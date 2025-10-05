@@ -1,0 +1,96 @@
+#include "vector.h"
+#include <stdlib.h>
+#include "common.h"
+#include "runtime.h"
+
+// Empty-vector singleton: actual CljVector instance with rc=0
+static CljVector clj_empty_vector_singleton;
+static void init_empty_vector_singleton_once(void) {
+    static int initialized = 0;
+    if (initialized) return;
+    clj_empty_vector_singleton.base.type = CLJ_VECTOR;
+    clj_empty_vector_singleton.base.rc = 0; // Singletons have no reference counting
+    clj_empty_vector_singleton.count = 0;
+    clj_empty_vector_singleton.capacity = 0;
+    clj_empty_vector_singleton.mutable_flag = 0;
+    clj_empty_vector_singleton.data = NULL;
+    initialized = 1;
+}
+
+// Creates a CljVector.
+// Notes:
+// - When capacity <= 0, returns empty-vector singleton (rc=0, data=NULL); do not retain/release.
+// - When capacity > 0, returns heap vector (rc=1) with zero-initialized backing store.
+CljObject* make_vector(int capacity, int is_mutable) {
+    if (capacity <= 0) {
+        init_empty_vector_singleton_once();
+        return (CljObject*)&clj_empty_vector_singleton;
+    }
+    CljVector *vec = ALLOC(CljVector, 1);
+    if (!vec) return NULL;
+    
+    vec->base.type = CLJ_VECTOR;
+    vec->base.rc = 1;
+    vec->count = 0;
+    vec->capacity = capacity;
+    vec->mutable_flag = is_mutable ? 1 : 0;
+    vec->data = capacity > 0 ? (CljObject **)calloc((size_t)capacity, sizeof(CljObject*)) : NULL;
+    
+    return (CljObject*)vec;
+}
+
+CljObject* make_weak_vector(int capacity) {
+    // Weak vector: same layout as CljVector, aber Push ohne retain
+    CljObject *o = make_vector(capacity, 1);
+    if (!o) return NULL;
+    o->type = CLJ_WEAK_VECTOR;
+    return o;
+}
+
+static inline int is_weak_vec(CljObject *o) { return o && o->type == CLJ_WEAK_VECTOR; }
+
+int vector_push_inplace(CljObject *vec, CljObject *item) {
+    if (!vec || !item) return 0;
+    CljVector *v = as_vector(vec);
+    if (!v) return 0;
+    if (v->count >= v->capacity) {
+        int newcap = v->capacity ? v->capacity * 2 : 4;
+        void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject*));
+        if (!p) return 0;
+        v->data = (CljObject**)p;
+        for (int i = v->capacity; i < newcap; ++i) v->data[i] = NULL;
+        v->capacity = newcap;
+    }
+    v->data[v->count++] = item;
+    if (!is_weak_vec(vec)) retain(item);
+    return 1;
+}
+
+CljObject* vector_conj(CljObject *vec, CljObject *item) {
+    if (!vec || vec->type != CLJ_VECTOR || !item) return NULL;
+    
+    CljVector *old_vec = as_vector(vec);
+    if (!old_vec) return NULL;
+    
+    int new_capacity = old_vec->capacity + 1;
+    if (new_capacity < 4) new_capacity = 4;
+    
+    CljObject *new_vec_obj = make_vector(new_capacity, 0);
+    CljVector *new_vec = as_vector(new_vec_obj);
+    if (!new_vec) return NULL;
+    
+    for (int i = 0; i < old_vec->count; i++) {
+        if (old_vec->data[i]) {
+            new_vec->data[i] = old_vec->data[i];
+            retain(old_vec->data[i]);
+        }
+    }
+    
+    new_vec->data[old_vec->count] = item;
+    retain(item);
+    new_vec->count = old_vec->count + 1;
+    
+    return autorelease(new_vec_obj);
+}
+
+

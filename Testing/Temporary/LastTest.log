@@ -1,0 +1,238 @@
+Start testing: Oct 05 10:23 CEST
+----------------------------------------------------------
+1/7 Testing: unit
+1/7 Test: unit
+Command: "/Users/theisen/Projects/tiny-clj/test-unit" "--all"
+Directory: /Users/theisen/Projects/tiny-clj
+"unit" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+=== Tiny-Clj Unit Test Runner ===
+
+Running all unit tests...
+
+
+=== Testing Basic Object Creation ===
+✓ Basic object creation tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Singleton Objects ===
+✓ Singleton object tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Symbol Creation ===
+✓ Symbol creation tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Vector Creation ===
+✓ Vector creation tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Map Creation ===
+✓ Map creation tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Reference Counting ===
+✓ Reference counting tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Object Equality ===
+✓ Object equality tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Assertion Functions ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Exception Object Creation ===
+✓ Assertion function tests passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Basic Vector Conj ===
+✓ Vector conj test passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Double Release Exception ===
+✓ Object state: rc=-1 (simulated double release)
+✓ release() function checks rc <= 0 and throws DoubleFreeError
+✓ Exception handling prevents segmentation faults
+✓ Double release exception test passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing clj_assert Success ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing clj_assert_args Success ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing clj_assert_args_multiple Success ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+=== Testing Assertion Functions Exist ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c:199:unit_tests[i].test_func:PASS
+
+-----------------------
+29 Tests 0 Failures 0 Ignored 
+OK
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"unit" end time: Oct 05 10:23 CEST
+"unit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/7 Testing: integration
+2/7 Test: integration
+Command: "/Users/theisen/Projects/tiny-clj/test-integration" "--all"
+Directory: /Users/theisen/Projects/tiny-clj
+"integration" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+=== Tiny-Clj Integration Test Runner ===
+
+Running all integration tests...
+
+
+=== Testing Basic Integration ===
+✓ Basic integration test passed
+/Users/theisen/Projects/tiny-clj/src/tests/test_integration_main.c:154:integration_tests[i].test_func:PASS
+
+-----------------------
+1 Tests 0 Failures 0 Ignored 
+OK
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"integration" end time: Oct 05 10:23 CEST
+"integration" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/7 Testing: parser
+3/7 Test: parser
+Command: "/Users/theisen/Projects/tiny-clj/test-parser"
+Directory: /Users/theisen/Projects/tiny-clj
+"parser" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+
+=== Testing Basic Type Parsing ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_parser.c:156:test_parse_basic_types:PASS
+
+=== Testing Collection Parsing ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_parser.c:157:test_parse_collections:PASS
+
+=== Testing Comment Parsing ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_parser.c:158:test_parse_comments:PASS
+
+=== Testing Metadata Parsing ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_parser.c:159:test_parse_metadata:PASS
+
+=== Testing Error Handling ===
+/Users/theisen/Projects/tiny-clj/src/tests/test_parser.c:160:test_parse_error_handling:PASS
+
+-----------------------
+5 Tests 0 Failures 0 Ignored 
+OK
+<end of output>
+Test time =   0.19 sec
+----------------------------------------------------------
+Test Passed.
+"parser" end time: Oct 05 10:23 CEST
+"parser" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/7 Testing: repl-eval-add
+4/7 Test: repl-eval-add
+Command: "/Users/theisen/Projects/tiny-clj/tiny-clj-repl" "-e" "(+ 1 2)"
+Directory: /Users/theisen/Projects/tiny-clj
+"repl-eval-add" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+3
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Pass Reason:
+Required regular expression found. Regex=[3
+]
+"repl-eval-add" end time: Oct 05 10:23 CEST
+"repl-eval-add" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/7 Testing: repl-println-vector
+5/7 Test: repl-println-vector
+Command: "/Users/theisen/Projects/tiny-clj/tiny-clj-repl" "-e" "(println [1 2 3])"
+Directory: /Users/theisen/Projects/tiny-clj
+"repl-println-vector" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+println: [1 2 3]
+nil
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Pass Reason:
+Required regular expression found. Regex=[nil]
+"repl-println-vector" end time: Oct 05 10:23 CEST
+"repl-println-vector" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/7 Testing: repl-ns-eval
+6/7 Test: repl-ns-eval
+Command: "/Users/theisen/Projects/tiny-clj/tiny-clj-repl" "-n" "user" "-e" "(+ 2 2)"
+Directory: /Users/theisen/Projects/tiny-clj
+"repl-ns-eval" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+4
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Pass Reason:
+Required regular expression found. Regex=[4
+]
+"repl-ns-eval" end time: Oct 05 10:23 CEST
+"repl-ns-eval" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/7 Testing: repl-error-divzero
+7/7 Test: repl-error-divzero
+Command: "/Users/theisen/Projects/tiny-clj/tiny-clj-repl" "-e" "(/ 1 0)"
+Directory: /Users/theisen/Projects/tiny-clj
+"repl-error-divzero" start time: Oct 05 10:23 CEST
+Output:
+----------------------------------------------------------
+954230512
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"repl-error-divzero" end time: Oct 05 10:23 CEST
+"repl-error-divzero" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 05 10:23 CEST
+
+integration =   0.00 sec*proc
+
+parser =   0.19 sec*proc
+
+repl =   0.01 sec*proc
+
+unit =   0.23 sec*proc
+

@@ -1,0 +1,8 @@
+unit 40 0.00572873
+integration 40 6.46761e-05
+parser 35 0.00529906
+repl-eval-add 12 0.000225986
+repl-println-vector 6 0.000289396
+repl-ns-eval 12 0.000141142
+repl-error-divzero 14 0.000112985
+---

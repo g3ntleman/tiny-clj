@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run tiny-clj (LLDB)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/tiny-clj",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {},
+      "stopOnEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
