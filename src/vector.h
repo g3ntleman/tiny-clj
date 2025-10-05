@@ -11,6 +11,8 @@ CljObject* vector_conj(CljObject *vec, CljObject *item);
 int vector_push_inplace(CljObject *vec, CljObject *item);
 /** Weak vector (no retain on push). */
 CljObject* make_weak_vector(int capacity);
+/** Create a vector from an array of items (retains non-NULL items). */
+CljObject* vector_from_items(CljObject **items, int count);
 
 #endif
 

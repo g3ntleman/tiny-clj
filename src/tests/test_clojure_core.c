@@ -238,6 +238,52 @@ void test_namespace_access(void) {
     TEST_ASSERT_TRUE(map->count > 0);
 }
 
+// --- Tests for clojure.core/some (interpreted) ---
+
+// use generic constructor from vector.c
+
+void test_some_truthy_identity_vector(void) {
+    // (some identity [nil 0 2]) => 0 (0 ist truthy)
+    CljObject *nilv = clj_nil();
+    CljObject *zero = autorelease(make_int(0));
+    CljObject *two  = autorelease(make_int(2));
+    CljObject *items[3] = {nilv, zero, two};
+    CljObject *vec = autorelease(vector_from_items(items, 3));
+
+    CljObject *pred_sym = autorelease(make_symbol("identity", NULL));
+    CljObject *args[2] = {pred_sym, vec};
+    CljObject *res = autorelease(call_clojure_core_function("some", 2, args));
+    ASSERT_TYPE(res, CLJ_INT);
+    TEST_ASSERT_EQUAL_INT(0, res->as.i);
+}
+
+void test_some_nil_when_no_match(void) {
+    // (some identity [nil nil]) => nil
+    CljObject *nilv = clj_nil();
+    CljObject *items[2] = {nilv, nilv};
+    CljObject *vec = autorelease(vector_from_items(items, 2));
+
+    CljObject *pred_sym = autorelease(make_symbol("identity", NULL));
+    CljObject *args[2] = {pred_sym, vec};
+    CljObject *res = autorelease(call_clojure_core_function("some", 2, args));
+    TEST_ASSERT_TRUE(res == clj_nil());
+}
+
+void test_some_short_circuit_first_truthy(void) {
+    // (some identity [1 2 3]) => 1 (sollte beim ersten truthy abbrechen)
+    CljObject *one = autorelease(make_int(1));
+    CljObject *two = autorelease(make_int(2));
+    CljObject *three = autorelease(make_int(3));
+    CljObject *items[3] = {one, two, three};
+    CljObject *vec = autorelease(vector_from_items(items, 3));
+
+    CljObject *pred_sym = autorelease(make_symbol("identity", NULL));
+    CljObject *args[2] = {pred_sym, vec};
+    CljObject *res = autorelease(call_clojure_core_function("some", 2, args));
+    ASSERT_TYPE(res, CLJ_INT);
+    TEST_ASSERT_EQUAL_INT(1, res->as.i);
+}
+
 int main(void) {
     printf("=== Unity Test Suite for Clojure Core ===\n");
     
@@ -277,6 +323,11 @@ int main(void) {
     
     // Namespace operations
     RUN_TEST(test_namespace_access);
+
+    // clojure.core/some tests (will fail until implemented)
+    RUN_TEST(test_some_truthy_identity_vector);
+    RUN_TEST(test_some_nil_when_no_match);
+    RUN_TEST(test_some_short_circuit_first_truthy);
     
     return UNITY_END();
 }

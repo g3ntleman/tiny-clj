@@ -85,12 +85,32 @@ CljObject* vector_conj(CljObject *vec, CljObject *item) {
             retain(old_vec->data[i]);
         }
     }
-    
-    new_vec->data[old_vec->count] = item;
-    retain(item);
-    new_vec->count = old_vec->count + 1;
+    // set count for existing elements (including possible NULL holes)
+    new_vec->count = old_vec->count;
+    // append the new item using push helper (handles retain and growth)
+    vector_push_inplace(new_vec_obj, item);
     
     return autorelease(new_vec_obj);
+}
+
+
+CljObject* vector_from_items(CljObject **items, int count) {
+    if (count <= 0) return make_vector(0, 0);
+    CljObject *vec = make_vector(count, 0);
+    CljVector *vd = as_vector(vec);
+    if (!vd) return vec;
+    vd->count = 0;
+    for (int i = 0; i < count; ++i) {
+        if (items[i]) {
+            // use push helper for non-NULL (retains item and manages capacity)
+            vector_push_inplace(vec, items[i]);
+        } else {
+            // preserve NULL holes at the current logical index
+            vd->data[vd->count] = NULL;
+            vd->count++;
+        }
+    }
+    return vec;
 }
 
 

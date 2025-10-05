@@ -43,6 +43,16 @@
         TEST_ASSERT_FLOAT_WITHIN((EPS), (EXPECTED), (OBJ)->as.f); \
     } while (0)
 
+// Ensure autorelease pool is drained after every test across all suites
+#ifdef RUN_TEST
+#undef RUN_TEST
+#endif
+static inline void RunTestWithPoolCheck(void (*Func)(void), const char *FuncName, const int FuncLineNum) {
+    UnityDefaultTestRun(Func, FuncName, FuncLineNum);
+    cljvalue_pool_cleanup_all();
+}
+#define RUN_TEST(func) RunTestWithPoolCheck((func), #func, __LINE__)
+
 #endif // TEST_HELPERS_H
 
 
