@@ -386,7 +386,7 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
     }
     
     if (arg->type == CLJ_VECTOR) {
-        CljVector *vec = as_vector(arg);
+        CljPersistentVector *vec = as_vector(arg);
         return vec ? make_int(vec->count) : make_int(0);
     }
     
@@ -419,7 +419,7 @@ CljObject* eval_first(CljObject *list, CljObject *env) {
     if (!arg) return clj_nil();
     
     if (arg->type == CLJ_VECTOR) {
-        CljVector *vec = as_vector(arg);
+        CljPersistentVector *vec = as_vector(arg);
         if (vec && vec->count > 0) {
             return vec->data[0] ? (retain(vec->data[0]), vec->data[0]) : clj_nil();
         }
@@ -438,10 +438,10 @@ CljObject* eval_rest(CljObject *list, CljObject *env) {
     if (!arg) return make_list(); // Empty list
     
     if (arg->type == CLJ_VECTOR) {
-        CljVector *vec = as_vector(arg);
+        CljPersistentVector *vec = as_vector(arg);
         if (vec && vec->count > 1) {
             CljObject *rest_vec = make_vector(vec->count - 1, 0);
-            CljVector *rest_data = as_vector(rest_vec);
+            CljPersistentVector *rest_data = as_vector(rest_vec);
             if (rest_data) {
                 for (int i = 1; i < vec->count; i++) {
                     rest_data->data[i-1] = vec->data[i] ? (retain(vec->data[i]), vec->data[i]) : NULL;

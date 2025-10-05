@@ -46,7 +46,7 @@ void test_basic_integration(void) {
     CljObject *vec = make_vector(3, 0);
     TEST_ASSERT_NOT_NULL(vec);
     
-    CljVector *vec_data = as_vector(vec);
+    CljPersistentVector *vec_data = as_vector(vec);
     vec_data->data[0] = make_int(1);
     vec_data->data[1] = make_int(2);
     vec_data->data[2] = make_int(3);
@@ -56,7 +56,7 @@ void test_basic_integration(void) {
     CljObject *result = vector_conj(vec, make_int(4));
     TEST_ASSERT_NOT_NULL(result);
     
-    CljVector *result_data = as_vector(result);
+    CljPersistentVector *result_data = as_vector(result);
     TEST_ASSERT_EQUAL_INT(4, result_data->count);
     TEST_ASSERT_EQUAL_INT(4, result_data->data[3]->as.i);
     

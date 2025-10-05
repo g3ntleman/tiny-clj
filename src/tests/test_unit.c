@@ -112,7 +112,7 @@ void test_vector_creation(void) {
     CljObject *vec = make_vector(3, 0); // Immutable vector
     ASSERT_TYPE(vec, CLJ_VECTOR);
     
-    CljVector *vec_data = as_vector(vec);
+    CljPersistentVector *vec_data = as_vector(vec);
     TEST_ASSERT_NOT_NULL(vec_data);
     TEST_ASSERT_EQUAL_INT(3, vec_data->capacity);
     TEST_ASSERT_EQUAL_INT(0, vec_data->count);
@@ -275,7 +275,7 @@ void test_vector_conj_basic(void) {
     CljObject *vec = make_vector(3, 0);
     TEST_ASSERT_NOT_NULL(vec);
     
-    CljVector *vec_data = as_vector(vec);
+    CljPersistentVector *vec_data = as_vector(vec);
     TEST_ASSERT_NOT_NULL(vec_data);
     
     vec_data->data[0] = make_int(1);
@@ -287,7 +287,7 @@ void test_vector_conj_basic(void) {
     CljObject *result = vector_conj(vec, make_int(4));
     TEST_ASSERT_NOT_NULL(result);
     
-    CljVector *result_data = as_vector(result);
+    CljPersistentVector *result_data = as_vector(result);
     TEST_ASSERT_NOT_NULL(result_data);
     TEST_ASSERT_EQUAL_INT(4, result_data->count);
     TEST_ASSERT_EQUAL_INT(4, result_data->data[3]->as.i);

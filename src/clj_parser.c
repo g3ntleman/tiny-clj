@@ -603,7 +603,7 @@ CljObject* parse(const char *input, EvalState *st) {
 // Stack-based helpers
 CljObject* vector_from_stack(CljObject **stack, int count) {
     CljObject *vec_obj = make_vector(count, 0);
-    CljVector *vec = as_vector(vec_obj);
+    CljPersistentVector *vec = as_vector(vec_obj);
     if (!vec) return NULL;
     for (int i = 0; i < count; i++) {
         vec->data[i] = stack[i];

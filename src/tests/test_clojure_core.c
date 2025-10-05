@@ -118,7 +118,7 @@ void test_count_vector(void) {
     // Test: (count [1 2 3]) => 3
     // For now, test with an empty vector since vector creation is complex
     CljObject *vec = autorelease(make_vector(0, 0));
-    CljVector *vec_data = as_vector(vec);
+    CljPersistentVector *vec_data = as_vector(vec);
     
     // Empty vector should have count 0
     CljObject *result = autorelease(call_clojure_core_function("count", 1, &vec));

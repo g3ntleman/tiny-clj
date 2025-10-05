@@ -71,7 +71,7 @@ void test_vector_creation(void) {
     
     ASSERT_TYPE(vec_obj, CLJ_VECTOR);
     
-    CljVector *vec = as_vector(vec_obj);
+    CljPersistentVector *vec = as_vector(vec_obj);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(10, vec->capacity);
     TEST_ASSERT_EQUAL_INT(0, vec->count);

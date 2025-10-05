@@ -97,7 +97,7 @@ void test_vector_creation_performance(void) {
     
     for (int i = 0; i < iterations; i++) {
         CljObject *vec_obj = autorelease(make_vector(vector_size, 1));
-        CljVector *vec = as_vector(vec_obj);
+        CljPersistentVector *vec = as_vector(vec_obj);
         int count = vec->count;
         int capacity = vec->capacity;
         (void)count; (void)capacity;

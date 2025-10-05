@@ -23,7 +23,7 @@
 #include "tiny_clj.h"
 static void release_object_deep(CljObject *v);
 // Autorelease pool backed by a weak vector for locality and fewer allocations
-typedef struct CljObjectPool { CljObject *backing; struct CljObjectPool *prev; } CljObjectPool;
+struct CljObjectPool { CljObject *backing; struct CljObjectPool *prev; };
 static CljObjectPool *g_cv_pool_top = NULL;
 
 // Helper functions for optimized structure
@@ -124,7 +124,7 @@ void retain(CljObject *v) {
     if (IS_PRIMITIVE_TYPE(v->type)) return;
     // Guard: empty vector/map singletons must not be retained
     if (v->type == CLJ_VECTOR) {
-        CljVector *vec = as_vector(v);
+        CljPersistentVector *vec = as_vector(v);
         if (vec && vec->base.rc == 0 && vec->data == NULL) return;
     }
     if (v->type == CLJ_MAP) {
@@ -140,7 +140,7 @@ void release(CljObject *v) {
     if (IS_PRIMITIVE_TYPE(v->type)) return;
     // Guard: empty vector/map singletons must not be released
     if (v->type == CLJ_VECTOR) {
-        CljVector *vec = as_vector(v);
+        CljPersistentVector *vec = as_vector(v);
         if (vec && vec->base.rc == 0 && vec->data == NULL) return;
     }
     if (v->type == CLJ_MAP) {
@@ -181,7 +181,7 @@ CljObjectPool *cljvalue_pool_push() {
 
 void cljvalue_pool_pop(CljObjectPool *pool) {
     if (!pool || g_cv_pool_top != pool) return;
-    CljVector *vec = as_vector(pool->backing);
+    CljPersistentVector *vec = as_vector(pool->backing);
     if (vec) {
         for (int i = vec->count - 1; i >= 0; --i) {
             if (vec->data[i]) release(vec->data[i]);
@@ -224,7 +224,7 @@ static void release_object_deep(CljObject *v) {
         case CLJ_VECTOR:
             // Vector finalizer: embedded object; free backing store and elements only
             {
-                CljVector *vec = as_vector(v);
+                CljPersistentVector *vec = as_vector(v);
                 if (vec) {
                     for (int i = 0; i < vec->count; ++i) {
                         if (vec->data[i]) release(vec->data[i]);
@@ -236,7 +236,7 @@ static void release_object_deep(CljObject *v) {
         case CLJ_WEAK_VECTOR:
             // Weak vector finalizer: does not retain on push; releasing elements here is still required
             {
-                CljVector *vec = as_vector(v);
+                CljPersistentVector *vec = as_vector(v);
                 if (vec) {
                     for (int i = 0; i < vec->count; ++i) {
                         if (vec->data[i]) release(vec->data[i]);
@@ -486,7 +486,7 @@ char* pr_str(CljObject *v) {
 
         case CLJ_VECTOR:
             {
-                CljVector *vec = as_vector(v);
+                CljPersistentVector *vec = as_vector(v);
                 if (!vec) return strdup("[]");
                 size_t cap = 2; // [ ]
                 for (int i = 0; i < vec->count; i++) {
@@ -648,8 +648,8 @@ bool clj_equal(CljObject *a, CljObject *b) {
         }
         
         case CLJ_VECTOR: {
-            CljVector *vec_a = (CljVector*)a->as.data;
-            CljVector *vec_b = (CljVector*)b->as.data;
+            CljPersistentVector *vec_a = (CljPersistentVector*)a->as.data;
+            CljPersistentVector *vec_b = (CljPersistentVector*)b->as.data;
             if (!vec_a || !vec_b) return false;
             if (vec_a->count != vec_b->count) return false;
             for (int i = 0; i < vec_a->count; i++) {
@@ -1055,7 +1055,7 @@ void free_object(CljObject *obj) {
             break;
         case CLJ_VECTOR:
             {
-                CljVector *vec = (CljVector*)obj;
+                CljPersistentVector *vec = (CljPersistentVector*)obj;
                 if (vec->data) {
                     for (int i = 0; i < vec->count; i++) {
                         if (vec->data[i]) release_object(vec->data[i]);

@@ -4,7 +4,7 @@
 #include "runtime.h"
 
 // Empty-vector singleton: actual CljVector instance with rc=0
-static CljVector clj_empty_vector_singleton;
+static CljPersistentVector clj_empty_vector_singleton;
 static void init_empty_vector_singleton_once(void) {
     static int initialized = 0;
     if (initialized) return;
@@ -26,7 +26,7 @@ CljObject* make_vector(int capacity, int is_mutable) {
         init_empty_vector_singleton_once();
         return (CljObject*)&clj_empty_vector_singleton;
     }
-    CljVector *vec = ALLOC(CljVector, 1);
+    CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
     if (!vec) return NULL;
     
     vec->base.type = CLJ_VECTOR;
@@ -51,7 +51,7 @@ static inline int is_weak_vec(CljObject *o) { return o && o->type == CLJ_WEAK_VE
 
 int vector_push_inplace(CljObject *vec, CljObject *item) {
     if (!vec || !item) return 0;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     if (!v) return 0;
     if (v->count >= v->capacity) {
         int newcap = v->capacity ? v->capacity * 2 : 4;
@@ -69,14 +69,14 @@ int vector_push_inplace(CljObject *vec, CljObject *item) {
 CljObject* vector_conj(CljObject *vec, CljObject *item) {
     if (!vec || vec->type != CLJ_VECTOR || !item) return NULL;
     
-    CljVector *old_vec = as_vector(vec);
+    CljPersistentVector *old_vec = as_vector(vec);
     if (!old_vec) return NULL;
     
     int new_capacity = old_vec->capacity + 1;
     if (new_capacity < 4) new_capacity = 4;
     
     CljObject *new_vec_obj = make_vector(new_capacity, 0);
-    CljVector *new_vec = as_vector(new_vec_obj);
+    CljPersistentVector *new_vec = as_vector(new_vec_obj);
     if (!new_vec) return NULL;
     
     for (int i = 0; i < old_vec->count; i++) {
@@ -97,7 +97,7 @@ CljObject* vector_conj(CljObject *vec, CljObject *item) {
 CljObject* vector_from_items(CljObject **items, int count) {
     if (count <= 0) return make_vector(0, 0);
     CljObject *vec = make_vector(count, 0);
-    CljVector *vd = as_vector(vec);
+    CljPersistentVector *vd = as_vector(vec);
     if (!vd) return vec;
     vd->count = 0;
     for (int i = 0; i < count; ++i) {

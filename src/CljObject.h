@@ -61,7 +61,7 @@ typedef struct {
     int capacity;
     int mutable_flag;
     CljObject **data;
-} CljVector;
+} CljPersistentVector;
 
 typedef struct {
     CljObject base;         // Embedded base object
@@ -267,8 +267,8 @@ void free_object(CljObject *obj);
 static inline CljSymbol* as_symbol(CljObject *obj) {
     return (obj && obj->type == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;
 }
-static inline CljVector* as_vector(CljObject *obj) {
-    return (obj && (obj->type == CLJ_VECTOR || obj->type == CLJ_WEAK_VECTOR)) ? (CljVector*)obj : NULL;
+static inline CljPersistentVector* as_vector(CljObject *obj) {
+    return (obj && (obj->type == CLJ_VECTOR || obj->type == CLJ_WEAK_VECTOR)) ? (CljPersistentVector*)obj : NULL;
 }
 static inline CljMap* as_map(CljObject *obj) {
     return (obj && obj->type == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;

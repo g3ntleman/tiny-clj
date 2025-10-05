@@ -111,7 +111,7 @@ int main() {
     // count: (count [1 2 3 4 5])
     printf("   (count [1 2 3 4 5]): ");
     CljObject *vec = make_vector(5, 0);
-    CljVector *vec_data = as_vector(vec);
+    CljPersistentVector *vec_data = as_vector(vec);
     if (vec_data) {
         vec_data->data[0] = make_int(1);
         vec_data->data[1] = make_int(2);
@@ -139,7 +139,7 @@ int main() {
     // first: (first [10 20 30])
     printf("   (first [10 20 30]): ");
     CljObject *vec2 = make_vector(3, 0);
-    CljVector *vec2_data = as_vector(vec2);
+    CljPersistentVector *vec2_data = as_vector(vec2);
     if (vec2_data) {
         vec2_data->data[0] = make_int(10);
         vec2_data->data[1] = make_int(20);

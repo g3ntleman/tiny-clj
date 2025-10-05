@@ -85,7 +85,7 @@ CljObject* map_keys(CljObject *map) {
     CljMap *map_data = as_map(map);
     if (!map_data) return NULL;
     CljObject *keys = make_vector(map_data->count, 0);
-    CljVector *keys_vec = as_vector(keys);
+    CljPersistentVector *keys_vec = as_vector(keys);
     if (!keys_vec) return NULL;
     for (int i = 0; i < map_data->count; i++) {
         CljObject *key = KV_KEY(map_data->data, i);
@@ -103,7 +103,7 @@ CljObject* map_vals(CljObject *map) {
     CljMap *map_data = as_map(map);
     if (!map_data) return NULL;
     CljObject *vals = make_vector(map_data->count, 0);
-    CljVector *vals_vec = as_vector(vals);
+    CljPersistentVector *vals_vec = as_vector(vals);
     if (!vals_vec) return NULL;
     for (int i = 0; i < map_data->count; i++) {
         CljObject *val = KV_VALUE(map_data->data, i);

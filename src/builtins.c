@@ -8,7 +8,7 @@
 CljObject* nth2(CljObject *vec, CljObject *idx) {
     if (!vec || !idx || vec->type != CLJ_VECTOR || idx->type != CLJ_INT) return NULL;
     int i = idx->as.i;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) return NULL;
     retain(v->data[i]);
     return v->data[i];
@@ -16,7 +16,7 @@ CljObject* nth2(CljObject *vec, CljObject *idx) {
 
 CljObject* conj2(CljObject *vec, CljObject *val) {
     if (!vec || vec->type != CLJ_VECTOR) return NULL;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     int is_mutable = v ? v->mutable_flag : 0;
     if (is_mutable) {
         if (v->count >= v->capacity) {
@@ -35,7 +35,7 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
         if (need > newcap) newcap = newcap > 0 ? newcap * 2 : 1;
         CljObject *copy = make_vector(newcap, 0);
         if (!copy) return NULL;
-        CljVector *c = as_vector(copy);
+        CljPersistentVector *c = as_vector(copy);
         for (int i = 0; i < v->count; ++i) {
             c->data[i] = (retain(v->data[i]), v->data[i]);
         }
@@ -48,7 +48,7 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
 CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
     if (!vec || vec->type != CLJ_VECTOR || !idx || idx->type != CLJ_INT) return NULL;
     int i = idx->as.i;
-    CljVector *v = as_vector(vec);
+    CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) return NULL;
     int is_mutable = v->mutable_flag;
     if (is_mutable) {
@@ -59,7 +59,7 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
     } else {
         CljObject *copy = make_vector(v->capacity, 0);
         if (!copy) return NULL;
-        CljVector *c = as_vector(copy);
+        CljPersistentVector *c = as_vector(copy);
         for (int j = 0; j < v->count; ++j) {
             c->data[j] = (retain(v->data[j]), v->data[j]);
         }

@@ -15,7 +15,7 @@ CljObject* eval_count_simple(CljObject *arg) {
     }
     
     if (arg->type == CLJ_VECTOR) {
-        CljVector *vec = as_vector(arg);
+    CljPersistentVector *vec = as_vector(arg);
         return vec ? make_int(vec->count) : make_int(0);
     }
     
