@@ -1,4 +1,28 @@
 {
+  // Cursor/VSCode launch configuration for Tiny-CLJ
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tiny-CLJ REPL",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tiny-clj-repl",
+      "cwd": "${workspaceFolder}",
+      "args": ["--repl"],
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "Tiny-CLJ eval (-e)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tiny-clj-repl",
+      "cwd": "${workspaceFolder}",
+      "args": ["--no-core", "-e", "(+ 1 2)"]
+    }
+  ]
+}
+
+{
   "version": "0.2.0",
   "configurations": [
     {

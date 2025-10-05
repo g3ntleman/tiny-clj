@@ -20,7 +20,9 @@
 #include "runtime.h"
 #include "map.h"
 #include "kv_macros.h"
-#include "tiny_clj.h"
+#include "namespace.h"
+#include "memory_profiler.h"
+
 static void release_object_deep(CljObject *v);
 // Autorelease pool backed by a weak vector for locality and fewer allocations
 struct CljObjectPool { CljObject *backing; struct CljObjectPool *prev; };
@@ -38,6 +40,7 @@ static EvalState *global_eval_state = NULL;
 // - create_exception returns rc=1 (no autorelease)
 // - Ownership is transferred to EvalState->last_error before longjmp
 // - Catch handler must set last_error=NULL and release_exception(ex)
+/** @brief Throw an exception with type, message, and location */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
     if (global_exception) {
         release_exception(global_exception);
@@ -60,11 +63,13 @@ void throw_exception(const char *type, const char *message, const char *file, in
 }
 
 // Set EvalState for try/catch
+/** @brief Set global evaluation state */
 void set_global_eval_state(void *state) {
     global_eval_state = (EvalState*)state;
 }
 
 // Exception management with reference counting (analogous to CljVector)
+/** @brief Create exception with reference counting */
 CLJException* create_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
     
@@ -100,12 +105,17 @@ void release_exception(CLJException *exception) {
     }
 }
 
+/** @brief Create integer object */
 CljObject* make_int(int x) {
     CljObject *v = ALLOC(CljObject, 1);
     if (!v) return NULL;
     v->type = CLJ_INT;
     v->rc = 1;
     v->as.i = x;
+    
+    // Memory profiling
+    MEMORY_PROFILER_TRACK_OBJECT_CREATION(v);
+    
     return v;
 }
 
@@ -115,9 +125,14 @@ CljObject* make_float(double x) {
     v->type = CLJ_FLOAT;
     v->rc = 1;
     v->as.f = x;
+    
+    // Memory profiling
+    MEMORY_PROFILER_TRACK_OBJECT_CREATION(v);
+    
     return v;
 }
 
+/** @brief Increment reference count */
 void retain(CljObject *v) {
     if (!v) return;
     // Singletons have no reference counting
@@ -132,8 +147,12 @@ void retain(CljObject *v) {
         if (map && map->base.rc == 0 && map->data == NULL) return;
     }
     v->rc++;
+    
+    // Memory profiling
+    MEMORY_PROFILER_TRACK_RETAIN(v);
 }
 
+/** @brief Decrement reference count and free if zero */
 void release(CljObject *v) {
     if (!v) return;
     // Singletons have no reference counting
@@ -156,7 +175,13 @@ void release(CljObject *v) {
         throw_exception("DoubleFreeError", message, __FILE__, __LINE__, 0);
     }
     v->rc--;
+    
+    // Memory profiling
+    MEMORY_PROFILER_TRACK_RELEASE(v);
+    
     if (v->rc == 0) { 
+        // Memory profiling - track object destruction
+        MEMORY_PROFILER_TRACK_OBJECT_DESTRUCTION(v);
         release_object_deep(v); 
         free(v); 
     }
@@ -167,6 +192,10 @@ CljObject *autorelease(CljObject *v) {
     if (!g_cv_pool_top) return v;
     // Weak vector push: does not retain the item
     vector_push_inplace(g_cv_pool_top->backing, v);
+    
+    // Memory profiling
+    MEMORY_PROFILER_TRACK_AUTORELEASE(v);
+    
     return v;
 }
 
@@ -567,7 +596,7 @@ char* pr_str(CljObject *v) {
                 }
                 char *s = ALLOC(char, cap+1);
                 strcpy(s, "{");
-                int first = 1;
+                bool first = true;
                 for (int i = 0; i < map->count; i++) {
                     CljObject *k = KV_KEY(map->data, i);
                     CljObject *val = KV_VALUE(map->data, i);
@@ -579,7 +608,7 @@ char* pr_str(CljObject *v) {
                     strcat(s, " ");
                     strcat(s, vs);
                     free(ks); free(vs);
-                    first = 0;
+                    first = false;
                 }
                 strcat(s, "}");
                 return s;
@@ -871,12 +900,12 @@ static void init_static_singletons() {
     // Initialize TRUE singleton
     clj_true_singleton.type = CLJ_BOOL;
     clj_true_singleton.rc = 0; // Singletons do not use reference counting
-    clj_true_singleton.as.b = 1;
+    clj_true_singleton.as.b = true;
     
     // Initialize FALSE singleton
     clj_false_singleton.type = CLJ_BOOL;
     clj_false_singleton.rc = 0; // Singletons do not use reference counting
-    clj_false_singleton.as.b = 0;
+    clj_false_singleton.as.b = false;
     
 
     // Initialize empty map singleton
@@ -887,28 +916,28 @@ static void init_static_singletons() {
 
 // Singleton access functions
 CljObject* clj_nil() {
-    static int initialized = 0;
+    static bool initialized = false;
     if (!initialized) {
         init_static_singletons();
-        initialized = 1;
+        initialized = true;
     }
     return &clj_nil_singleton;
 }
 
 CljObject* clj_true() {
-    static int initialized = 0;
+    static bool initialized = false;
     if (!initialized) {
         init_static_singletons();
-        initialized = 1;
+        initialized = true;
     }
     return &clj_true_singleton;
 }
 
 CljObject* clj_false() {
-    static int initialized = 0;
+    static bool initialized = false;
     if (!initialized) {
         init_static_singletons();
-        initialized = 1;
+        initialized = true;
     }
     return &clj_false_singleton;
 }

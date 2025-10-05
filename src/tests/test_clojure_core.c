@@ -2,6 +2,7 @@
 #include "../tiny_clj.h"
 #include "test_helpers.h"
 #include "../CljObject.h"
+#include "../vector.h"
 #include "../clj_symbols.h"
 #include "../map.h"
 #include <stdlib.h>

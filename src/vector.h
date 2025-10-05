@@ -13,6 +13,7 @@ int vector_push_inplace(CljObject *vec, CljObject *item);
 CljObject* make_weak_vector(int capacity);
 /** Create a vector from an array of items (retains non-NULL items). */
 CljObject* vector_from_items(CljObject **items, int count);
+CljObject* vector_from_stack(CljObject **stack, int count);
 
 #endif
 

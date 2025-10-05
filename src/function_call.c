@@ -12,10 +12,12 @@
 #include "CljObject.h"
 #include "vector.h"
 #include "function_call.h"
-#include "runtime.h"
+#include "seq.h"
+#include "namespace.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 // Forward declarations
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count);
@@ -27,13 +29,13 @@ CljObject* eval_mul_with_substitution(CljObject *list, CljObject **params, CljOb
 CljObject* eval_div_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count);
 CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count);
 
-// Helper: compare symbol name directly (works for non-interned symbols)
+/** @brief Compare symbol name directly (works for non-interned symbols) */
 static inline int sym_is(CljObject *value, const char *name) {
     CljSymbol *sym = as_symbol(value);
     return sym && strcmp(sym->name, name) == 0;
 }
 
-// Helper: get raw nth element from a list (0=head). Returns NULL if out of bounds
+/** @brief Get raw nth element from a list (0=head). Returns NULL if out of bounds */
 static CljObject* list_get_element(CljObject *list, int index) {
     if (!list || list->type != CLJ_LIST || index < 0) return NULL;
     CljList *node = as_list(list);
@@ -66,7 +68,7 @@ static const char* arith_errors[] = {
     "Invalid arguments for division"
 };
 
-// Generic arithmetic function (normal version)
+/** @brief Generic arithmetic function (normal version) */
 CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op) {
     CljObject *a = eval_arg(list, 1, env);
     CljObject *b = eval_arg(list, 2, env);
@@ -115,6 +117,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 }
 
 // Extended function call implementation with complete evaluation
+/** @brief Main function call evaluator */
 CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObject *env) {
     (void)env;
     if (!fn || fn->type != CLJ_FUNC) {
@@ -183,10 +186,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     if (sym_is(op, "if")) {
         // (if cond then else?)
         CljObject *cond_val = eval_arg_with_substitution(list, 1, params, values, param_count);
-        int truthy = 0;
-        if (cond_val && cond_val != clj_nil()) {
-            if (cond_val->type == CLJ_BOOL) truthy = cond_val->as.b != 0; else truthy = 1;
-        }
+        bool truthy = clj_is_truthy(cond_val);
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
         if (!branch) return clj_nil();
         return eval_body_with_params(branch, params, values, param_count);
@@ -216,6 +216,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
 }
 
 // Simplified body evaluation (placeholder for real eval implementation)
+/** @brief Evaluate function body expressions */
 CljObject* eval_body(CljObject *body, CljObject *env) {
     if (!body) return clj_nil();
     
@@ -251,10 +252,7 @@ CljObject* eval_list(CljObject *list, CljObject *env) {
     if (sym_is(op, "if")) {
         // (if cond then else?)
         CljObject *cond_val = eval_arg(list, 1, env);
-        int truthy = 0;
-        if (cond_val && cond_val != clj_nil()) {
-            if (cond_val->type == CLJ_BOOL) truthy = cond_val->as.b != 0; else truthy = 1;
-        }
+        bool truthy = clj_is_truthy(cond_val);
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
         if (!branch) return clj_nil();
         return eval_body(branch, env);
@@ -297,6 +295,26 @@ CljObject* eval_list(CljObject *list, CljObject *env) {
     
     if (sym_is(op, "rest")) {
         return eval_rest(list, env);
+    }
+    
+    if (sym_is(op, "seq")) {
+        return eval_seq(list, env);
+    }
+    
+    if (sym_is(op, "next")) {
+        return eval_rest(list, env); // next is alias for rest
+    }
+    
+    if (sym_is(op, "for")) {
+        return eval_for(list, env);
+    }
+    
+    if (sym_is(op, "doseq")) {
+        return eval_doseq(list, env);
+    }
+    
+    if (sym_is(op, "dotimes")) {
+        return eval_dotimes(list, env);
     }
     
     // Fallback: return first element
@@ -418,48 +436,278 @@ CljObject* eval_first(CljObject *list, CljObject *env) {
     CljObject *arg = eval_arg(list, 1, env);
     if (!arg) return clj_nil();
     
-    if (arg->type == CLJ_VECTOR) {
-        CljPersistentVector *vec = as_vector(arg);
-        if (vec && vec->count > 0) {
-            return vec->data[0] ? (retain(vec->data[0]), vec->data[0]) : clj_nil();
-        }
-    } else if (arg->type == CLJ_LIST) {
-        CljList *list_data = as_list(arg);
-        if (list_data && list_data->head) {
-            return list_data->head ? (retain(list_data->head), list_data->head) : clj_nil();
-        }
-    }
+    // Use new seq implementation for unified behavior
+    SeqIterator *seq = seq_create(arg);
+    if (!seq) return clj_nil();
     
-    return clj_nil();
+    CljObject *result = seq_first(seq);
+    seq_release(seq);
+    
+    return result ? result : clj_nil();
 }
 
 CljObject* eval_rest(CljObject *list, CljObject *env) {
     CljObject *arg = eval_arg(list, 1, env);
     if (!arg) return make_list(); // Empty list
     
-    if (arg->type == CLJ_VECTOR) {
-        CljPersistentVector *vec = as_vector(arg);
-        if (vec && vec->count > 1) {
-            CljObject *rest_vec = make_vector(vec->count - 1, 0);
-            CljPersistentVector *rest_data = as_vector(rest_vec);
-            if (rest_data) {
-                for (int i = 1; i < vec->count; i++) {
-                    rest_data->data[i-1] = vec->data[i] ? (retain(vec->data[i]), vec->data[i]) : NULL;
+    // Use new seq implementation for unified behavior
+    SeqIterator *seq = seq_create(arg);
+    if (!seq) {
+        return make_list();
+    }
+    
+    SeqIterator *rest_seq = seq_rest(seq);
+    seq_release(seq);
+    
+    if (!rest_seq) {
+        return make_list();
+    }
+    
+    // Convert rest sequence to list
+    CljObject *result = seq_to_list(rest_seq);
+    seq_release(rest_seq);
+    
+    return result;
+}
+
+CljObject* eval_seq(CljObject *list, CljObject *env) {
+    CljObject *arg = eval_arg(list, 1, env);
+    if (!arg) return clj_nil();
+    
+    // If argument is already nil, return nil
+    if (arg->type == CLJ_NIL) {
+        return clj_nil();
+    }
+    
+    // Check if argument is seqable
+    if (!is_seqable(arg)) {
+        return clj_nil();
+    }
+    
+    // For lists, return as-is (lists are already sequences)
+    if (arg->type == CLJ_LIST) {
+        return arg ? (retain(arg), arg) : clj_nil();
+    }
+    
+    // For other seqable types, convert to list
+    SeqIterator *seq = seq_create(arg);
+    if (!seq) return clj_nil();
+    
+    CljObject *result = seq_to_list(seq);
+    seq_release(seq);
+    
+    return result;
+}
+
+// ============================================================================
+// FOR-LOOP IMPLEMENTATIONS
+// ============================================================================
+
+CljObject* eval_for(CljObject *list, CljObject *env) {
+    // (for [binding coll] expr)
+    // Returns a lazy sequence of results
+    
+    CljObject *binding_list = eval_arg(list, 1, env);
+    CljObject *body = eval_arg(list, 2, env);
+    
+    if (!binding_list || binding_list->type != CLJ_LIST) {
+        return clj_nil();
+    }
+    
+    // Parse binding: [var coll]
+    CljList *binding_data = as_list(binding_list);
+    if (!binding_data || !binding_data->head || !binding_data->tail) {
+        return clj_nil();
+    }
+    
+    CljObject *var = binding_data->head;
+    CljObject *coll = binding_data->tail;
+    
+    // Get collection to iterate over
+    CljList *coll_data = as_list(coll);
+    if (!coll_data || !coll_data->head) {
+        return clj_nil();
+    }
+    
+    CljObject *collection = coll_data->head; // Simple: just use the expression directly
+    if (!collection) {
+        return clj_nil();
+    }
+    
+    // Create result list
+    CljObject *result = make_list();
+    CljList *result_data = as_list(result);
+    
+    // Iterate over collection using seq
+    SeqIterator *seq = seq_create(collection);
+    if (seq) {
+        while (!seq_empty(seq)) {
+            CljObject *element = seq_first(seq);
+            
+            // Create new environment with binding
+            CljObject *new_env = make_list();
+            CljList *new_env_data = as_list(new_env);
+            if (new_env_data) {
+                // Add binding to environment
+                new_env_data->head = var;
+                new_env_data->tail = make_list();
+                CljList *tail_data = as_list(new_env_data->tail);
+                if (tail_data) {
+                    tail_data->head = element;
+                    tail_data->tail = env; // Chain with existing environment
                 }
-                rest_data->count = vec->count - 1;
             }
-            return rest_vec;
-        }
-    } else if (arg->type == CLJ_LIST) {
-        CljList *list_data = as_list(arg);
-        if (list_data && list_data->tail) {
-            return list_data->tail ? (retain(list_data->tail), list_data->tail) : make_list();
+            
+            // Evaluate body with new binding
+            CljObject *body_result = body; // Simple: just return the expression
+            
+            // Add result to result list (simple implementation)
+            if (body_result) {
+                // For now, just return the first result
+                // In a full implementation, this would be a lazy sequence
+                release(result);
+                release(collection);
+                seq_release(seq);
+                return body_result;
+            }
+            
+            SeqIterator *next = seq_next(seq);
+            seq_release(seq);
+            seq = next;
         }
     }
     
-    return make_list(); // Empty list
+    release(collection);
+    return result;
 }
 
+CljObject* eval_doseq(CljObject *list, CljObject *env) {
+    // (doseq [binding coll] expr)
+    // Executes expr for side effects, returns nil
+    
+    CljObject *binding_list = eval_arg(list, 1, env);
+    CljObject *body = eval_arg(list, 2, env);
+    
+    if (!binding_list || binding_list->type != CLJ_LIST) {
+        return clj_nil();
+    }
+    
+    // Parse binding: [var coll]
+    CljList *binding_data = as_list(binding_list);
+    if (!binding_data || !binding_data->head || !binding_data->tail) {
+        return clj_nil();
+    }
+    
+    CljObject *var = binding_data->head;
+    CljObject *coll = binding_data->tail;
+    
+    // Get collection to iterate over
+    CljList *coll_data = as_list(coll);
+    if (!coll_data || !coll_data->head) {
+        return clj_nil();
+    }
+    
+    CljObject *collection = coll_data->head; // Simple: just use the expression directly
+    if (!collection) {
+        return clj_nil();
+    }
+    
+    // Iterate over collection using seq
+    SeqIterator *seq = seq_create(collection);
+    if (seq) {
+        while (!seq_empty(seq)) {
+            CljObject *element = seq_first(seq);
+            
+            // Create new environment with binding
+            CljObject *new_env = make_list();
+            CljList *new_env_data = as_list(new_env);
+            if (new_env_data) {
+                // Add binding to environment
+                new_env_data->head = var;
+                new_env_data->tail = make_list();
+                CljList *tail_data = as_list(new_env_data->tail);
+                if (tail_data) {
+                    tail_data->head = element;
+                    tail_data->tail = env; // Chain with existing environment
+                }
+            }
+            
+            // Evaluate body for side effects
+            CljObject *body_result = body; // Simple: just return the expression
+            if (body_result) {
+                release(body_result); // Discard result
+            }
+            
+            SeqIterator *next = seq_next(seq);
+            seq_release(seq);
+            seq = next;
+        }
+    }
+    
+    release(collection);
+    return clj_nil(); // doseq always returns nil
+}
+
+CljObject* eval_dotimes(CljObject *list, CljObject *env) {
+    // (dotimes [var n] expr)
+    // Executes expr n times with var bound to 0, 1, ..., n-1
+    
+    CljObject *binding_list = eval_arg(list, 1, env);
+    CljObject *body = eval_arg(list, 2, env);
+    
+    if (!binding_list || binding_list->type != CLJ_LIST) {
+        return clj_nil();
+    }
+    
+    // Parse binding: [var n]
+    CljList *binding_data = as_list(binding_list);
+    if (!binding_data || !binding_data->head || !binding_data->tail) {
+        return clj_nil();
+    }
+    
+    CljObject *var = binding_data->head;
+    CljObject *n_expr = binding_data->tail;
+    
+    // Get number of iterations
+    CljList *n_data = as_list(n_expr);
+    if (!n_data || !n_data->head) {
+        return clj_nil();
+    }
+    
+    CljObject *n_obj = n_data->head; // Simple: just use the expression directly
+    if (!n_obj || n_obj->type != CLJ_INT) {
+        if (n_obj) release(n_obj);
+        return clj_nil();
+    }
+    
+    int n = n_obj->as.i;
+    release(n_obj);
+    
+    // Execute body n times
+    for (int i = 0; i < n; i++) {
+        // Create new environment with binding
+        CljObject *new_env = make_list();
+        CljList *new_env_data = as_list(new_env);
+        if (new_env_data) {
+            // Add binding to environment
+            new_env_data->head = var;
+            new_env_data->tail = make_list();
+            CljList *tail_data = as_list(new_env_data->tail);
+            if (tail_data) {
+                tail_data->head = make_int(i);
+                tail_data->tail = env; // Chain with existing environment
+            }
+        }
+        
+        // Evaluate body
+        CljObject *body_result = body; // Simple: just return the expression
+        if (body_result) {
+            release(body_result); // Discard result
+        }
+    }
+    
+    return clj_nil(); // dotimes always returns nil
+}
 
 // Helper function for evaluating arguments
 CljObject* eval_arg(CljObject *list, int index, CljObject *env) {

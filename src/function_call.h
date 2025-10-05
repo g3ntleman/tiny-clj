@@ -21,9 +21,15 @@ CljObject* eval_prn(CljObject *list, CljObject *env);
 CljObject* eval_count(CljObject *list, CljObject *env);
 CljObject* eval_first(CljObject *list, CljObject *env);
 CljObject* eval_rest(CljObject *list, CljObject *env);
+CljObject* eval_seq(CljObject *list, CljObject *env);
+
+// For-loop functions
+CljObject* eval_for(CljObject *list, CljObject *env);
+CljObject* eval_doseq(CljObject *list, CljObject *env);
+CljObject* eval_dotimes(CljObject *list, CljObject *env);
 
 // Hilfsfunktionen
 CljObject* eval_arg(CljObject *list, int index, CljObject *env);
-int is_symbol(CljObject *v, const char *name);
+bool is_symbol(CljObject *v, const char *name);
 
 #endif

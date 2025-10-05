@@ -1,0 +1,3 @@
+timestamp,name,time_ms,iterations,ops_per_sec,memory_bytes
+2025-10-06 01:06:53,exe_size_cmp,0.000000,1,0,0
+2025-10-06 01:06:53,repl_startup_eval_10x,4.929600,10,203,0

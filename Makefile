@@ -250,6 +250,84 @@ test-parser/fast:
 .PHONY : test-parser/fast
 
 #=============================================================================
+# Target rules for targets named test-seq
+
+# Build rule for target.
+test-seq: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-seq
+.PHONY : test-seq
+
+# fast build rule for target.
+test-seq/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/build
+.PHONY : test-seq/fast
+
+#=============================================================================
+# Target rules for targets named test-seq-performance
+
+# Build rule for target.
+test-seq-performance: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-seq-performance
+.PHONY : test-seq-performance
+
+# fast build rule for target.
+test-seq-performance/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/build
+.PHONY : test-seq-performance/fast
+
+#=============================================================================
+# Target rules for targets named test-for-loops
+
+# Build rule for target.
+test-for-loops: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-for-loops
+.PHONY : test-for-loops
+
+# fast build rule for target.
+test-for-loops/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/build
+.PHONY : test-for-loops/fast
+
+#=============================================================================
+# Target rules for targets named test-for-performance
+
+# Build rule for target.
+test-for-performance: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-for-performance
+.PHONY : test-for-performance
+
+# fast build rule for target.
+test-for-performance/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/build
+.PHONY : test-for-performance/fast
+
+#=============================================================================
+# Target rules for targets named test-memory-profiling
+
+# Build rule for target.
+test-memory-profiling: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-memory-profiling
+.PHONY : test-memory-profiling
+
+# fast build rule for target.
+test-memory-profiling/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/build
+.PHONY : test-memory-profiling/fast
+
+#=============================================================================
+# Target rules for targets named test-memory-simple
+
+# Build rule for target.
+test-memory-simple: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-memory-simple
+.PHONY : test-memory-simple
+
+# fast build rule for target.
+test-memory-simple/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/build
+.PHONY : test-memory-simple/fast
+
+#=============================================================================
 # Target rules for targets named test-all
 
 # Build rule for target.
@@ -261,6 +339,45 @@ test-all: cmake_check_build_system
 test-all/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-all.dir/build.make CMakeFiles/test-all.dir/build
 .PHONY : test-all/fast
+
+#=============================================================================
+# Target rules for targets named demo-array-system
+
+# Build rule for target.
+demo-array-system: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 demo-array-system
+.PHONY : demo-array-system
+
+# fast build rule for target.
+demo-array-system/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/build
+.PHONY : demo-array-system/fast
+
+#=============================================================================
+# Target rules for targets named test-kv-macros
+
+# Build rule for target.
+test-kv-macros: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test-kv-macros
+.PHONY : test-kv-macros
+
+# fast build rule for target.
+test-kv-macros/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/build
+.PHONY : test-kv-macros/fast
+
+#=============================================================================
+# Target rules for targets named kv-macros-demo
+
+# Build rule for target.
+kv-macros-demo: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 kv-macros-demo
+.PHONY : kv-macros-demo
+
+# fast build rule for target.
+kv-macros-demo/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/build
+.PHONY : kv-macros-demo/fast
 
 #=============================================================================
 # Target rules for targets named run-unit-tests
@@ -702,6 +819,15 @@ src/CljObject.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/CljObject.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/CljObject.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/CljObject.c.o
 .PHONY : src/CljObject.c.o
 
 src/CljObject.i: src/CljObject.c.i
@@ -715,6 +841,15 @@ src/CljObject.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/CljObject.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/CljObject.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/CljObject.c.i
 .PHONY : src/CljObject.c.i
 
 src/CljObject.s: src/CljObject.c.s
@@ -728,6 +863,15 @@ src/CljObject.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/CljObject.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/CljObject.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/CljObject.c.s
 .PHONY : src/CljObject.c.s
 
 src/benchmark.o: src/benchmark.c.o
@@ -786,10 +930,16 @@ src/clj_error.o: src/clj_error.c.o
 
 # target to build an object file
 src/clj_error.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_error.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_error.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_error.c.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_error.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_error.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_error.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_error.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_error.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_error.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_error.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_error.c.o
 .PHONY : src/clj_error.c.o
 
 src/clj_error.i: src/clj_error.c.i
@@ -797,10 +947,16 @@ src/clj_error.i: src/clj_error.c.i
 
 # target to preprocess a source file
 src/clj_error.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_error.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_error.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_error.c.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_error.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_error.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_error.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_error.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_error.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_error.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_error.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_error.c.i
 .PHONY : src/clj_error.c.i
 
 src/clj_error.s: src/clj_error.c.s
@@ -808,10 +964,16 @@ src/clj_error.s: src/clj_error.c.s
 
 # target to generate assembly for a file
 src/clj_error.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_error.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_error.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_error.c.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_error.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_error.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_error.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_error.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_error.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_error.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_error.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_error.c.s
 .PHONY : src/clj_error.c.s
 
 src/clj_parser.o: src/clj_parser.c.o
@@ -825,6 +987,12 @@ src/clj_parser.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_parser.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_parser.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_parser.c.o
 .PHONY : src/clj_parser.c.o
 
 src/clj_parser.i: src/clj_parser.c.i
@@ -838,6 +1006,12 @@ src/clj_parser.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_parser.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_parser.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_parser.c.i
 .PHONY : src/clj_parser.c.i
 
 src/clj_parser.s: src/clj_parser.c.s
@@ -851,6 +1025,12 @@ src/clj_parser.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_parser.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_parser.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_parser.c.s
 .PHONY : src/clj_parser.c.s
 
 src/clj_symbols.o: src/clj_symbols.c.o
@@ -864,6 +1044,15 @@ src/clj_symbols.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_symbols.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_symbols.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/clj_symbols.c.o
 .PHONY : src/clj_symbols.c.o
 
 src/clj_symbols.i: src/clj_symbols.c.i
@@ -877,6 +1066,15 @@ src/clj_symbols.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_symbols.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_symbols.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/clj_symbols.c.i
 .PHONY : src/clj_symbols.c.i
 
 src/clj_symbols.s: src/clj_symbols.c.s
@@ -890,6 +1088,15 @@ src/clj_symbols.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_symbols.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clj_symbols.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/clj_symbols.c.s
 .PHONY : src/clj_symbols.c.s
 
 src/clojure_core.o: src/clojure_core.c.o
@@ -932,6 +1139,10 @@ src/exception.o: src/exception.c.o
 src/exception.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/exception.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/exception.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/exception.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/exception.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/exception.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/exception.c.o
 .PHONY : src/exception.c.o
 
 src/exception.i: src/exception.c.i
@@ -941,6 +1152,10 @@ src/exception.i: src/exception.c.i
 src/exception.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/exception.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/exception.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/exception.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/exception.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/exception.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/exception.c.i
 .PHONY : src/exception.c.i
 
 src/exception.s: src/exception.c.s
@@ -950,6 +1165,10 @@ src/exception.s: src/exception.c.s
 src/exception.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/exception.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/exception.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/exception.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/exception.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/exception.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/exception.c.s
 .PHONY : src/exception.c.s
 
 src/function_call.o: src/function_call.c.o
@@ -963,6 +1182,12 @@ src/function_call.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/function_call.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/function_call.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/function_call.c.o
 .PHONY : src/function_call.c.o
 
 src/function_call.i: src/function_call.c.i
@@ -976,6 +1201,12 @@ src/function_call.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/function_call.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/function_call.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/function_call.c.i
 .PHONY : src/function_call.c.i
 
 src/function_call.s: src/function_call.c.s
@@ -989,6 +1220,12 @@ src/function_call.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/function_call.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/function_call.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/function_call.c.s
 .PHONY : src/function_call.c.s
 
 src/list_operations.o: src/list_operations.c.o
@@ -1002,6 +1239,12 @@ src/list_operations.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/list_operations.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/list_operations.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/list_operations.c.o
 .PHONY : src/list_operations.c.o
 
 src/list_operations.i: src/list_operations.c.i
@@ -1015,6 +1258,12 @@ src/list_operations.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/list_operations.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/list_operations.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/list_operations.c.i
 .PHONY : src/list_operations.c.i
 
 src/list_operations.s: src/list_operations.c.s
@@ -1028,31 +1277,13 @@ src/list_operations.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/list_operations.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/list_operations.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/list_operations.c.s
 .PHONY : src/list_operations.c.s
-
-src/main.o: src/main.c.o
-.PHONY : src/main.o
-
-# target to build an object file
-src/main.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/main.c.o
-.PHONY : src/main.c.o
-
-src/main.i: src/main.c.i
-.PHONY : src/main.i
-
-# target to preprocess a source file
-src/main.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/main.c.i
-.PHONY : src/main.c.i
-
-src/main.s: src/main.c.s
-.PHONY : src/main.s
-
-# target to generate assembly for a file
-src/main.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/main.c.s
-.PHONY : src/main.c.s
 
 src/map.o: src/map.c.o
 .PHONY : src/map.o
@@ -1065,6 +1296,12 @@ src/map.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/map.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/map.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/map.c.o
 .PHONY : src/map.c.o
 
 src/map.i: src/map.c.i
@@ -1078,6 +1315,12 @@ src/map.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/map.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/map.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/map.c.i
 .PHONY : src/map.c.i
 
 src/map.s: src/map.c.s
@@ -1091,7 +1334,46 @@ src/map.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/map.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/map.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/map.c.s
 .PHONY : src/map.c.s
+
+src/memory_profiler.o: src/memory_profiler.c.o
+.PHONY : src/memory_profiler.o
+
+# target to build an object file
+src/memory_profiler.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_profiler.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_profiler.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/memory_profiler.c.o
+.PHONY : src/memory_profiler.c.o
+
+src/memory_profiler.i: src/memory_profiler.c.i
+.PHONY : src/memory_profiler.i
+
+# target to preprocess a source file
+src/memory_profiler.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_profiler.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_profiler.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/memory_profiler.c.i
+.PHONY : src/memory_profiler.c.i
+
+src/memory_profiler.s: src/memory_profiler.c.s
+.PHONY : src/memory_profiler.s
+
+# target to generate assembly for a file
+src/memory_profiler.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_profiler.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_profiler.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/memory_profiler.c.s
+.PHONY : src/memory_profiler.c.s
 
 src/namespace.o: src/namespace.c.o
 .PHONY : src/namespace.o
@@ -1104,6 +1386,15 @@ src/namespace.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/namespace.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/namespace.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/namespace.c.o
 .PHONY : src/namespace.c.o
 
 src/namespace.i: src/namespace.c.i
@@ -1117,6 +1408,15 @@ src/namespace.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/namespace.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/namespace.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/namespace.c.i
 .PHONY : src/namespace.c.i
 
 src/namespace.s: src/namespace.c.s
@@ -1130,6 +1430,15 @@ src/namespace.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/namespace.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/namespace.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/namespace.c.s
 .PHONY : src/namespace.c.s
 
 src/platform_macos.o: src/platform_macos.c.o
@@ -1137,7 +1446,6 @@ src/platform_macos.o: src/platform_macos.c.o
 
 # target to build an object file
 src/platform_macos.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/platform_macos.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o
 .PHONY : src/platform_macos.c.o
 
@@ -1146,7 +1454,6 @@ src/platform_macos.i: src/platform_macos.c.i
 
 # target to preprocess a source file
 src/platform_macos.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/platform_macos.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.i
 .PHONY : src/platform_macos.c.i
 
@@ -1155,9 +1462,65 @@ src/platform_macos.s: src/platform_macos.c.s
 
 # target to generate assembly for a file
 src/platform_macos.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/platform_macos.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.s
 .PHONY : src/platform_macos.c.s
+
+src/reader.o: src/reader.c.o
+.PHONY : src/reader.o
+
+# target to build an object file
+src/reader.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/reader.c.o
+.PHONY : src/reader.c.o
+
+src/reader.i: src/reader.c.i
+.PHONY : src/reader.i
+
+# target to preprocess a source file
+src/reader.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/reader.c.i
+.PHONY : src/reader.c.i
+
+src/reader.s: src/reader.c.s
+.PHONY : src/reader.s
+
+# target to generate assembly for a file
+src/reader.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/reader.c.s
+.PHONY : src/reader.c.s
 
 src/repl.o: src/repl.c.o
 .PHONY : src/repl.o
@@ -1210,6 +1573,63 @@ src/runtime.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/runtime.c.s
 .PHONY : src/runtime.c.s
 
+src/seq.o: src/seq.c.o
+.PHONY : src/seq.o
+
+# target to build an object file
+src/seq.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/seq.c.o
+.PHONY : src/seq.c.o
+
+src/seq.i: src/seq.c.i
+.PHONY : src/seq.i
+
+# target to preprocess a source file
+src/seq.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/seq.c.i
+.PHONY : src/seq.c.i
+
+src/seq.s: src/seq.c.s
+.PHONY : src/seq.s
+
+# target to generate assembly for a file
+src/seq.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/seq.c.s
+.PHONY : src/seq.c.s
+
 src/string.o: src/string.c.o
 .PHONY : src/string.o
 
@@ -1221,6 +1641,12 @@ src/string.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/string.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/string.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/string.c.o
 .PHONY : src/string.c.o
 
 src/string.i: src/string.c.i
@@ -1234,6 +1660,12 @@ src/string.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/string.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/string.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/string.c.i
 .PHONY : src/string.c.i
 
 src/string.s: src/string.c.s
@@ -1247,7 +1679,61 @@ src/string.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/string.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/string.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/string.c.s
 .PHONY : src/string.c.s
+
+src/tests/demo_array_system.o: src/tests/demo_array_system.c.o
+.PHONY : src/tests/demo_array_system.o
+
+# target to build an object file
+src/tests/demo_array_system.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/tests/demo_array_system.c.o
+.PHONY : src/tests/demo_array_system.c.o
+
+src/tests/demo_array_system.i: src/tests/demo_array_system.c.i
+.PHONY : src/tests/demo_array_system.i
+
+# target to preprocess a source file
+src/tests/demo_array_system.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/tests/demo_array_system.c.i
+.PHONY : src/tests/demo_array_system.c.i
+
+src/tests/demo_array_system.s: src/tests/demo_array_system.c.s
+.PHONY : src/tests/demo_array_system.s
+
+# target to generate assembly for a file
+src/tests/demo_array_system.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/tests/demo_array_system.c.s
+.PHONY : src/tests/demo_array_system.c.s
+
+src/tests/kv_macros_demo.o: src/tests/kv_macros_demo.c.o
+.PHONY : src/tests/kv_macros_demo.o
+
+# target to build an object file
+src/tests/kv_macros_demo.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/tests/kv_macros_demo.c.o
+.PHONY : src/tests/kv_macros_demo.c.o
+
+src/tests/kv_macros_demo.i: src/tests/kv_macros_demo.c.i
+.PHONY : src/tests/kv_macros_demo.i
+
+# target to preprocess a source file
+src/tests/kv_macros_demo.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/tests/kv_macros_demo.c.i
+.PHONY : src/tests/kv_macros_demo.c.i
+
+src/tests/kv_macros_demo.s: src/tests/kv_macros_demo.c.s
+.PHONY : src/tests/kv_macros_demo.s
+
+# target to generate assembly for a file
+src/tests/kv_macros_demo.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/tests/kv_macros_demo.c.s
+.PHONY : src/tests/kv_macros_demo.c.s
 
 src/tests/test_all_main.o: src/tests/test_all_main.c.o
 .PHONY : src/tests/test_all_main.o
@@ -1278,7 +1764,7 @@ src/tests/test_alloc_macros.o: src/tests/test_alloc_macros.c.o
 
 # target to build an object file
 src/tests/test_alloc_macros.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_alloc_macros.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o
 .PHONY : src/tests/test_alloc_macros.c.o
 
 src/tests/test_alloc_macros.i: src/tests/test_alloc_macros.c.i
@@ -1286,7 +1772,7 @@ src/tests/test_alloc_macros.i: src/tests/test_alloc_macros.c.i
 
 # target to preprocess a source file
 src/tests/test_alloc_macros.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_alloc_macros.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.i
 .PHONY : src/tests/test_alloc_macros.c.i
 
 src/tests/test_alloc_macros.s: src/tests/test_alloc_macros.c.s
@@ -1294,7 +1780,7 @@ src/tests/test_alloc_macros.s: src/tests/test_alloc_macros.c.s
 
 # target to generate assembly for a file
 src/tests/test_alloc_macros.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_alloc_macros.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.s
 .PHONY : src/tests/test_alloc_macros.c.s
 
 src/tests/test_assertions.o: src/tests/test_assertions.c.o
@@ -1302,7 +1788,7 @@ src/tests/test_assertions.o: src/tests/test_assertions.c.o
 
 # target to build an object file
 src/tests/test_assertions.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_assertions.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o
 .PHONY : src/tests/test_assertions.c.o
 
 src/tests/test_assertions.i: src/tests/test_assertions.c.i
@@ -1310,7 +1796,7 @@ src/tests/test_assertions.i: src/tests/test_assertions.c.i
 
 # target to preprocess a source file
 src/tests/test_assertions.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_assertions.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.i
 .PHONY : src/tests/test_assertions.c.i
 
 src/tests/test_assertions.s: src/tests/test_assertions.c.s
@@ -1318,7 +1804,7 @@ src/tests/test_assertions.s: src/tests/test_assertions.c.s
 
 # target to generate assembly for a file
 src/tests/test_assertions.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_assertions.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.s
 .PHONY : src/tests/test_assertions.c.s
 
 src/tests/test_benchmark_main.o: src/tests/test_benchmark_main.c.o
@@ -1345,12 +1831,60 @@ src/tests/test_benchmark_main.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/tests/test_benchmark_main.c.s
 .PHONY : src/tests/test_benchmark_main.c.s
 
+src/tests/test_for_loops_minunit.o: src/tests/test_for_loops_minunit.c.o
+.PHONY : src/tests/test_for_loops_minunit.o
+
+# target to build an object file
+src/tests/test_for_loops_minunit.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/tests/test_for_loops_minunit.c.o
+.PHONY : src/tests/test_for_loops_minunit.c.o
+
+src/tests/test_for_loops_minunit.i: src/tests/test_for_loops_minunit.c.i
+.PHONY : src/tests/test_for_loops_minunit.i
+
+# target to preprocess a source file
+src/tests/test_for_loops_minunit.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/tests/test_for_loops_minunit.c.i
+.PHONY : src/tests/test_for_loops_minunit.c.i
+
+src/tests/test_for_loops_minunit.s: src/tests/test_for_loops_minunit.c.s
+.PHONY : src/tests/test_for_loops_minunit.s
+
+# target to generate assembly for a file
+src/tests/test_for_loops_minunit.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/tests/test_for_loops_minunit.c.s
+.PHONY : src/tests/test_for_loops_minunit.c.s
+
+src/tests/test_for_performance.o: src/tests/test_for_performance.c.o
+.PHONY : src/tests/test_for_performance.o
+
+# target to build an object file
+src/tests/test_for_performance.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/tests/test_for_performance.c.o
+.PHONY : src/tests/test_for_performance.c.o
+
+src/tests/test_for_performance.i: src/tests/test_for_performance.c.i
+.PHONY : src/tests/test_for_performance.i
+
+# target to preprocess a source file
+src/tests/test_for_performance.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/tests/test_for_performance.c.i
+.PHONY : src/tests/test_for_performance.c.i
+
+src/tests/test_for_performance.s: src/tests/test_for_performance.c.s
+.PHONY : src/tests/test_for_performance.s
+
+# target to generate assembly for a file
+src/tests/test_for_performance.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/tests/test_for_performance.c.s
+.PHONY : src/tests/test_for_performance.c.s
+
 src/tests/test_global_singletons.o: src/tests/test_global_singletons.c.o
 .PHONY : src/tests/test_global_singletons.o
 
 # target to build an object file
 src/tests/test_global_singletons.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_global_singletons.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o
 .PHONY : src/tests/test_global_singletons.c.o
 
 src/tests/test_global_singletons.i: src/tests/test_global_singletons.c.i
@@ -1358,7 +1892,7 @@ src/tests/test_global_singletons.i: src/tests/test_global_singletons.c.i
 
 # target to preprocess a source file
 src/tests/test_global_singletons.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_global_singletons.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.i
 .PHONY : src/tests/test_global_singletons.c.i
 
 src/tests/test_global_singletons.s: src/tests/test_global_singletons.c.s
@@ -1366,7 +1900,7 @@ src/tests/test_global_singletons.s: src/tests/test_global_singletons.c.s
 
 # target to generate assembly for a file
 src/tests/test_global_singletons.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_global_singletons.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.s
 .PHONY : src/tests/test_global_singletons.c.s
 
 src/tests/test_integration_main.o: src/tests/test_integration_main.c.o
@@ -1374,6 +1908,7 @@ src/tests/test_integration_main.o: src/tests/test_integration_main.c.o
 
 # target to build an object file
 src/tests/test_integration_main.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/tests/test_integration_main.c.o
 .PHONY : src/tests/test_integration_main.c.o
 
@@ -1382,6 +1917,7 @@ src/tests/test_integration_main.i: src/tests/test_integration_main.c.i
 
 # target to preprocess a source file
 src/tests/test_integration_main.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/tests/test_integration_main.c.i
 .PHONY : src/tests/test_integration_main.c.i
 
@@ -1390,63 +1926,163 @@ src/tests/test_integration_main.s: src/tests/test_integration_main.c.s
 
 # target to generate assembly for a file
 src/tests/test_integration_main.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/tests/test_integration_main.c.s
 .PHONY : src/tests/test_integration_main.c.s
 
-src/tests/test_parser.o: src/tests/test_parser.c.o
-.PHONY : src/tests/test_parser.o
+src/tests/test_kv_macros.o: src/tests/test_kv_macros.c.o
+.PHONY : src/tests/test_kv_macros.o
 
 # target to build an object file
-src/tests/test_parser.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser.c.o
-.PHONY : src/tests/test_parser.c.o
+src/tests/test_kv_macros.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/tests/test_kv_macros.c.o
+.PHONY : src/tests/test_kv_macros.c.o
 
-src/tests/test_parser.i: src/tests/test_parser.c.i
-.PHONY : src/tests/test_parser.i
+src/tests/test_kv_macros.i: src/tests/test_kv_macros.c.i
+.PHONY : src/tests/test_kv_macros.i
 
 # target to preprocess a source file
-src/tests/test_parser.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser.c.i
-.PHONY : src/tests/test_parser.c.i
+src/tests/test_kv_macros.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/tests/test_kv_macros.c.i
+.PHONY : src/tests/test_kv_macros.c.i
 
-src/tests/test_parser.s: src/tests/test_parser.c.s
-.PHONY : src/tests/test_parser.s
+src/tests/test_kv_macros.s: src/tests/test_kv_macros.c.s
+.PHONY : src/tests/test_kv_macros.s
 
 # target to generate assembly for a file
-src/tests/test_parser.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser.c.s
-.PHONY : src/tests/test_parser.c.s
+src/tests/test_kv_macros.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/tests/test_kv_macros.c.s
+.PHONY : src/tests/test_kv_macros.c.s
 
-src/tests/test_unit.o: src/tests/test_unit.c.o
-.PHONY : src/tests/test_unit.o
+src/tests/test_memory_profiling.o: src/tests/test_memory_profiling.c.o
+.PHONY : src/tests/test_memory_profiling.o
 
 # target to build an object file
-src/tests/test_unit.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit.c.o
-.PHONY : src/tests/test_unit.c.o
+src/tests/test_memory_profiling.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/tests/test_memory_profiling.c.o
+.PHONY : src/tests/test_memory_profiling.c.o
 
-src/tests/test_unit.i: src/tests/test_unit.c.i
-.PHONY : src/tests/test_unit.i
+src/tests/test_memory_profiling.i: src/tests/test_memory_profiling.c.i
+.PHONY : src/tests/test_memory_profiling.i
 
 # target to preprocess a source file
-src/tests/test_unit.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit.c.i
-.PHONY : src/tests/test_unit.c.i
+src/tests/test_memory_profiling.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/tests/test_memory_profiling.c.i
+.PHONY : src/tests/test_memory_profiling.c.i
 
-src/tests/test_unit.s: src/tests/test_unit.c.s
-.PHONY : src/tests/test_unit.s
+src/tests/test_memory_profiling.s: src/tests/test_memory_profiling.c.s
+.PHONY : src/tests/test_memory_profiling.s
 
 # target to generate assembly for a file
-src/tests/test_unit.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit.c.s
-.PHONY : src/tests/test_unit.c.s
+src/tests/test_memory_profiling.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/tests/test_memory_profiling.c.s
+.PHONY : src/tests/test_memory_profiling.c.s
+
+src/tests/test_memory_simple.o: src/tests/test_memory_simple.c.o
+.PHONY : src/tests/test_memory_simple.o
+
+# target to build an object file
+src/tests/test_memory_simple.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/tests/test_memory_simple.c.o
+.PHONY : src/tests/test_memory_simple.c.o
+
+src/tests/test_memory_simple.i: src/tests/test_memory_simple.c.i
+.PHONY : src/tests/test_memory_simple.i
+
+# target to preprocess a source file
+src/tests/test_memory_simple.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/tests/test_memory_simple.c.i
+.PHONY : src/tests/test_memory_simple.c.i
+
+src/tests/test_memory_simple.s: src/tests/test_memory_simple.c.s
+.PHONY : src/tests/test_memory_simple.s
+
+# target to generate assembly for a file
+src/tests/test_memory_simple.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/tests/test_memory_simple.c.s
+.PHONY : src/tests/test_memory_simple.c.s
+
+src/tests/test_parser_minunit.o: src/tests/test_parser_minunit.c.o
+.PHONY : src/tests/test_parser_minunit.o
+
+# target to build an object file
+src/tests/test_parser_minunit.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser_minunit.c.o
+.PHONY : src/tests/test_parser_minunit.c.o
+
+src/tests/test_parser_minunit.i: src/tests/test_parser_minunit.c.i
+.PHONY : src/tests/test_parser_minunit.i
+
+# target to preprocess a source file
+src/tests/test_parser_minunit.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser_minunit.c.i
+.PHONY : src/tests/test_parser_minunit.c.i
+
+src/tests/test_parser_minunit.s: src/tests/test_parser_minunit.c.s
+.PHONY : src/tests/test_parser_minunit.s
+
+# target to generate assembly for a file
+src/tests/test_parser_minunit.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser_minunit.c.s
+.PHONY : src/tests/test_parser_minunit.c.s
+
+src/tests/test_seq_minunit.o: src/tests/test_seq_minunit.c.o
+.PHONY : src/tests/test_seq_minunit.o
+
+# target to build an object file
+src/tests/test_seq_minunit.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/tests/test_seq_minunit.c.o
+.PHONY : src/tests/test_seq_minunit.c.o
+
+src/tests/test_seq_minunit.i: src/tests/test_seq_minunit.c.i
+.PHONY : src/tests/test_seq_minunit.i
+
+# target to preprocess a source file
+src/tests/test_seq_minunit.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/tests/test_seq_minunit.c.i
+.PHONY : src/tests/test_seq_minunit.c.i
+
+src/tests/test_seq_minunit.s: src/tests/test_seq_minunit.c.s
+.PHONY : src/tests/test_seq_minunit.s
+
+# target to generate assembly for a file
+src/tests/test_seq_minunit.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/tests/test_seq_minunit.c.s
+.PHONY : src/tests/test_seq_minunit.c.s
+
+src/tests/test_seq_performance.o: src/tests/test_seq_performance.c.o
+.PHONY : src/tests/test_seq_performance.o
+
+# target to build an object file
+src/tests/test_seq_performance.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/tests/test_seq_performance.c.o
+.PHONY : src/tests/test_seq_performance.c.o
+
+src/tests/test_seq_performance.i: src/tests/test_seq_performance.c.i
+.PHONY : src/tests/test_seq_performance.i
+
+# target to preprocess a source file
+src/tests/test_seq_performance.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/tests/test_seq_performance.c.i
+.PHONY : src/tests/test_seq_performance.c.i
+
+src/tests/test_seq_performance.s: src/tests/test_seq_performance.c.s
+.PHONY : src/tests/test_seq_performance.s
+
+# target to generate assembly for a file
+src/tests/test_seq_performance.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/tests/test_seq_performance.c.s
+.PHONY : src/tests/test_seq_performance.c.s
 
 src/tests/test_unit_main.o: src/tests/test_unit_main.c.o
 .PHONY : src/tests/test_unit_main.o
 
 # target to build an object file
 src/tests/test_unit_main.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_main.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o
 .PHONY : src/tests/test_unit_main.c.o
 
 src/tests/test_unit_main.i: src/tests/test_unit_main.c.i
@@ -1454,7 +2090,7 @@ src/tests/test_unit_main.i: src/tests/test_unit_main.c.i
 
 # target to preprocess a source file
 src/tests/test_unit_main.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_main.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.i
 .PHONY : src/tests/test_unit_main.c.i
 
 src/tests/test_unit_main.s: src/tests/test_unit_main.c.s
@@ -1462,8 +2098,35 @@ src/tests/test_unit_main.s: src/tests/test_unit_main.c.s
 
 # target to generate assembly for a file
 src/tests/test_unit_main.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_main.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.s
 .PHONY : src/tests/test_unit_main.c.s
+
+src/tests/test_unit_minunit.o: src/tests/test_unit_minunit.c.o
+.PHONY : src/tests/test_unit_minunit.o
+
+# target to build an object file
+src/tests/test_unit_minunit.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_minunit.c.o
+.PHONY : src/tests/test_unit_minunit.c.o
+
+src/tests/test_unit_minunit.i: src/tests/test_unit_minunit.c.i
+.PHONY : src/tests/test_unit_minunit.i
+
+# target to preprocess a source file
+src/tests/test_unit_minunit.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_minunit.c.i
+.PHONY : src/tests/test_unit_minunit.c.i
+
+src/tests/test_unit_minunit.s: src/tests/test_unit_minunit.c.s
+.PHONY : src/tests/test_unit_minunit.s
+
+# target to generate assembly for a file
+src/tests/test_unit_minunit.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_minunit.c.s
+.PHONY : src/tests/test_unit_minunit.c.s
 
 src/types.o: src/types.c.o
 .PHONY : src/types.o
@@ -1476,6 +2139,15 @@ src/types.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/types.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/types.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/types.c.o
 .PHONY : src/types.c.o
 
 src/types.i: src/types.c.i
@@ -1489,6 +2161,15 @@ src/types.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/types.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/types.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/types.c.i
 .PHONY : src/types.c.i
 
 src/types.s: src/types.c.s
@@ -1502,6 +2183,15 @@ src/types.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/types.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/types.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/types.c.s
 .PHONY : src/types.c.s
 
 src/unity.o: src/unity.c.o
@@ -1509,10 +2199,8 @@ src/unity.o: src/unity.c.o
 
 # target to build an object file
 src/unity.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/unity.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/unity.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/unity.c.o
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/unity.c.o
 .PHONY : src/unity.c.o
 
 src/unity.i: src/unity.c.i
@@ -1520,10 +2208,8 @@ src/unity.i: src/unity.c.i
 
 # target to preprocess a source file
 src/unity.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/unity.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/unity.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/unity.c.i
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/unity.c.i
 .PHONY : src/unity.c.i
 
 src/unity.s: src/unity.c.s
@@ -1531,10 +2217,8 @@ src/unity.s: src/unity.c.s
 
 # target to generate assembly for a file
 src/unity.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/unity.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/unity.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/unity.c.s
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/unity.c.s
 .PHONY : src/unity.c.s
 
 src/vector.o: src/vector.c.o
@@ -1548,6 +2232,12 @@ src/vector.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/vector.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/vector.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/vector.c.o
 .PHONY : src/vector.c.o
 
 src/vector.i: src/vector.c.i
@@ -1561,6 +2251,12 @@ src/vector.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/vector.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/vector.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/vector.c.i
 .PHONY : src/vector.c.i
 
 src/vector.s: src/vector.c.s
@@ -1574,6 +2270,12 @@ src/vector.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/vector.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/vector.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/vector.c.s
 .PHONY : src/vector.c.s
 
 # Help Target
@@ -1622,10 +2324,19 @@ help:
 	@echo "... run-integration-tests"
 	@echo "... run-quick-tests"
 	@echo "... run-unit-tests"
+	@echo "... demo-array-system"
+	@echo "... kv-macros-demo"
 	@echo "... test-all"
 	@echo "... test-benchmark"
+	@echo "... test-for-loops"
+	@echo "... test-for-performance"
 	@echo "... test-integration"
+	@echo "... test-kv-macros"
+	@echo "... test-memory-profiling"
+	@echo "... test-memory-simple"
 	@echo "... test-parser"
+	@echo "... test-seq"
+	@echo "... test-seq-performance"
 	@echo "... test-unit"
 	@echo "... tiny-clj"
 	@echo "... tiny-clj-repl"
@@ -1659,27 +2370,39 @@ help:
 	@echo "... src/list_operations.o"
 	@echo "... src/list_operations.i"
 	@echo "... src/list_operations.s"
-	@echo "... src/main.o"
-	@echo "... src/main.i"
-	@echo "... src/main.s"
 	@echo "... src/map.o"
 	@echo "... src/map.i"
 	@echo "... src/map.s"
+	@echo "... src/memory_profiler.o"
+	@echo "... src/memory_profiler.i"
+	@echo "... src/memory_profiler.s"
 	@echo "... src/namespace.o"
 	@echo "... src/namespace.i"
 	@echo "... src/namespace.s"
 	@echo "... src/platform_macos.o"
 	@echo "... src/platform_macos.i"
 	@echo "... src/platform_macos.s"
+	@echo "... src/reader.o"
+	@echo "... src/reader.i"
+	@echo "... src/reader.s"
 	@echo "... src/repl.o"
 	@echo "... src/repl.i"
 	@echo "... src/repl.s"
 	@echo "... src/runtime.o"
 	@echo "... src/runtime.i"
 	@echo "... src/runtime.s"
+	@echo "... src/seq.o"
+	@echo "... src/seq.i"
+	@echo "... src/seq.s"
 	@echo "... src/string.o"
 	@echo "... src/string.i"
 	@echo "... src/string.s"
+	@echo "... src/tests/demo_array_system.o"
+	@echo "... src/tests/demo_array_system.i"
+	@echo "... src/tests/demo_array_system.s"
+	@echo "... src/tests/kv_macros_demo.o"
+	@echo "... src/tests/kv_macros_demo.i"
+	@echo "... src/tests/kv_macros_demo.s"
 	@echo "... src/tests/test_all_main.o"
 	@echo "... src/tests/test_all_main.i"
 	@echo "... src/tests/test_all_main.s"
@@ -1692,21 +2415,42 @@ help:
 	@echo "... src/tests/test_benchmark_main.o"
 	@echo "... src/tests/test_benchmark_main.i"
 	@echo "... src/tests/test_benchmark_main.s"
+	@echo "... src/tests/test_for_loops_minunit.o"
+	@echo "... src/tests/test_for_loops_minunit.i"
+	@echo "... src/tests/test_for_loops_minunit.s"
+	@echo "... src/tests/test_for_performance.o"
+	@echo "... src/tests/test_for_performance.i"
+	@echo "... src/tests/test_for_performance.s"
 	@echo "... src/tests/test_global_singletons.o"
 	@echo "... src/tests/test_global_singletons.i"
 	@echo "... src/tests/test_global_singletons.s"
 	@echo "... src/tests/test_integration_main.o"
 	@echo "... src/tests/test_integration_main.i"
 	@echo "... src/tests/test_integration_main.s"
-	@echo "... src/tests/test_parser.o"
-	@echo "... src/tests/test_parser.i"
-	@echo "... src/tests/test_parser.s"
-	@echo "... src/tests/test_unit.o"
-	@echo "... src/tests/test_unit.i"
-	@echo "... src/tests/test_unit.s"
+	@echo "... src/tests/test_kv_macros.o"
+	@echo "... src/tests/test_kv_macros.i"
+	@echo "... src/tests/test_kv_macros.s"
+	@echo "... src/tests/test_memory_profiling.o"
+	@echo "... src/tests/test_memory_profiling.i"
+	@echo "... src/tests/test_memory_profiling.s"
+	@echo "... src/tests/test_memory_simple.o"
+	@echo "... src/tests/test_memory_simple.i"
+	@echo "... src/tests/test_memory_simple.s"
+	@echo "... src/tests/test_parser_minunit.o"
+	@echo "... src/tests/test_parser_minunit.i"
+	@echo "... src/tests/test_parser_minunit.s"
+	@echo "... src/tests/test_seq_minunit.o"
+	@echo "... src/tests/test_seq_minunit.i"
+	@echo "... src/tests/test_seq_minunit.s"
+	@echo "... src/tests/test_seq_performance.o"
+	@echo "... src/tests/test_seq_performance.i"
+	@echo "... src/tests/test_seq_performance.s"
 	@echo "... src/tests/test_unit_main.o"
 	@echo "... src/tests/test_unit_main.i"
 	@echo "... src/tests/test_unit_main.s"
+	@echo "... src/tests/test_unit_minunit.o"
+	@echo "... src/tests/test_unit_minunit.i"
+	@echo "... src/tests/test_unit_minunit.s"
 	@echo "... src/types.o"
 	@echo "... src/types.i"
 	@echo "... src/types.s"

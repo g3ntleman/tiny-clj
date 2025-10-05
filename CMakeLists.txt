@@ -40,11 +40,13 @@ list(APPEND SOURCES
     src/clj_symbols.c
     src/exception.c
     src/clj_parser.c
+    src/reader.c
     src/function_call.c
     src/list_operations.c
     src/vector.c
     src/map.c
     src/string.c
+    src/seq.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -62,14 +64,9 @@ target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
 
-# Unit Tests (isolated, fast tests) - use runner with all unit test files
+# Unit Tests (isolated, fast tests) - using MinUnit
 add_executable(test-unit
-    src/tests/test_unit_main.c
-    src/tests/test_unit.c
-    src/tests/test_assertions.c
-    src/tests/test_global_singletons.c
-    src/tests/test_alloc_macros.c
-    src/unity.c
+    src/tests/test_unit_minunit.c
     src/CljObject.c
     src/types.c
     src/vector.c
@@ -79,8 +76,10 @@ add_executable(test-unit
     src/clj_symbols.c
     src/namespace.c
     src/clj_parser.c
+    src/reader.c
     src/function_call.c
     src/list_operations.c
+    src/seq.c
 )
 
 # Integration Tests (component interaction tests)
@@ -96,9 +95,11 @@ add_executable(test-integration
     src/clj_symbols.c
     src/namespace.c
     src/clj_parser.c
+    src/reader.c
     src/function_call.c
     src/clojure_core.c
-    src/list_operations.c)
+    src/list_operations.c
+    src/seq.c)
 
 # Benchmark Tests (performance and size tests)
 add_executable(test-benchmark
@@ -113,15 +114,16 @@ add_executable(test-benchmark
     src/clj_symbols.c
     src/namespace.c
     src/clj_parser.c
+    src/reader.c
     src/function_call.c
     src/clojure_core.c
     src/benchmark.c
+    src/seq.c
     src/list_operations.c)
 
-# Parser Tests
+# Parser Tests (using MinUnit)
 add_executable(test-parser
-    src/tests/test_parser.c
-    src/unity.c
+    src/tests/test_parser_minunit.c
     src/CljObject.c
     src/types.c
     src/vector.c
@@ -131,8 +133,125 @@ add_executable(test-parser
     src/clj_symbols.c
     src/namespace.c
     src/clj_parser.c
+    src/reader.c
     src/function_call.c
-    src/list_operations.c)
+    src/list_operations.c
+    src/seq.c)
+
+# Seq Tests (using MinUnit)
+add_executable(test-seq
+    src/tests/test_seq_minunit.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c)
+
+# Seq Performance Tests
+add_executable(test-seq-performance
+    src/tests/test_seq_performance.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/memory_profiler.c)
+
+# Set DEBUG flag for memory profiling
+target_compile_definitions(test-seq PRIVATE DEBUG=1)
+
+# For-Loop Tests
+add_executable(test-for-loops
+    src/tests/test_for_loops_minunit.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/memory_profiler.c)
+
+# Set DEBUG flag for memory profiling
+target_compile_definitions(test-for-loops PRIVATE DEBUG=1)
+
+# For-Loop Performance Tests
+add_executable(test-for-performance
+    src/tests/test_for_performance.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c)
+
+# Memory Profiling Tests (Debug only)
+add_executable(test-memory-profiling
+    src/tests/test_memory_profiling.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/memory_profiler.c)
+
+# Simple Memory Profiling Tests (Debug only)
+add_executable(test-memory-simple
+    src/tests/test_memory_simple.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/memory_profiler.c)
+
+# Set DEBUG flag for memory profiling
+target_compile_definitions(test-memory-simple PRIVATE DEBUG=1)
 
 # Test All (wrapper for all test categories)
 add_executable(test-all src/tests/test_all_main.c)
@@ -160,7 +279,6 @@ target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 
 # Meta-Funktionalität für alle Test-Executables aktivieren
 target_compile_definitions(test-unit PRIVATE ENABLE_META)
-target_compile_definitions(test-unit PRIVATE UNIT_TEST_RUNNER)
 target_compile_definitions(test-integration PRIVATE ENABLE_META)
 target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
 
@@ -170,12 +288,11 @@ target_compile_definitions(tiny-clj PRIVATE TINY_CLJ_EMBED_TESTS)
 target_sources(tiny-clj PRIVATE 
     src/tests/test_unit_main.c 
     src/tests/test_integration_main.c 
-    src/tests/test_parser.c 
-    src/tests/test_unit.c
+    src/tests/test_parser_minunit.c 
+    src/tests/test_unit_minunit.c
     src/tests/test_assertions.c
     src/tests/test_global_singletons.c
     src/tests/test_alloc_macros.c
-    src/unity.c
     src/clj_error.c)
 
 # ============================================================================
@@ -228,7 +345,7 @@ install(TARGETS tiny-clj test-unit test-integration test-benchmark test-all
 include(CTest)
 enable_testing()
 
-add_test(NAME unit COMMAND test-unit --all)
+add_test(NAME unit COMMAND test-unit)
 set_tests_properties(unit PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} LABELS "unit")
 
 add_test(NAME integration COMMAND test-integration --all)

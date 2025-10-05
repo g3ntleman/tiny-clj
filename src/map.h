@@ -23,6 +23,7 @@ void map_foreach(CljObject *map, void (*func)(CljObject*, CljObject*));
 int map_contains(CljObject *map, CljObject *key);
 /** Remove key if present (releases removed references). */
 void map_remove(CljObject *map, CljObject *key);
+CljObject* map_from_stack(CljObject **pairs, int pair_count);
 
 #endif
 

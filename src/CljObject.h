@@ -15,6 +15,7 @@
 #include "common.h"
 #include "types.h"
 #include <string.h>
+#include <stdbool.h>
 
 // Forward declaration to avoid circular dependency
 struct CljNamespace;
@@ -38,7 +39,7 @@ struct CljObject {
         // Primitive values stored directly
         int i;
         double f;
-        int b;  // boolean
+        bool b;  // boolean
         
         // Complex objects referenced via pointer
         void* data;
@@ -157,6 +158,11 @@ char* pr_str(CljObject *v);
 // Equality comparison
 /** Structural equality for collections; pointer equality fast path. */
 bool clj_equal(CljObject *a, CljObject *b);
+static inline bool clj_is_truthy(CljObject *v) {
+    if (!v || v == clj_nil()) return false;
+    if (v->type == CLJ_BOOL) return v->as.b;
+    return true;
+}
 
 // Map operations (optimized with pointer fast paths)
 /** Get value for key or NULL (structural key equality). */

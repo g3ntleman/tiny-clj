@@ -3,16 +3,26 @@ Tiny-CLJ Roadmap
 
 Active/Next
 -----------
-- UTF-8 (Phase 1):
+- UTF-8 (Phase 1): ✅ COMPLETED
   - Vendor sheredom/utf8.h (done)
   - Parser: validate & iterate codepoints for symbols/strings (no normalization)
   - Tests for UTF-8 roundtrip & delimiters
   - Measure code size impact (Release) and record in `Reports/`
-- Seq Semantics (Core):
-  - seq() for list, vector, map (entry view), string, nil
-  - first/rest/next via iterator views (no heap alloc)
-  - reduce/concat/apply on iterator basis
-  - Equality across seqables (value-based)
+       - Seq Semantics (Core): ✅ COMPLETED
+         - seq() for list, vector, map (entry view), string, nil
+         - first/rest/next via iterator views (no heap alloc)
+         - reduce/concat/apply on iterator basis
+         - Equality across seqables (value-based)
+       - For-Loops: ✅ COMPLETED
+         - for, doseq, dotimes implementations
+         - Seq-based iteration with environment binding
+         - Performance benchmarks and optimization analysis
+
+Next Priority
+-------------
+- Large-Map:
+  - Small→Large promotion; open addressing; pointer-key fastpath for interned symbols
+  - Benchmarks vs small maps (N≥16)
 
 Planned
 -------

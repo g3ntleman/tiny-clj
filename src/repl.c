@@ -10,19 +10,20 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 static int is_balanced_form(const char *s) {
     int p = 0, b = 0, c = 0; // () [] {}
-    int in_str = 0; int esc = 0;
+    bool in_str = false; bool esc = false;
     for (const char *x = s; *x; ++x) {
         char ch = *x;
         if (in_str) {
-            if (esc) { esc = 0; continue; }
-            if (ch == '\\') { esc = 1; continue; }
-            if (ch == '"') { in_str = 0; continue; }
+            if (esc) { esc = false; continue; }
+            if (ch == '\\') { esc = true; continue; }
+            if (ch == '"') { in_str = false; continue; }
             continue;
         }
-        if (ch == '"') { in_str = 1; continue; }
+        if (ch == '"') { in_str = true; continue; }
         if (ch == '(') p++; else if (ch == ')') p--;
         else if (ch == '[') b++; else if (ch == ']') b--;
         else if (ch == '{') c++; else if (ch == '}') c--;
@@ -63,13 +64,13 @@ int main(int argc, char **argv) {
     set_global_eval_state(st);
     evalstate_set_ns(st, "user");
     // Quiet mode for CLI eval (no banner)
-    int no_core = 0;
+    bool no_core = false;
     if (argc > 1) clojure_core_set_quiet(1);
 
     const char *ns_arg = NULL;
     const char *eval_arg = NULL;
     const char *file_arg = NULL;
-    int start_repl = 0;
+    bool start_repl = false;
     for (int i = 1; i < argc; i++) {
         if ((strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--ns") == 0) && i + 1 < argc) {
             ns_arg = argv[++i];
@@ -78,9 +79,9 @@ int main(int argc, char **argv) {
         } else if ((strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--file") == 0) && i + 1 < argc) {
             file_arg = argv[++i];
         } else if (strcmp(argv[i], "--no-core") == 0) {
-            no_core = 1;
+            no_core = true;
         } else if (strcmp(argv[i], "--repl") == 0) {
-            start_repl = 1;
+            start_repl = true;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             return 0;
@@ -148,10 +149,14 @@ int main(int argc, char **argv) {
     platform_set_stdin_nonblocking(1);
 
     char acc[4096]; acc[0] = '\0';
+    bool prompt_shown = false;
     for (;;) {
-        // Prompt indicates balance state
-        printf(is_balanced_form(acc) ? "> " : "…> ");
-        fflush(stdout);
+        // Print prompt only once per input cycle to avoid flooding
+        if (!prompt_shown) {
+            printf(is_balanced_form(acc) ? "> " : "…> ");
+            fflush(stdout);
+            prompt_shown = true;
+        }
 
         int once = 200; // poll iterations per loop for cooperative multitasking
         int got = 0;
@@ -174,6 +179,7 @@ int main(int argc, char **argv) {
 
         if (!is_balanced_form(acc)) {
             // need more lines
+            prompt_shown = false; // show continuation prompt once
             continue;
         }
 
@@ -195,6 +201,7 @@ int main(int argc, char **argv) {
             }
         }
         acc[0] = '\0';
+        prompt_shown = false; // show fresh prompt after evaluation
     }
 
     return 0;

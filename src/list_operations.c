@@ -36,16 +36,31 @@ int list_count(CljObject *list) {
     return count;
 }
 
-int is_list(CljObject *v) {
+CljObject* list_from_stack(CljObject **stack, int count) {
+    if (count == 0) return clj_nil();
+    CljObject *prev = NULL;
+    for (int i = count - 1; i >= 0; i--) {
+        CljObject *node = make_list();
+        CljList *node_list = as_list(node);
+        if (!node_list) return clj_nil();
+        node_list->head = stack[i];
+        node_list->tail = prev;
+        prev = node;
+        if (stack[i]) retain(stack[i]);
+    }
+    return prev ? prev : clj_nil();
+}
+
+bool is_list(CljObject *v) {
     return v && v->type == CLJ_LIST;
 }
 
-int is_symbol(CljObject *v, const char *name) {
-    if (!v || v->type != CLJ_SYMBOL || !name) return 0;
+bool is_symbol(CljObject *v, const char *name) {
+    if (!v || v->type != CLJ_SYMBOL || !name) return false;
     
     // Erstelle Symbol für Vergleich (wird interniert)
     CljObject *compare_symbol = intern_symbol_global(name);
-    if (!compare_symbol) return 0;
+    if (!compare_symbol) return false;
     
     // Pointer-Vergleich statt String-Vergleich!
     return v == compare_symbol;
