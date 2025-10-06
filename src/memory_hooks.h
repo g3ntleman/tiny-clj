@@ -82,11 +82,24 @@ void memory_test_end(const char *test_name);
     // Fluent memory profiling macro
     #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
+        bool pool_was_active = is_autorelease_pool_active(); \
+        if (!pool_was_active) { \
+            cljvalue_pool_push(); \
+        } \
         code; \
-        /* Expliziter Pool-Cleanup vor Memory-Check (nur wenn Pool aktiv) */ \
         if (is_autorelease_pool_active()) { \
             cljvalue_pool_cleanup_all(); \
         } \
+        if (!pool_was_active && is_autorelease_pool_active()) { \
+            cljvalue_pool_pop(NULL); \
+        } \
+        MEMORY_TEST_END(__FUNCTION__); \
+    } while(0)
+    
+    // Fluent time profiling macro (for benchmarks)
+    #define WITH_TIME_PROFILING(code) do { \
+        MEMORY_TEST_START(__FUNCTION__); \
+        code; \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
 #else
@@ -101,6 +114,7 @@ void memory_test_end(const char *test_name);
     #define MEMORY_TEST_START(name) ((void)0)
     #define MEMORY_TEST_END(name) ((void)0)
     #define WITH_MEMORY_PROFILING(code) do { code } while(0)
+    #define WITH_TIME_PROFILING(code) do { code } while(0)
 #endif
 
 #endif // TINY_CLJ_MEMORY_HOOKS_H

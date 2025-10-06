@@ -91,9 +91,6 @@ static char* test_direct_vector_iteration(void) {
 // Test 2: dotimes Clojure expression evaluation
 static char* test_dotimes_clojure_expr(void) {
     WITH_MEMORY_PROFILING({
-        // Activate autorelease pool for this test
-        cljvalue_pool_push();
-        
         // Parse and evaluate Clojure expression: (dotimes [i 10] (println i))
         const char* dotimes_expr = "(dotimes [i 10] (println i))";
         CljObject *parsed = parse_string(dotimes_expr, shared_eval_state);
@@ -105,9 +102,7 @@ static char* test_dotimes_clojure_expr(void) {
         mu_assert("Should evaluate dotimes expression", result != NULL);
         
         // No manual cleanup needed - result is autoreleased
-        
-        // Clean up pool
-        cljvalue_pool_pop(NULL);
+        // Pool management handled by WITH_MEMORY_PROFILING
     });
     return 0;
 }
@@ -115,9 +110,6 @@ static char* test_dotimes_clojure_expr(void) {
 // Test 3: doseq Clojure expression evaluation
 static char* test_doseq_clojure_expr(void) {
     WITH_MEMORY_PROFILING({
-        // Activate autorelease pool for this test
-        cljvalue_pool_push();
-        
         // Parse and evaluate Clojure expression: (doseq [x vector] (println x))
         const char* doseq_expr = 
             "(doseq [x [Alpha Beta Gamma Delta Epsilon "
@@ -131,9 +123,7 @@ static char* test_doseq_clojure_expr(void) {
         mu_assert("Should evaluate doseq expression", result != NULL);
         
         // No manual cleanup needed - result is autoreleased
-        
-        // Clean up pool
-        cljvalue_pool_pop(NULL);
+        // Pool management handled by WITH_MEMORY_PROFILING
     });
     return 0;
 }
@@ -141,9 +131,6 @@ static char* test_doseq_clojure_expr(void) {
 // Test 4: for Clojure expression evaluation
 static char* test_for_clojure_expr(void) {
     WITH_MEMORY_PROFILING({
-        // Activate autorelease pool for this test
-        cljvalue_pool_push();
-        
         // Parse and evaluate Clojure expression: (for [x vector] x)
         const char* for_expr = 
             "(for [x [Alpha Beta Gamma Delta Epsilon "
@@ -157,9 +144,7 @@ static char* test_for_clojure_expr(void) {
         mu_assert("Should evaluate for expression", result != NULL);
         
         // No manual cleanup needed - result is autoreleased
-        
-        // Clean up pool
-        cljvalue_pool_pop(NULL);
+        // Pool management handled by WITH_MEMORY_PROFILING
     });
     return 0;
 }
@@ -167,9 +152,6 @@ static char* test_for_clojure_expr(void) {
 // Test 5: seq iteration with shared vector using Clojure expression
 static char* test_seq_shared_vector(void) {
     WITH_MEMORY_PROFILING({
-        // Activate autorelease pool for this test
-        cljvalue_pool_push();
-        
         // Parse and evaluate Clojure expression: (seq vector)
         const char* seq_expr = 
             "(seq [Alpha Beta Gamma Delta Epsilon "
@@ -187,9 +169,7 @@ static char* test_seq_shared_vector(void) {
         mu_assert("Should have seq result", seq_result != NULL);
         
         // No manual cleanup needed - result is autoreleased
-        
-        // Clean up pool
-        cljvalue_pool_pop(NULL);
+        // Pool management handled by WITH_MEMORY_PROFILING
     });
     return 0;
 }
