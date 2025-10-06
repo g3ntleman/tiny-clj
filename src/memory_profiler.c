@@ -25,8 +25,7 @@ MemoryStats g_memory_stats = {0};
 
 void memory_profiler_init(void) {
     memset(&g_memory_stats, 0, sizeof(MemoryStats));
-    printf("🔍 Memory Profiler initialized (DEBUG build)\n");
-    printf("🔍 DEBUG macro is defined: %d\n", DEBUG);
+    // Debug prints removed for production
 }
 
 void memory_profiler_reset(void) {
@@ -38,7 +37,7 @@ void memory_profiler_cleanup(void) {
         printf("⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
                g_memory_stats.memory_leaks);
     }
-    printf("🔍 Memory Profiler cleanup completed\n");
+    // Debug prints removed for production
 }
 
 MemoryStats memory_profiler_get_stats(void) {
@@ -93,6 +92,9 @@ void memory_profiler_track_allocation(size_t size) {
         g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
     } else {
         g_memory_stats.memory_leaks = 0; // No leaks if deallocations exceed allocations
+        // Double-free detection
+        printf("⚠️  WARNING: Double-free detected! Deallocations (%zu) exceed allocations (%zu).\n", 
+               g_memory_stats.total_deallocations, g_memory_stats.total_allocations);
     }
 }
 
@@ -108,6 +110,9 @@ void memory_profiler_track_deallocation(size_t size) {
         g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
     } else {
         g_memory_stats.memory_leaks = 0; // No leaks if deallocations exceed allocations
+        // Double-free detection
+        printf("⚠️  WARNING: Double-free detected! Deallocations (%zu) exceed allocations (%zu).\n", 
+               g_memory_stats.total_deallocations, g_memory_stats.total_allocations);
     }
 }
 
