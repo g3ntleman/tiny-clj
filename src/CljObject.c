@@ -17,6 +17,7 @@
 #include "CljObject.h"
 #include <string.h>
 #include "vector.h"
+#include "memory_hooks.h"
 #include "runtime.h"
 #include "map.h"
 #include "kv_macros.h"
@@ -113,9 +114,7 @@ CljObject* make_int(int x) {
     v->rc = 1;
     v->as.i = x;
     
-    // Memory profiling
-    MEMORY_PROFILER_TRACK_OBJECT_CREATION(v);
-    
+    CREATE(v);
     return v;
 }
 
@@ -126,15 +125,15 @@ CljObject* make_float(double x) {
     v->rc = 1;
     v->as.f = x;
     
-    // Memory profiling
-    MEMORY_PROFILER_TRACK_OBJECT_CREATION(v);
-    
+    CREATE(v);
     return v;
 }
 
 /** @brief Increment reference count */
 void retain(CljObject *v) {
     if (!v) return;
+    
+    
     // Singletons have no reference counting
     if (IS_PRIMITIVE_TYPE(v->type)) return;
     // Guard: empty vector/map singletons must not be retained
@@ -148,15 +147,19 @@ void retain(CljObject *v) {
     }
     v->rc++;
     
-    // Memory profiling
-    MEMORY_PROFILER_TRACK_RETAIN(v);
+    // RETAIN(v); // Hook now called via RELEASE macro
 }
 
 /** @brief Decrement reference count and free if zero */
 void release(CljObject *v) {
     if (!v) return;
+    
+    
     // Singletons have no reference counting
-    if (IS_PRIMITIVE_TYPE(v->type)) return;
+    if (IS_PRIMITIVE_TYPE(v->type)) {
+        // Primitive types are never actually freed, so don't track as deallocation
+        return;
+    }
     // Guard: empty vector/map singletons must not be released
     if (v->type == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector(v);
@@ -176,12 +179,10 @@ void release(CljObject *v) {
     }
     v->rc--;
     
-    // Memory profiling
-    MEMORY_PROFILER_TRACK_RELEASE(v);
+    // RELEASE(v); // Hook now called via RELEASE macro
     
     if (v->rc == 0) { 
-        // Memory profiling - track object destruction
-        MEMORY_PROFILER_TRACK_OBJECT_DESTRUCTION(v);
+        // DEALLOC(v); // Hook now called via DEALLOC macro
         release_object_deep(v); 
         free(v); 
     }

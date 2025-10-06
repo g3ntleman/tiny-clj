@@ -1342,11 +1342,48 @@ src/map.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/map.c.s
 .PHONY : src/map.c.s
 
+src/memory_hooks.o: src/memory_hooks.c.o
+.PHONY : src/memory_hooks.o
+
+# target to build an object file
+src/memory_hooks.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_hooks.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_hooks.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_hooks.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_hooks.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/memory_hooks.c.o
+.PHONY : src/memory_hooks.c.o
+
+src/memory_hooks.i: src/memory_hooks.c.i
+.PHONY : src/memory_hooks.i
+
+# target to preprocess a source file
+src/memory_hooks.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_hooks.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_hooks.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_hooks.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_hooks.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/memory_hooks.c.i
+.PHONY : src/memory_hooks.c.i
+
+src/memory_hooks.s: src/memory_hooks.c.s
+.PHONY : src/memory_hooks.s
+
+# target to generate assembly for a file
+src/memory_hooks.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_hooks.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_hooks.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_hooks.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_hooks.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-simple.dir/build.make CMakeFiles/test-memory-simple.dir/src/memory_hooks.c.s
+.PHONY : src/memory_hooks.c.s
+
 src/memory_profiler.o: src/memory_profiler.c.o
 .PHONY : src/memory_profiler.o
 
 # target to build an object file
 src/memory_profiler.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_profiler.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_profiler.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_profiler.c.o
@@ -1358,6 +1395,7 @@ src/memory_profiler.i: src/memory_profiler.c.i
 
 # target to preprocess a source file
 src/memory_profiler.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_profiler.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_profiler.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_profiler.c.i
@@ -1369,6 +1407,7 @@ src/memory_profiler.s: src/memory_profiler.c.s
 
 # target to generate assembly for a file
 src/memory_profiler.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_profiler.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/memory_profiler.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/src/memory_profiler.c.s
@@ -2373,6 +2412,9 @@ help:
 	@echo "... src/map.o"
 	@echo "... src/map.i"
 	@echo "... src/map.s"
+	@echo "... src/memory_hooks.o"
+	@echo "... src/memory_hooks.i"
+	@echo "... src/memory_hooks.s"
 	@echo "... src/memory_profiler.o"
 	@echo "... src/memory_profiler.i"
 	@echo "... src/memory_profiler.s"

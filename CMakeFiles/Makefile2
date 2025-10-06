@@ -155,12 +155,12 @@ clean: CMakeFiles/ContinuousSubmit.dir/clean
 CMakeFiles/tiny-clj.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=81,82,83,84,85,86,87,88,89,90,91 "Built target tiny-clj"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=82,83,84,85,86,87,88,89,90,91 "Built target tiny-clj"
 .PHONY : CMakeFiles/tiny-clj.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/tiny-clj.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 11
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 10
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/tiny-clj.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/tiny-clj.dir/rule
@@ -172,7 +172,7 @@ tiny-clj: CMakeFiles/tiny-clj.dir/rule
 # codegen rule for target.
 CMakeFiles/tiny-clj.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=81,82,83,84,85,86,87,88,89,90,91 "Finished codegen for target tiny-clj"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=82,83,84,85,86,87,88,89,90,91 "Finished codegen for target tiny-clj"
 .PHONY : CMakeFiles/tiny-clj.dir/codegen
 
 # clean rule for target.
@@ -219,7 +219,7 @@ CMakeFiles/tiny-clj-repl.dir/clean:
 CMakeFiles/test-unit.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=75,76,77,78,79,80 "Built target test-unit"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=76,77,78,79,80,81 "Built target test-unit"
 .PHONY : CMakeFiles/test-unit.dir/all
 
 # Build rule for subdir invocation for target.
@@ -236,7 +236,7 @@ test-unit: CMakeFiles/test-unit.dir/rule
 # codegen rule for target.
 CMakeFiles/test-unit.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=75,76,77,78,79,80 "Finished codegen for target test-unit"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=76,77,78,79,80,81 "Finished codegen for target test-unit"
 .PHONY : CMakeFiles/test-unit.dir/codegen
 
 # clean rule for target.
@@ -251,12 +251,12 @@ CMakeFiles/test-unit.dir/clean:
 CMakeFiles/test-integration.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=31,32,33,34,35,36,37 "Built target test-integration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=30,31,32,33,34,35,36,37 "Built target test-integration"
 .PHONY : CMakeFiles/test-integration.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-integration.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-integration.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-integration.dir/rule
@@ -268,7 +268,7 @@ test-integration: CMakeFiles/test-integration.dir/rule
 # codegen rule for target.
 CMakeFiles/test-integration.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=31,32,33,34,35,36,37 "Finished codegen for target test-integration"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=30,31,32,33,34,35,36,37 "Finished codegen for target test-integration"
 .PHONY : CMakeFiles/test-integration.dir/codegen
 
 # clean rule for target.
@@ -283,12 +283,12 @@ CMakeFiles/test-integration.dir/clean:
 CMakeFiles/test-benchmark.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=10,11,12,13,14,15,16 "Built target test-benchmark"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=9,10,11,12,13,14,15,16 "Built target test-benchmark"
 .PHONY : CMakeFiles/test-benchmark.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-benchmark.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-benchmark.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-benchmark.dir/rule
@@ -300,7 +300,7 @@ test-benchmark: CMakeFiles/test-benchmark.dir/rule
 # codegen rule for target.
 CMakeFiles/test-benchmark.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=10,11,12,13,14,15,16 "Finished codegen for target test-benchmark"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=9,10,11,12,13,14,15,16 "Finished codegen for target test-benchmark"
 .PHONY : CMakeFiles/test-benchmark.dir/codegen
 
 # clean rule for target.
@@ -315,12 +315,12 @@ CMakeFiles/test-benchmark.dir/clean:
 CMakeFiles/test-parser.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=55,56,57,58,59,60,61 "Built target test-parser"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=55,56,57,58,59,60 "Built target test-parser"
 .PHONY : CMakeFiles/test-parser.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-parser.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-parser.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-parser.dir/rule
@@ -332,7 +332,7 @@ test-parser: CMakeFiles/test-parser.dir/rule
 # codegen rule for target.
 CMakeFiles/test-parser.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=55,56,57,58,59,60,61 "Finished codegen for target test-parser"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=55,56,57,58,59,60 "Finished codegen for target test-parser"
 .PHONY : CMakeFiles/test-parser.dir/codegen
 
 # clean rule for target.
@@ -347,12 +347,12 @@ CMakeFiles/test-parser.dir/clean:
 CMakeFiles/test-seq.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=62,63,64,65,66,67 "Built target test-seq"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=61,62,63,64,65,66,67 "Built target test-seq"
 .PHONY : CMakeFiles/test-seq.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-seq.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 6
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-seq.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-seq.dir/rule
@@ -364,7 +364,7 @@ test-seq: CMakeFiles/test-seq.dir/rule
 # codegen rule for target.
 CMakeFiles/test-seq.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=62,63,64,65,66,67 "Finished codegen for target test-seq"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=61,62,63,64,65,66,67 "Finished codegen for target test-seq"
 .PHONY : CMakeFiles/test-seq.dir/codegen
 
 # clean rule for target.
@@ -379,12 +379,12 @@ CMakeFiles/test-seq.dir/clean:
 CMakeFiles/test-seq-performance.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=68,69,70,71,72,73,74 "Built target test-seq-performance"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=68,69,70,71,72,73,74,75 "Built target test-seq-performance"
 .PHONY : CMakeFiles/test-seq-performance.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-seq-performance.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-seq-performance.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-seq-performance.dir/rule
@@ -396,7 +396,7 @@ test-seq-performance: CMakeFiles/test-seq-performance.dir/rule
 # codegen rule for target.
 CMakeFiles/test-seq-performance.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=68,69,70,71,72,73,74 "Finished codegen for target test-seq-performance"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=68,69,70,71,72,73,74,75 "Finished codegen for target test-seq-performance"
 .PHONY : CMakeFiles/test-seq-performance.dir/codegen
 
 # clean rule for target.
@@ -443,12 +443,12 @@ CMakeFiles/test-for-loops.dir/clean:
 CMakeFiles/test-for-performance.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=24,25,26,27,28,29,30 "Built target test-for-performance"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=24,25,26,27,28,29 "Built target test-for-performance"
 .PHONY : CMakeFiles/test-for-performance.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-for-performance.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-for-performance.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-for-performance.dir/rule
@@ -460,7 +460,7 @@ test-for-performance: CMakeFiles/test-for-performance.dir/rule
 # codegen rule for target.
 CMakeFiles/test-for-performance.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-performance.dir/build.make CMakeFiles/test-for-performance.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=24,25,26,27,28,29,30 "Finished codegen for target test-for-performance"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=24,25,26,27,28,29 "Finished codegen for target test-for-performance"
 .PHONY : CMakeFiles/test-for-performance.dir/codegen
 
 # clean rule for target.
@@ -539,12 +539,12 @@ CMakeFiles/test-memory-simple.dir/clean:
 CMakeFiles/test-all.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-all.dir/build.make CMakeFiles/test-all.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-all.dir/build.make CMakeFiles/test-all.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=9 "Built target test-all"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num= "Built target test-all"
 .PHONY : CMakeFiles/test-all.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-all.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 1
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-all.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-all.dir/rule
@@ -556,7 +556,7 @@ test-all: CMakeFiles/test-all.dir/rule
 # codegen rule for target.
 CMakeFiles/test-all.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-all.dir/build.make CMakeFiles/test-all.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=9 "Finished codegen for target test-all"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num= "Finished codegen for target test-all"
 .PHONY : CMakeFiles/test-all.dir/codegen
 
 # clean rule for target.
@@ -571,12 +571,12 @@ CMakeFiles/test-all.dir/clean:
 CMakeFiles/demo-array-system.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=1,2,3 "Built target demo-array-system"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=1,2 "Built target demo-array-system"
 .PHONY : CMakeFiles/demo-array-system.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/demo-array-system.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 2
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/demo-array-system.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/demo-array-system.dir/rule
@@ -588,7 +588,7 @@ demo-array-system: CMakeFiles/demo-array-system.dir/rule
 # codegen rule for target.
 CMakeFiles/demo-array-system.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=1,2,3 "Finished codegen for target demo-array-system"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=1,2 "Finished codegen for target demo-array-system"
 .PHONY : CMakeFiles/demo-array-system.dir/codegen
 
 # clean rule for target.
@@ -635,7 +635,7 @@ CMakeFiles/test-kv-macros.dir/clean:
 CMakeFiles/kv-macros-demo.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=4,5,6 "Built target kv-macros-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=3,4,5 "Built target kv-macros-demo"
 .PHONY : CMakeFiles/kv-macros-demo.dir/all
 
 # Build rule for subdir invocation for target.
@@ -652,7 +652,7 @@ kv-macros-demo: CMakeFiles/kv-macros-demo.dir/rule
 # codegen rule for target.
 CMakeFiles/kv-macros-demo.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=4,5,6 "Finished codegen for target kv-macros-demo"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=3,4,5 "Finished codegen for target kv-macros-demo"
 .PHONY : CMakeFiles/kv-macros-demo.dir/codegen
 
 # clean rule for target.
@@ -704,7 +704,7 @@ CMakeFiles/run-integration-tests.dir/all: CMakeFiles/test-integration.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/run-integration-tests.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 8
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 9
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/run-integration-tests.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/run-integration-tests.dir/rule
@@ -736,7 +736,7 @@ CMakeFiles/run-benchmark-tests.dir/all: CMakeFiles/test-benchmark.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/run-benchmark-tests.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 8
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/run-benchmark-tests.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/run-benchmark-tests.dir/rule
@@ -763,7 +763,7 @@ CMakeFiles/run-benchmark-tests.dir/clean:
 CMakeFiles/run-all-tests.dir/all: CMakeFiles/test-all.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-all-tests.dir/build.make CMakeFiles/run-all-tests.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-all-tests.dir/build.make CMakeFiles/run-all-tests.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num= "Built target run-all-tests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=6 "Built target run-all-tests"
 .PHONY : CMakeFiles/run-all-tests.dir/all
 
 # Build rule for subdir invocation for target.
@@ -780,7 +780,7 @@ run-all-tests: CMakeFiles/run-all-tests.dir/rule
 # codegen rule for target.
 CMakeFiles/run-all-tests.dir/codegen: CMakeFiles/test-all.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-all-tests.dir/build.make CMakeFiles/run-all-tests.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num= "Finished codegen for target run-all-tests"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=6 "Finished codegen for target run-all-tests"
 .PHONY : CMakeFiles/run-all-tests.dir/codegen
 
 # clean rule for target.
@@ -800,7 +800,7 @@ CMakeFiles/run-quick-tests.dir/all: CMakeFiles/test-all.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/run-quick-tests.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 1
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/run-quick-tests.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/run-quick-tests.dir/rule

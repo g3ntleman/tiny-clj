@@ -153,7 +153,9 @@ add_executable(test-seq
     src/reader.c
     src/function_call.c
     src/list_operations.c
-    src/seq.c)
+    src/seq.c
+    src/memory_profiler.c
+    src/memory_hooks.c)
 
 # Seq Performance Tests
 add_executable(test-seq-performance
@@ -171,7 +173,8 @@ add_executable(test-seq-performance
     src/function_call.c
     src/list_operations.c
     src/seq.c
-    src/memory_profiler.c)
+    src/memory_profiler.c
+    src/memory_hooks.c)
 
 # Set DEBUG flag for memory profiling
 target_compile_definitions(test-seq PRIVATE DEBUG=1)
@@ -192,7 +195,8 @@ add_executable(test-for-loops
     src/function_call.c
     src/list_operations.c
     src/seq.c
-    src/memory_profiler.c)
+    src/memory_profiler.c
+    src/memory_hooks.c)
 
 # Set DEBUG flag for memory profiling
 target_compile_definitions(test-for-loops PRIVATE DEBUG=1)
@@ -230,7 +234,8 @@ add_executable(test-memory-profiling
     src/function_call.c
     src/list_operations.c
     src/seq.c
-    src/memory_profiler.c)
+    src/memory_profiler.c
+    src/memory_hooks.c)
 
 # Simple Memory Profiling Tests (Debug only)
 add_executable(test-memory-simple
@@ -248,7 +253,8 @@ add_executable(test-memory-simple
     src/function_call.c
     src/list_operations.c
     src/seq.c
-    src/memory_profiler.c)
+    src/memory_profiler.c
+    src/memory_hooks.c)
 
 # Set DEBUG flag for memory profiling
 target_compile_definitions(test-memory-simple PRIVATE DEBUG=1)

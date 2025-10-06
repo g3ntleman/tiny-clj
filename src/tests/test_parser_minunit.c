@@ -55,10 +55,10 @@ static char *test_parse_basic_types(void) {
   mu_assert_obj_not_null(float_result);
   mu_assert_obj_type(float_result, CLJ_FLOAT);
 
-  // Test string parsing (currently returns symbol due to parser bug)
+  // Test string parsing (now fixed!)
   CljObject *str_result = parse("\"hello\"", &st);
   mu_debug_obj(str_result, "str_result");
-  mu_assert_obj_type_detailed(str_result, CLJ_SYMBOL); // TODO: Fix parser to return CLJ_STRING
+  mu_assert_obj_type_detailed(str_result, CLJ_STRING);
 
   // Test symbol parsing
   CljObject *sym_result = parse("test-symbol", &st);

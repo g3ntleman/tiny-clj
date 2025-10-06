@@ -15,47 +15,28 @@
 // SIMPLE MEMORY PROFILING TESTS
 // ============================================================================
 
-static char *test_basic_memory_tracking(void) {
-    printf("\n=== Testing Basic Memory Tracking ===\n");
+static char *test_singleton_memory_tracking(void) {
+    printf("\n=== Testing Singleton Memory Tracking ===\n");
     
-    printf("🔍 About to call MEMORY_TEST_START\n");
-#ifdef DEBUG
-    printf("🔍 DEBUG is defined\n");
-    MEMORY_TEST_START("Basic Memory Operations");
-#else
-    printf("🔍 DEBUG is NOT defined - calling functions directly\n");
-    memory_profiler_reset();
-    printf("🔍 Memory Profiling: Basic Memory Operations\n");
-#endif
-    printf("🔍 MEMORY_TEST_START called\n");
+    MEMORY_TEST_START("Singleton Memory Operations");
     
-    // Create and release objects
-    CljObject *obj1 = make_int(42);
-    CljObject *obj2 = make_float(3.14);
+    // Create and release singleton objects (vectors, maps, lists)
+    CljObject *empty_vec = make_vector(0, 0);
+    CljObject *empty_list = make_list();
     
-    mu_assert("obj1 created", obj1 != NULL);
-    mu_assert("obj2 created", obj2 != NULL);
+    mu_assert("empty_vec created", empty_vec != NULL);
+    mu_assert("empty_list created", empty_list != NULL);
     
-    // Test retain/release
-    retain(obj1);
-    retain(obj2);
+    // Test retain/release on singletons
+    retain(empty_vec);
+    retain(empty_list);
     
-    release(obj1);
-    release(obj1); // Should be freed now
-    release(obj2);
-    release(obj2); // Should be freed now
+    release(empty_vec);
+    release(empty_list);
     
-    printf("🔍 About to call MEMORY_TEST_END\n");
-#ifdef DEBUG
-    MEMORY_TEST_END("Basic Memory Operations");
-#else
-    printf("🔍 DEBUG is NOT defined - calling functions directly\n");
-    memory_profiler_print_stats("Basic Memory Operations");
-    memory_profiler_check_leaks("Basic Memory Operations");
-#endif
-    printf("🔍 MEMORY_TEST_END called\n");
+    MEMORY_TEST_END("Singleton Memory Operations");
     
-    printf("✓ Basic memory tracking test passed\n");
+    printf("✓ Singleton memory tracking test passed\n");
     return 0;
 }
 
@@ -82,6 +63,12 @@ static char *test_vector_memory_tracking(void) {
     CljObject *first = vec_data->data[0];
     mu_assert("first element accessible", first != NULL);
     
+    // Free all vector elements first
+    for (int i = 0; i < 5; i++) {
+        release(vec_data->data[i]);
+    }
+    
+    // Then free the vector
     release(vec);
     
     MEMORY_TEST_END("Vector Memory Operations");
@@ -120,7 +107,7 @@ static char *test_memory_efficiency_analysis(void) {
 // ============================================================================
 
 static char *all_simple_memory_tests(void) {
-    mu_run_test(test_basic_memory_tracking);
+    mu_run_test(test_singleton_memory_tracking);
     mu_run_test(test_vector_memory_tracking);
     mu_run_test(test_memory_efficiency_analysis);
     

@@ -69,8 +69,8 @@ bool reader_skip_whitespace(Reader *reader) {
         if (cp < 0) break;
         
         // Check if codepoint is whitespace
-        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r') ||
-                            utf8_is_delimiter(cp);
+        // Note: utf8_is_delimiter includes quotes which are NOT whitespace for parsing
+        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r');
         
         if (!is_whitespace) break;
         

@@ -20,6 +20,8 @@
 static char *test_seq_create_list(void) {
     printf("\n=== Testing Seq Creation for Lists ===\n");
     
+    MEMORY_TEST_START("Seq Creation for Lists");
+    
     // Create a test list
     CljObject *list = make_list();
     CljList *list_data = as_list(list);
@@ -42,12 +44,16 @@ static char *test_seq_create_list(void) {
     seq_release(seq);
     release(list);
     
+    MEMORY_TEST_END("Seq Creation for Lists");
+    
     printf("✓ List seq creation test passed\n");
     return 0;
 }
 
 static char *test_seq_create_vector(void) {
     printf("\n=== Testing Seq Creation for Vectors ===\n");
+    
+    MEMORY_TEST_START("Seq Creation for Vectors");
     
     // Create a test vector
     CljObject *vec = make_vector(3, 1);
@@ -67,6 +73,8 @@ static char *test_seq_create_vector(void) {
     
     seq_release(seq);
     release(vec);
+    
+    MEMORY_TEST_END("Seq Creation for Vectors");
     
     printf("✓ Vector seq creation test passed\n");
     return 0;

@@ -1,5 +1,6 @@
 #include "vector.h"
 #include "runtime.h"
+#include "memory_hooks.h"
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -45,6 +46,7 @@ CljObject *make_vector(int capacity, int is_mutable) {
                   ? (CljObject **)calloc((size_t)capacity, sizeof(CljObject *))
                   : NULL;
 
+  CREATE((CljObject *)vec);
   return (CljObject *)vec;
 }
 

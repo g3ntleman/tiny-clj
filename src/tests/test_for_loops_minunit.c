@@ -11,7 +11,7 @@
 #include "function_call.h"
 #include "CljObject.h"
 #include "clj_symbols.h"
-#include "memory_profiler.h"
+#include "memory_hooks.h"
 #include <stdio.h>
 
 // ============================================================================
@@ -27,11 +27,11 @@ static char *test_dotimes_basic(void) {
     // For now, we'll just test that it doesn't crash
     
     // Create binding list: [i 3]
-    CljObject *binding_list = make_list();
+    CljObject *binding_list = AUTORELEASE(make_list());
     CljList *binding_data = as_list(binding_list);
     if (binding_data) {
         binding_data->head = intern_symbol_global("i");
-        binding_data->tail = make_list();
+        binding_data->tail = AUTORELEASE(make_list());
         CljList *tail_data = as_list(binding_data->tail);
         if (tail_data) {
             tail_data->head = make_int(3);
@@ -40,11 +40,11 @@ static char *test_dotimes_basic(void) {
     }
     
     // Create body: (println i)
-    CljObject *body = make_list();
+    CljObject *body = AUTORELEASE(make_list());
     CljList *body_data = as_list(body);
     if (body_data) {
         body_data->head = intern_symbol_global("println");
-        body_data->tail = make_list();
+        body_data->tail = AUTORELEASE(make_list());
         CljList *body_tail = as_list(body_data->tail);
         if (body_tail) {
             body_tail->head = intern_symbol_global("i");
@@ -53,15 +53,15 @@ static char *test_dotimes_basic(void) {
     }
     
     // Create function call: (dotimes [i 3] (println i))
-    CljObject *dotimes_call = make_list();
+    CljObject *dotimes_call = AUTORELEASE(make_list());
     CljList *call_data = as_list(dotimes_call);
     if (call_data) {
         call_data->head = intern_symbol_global("dotimes");
-        call_data->tail = make_list();
+        call_data->tail = AUTORELEASE(make_list());
         CljList *call_tail = as_list(call_data->tail);
         if (call_tail) {
             call_tail->head = binding_list;
-            call_tail->tail = make_list();
+            call_tail->tail = AUTORELEASE(make_list());
             CljList *call_tail2 = as_list(call_tail->tail);
             if (call_tail2) {
                 call_tail2->head = body;
@@ -74,7 +74,7 @@ static char *test_dotimes_basic(void) {
     CljObject *result = eval_dotimes(dotimes_call, NULL);
     mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
     
-    release(dotimes_call);
+    RELEASE(dotimes_call);
     
     MEMORY_TEST_END("dotimes Basic Functionality");
     
@@ -88,7 +88,7 @@ static char *test_doseq_basic(void) {
     MEMORY_TEST_START("doseq Basic Functionality");
     
     // Create a test vector
-    CljObject *vec = make_vector(3, 1);
+    CljObject *vec = AUTORELEASE(make_vector(3, 1));
     CljPersistentVector *vec_data = as_vector(vec);
     if (vec_data) {
         vec_data->data[0] = make_int(1);
@@ -98,11 +98,11 @@ static char *test_doseq_basic(void) {
     }
     
     // Create binding list: [x [1 2 3]]
-    CljObject *binding_list = make_list();
+    CljObject *binding_list = AUTORELEASE(make_list());
     CljList *binding_data = as_list(binding_list);
     if (binding_data) {
         binding_data->head = intern_symbol_global("x");
-        binding_data->tail = make_list();
+        binding_data->tail = AUTORELEASE(make_list());
         CljList *tail_data = as_list(binding_data->tail);
         if (tail_data) {
             tail_data->head = vec;
@@ -111,11 +111,11 @@ static char *test_doseq_basic(void) {
     }
     
     // Create body: (println x)
-    CljObject *body = make_list();
+    CljObject *body = AUTORELEASE(make_list());
     CljList *body_data = as_list(body);
     if (body_data) {
         body_data->head = intern_symbol_global("println");
-        body_data->tail = make_list();
+        body_data->tail = AUTORELEASE(make_list());
         CljList *body_tail = as_list(body_data->tail);
         if (body_tail) {
             body_tail->head = intern_symbol_global("x");
@@ -124,15 +124,15 @@ static char *test_doseq_basic(void) {
     }
     
     // Create function call: (doseq [x [1 2 3]] (println x))
-    CljObject *doseq_call = make_list();
+    CljObject *doseq_call = AUTORELEASE(make_list());
     CljList *call_data = as_list(doseq_call);
     if (call_data) {
         call_data->head = intern_symbol_global("doseq");
-        call_data->tail = make_list();
+        call_data->tail = AUTORELEASE(make_list());
         CljList *call_tail = as_list(call_data->tail);
         if (call_tail) {
             call_tail->head = binding_list;
-            call_tail->tail = make_list();
+            call_tail->tail = AUTORELEASE(make_list());
             CljList *call_tail2 = as_list(call_tail->tail);
             if (call_tail2) {
                 call_tail2->head = body;
@@ -145,7 +145,11 @@ static char *test_doseq_basic(void) {
     CljObject *result = eval_doseq(doseq_call, NULL);
     mu_assert("doseq should return nil", result == NULL || result->type == CLJ_NIL);
     
-    release(doseq_call);
+    // Cleanup: Release intermediate objects
+    RELEASE(vec);
+    RELEASE(binding_list);
+    RELEASE(body);
+    RELEASE(doseq_call);
     
     MEMORY_TEST_END("doseq Basic Functionality");
     
@@ -159,7 +163,7 @@ static char *test_for_basic(void) {
     MEMORY_TEST_START("for Basic Functionality");
     
     // Create a test vector
-    CljObject *vec = make_vector(3, 1);
+    CljObject *vec = AUTORELEASE(make_vector(3, 1));
     CljPersistentVector *vec_data = as_vector(vec);
     if (vec_data) {
         vec_data->data[0] = make_int(1);
@@ -169,11 +173,11 @@ static char *test_for_basic(void) {
     }
     
     // Create binding list: [x [1 2 3]]
-    CljObject *binding_list = make_list();
+    CljObject *binding_list = AUTORELEASE(make_list());
     CljList *binding_data = as_list(binding_list);
     if (binding_data) {
         binding_data->head = intern_symbol_global("x");
-        binding_data->tail = make_list();
+        binding_data->tail = AUTORELEASE(make_list());
         CljList *tail_data = as_list(binding_data->tail);
         if (tail_data) {
             tail_data->head = vec;
@@ -185,15 +189,15 @@ static char *test_for_basic(void) {
     CljObject *body = intern_symbol_global("x");
     
     // Create function call: (for [x [1 2 3]] x)
-    CljObject *for_call = make_list();
+    CljObject *for_call = AUTORELEASE(make_list());
     CljList *call_data = as_list(for_call);
     if (call_data) {
         call_data->head = intern_symbol_global("for");
-        call_data->tail = make_list();
+        call_data->tail = AUTORELEASE(make_list());
         CljList *call_tail = as_list(call_data->tail);
         if (call_tail) {
             call_tail->head = binding_list;
-            call_tail->tail = make_list();
+            call_tail->tail = AUTORELEASE(make_list());
             CljList *call_tail2 = as_list(call_tail->tail);
             if (call_tail2) {
                 call_tail2->head = body;
@@ -206,8 +210,26 @@ static char *test_for_basic(void) {
     CljObject *result = eval_for(for_call, NULL);
     mu_assert("for should return a result", result != NULL);
     
-    release(for_call);
-    if (result) release(result);
+    // Cleanup: Release intermediate objects and nested structures
+    RELEASE(vec);
+    
+    // Release nested list structures
+    if (binding_data && binding_data->tail) {
+        RELEASE(binding_data->tail);
+    }
+    RELEASE(binding_list);
+    
+    // Release nested call structures
+    if (call_data && call_data->tail) {
+        CljList *call_tail = as_list(call_data->tail);
+        if (call_tail && call_tail->tail) {
+            RELEASE(call_tail->tail);
+        }
+        RELEASE(call_data->tail);
+    }
+    RELEASE(for_call);
+    
+    if (result) RELEASE(result);
     
     MEMORY_TEST_END("for Basic Functionality");
     
@@ -221,11 +243,11 @@ static char *test_dotimes_with_variable(void) {
     MEMORY_TEST_START("dotimes with Variable Binding");
     
     // Create binding list: [i 5]
-    CljObject *binding_list = make_list();
+    CljObject *binding_list = AUTORELEASE(make_list());
     CljList *binding_data = as_list(binding_list);
     if (binding_data) {
         binding_data->head = intern_symbol_global("i");
-        binding_data->tail = make_list();
+        binding_data->tail = AUTORELEASE(make_list());
         CljList *tail_data = as_list(binding_data->tail);
         if (tail_data) {
             tail_data->head = make_int(5);
@@ -237,15 +259,15 @@ static char *test_dotimes_with_variable(void) {
     CljObject *body = intern_symbol_global("i");
     
     // Create function call: (dotimes [i 5] i)
-    CljObject *dotimes_call = make_list();
+    CljObject *dotimes_call = AUTORELEASE(make_list());
     CljList *call_data = as_list(dotimes_call);
     if (call_data) {
         call_data->head = intern_symbol_global("dotimes");
-        call_data->tail = make_list();
+        call_data->tail = AUTORELEASE(make_list());
         CljList *call_tail = as_list(call_data->tail);
         if (call_tail) {
             call_tail->head = binding_list;
-            call_tail->tail = make_list();
+            call_tail->tail = AUTORELEASE(make_list());
             CljList *call_tail2 = as_list(call_tail->tail);
             if (call_tail2) {
                 call_tail2->head = body;
@@ -258,7 +280,7 @@ static char *test_dotimes_with_variable(void) {
     CljObject *result = eval_dotimes(dotimes_call, NULL);
     mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
     
-    release(dotimes_call);
+    RELEASE(dotimes_call);
     
     MEMORY_TEST_END("dotimes with Variable Binding");
     
@@ -272,7 +294,7 @@ static char *test_for_with_simple_expression(void) {
     MEMORY_TEST_START("for with Simple Expression");
     
     // Create a test vector
-    CljObject *vec = make_vector(2, 1);
+    CljObject *vec = AUTORELEASE(make_vector(2, 1));
     CljPersistentVector *vec_data = as_vector(vec);
     if (vec_data) {
         vec_data->data[0] = make_int(1);
@@ -281,11 +303,11 @@ static char *test_for_with_simple_expression(void) {
     }
     
     // Create binding list: [x [1 2]]
-    CljObject *binding_list = make_list();
+    CljObject *binding_list = AUTORELEASE(make_list());
     CljList *binding_data = as_list(binding_list);
     if (binding_data) {
         binding_data->head = intern_symbol_global("x");
-        binding_data->tail = make_list();
+        binding_data->tail = AUTORELEASE(make_list());
         CljList *tail_data = as_list(binding_data->tail);
         if (tail_data) {
             tail_data->head = vec;
@@ -297,15 +319,15 @@ static char *test_for_with_simple_expression(void) {
     CljObject *body = intern_symbol_global("x");
     
     // Create function call: (for [x [1 2]] x)
-    CljObject *for_call = make_list();
+    CljObject *for_call = AUTORELEASE(make_list());
     CljList *call_data = as_list(for_call);
     if (call_data) {
         call_data->head = intern_symbol_global("for");
-        call_data->tail = make_list();
+        call_data->tail = AUTORELEASE(make_list());
         CljList *call_tail = as_list(call_data->tail);
         if (call_tail) {
             call_tail->head = binding_list;
-            call_tail->tail = make_list();
+            call_tail->tail = AUTORELEASE(make_list());
             CljList *call_tail2 = as_list(call_tail->tail);
             if (call_tail2) {
                 call_tail2->head = body;
@@ -318,8 +340,11 @@ static char *test_for_with_simple_expression(void) {
     CljObject *result = eval_for(for_call, NULL);
     mu_assert("for with simple expression should return a result", result != NULL);
     
-    release(for_call);
-    if (result) release(result);
+    // Cleanup: Release intermediate objects
+    RELEASE(vec);
+    RELEASE(binding_list);
+    RELEASE(for_call);
+    if (result) RELEASE(result);
     
     MEMORY_TEST_END("for with Simple Expression");
     
@@ -344,16 +369,16 @@ static char *all_for_loop_tests(void) {
 int main(void) {
     printf("=== Tiny-CLJ For-Loop Tests with Memory Profiling ===\n");
     
-    // Initialize memory profiler
-    MEMORY_PROFILER_INIT();
+    // Initialize memory profiling with hooks
+    memory_profiling_init_with_hooks();
     
     // Initialize symbol table
     init_special_symbols();
     
     int result = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
     
-    // Cleanup memory profiler
-    MEMORY_PROFILER_CLEANUP();
+    // Cleanup memory profiling
+    memory_profiling_cleanup_with_hooks();
     
     return result;
 }

@@ -88,7 +88,12 @@ void memory_profiler_track_allocation(size_t size) {
     if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
         g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
     }
-    g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
+    // Calculate memory leaks safely (avoid integer overflow)
+    if (g_memory_stats.total_allocations >= g_memory_stats.total_deallocations) {
+        g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
+    } else {
+        g_memory_stats.memory_leaks = 0; // No leaks if deallocations exceed allocations
+    }
 }
 
 void memory_profiler_track_deallocation(size_t size) {
@@ -98,7 +103,12 @@ void memory_profiler_track_deallocation(size_t size) {
     } else {
         g_memory_stats.current_memory_usage = 0;
     }
-    g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
+    // Calculate memory leaks safely (avoid integer overflow)
+    if (g_memory_stats.total_allocations >= g_memory_stats.total_deallocations) {
+        g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
+    } else {
+        g_memory_stats.memory_leaks = 0; // No leaks if deallocations exceed allocations
+    }
 }
 
 void memory_profiler_track_object_creation(CljObject *obj) {

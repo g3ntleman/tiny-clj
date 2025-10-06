@@ -124,10 +124,15 @@ static CljObject *parse_number(Reader *reader, EvalState *st);
  * @return Parsed CljObject or NULL on error
  */
 static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
+  printf("DEBUG: Before skip_all - index=%zu, char='%c' (0x%02x)\n", 
+         reader->index, reader_peek(reader), (unsigned char)reader_peek(reader));
   reader_skip_all(reader);
+  printf("DEBUG: After skip_all - index=%zu, char='%c' (0x%02x)\n", 
+         reader->index, reader_peek(reader), (unsigned char)reader_peek(reader));
   if (reader_is_eof(reader))
     return NULL;
   char c = reader_current(reader);
+  printf("DEBUG: parse_expr_internal got char: '%c' (0x%02x)\n", c, (unsigned char)c);
   if (c == '^')
     return parse_meta(reader, st);
   if (c == '#' && reader_peek_ahead(reader, 1) == '^')
