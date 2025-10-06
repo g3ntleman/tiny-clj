@@ -1244,4 +1244,3 @@ void free_object(CljObject *obj) {
 }
 
 // Type-safe Casting now provided as static inline in header
-// Test addition
