@@ -162,7 +162,14 @@ CljObject* make_float(double x) {
     return v;
 }
 
-/** @brief Increment reference count */
+/** @brief Increment reference count
+ * 
+ * @param v Pointer to CljObject to retain (NULL parameters are safely ignored)
+ * 
+ * This function safely handles NULL parameters by returning early without
+ * performing any operations. This prevents crashes and follows defensive
+ * programming practices.
+ */
 void retain(CljObject *v) {
     if (!v) return;
     
@@ -183,7 +190,14 @@ void retain(CljObject *v) {
     // RETAIN(v); // Hook now called via RELEASE macro
 }
 
-/** @brief Decrement reference count and free if zero */
+/** @brief Decrement reference count and free if zero
+ * 
+ * @param v Pointer to CljObject to release (NULL parameters are safely ignored)
+ * 
+ * This function safely handles NULL parameters by returning early without
+ * performing any operations. This prevents crashes and follows defensive
+ * programming practices.
+ */
 void release(CljObject *v) {
     if (!v) return;
     
@@ -222,6 +236,15 @@ bool is_autorelease_pool_active(void) {
     return g_cv_pool_top != NULL;
 }
 
+/** @brief Add object to autorelease pool for deferred cleanup
+ * 
+ * @param v Pointer to CljObject to autorelease (NULL parameters are safely ignored)
+ * @return The same object pointer, or NULL if input was NULL
+ * 
+ * This function safely handles NULL parameters by returning NULL without
+ * performing any operations. This prevents crashes and follows defensive
+ * programming practices.
+ */
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
     
