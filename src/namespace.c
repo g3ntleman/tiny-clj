@@ -8,6 +8,7 @@
 #include "map.h"
 #include "list_operations.h"
 #include "function_call.h"
+#include "memory_hooks.h"
 
 // Global namespace registry
 CljNamespace *ns_registry = NULL;
@@ -41,7 +42,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
 }
 
 CljObject* ns_resolve(EvalState *st, CljObject *sym) {
-    {
+    if (!st || !sym || !st->current_ns) {
         return NULL;
     }
     
@@ -52,7 +53,7 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     // Optionally search global namespaces (e.g., clojure.core)
     CljNamespace *cur = ns_registry;
     while (cur) {
-        {
+        if (cur->mappings) {
             v = map_get(cur->mappings, sym);
             if (v) return v;
         }
@@ -125,11 +126,26 @@ void ns_cleanup() {
 // EvalState functions
 EvalState* evalstate() {
     EvalState *st = ALLOC(EvalState, 1);
-    if (!st) return NULL;
+    if (!st) {
+        printf("FAILED: EvalState allocation failed at %s:%d\n", __FILE__, __LINE__);
+        return NULL;
+    }
     
     memset(st, 0, sizeof(EvalState));
     st->pool = cljvalue_pool_push();
+    if (!st->pool) {
+        printf("FAILED: Autorelease pool creation failed at %s:%d\n", __FILE__, __LINE__);
+        free(st);
+        return NULL;
+    }
+    
     st->current_ns = ns_get_or_create("user", NULL); // Default namespace
+    if (!st->current_ns) {
+        printf("FAILED: Namespace creation failed at %s:%d\n", __FILE__, __LINE__);
+        cljvalue_pool_pop_specific(st->pool);
+        free(st);
+        return NULL;
+    }
     
     // Initialize exception handling
     st->last_error = NULL;
@@ -234,17 +250,40 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     if (!expr) return NULL;
     
     if (expr->type == CLJ_SYMBOL) {
-        if (st && st->current_ns) {
-            CljObject *value = map_get(st->current_ns->mappings, expr);
-            if (value) return value;
-        }
-        return expr;
+        CljObject *result = eval_symbol(expr, st);
+        return result ? AUTORELEASE(result) : NULL;
     }
     
     if (expr->type == CLJ_LIST) {
         CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        return eval_list(expr, env);
+        CljObject *result = eval_list(expr, env, st);
+        return result ? AUTORELEASE(result) : NULL;
     }
     
-    return expr;
+    return AUTORELEASE(expr);
+}
+
+/**
+ * @brief Define a symbol in the current namespace
+ * @param st Evaluation state
+ * @param symbol Symbol to define
+ * @param value Value to bind to symbol
+ */
+void ns_define(EvalState *st, CljObject *symbol, CljObject *value) {
+    if (!st || !symbol || !value) return;
+    
+    // Get current namespace
+    CljNamespace *ns = st->current_ns;
+    if (!ns) {
+        ns = ns_get_or_create("user", NULL);
+        st->current_ns = ns;
+    }
+    
+    // Create or update mappings
+    if (!ns->mappings) {
+        ns->mappings = make_map(16);  // Initial capacity of 16
+    }
+    
+    // Store symbol-value binding (overwrites existing)
+    map_assoc(ns->mappings, symbol, value);
 }

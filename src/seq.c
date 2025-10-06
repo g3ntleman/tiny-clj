@@ -11,6 +11,7 @@
 #include "map.h"
 #include "string.h"
 #include "clj_symbols.h"
+#include "memory_hooks.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,100 +50,149 @@ typedef struct {
 // SEQ CREATION AND MANAGEMENT
 // ============================================================================
 
-SeqIterator* seq_create(CljObject *obj) {
-    // Handle NULL (nil) case
+/**
+ * @brief Create a sequence iterator for any seqable Clojure object
+ * @param obj The Clojure object to create a sequence iterator for (can be NULL for nil)
+ * @return A new SeqIterator (caller must call seq_release()) or NULL on error
+ * 
+ * This function creates a unified sequence iterator that can handle all seqable types:
+ * - CLJ_LIST: Iterates through linked list elements
+ * - CLJ_VECTOR: Iterates through vector elements by index
+ * - CLJ_MAP: Iterates through key-value pairs (keys at even indices, values at odd)
+ * - CLJ_STRING: Iterates through individual characters
+ * - CLJ_NIL: Creates an empty sequence iterator
+ * 
+ * Memory Policy:
+ * - Returns a new SeqIterator that must be released with seq_release()
+ * - Retains the container object to prevent premature deallocation
+ * - Allocates type-specific state structures for iteration tracking
+ * - Returns NULL for non-seqable types or allocation failures
+ * 
+ * Usage Pattern:
+ *   SeqIterator *seq = seq_create(obj);
+ *   if (seq) {
+ *       // Use seq_first(), seq_rest(), etc.
+ *       seq_release(seq);  // Always release when done
+ *   }
+ */
+CljObject* seq_create(CljObject *obj) {
+    // Handle NULL (nil) case - create empty sequence iterator
     if (!obj) {
-        SeqIterator *seq = calloc(1, sizeof(SeqIterator));
+        CljSeqIterator *seq = calloc(1, sizeof(CljSeqIterator));
         if (!seq) return NULL;
-        seq->container = NULL;
-        seq->state = NULL;
-        seq->seq_type = CLJ_NIL;
-        return seq;
+        seq->base.type = CLJ_SEQ;
+        seq->base.rc = 1;
+        seq->container = NULL;    // No container for nil
+        seq->state = NULL;        // No iteration state needed
+        seq->seq_type = CLJ_NIL;   // Mark as nil sequence
+        return (CljObject*)seq;
     }
     
-    SeqIterator *seq = calloc(1, sizeof(SeqIterator));
+    // Allocate the main sequence iterator structure
+    CljSeqIterator *seq = calloc(1, sizeof(CljSeqIterator));
     if (!seq) return NULL;
+    seq->base.type = CLJ_SEQ;
+    seq->base.rc = 1;
     
+    // Retain the container object to prevent premature deallocation during iteration
     seq->container = obj;
-    retain(obj); // Borrowed reference
+    RETAIN(obj); // Borrowed reference - prevents container from being freed
     
+    // Create type-specific iterator state based on object type
     switch (obj->type) {
         case CLJ_LIST: {
+            // List iteration: traverse linked list structure
             CljList *list_data = as_list(obj);
             if (!list_data) {
                 free(seq);
                 return NULL;
             }
             
+            // Check if list is empty - return nil singleton for empty lists
+            int count = list_count(obj);
+            if (count == 0) {
+                RELEASE(obj);  // Release the retained reference
+                free(seq);
+                return clj_nil();    // Empty list -> nil sequence (singleton)
+            }
+            
+            // Allocate list-specific iteration state
             ListIteratorState *state = calloc(1, sizeof(ListIteratorState));
-            state->current = list_data->head;
-            state->index = 0;
-            state->count = list_count(obj);
+            state->current = list_data->head;  // Start at head of list
+            state->index = 0;                  // Track position in sequence
+            state->count = count;             // Total number of elements
             seq->state = state;
             seq->seq_type = CLJ_LIST;
             break;
         }
         
         case CLJ_VECTOR: {
+            // Vector iteration: access elements by index
             CljPersistentVector *vec = as_vector(obj);
             if (!vec) {
                 free(seq);
                 return NULL;
             }
             
+            // Allocate vector-specific iteration state
             VectorIteratorState *state = calloc(1, sizeof(VectorIteratorState));
-            state->index = 0;
-            state->count = vec->count;
-            state->data = vec->data;
+            state->index = 0;              // Start at index 0
+            state->count = vec->count;     // Total number of elements
+            state->data = vec->data;       // Direct access to vector data
             seq->state = state;
             seq->seq_type = CLJ_VECTOR;
             break;
         }
         
         case CLJ_MAP: {
+            // Map iteration: traverse key-value pairs
             CljMap *map = as_map(obj);
             if (!map) {
                 free(seq);
                 return NULL;
             }
             
+            // Allocate map-specific iteration state
             MapIteratorState *state = calloc(1, sizeof(MapIteratorState));
-            state->index = 0;
-            state->count = map->count;
-            state->keys = map->data;      // Keys are at even indices
-            state->values = map->data + 1; // Values are at odd indices
+            state->index = 0;              // Start at index 0
+            state->count = map->count;     // Total number of key-value pairs
+            state->keys = map->data;       // Keys are at even indices (0, 2, 4, ...)
+            state->values = map->data + 1; // Values are at odd indices (1, 3, 5, ...)
             seq->state = state;
             seq->seq_type = CLJ_MAP;
             break;
         }
         
         case CLJ_STRING: {
+            // String iteration: traverse individual characters
             StringIteratorState *state = calloc(1, sizeof(StringIteratorState));
-            state->index = 0;
-            state->length = strlen((char*)obj->as.data);
-            state->data = (const char*)obj->as.data;
+            state->index = 0;                              // Start at character 0
+            state->length = strlen((char*)obj->as.data);  // Total string length
+            state->data = (const char*)obj->as.data;       // Direct access to string data
             seq->state = state;
             seq->seq_type = CLJ_STRING;
             break;
         }
         
         case CLJ_NIL:
-            // Empty sequence - create a minimal state
-            seq->state = NULL;
-            seq->seq_type = CLJ_NIL;
-            seq->container = NULL; // Don't retain NULL
+            // Empty sequence - create a minimal state for nil
+            seq->state = NULL;        // No iteration state needed
+            seq->seq_type = CLJ_NIL;   // Mark as nil sequence
+            seq->container = NULL;     // Don't retain NULL
             break;
             
         default:
-            // Not seqable
+            // Not seqable - free allocated memory and return NULL
             free(seq);
             return NULL;
     }
     
-    return seq;
+    return (CljObject*)seq;
 }
 
-void seq_release(SeqIterator *seq) {
+void seq_release(CljObject *seq_obj) {
+    if (!seq_obj) return;
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return;
     
     if (seq->container) {
@@ -156,9 +206,11 @@ void seq_release(SeqIterator *seq) {
     free(seq);
 }
 
-void seq_retain(SeqIterator *seq) {
+void seq_retain(CljObject *seq_obj) {
+    if (!seq_obj) return;
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (seq && seq->container) {
-        retain(seq->container);
+        RETAIN(seq->container);
     }
 }
 
@@ -166,14 +218,16 @@ void seq_retain(SeqIterator *seq) {
 // SEQ OPERATIONS
 // ============================================================================
 
-CljObject* seq_first(SeqIterator *seq) {
+CljObject* seq_first(CljObject *seq_obj) {
+    if (!seq_obj) return clj_nil();
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq || !seq->state) return clj_nil();
     
     switch (seq->seq_type) {
         case CLJ_LIST: {
             ListIteratorState *state = (ListIteratorState*)seq->state;
             if (state->current) {
-                retain(state->current);
+                RETAIN(state->current);
                 return state->current;
             }
             break;
@@ -182,7 +236,7 @@ CljObject* seq_first(SeqIterator *seq) {
         case CLJ_VECTOR: {
             VectorIteratorState *state = (VectorIteratorState*)seq->state;
             if (state->index < state->count && state->data[state->index]) {
-                retain(state->data[state->index]);
+                RETAIN(state->data[state->index]);
                 return state->data[state->index];
             }
             break;
@@ -198,8 +252,8 @@ CljObject* seq_first(SeqIterator *seq) {
                     CljObject *pair = make_vector(2, 1);
                     CljPersistentVector *pair_vec = as_vector(pair);
                     if (pair_vec) {
-                        retain(key);
-                        retain(value);
+                        RETAIN(key);
+                        RETAIN(value);
                         pair_vec->data[0] = key;
                         pair_vec->data[1] = value;
                         pair_vec->count = 2;
@@ -229,14 +283,18 @@ CljObject* seq_first(SeqIterator *seq) {
     return clj_nil();
 }
 
-SeqIterator* seq_rest(SeqIterator *seq) {
+CljObject* seq_rest(CljObject *seq_obj) {
+    if (!seq_obj) return NULL;
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq || !seq->state) return NULL;
     
-    SeqIterator *rest_seq = calloc(1, sizeof(SeqIterator));
+    CljSeqIterator *rest_seq = calloc(1, sizeof(CljSeqIterator));
     if (!rest_seq) return NULL;
+    rest_seq->base.type = CLJ_SEQ;
+    rest_seq->base.rc = 1;
     
     rest_seq->container = seq->container;
-    retain(rest_seq->container);
+    RETAIN(rest_seq->container);
     rest_seq->seq_type = seq->seq_type;
     
     switch (seq->seq_type) {
@@ -298,14 +356,16 @@ SeqIterator* seq_rest(SeqIterator *seq) {
             return NULL;
     }
     
-    return rest_seq;
+    return (CljObject*)rest_seq;
 }
 
-SeqIterator* seq_next(SeqIterator *seq) {
-    return seq_rest(seq);
+CljObject* seq_next(CljObject *seq_obj) {
+    return seq_rest(seq_obj);
 }
 
-bool seq_empty(SeqIterator *seq) {
+bool seq_empty(CljObject *seq_obj) {
+    if (!seq_obj) return true;
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq || !seq->state) return true;
     
     switch (seq->seq_type) {
@@ -335,7 +395,9 @@ bool seq_empty(SeqIterator *seq) {
     }
 }
 
-int seq_count(SeqIterator *seq) {
+int seq_count(CljObject *seq_obj) {
+    if (!seq_obj) return 0;
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq || !seq->state) return 0;
     
     switch (seq->seq_type) {
@@ -387,32 +449,27 @@ bool is_seqable(CljObject *obj) {
 bool is_seq(CljObject *obj) {
     // In our implementation, sequences are represented by SeqIterator objects
     // This function checks if an object is already a sequence
-    return obj && obj->type == CLJ_LIST; // Lists are the primary sequence type
+    return type(obj) == CLJ_LIST; // Lists are the primary sequence type
 }
 
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
-CljObject* seq_to_list(SeqIterator *seq) {
-    if (!seq) return make_list();
-    
-    // For now, return an empty list to avoid complex list building
-    // This can be enhanced later with proper list construction
-    return make_list();
-}
+// Direct seq operations - these work on CljObject directly without iterators
+// The key insight: lists and sequences are the same thing
 
 // ============================================================================
 // EQUALITY
 // ============================================================================
 
-bool seq_equal(SeqIterator *seq1, SeqIterator *seq2) {
-    if (!seq1 && !seq2) return true;
-    if (!seq1 || !seq2) return false;
+bool seq_equal(CljObject *seq1_obj, CljObject *seq2_obj) {
+    if (!seq1_obj && !seq2_obj) return true;
+    if (!seq1_obj || !seq2_obj) return false;
     
     // Compare element by element
-    SeqIterator *current1 = seq1;
-    SeqIterator *current2 = seq2;
+    CljObject *current1 = seq1_obj;
+    CljObject *current2 = seq2_obj;
     
     while (!seq_empty(current1) && !seq_empty(current2)) {
         CljObject *first1 = seq_first(current1);
@@ -425,8 +482,8 @@ bool seq_equal(SeqIterator *seq1, SeqIterator *seq2) {
             return false;
         }
         
-        SeqIterator *next1 = seq_next(current1);
-        SeqIterator *next2 = seq_next(current2);
+        CljObject *next1 = seq_next(current1);
+        CljObject *next2 = seq_next(current2);
         
         seq_release(current1);
         seq_release(current2);
@@ -444,8 +501,8 @@ bool seq_equal(SeqIterator *seq1, SeqIterator *seq2) {
 }
 
 bool seqable_equal(CljObject *obj1, CljObject *obj2) {
-    SeqIterator *seq1 = seq_create(obj1);
-    SeqIterator *seq2 = seq_create(obj2);
+    CljObject *seq1 = seq_create(obj1);
+    CljObject *seq2 = seq_create(obj2);
     
     bool equal = seq_equal(seq1, seq2);
     

@@ -13,7 +13,58 @@
 #include "clj_symbols.h"
 #include "memory_hooks.h"
 #include "memory_profiler.h"
+#include "tiny_clj.h"
+#include "clj_parser.h"
 #include <stdio.h>
+
+// Helper functions for simplified test creation
+static CljObject* make_for_call(CljObject *binding_var, CljObject *collection, CljObject *body) {
+    CljObject *for_call = make_list();
+    CljList *for_data = as_list(for_call);
+    
+    // Build (for [var coll] body)
+    CljObject *for_sym = make_symbol("for", NULL);
+    CljObject *binding_list = make_list();
+    CljList *binding_data = as_list(binding_list);
+    binding_data->head = binding_var;
+    binding_data->tail = make_list();
+    CljList *coll_data = as_list(binding_data->tail);
+    coll_data->head = collection;
+    
+    for_data->head = for_sym;
+    for_data->tail = make_list();
+    CljList *args_data = as_list(for_data->tail);
+    args_data->head = binding_list;
+    args_data->tail = make_list();
+    CljList *body_data = as_list(args_data->tail);
+    body_data->head = body;
+    
+    return for_call;
+}
+
+static CljObject* make_dotimes_call(CljObject *var, int n, CljObject *body) {
+    CljObject *dotimes_call = make_list();
+    CljList *dotimes_data = as_list(dotimes_call);
+    
+    // Build (dotimes [var n] body)
+    CljObject *dotimes_sym = make_symbol("dotimes", NULL);
+    CljObject *binding_list = make_list();
+    CljList *binding_data = as_list(binding_list);
+    binding_data->head = var;
+    binding_data->tail = make_list();
+    CljList *n_data = as_list(binding_data->tail);
+    n_data->head = make_int(n);
+    
+    dotimes_data->head = dotimes_sym;
+    dotimes_data->tail = make_list();
+    CljList *args_data = as_list(dotimes_data->tail);
+    args_data->head = binding_list;
+    args_data->tail = make_list();
+    CljList *body_data = as_list(args_data->tail);
+    body_data->head = body;
+    
+    return dotimes_call;
+}
 
 // ============================================================================
 // FOR-LOOP TESTS
@@ -143,16 +194,7 @@ static char *test_doseq_basic(void) {
         CljObject *result = eval_doseq(doseq_call, NULL);
         mu_assert("doseq should return nil", result == NULL || result->type == CLJ_NIL);
         
-        // Memory Pool Validation
-        MemoryStats stats = memory_profiler_get_stats();
-        bool memory_balanced = (stats.total_allocations == stats.total_deallocations);
-        if (!memory_balanced) {
-            printf("🔍 MEMORY ANALYSIS: Allocations=%zu, Deallocations=%zu\n", 
-                   stats.total_allocations, stats.total_deallocations);
-        }
-        mu_assert("Memory should be balanced", memory_balanced);
-        
-        // No manual cleanup needed - autorelease objects handled by pool
+        // Memory balance is automatically checked by WITH_MEMORY_PROFILING after pool cleanup
     });
     
     printf("✓ doseq basic test passed\n");
@@ -162,56 +204,12 @@ static char *test_doseq_basic(void) {
 static char *test_for_basic(void) {
     printf("\n=== Testing for Basic Functionality ===\n");
     
-    WITH_MEMORY_PROFILING({
-        // Create a test vector
-        CljObject *vec = AUTORELEASE(make_vector(3, 1));
-        CljPersistentVector *vec_data = as_vector(vec);
-        if (vec_data) {
-            vec_data->data[0] = make_int(1);
-            vec_data->data[1] = make_int(2);
-            vec_data->data[2] = make_int(3);
-            vec_data->count = 3;
-        }
-        
-        // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = AUTORELEASE(make_list());
-        CljList *binding_data = as_list(binding_list);
-        if (binding_data) {
-            binding_data->head = intern_symbol_global("x");
-            binding_data->tail = AUTORELEASE(make_list());
-            CljList *tail_data = as_list(binding_data->tail);
-            if (tail_data) {
-                tail_data->head = vec;
-                tail_data->tail = NULL;
-            }
-        }
-        
-        // Create body: x (identity)
-        CljObject *body = intern_symbol_global("x");
-        
-        // Create function call: (for [x [1 2 3]] x)
-        CljObject *for_call = AUTORELEASE(make_list());
-        CljList *call_data = as_list(for_call);
-        if (call_data) {
-            call_data->head = intern_symbol_global("for");
-            call_data->tail = AUTORELEASE(make_list());
-            CljList *call_tail = as_list(call_data->tail);
-            if (call_tail) {
-                call_tail->head = binding_list;
-                call_tail->tail = AUTORELEASE(make_list());
-                CljList *call_tail2 = as_list(call_tail->tail);
-                if (call_tail2) {
-                    call_tail2->head = body;
-                    call_tail2->tail = NULL;
-                }
-            }
-        }
-        
-        // Test for evaluation
-        CljObject *result = eval_for(for_call, NULL);
+    WITH_MEMORY_PROFILING_EVAL({
+        // Test for evaluation using parse_string + eval_parsed
+        char *for_expr = "(for [x [1 2 3]] x)";
+        CljObject *parsed = parse_string(for_expr, eval_state);
+        CljObject *result = eval_parsed(parsed, eval_state);
         mu_assert("for should return a result", result != NULL);
-        
-        // No manual cleanup needed - autorelease objects handled by pool
     });
     
     printf("✓ for basic test passed\n");
@@ -221,46 +219,12 @@ static char *test_for_basic(void) {
 static char *test_dotimes_with_variable(void) {
     printf("\n=== Testing dotimes with Variable Binding ===\n");
     
-    WITH_MEMORY_PROFILING({
-        // Create binding list: [i 5]
-        CljObject *binding_list = AUTORELEASE(make_list());
-        CljList *binding_data = as_list(binding_list);
-        if (binding_data) {
-            binding_data->head = intern_symbol_global("i");
-            binding_data->tail = AUTORELEASE(make_list());
-            CljList *tail_data = as_list(binding_data->tail);
-            if (tail_data) {
-                tail_data->head = make_int(5);
-                tail_data->tail = NULL;
-            }
-        }
-        
-        // Create body: i (just return the variable)
-        CljObject *body = intern_symbol_global("i");
-        
-        // Create function call: (dotimes [i 5] i)
-        CljObject *dotimes_call = AUTORELEASE(make_list());
-        CljList *call_data = as_list(dotimes_call);
-        if (call_data) {
-            call_data->head = intern_symbol_global("dotimes");
-            call_data->tail = AUTORELEASE(make_list());
-            CljList *call_tail = as_list(call_data->tail);
-            if (call_tail) {
-                call_tail->head = binding_list;
-                call_tail->tail = AUTORELEASE(make_list());
-                CljList *call_tail2 = as_list(call_tail->tail);
-                if (call_tail2) {
-                    call_tail2->head = body;
-                    call_tail2->tail = NULL;
-                }
-            }
-        }
-        
-        // Test dotimes evaluation
-        CljObject *result = eval_dotimes(dotimes_call, NULL);
+    WITH_MEMORY_PROFILING_EVAL({
+        // Test dotimes evaluation using parse_string + eval_parsed
+        char *dotimes_expr = "(dotimes [i 5] i)";
+        CljObject *parsed = parse_string(dotimes_expr, eval_state);
+        CljObject *result = eval_parsed(parsed, eval_state);
         mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
-        
-        // No manual cleanup needed - autorelease objects handled by pool
     });
     
     printf("✓ dotimes with variable binding test passed\n");
@@ -270,55 +234,12 @@ static char *test_dotimes_with_variable(void) {
 static char *test_for_with_simple_expression(void) {
     printf("\n=== Testing for with Simple Expression ===\n");
     
-    WITH_MEMORY_PROFILING({
-        // Create a test vector
-        CljObject *vec = AUTORELEASE(make_vector(2, 1));
-        CljPersistentVector *vec_data = as_vector(vec);
-        if (vec_data) {
-            vec_data->data[0] = make_int(1);
-            vec_data->data[1] = make_int(2);
-            vec_data->count = 2;
-        }
-        
-        // Create binding list: [x [1 2]]
-        CljObject *binding_list = AUTORELEASE(make_list());
-        CljList *binding_data = as_list(binding_list);
-        if (binding_data) {
-            binding_data->head = intern_symbol_global("x");
-            binding_data->tail = AUTORELEASE(make_list());
-            CljList *tail_data = as_list(binding_data->tail);
-            if (tail_data) {
-                tail_data->head = vec;
-                tail_data->tail = NULL;
-            }
-        }
-        
-        // Create body: x (simple identity)
-        CljObject *body = intern_symbol_global("x");
-        
-        // Create function call: (for [x [1 2]] x)
-        CljObject *for_call = AUTORELEASE(make_list());
-        CljList *call_data = as_list(for_call);
-        if (call_data) {
-            call_data->head = intern_symbol_global("for");
-            call_data->tail = AUTORELEASE(make_list());
-            CljList *call_tail = as_list(call_data->tail);
-            if (call_tail) {
-                call_tail->head = binding_list;
-                call_tail->tail = AUTORELEASE(make_list());
-                CljList *call_tail2 = as_list(call_tail->tail);
-                if (call_tail2) {
-                    call_tail2->head = body;
-                    call_tail2->tail = NULL;
-                }
-            }
-        }
-        
-        // Test for evaluation
-        CljObject *result = eval_for(for_call, NULL);
+    WITH_MEMORY_PROFILING_EVAL({
+        // Test for evaluation using parse_string + eval_parsed
+        char *for_expr = "(for [x [1 2]] x)";
+        CljObject *parsed = parse_string(for_expr, eval_state);
+        CljObject *result = eval_parsed(parsed, eval_state);
         mu_assert("for with simple expression should return a result", result != NULL);
-        
-        // No manual cleanup needed - autorelease objects handled by pool
     });
     
     printf("✓ for with simple expression test passed\n");
@@ -345,18 +266,14 @@ int main(void) {
     // Initialize memory profiling with hooks
     memory_profiling_init_with_hooks();
     
-    // 🧪 TEST HYPOTHESIS: Create autorelease pool
-    printf("🧪 Creating autorelease pool for leak testing...\n");
-    CljObjectPool *pool = cljvalue_pool_push();
-    
     // Initialize symbol table
     init_special_symbols();
     
-    int result = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
+    // Load clojure.core to enable interpreted functions
+    printf("DEBUG: Loading clojure.core...\n");
+    load_clojure_core();
     
-    // 🧪 TEST HYPOTHESIS: Cleanup autorelease pool
-    printf("🧪 Cleaning up autorelease pool...\n");
-    cljvalue_pool_pop(pool);
+    int result = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
     
     // Cleanup memory profiling
     memory_profiling_cleanup_with_hooks();

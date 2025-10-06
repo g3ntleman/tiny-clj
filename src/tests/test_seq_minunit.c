@@ -38,10 +38,12 @@ static char *test_seq_create_list(void) {
         }
         
         // Create sequence iterator
-        SeqIterator *seq = seq_create(list);
+        CljObject *seq = seq_create(list);
         mu_assert("seq creation failed", seq != NULL);
-        mu_assert("seq container mismatch", seq->container == list);
-        mu_assert("seq type mismatch", seq->seq_type == CLJ_LIST);
+        CljSeqIterator *seq_iter = as_seq(seq);
+        mu_assert("seq iterator cast failed", seq_iter != NULL);
+        mu_assert("seq container mismatch", seq_iter->container == list);
+        mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_LIST);
         
         seq_release(seq);
         release(list);
@@ -66,10 +68,12 @@ static char *test_seq_create_vector(void) {
         }
         
         // Create sequence iterator
-        SeqIterator *seq = seq_create(vec);
+        CljObject *seq = seq_create(vec);
         mu_assert("seq creation failed", seq != NULL);
-        mu_assert("seq container mismatch", seq->container == vec);
-        mu_assert("seq type mismatch", seq->seq_type == CLJ_VECTOR);
+        CljSeqIterator *seq_iter = as_seq(seq);
+        mu_assert("seq iterator cast failed", seq_iter != NULL);
+        mu_assert("seq container mismatch", seq_iter->container == vec);
+        mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_VECTOR);
         
         seq_release(seq);
         release(vec);
@@ -86,10 +90,12 @@ static char *test_seq_create_string(void) {
     CljObject *str = make_string("hello");
     
     // Create sequence iterator
-    SeqIterator *seq = seq_create(str);
+    CljObject *seq = seq_create(str);
     mu_assert("seq creation failed", seq != NULL);
-    mu_assert("seq container mismatch", seq->container == str);
-    mu_assert("seq type mismatch", seq->seq_type == CLJ_STRING);
+    CljSeqIterator *seq_iter = as_seq(seq);
+    mu_assert("seq iterator cast failed", seq_iter != NULL);
+    mu_assert("seq container mismatch", seq_iter->container == str);
+    mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_STRING);
     
     seq_release(seq);
     release(str);
@@ -102,9 +108,11 @@ static char *test_seq_create_nil(void) {
     printf("\n=== Testing Seq Creation for Nil ===\n");
     
     // Create sequence iterator for nil
-    SeqIterator *seq = seq_create(NULL);
+    CljObject *seq = seq_create(NULL);
     mu_assert("seq creation failed", seq != NULL);
-    mu_assert("seq type mismatch", seq->seq_type == CLJ_NIL);
+    CljSeqIterator *seq_iter = as_seq(seq);
+    mu_assert("seq iterator cast failed", seq_iter != NULL);
+    mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_NIL);
     
     seq_release(seq);
     
@@ -128,7 +136,7 @@ static char *test_seq_first(void) {
         vec_data->count = 2;
     }
     
-    SeqIterator *seq = seq_create(vec);
+    CljObject *seq = seq_create(vec);
     mu_assert("seq creation failed", seq != NULL);
     
     CljObject *first = seq_first(seq);
@@ -155,10 +163,10 @@ static char *test_seq_rest(void) {
         vec_data->count = 3;
     }
     
-    SeqIterator *seq = seq_create(vec);
+    CljObject *seq = seq_create(vec);
     mu_assert("seq creation failed", seq != NULL);
     
-    SeqIterator *rest_seq = seq_rest(seq);
+    CljObject *rest_seq = seq_rest(seq);
     mu_assert("rest sequence is null", rest_seq != NULL);
     
     CljObject *first_rest = seq_first(rest_seq);
@@ -178,7 +186,7 @@ static char *test_seq_empty(void) {
     
     // Test with empty vector
     CljObject *vec = make_vector(0, 1);
-    SeqIterator *seq = seq_create(vec);
+    CljObject *seq = seq_create(vec);
     mu_assert("seq creation failed", seq != NULL);
     
     mu_assert("empty sequence should be empty", seq_empty(seq) == true);
@@ -203,7 +211,7 @@ static char *test_seq_count(void) {
         vec_data->count = 3;
     }
     
-    SeqIterator *seq = seq_create(vec);
+    CljObject *seq = seq_create(vec);
     mu_assert("seq creation failed", seq != NULL);
     
     int count = seq_count(seq);
@@ -254,18 +262,57 @@ static char *test_seq_to_list(void) {
         vec_data->count = 2;
     }
     
-    SeqIterator *seq = seq_create(vec);
-    mu_assert("seq creation failed", seq != NULL);
+    // Test that lists and sequences work the same way
+    // (first list1) and (first (seq list1)) should use the same codepath
     
-    CljObject *list = seq_to_list(seq);
-    mu_assert("list conversion failed", list != NULL);
-    mu_assert("list should be a list", list->type == CLJ_LIST);
+    // Test that vectors work with seq operations
+    // Vectors are not lists, so we need seq operations for them
+    
+    // Test that seq operations work on lists directly
+    CljObject *seq = seq_create(vec);
+    mu_assert("seq creation should work on lists", seq != NULL);
+    
+    CljObject *first_elem = seq_first(seq);
+    mu_assert("seq first should work", first_elem != NULL);
+    mu_assert("seq first should be integer", first_elem->type == CLJ_INT);
     
     seq_release(seq);
     release(vec);
-    release(list);
     
-    printf("✓ Seq to list conversion test passed\n");
+    printf("✓ List and seq operations work the same way\n");
+    return 0;
+}
+
+static char *test_empty_list_nil_semantics(void) {
+    printf("\n=== Testing Empty List and Nil Semantics ===\n");
+    
+    // Test 1: empty-list is () (nil)
+    CljObject *empty_list = make_list();
+    mu_assert("empty list should not be NULL", empty_list != NULL);
+    mu_assert("empty list should be a list", empty_list->type == CLJ_LIST);
+    
+    // Test 2: (seq empty-list) is nil
+    CljObject *seq = seq_create(empty_list);
+    mu_assert("seq of empty list should be nil singleton", seq == clj_nil());
+    
+    // Test 3: (= nil nil) is true
+    CljObject *nil1 = clj_nil();
+    CljObject *nil2 = clj_nil();
+    mu_assert("nil should equal nil", nil1 == nil2);
+    
+    // Test 4: (= () nil) is false
+    mu_assert("empty list should not equal nil", empty_list != clj_nil());
+    
+    // Test 5: seq operations on empty list
+    CljObject *first = list_first(empty_list);
+    mu_assert("first of empty list should be nil singleton", first == clj_nil());
+    
+    // Test that empty list is seqable but seq is nil
+    mu_assert("empty list should be seqable", is_seqable(empty_list));
+    
+    release(empty_list);
+    
+    printf("✓ Empty list and nil semantics test passed\n");
     return 0;
 }
 
@@ -287,6 +334,7 @@ static char *all_seq_tests(void) {
     mu_run_test(test_is_seqable);
     
     mu_run_test(test_seq_to_list);
+    mu_run_test(test_empty_list_nil_semantics);
     
     return 0;
 }

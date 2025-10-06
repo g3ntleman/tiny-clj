@@ -169,6 +169,70 @@ static char *test_parser_collections(void) {
   return 0;
 }
 
+static char *test_variable_definition(void) {
+  EvalState *st = evalstate();
+  // Assertion moved to evalstate()
+  
+  // Test defining a variable
+  CljObject *result = eval_string("(def x 42)", st);
+  mu_assert("def should return the value", result != NULL);
+  mu_assert_obj_type(result, CLJ_INT);
+  mu_assert_obj_int(result, 42);
+  
+  // Test resolving the variable
+  CljObject *var_result = eval_string("x", st);
+  mu_assert("Variable should be resolvable", var_result != NULL);
+  mu_assert_obj_type(var_result, CLJ_INT);
+  mu_assert_obj_int(var_result, 42);
+  
+  evalstate_free(st);
+  printf("✓ Variable definition tests passed\n");
+  return 0;
+}
+
+static char *test_variable_redefinition(void) {
+  EvalState *st = evalstate();
+  // Assertion moved to evalstate()
+  
+  // Define variable first time
+  CljObject *result1 = eval_string("(def x 42)", st);
+  mu_assert("First def should work", result1 != NULL);
+  mu_assert_obj_int(result1, 42);
+  
+  // Redefine variable
+  CljObject *result2 = eval_string("(def x 100)", st);
+  mu_assert("Second def should work", result2 != NULL);
+  mu_assert_obj_int(result2, 100);
+  
+  // Test that variable now has new value
+  CljObject *var_result = eval_string("x", st);
+  mu_assert("Variable should have new value", var_result != NULL);
+  mu_assert_obj_int(var_result, 100);
+  
+  evalstate_free(st);
+  printf("✓ Variable redefinition tests passed\n");
+  return 0;
+}
+
+static char *test_variable_with_string(void) {
+  EvalState *st = evalstate();
+  // Assertion moved to evalstate()
+  
+  // Test defining a string variable
+  CljObject *result = eval_string(R"((def message "Hello, World!"))", st);
+  mu_assert("String def should work", result != NULL);
+  mu_assert_obj_type(result, CLJ_STRING);
+  
+  // Test resolving the string variable
+  CljObject *var_result = eval_string("message", st);
+  mu_assert("String variable should be resolvable", var_result != NULL);
+  mu_assert_obj_type(var_result, CLJ_STRING);
+  
+  evalstate_free(st);
+  printf("✓ String variable tests passed\n");
+  return 0;
+}
+
 // ============================================================================
 // TEST RUNNER
 // ============================================================================
@@ -183,6 +247,9 @@ static char *all_unit_tests(void) {
   mu_run_test(test_empty_map_singleton);
   mu_run_test(test_parser_basic_types);
   mu_run_test(test_parser_collections);
+  mu_run_test(test_variable_definition);
+  mu_run_test(test_variable_redefinition);
+  mu_run_test(test_variable_with_string);
   
   test_teardown();
   return 0;

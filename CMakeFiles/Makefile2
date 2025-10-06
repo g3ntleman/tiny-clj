@@ -260,12 +260,12 @@ CMakeFiles/test-unit.dir/clean:
 CMakeFiles/test-eval-string-api.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=14,15,16,17,18,19,20 "Built target test-eval-string-api"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=14,15,16,17,18,19 "Built target test-eval-string-api"
 .PHONY : CMakeFiles/test-eval-string-api.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-eval-string-api.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-eval-string-api.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-eval-string-api.dir/rule
@@ -277,7 +277,7 @@ test-eval-string-api: CMakeFiles/test-eval-string-api.dir/rule
 # codegen rule for target.
 CMakeFiles/test-eval-string-api.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=14,15,16,17,18,19,20 "Finished codegen for target test-eval-string-api"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=14,15,16,17,18,19 "Finished codegen for target test-eval-string-api"
 .PHONY : CMakeFiles/test-eval-string-api.dir/codegen
 
 # clean rule for target.
@@ -452,12 +452,12 @@ CMakeFiles/test-seq-performance.dir/clean:
 CMakeFiles/test-for-loops.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=21,22,23,24,25 "Built target test-for-loops"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=20,21,22,23,24,25,26 "Built target test-for-loops"
 .PHONY : CMakeFiles/test-for-loops.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-for-loops.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 7
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-for-loops.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-for-loops.dir/rule
@@ -469,7 +469,7 @@ test-for-loops: CMakeFiles/test-for-loops.dir/rule
 # codegen rule for target.
 CMakeFiles/test-for-loops.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=21,22,23,24,25 "Finished codegen for target test-for-loops"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=20,21,22,23,24,25,26 "Finished codegen for target test-for-loops"
 .PHONY : CMakeFiles/test-for-loops.dir/codegen
 
 # clean rule for target.
@@ -484,12 +484,12 @@ CMakeFiles/test-for-loops.dir/clean:
 CMakeFiles/test-for-loops-comparison.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops-comparison.dir/build.make CMakeFiles/test-for-loops-comparison.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops-comparison.dir/build.make CMakeFiles/test-for-loops-comparison.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=26,27,28,29,30,31 "Built target test-for-loops-comparison"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=27,28,29,30,31 "Built target test-for-loops-comparison"
 .PHONY : CMakeFiles/test-for-loops-comparison.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-for-loops-comparison.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 6
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-for-loops-comparison.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-for-loops-comparison.dir/rule
@@ -501,7 +501,7 @@ test-for-loops-comparison: CMakeFiles/test-for-loops-comparison.dir/rule
 # codegen rule for target.
 CMakeFiles/test-for-loops-comparison.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops-comparison.dir/build.make CMakeFiles/test-for-loops-comparison.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=26,27,28,29,30,31 "Finished codegen for target test-for-loops-comparison"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=27,28,29,30,31 "Finished codegen for target test-for-loops-comparison"
 .PHONY : CMakeFiles/test-for-loops-comparison.dir/codegen
 
 # clean rule for target.
@@ -580,12 +580,12 @@ CMakeFiles/test-for-performance.dir/clean:
 CMakeFiles/test-memory-profiling.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=45,46,47,48,49,50 "Built target test-memory-profiling"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=46,47,48,49,50 "Built target test-memory-profiling"
 .PHONY : CMakeFiles/test-memory-profiling.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-memory-profiling.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 6
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 5
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-memory-profiling.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-memory-profiling.dir/rule
@@ -597,7 +597,7 @@ test-memory-profiling: CMakeFiles/test-memory-profiling.dir/rule
 # codegen rule for target.
 CMakeFiles/test-memory-profiling.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-memory-profiling.dir/build.make CMakeFiles/test-memory-profiling.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=45,46,47,48,49,50 "Finished codegen for target test-memory-profiling"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=46,47,48,49,50 "Finished codegen for target test-memory-profiling"
 .PHONY : CMakeFiles/test-memory-profiling.dir/codegen
 
 # clean rule for target.
@@ -708,12 +708,12 @@ CMakeFiles/demo-array-system.dir/clean:
 CMakeFiles/test-kv-macros.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=43,44 "Built target test-kv-macros"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=43,44,45 "Built target test-kv-macros"
 .PHONY : CMakeFiles/test-kv-macros.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/test-kv-macros.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 2
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 3
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test-kv-macros.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /Users/theisen/Projects/tiny-clj/CMakeFiles 0
 .PHONY : CMakeFiles/test-kv-macros.dir/rule
@@ -725,7 +725,7 @@ test-kv-macros: CMakeFiles/test-kv-macros.dir/rule
 # codegen rule for target.
 CMakeFiles/test-kv-macros.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-kv-macros.dir/build.make CMakeFiles/test-kv-macros.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=43,44 "Finished codegen for target test-kv-macros"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=43,44,45 "Finished codegen for target test-kv-macros"
 .PHONY : CMakeFiles/test-kv-macros.dir/codegen
 
 # clean rule for target.

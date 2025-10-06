@@ -122,7 +122,7 @@ static CljObject *parse_number(Reader *reader, EvalState *st);
  * @brief Internal expression parser using Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return Parsed CljObject or NULL on error
+ * @return Parsed CljObject or NULL on error, autoreleased
  */
 static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
@@ -141,7 +141,9 @@ static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
     return parse_list(reader, st);
   if (c == '"')
     return parse_string_internal(reader, st);
-  if (c == '-' || isdigit(c))
+  if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
+    return parse_number(reader, st);
+  if (isdigit(c))
     return parse_number(reader, st);
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
     return parse_symbol(reader, st);
@@ -157,7 +159,7 @@ static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
  * @brief Parse Clojure expression from string input
  * @param input Input string to parse
  * @param st Evaluation state
- * @return Parsed CljObject or NULL on error
+ * @return Parsed CljObject (autoreleased) or NULL on error
  */
 CljObject *parse(const char *input, EvalState *st) {
   if (!input)
@@ -171,7 +173,7 @@ CljObject *parse(const char *input, EvalState *st) {
  * @brief Parse a Clojure expression from a string
  * @param expr_str The Clojure expression as a string
  * @param eval_state The evaluation state
- * @return The parsed AST (caller must release) or NULL on error
+ * @return The parsed AST (autoreleased) or NULL on error
  */
 CljObject* parse_string(const char* expr_str, EvalState *eval_state) {
     return parse(expr_str, eval_state);
@@ -196,11 +198,26 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
+    // Create autorelease pool for this evaluation
+    CljObjectPool *pool = cljvalue_pool_push();
+    if (!pool) return NULL;
+    
     CljObject *parsed = parse_string(expr_str, eval_state);
-    if (!parsed) return NULL;
+    if (!parsed) {
+        cljvalue_pool_pop();
+        return NULL;
+    }
+    
     CljObject *result = eval_parsed(parsed, eval_state);
-    RELEASE(parsed); // Clean up parsed expression
-    return result;
+    
+    // Retain result before cleaning up pool
+    if (result) RETAIN(result);
+    
+    // Clean up autorelease pool
+    cljvalue_pool_pop();
+    
+    // Return autoreleased result
+    return result ? AUTORELEASE(result) : NULL;
 }
 
 /**
@@ -330,7 +347,7 @@ static CljObject *parse_symbol(Reader *reader, EvalState *st) {
   buffer[pos] = '\0';
   if (!utf8valid(buffer))
     return NULL;
-  return (CljObject *)intern_symbol_global(buffer);
+  return AUTORELEASE(make_symbol(buffer, NULL));
 }
 
 /**
@@ -379,7 +396,7 @@ static CljObject *parse_string_internal(Reader *reader, EvalState *st) {
   buf[pos] = '\0';
   if (!utf8valid(buf))
     return NULL;
-  return make_string(buf);
+  return AUTORELEASE(make_string(buf));
 }
 
 /**

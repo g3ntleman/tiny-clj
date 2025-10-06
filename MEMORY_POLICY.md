@@ -14,12 +14,12 @@ Tiny-CLJ uses manual reference counting for memory management, following Objecti
 
 ### 2. Memory Management Patterns
 
-#### Test Code Pattern (Comfort)
+#### Test Code Pattern (Comfort & Readability)
 ```c
-// Use autorelease() for cleaner, less verbose test code
+// Use autorelease() for cleaner, more readable test code
 CljObject *vec = autorelease(make_vector(3, 1));
 CljObject *list = autorelease(make_list());
-// Objects automatically freed at test end
+// Objects automatically freed at test end - no manual cleanup needed
 ```
 
 #### Production Code Pattern (Performance)
@@ -39,12 +39,15 @@ release(list);
 - ✅ **Debugging**: Automatic cleanup, fewer manual calls
 - ✅ **Prototyping**: Quick iteration without cleanup concerns
 - ✅ **Non-performance-critical code**: Convenience over speed
+- ✅ **Readability**: More readable test code with less cleanup boilerplate
+- ✅ **Maintainability**: Easier to write and maintain test code
 
 #### Use `release()` in Production:
 - ✅ **Performance-critical code**: No autorelease pool overhead
 - ✅ **Real-time systems**: Predictable memory timing
 - ✅ **Long-running processes**: Explicit control over object lifetime
 - ✅ **Memory-constrained environments**: Immediate cleanup
+- ✅ **Objects not returned as values**: Use `release()` when result is not used as return value
 
 ### 4. Object Lifecycle Rules
 
@@ -69,9 +72,9 @@ return obj;  // Caller must release()
 
 #### Temporary Objects:
 ```c
-// For temporary objects in tests:
+// For temporary objects in tests (improved readability):
 CljObject *temp = autorelease(make_list());
-// Automatically cleaned up
+// Automatically cleaned up - no manual release() needed
 ```
 
 ### 5. Common Anti-Patterns
@@ -100,8 +103,9 @@ for (int i = 0; i < 1000000; i++) {
 CljObject *obj = make_vector(3, 1);
 release(obj);
 
-// Test pattern with autorelease
+// Test pattern with autorelease (improved readability)
 CljObject *obj = autorelease(make_vector(3, 1));
+// No manual cleanup needed - automatically freed
 
 // Production loop pattern
 for (int i = 0; i < 1000000; i++) {
@@ -109,6 +113,12 @@ for (int i = 0; i < 1000000; i++) {
     // ... use temp ...
     release(temp);  // ✅ FAST: Immediate cleanup
 }
+
+// Production pattern for non-return values
+CljObject *int_obj = make_int(i);
+tail_data->head = int_obj;
+// ... use int_obj ...
+release(int_obj);  // ✅ FAST: No autorelease pool overhead
 ```
 
 ## Memory Profiling
@@ -132,6 +142,16 @@ DEALLOC(obj);   // Object destruction
 RETAIN(obj);    // Reference increment
 RELEASE(obj);   // Reference decrement
 ```
+
+### Memory Management Macro Rule:
+**ALWAYS use memory management macros instead of direct function calls:**
+- ✅ **Use `RETAIN(obj)`** instead of `retain(obj)`
+- ✅ **Use `RELEASE(obj)`** instead of `release(obj)`
+- ✅ **Use `AUTORELEASE(obj)`** instead of `autorelease(obj)`
+- ✅ **Use `CREATE(obj)`** instead of `make_*()` functions
+- ✅ **Use `DEALLOC(obj)`** instead of `free(obj)`
+
+This ensures consistent memory profiling and better tracking of all memory operations throughout the codebase.
 
 ## API Memory Policy
 
@@ -190,12 +210,13 @@ release(vec);  // Must release manually
 
 1. **API Functions**: Return autoreleased objects (no manual cleanup)
 2. **Object Creation**: Return objects with `rc=1` (manual cleanup required)
-3. **Tests**: Use `autorelease()` for convenience
+3. **Tests**: Use `autorelease()` for convenience and readability
 4. **Production**: Use `release()` for performance
-5. **Data Structures**: Use `retain()` when storing objects
-6. **Profiling**: Always track memory usage in tests
-7. **Debugging**: Use memory profiler to find leaks
-8. **Trust API Design**: Follow documented memory policy
+5. **Non-return values**: Use `release()` when object is not returned as function result
+6. **Data Structures**: Use `retain()` when storing objects
+7. **Profiling**: Always track memory usage in tests
+8. **Debugging**: Use memory profiler to find leaks
+9. **Trust API Design**: Follow documented memory policy
 
 ## Implementation Notes
 

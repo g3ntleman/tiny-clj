@@ -26,46 +26,58 @@ extern "C" {
  * For long-lived iterators, call seq_retain() to extend lifetime.
  */
 typedef struct {
+    CljObject base;         // Embedded base object (CLJ_SEQ type)
     CljObject *container;    // Original container (borrowed reference)
     void *state;             // Iterator-specific state
     int position;            // Current position in sequence
     CljType seq_type;        // Type of sequence (for dispatch)
-} SeqIterator;
+} CljSeqIterator;
 
 /**
  * @brief Create a sequence view from any seqable container
  * @param obj Container (list, vector, map, string, nil)
- * @return Iterator view, or NULL if not seqable
+ * @return Iterator view as CljObject, or NULL if not seqable
  */
-SeqIterator* seq_create(CljObject *obj);
+CljObject* seq_create(CljObject *obj);
+
+/**
+ * @brief Cast CljObject to CljSeqIterator
+ * @param obj Object to cast
+ * @return CljSeqIterator* if obj is CLJ_SEQ type, NULL otherwise
+ */
+static inline CljSeqIterator* as_seq(CljObject *obj) {
+    return (type(obj) == CLJ_SEQ) ? (CljSeqIterator*)obj : NULL;
+}
 
 /**
  * @brief Get the first element of a sequence
  * @param seq Sequence iterator
  * @return First element, or nil if empty
  */
-CljObject* seq_first(SeqIterator *seq);
+CljObject* seq_first(CljObject *seq);
+
+// Direct seq operations - lists and sequences are the same thing
 
 /**
  * @brief Get the rest of a sequence (without first element)
  * @param seq Sequence iterator
  * @return New iterator for rest, or NULL if empty
  */
-SeqIterator* seq_rest(SeqIterator *seq);
+CljObject* seq_rest(CljObject *seq);
 
 /**
  * @brief Get the next element of a sequence (alias for rest)
  * @param seq Sequence iterator
  * @return New iterator for next, or NULL if empty
  */
-SeqIterator* seq_next(SeqIterator *seq);
+CljObject* seq_next(CljObject *seq);
 
 /**
  * @brief Check if sequence is empty
  * @param seq Sequence iterator
  * @return true if empty, false otherwise
  */
-bool seq_empty(SeqIterator *seq);
+bool seq_empty(CljObject *seq);
 
 /**
  * @brief Get the nth element of a sequence
@@ -73,26 +85,26 @@ bool seq_empty(SeqIterator *seq);
  * @param n Index (0-based)
  * @return nth element, or nil if out of bounds
  */
-CljObject* seq_nth(SeqIterator *seq, int n);
+CljObject* seq_nth(CljObject *seq, int n);
 
 /**
  * @brief Get the count of a sequence
  * @param seq Sequence iterator
  * @return Number of elements, or -1 if not countable
  */
-int seq_count(SeqIterator *seq);
+int seq_count(CljObject *seq);
 
 /**
  * @brief Release a sequence iterator
  * @param seq Iterator to release
  */
-void seq_release(SeqIterator *seq);
+void seq_release(CljObject *seq);
 
 /**
  * @brief Retain a sequence iterator (for long-lived views)
  * @param seq Iterator to retain
  */
-void seq_retain(SeqIterator *seq);
+void seq_retain(CljObject *seq);
 
 // ============================================================================
 // SEQABLE PREDICATES
@@ -123,7 +135,7 @@ bool is_seq(CljObject *obj);
  * @param init Initial value
  * @return Final reduced value
  */
-CljObject* seq_reduce(SeqIterator *seq, CljObject *f, CljObject *init);
+CljObject* seq_reduce(CljObject *seq, CljObject *f, CljObject *init);
 
 /**
  * @brief Map over a sequence
@@ -131,7 +143,7 @@ CljObject* seq_reduce(SeqIterator *seq, CljObject *f, CljObject *init);
  * @param f Mapping function (f item) -> new_item
  * @return New list with mapped values
  */
-CljObject* seq_map(SeqIterator *seq, CljObject *f);
+CljObject* seq_map(CljObject *seq, CljObject *f);
 
 /**
  * @brief Filter a sequence
@@ -139,7 +151,7 @@ CljObject* seq_map(SeqIterator *seq, CljObject *f);
  * @param pred Predicate function (pred item) -> boolean
  * @return New list with filtered values
  */
-CljObject* seq_filter(SeqIterator *seq, CljObject *pred);
+CljObject* seq_filter(CljObject *seq, CljObject *pred);
 
 /**
  * @brief Take n elements from a sequence
@@ -147,7 +159,7 @@ CljObject* seq_filter(SeqIterator *seq, CljObject *pred);
  * @param n Number of elements to take
  * @return New list with first n elements
  */
-CljObject* seq_take(SeqIterator *seq, int n);
+CljObject* seq_take(CljObject *seq, int n);
 
 /**
  * @brief Drop n elements from a sequence
@@ -155,7 +167,7 @@ CljObject* seq_take(SeqIterator *seq, int n);
  * @param n Number of elements to drop
  * @return New iterator starting after n elements
  */
-SeqIterator* seq_drop(SeqIterator *seq, int n);
+CljObject* seq_drop(CljObject *seq, int n);
 
 // ============================================================================
 // SEQUENCE EQUALITY
@@ -167,7 +179,7 @@ SeqIterator* seq_drop(SeqIterator *seq, int n);
  * @param seq2 Second sequence
  * @return true if equal, false otherwise
  */
-bool seq_equal(SeqIterator *seq1, SeqIterator *seq2);
+bool seq_equal(CljObject *seq1, CljObject *seq2);
 
 /**
  * @brief Compare two seqable objects for equality
@@ -186,14 +198,14 @@ bool seqable_equal(CljObject *obj1, CljObject *obj2);
  * @param seq Sequence iterator
  * @return New list containing all elements
  */
-CljObject* seq_to_list(SeqIterator *seq);
+CljObject* seq_to_list(CljObject *seq);
 
 /**
  * @brief Convert a sequence to a vector
  * @param seq Sequence iterator
  * @return New vector containing all elements
  */
-CljObject* seq_to_vector(SeqIterator *seq);
+CljObject* seq_to_vector(CljObject *seq);
 
 /**
  * @brief Concatenate multiple sequences
@@ -201,7 +213,7 @@ CljObject* seq_to_vector(SeqIterator *seq);
  * @param count Number of sequences
  * @return New list containing all elements
  */
-CljObject* seq_concat(SeqIterator **sequences, int count);
+CljObject* seq_concat(CljObject **sequences, int count);
 
 #ifdef __cplusplus
 }

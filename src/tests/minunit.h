@@ -90,6 +90,9 @@ int tests_run;
 #define mu_assert_obj_ptr_equal(obj1, obj2) \
     mu_assert("objects not equal", (obj1) == (obj2))
 
+#define mu_assert_string_eq(actual, expected) \
+    mu_assert("strings not equal", strcmp((actual), (expected)) == 0)
+
 // Debug helper macros
 #define mu_debug_obj(obj, name) do { \
     if (obj) { \
@@ -100,7 +103,7 @@ int tests_run;
 } while(0)
 
 #define mu_debug_obj_int(obj, name) do { \
-    if (obj && obj->type == CLJ_INT) { \
+    if (type(obj) == CLJ_INT) { \
         printf("DEBUG %s: int value=%d\n", name, obj->as.i); \
     } else { \
         printf("DEBUG %s: not an int (type=%d)\n", name, obj ? obj->type : -1); \

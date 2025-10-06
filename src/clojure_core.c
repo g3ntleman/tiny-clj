@@ -11,6 +11,7 @@
 
 static bool g_core_quiet = false;
 
+
 // Clojure core code for Tiny-Clj interpreter
 const char *clojure_core_code =
 
@@ -48,6 +49,7 @@ int load_clojure_core() {
     printf("[clojure.core] source string missing\n");
     return 0;
   }
+
 
   EvalState *st = evalstate_new();
   if (!st)

@@ -1172,9 +1172,11 @@ src/clojure_core.o: src/clojure_core.c.o
 src/clojure_core.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clojure_core.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clojure_core.c.o
 .PHONY : src/clojure_core.c.o
 
 src/clojure_core.i: src/clojure_core.c.i
@@ -1184,9 +1186,11 @@ src/clojure_core.i: src/clojure_core.c.i
 src/clojure_core.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clojure_core.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clojure_core.c.i
 .PHONY : src/clojure_core.c.i
 
 src/clojure_core.s: src/clojure_core.c.s
@@ -1196,9 +1200,11 @@ src/clojure_core.s: src/clojure_core.c.s
 src/clojure_core.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/clojure_core.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/clojure_core.c.s
 .PHONY : src/clojure_core.c.s
 
 src/exception.o: src/exception.c.o

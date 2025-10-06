@@ -14,7 +14,7 @@
 // Forward declaration for CljObject (avoid redefinition)
 #ifndef CLJ_OBJECT_DEFINED
 struct CljObject;
-typedef struct CljObject CljObject;
+// CljObject is already defined in CljObject.h
 #endif
 
 // Memory operation types
@@ -58,16 +58,18 @@ void memory_test_end(const char *test_name);
         typeof(obj) _tmp = (obj); \
         memory_hook_trigger(MEMORY_HOOK_OBJECT_DESTRUCTION, _tmp, sizeof(CljObject)); \
     } while(0)
-    #define RETAIN(obj) do { \
+    #define RETAIN(obj) ({ \
         typeof(obj) _tmp = (obj); \
         memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
         retain(_tmp); \
-    } while(0)
-    #define RELEASE(obj) do { \
+        _tmp; \
+    })
+    #define RELEASE(obj) ({ \
         typeof(obj) _tmp = (obj); \
         memory_hook_trigger(MEMORY_HOOK_RELEASE, _tmp, 0); \
         release(_tmp); \
-    } while(0)
+        _tmp; \
+    })
     #define AUTORELEASE(obj) ({ \
         typeof(obj) _tmp = (obj); \
         memory_hook_trigger(MEMORY_HOOK_AUTORELEASE, _tmp, 0); \
@@ -76,23 +78,25 @@ void memory_test_end(const char *test_name);
     })
     
     // Test macros for backward compatibility
-    #define MEMORY_TEST_START(name) memory_test_start(name)
-    #define MEMORY_TEST_END(name) memory_test_end(name)
+    // MEMORY_TEST_START/END are defined in memory_profiler.h
     
     // Fluent memory profiling macro
     #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
-        bool pool_was_active = is_autorelease_pool_active(); \
-        if (!pool_was_active) { \
-            cljvalue_pool_push(); \
-        } \
+        cljvalue_pool_push(); \
         code; \
-        if (is_autorelease_pool_active()) { \
-            cljvalue_pool_pop(); \
-        } \
-        if (!pool_was_active && is_autorelease_pool_active()) { \
-            cljvalue_pool_pop(); \
-        } \
+        cljvalue_pool_cleanup_all(); \
+        MEMORY_TEST_END(__FUNCTION__); \
+    } while(0)
+    
+    // Fluent memory profiling macro with EvalState management
+    #define WITH_MEMORY_PROFILING_EVAL(code) do { \
+        MEMORY_TEST_START(__FUNCTION__); \
+        cljvalue_pool_push(); \
+        EvalState *eval_state = evalstate_new(); \
+        code; \
+        evalstate_free(eval_state); \
+        cljvalue_pool_cleanup_all(); \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
@@ -111,8 +115,7 @@ void memory_test_end(const char *test_name);
     #define AUTORELEASE(obj) (obj)
     
     // No-op test macros for release builds
-    #define MEMORY_TEST_START(name) ((void)0)
-    #define MEMORY_TEST_END(name) ((void)0)
+    // MEMORY_TEST_START/END are defined in memory_profiler.h
     #define WITH_MEMORY_PROFILING(code) do { code } while(0)
     #define WITH_TIME_PROFILING(code) do { code } while(0)
 #endif

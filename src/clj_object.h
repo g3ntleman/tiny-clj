@@ -167,12 +167,12 @@ void retain_object(CljObject *obj);
 void release_object(CljObject *obj);
 void free_object(CljObject *obj);
 
-static inline CljSymbol* as_symbol(CljObject *obj) { return (obj && obj->type == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL; }
-static inline CljPersistentVector* as_vector(CljObject *obj) { return (obj && obj->type == CLJ_VECTOR) ? (CljPersistentVector*)obj : NULL; }
-static inline CljMap* as_map(CljObject *obj) { return (obj && obj->type == CLJ_MAP) ? (CljMap*)obj->as.data : NULL; }
-static inline CljList* as_list(CljObject *obj) { return (obj && obj->type == CLJ_LIST) ? (CljList*)obj->as.data : NULL; }
-static inline CljFunction* as_function(CljObject *obj) { return (obj && obj->type == CLJ_FUNC) ? (CljFunction*)obj : NULL; }
-static inline int is_native_fn(CljObject *fn) { return fn && fn->type == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL; }
+static inline CljSymbol* as_symbol(CljObject *obj) { return (type(obj) == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL; }
+static inline CljPersistentVector* as_vector(CljObject *obj) { return (type(obj) == CLJ_VECTOR) ? (CljPersistentVector*)obj : NULL; }
+static inline CljMap* as_map(CljObject *obj) { return (type(obj) == CLJ_MAP) ? (CljMap*)obj->as.data : NULL; }
+static inline CljList* as_list(CljObject *obj) { return (type(obj) == CLJ_LIST) ? (CljList*)obj->as.data : NULL; }
+static inline CljFunction* as_function(CljObject *obj) { return (type(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL; }
+static inline int is_native_fn(CljObject *fn) { return type(fn) == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL; }
 
 #endif
 

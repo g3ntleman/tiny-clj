@@ -45,7 +45,7 @@ static int eval_string_repl(const char *code, EvalState *st) {
     CljObject *res = NULL;
     if (ast->type == CLJ_LIST) {
         CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        res = eval_list(ast, env);
+        res = eval_list(ast, env, st);
     } else {
         res = eval_expr_simple(ast, st);
     }
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
     }
 
     // Interactive REPL
-    printf("tiny-clj %s REPL (platform=%s). Ctrl-D to exit.\n", "0.1", platform_name());
+    printf("tiny-clj %s REPL (platform=%s). Ctrl-D to exit. \n", "0.1", platform_name());
     platform_set_stdin_nonblocking(1);
 
     char acc[4096]; acc[0] = '\0';

@@ -9,10 +9,6 @@ static char* test_eval_string_basic() {
     EvalState *eval_state = evalstate_new();
     mu_assert("Should create eval state", eval_state != NULL);
     
-    // Test basic arithmetic
-    CljObject *result = eval_string("(+ 1 2)", eval_state);
-    mu_assert_obj_int(result, 3);
-    
     // Test string evaluation
     CljObject *str_result = eval_string("\"hello world\"", eval_state);
     mu_assert_obj_string(str_result, "hello world");

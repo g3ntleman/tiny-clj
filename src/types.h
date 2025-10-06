@@ -14,6 +14,7 @@ typedef enum {
     CLJ_WEAK_VECTOR,
     CLJ_MAP,
     CLJ_LIST,
+    CLJ_SEQ,         // Sequence iterator (embedded CljSeqIterator)
     CLJ_ARRAY,       // Strong array (retains on push)
     CLJ_WEAK_ARRAY,  // Weak array (no retain on push; single release on clear)
     CLJ_FUNC,

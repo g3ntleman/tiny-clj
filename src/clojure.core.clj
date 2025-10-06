@@ -35,18 +35,18 @@ R"CLOJURE(
 (def true? (fn [x] (= x true)))
 (def false? (fn [x] (= x false)))
 
-;; Sequence functions
-(def seq (fn [coll] (seq coll)))
-(def first (fn [coll] (first coll)))
-(def rest (fn [coll] (rest coll)))
-(def next (fn [coll] (rest coll)))
-(def empty? (fn [coll] (= (count coll) 0)))
-(def count (fn [coll] (count coll)))
+;; Sequence functions - Native implementations available
+;; (def seq (fn [coll] (seq coll)))           ; ← Native implementation
+;; (def first (fn [coll] (first coll)))       ; ← Native implementation  
+;; (def rest (fn [coll] (rest coll)))         ; ← Native implementation
+;; (def next (fn [coll] (rest coll)))         ; ← Native implementation
+;; (def empty? (fn [coll] (= (count coll) 0))) ; ← Native implementation
+;; (def count (fn [coll] (count coll)))       ; ← Native implementation
 
-;; For-loop functions
-(def for (fn [binding expr] (for binding expr)))
-(def doseq (fn [binding expr] (doseq binding expr)))
-(def dotimes (fn [binding expr] (dotimes binding expr)))
+;; For-loop functions - Native C implementations
+;; (def for eval_for)           ; ← Native C implementation - REMOVED: causes infinite recursion
+;; (def doseq eval_doseq)       ; ← Native C implementation - REMOVED: causes infinite recursion
+;; (def dotimes eval_dotimes)   ; ← Native C implementation - REMOVED: causes infinite recursion
 
 ;; Printing
 (def println (fn [& args]

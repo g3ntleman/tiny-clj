@@ -239,7 +239,7 @@ void cljvalue_pool_pop_legacy(CljObjectPool *pool);
 /** Drain all autorelease pools (global cleanup). */
 void cljvalue_pool_cleanup_all();
 
-#define CLJVALUE_POOL_SCOPE(name) for (CljObjectPool *(name) = cljvalue_pool_push(); (name) != NULL; cljvalue_pool_pop(name), (name) = NULL)
+#define CLJVALUE_POOL_SCOPE(name) for (CljObjectPool *(name) = cljvalue_pool_push(); (name) != NULL; cljvalue_pool_pop_specific(name), (name) = NULL)
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */
@@ -279,25 +279,25 @@ void free_object(CljObject *obj);
 
 // Type-safe casting (static inline for performance)
 static inline CljSymbol* as_symbol(CljObject *obj) {
-    return (obj && obj->type == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;
+    return (type(obj) == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
-    return (obj && (obj->type == CLJ_VECTOR || obj->type == CLJ_WEAK_VECTOR)) ? (CljPersistentVector*)obj : NULL;
+    return (type(obj) == CLJ_VECTOR || type(obj) == CLJ_WEAK_VECTOR) ? (CljPersistentVector*)obj : NULL;
 }
 static inline CljMap* as_map(CljObject *obj) {
-    return (obj && obj->type == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;
+    return (type(obj) == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;
 }
 static inline CljList* as_list(CljObject *obj) {
-    return (obj && obj->type == CLJ_LIST) ? (CljList*)obj->as.data : NULL;
+    return (type(obj) == CLJ_LIST) ? (CljList*)obj->as.data : NULL;
 }
 static inline CljFunction* as_function(CljObject *obj) {
-    return (obj && obj->type == CLJ_FUNC) ? (CljFunction*)obj : NULL;
+    return (type(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL;
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)
 static inline int is_native_fn(CljObject *fn) {
     // Native builtins are represented as CljFunc; interpreted functions as CljFunction
-    return fn && fn->type == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
+    return type(fn) == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
 }
 
 // Helper function to check if autorelease pool is active

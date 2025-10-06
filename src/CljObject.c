@@ -13,11 +13,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <assert.h>
 #include <stdarg.h>
 #include "CljObject.h"
 #include <string.h>
 #include "vector.h"
+#include "seq.h"
 #include "memory_hooks.h"
 #include "runtime.h"
 #include "map.h"
@@ -101,6 +103,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
 void set_global_eval_state(void *state) {
     global_eval_state = (EvalState*)state;
 }
+
 
 // Exception management with reference counting (analogous to CljVector)
 /** @brief Create exception with reference counting */
@@ -215,12 +218,15 @@ void release(CljObject *v) {
         CljMap *map = as_map(v);
         if (map && map->base.rc == 0 && map->data == NULL) return;
     }
-    if (v->rc <= 0) {
+    v->rc--;
+    
+    // Check for double-free after decrement
+    if (v->rc < 0) {
         throw_exception_formatted("DoubleFreeError", __FILE__, __LINE__, 0,
                 "Double free detected! Object %p (type=%d, rc=%d) was freed twice. "
-                "This indicates a memory management bug.", v, v->type, v->rc);
+                "Object type: %s. This indicates a memory management bug.", 
+                v, v->type, v->rc, clj_type_name(v->type));
     }
-    v->rc--;
     
     // RELEASE(v); // Hook now called via RELEASE macro
     
@@ -295,15 +301,23 @@ static void cljvalue_pool_pop_internal(CljObjectPool *pool) {
     CljPersistentVector *vec = as_vector(pool->backing);
     if (vec) {
         for (int i = vec->count - 1; i >= 0; --i) {
-            if (vec->data[i]) release(vec->data[i]);
-            vec->data[i] = NULL;
+            CljObject *obj = vec->data[i];
+            vec->data[i] = NULL;  // First set to NULL to prevent double-free
+            release(obj);         // Then release (NULL-safe)
         }
         vec->count = 0;
     }
     g_cv_pool_top = pool->prev;
     g_pool_push_count--;  // Decrement push counter
-    // Release the weak vector object (will free only its backing store)
-    if (pool->backing) release(pool->backing);
+    
+    // Assertion: Check for negative push count (imbalance)
+    if (g_pool_push_count < 0) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "Pool push/pop imbalance! Push count: %d. "
+                "This indicates more pop() calls than push() calls.", g_pool_push_count);
+    }
+    // Weak vector is not released - it only contains weak references
+    // The objects were already released in the loop above
     free(pool);
 }
 
@@ -461,17 +475,23 @@ static void init_static_singletons(void);
 // map functions moved to map.c
 
 CljObject* make_symbol(const char *name, const char *ns) {
-    if (!name) return NULL;
+    if (!name) {
+        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
+                "make_symbol: name cannot be NULL");
+    }
     
     // Range check for name length
     if (strlen(name) >= SYMBOL_NAME_MAX_LEN) {
-        printf("Error: Symbol name '%s' exceeds maximum length of %d characters\n", 
-               name, SYMBOL_NAME_MAX_LEN - 1);
-        return NULL;
+        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
+                "Symbol name '%s' exceeds maximum length of %d characters", 
+                name, SYMBOL_NAME_MAX_LEN - 1);
     }
     
-    CljSymbol *sym = ALLOC(CljSymbol, 1);
-    if (!sym) return NULL;
+    CljSymbol *sym = malloc(sizeof(CljSymbol));
+    if (!sym) {
+        throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
+                "Failed to allocate memory for symbol '%s'", name);
+    }
     
     sym->base.type = CLJ_SYMBOL;
     sym->base.rc = 1;
@@ -485,7 +505,8 @@ CljObject* make_symbol(const char *name, const char *ns) {
         sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
         if (!sym->ns) {
             free(sym);
-            return NULL;
+            throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
+                    "Failed to create namespace '%s' for symbol '%s'", ns, name);
         }
         // Namespace is already retained by ns_get_or_create
     } else {
@@ -563,6 +584,7 @@ CljObject* make_list() {
     obj->rc = 1;
     obj->as.data = (void*)list;
     
+    CREATE(obj);
     return obj;
 }
 
@@ -723,6 +745,64 @@ char* pr_str(CljObject *v) {
                 } else {
                     return strdup("#<function>");
                 }
+            }
+
+        case CLJ_SEQ:
+            {
+                CljSeqIterator *seq = as_seq(v);
+                if (!seq) return strdup("()");
+                
+                // Direktes Drucken ohne Umkopieren
+                char *result = strdup("(");
+                if (!result) return strdup("()");
+                
+                bool first = true;
+                CljObject *temp_seq = seq_create(seq->container);
+                if (!temp_seq) {
+                    free(result);
+                    return strdup("()");
+                }
+                
+                while (!seq_empty(temp_seq)) {
+                    CljObject *element = seq_first(temp_seq);
+                    if (!element) {
+                        seq_next(temp_seq);
+                        continue;
+                    }
+                    
+                    char *el_str = pr_str(element);
+                    if (!el_str) {
+                        seq_next(temp_seq);
+                        continue;
+                    }
+                    
+                    // String erweitern
+                    size_t old_len = strlen(result);
+                    size_t el_len = strlen(el_str);
+                    size_t new_len = old_len + el_len + (first ? 0 : 1) + 1; // +1 für Leerzeichen oder \0
+                    
+                    char *new_result = realloc(result, new_len + 1); // +1 für \0
+                    if (!new_result) {
+                        free(result);
+                        free(el_str);
+                        release(temp_seq);
+                        return strdup("()");
+                    }
+                    result = new_result;
+                    
+                    if (!first) {
+                        strcat(result, " ");
+                    }
+                    strcat(result, el_str);
+                    first = false;
+                    
+                    free(el_str);
+                    seq_next(temp_seq);
+                }
+                
+                strcat(result, ")");
+                release(temp_seq);
+                return result;
             }
 
         case CLJ_EXCEPTION:

@@ -80,6 +80,7 @@ add_executable(test-unit
     src/function_call.c
     src/list_operations.c
     src/seq.c
+    src/clojure_core.c
 )
 
 # eval_string API Tests
@@ -218,7 +219,8 @@ add_executable(test-for-loops
     src/list_operations.c
     src/seq.c
     src/memory_profiler.c
-    src/memory_hooks.c)
+    src/memory_hooks.c
+    src/clojure_core.c)
 
 # Test executable for for-loops comparison
 add_executable(test-for-loops-comparison
