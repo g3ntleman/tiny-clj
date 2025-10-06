@@ -92,7 +92,6 @@ static char *test_singleton_objects(void) {
 static char *test_empty_vector_singleton(void) {
   // make_vector(0, ...) returns the empty-vector singleton
   CljObject *v0 = make_vector(0, 0);
-  mu_assert_obj_not_null(v0);
   mu_assert_obj_type(v0, CLJ_VECTOR);
 
   // capacity <= 0 also returns the same singleton
@@ -131,24 +130,20 @@ static char *test_parser_basic_types(void) {
 
   // Test integer parsing
   CljObject *int_result = parse("42", &st);
-  if (int_result == NULL) return "parse returned NULL for integer";
-  if (int_result->type != CLJ_INT) return "wrong type for integer";
-  if (int_result->as.i != 42) return "wrong integer value";
+  mu_assert_obj_type(int_result, CLJ_INT);
+  mu_assert_obj_int(int_result, 42);
 
   // Test float parsing
   CljObject *float_result = parse("3.14", &st);
-  if (float_result == NULL) return "parse returned NULL for float";
-  if (float_result->type != CLJ_FLOAT) return "wrong type for float";
+  mu_assert_obj_type(float_result, CLJ_FLOAT);
 
   // Test string parsing
-  CljObject *str_result = parse("\"hello\"", &st);
-  if (str_result == NULL) return "parse returned NULL for string";
-  if (str_result->type != CLJ_STRING) return "wrong type for string";
+  CljObject *str_result = parse(R"("hello")", &st);
+  mu_assert_obj_type(str_result, CLJ_STRING);
 
   // Test symbol parsing
   CljObject *sym_result = parse("test-symbol", &st);
-  if (sym_result == NULL) return "parse returned NULL for symbol";
-  if (sym_result->type != CLJ_SYMBOL) return "wrong type for symbol";
+  mu_assert_obj_type(sym_result, CLJ_SYMBOL);
 
   printf("✓ Parser basic types tests passed\n");
   return 0;

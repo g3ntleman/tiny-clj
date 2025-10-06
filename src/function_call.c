@@ -74,13 +74,16 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op) 
     CljObject *b = eval_arg(list, 2, env);
     
     if (!a || !b || a->type != CLJ_INT || b->type != CLJ_INT) {
-        throw_exception("ArithmeticException", arith_errors[op], NULL, 0, 0);
+        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                "Invalid arguments for %s: expected two integers, got %s and %s", 
+                arith_errors[op], a ? clj_type_name(a->type) : "nil", b ? clj_type_name(b->type) : "nil");
         return clj_nil();
     }
     
     // Division by zero check
     if (op == ARITH_DIV && b->as.i == 0) {
-        throw_exception("ArithmeticException", "Division by zero", NULL, 0, 0);
+        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                "Division by zero: %d / %d", a->as.i, b->as.i);
         return clj_nil();
     }
     
@@ -98,13 +101,16 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
     CljObject *b = eval_arg_with_substitution(list, 2, params, values, param_count);
     
     if (!a || !b || a->type != CLJ_INT || b->type != CLJ_INT) {
-        throw_exception("ArithmeticException", arith_errors[op], NULL, 0, 0);
+        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                "Invalid arguments for %s: expected two integers, got %s and %s", 
+                arith_errors[op], a ? clj_type_name(a->type) : "nil", b ? clj_type_name(b->type) : "nil");
         return clj_nil();
     }
     
     // Division by zero check
     if (op == ARITH_DIV && b->as.i == 0) {
-        throw_exception("ArithmeticException", "Division by zero", NULL, 0, 0);
+        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                "Division by zero: %d / %d", a->as.i, b->as.i);
         return clj_nil();
     }
     

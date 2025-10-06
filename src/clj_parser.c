@@ -13,6 +13,7 @@
 #include "clj_parser.h"
 #include "map.h"
 #include "list_operations.h"
+#include "memory_hooks.h"
 #include "runtime.h"
 #include "utf8.h"
 #include "vector.h"
@@ -113,7 +114,7 @@ static CljObject *parse_meta_map(Reader *reader, EvalState *st);
 static CljObject *parse_vector(Reader *reader, EvalState *st);
 static CljObject *parse_map(Reader *reader, EvalState *st);
 static CljObject *parse_list(Reader *reader, EvalState *st);
-static CljObject *parse_string(Reader *reader, EvalState *st);
+static CljObject *parse_string_internal(Reader *reader, EvalState *st);
 static CljObject *parse_symbol(Reader *reader, EvalState *st);
 static CljObject *parse_number(Reader *reader, EvalState *st);
 
@@ -124,15 +125,10 @@ static CljObject *parse_number(Reader *reader, EvalState *st);
  * @return Parsed CljObject or NULL on error
  */
 static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
-  printf("DEBUG: Before skip_all - index=%zu, char='%c' (0x%02x)\n", 
-         reader->index, reader_peek(reader), (unsigned char)reader_peek(reader));
   reader_skip_all(reader);
-  printf("DEBUG: After skip_all - index=%zu, char='%c' (0x%02x)\n", 
-         reader->index, reader_peek(reader), (unsigned char)reader_peek(reader));
   if (reader_is_eof(reader))
     return NULL;
   char c = reader_current(reader);
-  printf("DEBUG: parse_expr_internal got char: '%c' (0x%02x)\n", c, (unsigned char)c);
   if (c == '^')
     return parse_meta(reader, st);
   if (c == '#' && reader_peek_ahead(reader, 1) == '^')
@@ -144,7 +140,7 @@ static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
   if (c == '(')
     return parse_list(reader, st);
   if (c == '"')
-    return parse_string(reader, st);
+    return parse_string_internal(reader, st);
   if (c == '-' || isdigit(c))
     return parse_number(reader, st);
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
@@ -169,6 +165,42 @@ CljObject *parse(const char *input, EvalState *st) {
   Reader reader;
   reader_init(&reader, input);
   return parse_expr_internal(&reader, st);
+}
+
+/**
+ * @brief Parse a Clojure expression from a string
+ * @param expr_str The Clojure expression as a string
+ * @param eval_state The evaluation state
+ * @return The parsed AST (caller must release) or NULL on error
+ */
+CljObject* parse_string(const char* expr_str, EvalState *eval_state) {
+    return parse(expr_str, eval_state);
+}
+
+/**
+ * @brief Evaluate a parsed Clojure expression
+ * @param parsed_expr The parsed AST
+ * @param eval_state The evaluation state
+ * @return The evaluated result (autoreleased) or NULL on error
+ */
+CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
+    if (!parsed_expr) return NULL;
+    CljObject *result = eval_expr_simple(parsed_expr, eval_state);
+    return result ? AUTORELEASE(result) : NULL;
+}
+
+/**
+ * @brief Parse and evaluate a Clojure expression from a string (convenience)
+ * @param expr_str The Clojure expression as a string
+ * @param eval_state The evaluation state
+ * @return The evaluated result (autoreleased) or NULL on error
+ */
+CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
+    CljObject *parsed = parse_string(expr_str, eval_state);
+    if (!parsed) return NULL;
+    CljObject *result = eval_parsed(parsed, eval_state);
+    RELEASE(parsed); // Clean up parsed expression
+    return result;
 }
 
 /**
@@ -307,7 +339,7 @@ static CljObject *parse_symbol(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed string CljObject or NULL on error
  */
-static CljObject *parse_string(Reader *reader, EvalState *st) {
+static CljObject *parse_string_internal(Reader *reader, EvalState *st) {
   (void)st;
   if (reader_next(reader) != '"')
     return NULL;

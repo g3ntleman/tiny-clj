@@ -12,39 +12,40 @@
 #include "string.h"
 #include "clj_symbols.h"
 #include "memory_profiler.h"
+#include "memory_hooks.h"
 
 // ============================================================================
 // SEQ CREATION TESTS
 // ============================================================================
 
+#define TEST_VECTOR_SIZE 3
+
 static char *test_seq_create_list(void) {
     printf("\n=== Testing Seq Creation for Lists ===\n");
     
-    MEMORY_TEST_START("Seq Creation for Lists");
-    
-    // Create a test list
-    CljObject *list = make_list();
-    CljList *list_data = as_list(list);
-    if (list_data) {
-        list_data->head = make_int(1);
-        list_data->tail = make_list();
-        CljList *tail_data = as_list(list_data->tail);
-        if (tail_data) {
-            tail_data->head = make_int(2);
-            tail_data->tail = NULL;
+    WITH_MEMORY_PROFILING({
+        // Create a test list
+        CljObject *list = make_list();
+        CljList *list_data = as_list(list);
+        if (list_data) {
+            list_data->head = make_int(1);
+            list_data->tail = make_list();
+            CljList *tail_data = as_list(list_data->tail);
+            if (tail_data) {
+                tail_data->head = make_int(2);
+                tail_data->tail = NULL;
+            }
         }
-    }
-    
-    // Create sequence iterator
-    SeqIterator *seq = seq_create(list);
-    mu_assert("seq creation failed", seq != NULL);
-    mu_assert("seq container mismatch", seq->container == list);
-    mu_assert("seq type mismatch", seq->seq_type == CLJ_LIST);
-    
-    seq_release(seq);
-    release(list);
-    
-    MEMORY_TEST_END("Seq Creation for Lists");
+        
+        // Create sequence iterator
+        SeqIterator *seq = seq_create(list);
+        mu_assert("seq creation failed", seq != NULL);
+        mu_assert("seq container mismatch", seq->container == list);
+        mu_assert("seq type mismatch", seq->seq_type == CLJ_LIST);
+        
+        seq_release(seq);
+        release(list);
+    });
     
     printf("✓ List seq creation test passed\n");
     return 0;
@@ -53,28 +54,26 @@ static char *test_seq_create_list(void) {
 static char *test_seq_create_vector(void) {
     printf("\n=== Testing Seq Creation for Vectors ===\n");
     
-    MEMORY_TEST_START("Seq Creation for Vectors");
-    
-    // Create a test vector
-    CljObject *vec = make_vector(3, 1);
-    CljPersistentVector *vec_data = as_vector(vec);
-    if (vec_data) {
-        vec_data->data[0] = make_int(1);
-        vec_data->data[1] = make_int(2);
-        vec_data->data[2] = make_int(3);
-        vec_data->count = 3;
-    }
-    
-    // Create sequence iterator
-    SeqIterator *seq = seq_create(vec);
-    mu_assert("seq creation failed", seq != NULL);
-    mu_assert("seq container mismatch", seq->container == vec);
-    mu_assert("seq type mismatch", seq->seq_type == CLJ_VECTOR);
-    
-    seq_release(seq);
-    release(vec);
-    
-    MEMORY_TEST_END("Seq Creation for Vectors");
+    WITH_MEMORY_PROFILING({
+        // Create a test vector
+        CljObject *vec = make_vector(TEST_VECTOR_SIZE, 1);
+        CljPersistentVector *vec_data = as_vector(vec);
+        if (vec_data) {
+            vec_data->data[0] = make_int(1);
+            vec_data->data[1] = make_int(2);
+            vec_data->data[2] = make_int(3);
+            vec_data->count = TEST_VECTOR_SIZE;
+        }
+        
+        // Create sequence iterator
+        SeqIterator *seq = seq_create(vec);
+        mu_assert("seq creation failed", seq != NULL);
+        mu_assert("seq container mismatch", seq->container == vec);
+        mu_assert("seq type mismatch", seq->seq_type == CLJ_VECTOR);
+        
+        seq_release(seq);
+        release(vec);
+    });
     
     printf("✓ Vector seq creation test passed\n");
     return 0;

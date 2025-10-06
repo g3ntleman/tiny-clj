@@ -27,6 +27,9 @@ void setUp(void) {
 
   // Initialize benchmark system
   benchmark_init();
+  
+  // Create autorelease pool for benchmark tests
+  cljvalue_pool_push();
 }
 
 void tearDown(void) {

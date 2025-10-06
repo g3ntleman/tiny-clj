@@ -133,14 +133,69 @@ RETAIN(obj);    // Reference increment
 RELEASE(obj);   // Reference decrement
 ```
 
+## API Memory Policy
+
+### Public API Functions
+
+#### Parse Functions
+```c
+CljObject* parse_string(const char* expr_str, EvalState *eval_state);
+```
+- **Returns**: Autoreleased object
+- **Memory**: Automatically managed by autorelease pool
+- **Usage**: No manual `release()` needed
+
+#### Evaluation Functions
+```c
+CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state);
+CljObject* eval_string(const char* expr_str, EvalState *eval_state);
+```
+- **Returns**: Autoreleased object
+- **Memory**: Automatically managed by autorelease pool
+- **Usage**: No manual `release()` needed
+
+#### Object Creation Functions
+```c
+CljObject* make_vector(int count, int initial_value);
+CljObject* make_list();
+CljObject* make_string(const char* str);
+```
+- **Returns**: Object with `rc=1` (caller must release)
+- **Memory**: Manual management required
+- **Usage**: Must call `release()` when done
+
+### API Usage Patterns
+
+#### Correct API Usage:
+```c
+// Parse and evaluate (both return autoreleased objects)
+CljObject *parsed = parse_string(expr, eval_state);
+CljObject *result = eval_parsed(parsed, eval_state);
+// No manual cleanup needed - both are autoreleased
+
+// Convenience function (also returns autoreleased object)
+CljObject *result = eval_string(expr, eval_state);
+// No manual cleanup needed - result is autoreleased
+```
+
+#### Object Creation (manual management):
+```c
+// Object creation requires manual release
+CljObject *vec = make_vector(10, 1);
+// ... use vec ...
+release(vec);  // Must release manually
+```
+
 ## Best Practices Summary
 
-1. **Tests**: Use `autorelease()` for convenience
-2. **Production**: Use `release()` for performance
-3. **Data Structures**: Use `retain()` when storing objects
-4. **Functions**: Return objects with caller ownership
-5. **Profiling**: Always track memory usage in tests
-6. **Debugging**: Use memory profiler to find leaks
+1. **API Functions**: Return autoreleased objects (no manual cleanup)
+2. **Object Creation**: Return objects with `rc=1` (manual cleanup required)
+3. **Tests**: Use `autorelease()` for convenience
+4. **Production**: Use `release()` for performance
+5. **Data Structures**: Use `retain()` when storing objects
+6. **Profiling**: Always track memory usage in tests
+7. **Debugging**: Use memory profiler to find leaks
+8. **Trust API Design**: Follow documented memory policy
 
 ## Implementation Notes
 
@@ -149,3 +204,26 @@ RELEASE(obj);   // Reference decrement
 - Vector elements are automatically freed by `release_object_deep()`
 - Singletons (empty vectors/lists) skip reference counting
 - Primitive types (int, float) are not reference counted
+
+## Common Mistakes and Solutions
+
+### ❌ Incorrect Assumptions
+```c
+// WRONG: Assuming parse_string needs manual release
+CljObject *parsed = parse_string(expr, eval_state);
+release(parsed);  // ❌ UNNECESSARY: parse_string returns autoreleased object
+```
+
+### ✅ Correct Usage
+```c
+// CORRECT: Trust the API design
+CljObject *parsed = parse_string(expr, eval_state);
+CljObject *result = eval_parsed(parsed, eval_state);
+// Both are autoreleased - no manual cleanup needed
+```
+
+### Memory Policy Verification
+- **Always check Doxygen documentation** for memory policy
+- **Use memory profiling** to validate assumptions
+- **Test-First development** prevents incorrect implementations
+- **Trust existing API design** unless proven otherwise

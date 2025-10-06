@@ -6,7 +6,7 @@ C_DEFINES = -DENABLE_META -DTINY_CLJ_EMBED_TESTS
 
 C_INCLUDES = -I/Users/theisen/Projects/tiny-clj/include -I/Users/theisen/Projects/tiny-clj/src -I/Users/theisen/Projects/tiny-clj/external
 
-C_FLAGSarm64 =  -Wall -Wextra -g -g -O0 -std=gnu99 -arch arm64
+C_FLAGSarm64 =  -Wall -Wextra -std=gnu99 -arch arm64
 
-C_FLAGS =  -Wall -Wextra -g -g -O0 -std=gnu99 -arch arm64
+C_FLAGS =  -Wall -Wextra -std=gnu99 -arch arm64
 

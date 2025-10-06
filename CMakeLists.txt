@@ -82,6 +82,28 @@ add_executable(test-unit
     src/seq.c
 )
 
+# eval_string API Tests
+add_executable(test-eval-string-api
+    src/tests/test_eval_string_api.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/clojure_core.c
+    src/runtime.c
+    src/exception.c
+    src/memory_profiler.c
+    src/memory_hooks.c
+)
+
 # Integration Tests (component interaction tests)
 add_executable(test-integration
     src/tests/test_integration_main.c
@@ -198,8 +220,81 @@ add_executable(test-for-loops
     src/memory_profiler.c
     src/memory_hooks.c)
 
+# Test executable for for-loops comparison
+add_executable(test-for-loops-comparison
+    src/tests/test_for_loops_comparison.c
+    src/tests/minunit.h
+    src/CljObject.c
+    src/CljObject.h
+    src/clj_object.h
+    src/types.c
+    src/vector.c
+    src/vector.h
+    src/list_operations.c
+    src/list_operations.h
+    src/function_call.c
+    src/function_call.h
+    src/namespace.c
+    src/namespace.h
+    src/clj_symbols.c
+    src/clj_symbols.h
+    src/memory_profiler.c
+    src/memory_profiler.h
+    src/memory_hooks.c
+    src/memory_hooks.h
+    src/seq.c
+    src/seq.h
+    src/map.c
+    src/map.h
+    src/string.c
+    src/clj_string.h
+    src/clj_parser.c
+    src/clj_parser.h
+    src/reader.c
+    src/reader.h
+)
+
 # Set DEBUG flag for memory profiling
 target_compile_definitions(test-for-loops PRIVATE DEBUG=1)
+target_compile_definitions(test-for-loops-comparison PRIVATE DEBUG=1)
+
+# Test executable for seq debugging
+add_executable(test-seq-debug
+    src/tests/test_seq_debug.c
+    src/tests/minunit.h
+    src/CljObject.c
+    src/CljObject.h
+    src/clj_object.h
+    src/types.c
+    src/vector.c
+    src/vector.h
+    src/list_operations.c
+    src/list_operations.h
+    src/function_call.c
+    src/function_call.h
+    src/namespace.c
+    src/namespace.h
+    src/clj_symbols.c
+    src/clj_symbols.h
+    src/memory_profiler.c
+    src/memory_profiler.h
+    src/memory_hooks.c
+    src/memory_hooks.h
+    src/seq.c
+    src/seq.h
+    src/map.c
+    src/map.h
+    src/string.c
+    src/clj_string.h
+    src/clj_parser.c
+    src/clj_parser.h
+    src/reader.c
+    src/reader.h
+    src/unity.c
+    src/unity.h
+)
+
+target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
 
 # For-Loop Performance Tests
 add_executable(test-for-performance

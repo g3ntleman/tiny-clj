@@ -16,6 +16,8 @@
 #include "types.h"
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
+
 
 // Forward declaration to avoid circular dependency
 struct CljNamespace;
@@ -132,6 +134,8 @@ CljObject* make_exception(const char *type, const char *message, const char *fil
 // Exception throwing
 /** Throw exception via longjmp; transfers ownership to runtime. */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col);
+/** Throw exception with printf-style formatting; transfers ownership to runtime. */
+void throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
 /** Create interpreted function with params/body/closure; rc=1. */
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
 /** Create empty list node (rc=1). */
@@ -291,5 +295,8 @@ static inline int is_native_fn(CljObject *fn) {
     // Native builtins are represented as CljFunc; interpreted functions as CljFunction
     return fn && fn->type == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
 }
+
+// Helper function to check if autorelease pool is active
+bool is_autorelease_pool_active(void);
 
 #endif

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <unistd.h>
 #include <stdbool.h>
 
@@ -37,7 +38,7 @@ static void print_result(CljObject *v) {
     if (s) { printf("%s\n", s); free(s); }
 }
 
-static int eval_string(const char *code, EvalState *st) {
+static int eval_string_repl(const char *code, EvalState *st) {
     const char *p = code;
     CljObject *ast = parse(p, st);
     if (!ast) return 0;
@@ -104,14 +105,15 @@ int main(int argc, char **argv) {
             if (setjmp(st->jmp_env) == 0) {
                 FILE *fp = fopen(file_arg, "r");
                 if (!fp) {
-                    throw_exception("IOError", "Failed to open file", file_arg, 0, 0);
+                    throw_exception_formatted("IOError", __FILE__, __LINE__, 0,
+                            "Failed to open file '%s': %s", file_arg, strerror(errno));
                 } else {
                     char line[1024];
                     char acc[8192]; acc[0] = '\0';
                     while (fgets(line, sizeof(line), fp)) {
                         strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
                         if (!is_balanced_form(acc)) continue;
-                        (void)eval_string(acc, st);
+                        (void)eval_string_repl(acc, st);
                         acc[0] = '\0';
                     }
                     fclose(fp);
@@ -131,7 +133,7 @@ int main(int argc, char **argv) {
     if (eval_arg) {
         CLJVALUE_POOL_SCOPE(pool) {
             if (setjmp(st->jmp_env) == 0) {
-                (void)eval_string(eval_arg, st);
+                (void)eval_string_repl(eval_arg, st);
             } else {
                 if (st->last_error) {
                     print_result(st->last_error);

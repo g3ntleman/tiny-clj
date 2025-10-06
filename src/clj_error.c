@@ -61,7 +61,8 @@ void clj_assert(bool condition, const char *message) {
     if (!condition) {
         CLJException *e = exception(message, NULL, 0, 0);
         if (e) {
-            throw_exception("AssertionError", e->message, e->file, e->line, e->col);
+            throw_exception_formatted("AssertionError", e->file, e->line, e->col,
+                    "Assertion failed: %s", e->message);
         }
     }
 }

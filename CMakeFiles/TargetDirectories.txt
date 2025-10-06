@@ -1,12 +1,15 @@
 /Users/theisen/Projects/tiny-clj/CMakeFiles/tiny-clj.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/tiny-clj-repl.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-unit.dir
+/Users/theisen/Projects/tiny-clj/CMakeFiles/test-eval-string-api.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-integration.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-benchmark.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-parser.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-seq.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-seq-performance.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-for-loops.dir
+/Users/theisen/Projects/tiny-clj/CMakeFiles/test-for-loops-comparison.dir
+/Users/theisen/Projects/tiny-clj/CMakeFiles/test-seq-debug.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-for-performance.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-memory-profiling.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-memory-simple.dir

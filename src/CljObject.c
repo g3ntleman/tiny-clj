@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdarg.h>
 #include "CljObject.h"
 #include <string.h>
 #include "vector.h"
@@ -25,9 +26,41 @@
 #include "memory_profiler.h"
 
 static void release_object_deep(CljObject *v);
+
+/**
+ * Convenience function for throwing exceptions with printf-style formatting
+ * 
+ * @param type Exception type (NULL for generic "RuntimeException")
+ * @param file Source file name (use __FILE__)
+ * @param line Line number (use __LINE__)
+ * @param code Error code (use 0 for most cases)
+ * @param format printf-style format string
+ * @param ... Variable arguments for formatting
+ */
+void throw_exception_formatted(const char *type, const char *file, int line, int code, 
+                              const char *format, ...) {
+    char message[512];  // Increased buffer size for longer messages
+    va_list args;
+    
+    va_start(args, format);
+    int result = vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
+    
+    // Additional safety: ensure null termination if message was truncated
+    if (result >= (int)sizeof(message)) {
+        // Message was truncated - ensure null termination
+        message[sizeof(message)-1] = '\0';
+    }
+    
+    // Use generic RuntimeException if type is NULL
+    const char *exception_type = (type != NULL) ? type : "RuntimeException";
+    throw_exception(exception_type, message, file, line, code);
+}
+
 // Autorelease pool backed by a weak vector for locality and fewer allocations
 struct CljObjectPool { CljObject *backing; struct CljObjectPool *prev; };
 static CljObjectPool *g_cv_pool_top = NULL;
+static int g_pool_push_count = 0;  // Track push/pop balance
 
 // Helper functions for optimized structure
 // Note: is_primitive_type function replaced by IS_PRIMITIVE_TYPE macro in header
@@ -154,7 +187,6 @@ void retain(CljObject *v) {
 void release(CljObject *v) {
     if (!v) return;
     
-    
     // Singletons have no reference counting
     if (IS_PRIMITIVE_TYPE(v->type)) {
         // Primitive types are never actually freed, so don't track as deallocation
@@ -170,27 +202,37 @@ void release(CljObject *v) {
         if (map && map->base.rc == 0 && map->data == NULL) return;
     }
     if (v->rc <= 0) {
-        char message[256];
-        snprintf(message, sizeof(message), 
-                "release() called on already freed object (rc=%d, type=%d, addr=%p). "
-                "This indicates a double-free or use-after-free bug!", 
-                v->rc, v->type, v);
-        throw_exception("DoubleFreeError", message, __FILE__, __LINE__, 0);
+        throw_exception_formatted("DoubleFreeError", __FILE__, __LINE__, 0,
+                "Double free detected! Object %p (type=%d, rc=%d) was freed twice. "
+                "This indicates a memory management bug.", v, v->type, v->rc);
     }
     v->rc--;
     
     // RELEASE(v); // Hook now called via RELEASE macro
     
     if (v->rc == 0) { 
-        // DEALLOC(v); // Hook now called via DEALLOC macro
+        DEALLOC(v); // Hook for memory profiling
         release_object_deep(v); 
         free(v); 
     }
 }
 
+// Helper function to check if autorelease pool is active
+bool is_autorelease_pool_active(void) {
+    return g_cv_pool_top != NULL;
+}
+
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
-    if (!g_cv_pool_top) return v;
+    
+    // 🚨 ASSERTION: Autorelease pool must exist
+    if (!g_cv_pool_top) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
+                "This indicates missing cljvalue_pool_push() or premature cljvalue_pool_pop().", 
+                v, v ? v->type : -1);
+    }
+    
     // Weak vector push: does not retain the item
     vector_push_inplace(g_cv_pool_top->backing, v);
     
@@ -206,11 +248,22 @@ CljObjectPool *cljvalue_pool_push() {
     p->backing = make_weak_vector(16);
     p->prev = g_cv_pool_top;
     g_cv_pool_top = p;
+    g_pool_push_count++;  // Increment push counter
     return p;
 }
 
 void cljvalue_pool_pop(CljObjectPool *pool) {
+    // 🚨 ASSERTION: Check for pop/push imbalance (before early return)
+    if (g_pool_push_count <= 0) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "cljvalue_pool_pop() called more times than cljvalue_pool_push()! "
+                "Push count: %d, attempting to pop pool %p. "
+                "This indicates unbalanced pool operations.", 
+                g_pool_push_count, pool);
+    }
+    
     if (!pool || g_cv_pool_top != pool) return;
+    
     CljPersistentVector *vec = as_vector(pool->backing);
     if (vec) {
         for (int i = vec->count - 1; i >= 0; --i) {
@@ -220,6 +273,7 @@ void cljvalue_pool_pop(CljObjectPool *pool) {
         vec->count = 0;
     }
     g_cv_pool_top = pool->prev;
+    g_pool_push_count--;  // Decrement push counter
     // Release the weak vector object (will free only its backing store)
     if (pool->backing) release(pool->backing);
     free(pool);

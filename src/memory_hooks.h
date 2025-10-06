@@ -78,6 +78,17 @@ void memory_test_end(const char *test_name);
     // Test macros for backward compatibility
     #define MEMORY_TEST_START(name) memory_test_start(name)
     #define MEMORY_TEST_END(name) memory_test_end(name)
+    
+    // Fluent memory profiling macro
+    #define WITH_MEMORY_PROFILING(code) do { \
+        MEMORY_TEST_START(__FUNCTION__); \
+        code; \
+        /* Expliziter Pool-Cleanup vor Memory-Check (nur wenn Pool aktiv) */ \
+        if (is_autorelease_pool_active()) { \
+            cljvalue_pool_cleanup_all(); \
+        } \
+        MEMORY_TEST_END(__FUNCTION__); \
+    } while(0)
 #else
     // No-op macros for release builds
     #define CREATE(obj) ((void)0)
@@ -89,6 +100,7 @@ void memory_test_end(const char *test_name);
     // No-op test macros for release builds
     #define MEMORY_TEST_START(name) ((void)0)
     #define MEMORY_TEST_END(name) ((void)0)
+    #define WITH_MEMORY_PROFILING(code) do { code } while(0)
 #endif
 
 #endif // TINY_CLJ_MEMORY_HOOKS_H

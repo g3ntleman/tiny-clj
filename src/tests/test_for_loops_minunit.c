@@ -21,62 +21,60 @@
 static char *test_dotimes_basic(void) {
     printf("\n=== Testing dotimes Basic Functionality ===\n");
     
-    MEMORY_TEST_START("dotimes Basic Functionality");
-    
-    // Create a simple test: (dotimes [i 3] (println i))
-    // For now, we'll just test that it doesn't crash
-    
-    // Create binding list: [i 3]
-    CljObject *binding_list = AUTORELEASE(make_list());
-    CljList *binding_data = as_list(binding_list);
-    if (binding_data) {
-        binding_data->head = intern_symbol_global("i");
-        binding_data->tail = AUTORELEASE(make_list());
-        CljList *tail_data = as_list(binding_data->tail);
-        if (tail_data) {
-            tail_data->head = make_int(3);
-            tail_data->tail = NULL;
-        }
-    }
-    
-    // Create body: (println i)
-    CljObject *body = AUTORELEASE(make_list());
-    CljList *body_data = as_list(body);
-    if (body_data) {
-        body_data->head = intern_symbol_global("println");
-        body_data->tail = AUTORELEASE(make_list());
-        CljList *body_tail = as_list(body_data->tail);
-        if (body_tail) {
-            body_tail->head = intern_symbol_global("i");
-            body_tail->tail = NULL;
-        }
-    }
-    
-    // Create function call: (dotimes [i 3] (println i))
-    CljObject *dotimes_call = AUTORELEASE(make_list());
-    CljList *call_data = as_list(dotimes_call);
-    if (call_data) {
-        call_data->head = intern_symbol_global("dotimes");
-        call_data->tail = AUTORELEASE(make_list());
-        CljList *call_tail = as_list(call_data->tail);
-        if (call_tail) {
-            call_tail->head = binding_list;
-            call_tail->tail = AUTORELEASE(make_list());
-            CljList *call_tail2 = as_list(call_tail->tail);
-            if (call_tail2) {
-                call_tail2->head = body;
-                call_tail2->tail = NULL;
+    WITH_MEMORY_PROFILING({
+        // Create a simple test: (dotimes [i 3] (println i))
+        // For now, we'll just test that it doesn't crash
+        
+        // Create binding list: [i 3]
+        CljObject *binding_list = AUTORELEASE(make_list());
+        CljList *binding_data = as_list(binding_list);
+        if (binding_data) {
+            binding_data->head = intern_symbol_global("i");
+            binding_data->tail = AUTORELEASE(make_list());
+            CljList *tail_data = as_list(binding_data->tail);
+            if (tail_data) {
+                tail_data->head = make_int(3);
+                tail_data->tail = NULL;
             }
         }
-    }
-    
-    // Test dotimes evaluation
-    CljObject *result = eval_dotimes(dotimes_call, NULL);
-    mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
-    
-    RELEASE(dotimes_call);
-    
-    MEMORY_TEST_END("dotimes Basic Functionality");
+        
+        // Create body: (println i)
+        CljObject *body = AUTORELEASE(make_list());
+        CljList *body_data = as_list(body);
+        if (body_data) {
+            body_data->head = intern_symbol_global("println");
+            body_data->tail = AUTORELEASE(make_list());
+            CljList *body_tail = as_list(body_data->tail);
+            if (body_tail) {
+                body_tail->head = intern_symbol_global("i");
+                body_tail->tail = NULL;
+            }
+        }
+        
+        // Create function call: (dotimes [i 3] (println i))
+        CljObject *dotimes_call = AUTORELEASE(make_list());
+        CljList *call_data = as_list(dotimes_call);
+        if (call_data) {
+            call_data->head = intern_symbol_global("dotimes");
+            call_data->tail = AUTORELEASE(make_list());
+            CljList *call_tail = as_list(call_data->tail);
+            if (call_tail) {
+                call_tail->head = binding_list;
+                call_tail->tail = AUTORELEASE(make_list());
+                CljList *call_tail2 = as_list(call_tail->tail);
+                if (call_tail2) {
+                    call_tail2->head = body;
+                    call_tail2->tail = NULL;
+                }
+            }
+        }
+        
+        // Test dotimes evaluation
+        CljObject *result = eval_dotimes(dotimes_call, NULL);
+        mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
+        
+        RELEASE(dotimes_call);
+    });
     
     printf("✓ dotimes basic test passed\n");
     return 0;
@@ -372,10 +370,18 @@ int main(void) {
     // Initialize memory profiling with hooks
     memory_profiling_init_with_hooks();
     
+    // 🧪 TEST HYPOTHESIS: Create autorelease pool
+    printf("🧪 Creating autorelease pool for leak testing...\n");
+    CljObjectPool *pool = cljvalue_pool_push();
+    
     // Initialize symbol table
     init_special_symbols();
     
     int result = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
+    
+    // 🧪 TEST HYPOTHESIS: Cleanup autorelease pool
+    printf("🧪 Cleaning up autorelease pool...\n");
+    cljvalue_pool_pop(pool);
     
     // Cleanup memory profiling
     memory_profiling_cleanup_with_hooks();

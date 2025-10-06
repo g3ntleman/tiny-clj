@@ -108,22 +108,23 @@ measure_executable_size() {
     local executable="$1"
     
     if [ -f "$executable" ]; then
-        # Use size command to get detailed size information
+        # Use file size as primary measurement
+        local file_size=$(stat -f%z "$executable" 2>/dev/null || echo "0")
+        local base_name=$(basename "$executable")
+        
+        # Try to get detailed size information
         local size_output=$(size "$executable" 2>/dev/null | tail -1)
-        if [ -n "$size_output" ]; then
-            local text_size=$(echo "$size_output" | awk '{print $1}')
-            local data_size=$(echo "$size_output" | awk '{print $2}')
-            local bss_size=$(echo "$size_output" | awk '{print $3}')
-            local total_size=$(echo "$size_output" | awk '{print $4}')
-            
-            local base_name=$(basename "$executable")
-            log_executable_size "$base_name" "$total_size" "$text_size" "$data_size" "$bss_size"
-        else
-            # Fallback to file size
-            local file_size=$(stat -f%z "$executable" 2>/dev/null || echo "0")
-            local base_name=$(basename "$executable")
-            log_executable_size "$base_name" "$file_size" "0" "0" "0"
+        local text_size="0"
+        local data_size="0"
+        local bss_size="0"
+        
+        if [ -n "$size_output" ] && [ $(echo "$size_output" | wc -w) -ge 4 ]; then
+            text_size=$(echo "$size_output" | awk '{print $1}')
+            data_size=$(echo "$size_output" | awk '{print $2}')
+            bss_size=$(echo "$size_output" | awk '{print $3}')
         fi
+        
+        log_executable_size "$base_name" "$file_size" "$text_size" "$data_size" "$bss_size"
     fi
 }
 
@@ -134,16 +135,12 @@ make > /dev/null 2>&1 || cmake . > /dev/null 2>&1 && make > /dev/null 2>&1
 
 echo -e "${BLUE}=== Running Benchmarks ===${NC}"
 
-# Run core performance benchmarks
-run_benchmark "primitive_object_creation" "1000000" "./test-benchmark 2>/dev/null | grep -q 'primitive_object_creation'"
-run_benchmark "type_checking" "1000000" "./test-benchmark 2>/dev/null | grep -q 'type_checking'"
-run_benchmark "reference_counting" "1000000" "./test-benchmark 2>/dev/null | grep -q 'reference_counting'"
-run_benchmark "vector_creation" "100000" "./test-benchmark 2>/dev/null | grep -q 'vector_creation'"
-run_benchmark "map_operations" "1000" "./test-benchmark 2>/dev/null | grep -q 'map_operations'"
-run_benchmark "function_call" "100000" "./test-benchmark 2>/dev/null | grep -q 'function_call'"
-
-# Run REPL startup benchmark
-run_benchmark "repl_startup_eval_10x" "10" "./test-benchmark 2>/dev/null | grep -q 'repl_startup_eval'"
+# Run simple benchmarks
+run_benchmark "project_build_time" "1" "make clean >/dev/null 2>&1 && make >/dev/null 2>&1"
+run_benchmark "test_execution_time" "1" "./test-benchmark >/dev/null 2>&1"
+run_benchmark "unit_tests_time" "1" "./test-unit >/dev/null 2>&1"
+run_benchmark "parser_tests_time" "1" "./test-parser >/dev/null 2>&1"
+run_benchmark "memory_tests_time" "1" "./test-memory-simple >/dev/null 2>&1"
 
 echo -e "${BLUE}=== Measuring Executable Sizes ===${NC}"
 

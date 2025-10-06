@@ -6,6 +6,7 @@
 
 #include "minunit.h"
 #include "memory_profiler.h"
+#include "memory_hooks.h"
 #include "CljObject.h"
 #include "vector.h"
 #include "clj_symbols.h"
@@ -15,26 +16,26 @@
 // SIMPLE MEMORY PROFILING TESTS
 // ============================================================================
 
+#define TEST_VECTOR_SIZE 5
+
 static char *test_singleton_memory_tracking(void) {
     printf("\n=== Testing Singleton Memory Tracking ===\n");
     
-    MEMORY_TEST_START("Singleton Memory Operations");
-    
-    // Create and release singleton objects (vectors, maps, lists)
-    CljObject *empty_vec = make_vector(0, 0);
-    CljObject *empty_list = make_list();
-    
-    mu_assert("empty_vec created", empty_vec != NULL);
-    mu_assert("empty_list created", empty_list != NULL);
-    
-    // Test retain/release on singletons
-    retain(empty_vec);
-    retain(empty_list);
-    
-    release(empty_vec);
-    release(empty_list);
-    
-    MEMORY_TEST_END("Singleton Memory Operations");
+    WITH_MEMORY_PROFILING({
+        // Create and release singleton objects (vectors, maps, lists)
+        CljObject *empty_vec = make_vector(0, 0);
+        CljObject *empty_list = make_list();
+        
+        mu_assert("empty_vec created", empty_vec != NULL);
+        mu_assert("empty_list created", empty_list != NULL);
+        
+        // Test retain/release on singletons
+        retain(empty_vec);
+        retain(empty_list);
+        
+        release(empty_vec);
+        release(empty_list);
+    });
     
     printf("✓ Singleton memory tracking test passed\n");
     return 0;
@@ -43,35 +44,33 @@ static char *test_singleton_memory_tracking(void) {
 static char *test_vector_memory_tracking(void) {
     printf("\n=== Testing Vector Memory Tracking ===\n");
     
-    MEMORY_TEST_START("Vector Memory Operations");
-    
-    // Create a vector
-    CljObject *vec = make_vector(5, 1);
-    CljPersistentVector *vec_data = as_vector(vec);
-    
-    mu_assert("vector created", vec != NULL);
-    mu_assert("vector data valid", vec_data != NULL);
-    
-    // Add elements
-    for (int i = 0; i < 5; i++) {
-        CljObject *elem = make_int(i);
-        vec_data->data[i] = elem;
-    }
-    vec_data->count = 5;
-    
-    // Test element access
-    CljObject *first = vec_data->data[0];
-    mu_assert("first element accessible", first != NULL);
-    
-    // Free all vector elements first
-    for (int i = 0; i < 5; i++) {
-        release(vec_data->data[i]);
-    }
-    
-    // Then free the vector
-    release(vec);
-    
-    MEMORY_TEST_END("Vector Memory Operations");
+    WITH_MEMORY_PROFILING({
+        // Create a vector
+        CljObject *vec = make_vector(TEST_VECTOR_SIZE, 1);
+        CljPersistentVector *vec_data = as_vector(vec);
+        
+        mu_assert("vector created", vec != NULL);
+        mu_assert("vector data valid", vec_data != NULL);
+        
+        // Add elements
+        for (int i = 0; i < TEST_VECTOR_SIZE; i++) {
+            CljObject *elem = make_int(i);
+            vec_data->data[i] = elem;
+        }
+        vec_data->count = TEST_VECTOR_SIZE;
+        
+        // Test element access
+        CljObject *first = vec_data->data[0];
+        mu_assert("first element accessible", first != NULL);
+        
+        // Free all vector elements first
+        for (int i = 0; i < TEST_VECTOR_SIZE; i++) {
+            release(vec_data->data[i]);
+        }
+        
+        // Then free the vector
+        release(vec);
+    });
     
     printf("✓ Vector memory tracking test passed\n");
     return 0;

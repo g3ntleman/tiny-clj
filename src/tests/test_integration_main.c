@@ -25,14 +25,17 @@ void setUp(void) {
     
     // Initialize meta registry
     meta_registry_init();
+    
+    // Initialize autorelease pool
+    cljvalue_pool_push();
 }
 
 void tearDown(void) {
     // Cleanup symbol table
     symbol_table_cleanup();
     
-    // Cleanup autorelease pool
-    cljvalue_pool_cleanup_all();
+    // Pop autorelease pool
+    cljvalue_pool_pop(NULL);
 }
 
 // ============================================================================
