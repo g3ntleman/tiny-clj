@@ -230,8 +230,12 @@ typedef struct CljObjectPool CljObjectPool;
 CljObject *autorelease(CljObject *v);
 /** Push a new autorelease pool; returns pool handle. */
 CljObjectPool *cljvalue_pool_push();
-/** Pop and drain given autorelease pool. */
-void cljvalue_pool_pop(CljObjectPool *pool);
+/** Pop and drain current autorelease pool (most common usage). */
+void cljvalue_pool_pop(void);
+/** Pop and drain specific autorelease pool (advanced usage). */
+void cljvalue_pool_pop_specific(CljObjectPool *pool);
+/** Legacy API: Pop and drain given autorelease pool (backward compatibility). */
+void cljvalue_pool_pop_legacy(CljObjectPool *pool);
 /** Drain all autorelease pools (global cleanup). */
 void cljvalue_pool_cleanup_all();
 

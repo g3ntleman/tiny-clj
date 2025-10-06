@@ -88,10 +88,10 @@ void memory_test_end(const char *test_name);
         } \
         code; \
         if (is_autorelease_pool_active()) { \
-            cljvalue_pool_pop(NULL); \
+            cljvalue_pool_pop(); \
         } \
         if (!pool_was_active && is_autorelease_pool_active()) { \
-            cljvalue_pool_pop(NULL); \
+            cljvalue_pool_pop(); \
         } \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)

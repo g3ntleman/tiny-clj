@@ -35,7 +35,7 @@ void tearDown(void) {
     symbol_table_cleanup();
     
     // Pop autorelease pool
-    cljvalue_pool_pop(NULL);
+    cljvalue_pool_pop();
 }
 
 // ============================================================================

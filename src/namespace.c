@@ -147,7 +147,7 @@ EvalState* evalstate_new() {
 void evalstate_free(EvalState *st) {
     if (!st) return;
     
-    if (st->pool) cljvalue_pool_pop(st->pool);
+    if (st->pool) cljvalue_pool_pop_specific(st->pool);
     if (st->stack) free(st->stack);
     free(st);
 }

@@ -275,7 +275,8 @@ CljObjectPool *cljvalue_pool_push() {
     return p;
 }
 
-void cljvalue_pool_pop(CljObjectPool *pool) {
+// Internal implementation
+static void cljvalue_pool_pop_internal(CljObjectPool *pool) {
     // 🚨 ASSERTION: Check for pop/push imbalance (before early return)
     if (g_pool_push_count <= 0) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
@@ -285,6 +286,10 @@ void cljvalue_pool_pop(CljObjectPool *pool) {
                 g_pool_push_count, pool);
     }
     
+    // If no pool specified or pool doesn't match current top, pop current top
+    if (!pool) {
+        pool = g_cv_pool_top;
+    }
     if (!pool || g_cv_pool_top != pool) return;
     
     CljPersistentVector *vec = as_vector(pool->backing);
@@ -302,10 +307,25 @@ void cljvalue_pool_pop(CljObjectPool *pool) {
     free(pool);
 }
 
+// Public API: Pop current pool (most common usage)
+void cljvalue_pool_pop(void) {
+    cljvalue_pool_pop_internal(NULL);
+}
+
+// Public API: Pop specific pool (for advanced usage)
+void cljvalue_pool_pop_specific(CljObjectPool *pool) {
+    cljvalue_pool_pop_internal(pool);
+}
+
+// Legacy API: Keep for backward compatibility
+void cljvalue_pool_pop_legacy(CljObjectPool *pool) {
+    cljvalue_pool_pop_internal(pool);
+}
+
 // Globale Cleanup-Funktion für alle Autorelease-Pools
 void cljvalue_pool_cleanup_all() {
     while (g_cv_pool_top) {
-        cljvalue_pool_pop(g_cv_pool_top);
+        cljvalue_pool_pop_internal(g_cv_pool_top);
     }
 }
 // Central dispatcher for finalizers based on type tag
