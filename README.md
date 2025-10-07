@@ -10,6 +10,9 @@ Tiny-CLJ is an **embedded-first Clojure interpreter** designed to run on microco
 
 Project Goals
 -------------
+### Primary Objective
+**Follow the Clojure language as good as possible.** Maximum compatibility with standard Clojure features, syntax, and behavior.
+
 ### Core Design
 - Keep the core source base minimal, readable, and lean
 - Pure C99/C11 - no POSIX-only features for embedded compatibility
