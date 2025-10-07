@@ -3,16 +3,34 @@ Tiny-CLJ
 
 Overview
 --------
-Tiny-CLJ is a small C-based interpreter for a Clojure-like language, optimized for clarity, small core, and portability (macOS and embedded targets).
+Tiny-CLJ is an **embedded-first Clojure interpreter** designed to run on microcontrollers (STM32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
+
+**Primary Target:** STM32 and other embedded controllers  
+**Development Platform:** macOS/Linux for testing and REPL
 
 Project Goals
 -------------
-- Keep the core source base minimal, readable, and lean.
-- Provide essential Lisp/Clojure primitives (numbers, booleans, strings, symbols, lists, vectors, maps) and a simple evaluator.
-- Implement built-ins and a few core special forms (e.g., if, when) with clear semantics and consistent error handling.
-- Maintain a robust test and benchmark setup, with automated comparison and history.
-- Embedded focus: support common embedded controller capabilities (timers, GPIO, networking incl. REST calls) via platform abstractions.
-- macOS focus: allow usage of Clojure libraries that have no special native dependencies.
+### Core Design
+- Keep the core source base minimal, readable, and lean
+- Pure C99/C11 - no POSIX-only features for embedded compatibility
+- Provide essential Lisp/Clojure primitives (numbers, booleans, strings, symbols, lists, vectors, maps)
+- Manual reference counting for predictable memory behavior on embedded systems
+
+### Embedded Focus
+- **Primary:** Run on STM32, ESP32, ARM Cortex-M microcontrollers
+- Support common embedded capabilities: timers, GPIO, networking (REST calls) via platform abstractions
+- Small binary size (<200KB) and minimal RAM usage
+- No dynamic linking (dlopen/dlsym) - all symbols compiled-in
+
+### Desktop Development
+- macOS/Linux for REPL development and testing
+- Compatible with Clojure libraries without native dependencies
+- Fast iteration cycle for embedded code development
+
+### Quality
+- Robust test and benchmark setup with automated comparison and history
+- Clojure-compatible syntax where possible (`*ns*`, `def`, `fn`, etc)
+- Consistent error handling and memory management
 
 Architecture
 ------------
@@ -25,14 +43,25 @@ Architecture
 
 Design Decisions
 ----------------
-- Memory Model: Manual reference counting inspired by Objective‑C pre‑ARC (retain/release/autorelease). Exceptions are never autoreleased; ownership is transferred on throw/catch. Singletons skip RC entirely.
-- Singletons: `nil`, `true`, `false`, and empty‑collection singletons are static and never autoreleased.
-- Reference Counting: Applies to heap `CljObject`s; primitives/singletons do not participate.
-- Exceptions: Use `throw_exception` rather than "error objects as values". Double release throws.
-- Early Return: Prefer early returns over deep if‑else pyramids.
-- Expressive Macros: Use small, expressive C macros in tests and where readability benefits; avoid macro overuse in core.
-- Core vs Tests: Core code remains small; tests/benchmarks live separately and should not bloat core.
-- Benchmarks: 2% significance threshold; auto‑baseline update and append significant changes to history.
+### Embedded-First Constraints
+- **Pure C99/C11:** No POSIX-only APIs (dlsym, pthread, etc) for STM32 compatibility
+- **Static Linking:** All code compiled-in, no dynamic loading
+- **Manual Registry:** Test and function discovery via compile-time registry, not runtime symbol lookup
+- **Small Binary:** Target <200KB for embedded deployment
+- **Predictable Memory:** Manual reference counting, no garbage collection
+
+### Memory Model
+- Manual reference counting inspired by Objective‑C pre‑ARC (retain/release/autorelease)
+- Exceptions are never autoreleased; ownership is transferred on throw/catch
+- Singletons (`nil`, `true`, `false`) skip RC entirely
+- Reference Counting applies to heap `CljObject`s; primitives/singletons do not participate
+- Double release throws exception
+
+### Code Quality
+- Early Return: Prefer early returns over deep if‑else pyramids
+- Expressive Macros: Use small, expressive C macros in tests; avoid macro overuse in core
+- Core vs Tests: Core code remains small; tests/benchmarks live separately
+- Benchmarks: 2% significance threshold; auto‑baseline update and append significant changes to history
 
 Coding Style
 ------------
