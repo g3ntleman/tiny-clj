@@ -9,6 +9,7 @@
 #include "object.h"
 #include "vector.h"
 #include "seq.h"
+#include "map.h"
 #include "function_call.h"
 #include "clj_symbols.h"
 #include <stdio.h>
@@ -173,6 +174,62 @@ static char *test_for_loop_memory(void) {
     return 0;
 }
 
+static char *test_map_creation_memory(void) {
+    printf("\n=== Testing Map Creation and Operations Memory Usage ===\n");
+    
+    MEMORY_TEST_START("Map Creation");
+    
+    // Create a map with initial capacity
+    CljObject *map = make_map(10);
+    mu_assert("map created", map != NULL);
+    mu_assert("map is correct type", map->type == CLJ_MAP);
+    
+    // Create keys and values
+    CljObject *k1 = make_string("name");
+    CljObject *v1 = make_string("Alice");
+    CljObject *k2 = make_string("age");
+    CljObject *v2 = make_int(30);
+    CljObject *k3 = make_string("city");
+    CljObject *v3 = make_string("Berlin");
+    
+    // Add multiple key-value pairs (map_assoc modifies in-place)
+    map_assoc(map, k1, v1);
+    mu_assert("map still valid after first assoc", map != NULL);
+    
+    map_assoc(map, k2, v2);
+    mu_assert("map still valid after second assoc", map != NULL);
+    
+    map_assoc(map, k3, v3);
+    mu_assert("map still valid after third assoc", map != NULL);
+    
+    // Test map retrieval
+    CljObject *retrieved = map_get(map, k1);
+    mu_assert("retrieved value from map", retrieved != NULL);
+    mu_assert("retrieved correct value", retrieved == v1);
+    
+    // Test map size
+    int count = map_count(map);
+    mu_assert("map has correct count", count == 3);
+    
+    // Test map_contains
+    mu_assert("map contains k1", map_contains(map, k1));
+    mu_assert("map contains k2", map_contains(map, k2));
+    
+    // Release all objects
+    release(map);
+    release(k1);
+    release(v1);
+    release(k2);
+    release(v2);
+    release(k3);
+    release(v3);
+    
+    MEMORY_TEST_END("Map Creation");
+    
+    printf("✓ Map creation memory test passed\n");
+    return 0;
+}
+
 static char *test_memory_comparison_analysis(void) {
     printf("\n=== Memory Comparison Analysis ===\n");
     
@@ -182,6 +239,7 @@ static char *test_memory_comparison_analysis(void) {
     printf("  ├─────────────────────────────────────────────────────────┤\n");
     printf("  │ Basic Object Creation  │ Low overhead, predictable     │\n");
     printf("  │ Vector Operations      │ Higher overhead for storage   │\n");
+    printf("  │ Map Operations         │ Hash table overhead           │\n");
     printf("  │ Seq Iteration          │ Iterator allocation overhead  │\n");
     printf("  │ For-Loop Operations    │ Environment binding overhead  │\n");
     printf("  └─────────────────────────────────────────────────────────┘\n");
@@ -189,6 +247,7 @@ static char *test_memory_comparison_analysis(void) {
     printf("Optimization Recommendations:\n");
     printf("  • Use object pooling for high-frequency allocations\n");
     printf("  • Prefer direct iteration over seq for performance-critical code\n");
+    printf("  • Monitor map growth for large datasets\n");
     printf("  │ • Consider iterator reuse for repeated seq operations\n");
     printf("  • Monitor memory leaks in complex nested operations\n");
     
@@ -249,6 +308,7 @@ static char *test_memory_benchmark_large_vectors(void) {
 static char *all_memory_profiling_tests(void) {
     mu_run_test(test_basic_object_creation_memory);
     mu_run_test(test_vector_creation_memory);
+    mu_run_test(test_map_creation_memory);
     mu_run_test(test_seq_iteration_memory);
     mu_run_test(test_for_loop_memory);
     mu_run_test(test_memory_comparison_analysis);
