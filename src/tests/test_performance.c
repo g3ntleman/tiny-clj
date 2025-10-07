@@ -410,7 +410,13 @@ int main(void) {
     
     init_special_symbols();
     
+    // Create global autorelease pool for all benchmarks
+    cljvalue_pool_push();
+    
     int result = run_minunit_tests(all_performance_tests, "Performance & Benchmark Tests");
+    
+    // Cleanup autorelease pool
+    cljvalue_pool_pop();
     
     printf("\n✅ Performance benchmarks completed\n");
     printf("   Tests run: %d\n", tests_run);
