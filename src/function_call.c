@@ -544,7 +544,8 @@ CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
         ns_define(st, symbol, value);
     }
     
-    return AUTORELEASE(value);
+    // Return the symbol (Clojure-compatible: def returns the var/symbol, not the value)
+    return symbol;
 }
 
 CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st) {
