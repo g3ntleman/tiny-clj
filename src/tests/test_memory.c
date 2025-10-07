@@ -31,7 +31,6 @@
 // ============================================================================
 
 static char *test_basic_object_creation_memory(void) {
-    printf("\n=== Testing Basic Object Creation Memory ===\n");
     
     MEMORY_TEST_START("Basic Object Creation");
     
@@ -51,12 +50,10 @@ static char *test_basic_object_creation_memory(void) {
     
     MEMORY_TEST_END("Basic Object Creation");
     
-    printf("✓ Basic object creation memory test passed\n");
     return 0;
 }
 
 static char *test_vector_creation_memory(void) {
-    printf("\n=== Testing Vector Creation Memory ===\n");
     
     MEMORY_TEST_START("Vector Creation");
     
@@ -82,12 +79,10 @@ static char *test_vector_creation_memory(void) {
     
     MEMORY_TEST_END("Vector Creation");
     
-    printf("✓ Vector creation memory test passed\n");
     return 0;
 }
 
 static char *test_map_creation_memory(void) {
-    printf("\n=== Testing Map Creation Memory ===\n");
     
     MEMORY_TEST_START("Map Creation");
     
@@ -138,12 +133,10 @@ static char *test_map_creation_memory(void) {
     
     MEMORY_TEST_END("Map Creation");
     
-    printf("✓ Map creation memory test passed\n");
     return 0;
 }
 
 static char *test_seq_iteration_memory(void) {
-    printf("\n=== Testing Seq Iteration Memory ===\n");
     
     MEMORY_TEST_START("Seq Iteration");
     
@@ -172,7 +165,6 @@ static char *test_seq_iteration_memory(void) {
     
     MEMORY_TEST_END("Seq Iteration");
     
-    printf("✓ Seq iteration memory test passed\n");
     return 0;
 }
 

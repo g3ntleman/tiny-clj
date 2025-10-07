@@ -65,7 +65,6 @@ static CljObject* create_test_vector(int size) {
 // ============================================================================
 
 static char *benchmark_primitive_object_creation(void) {
-    printf("\n=== Benchmarking Primitive Object Creation (with Memory Management) ===\n");
     
     double start = get_time_ms();
     
@@ -94,7 +93,6 @@ static char *benchmark_primitive_object_creation(void) {
 }
 
 static char *benchmark_collection_creation(void) {
-    printf("\n=== Benchmarking Collection Creation (with Memory Management) ===\n");
     
     double start = get_time_ms();
     
@@ -121,7 +119,6 @@ static char *benchmark_collection_creation(void) {
 // ============================================================================
 
 static char *benchmark_dotimes_performance(void) {
-    printf("\n=== Benchmarking dotimes Performance ===\n");
     
     EvalState *st = evalstate_new();
     init_special_symbols();
@@ -145,7 +142,6 @@ static char *benchmark_dotimes_performance(void) {
 }
 
 static char *benchmark_doseq_performance(void) {
-    printf("\n=== Benchmarking doseq Performance ===\n");
     
     EvalState *st = evalstate_new();
     init_special_symbols();
@@ -167,7 +163,6 @@ static char *benchmark_doseq_performance(void) {
 }
 
 static char *benchmark_for_performance(void) {
-    printf("\n=== Benchmarking for Performance ===\n");
     
     EvalState *st = evalstate_new();
     init_special_symbols();
@@ -193,7 +188,6 @@ static char *benchmark_for_performance(void) {
 // ============================================================================
 
 static char *benchmark_direct_vector_iteration(void) {
-    printf("\n=== Benchmarking Direct Vector Iteration ===\n");
     
     CljObject *vec = create_test_vector(VECTOR_SIZE_LARGE);
     if (!vec) return "Failed to create test vector";
@@ -220,7 +214,6 @@ static char *benchmark_direct_vector_iteration(void) {
 }
 
 static char *benchmark_seq_vector_iteration(void) {
-    printf("\n=== Benchmarking Seq-based Vector Iteration ===\n");
     
     CljObject *vec = create_test_vector(VECTOR_SIZE_LARGE);
     if (!vec) return "Failed to create test vector";
@@ -252,7 +245,6 @@ static char *benchmark_seq_vector_iteration(void) {
 // ============================================================================
 
 static char *benchmark_parsing_integers(void) {
-    printf("\n=== Benchmarking Integer Parsing ===\n");
     
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
@@ -272,7 +264,6 @@ static char *benchmark_parsing_integers(void) {
 }
 
 static char *benchmark_parsing_expressions(void) {
-    printf("\n=== Benchmarking Expression Parsing ===\n");
     
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
@@ -298,7 +289,6 @@ static char *benchmark_parsing_expressions(void) {
 // ============================================================================
 
 static char *benchmark_symbol_lookup_local(void) {
-    printf("\n=== Benchmarking Symbol Lookup (Local Namespace) ===\n");
     
     EvalState *st = evalstate_new();
     init_special_symbols();
@@ -334,7 +324,6 @@ static char *benchmark_symbol_lookup_local(void) {
 }
 
 static char *benchmark_symbol_lookup_with_fallback(void) {
-    printf("\n=== Benchmarking Symbol Lookup (with clojure.core Fallback) ===\n");
     
     EvalState *st = evalstate_new();
     init_special_symbols();
@@ -371,7 +360,6 @@ static char *benchmark_symbol_lookup_with_fallback(void) {
 }
 
 static char *benchmark_map_get_performance(void) {
-    printf("\n=== Benchmarking Raw map_get Performance ===\n");
     
     // Create map with 50 entries
     CljObject *map = make_map(64);
@@ -411,7 +399,6 @@ static char *benchmark_map_get_performance(void) {
 // ============================================================================
 
 static char *benchmark_memory_allocation(void) {
-    printf("\n=== Benchmarking Memory Allocation/Deallocation (Strings) ===\n");
     
     double start = get_time_ms();
     
@@ -435,7 +422,6 @@ static char *benchmark_memory_allocation(void) {
 // ============================================================================
 
 static char *benchmark_clojure_doseq_vs_direct(void) {
-    printf("\n=== Benchmarking doseq vs Direct Iteration ===\n");
     
     EvalState *st = evalstate_new();
     init_special_symbols();
