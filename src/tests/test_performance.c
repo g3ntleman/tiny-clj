@@ -13,6 +13,7 @@
 #include "memory_hooks.h"
 #include "seq.h"
 #include "vector.h"
+#include "map.h"
 #include "function_call.h"
 #include "CljObject.h"
 #include "clj_symbols.h"
@@ -293,6 +294,119 @@ static char *benchmark_parsing_expressions(void) {
 }
 
 // ============================================================================
+// SYMBOL RESOLUTION / ENVIRONMENT LOOKUP BENCHMARKS
+// ============================================================================
+
+static char *benchmark_symbol_lookup_local(void) {
+    printf("\n=== Benchmarking Symbol Lookup (Local Namespace) ===\n");
+    
+    EvalState *st = evalstate_new();
+    init_special_symbols();
+    
+    // Define 10 variables in current namespace
+    for (int i = 0; i < 10; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "var%d", i);
+        CljObject *sym = intern_symbol(NULL, name);
+        CljObject *val = make_int(i * 10);
+        ns_define(st, sym, val);
+    }
+    
+    // Benchmark lookup of last defined variable (worst case in map)
+    CljObject *lookup_sym = intern_symbol(NULL, "var9");
+    
+    double start = get_time_ms();
+    
+    for (int i = 0; i < BENCHMARK_ITERATIONS_LARGE; i++) {
+        CljObject *result = ns_resolve(st, lookup_sym);
+        (void)result;
+    }
+    
+    double elapsed = get_time_ms() - start;
+    double lookups_per_sec = (BENCHMARK_ITERATIONS_LARGE * 1000.0) / elapsed;
+    
+    printf("  Total time: %.3f ms\n", elapsed);
+    printf("  Per lookup: %.6f µs\n", (elapsed * 1000) / BENCHMARK_ITERATIONS_LARGE);
+    printf("  Lookups/sec: %.0f\n", lookups_per_sec);
+    printf("  Namespace size: 10 symbols\n");
+    
+    return NULL;
+}
+
+static char *benchmark_symbol_lookup_with_fallback(void) {
+    printf("\n=== Benchmarking Symbol Lookup (with clojure.core Fallback) ===\n");
+    
+    EvalState *st = evalstate_new();
+    init_special_symbols();
+    load_clojure_core(st);
+    
+    // Define local variables
+    for (int i = 0; i < 5; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "local%d", i);
+        CljObject *sym = intern_symbol(NULL, name);
+        CljObject *val = make_int(i);
+        ns_define(st, sym, val);
+    }
+    
+    // Benchmark lookup of non-existent symbol (forces fallback to clojure.core)
+    CljObject *not_found_sym = intern_symbol(NULL, "not-found-symbol");
+    
+    double start = get_time_ms();
+    
+    for (int i = 0; i < BENCHMARK_ITERATIONS_MEDIUM; i++) {
+        CljObject *result = ns_resolve(st, not_found_sym);
+        (void)result;  // Will be NULL
+    }
+    
+    double elapsed = get_time_ms() - start;
+    double lookups_per_sec = (BENCHMARK_ITERATIONS_MEDIUM * 1000.0) / elapsed;
+    
+    printf("  Total time: %.3f ms\n", elapsed);
+    printf("  Per lookup: %.6f µs\n", (elapsed * 1000) / BENCHMARK_ITERATIONS_MEDIUM);
+    printf("  Lookups/sec: %.0f\n", lookups_per_sec);
+    printf("  Namespaces searched: 2 (user + clojure.core)\n");
+    
+    return NULL;
+}
+
+static char *benchmark_map_get_performance(void) {
+    printf("\n=== Benchmarking Raw map_get Performance ===\n");
+    
+    // Create map with 50 entries
+    CljObject *map = make_map(64);
+    CljObject *keys[50];
+    
+    for (int i = 0; i < 50; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "key%d", i);
+        keys[i] = intern_symbol(NULL, name);
+        CljObject *val = make_int(i);
+        map_assoc(map, keys[i], val);
+    }
+    
+    // Benchmark lookup of middle key
+    CljObject *lookup_key = keys[25];
+    
+    double start = get_time_ms();
+    
+    for (int i = 0; i < BENCHMARK_ITERATIONS_LARGE; i++) {
+        CljObject *result = map_get(map, lookup_key);
+        (void)result;
+    }
+    
+    double elapsed = get_time_ms() - start;
+    double lookups_per_sec = (BENCHMARK_ITERATIONS_LARGE * 1000.0) / elapsed;
+    
+    printf("  Total time: %.3f ms\n", elapsed);
+    printf("  Per lookup: %.6f µs\n", (elapsed * 1000) / BENCHMARK_ITERATIONS_LARGE);
+    printf("  Lookups/sec: %.0f\n", lookups_per_sec);
+    printf("  Map size: 50 entries\n");
+    
+    return NULL;
+}
+
+// ============================================================================
 // MEMORY OPERATIONS BENCHMARKS
 // ============================================================================
 
@@ -392,12 +506,20 @@ static char *all_memory_benchmarks(void) {
     return NULL;
 }
 
+static char *all_lookup_benchmarks(void) {
+    mu_run_test(benchmark_symbol_lookup_local);
+    mu_run_test(benchmark_symbol_lookup_with_fallback);
+    mu_run_test(benchmark_map_get_performance);
+    return NULL;
+}
+
 static char *all_performance_tests(void) {
     mu_run_test(all_object_benchmarks);
     mu_run_test(all_loop_benchmarks);
     mu_run_test(all_seq_benchmarks);
     mu_run_test(all_parsing_benchmarks);
     mu_run_test(all_memory_benchmarks);
+    mu_run_test(all_lookup_benchmarks);
     return NULL;
 }
 

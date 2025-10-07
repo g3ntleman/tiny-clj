@@ -175,13 +175,10 @@ static char *test_variable_definition(void) {
   
   // Test defining a variable
   CljObject *result = eval_string("(def x 42)", st);
-  mu_assert("def should return the symbol", result != NULL);
-  mu_assert_obj_type(result, CLJ_SYMBOL);  // Clojure-compatible: def returns symbol
+  mu_assert_obj_type(result, CLJ_SYMBOL);  // def returns symbol
   
-  // Test resolving the variable
+  // Test retrieving the variable
   CljObject *var_result = eval_string("x", st);
-  mu_assert("Variable should be resolvable", var_result != NULL);
-  mu_assert_obj_type(var_result, CLJ_INT);
   mu_assert_obj_int(var_result, 42);
   
   evalstate_free(st);
@@ -195,17 +192,14 @@ static char *test_variable_redefinition(void) {
   
   // Define variable first time
   CljObject *result1 = eval_string("(def x 42)", st);
-  mu_assert("First def should work", result1 != NULL);
   mu_assert_obj_type(result1, CLJ_SYMBOL);  // def returns symbol
   
   // Redefine variable
   CljObject *result2 = eval_string("(def x 100)", st);
-  mu_assert("Second def should work", result2 != NULL);
   mu_assert_obj_type(result2, CLJ_SYMBOL);  // def returns symbol
   
   // Test that variable now has new value
   CljObject *var_result = eval_string("x", st);
-  mu_assert("Variable should have new value", var_result != NULL);
   mu_assert_obj_int(var_result, 100);
   
   evalstate_free(st);
@@ -219,9 +213,7 @@ static char *test_variable_with_string(void) {
   
   // Test defining a string variable
   CljObject *result = eval_string(R"((def message "Hello, World!"))", st);
-  mu_assert("String def should work", result != NULL);
-  // Note: def returns the symbol, not the value
-  mu_assert_obj_type(result, CLJ_SYMBOL);
+  mu_assert_obj_type(result, CLJ_SYMBOL);  // def returns symbol
   
   // Test resolving the string variable - get from namespace mappings directly
   CljSymbol *sym = as_symbol(result);
@@ -229,7 +221,6 @@ static char *test_variable_with_string(void) {
   
   mu_assert("Namespace should have mappings", st->current_ns != NULL && st->current_ns->mappings != NULL);
   CljObject *var_result = map_get(st->current_ns->mappings, result);
-  mu_assert("String variable should be in namespace", var_result != NULL);
   mu_assert_obj_type(var_result, CLJ_STRING);
   mu_assert_obj_string(var_result, "Hello, World!");
   

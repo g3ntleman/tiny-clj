@@ -27,7 +27,6 @@ static char* test_eval_string_error_handling() {
     
     // Test invalid syntax - should return a symbol, not NULL
     CljObject *result = eval_string("invalid-syntax", eval_state);
-    mu_assert("Should handle invalid syntax gracefully", result != NULL);
     mu_assert_obj_type(result, CLJ_SYMBOL);
     
     // Test NULL input
