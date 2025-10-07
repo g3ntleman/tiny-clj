@@ -93,10 +93,10 @@ const char* expr = R"((doseq [x ["Alpha" "Beta" "Gamma"]] (println x)))";
 
 | Verbesserung | Status | Dateien betroffen |
 |--------------|--------|-------------------|
-| WITH_MEMORY_PROFILING | ✅ Implementiert | `memory_hooks.h`, `test_memory_simple.c`, `test_for_loops_minunit.c` |
-| MinUnit-Optimierung | ✅ Implementiert | `test_unit_minunit.c`, `test_eval_string_api.c` |
+| WITH_MEMORY_PROFILING | ✅ Implementiert | `memory_hooks.h`, `test_memory_simple.c`, `test_for_loops.c` |
+| MinUnit-Optimierung | ✅ Implementiert | `test_unit.c`, `test_eval_string_api.c` |
 | Magic Numbers Elimination | ✅ Implementiert | `test_memory_simple.c` |
-| Raw String Literals | ✅ Implementiert | `test_for_loops_comparison.c`, `test_eval_string_api.c`, `test_unit_minunit.c` |
+| Raw String Literals | ✅ Implementiert | `test_for_loops_comparison.c`, `test_eval_string_api.c`, `test_unit.c` |
 
 ## 🎯 Nächste Schritte
 
@@ -108,7 +108,7 @@ const char* expr = R"((doseq [x ["Alpha" "Beta" "Gamma"]] (println x)))";
 
 ### **Anwendung auf weitere Tests:**
 - `test_for_loops_comparison.c` - Magic Numbers eliminieren
-- `test_seq_minunit.c` - WITH_MEMORY_PROFILING anwenden
+- `test_seq.c` - WITH_MEMORY_PROFILING anwenden
 - Weitere Test-Dateien - MinUnit-Makro-Optimierung
 
 ## 💡 Erkenntnisse

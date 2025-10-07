@@ -67,11 +67,11 @@ target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
 # Unified Test Runner (all MinUnit tests in one executable - STM32 compatible)
 add_executable(run-tests
     src/tests/run_tests_main.c
-    src/tests/test_unit_minunit.c
-    src/tests/test_parser_minunit.c
+    src/tests/test_unit.c
+    src/tests/test_parser.c
     src/tests/test-namespace.c
-    src/tests/test_seq_minunit.c
-    src/tests/test_for_loops_minunit.c
+    src/tests/test_seq.c
+    src/tests/test_for_loops.c
     src/tests/test_eval_string_api.c
     src/CljObject.c
     src/types.c

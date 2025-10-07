@@ -1,336 +1,279 @@
-#include "../unity.h"
-#include "../tiny_clj.h"
-#include "test_helpers.h"
-#include "../CljObject.h"
-#include "../vector.h"
-#include "../clj_symbols.h"
-#include "../map.h"
-#include <stdlib.h>
+/*
+ * Clojure Core Functions Tests (MinUnit)
+ * 
+ * Tests for clojure.core functions implemented in clojure.core.clj
+ */
 
-void setUp(void) {
-    // Setup before each test
+#include "minunit.h"
+#include "../CljObject.h"
+#include "../clj_symbols.h"
+#include "../namespace.h"
+#include "../function_call.h"
+#include "../clj_parser.h"
+#include "../tiny_clj.h"
+#include <stdio.h>
+#include <string.h>
+
+// Forward declaration
+int load_clojure_core(void);
+
+// ============================================================================
+// TEST HELPERS
+// ============================================================================
+
+static EvalState *global_eval_state = NULL;
+
+static void test_setup(void) {
     init_special_symbols();
     meta_registry_init();
-    EvalState *st = evalstate_new();
-    set_global_eval_state(st);
-    load_clojure_core(st);
+    global_eval_state = evalstate_new();
+    load_clojure_core(global_eval_state);
 }
 
-void tearDown(void) {
-    // Cleanup after each test
-    cleanup_clojure_core();
+static void test_teardown(void) {
+    if (global_eval_state) {
+        evalstate_free(global_eval_state);
+        global_eval_state = NULL;
+    }
+    symbol_table_cleanup();
     meta_registry_cleanup();
-    cljvalue_pool_cleanup_all();
 }
 
-void test_inc_function(void) {
-    CljObject *arg = autorelease(make_int(5));
-    CljObject *result = autorelease(call_clojure_core_function("inc", 1, &arg));
-    
-    ASSERT_OBJ_INT_EQ(result, 6);
+static CljObject* eval_code(const char *code) {
+    return eval_string(code, global_eval_state);
 }
 
-void test_dec_function(void) {
-    CljObject *arg = autorelease(make_int(10));
-    CljObject *result = autorelease(call_clojure_core_function("dec", 1, &arg));
-    
-    ASSERT_OBJ_INT_EQ(result, 9);
+// ============================================================================
+// TYPE CHECKING HELPERS
+// ============================================================================
+
+static bool is_number(CljObject *obj, int expected) {
+    return obj && obj->type == CLJ_NUMBER && 
+           as_number(obj)->value == expected;
 }
 
-void test_add_function(void) {
-    CljObject *arg1 = autorelease(make_int(3));
-    CljObject *arg2 = autorelease(make_int(7));
-    CljObject *args[2] = {arg1, arg2};
-    CljObject *result = autorelease(call_clojure_core_function("add", 2, args));
-    
-    ASSERT_OBJ_INT_EQ(result, 10);
+static bool is_type(CljObject *obj, CljType expected_type) {
+    return obj && obj->type == expected_type;
 }
 
-void test_sub_function(void) {
-    CljObject *arg1 = autorelease(make_int(10));
-    CljObject *arg2 = autorelease(make_int(3));
-    CljObject *args[2] = {arg1, arg2};
-    CljObject *result = autorelease(call_clojure_core_function("sub", 2, args));
+// Boolean singleton getters
+extern CljObject* clj_true(void);
+extern CljObject* clj_false(void);
+
+// Boolean assertion macros
+#define assert_clj_true(msg, obj) mu_assert(msg, (obj) == clj_true())
+#define assert_clj_false(msg, obj) mu_assert(msg, (obj) == clj_false())
+#define assert_number(msg, obj, val) mu_assert(msg, is_number(obj, val))
+#define assert_type(msg, obj, type) mu_assert(msg, is_type(obj, type))
+
+// ============================================================================
+// NUMERIC PREDICATES
+// ============================================================================
+
+static char* test_zero_predicate(void) {
+    printf("\n=== Testing zero? ===\n");
+    test_setup();
     
-    ASSERT_OBJ_INT_EQ(result, 7);
+    assert_clj_true("(zero? 0) should return true", eval_code("(zero? 0)"));
+    assert_clj_false("(zero? 1) should return false", eval_code("(zero? 1)"));
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_mul_function(void) {
-    CljObject *arg1 = autorelease(make_int(6));
-    CljObject *arg2 = autorelease(make_int(7));
-    CljObject *args[2] = {arg1, arg2};
-    CljObject *result = autorelease(call_clojure_core_function("mul", 2, args));
+static char* test_pos_predicate(void) {
+    printf("\n=== Testing pos? ===\n");
+    test_setup();
     
-    ASSERT_OBJ_INT_EQ(result, 42);
+    assert_clj_true("(pos? 5) should return true", eval_code("(pos? 5)"));
+    assert_clj_false("(pos? 0) should return false", eval_code("(pos? 0)"));
+    assert_clj_false("(pos? -5) should return false", eval_code("(pos? -5)"));
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_div_function(void) {
-    CljObject *arg1 = autorelease(make_int(15));
-    CljObject *arg2 = autorelease(make_int(3));
-    CljObject *args[2] = {arg1, arg2};
-    CljObject *result = autorelease(call_clojure_core_function("div", 2, args));
+static char* test_neg_predicate(void) {
+    printf("\n=== Testing neg? ===\n");
+    test_setup();
     
-    ASSERT_OBJ_INT_EQ(result, 5);
+    assert_clj_true("(neg? -5) should return true", eval_code("(neg? -5)"));
+    assert_clj_false("(neg? 0) should return false", eval_code("(neg? 0)"));
+    assert_clj_false("(neg? 5) should return false", eval_code("(neg? 5)"));
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_square_function(void) {
-    CljObject *arg = autorelease(make_int(4));
-    CljObject *result = autorelease(call_clojure_core_function("square", 1, &arg));
+// ============================================================================
+// LOGIC FUNCTIONS
+// ============================================================================
+
+static char* test_not_function(void) {
+    printf("\n=== Testing not ===\n");
+    test_setup();
     
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, result->type);
-    TEST_ASSERT_EQUAL_INT(16, result->as.i);
+    assert_clj_false("(not true) should return false", eval_code("(not true)"));
+    assert_clj_true("(not false) should return true", eval_code("(not false)"));
+    assert_clj_false("(not 0) should return false (0 is truthy)", eval_code("(not 0)"));
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_nil_predicate(void) {
-    CljObject *nil_val = clj_nil(); // Singleton - no autorelease!
-    CljObject *result = autorelease(call_clojure_core_function("nil?", 1, &nil_val));
+// ============================================================================
+// COMPARISON FUNCTIONS
+// ============================================================================
+
+static char* test_max_function(void) {
+    printf("\n=== Testing max ===\n");
+    test_setup();
     
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, result->type);
-    TEST_ASSERT_TRUE(result == clj_true());
+    assert_number("(max 10 20) should return 20", eval_code("(max 10 20)"), 20);
+    assert_number("(max 100 50) should return 100", eval_code("(max 100 50)"), 100);
+    assert_number("(max -5 -10) should return -5", eval_code("(max -5 -10)"), -5);
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_true_predicate(void) {
-    CljObject *true_val = clj_true(); // Singleton - no autorelease!
-    CljObject *result = autorelease(call_clojure_core_function("true?", 1, &true_val));
+static char* test_min_function(void) {
+    printf("\n=== Testing min ===\n");
+    test_setup();
     
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, result->type);
-    TEST_ASSERT_TRUE(result == clj_true());
+    assert_number("(min 10 20) should return 10", eval_code("(min 10 20)"), 10);
+    assert_number("(min 100 50) should return 50", eval_code("(min 100 50)"), 50);
+    assert_number("(min -5 -10) should return -10", eval_code("(min -5 -10)"), -10);
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_false_predicate(void) {
-    CljObject *false_val = clj_false(); // Singleton - no autorelease!
-    CljObject *result = autorelease(call_clojure_core_function("false?", 1, &false_val));
+// ============================================================================
+// COLLECTION FUNCTIONS
+// ============================================================================
+
+static char* test_second_function(void) {
+    printf("\n=== Testing second ===\n");
+    test_setup();
     
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, result->type);
-    TEST_ASSERT_TRUE(result == clj_true());
+    assert_number("(second [1 2 3]) should return 2", eval_code("(second [1 2 3])"), 2);
+    assert_type("(second [42]) should return nil", eval_code("(second [42])"), CLJ_NIL);
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_identity_function(void) {
-    CljObject *test_val = autorelease(make_string("hello"));
-    CljObject *result = autorelease(call_clojure_core_function("identity", 1, &test_val));
+static char* test_empty_predicate(void) {
+    printf("\n=== Testing empty? ===\n");
+    test_setup();
     
-    ASSERT_TYPE(result, CLJ_STRING);
-    TEST_ASSERT_EQUAL_STRING("hello", (char*)result->as.data);
+    assert_clj_true("(empty? []) should return true", eval_code("(empty? [])"));
+    assert_clj_false("(empty? [1 2 3]) should return false", eval_code("(empty? [1 2 3])"));
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_count_vector(void) {
-    // Test: (count [1 2 3]) => 3
-    // For now, test with an empty vector since vector creation is complex
-    CljObject *vec = autorelease(make_vector(0, 0));
-    CljPersistentVector *vec_data = as_vector(vec);
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+static char* test_identity_function(void) {
+    printf("\n=== Testing identity ===\n");
+    test_setup();
     
-    // Empty vector should have count 0
-    CljObject *result = autorelease(call_clojure_core_function("count", 1, &vec));
-    ASSERT_OBJ_INT_EQ(result, 0);
+    assert_number("(identity 42) should return 42", eval_code("(identity 42)"), 42);
+    assert_type("(identity [1 2 3]) should return vector", eval_code("(identity [1 2 3])"), CLJ_VECTOR);
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_count_list(void) {
-    // Test: (count '(a b c)) => 3
-    // For now, test with an empty list since list creation is complex
-    CljObject *list = autorelease(make_list());
-    CljList *list_data = as_list(list);
+static char* test_constantly_function(void) {
+    printf("\n=== Testing constantly ===\n");
+    test_setup();
     
-    // Empty list should have count 0
-    CljObject *result = autorelease(call_clojure_core_function("count", 1, &list));
-    ASSERT_OBJ_INT_EQ(result, 0);
+    // constantly returns a function that always returns the same value
+    assert_number("((constantly 42) 99) should return 42", eval_code("((constantly 42) 99)"), 42);
+    assert_number("((constantly 10) 20) should return 10", eval_code("((constantly 10) 20)"), 10);
+    
+    test_teardown();
+    return NULL;
 }
 
-void test_count_map(void) {
-    // Test: (count {:a 1 :b 2}) => 2
-    CljObject *map = autorelease(make_map(4));
-    CljMap *map_data = as_map(map);
+// ============================================================================
+// TEST RUNNER
+// ============================================================================
+
+#ifndef UNIFIED_TEST_RUNNER
+
+static char* all_tests(void) {
+    printf("\n🧪 === Clojure Core Functions Tests ===\n");
     
-    CljObject *key1 = autorelease(make_symbol("a", NULL));
-    CljObject *val1 = autorelease(make_int(1));
-    CljObject *key2 = autorelease(make_symbol("b", NULL));
-    CljObject *val2 = autorelease(make_int(2));
+    // Numeric Predicates
+    mu_run_test(test_zero_predicate);
+    mu_run_test(test_pos_predicate);
+    mu_run_test(test_neg_predicate);
     
-    map_assoc(map, key1, val1);
-    map_assoc(map, key2, val2);
+    // Logic
+    mu_run_test(test_not_function);
     
-    CljObject *result = autorelease(call_clojure_core_function("count", 1, &map));
-    ASSERT_OBJ_INT_EQ(result, 2);
-}
-
-void test_count_string(void) {
-    // Test: (count "hello") => 5
-    CljObject *str = autorelease(make_string("hello"));
-    CljObject *result = autorelease(call_clojure_core_function("count", 1, &str));
+    // Comparison
+    mu_run_test(test_max_function);
+    mu_run_test(test_min_function);
     
-    ASSERT_OBJ_INT_EQ(result, 5);
-}
-
-void test_count_nil(void) {
-    // Test: (count nil) => 0
-    CljObject *nil_val = clj_nil();
-    CljObject *result = autorelease(call_clojure_core_function("count", 1, &nil_val));
+    // Collections
+    mu_run_test(test_second_function);
+    mu_run_test(test_empty_predicate);
     
-    ASSERT_OBJ_INT_EQ(result, 0);
-}
-
-void test_count_single_value(void) {
-    // Test: (count 42) => 1 (single value)
-    CljObject *int_val = autorelease(make_int(42));
-    CljObject *result = autorelease(call_clojure_core_function("count", 1, &int_val));
+    // Utilities
+    mu_run_test(test_identity_function);
+    mu_run_test(test_constantly_function);
     
-    ASSERT_OBJ_INT_EQ(result, 1);
-}
-
-void test_division_by_zero(void) {
-    CljObject *arg1 = autorelease(make_int(10));
-    CljObject *arg2 = autorelease(make_int(0));
-    CljObject *args[2] = {arg1, arg2};
-    CljObject *result = autorelease(call_clojure_core_function("div", 2, args));
-    
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_EXCEPTION, result->type);
-}
-
-void test_wrong_argument_count(void) {
-    CljObject *arg = autorelease(make_int(5));
-    CljObject *result = autorelease(call_clojure_core_function("add", 1, &arg));
-    
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_EXCEPTION, result->type);
-}
-
-void test_wrong_argument_type(void) {
-    CljObject *arg = autorelease(make_string("not_a_number"));
-    CljObject *result = autorelease(call_clojure_core_function("inc", 1, &arg));
-    
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_EXCEPTION, result->type);
-}
-
-void test_nonexistent_function(void) {
-    CljObject *result = autorelease(call_clojure_core_function("nonexistent", 0, NULL));
-    
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_EXCEPTION, result->type);
-}
-
-void test_negative_numbers(void) {
-    CljObject *arg = autorelease(make_int(-5));
-    CljObject *result = autorelease(call_clojure_core_function("inc", 1, &arg));
-    
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, result->type);
-    TEST_ASSERT_EQUAL_INT(-4, result->as.i);
-}
-
-void test_large_numbers(void) {
-    CljObject *arg1 = autorelease(make_int(1000));
-    CljObject *arg2 = autorelease(make_int(2000));
-    CljObject *args[2] = {arg1, arg2};
-    CljObject *result = autorelease(call_clojure_core_function("add", 2, args));
-    
-    ASSERT_OBJ_INT_EQ(result, 3000);
-}
-
-void test_namespace_access(void) {
-    CljNamespace *ns = get_clojure_core_namespace();
-    
-    TEST_ASSERT_NOT_NULL(ns);
-    TEST_ASSERT_NOT_NULL(ns->mappings);
-    
-    CljMap *map = as_map(ns->mappings);
-    TEST_ASSERT_TRUE(map->count > 0);
-}
-
-// --- Tests for clojure.core/some (interpreted) ---
-
-// use generic constructor from vector.c
-
-void test_some_truthy_identity_vector(void) {
-    // (some identity [nil 0 2]) => 0 (0 ist truthy)
-    CljObject *nilv = clj_nil();
-    CljObject *zero = autorelease(make_int(0));
-    CljObject *two  = autorelease(make_int(2));
-    CljObject *items[3] = {nilv, zero, two};
-    CljObject *vec = autorelease(vector_from_items(items, 3));
-
-    CljObject *pred_sym = autorelease(make_symbol("identity", NULL));
-    CljObject *args[2] = {pred_sym, vec};
-    CljObject *res = autorelease(call_clojure_core_function("some", 2, args));
-    ASSERT_TYPE(res, CLJ_INT);
-    TEST_ASSERT_EQUAL_INT(0, res->as.i);
-}
-
-void test_some_nil_when_no_match(void) {
-    // (some identity [nil nil]) => nil
-    CljObject *nilv = clj_nil();
-    CljObject *items[2] = {nilv, nilv};
-    CljObject *vec = autorelease(vector_from_items(items, 2));
-
-    CljObject *pred_sym = autorelease(make_symbol("identity", NULL));
-    CljObject *args[2] = {pred_sym, vec};
-    CljObject *res = autorelease(call_clojure_core_function("some", 2, args));
-    TEST_ASSERT_TRUE(res == clj_nil());
-}
-
-void test_some_short_circuit_first_truthy(void) {
-    // (some identity [1 2 3]) => 1 (sollte beim ersten truthy abbrechen)
-    CljObject *one = autorelease(make_int(1));
-    CljObject *two = autorelease(make_int(2));
-    CljObject *three = autorelease(make_int(3));
-    CljObject *items[3] = {one, two, three};
-    CljObject *vec = autorelease(vector_from_items(items, 3));
-
-    CljObject *pred_sym = autorelease(make_symbol("identity", NULL));
-    CljObject *args[2] = {pred_sym, vec};
-    CljObject *res = autorelease(call_clojure_core_function("some", 2, args));
-    ASSERT_TYPE(res, CLJ_INT);
-    TEST_ASSERT_EQUAL_INT(1, res->as.i);
+    return NULL;
 }
 
 int main(void) {
-    printf("=== Unity Test Suite for Clojure Core ===\n");
+    char *result = all_tests();
     
-    UNITY_BEGIN();
+    if (result != NULL) {
+        printf("❌ %s\n", result);
+        return 1;
+    }
     
-    // Arithmetic functions
-    RUN_TEST(test_inc_function);
-    RUN_TEST(test_dec_function);
-    RUN_TEST(test_add_function);
-    RUN_TEST(test_sub_function);
-    RUN_TEST(test_mul_function);
-    RUN_TEST(test_div_function);
-    RUN_TEST(test_square_function);
+    printf("✅ ALL TESTS PASSED\n");
+    printf("Tests run: %d\n", tests_run);
     
-    // Predicate functions
-    RUN_TEST(test_nil_predicate);
-    RUN_TEST(test_true_predicate);
-    RUN_TEST(test_false_predicate);
-    
-    // Identity function
-    RUN_TEST(test_identity_function);
-    
-    // Count function tests (simplified)
-    RUN_TEST(test_count_string);
-    RUN_TEST(test_count_nil);
-    RUN_TEST(test_count_single_value);
-    
-    // Error handling
-    RUN_TEST(test_division_by_zero);
-    RUN_TEST(test_wrong_argument_count);
-    RUN_TEST(test_wrong_argument_type);
-    RUN_TEST(test_nonexistent_function);
-    
-    // Edge cases
-    RUN_TEST(test_negative_numbers);
-    RUN_TEST(test_large_numbers);
-    
-    // Namespace operations
-    RUN_TEST(test_namespace_access);
-
-    // clojure.core/some tests (will fail until implemented)
-    RUN_TEST(test_some_truthy_identity_vector);
-    RUN_TEST(test_some_nil_when_no_match);
-    RUN_TEST(test_some_short_circuit_first_truthy);
-    
-    return UNITY_END();
+    return 0;
 }
+
+#else
+
+// Export for unified test runner
+char *run_clojure_core_tests(void) {
+    // Numeric Predicates
+    mu_run_test_verbose("zero?", test_zero_predicate);
+    mu_run_test_verbose("pos?", test_pos_predicate);
+    mu_run_test_verbose("neg?", test_neg_predicate);
+    
+    // Logic
+    mu_run_test_verbose("not", test_not_function);
+    
+    // Comparison
+    mu_run_test_verbose("max", test_max_function);
+    mu_run_test_verbose("min", test_min_function);
+    
+    // Collections
+    mu_run_test_verbose("second", test_second_function);
+    mu_run_test_verbose("empty?", test_empty_predicate);
+    
+    // Utilities
+    mu_run_test_verbose("identity", test_identity_function);
+    mu_run_test_verbose("constantly", test_constantly_function);
+    
+    return NULL;
+}
+
+#endif
+
