@@ -86,21 +86,24 @@ Reports & Artifacts
 
 Documentation
 -------
+**Main Guides** (in `Guides/`):
 - **`ROADMAP.md`** - Geplante Arbeiten (UTF‑8, Seq‑Semantik, Large‑Map, optionale Chunked‑Seqs) und Status
 - **`DEVELOPMENT_INSIGHTS.md`** - API Design, Memory Management, Test-First-Strategie und Code-Qualität
 - **`MEMORY_POLICY.md`** - Detaillierte Memory-Management-Richtlinien und Best Practices
 - **`MEMORY_PROFILING_GUIDE.md`** - Anleitung für Memory-Profiling und Leak-Detection
 - **`PERFORMANCE_GUIDE.md`** - Performance-Optimierung und Benchmarking
-- **`ERROR_HANDLING_GUIDE.md`** - Fehlerbehandlung und Exception-Management
+- **`ERROR_HANDLING_GUIDE.md`** - Fehlerbehandlung und TRY/CATCH Exception-Management
 - **`IMPROVEMENTS_SUMMARY.md`** - Zusammenfassung der letzten Verbesserungen
 - **`RELEASE_NOTES.md`** - Versionshinweise und Änderungen
+
+**Test Documentation:**
 - **`src/tests/README.md`** - Test-Dokumentation und -Struktur
 
-**Reports & Analysis:**
-- **`Reports/test_data_analysis.md`** - Test-Datenanalyse und -Statistiken
-- **`Reports/memory_usage_comparison.md`** - Memory-Usage-Vergleiche zwischen Implementierungen
-- **`Reports/seq_performance_analysis.md`** - Seq-Performance-Analyse und -Optimierung
-- **`Reports/utf8_size_impact.md`** - UTF-8 Implementierung und Code-Size-Impact
+**Reports & Analysis** (in `Reports/`):
+- **`test_data_analysis.md`** - Test-Datenanalyse und -Statistiken
+- **`memory_usage_comparison.md`** - Memory-Usage-Vergleiche zwischen Implementierungen
+- **`seq_performance_analysis.md`** - Seq-Performance-Analyse und -Optimierung
+- **`utf8_size_impact.md`** - UTF-8 Implementierung und Code-Size-Impact
 
 Command-Line Examples
 ---------------------
