@@ -9,9 +9,19 @@
 #include "../clj_symbols.h"
 #include "minunit.h"
 #include "test_registry.h"
+#ifdef ENABLE_MEMORY_PROFILING
+#include "memory_profiler.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+
+// ============================================================================
+// GLOBAL CONFIGURATION
+// ============================================================================
+
+static bool enable_memory_profiling = false;
 
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
@@ -21,12 +31,25 @@ static void global_setup(void) {
     init_special_symbols();
     meta_registry_init();
     cljvalue_pool_push(); // Create global autorelease pool for all tests
+    
+#ifdef ENABLE_MEMORY_PROFILING
+    if (enable_memory_profiling) {
+        MEMORY_PROFILER_INIT();
+        printf("🔍 Memory profiling enabled\n");
+    }
+#endif
 }
 
 static void global_teardown(void) {
     cljvalue_pool_cleanup_all();
     symbol_table_cleanup();
     meta_registry_cleanup();
+    
+#ifdef ENABLE_MEMORY_PROFILING
+    if (enable_memory_profiling) {
+        MEMORY_PROFILER_CLEANUP();
+    }
+#endif
 }
 
 // ============================================================================
@@ -40,12 +63,16 @@ static void print_usage(const char *program) {
     printf("  --help, -h         Show this help\n");
     printf("  --list, -l         List all tests\n");
     printf("  --suite SUITE      Run tests from specific suite\n");
-    printf("  --test TEST        Run specific test\n\n");
-    printf("Available test categories:\n");
+    printf("  --test TEST        Run specific test\n");
+#ifdef ENABLE_MEMORY_PROFILING
+    printf("  --profile          Enable memory profiling for all tests\n");
+#endif
+    printf("\nAvailable test categories:\n");
     printf("  core     - Core functionality (unit, parser)\n");
     printf("  data     - Data structures (seq)\n");
     printf("  control  - Control flow (for_loops)\n");
     printf("  api      - Public API tests\n");
+    printf("  memory   - Memory leak tests\n");
 }
 
 static void list_tests(void) {
@@ -167,9 +194,24 @@ static int run_all_tests(void) {
 // ============================================================================
 
 int main(int argc, char **argv) {
-    global_setup();
-    
     int result = 0;
+    
+    // Parse flags (can appear anywhere)
+    for (int i = 1; i < argc; i++) {
+#ifdef ENABLE_MEMORY_PROFILING
+        if (strcmp(argv[i], "--profile") == 0) {
+            enable_memory_profiling = true;
+            // Shift remaining args
+            for (int j = i; j < argc - 1; j++) {
+                argv[j] = argv[j + 1];
+            }
+            argc--;
+            i--;
+        }
+#endif
+    }
+    
+    global_setup();
     
     if (argc == 1) {
         // No arguments - run all tests
