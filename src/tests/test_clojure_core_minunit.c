@@ -105,13 +105,16 @@ static char* test_neg_predicate(void) {
     test_setup();
     
     CljObject *result1 = eval_code("(neg? -5)");
-    mu_assert("(neg? -5) should return true", is_type(result, CLJ_BOOL) && result == clj_true()1));
+    mu_assert("(neg? -5) should return true", 
+        is_type(result1, CLJ_BOOL) && result1 == clj_true());
     
     CljObject *result2 = eval_code("(neg? 0)");
-    mu_assert("(neg? 0) should return false", is_type(result, CLJ_BOOL) && result == clj_false()2));
+    mu_assert("(neg? 0) should return false", 
+        is_type(result2, CLJ_BOOL) && result2 == clj_false());
     
     CljObject *result3 = eval_code("(neg? 5)");
-    mu_assert("(neg? 5) should return false", is_type(result, CLJ_BOOL) && result == clj_false()3));
+    mu_assert("(neg? 5) should return false", 
+        is_type(result3, CLJ_BOOL) && result3 == clj_false());
     
     test_teardown();
     return NULL;
