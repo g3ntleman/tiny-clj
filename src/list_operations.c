@@ -1,6 +1,7 @@
 #include "list_operations.h"
 #include "clj_symbols.h"
 #include "memory_hooks.h"
+#include <stdarg.h>
 
 // List-Operationen für try/catch
 CljObject* list_first(CljObject *list) {
@@ -63,4 +64,31 @@ bool is_symbol(CljObject *v, const char *name) {
     
     // Pointer-Vergleich statt String-Vergleich!
     return v == compare_symbol;
+}
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+CljObject* list_from_ints(int count, ...) {
+    if (count <= 0) return clj_nil();
+    
+    va_list args;
+    va_start(args, count);
+    
+    // Build list from end to start (cons-style)
+    CljObject *result = NULL;
+    for (int i = count - 1; i >= 0; i--) {
+        int value = va_arg(args, int);
+        CljObject *node = make_list();
+        CljList *node_list = as_list(node);
+        if (node_list) {
+            node_list->head = make_int(value);
+            node_list->tail = result;
+            result = node;
+        }
+    }
+    
+    va_end(args);
+    return result ? result : clj_nil();
 }

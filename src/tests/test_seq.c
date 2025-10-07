@@ -24,18 +24,8 @@ static char *test_seq_create_list(void) {
     printf("\n=== Testing Seq Creation for Lists ===\n");
     
     WITH_MEMORY_PROFILING({
-        // Create a test list
-        CljObject *list = make_list();
-        CljList *list_data = as_list(list);
-        if (list_data) {
-            list_data->head = make_int(1);
-            list_data->tail = make_list();
-            CljList *tail_data = as_list(list_data->tail);
-            if (tail_data) {
-                tail_data->head = make_int(2);
-                tail_data->tail = NULL;
-            }
-        }
+        // Create a test list using convenience function
+        CljObject *list = list_from_ints(2, 1, 2);
         
         // Create sequence iterator
         CljObject *seq = seq_create(list);

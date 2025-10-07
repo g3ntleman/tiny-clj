@@ -12,4 +12,7 @@ CljObject* list_from_stack(CljObject **stack, int count);
 bool is_list(CljObject *v);
 bool is_symbol(CljObject *v, const char *name);
 
+// Convenience functions for creating lists
+CljObject* list_from_ints(int count, ...);
+
 #endif // LIST_OPERATIONS_H
