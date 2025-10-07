@@ -33,7 +33,7 @@ include_directories(include src external)
 list(APPEND SOURCES
     src/clojure_core.c
     src/types.c
-    src/CljObject.c
+    src/object.c
     src/builtins.c
     src/runtime.c
     src/namespace.c
@@ -73,7 +73,7 @@ add_executable(run-tests
     src/tests/test_seq.c
     src/tests/test_for_loops.c
     src/tests/test_eval_string_api.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/map.c
@@ -107,7 +107,7 @@ target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENA
 add_executable(test-exception-handling
     src/tests/test-exception-handling.c
     src/unity.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/map.c
@@ -129,7 +129,7 @@ target_compile_definitions(test-exception-handling PRIVATE ENABLE_META)
 add_executable(test-integration
     src/tests/test_integration_main.c
     src/unity.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/map.c
@@ -149,7 +149,7 @@ add_executable(test-integration
 add_executable(test-benchmark EXCLUDE_FROM_ALL
     src/tests/test_integration_main.c
     src/unity.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/map.c
@@ -169,7 +169,7 @@ target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
 # Performance & Benchmark Tests (consolidated)
 add_executable(test-performance EXCLUDE_FROM_ALL
     src/tests/test_performance.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/map.c
@@ -193,9 +193,8 @@ target_compile_definitions(test-performance PRIVATE ENABLE_META DEBUG)
 add_executable(test-seq-debug EXCLUDE_FROM_ALL
     src/tests/test_seq_debug.c
     src/tests/minunit.h
-    src/CljObject.c
-    src/CljObject.h
-    src/clj_object.h
+    src/object.c
+    src/object.h
     src/types.c
     src/vector.c
     src/vector.h
@@ -230,7 +229,7 @@ target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
 # Memory Profiling Tests (Debug only)
 add_executable(test-memory-profiling EXCLUDE_FROM_ALL
     src/tests/test_memory_profiling.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/map.c
@@ -335,7 +334,7 @@ set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 add_executable(test-seq-benchmark EXCLUDE_FROM_ALL
     src/tests/test_seq_fast_benchmark.c
     src/seq.c
-    src/CljObject.c
+    src/object.c
     src/types.c
     src/vector.c
     src/list_operations.c

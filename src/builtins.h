@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_BUILTINS_H
 #define TINY_CLJ_BUILTINS_H
 
-#include "CljObject.h"
+#include "object.h"
 
 typedef CljObject* (*CljNativeFn)(CljObject **args, int argc);
 

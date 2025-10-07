@@ -4,7 +4,7 @@
  * Tests the for, doseq, and dotimes implementations
  */
 
-#include "../CljObject.h"
+#include "../object.h"
 #include "../clj_symbols.h"
 #include "../memory_hooks.h"
 #include "../memory_profiler.h"

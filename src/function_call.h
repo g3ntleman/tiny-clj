@@ -1,7 +1,7 @@
 #ifndef FUNCTION_CALL_H
 #define FUNCTION_CALL_H
 
-#include "CljObject.h"
+#include "object.h"
 #include "namespace.h"
 
 

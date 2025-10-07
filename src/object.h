@@ -9,8 +9,8 @@
  * - Memory management with reference counting
  */
 
-#ifndef TINY_CLJ_VALUE_H
-#define TINY_CLJ_VALUE_H
+#ifndef TINY_CLJ_OBJECT_H
+#define TINY_CLJ_OBJECT_H
 
 #include "common.h"
 #include "types.h"

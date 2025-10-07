@@ -1,6 +1,6 @@
 #ifndef EXCEPTION_H
 #define EXCEPTION_H
-#include "CljObject.h"
+#include "object.h"
 #include <setjmp.h>
 #include <stdbool.h>
 

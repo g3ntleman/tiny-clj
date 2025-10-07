@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "CljObject.h"
+#include "object.h"
 #include "vector.h"
 #include "builtins.h"
 #include "runtime.h"

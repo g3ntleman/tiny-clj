@@ -9,7 +9,7 @@
  * - Stack-allocated argument handling
  */
 
-#include "CljObject.h"
+#include "object.h"
 #include "vector.h"
 #include "function_call.h"
 #include "seq.h"

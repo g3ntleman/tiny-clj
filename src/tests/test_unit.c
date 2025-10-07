@@ -4,7 +4,7 @@
  * Basic unit tests for Tiny-Clj core functionality
  */
 
-#include "../CljObject.h"
+#include "../object.h"
 #include "../clj_parser.h"
 #include "../clj_symbols.h"
 #include "../exception.h"

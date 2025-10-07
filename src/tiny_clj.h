@@ -2,7 +2,7 @@
 #define TINY_CLJ_H
 
 #include <setjmp.h>
-#include "CljObject.h"
+#include "object.h"
 #include "exception.h"
 #include "namespace.h"
 

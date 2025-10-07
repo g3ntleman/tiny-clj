@@ -5,7 +5,7 @@
  * collections, comments, and metadata parsing.
  */
 
-#include "../CljObject.h"
+#include "../object.h"
 #include "../clj_parser.h"
 #include "../clj_symbols.h"
 #include "../function_call.h"

@@ -8,7 +8,7 @@
 #ifndef TINY_CLJ_SEQ_H
 #define TINY_CLJ_SEQ_H
 
-#include "CljObject.h"
+#include "object.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus

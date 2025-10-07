@@ -15,7 +15,7 @@
 #include "vector.h"
 #include "map.h"
 #include "function_call.h"
-#include "CljObject.h"
+#include "object.h"
 #include "clj_symbols.h"
 #include "namespace.h"
 #include "clj_parser.h"

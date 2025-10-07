@@ -1,7 +1,7 @@
 #ifndef LIST_OPERATIONS_H
 #define LIST_OPERATIONS_H
 
-#include "CljObject.h"
+#include "object.h"
 #include <stdbool.h>
 
 // List operation functions

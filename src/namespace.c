@@ -4,7 +4,7 @@
 #include "namespace.h"
 #include "clj_symbols.h"
 #include "runtime.h"
-#include "CljObject.h"
+#include "object.h"
 #include "map.h"
 #include "list_operations.h"
 #include "function_call.h"

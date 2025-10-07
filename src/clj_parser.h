@@ -11,7 +11,7 @@
 #ifndef CLJ_PARSER_H
 #define CLJ_PARSER_H
 
-#include "CljObject.h"
+#include "object.h"
 #include "exception.h"
 #include "namespace.h"
 #include "reader.h"

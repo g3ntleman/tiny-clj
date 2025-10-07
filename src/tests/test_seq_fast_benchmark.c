@@ -8,7 +8,7 @@
 #include "seq.h"
 #include "seq_fast.h"
 #include "vector.h"
-#include "CljObject.h"
+#include "object.h"
 #include "clj_symbols.h"
 #include "memory_hooks.h"
 #include <stdio.h>

@@ -7,7 +7,7 @@
 
 #include "../unity.h"
 #include "../tiny_clj.h"
-#include "../CljObject.h"
+#include "../object.h"
 #include "../vector.h"
 #include "../clj_symbols.h"
 #include "../namespace.h"

@@ -3,7 +3,7 @@
 #include "minunit.h"
 #include "seq.h"
 #include "vector.h"
-#include "CljObject.h"
+#include "object.h"
 #include "memory_profiler.h"
 
 // Test-First: Debug seq_create with vector

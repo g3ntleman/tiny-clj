@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
 
-#include "CljObject.h"
+#include "object.h"
 
 // Globale Symbol-Pointer für Spezialformen (direkt als CljObject*)
 extern CljObject *SYM_TRY;

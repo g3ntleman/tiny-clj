@@ -5,7 +5,7 @@
  * Uses manual registry (no dlsym) for STM32 compatibility.
  */
 
-#include "../CljObject.h"
+#include "../object.h"
 #include "../clj_symbols.h"
 #include "minunit.h"
 #include "test_registry.h"

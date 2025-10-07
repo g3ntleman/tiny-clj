@@ -1,5 +1,5 @@
 #include "platform.h"
-#include "CljObject.h"
+#include "object.h"
 #include "exception.h"
 #include "clj_parser.h"
 #include "namespace.h"

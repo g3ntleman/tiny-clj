@@ -6,7 +6,7 @@
 #include "unity.h"
 #include "namespace.h"
 #include "exception.h"
-#include "CljObject.h"
+#include "object.h"
 #include "runtime.h"
 #include "function_call.h"
 #include <string.h>

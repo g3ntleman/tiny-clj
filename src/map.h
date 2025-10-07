@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_MAP_H
 #define TINY_CLJ_MAP_H
 
-#include "CljObject.h"
+#include "object.h"
 
 /** Create a map with capacity; capacity<=0 returns empty-map singleton. */
 CljObject* make_map(int capacity);

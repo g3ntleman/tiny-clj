@@ -3,7 +3,7 @@
 #include "tiny_clj.h"
 #include "clj_parser.h"
 #include "namespace.h"
-#include "CljObject.h"
+#include "object.h"
 #include "function_call.h"
 #include "exception.h"
 

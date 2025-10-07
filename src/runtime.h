@@ -12,7 +12,7 @@
 #ifndef TINY_CLJ_RUNTIME_H
 #define TINY_CLJ_RUNTIME_H
 
-#include "CljObject.h"
+#include "object.h"
 #include <alloca.h>
 #include <stdlib.h>
 

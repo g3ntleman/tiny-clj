@@ -6,7 +6,7 @@
 
 #include "minunit.h"
 #include "memory_profiler.h"
-#include "CljObject.h"
+#include "object.h"
 #include "vector.h"
 #include "seq.h"
 #include "function_call.h"

@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_NAMESPACE_H
 #define TINY_CLJ_NAMESPACE_H
 
-#include "CljObject.h"
+#include "object.h"
 #include <stdbool.h>
 #include <setjmp.h>
 

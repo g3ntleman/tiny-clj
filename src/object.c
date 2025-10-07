@@ -16,7 +16,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdarg.h>
-#include "CljObject.h"
+#include "object.h"
 #include <string.h>
 #include "vector.h"
 #include "seq.h"

@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_VECTOR_H
 #define TINY_CLJ_VECTOR_H
 
-#include "CljObject.h"
+#include "object.h"
 
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
 CljObject* make_vector(int capacity, int is_mutable);
