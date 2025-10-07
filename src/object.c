@@ -434,15 +434,26 @@ static void release_object_deep(CljObject *v) {
         case CLJ_FUNC:
             // Function finalizer: embedded; free internals only
             {
-                CljFunction *func = as_function(v);
-                if (func) {
-                    if (func->params) {
-                        release_array(func->params, func->param_count);
-                        free(func->params);
+                // Check if it's a CljFunction or CljFunc
+                CljFunction *clj_func = (CljFunction*)v;
+                if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                    // It's a CljFunction
+                    if (clj_func->params) {
+                        release_array(clj_func->params, clj_func->param_count);
+                        free(clj_func->params);
                     }
-                    if (func->body) release(func->body);
-                    if (func->closure_env) release(func->closure_env);
-                    if (func->name) free((void*)func->name);
+                    if (clj_func->body) release(clj_func->body);
+                    if (clj_func->closure_env) release(clj_func->closure_env);
+                    if (clj_func->name) free((void*)clj_func->name);
+                } else {
+                    // It's a CljFunc (native function)
+                    CljFunc *native_func = (CljFunc*)v;
+#ifdef DEBUG
+                    if (native_func && native_func->name) {
+                        // In Debug-Builds ist name ein String-Literal, kein malloc'd String
+                        // Daher kein free() nötig
+                    }
+#endif
                 }
             }
             break;
@@ -747,13 +758,32 @@ char* pr_str(CljObject *v) {
 
         case CLJ_FUNC:
             {
-                CljFunction *func = as_function(v);
-                if (!func) return strdup("#<function>");
-                if (func->name) {
-                    char buf[256];
-                    snprintf(buf, sizeof(buf), "#<function %s>", func->name);
-                    return strdup(buf);
+                // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
+                // We can distinguish by checking the structure layout
+                CljFunction *clj_func = (CljFunction*)v;
+                
+                // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
+                // We can distinguish by checking if the function has a fn pointer (native) or params (Clojure)
+                CljFunc *native_func = (CljFunc*)v;
+                if (native_func && native_func->fn) {
+                    // It's a native function (CljFunc)
+                    if (native_func->name) {
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);
+                        return strdup(buf);
+                    }
+                    return strdup("#<native function>");
+                } else if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                    // It's a Clojure function (CljFunction)
+                    if (clj_func->name) {
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
+                        return strdup(buf);
+                    } else {
+                        return strdup("#<function>");
+                    }
                 } else {
+                    // Fallback: unknown function type
                     return strdup("#<function>");
                 }
             }
@@ -1305,17 +1335,30 @@ void free_object(CljObject *obj) {
             break;
         case CLJ_FUNC:
             {
-                CljFunction *func = (CljFunction*)obj;
-                if (func->params) {
-                    for (int i = 0; i < func->param_count; i++) {
-                        if (func->params[i]) release_object(func->params[i]);
+                // Check if it's a CljFunction or CljFunc
+                CljFunction *clj_func = (CljFunction*)obj;
+                if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                    // It's a CljFunction
+                    if (clj_func->params) {
+                        for (int i = 0; i < clj_func->param_count; i++) {
+                            if (clj_func->params[i]) release_object(clj_func->params[i]);
+                        }
+                        free(clj_func->params);
                     }
-                    free(func->params);
+                    if (clj_func->body) release_object(clj_func->body);
+                    if (clj_func->closure_env) release_object(clj_func->closure_env);
+                    if (clj_func->name) free((void*)clj_func->name);
+                } else {
+                    // It's a CljFunc (native function)
+                    CljFunc *native_func = (CljFunc*)obj;
+#ifdef DEBUG
+                    if (native_func && native_func->name) {
+                        // In Debug-Builds ist name ein String-Literal, kein malloc'd String
+                        // Daher kein free() nötig
+                    }
+#endif
                 }
-                if (func->body) release_object(func->body);
-                if (func->closure_env) release_object(func->closure_env);
-                if (func->name) free((void*)func->name);
-                free(func);
+                free(obj);
             }
             break;
         case CLJ_EXCEPTION:

@@ -6,6 +6,7 @@
 #include "object.h"
 #include "function_call.h"
 #include "exception.h"
+#include "builtins.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -156,6 +157,9 @@ int main(int argc, char **argv) {
     if (!no_core) {
         load_clojure_core(st);
     }
+    
+    // Register builtin functions
+    register_builtins();
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);

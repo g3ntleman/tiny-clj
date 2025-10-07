@@ -26,6 +26,7 @@ CljObject* native_if(CljObject **args, int argc);
 
 // Function value constructors
 CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env);
+CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name);
 
 // Eval helpers
 CljObject* apply_builtin(const BuiltinEntry *entry, CljObject **args, int argc);

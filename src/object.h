@@ -83,6 +83,7 @@ typedef struct {
     CljObject base;         // Embedded base object
     CljObject* (*fn)(CljObject **args, int argc);
     void *env;
+    const char *name;       // Optional function name (for debugging/printing)
 } CljFunc;
 
 typedef struct {
