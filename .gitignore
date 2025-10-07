@@ -25,3 +25,5 @@ benchmark_history.csv
 # Local outputs
 benchmark_output.txt
 progress.marks
+*.csv
+test-*

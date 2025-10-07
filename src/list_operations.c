@@ -1,5 +1,6 @@
 #include "list_operations.h"
 #include "clj_symbols.h"
+#include "memory_hooks.h"
 
 // List-Operationen für try/catch
 CljObject* list_first(CljObject *list) {
@@ -26,12 +27,10 @@ int list_count(CljObject *list) {
     if (!list || list->type != CLJ_LIST) return 0;
     
     int count = 0;
-    CljList *ld2 = as_list(list);
-    CljObject *current = ld2 ? ld2->head : NULL;
-    while (current) {
+    CljList *current = as_list(list);
+    while (current && current->head) {
         count++;
-        CljList *cn = as_list(current);
-        current = cn ? cn->tail : NULL;
+        current = as_list(current->tail);
     }
     return count;
 }
@@ -46,7 +45,7 @@ CljObject* list_from_stack(CljObject **stack, int count) {
         node_list->head = stack[i];
         node_list->tail = prev;
         prev = node;
-        if (stack[i]) retain(stack[i]);
+        if (stack[i]) RETAIN(stack[i]);
     }
     return prev ? prev : clj_nil();
 }

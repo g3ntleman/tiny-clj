@@ -110,8 +110,8 @@ void memory_test_end(const char *test_name);
     // No-op macros for release builds
     #define CREATE(obj) ((void)0)
     #define DEALLOC(obj) ((void)0)
-    #define RETAIN(obj) ((void)0)
-    #define RELEASE(obj) ((void)0)
+    #define RETAIN(obj) ({ typeof(obj) _tmp = (obj); retain(_tmp); _tmp; })
+    #define RELEASE(obj) ({ typeof(obj) _tmp = (obj); release(_tmp); _tmp; })
     #define AUTORELEASE(obj) (obj)
     
     // No-op test macros for release builds

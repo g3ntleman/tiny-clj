@@ -153,6 +153,63 @@ RELEASE(obj);   // Reference decrement
 
 This ensures consistent memory profiling and better tracking of all memory operations throughout the codebase.
 
+### RETAIN/RELEASE Macros Return Values
+
+**Important:** The `RETAIN()` and `RELEASE()` macros **return the object** for fluent usage:
+
+```c
+// ✅ CORRECT: Compact and fluent
+CljObject* nth2(CljObject *vec, CljObject *idx) {
+    if (!v || i < 0 || i >= v->count) return NULL;
+    return RETAIN(v->data[i]);  // Returns retained object
+}
+
+// ❌ VERBOSE: Don't do this
+CljObject* nth2(CljObject *vec, CljObject *idx) {
+    if (!v || i < 0 || i >= v->count) return NULL;
+    RETAIN(v->data[i]);
+    return v->data[i];  // Unnecessary extra line
+}
+
+// ✅ CORRECT: Fluent chaining
+if (is_mutable) {
+    v->data[i] = (RETAIN(val), val);
+    return RETAIN(vec);  // Both retain and return in one expression
+}
+
+// ✅ CORRECT: Test and assign in one expression
+for (int i = 0; i < count; i++) {
+    CljObject *val = get_value(i);
+    if ((vec->data[i] = RETAIN(val))) {  // Assign and test in one line
+      vec->count++;
+    }
+}
+```
+
+**Macro Definition:**
+```c
+// DEBUG build (with profiling)
+#define RETAIN(obj) ({ \
+    typeof(obj) _tmp = (obj); \
+    memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
+    retain(_tmp); \
+    _tmp; \  // Returns the object
+})
+
+// RELEASE build (optimized)
+#define RETAIN(obj) ({ \
+    typeof(obj) _tmp = (obj); \
+    retain(_tmp); \
+    _tmp; \  // Returns the object
+})
+```
+
+**Benefits:**
+- **Concise code** - One line instead of two
+- **Better readability** - Intent is clearer
+- **Fluent API** - Enables chaining patterns
+- **Consistent style** - Same pattern as `AUTORELEASE()`
+
 ## API Memory Policy
 
 ### Public API Functions

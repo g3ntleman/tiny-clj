@@ -81,8 +81,7 @@ int vector_push_inplace(CljObject *vec, CljObject *item) {
     v->capacity = newcap;
   }
   v->data[v->count++] = item;
-  if (!is_weak_vec(vec))
-    retain(item);
+  if (!is_weak_vec(vec)) RETAIN(item);
   return 1;
 }
 
@@ -106,7 +105,7 @@ CljObject *vector_conj(CljObject *vec, CljObject *item) {
   for (int i = 0; i < old_vec->count; i++) {
     if (old_vec->data[i]) {
       new_vec->data[i] = old_vec->data[i];
-      retain(old_vec->data[i]);
+      RETAIN(old_vec->data[i]);
     }
   }
   // set count for existing elements (including possible NULL holes)
@@ -144,7 +143,7 @@ CljObject* vector_from_stack(CljObject **stack, int count) {
     if (!vec) return NULL;
     for (int i = 0; i < count; i++) {
         vec->data[i] = stack[i];
-        if (stack[i]) retain(stack[i]);
+        if (stack[i]) RETAIN(stack[i]);
     }
     vec->count = count;
     return vec_obj;

@@ -196,7 +196,7 @@ void seq_release(CljObject *seq_obj) {
     if (!seq) return;
     
     if (seq->container) {
-        release(seq->container);
+        RELEASE(seq->container);
     }
     
     if (seq->state) {
@@ -227,8 +227,7 @@ CljObject* seq_first(CljObject *seq_obj) {
         case CLJ_LIST: {
             ListIteratorState *state = (ListIteratorState*)seq->state;
             if (state->current) {
-                RETAIN(state->current);
-                return state->current;
+                return RETAIN(state->current);
             }
             break;
         }
@@ -236,8 +235,7 @@ CljObject* seq_first(CljObject *seq_obj) {
         case CLJ_VECTOR: {
             VectorIteratorState *state = (VectorIteratorState*)seq->state;
             if (state->index < state->count && state->data[state->index]) {
-                RETAIN(state->data[state->index]);
-                return state->data[state->index];
+                return RETAIN(state->data[state->index]);
             }
             break;
         }

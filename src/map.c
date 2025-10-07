@@ -3,6 +3,7 @@
 #include "kv_macros.h"
 #include "runtime.h"
 #include "vector.h"
+#include "memory_hooks.h"
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -71,8 +72,8 @@ void map_assoc(CljObject *map, CljObject *key, CljObject *value) {
     if (k && clj_equal(k, key)) {
       CljObject *old_value = map_data->data[2 * i + 1];
       if (old_value)
-        release(old_value);
-      map_data->data[2 * i + 1] = value ? (retain(value), value) : NULL;
+        RELEASE(old_value);
+      map_data->data[2 * i + 1] = value ? (RETAIN(value), value) : NULL;
       return;
     }
   }
@@ -93,8 +94,8 @@ void map_assoc(CljObject *map, CljObject *key, CljObject *value) {
     map_data->capacity = new_capacity;
   }
   int idx = map_data->count;
-  map_data->data[2 * idx] = key ? (retain(key), key) : NULL;
-  map_data->data[2 * idx + 1] = value ? (retain(value), value) : NULL;
+  map_data->data[2 * idx] = key ? (RETAIN(key), key) : NULL;
+  map_data->data[2 * idx + 1] = value ? (RETAIN(value), value) : NULL;
   map_data->count++;
 }
 
@@ -110,9 +111,7 @@ CljObject *map_keys(CljObject *map) {
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
     CljObject *key = KV_KEY(map_data->data, i);
-    if (key) {
-      keys_vec->data[i] = key;
-      retain(key);
+    if ((keys_vec->data[i] = RETAIN(key))) {
       keys_vec->count++;
     }
   }
@@ -131,9 +130,7 @@ CljObject *map_vals(CljObject *map) {
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
     CljObject *val = KV_VALUE(map_data->data, i);
-    if (val) {
-      vals_vec->data[i] = val;
-      retain(val);
+    if ((vals_vec->data[i] = RETAIN(val))) {
       vals_vec->count++;
     }
   }
@@ -162,8 +159,8 @@ void map_put(CljObject *map, CljObject *key, CljObject *value) {
   map_data->data[map_data->count * 2] = key;
   map_data->data[map_data->count * 2 + 1] = value;
   map_data->count++;
-  retain(key);
-  retain(value);
+  RETAIN(key);
+  RETAIN(value);
 }
 
 void map_foreach(CljObject *map, void (*func)(CljObject *, CljObject *)) {
@@ -196,9 +193,9 @@ void map_remove(CljObject *map, CljObject *key) {
     CljObject *old_key = KV_KEY(map_data->data, index);
     CljObject *old_value = KV_VALUE(map_data->data, index);
     if (old_key)
-      release(old_key);
+      RELEASE(old_key);
     if (old_value)
-      release(old_value);
+      RELEASE(old_value);
     for (int j = index; j < map_data->count - 1; j++) {
       KV_SET_PAIR(map_data->data, j, KV_KEY(map_data->data, j + 1),
                   KV_VALUE(map_data->data, j + 1));
@@ -214,12 +211,12 @@ CljObject* map_from_stack(CljObject **pairs, int pair_count) {
     CljObject *map = make_map(pair_count * 2);
     CljMap *map_data = as_map(map);
     if (!map_data) return NULL;
-    for (int i = 0; i < pair_count; i++) {
-        map_data->data[i * 2] = pairs[i * 2];
-        map_data->data[i * 2 + 1] = pairs[i * 2 + 1];
-        if (pairs[i * 2]) retain(pairs[i * 2]);
-        if (pairs[i * 2 + 1]) retain(pairs[i * 2 + 1]);
-    }
-    map_data->count = pair_count;
+      for (int i = 0; i < pair_count; i++) {
+          map_data->data[i * 2] = pairs[i * 2];
+          map_data->data[i * 2 + 1] = pairs[i * 2 + 1];
+          if (pairs[i * 2]) RETAIN(pairs[i * 2]);
+          if (pairs[i * 2 + 1]) RETAIN(pairs[i * 2 + 1]);
+      }
+      map_data->count = pair_count;
     return map;
 }

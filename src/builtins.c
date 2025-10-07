@@ -4,14 +4,14 @@
 #include "vector.h"
 #include "builtins.h"
 #include "runtime.h"
+#include "memory_hooks.h"
 
 CljObject* nth2(CljObject *vec, CljObject *idx) {
     if (!vec || !idx || vec->type != CLJ_VECTOR || idx->type != CLJ_INT) return NULL;
     int i = idx->as.i;
     CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) return NULL;
-    retain(v->data[i]);
-    return v->data[i];
+    return RETAIN(v->data[i]);
 }
 
 CljObject* conj2(CljObject *vec, CljObject *val) {
@@ -26,9 +26,8 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
             v->data = (CljObject**)newmem;
             v->capacity = newcap;
         }
-        v->data[v->count++] = (retain(val), val);
-        retain(vec);
-        return vec;
+        v->data[v->count++] = (RETAIN(val), val);
+        return RETAIN(vec);
     } else {
         int need = v->count + 1;
         int newcap = v->capacity;
@@ -37,10 +36,10 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
         if (!copy) return NULL;
         CljPersistentVector *c = as_vector(copy);
         for (int i = 0; i < v->count; ++i) {
-            c->data[i] = (retain(v->data[i]), v->data[i]);
+            c->data[i] = (RETAIN(v->data[i]), v->data[i]);
         }
         c->count = v->count;
-        c->data[c->count++] = (retain(val), val);
+        c->data[c->count++] = (RETAIN(val), val);
         return copy;
     }
 }
@@ -52,20 +51,19 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
     if (!v || i < 0 || i >= v->count) return NULL;
     int is_mutable = v->mutable_flag;
     if (is_mutable) {
-        if (v->data[i]) release(v->data[i]);
-        v->data[i] = (retain(val), val);
-        retain(vec);
-        return vec;
+        if (v->data[i]) RELEASE(v->data[i]);
+        v->data[i] = (RETAIN(val), val);
+        return RETAIN(vec);
     } else {
         CljObject *copy = make_vector(v->capacity, 0);
         if (!copy) return NULL;
         CljPersistentVector *c = as_vector(copy);
         for (int j = 0; j < v->count; ++j) {
-            c->data[j] = (retain(v->data[j]), v->data[j]);
+            c->data[j] = (RETAIN(v->data[j]), v->data[j]);
         }
         c->count = v->count;
-        if (c->data[i]) release(c->data[i]);
-        c->data[i] = (retain(val), val);
+        if (c->data[i]) RELEASE(c->data[i]);
+        c->data[i] = (RETAIN(val), val);
         return copy;
     }
 }
@@ -74,9 +72,9 @@ CljObject* native_if(CljObject **args, int argc) {
     if (argc < 2) return clj_nil();
     CljObject *cond = args[0];
     if (cond == clj_true()) {
-        return (retain(args[1]), args[1]);
+        return (RETAIN(args[1]), args[1]);
     } else if (argc > 2) {
-        return (retain(args[2]), args[2]);
+        return (RETAIN(args[2]), args[2]);
     } else {
         return clj_nil();
     }
