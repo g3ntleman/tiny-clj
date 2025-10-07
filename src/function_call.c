@@ -296,7 +296,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     return head ? (RETAIN(head), head) : clj_nil();
 }
 
-// Simplified body evaluation (placeholder for real eval implementation)
+// Simplified body evaluation (basic implementation)
 /** @brief Evaluate function body expressions */
 CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st) {
     if (!body) return clj_nil();
