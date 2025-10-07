@@ -40,21 +40,23 @@ static void test_teardown(void) {
 static char *test_basic_creation(void) {
   printf("\n=== Testing Basic Object Creation ===\n");
 
-  // Test integer creation
-  CljObject *int_obj = make_int(42);
-  mu_assert_obj_type(int_obj, CLJ_INT);
-  mu_assert_obj_int(int_obj, 42);
+  CLJVALUE_POOL_SCOPE(pool) {
+    // Test integer creation
+    CljObject *int_obj = make_int(42);
+    mu_assert_obj_type(int_obj, CLJ_INT);
+    mu_assert_obj_int(int_obj, 42);
 
-  // Test string creation
-  CljObject *str_obj = make_string("hello");
-  mu_assert_obj_type(str_obj, CLJ_STRING);
-  mu_assert_obj_string(str_obj, "hello");
-  
-  // Test float creation
-  CljObject *float_obj = make_float(3.14);
-  mu_assert_obj_type(float_obj, CLJ_FLOAT);
-  
-  printf("✓ Basic object creation tests passed\n");
+    // Test string creation
+    CljObject *str_obj = make_string("hello");
+    mu_assert_obj_type(str_obj, CLJ_STRING);
+    mu_assert_obj_string(str_obj, "hello");
+    
+    // Test float creation
+    CljObject *float_obj = make_float(3.14);
+    mu_assert_obj_type(float_obj, CLJ_FLOAT);
+    
+    printf("✓ Basic object creation tests passed\n");
+  }
   return 0;
 }
 
@@ -109,12 +111,14 @@ static char *test_empty_vector_singleton(void) {
 }
 
 static char *test_empty_map_singleton(void) {
-  // make_map(0) returns the empty-map singleton
-  CljObject *m0 = make_map(0);
-  mu_assert_obj_ptr_equal(m0, make_map(0));
-  mu_assert_obj_ptr_equal(m0, make_map(-1));
+  CLJVALUE_POOL_SCOPE(pool) {
+    // make_map(0) returns the empty-map singleton
+    CljObject *m0 = make_map(0);
+    mu_assert_obj_ptr_equal(m0, make_map(0));
+    mu_assert_obj_ptr_equal(m0, make_map(-1));
 
-  printf("✓ Empty map singleton tests passed\n");
+    printf("✓ Empty map singleton tests passed\n");
+  }
   return 0;
 }
 
@@ -125,47 +129,51 @@ static char *test_empty_map_singleton(void) {
 static char *test_parser_basic_types(void) {
   printf("\n=== Testing Parser Basic Types ===\n");
 
-  EvalState st;
-  memset(&st, 0, sizeof(EvalState));
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
 
-  // Test integer parsing
-  CljObject *int_result = parse("42", &st);
-  mu_assert_obj_type(int_result, CLJ_INT);
-  mu_assert_obj_int(int_result, 42);
+    // Test integer parsing
+    CljObject *int_result = parse("42", &st);
+    mu_assert_obj_type(int_result, CLJ_INT);
+    mu_assert_obj_int(int_result, 42);
 
-  // Test float parsing
-  CljObject *float_result = parse("3.14", &st);
-  mu_assert_obj_type(float_result, CLJ_FLOAT);
+    // Test float parsing
+    CljObject *float_result = parse("3.14", &st);
+    mu_assert_obj_type(float_result, CLJ_FLOAT);
 
-  // Test string parsing
-  CljObject *str_result = parse(R"("hello")", &st);
-  mu_assert_obj_type(str_result, CLJ_STRING);
+    // Test string parsing
+    CljObject *str_result = parse(R"("hello")", &st);
+    mu_assert_obj_type(str_result, CLJ_STRING);
 
-  // Test symbol parsing
-  CljObject *sym_result = parse("test-symbol", &st);
-  mu_assert_obj_type(sym_result, CLJ_SYMBOL);
+    // Test symbol parsing
+    CljObject *sym_result = parse("test-symbol", &st);
+    mu_assert_obj_type(sym_result, CLJ_SYMBOL);
 
-  printf("✓ Parser basic types tests passed\n");
+    printf("✓ Parser basic types tests passed\n");
+  }
   return 0;
 }
 
 static char *test_parser_collections(void) {
-  EvalState st;
-  memset(&st, 0, sizeof(EvalState));
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
 
-  // Test vector parsing
-  CljObject *vec_result = parse("[1 2 3]", &st);
-  mu_assert_obj_type(vec_result, CLJ_VECTOR);
+    // Test vector parsing
+    CljObject *vec_result = parse("[1 2 3]", &st);
+    mu_assert_obj_type(vec_result, CLJ_VECTOR);
 
-  // Test list parsing
-  CljObject *list_result = parse("(1 2 3)", &st);
-  mu_assert_obj_type(list_result, CLJ_LIST);
+    // Test list parsing
+    CljObject *list_result = parse("(1 2 3)", &st);
+    mu_assert_obj_type(list_result, CLJ_LIST);
 
-  // Test map parsing
-  CljObject *map_result = parse("{:a 1 :b 2}", &st);
-  mu_assert_obj_type(map_result, CLJ_MAP);
+    // Test map parsing
+    CljObject *map_result = parse("{:a 1 :b 2}", &st);
+    mu_assert_obj_type(map_result, CLJ_MAP);
 
-  printf("✓ Parser collections tests passed\n");
+    printf("✓ Parser collections tests passed\n");
+  }
   return 0;
 }
 
