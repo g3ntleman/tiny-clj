@@ -17,6 +17,7 @@ CljObject *SYM_LOOP = NULL;
 CljObject *SYM_RECUR = NULL;
 CljObject *SYM_THROW = NULL;
 CljObject *SYM_FINALLY = NULL;
+CljObject *SYM_NS = NULL;
 
 // Builtin-Funktionen
 CljObject *SYM_PLUS = NULL;
@@ -63,6 +64,7 @@ void init_special_symbols() {
     SYM_RECUR = intern_symbol_global("recur");
     SYM_THROW = intern_symbol_global("throw");
     SYM_FINALLY = intern_symbol_global("finally");
+    SYM_NS = intern_symbol_global("ns");
     
     // Builtin-Funktionen
     SYM_PLUS = intern_symbol_global("+");

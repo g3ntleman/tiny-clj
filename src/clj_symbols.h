@@ -20,6 +20,7 @@ extern CljObject *SYM_LOOP;
 extern CljObject *SYM_RECUR;
 extern CljObject *SYM_THROW;
 extern CljObject *SYM_FINALLY;
+extern CljObject *SYM_NS;
 
 // Globale Symbol-Pointer für Builtin-Funktionen
 extern CljObject *SYM_PLUS;

@@ -19,6 +19,7 @@ CljObject* eval_println(CljObject *list, CljObject *env);
 
 // Definition und Funktionen
 CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st);
+CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st);
 CljObject* eval_list_function(CljObject *list, CljObject *env);
 CljObject* eval_fn(CljObject *list, CljObject *env);
 CljObject* eval_symbol(CljObject *symbol, EvalState *st);

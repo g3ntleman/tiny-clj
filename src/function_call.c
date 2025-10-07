@@ -362,6 +362,10 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return eval_def(list, env, st);
     }
     
+    if (sym_is(op, "ns")) {
+        return eval_ns(list, env, st);
+    }
+    
     if (sym_is(op, "fn")) {
         return eval_fn(list, env);
     }
@@ -541,6 +545,29 @@ CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
     }
     
     return AUTORELEASE(value);
+}
+
+CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st) {
+    (void)env;  // Not used
+    if (!list || !st) return clj_nil();
+    
+    // Get namespace name (first argument) - use list_get_element like eval_def
+    CljObject *ns_name_obj = list_get_element(list, 1);
+    if (!ns_name_obj || ns_name_obj->type != CLJ_SYMBOL) {
+        eval_error("ns expects a symbol", st);
+        return clj_nil();
+    }
+    
+    CljSymbol *ns_sym = as_symbol(ns_name_obj);
+    if (!ns_sym || !ns_sym->name) {
+        eval_error("ns symbol has no name", st);
+        return clj_nil();
+    }
+    
+    // Switch to namespace (creates if not exists)
+    evalstate_set_ns(st, ns_sym->name);
+    
+    return clj_nil();
 }
 
 CljObject* eval_fn(CljObject *list, CljObject *env) {
