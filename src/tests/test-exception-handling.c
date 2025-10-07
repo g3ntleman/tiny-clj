@@ -11,6 +11,7 @@
 #include "function_call.h"
 #include "clj_symbols.h"
 #include "clj_parser.h"
+#include "test-utils.h"
 #include <string.h>
 
 static EvalState *test_state = NULL;
@@ -286,18 +287,8 @@ static char *test_eval_string_exception_propagation(void) {
     init_special_symbols();
     
     // Test that eval_string throws exception for invalid symbols
-    TRY {
-        CljObject *result = eval_string("invalid-symbol", st);
-        mu_assert("Should not reach here - exception should be thrown", false);
-    } CATCH(ex) {
-        // Exception should be caught here
-        mu_assert("Exception should be caught", ex != NULL);
-        mu_assert("Exception should have message", ex->message != NULL);
-        mu_assert("Exception message should contain 'Unable to resolve symbol'", 
-                  strstr(ex->message, "Unable to resolve symbol") != NULL);
-        mu_assert("Exception message should contain symbol name", 
-                  strstr(ex->message, "invalid-symbol") != NULL);
-    } END_TRY
+    mu_assert("Symbol resolution should throw exception", 
+              throws_exception(st, "invalid-symbol", NULL, "Unable to resolve symbol"));
     
     evalstate_free(st);
     return 0;
@@ -311,56 +302,14 @@ static char *test_eval_string_exception_propagation_with_ns(void) {
     evalstate_set_ns(st, "test.namespace");
     
     // Test that eval_string throws exception for invalid symbols in namespace
-    TRY {
-        CljObject *result = eval_string("undefined-var", st);
-        mu_assert("Should not reach here - exception should be thrown", false);
-    } CATCH(ex) {
-        // Exception should be caught here
-        mu_assert("Exception should be caught", ex != NULL);
-        mu_assert("Exception should have message", ex->message != NULL);
-        mu_assert("Exception message should contain 'Unable to resolve symbol'", 
-                  strstr(ex->message, "Unable to resolve symbol") != NULL);
-        mu_assert("Exception message should contain symbol name", 
-                  strstr(ex->message, "undefined-var") != NULL);
-    } END_TRY
+    mu_assert("Symbol resolution should throw exception", 
+              throws_exception(st, "undefined-var", NULL, "Unable to resolve symbol"));
     
     evalstate_free(st);
     return 0;
 }
 
-// Helper function to validate exception attributes
-static bool exception_matches(CLJException *ex, const char *expected_type, const char *expected_message_pattern) {
-    if (!ex) return false;
-    
-    // Check type (if provided)
-    if (expected_type && (!ex->type || strcmp(ex->type, expected_type) != 0)) {
-        return false;
-    }
-    
-    // Check message pattern (if provided)
-    if (expected_message_pattern && (!ex->message || strstr(ex->message, expected_message_pattern) == NULL)) {
-        return false;
-    }
-    
-    // Check that position exists (but don't check exact values)
-    if (!ex->file || strlen(ex->file) == 0 || ex->line <= 0) {
-        return false;
-    }
-    
-    return true;
-}
-
-// Helper function to test exception scenarios with TRY/CATCH
-static bool throws_exception(EvalState *st, const char *code, 
-                            const char *expected_type, 
-                            const char *expected_message_pattern) {
-    TRY {
-        CljObject *result = eval_string(code, st);
-        return false; // No exception thrown
-    } CATCH(ex) {
-        return exception_matches(ex, expected_type, expected_message_pattern);
-    } END_TRY
-}
+// Helper functions moved to test-utils.c
 
 static char *test_comprehensive_exception_types(void) {
     EvalState *st = evalstate_new();
