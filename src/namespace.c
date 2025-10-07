@@ -95,7 +95,7 @@ CljNamespace* ns_find(const char *name) {
     
     CljNamespace *cur = ns_registry;
     while (cur) {
-        if (cur->name && cur->name->type == CLJ_SYMBOL) {
+        if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
             CljSymbol *sym = as_symbol(cur->name);
             if (strcmp(sym->name, name) == 0) {
                 return cur;
@@ -245,10 +245,10 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     
     // Use TRY/CATCH to handle exceptions
     TRY {
-        if (expr->type == CLJ_SYMBOL) {
+        if (is_type(expr, CLJ_SYMBOL)) {
             result = eval_symbol(expr, st);
             if (result) result = AUTORELEASE(result);
-        } else if (expr->type == CLJ_LIST) {
+        } else if (is_type(expr, CLJ_LIST)) {
             CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
             result = eval_list(expr, env, st);
             if (result) result = AUTORELEASE(result);
@@ -256,7 +256,8 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
             result = AUTORELEASE(expr);
         }
     } CATCH(ex) {
-        // Exception caught - return NULL
+        // Exception caught - re-throw to let caller handle it
+        throw_exception_formatted(ex->type, ex->file, ex->line, ex->col, "%s", ex->message);
         result = NULL;
     } END_TRY
     

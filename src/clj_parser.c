@@ -202,7 +202,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     EvalState *st = eval_state;  // Alias for macro compatibility
     TRY {
         // Handle lists with special forms (like ns, def, fn)
-        if (parsed_expr->type == CLJ_LIST) {
+        if (is_type(parsed_expr, CLJ_LIST)) {
             CljObject *env = (eval_state && eval_state->current_ns) ? eval_state->current_ns->mappings : NULL;
             result = eval_list(parsed_expr, env, eval_state);
             if (result) result = AUTORELEASE(result);
@@ -250,7 +250,8 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
         
         // Return result without autorelease (already retained)
     } CATCH(ex) {
-        // Exception caught - return NULL
+        // Exception caught - re-throw to let caller handle it
+        throw_exception_formatted(ex->type, ex->file, ex->line, ex->col, "%s", ex->message);
         result = NULL;
     } END_TRY
     

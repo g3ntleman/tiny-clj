@@ -199,11 +199,11 @@ void retain(CljObject *v) {
     // Singletons have no reference counting
     if (IS_PRIMITIVE_TYPE(v->type)) return;
     // Guard: empty vector/map singletons must not be retained
-    if (v->type == CLJ_VECTOR) {
+    if (is_type(v, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(v);
         if (vec && vec->base.rc == 0 && vec->data == NULL) return;
     }
-    if (v->type == CLJ_MAP) {
+    if (is_type(v, CLJ_MAP)) {
         CljMap *map = as_map(v);
         if (map && map->base.rc == 0 && map->data == NULL) return;
     }
@@ -229,11 +229,11 @@ void release(CljObject *v) {
         return;
     }
     // Guard: empty vector/map singletons must not be released
-    if (v->type == CLJ_VECTOR) {
+    if (is_type(v, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(v);
         if (vec && vec->base.rc == 0 && vec->data == NULL) return;
     }
-    if (v->type == CLJ_MAP) {
+    if (is_type(v, CLJ_MAP)) {
         CljMap *map = as_map(v);
         if (map && map->base.rc == 0 && map->data == NULL) return;
     }

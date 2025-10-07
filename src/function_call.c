@@ -169,19 +169,19 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
     if (!body) return clj_nil();
     
     // Simplified implementation - would normally evaluate the AST
-    if (body->type == CLJ_LIST) {
+    if (is_type(body, CLJ_LIST)) {
         // Evaluate list - create temporary list with replaced symbols
         return eval_list_with_param_substitution(body, params, values, param_count, closure_env);
     }
     
-    if (body->type == CLJ_SYMBOL) {
+    if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol - check parameters first
         for (int i = 0; i < param_count; i++) {
             if (params[i] && body == params[i]) {
                 return values[i] ? (RETAIN(values[i]), values[i]) : clj_nil();
             }
             // Also try name comparison for non-interned symbols
-            if (params[i] && params[i]->type == CLJ_SYMBOL && body->type == CLJ_SYMBOL) {
+            if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
                 CljSymbol *param_sym = as_symbol(params[i]);
                 CljSymbol *body_sym = as_symbol(body);
                 if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
@@ -190,7 +190,7 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
             }
         }
         // If not a parameter, try to resolve from closure_env (namespace map)
-        if (closure_env && closure_env->type == CLJ_MAP) {
+        if (closure_env && is_type(closure_env, CLJ_MAP)) {
             CljObject *resolved = map_get(closure_env, body);
             if (resolved) {
                 return resolved ? (RETAIN(resolved), resolved) : clj_nil();
@@ -253,7 +253,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
             resolved_op = values[i];
             break;
         }
-        if (params[i] && params[i]->type == CLJ_SYMBOL && op->type == CLJ_SYMBOL) {
+        if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(op, CLJ_SYMBOL)) {
             CljSymbol *param_sym = as_symbol(params[i]);
             CljSymbol *op_sym = as_symbol(op);
             if (param_sym && op_sym && strcmp(param_sym->name, op_sym->name) == 0) {
@@ -264,12 +264,12 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     // If not found in parameters, try closure_env
-    if (!resolved_op && op->type == CLJ_SYMBOL && closure_env && closure_env->type == CLJ_MAP) {
+    if (!resolved_op && is_type(op, CLJ_SYMBOL) && closure_env && is_type(closure_env, CLJ_MAP)) {
         resolved_op = map_get(closure_env, op);
     }
     
     // If op was resolved to a function, call it
-    if (resolved_op && resolved_op->type == CLJ_FUNC) {
+    if (resolved_op && is_type(resolved_op, CLJ_FUNC)) {
         // Count arguments
         int total_count = list_count(list);
         int argc = total_count - 1;
@@ -302,12 +302,12 @@ CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st) {
     if (!body) return clj_nil();
     
     // Simplified implementation - would normally evaluate the AST
-    if (body->type == CLJ_LIST) {
+    if (is_type(body, CLJ_LIST)) {
         // Evaluate list
         return eval_list(body, env, st);
     }
     
-    if (body->type == CLJ_SYMBOL) {
+    if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol
         return env_get_stack(env, body);
     }
@@ -419,13 +419,13 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     }
     
     // Fallback: try to resolve symbol and call as function
-    if (op->type == CLJ_SYMBOL) {
+    if (is_type(op, CLJ_SYMBOL)) {
         // Resolve the symbol to get the function
         CljObject *fn = eval_symbol(op, st);
         if (!fn) return clj_nil();
         
         // Check if it's a function
-        if (fn->type == CLJ_FUNC) {
+        if (is_type(fn, CLJ_FUNC)) {
             // Count arguments
             int total_count = list_count(list);
             int argc = total_count - 1; // -1 for the function symbol itself
@@ -529,7 +529,7 @@ CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
     
     // Evaluate the value expression
     CljObject *value = NULL;
-    if (value_expr->type == CLJ_LIST) {
+    if (is_type(value_expr, CLJ_LIST)) {
         value = eval_list(value_expr, env, st);
     } else {
         value = eval_expr_simple(value_expr, st);
@@ -589,7 +589,7 @@ CljObject* eval_fn(CljObject *list, CljObject *env) {
     
     // Convert parameter list/vector to array
     int param_count = 0;
-    if (params_list->type == CLJ_VECTOR) {
+    if (is_type(params_list, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(params_list);
         param_count = vec ? vec->count : 0;
     } else {
@@ -600,7 +600,7 @@ CljObject* eval_fn(CljObject *list, CljObject *env) {
     CljObject **params = alloc_obj_array(param_count, params_stack);
     
     for (int i = 0; i < param_count; i++) {
-        if (params_list->type == CLJ_VECTOR) {
+        if (is_type(params_list, CLJ_VECTOR)) {
             CljPersistentVector *vec = as_vector(params_list);
             params[i] = vec->data[i];
         } else {
@@ -643,7 +643,8 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
     }
     
     // Fehler: Symbol kann nicht aufgelöst werden
-    // Don't throw exception - return NULL instead
+    const char *name = sym ? sym->name : "unknown";
+    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
     return NULL;
 }
 
@@ -671,16 +672,16 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
     CljObject *arg = eval_arg(list, 1, env);
     if (!arg) return AUTORELEASE(make_int(0));
     
-    if (arg->type == CLJ_NIL) {
+    if (is_type(arg, CLJ_NIL)) {
         return AUTORELEASE(make_int(0)); // nil has count 0
     }
     
-    if (arg->type == CLJ_VECTOR) {
+    if (is_type(arg, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(arg);
-        return vec ? AUTORELEASE(make_int(vec->count)) : AUTORELEASE(make_int(0));
+        return AUTORELEASE(vec ? make_int(vec->count) : make_int(0));
     }
     
-    if (arg->type == CLJ_LIST) {
+    if (is_type(arg, CLJ_LIST)) {
         CljList *list_data = as_list(arg);
         int count = 0;
         CljObject *current = list_data ? list_data->head : NULL;
@@ -692,12 +693,12 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
         return AUTORELEASE(make_int(count));
     }
     
-    if (arg->type == CLJ_MAP) {
+    if (is_type(arg, CLJ_MAP)) {
         CljMap *map = as_map(arg);
-        return map ? AUTORELEASE(make_int(map->count)) : AUTORELEASE(make_int(0));
+        return AUTORELEASE(map ? make_int(map->count) : make_int(0));
     }
     
-    if (arg->type == CLJ_STRING) {
+    if (is_type(arg, CLJ_STRING)) {
         return AUTORELEASE(make_int(strlen((char*)arg->as.data)));
     }
     
@@ -767,7 +768,7 @@ CljObject* eval_seq(CljObject *list, CljObject *env) {
     if (!arg) return clj_nil();
     
     // If argument is already nil, return nil
-    if (arg->type == CLJ_NIL) {
+    if (is_type(arg, CLJ_NIL)) {
         return clj_nil();
     }
     
@@ -777,7 +778,7 @@ CljObject* eval_seq(CljObject *list, CljObject *env) {
     }
     
     // For lists, return as-is (lists are already sequences)
-    if (arg->type == CLJ_LIST) {
+    if (is_type(arg, CLJ_LIST)) {
         return arg ? (RETAIN(arg), arg) : clj_nil();
     }
     

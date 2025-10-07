@@ -36,8 +36,16 @@ static char* test_eval_string_error_handling() {
     init_special_symbols();
     
     // Test invalid syntax - should throw an exception
-    CljObject *result = eval_string("invalid-syntax", eval_state);
-    mu_assert("Should handle invalid syntax gracefully", result == NULL);
+    // Use TRY/CATCH to test exception handling
+    EvalState *st = eval_state;  // Alias for macro compatibility
+    TRY {
+        CljObject *result = eval_string("invalid-syntax", eval_state);
+        mu_assert("Should not reach here - exception should be thrown", false);
+    } CATCH(ex) {
+        // Exception should be caught here
+        mu_assert("Exception should be caught", ex != NULL);
+        mu_assert("Exception should have message", ex->message != NULL);
+    } END_TRY
     
     // Test NULL input
     CljObject *null_result = eval_string(NULL, eval_state);
