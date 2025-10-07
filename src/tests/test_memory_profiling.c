@@ -12,7 +12,22 @@
 #include "map.h"
 #include "function_call.h"
 #include "clj_symbols.h"
+#include "namespace.h"
 #include <stdio.h>
+#include <time.h>
+
+// ============================================================================
+// BENCHMARK HELPERS
+// ============================================================================
+
+#define BENCHMARK_ITERATIONS_SMALL  1000
+#define BENCHMARK_ITERATIONS_MEDIUM 10000
+
+static double get_time_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
+}
 
 // ============================================================================
 // MEMORY PROFILING DEMONSTRATION TESTS
@@ -337,19 +352,173 @@ static char *test_memory_benchmark_large_maps(void) {
 }
 
 // ============================================================================
+// PERFORMANCE + MEMORY BENCHMARKS
+// ============================================================================
+
+static char *benchmark_vector_iteration_with_memory(void) {
+    printf("\n=== Performance+Memory: Vector Iteration ===\n");
+    
+    MEMORY_TEST_START("Vector Iteration Performance");
+    
+    // Create test vector
+    CljObject *vec = make_vector(100, 1);
+    CljPersistentVector *vec_data = as_vector(vec);
+    for (int i = 0; i < 100; i++) {
+        vec_data->data[i] = make_int(i);
+    }
+    vec_data->count = 100;
+    
+    // Direct iteration benchmark
+    double start = get_time_ms();
+    long sum = 0;
+    for (int iter = 0; iter < BENCHMARK_ITERATIONS_SMALL; iter++) {
+        for (int i = 0; i < 100; i++) {
+            CljObject *obj = vec_data->data[i];
+            if (obj && obj->type == CLJ_INT) {
+                sum += obj->as.i;
+            }
+        }
+    }
+    double direct_time = get_time_ms() - start;
+    
+    // Seq iteration benchmark
+    start = get_time_ms();
+    sum = 0;
+    for (int iter = 0; iter < BENCHMARK_ITERATIONS_SMALL; iter++) {
+        SeqIterator it;
+        seq_iter_init(&it, vec);
+        while (!seq_iter_empty(&it)) {
+            CljObject *obj = seq_iter_first(&it);
+            if (obj && obj->type == CLJ_INT) {
+                sum += obj->as.i;
+            }
+            seq_iter_next(&it);
+        }
+    }
+    double seq_time = get_time_ms() - start;
+    
+    release(vec);
+    
+    printf("  Direct iteration: %.2f ms (%.0f ops/sec)\n", 
+           direct_time, (BENCHMARK_ITERATIONS_SMALL * 100) / (direct_time / 1000.0));
+    printf("  Seq iteration:    %.2f ms (%.0f ops/sec)\n", 
+           seq_time, (BENCHMARK_ITERATIONS_SMALL * 100) / (seq_time / 1000.0));
+    printf("  Overhead: %.1fx\n", seq_time / direct_time);
+    
+    MEMORY_TEST_END("Vector Iteration Performance");
+    
+    printf("✓ Vector iteration benchmark passed\n");
+    return 0;
+}
+
+static char *benchmark_map_lookup_with_memory(void) {
+    printf("\n=== Performance+Memory: Map Lookup ===\n");
+    
+    MEMORY_TEST_START("Map Lookup Performance");
+    
+    // Create test map
+    CljObject *map = make_map(100);
+    CljObject *keys[10];
+    for (int i = 0; i < 10; i++) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "key-%d", i);
+        keys[i] = make_string(buf);
+        CljObject *val = make_int(i * 10);
+        map_assoc(map, keys[i], val);
+        release(val);
+    }
+    
+    // Benchmark map lookups
+    double start = get_time_ms();
+    long sum = 0;
+    for (int iter = 0; iter < BENCHMARK_ITERATIONS_MEDIUM; iter++) {
+        for (int i = 0; i < 10; i++) {
+            CljObject *result = map_get(map, keys[i]);
+            if (result && result->type == CLJ_INT) {
+                sum += result->as.i;
+            }
+        }
+    }
+    double elapsed = get_time_ms() - start;
+    
+    double lookups_per_sec = (BENCHMARK_ITERATIONS_MEDIUM * 10) / (elapsed / 1000.0);
+    printf("  Map lookups: %.2f ms (%.0f lookups/sec)\n", elapsed, lookups_per_sec);
+    
+    // Cleanup
+    for (int i = 0; i < 10; i++) {
+        release(keys[i]);
+    }
+    release(map);
+    
+    MEMORY_TEST_END("Map Lookup Performance");
+    
+    printf("✓ Map lookup benchmark passed\n");
+    return 0;
+}
+
+static char *benchmark_symbol_lookup_with_memory(void) {
+    printf("\n=== Performance+Memory: Symbol Lookup ===\n");
+    
+    MEMORY_TEST_START("Symbol Lookup Performance");
+    
+    // Create test environment
+    EvalState *st = evalstate_new();
+    init_special_symbols();
+    
+    // Define test variables
+    for (int i = 0; i < 10; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "bench-%d", i);
+        CljObject *sym = intern_symbol(NULL, name);
+        CljObject *val = make_int(i * 10);
+        ns_define(st, sym, val);
+    }
+    
+    // Lookup symbol for benchmarking
+    CljObject *lookup_sym = intern_symbol(NULL, "bench-5");
+    
+    // Benchmark symbol lookups
+    double start = get_time_ms();
+    long sum = 0;
+    for (int iter = 0; iter < BENCHMARK_ITERATIONS_MEDIUM; iter++) {
+        CljObject *result = ns_resolve(st, lookup_sym);
+        if (result && result->type == CLJ_INT) {
+            sum += result->as.i;
+        }
+    }
+    double elapsed = get_time_ms() - start;
+    
+    double lookups_per_sec = BENCHMARK_ITERATIONS_MEDIUM / (elapsed / 1000.0);
+    printf("  Symbol lookups: %.2f ms (%.0f lookups/sec)\n", elapsed, lookups_per_sec);
+    
+    MEMORY_TEST_END("Symbol Lookup Performance");
+    
+    printf("✓ Symbol lookup benchmark passed\n");
+    return 0;
+}
+
+// ============================================================================
 // TEST SUITE REGISTRY
 // ============================================================================
 
 static char *all_memory_profiling_tests(void) {
+    // Memory profiling tests
     mu_run_test(test_basic_object_creation_memory);
     mu_run_test(test_vector_creation_memory);
     mu_run_test(test_map_creation_memory);
     mu_run_test(test_seq_iteration_memory);
     mu_run_test(test_for_loop_memory);
     mu_run_test(test_memory_comparison_analysis);
+    
+    // Memory benchmarks
     mu_run_test(test_memory_benchmark_small_objects);
     mu_run_test(test_memory_benchmark_large_vectors);
     mu_run_test(test_memory_benchmark_large_maps);
+    
+    // Performance + Memory benchmarks
+    mu_run_test(benchmark_vector_iteration_with_memory);
+    mu_run_test(benchmark_map_lookup_with_memory);
+    mu_run_test(benchmark_symbol_lookup_with_memory);
     
     return 0;
 }
