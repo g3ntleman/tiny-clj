@@ -21,7 +21,6 @@
 #define TEST_VECTOR_SIZE 3
 
 static char *test_seq_create_list(void) {
-    printf("\n=== Testing Seq Creation for Lists ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a test list using convenience function
@@ -39,12 +38,10 @@ static char *test_seq_create_list(void) {
         release(list);
     });
     
-    printf("✓ List seq creation test passed\n");
     return 0;
 }
 
 static char *test_seq_create_vector(void) {
-    printf("\n=== Testing Seq Creation for Vectors ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a test vector
@@ -69,12 +66,10 @@ static char *test_seq_create_vector(void) {
         release(vec);
     });
     
-    printf("✓ Vector seq creation test passed\n");
     return 0;
 }
 
 static char *test_seq_create_string(void) {
-    printf("\n=== Testing Seq Creation for Strings ===\n");
     
     // Create a test string
     CljObject *str = make_string("hello");
@@ -90,12 +85,10 @@ static char *test_seq_create_string(void) {
     seq_release(seq);
     release(str);
     
-    printf("✓ String seq creation test passed\n");
     return 0;
 }
 
 static char *test_seq_create_nil(void) {
-    printf("\n=== Testing Seq Creation for Nil ===\n");
     
     // Create sequence for nil - should return nil singleton
     CljObject *seq = seq_create(NULL);
@@ -105,7 +98,6 @@ static char *test_seq_create_nil(void) {
     
     // No seq_release needed for nil singleton
     
-    printf("✓ Nil seq creation test passed\n");
     return 0;
 }
 
@@ -114,7 +106,6 @@ static char *test_seq_create_nil(void) {
 // ============================================================================
 
 static char *test_seq_first(void) {
-    printf("\n=== Testing Seq First ===\n");
     
     // Test with vector
     CljObject *vec = make_vector(2, 1);
@@ -135,12 +126,10 @@ static char *test_seq_first(void) {
     seq_release(seq);
     release(vec);
     
-    printf("✓ Seq first test passed\n");
     return 0;
 }
 
 static char *test_seq_rest(void) {
-    printf("\n=== Testing Seq Rest ===\n");
     
     // Test with vector
     CljObject *vec = make_vector(3, 1);
@@ -166,12 +155,10 @@ static char *test_seq_rest(void) {
     seq_release(rest_seq);
     release(vec);
     
-    printf("✓ Seq rest test passed\n");
     return 0;
 }
 
 static char *test_seq_empty(void) {
-    printf("\n=== Testing Seq Empty ===\n");
     
     // Test with empty vector
     CljObject *vec = make_vector(0, 1);
@@ -183,12 +170,10 @@ static char *test_seq_empty(void) {
     seq_release(seq);
     release(vec);
     
-    printf("✓ Seq empty test passed\n");
     return 0;
 }
 
 static char *test_seq_count(void) {
-    printf("\n=== Testing Seq Count ===\n");
     
     // Test with vector
     CljObject *vec = make_vector(3, 1);
@@ -209,7 +194,6 @@ static char *test_seq_count(void) {
     seq_release(seq);
     release(vec);
     
-    printf("✓ Seq count test passed\n");
     return 0;
 }
 
@@ -218,7 +202,6 @@ static char *test_seq_count(void) {
 // ============================================================================
 
 static char *test_is_seqable(void) {
-    printf("\n=== Testing is_seqable ===\n");
     
     // Test seqable types
     mu_assert("list should be seqable", is_seqable(make_list()) == true);
@@ -231,7 +214,6 @@ static char *test_is_seqable(void) {
     mu_assert("float should not be seqable", is_seqable(make_float(3.14)) == false);
     mu_assert("bool should not be seqable", is_seqable(clj_true()) == false);
     
-    printf("✓ is_seqable test passed\n");
     return 0;
 }
 
@@ -240,7 +222,6 @@ static char *test_is_seqable(void) {
 // ============================================================================
 
 static char *test_seq_to_list(void) {
-    printf("\n=== Testing Seq to List Conversion ===\n");
     
     // Create vector with test data
     CljObject *vec = make_vector(2, 1);
@@ -268,12 +249,10 @@ static char *test_seq_to_list(void) {
     seq_release(seq);
     release(vec);
     
-    printf("✓ List and seq operations work the same way\n");
     return 0;
 }
 
 static char *test_empty_list_nil_semantics(void) {
-    printf("\n=== Testing Empty List and Nil Semantics ===\n");
     
     // Test 1: empty-list is () (nil)
     CljObject *empty_list = make_list();
@@ -301,7 +280,6 @@ static char *test_empty_list_nil_semantics(void) {
     
     release(empty_list);
     
-    printf("✓ Empty list and nil semantics test passed\n");
     return 0;
 }
 

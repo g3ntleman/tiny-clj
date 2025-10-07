@@ -72,7 +72,6 @@ static bool is_type(CljObject *obj, CljType expected_type) {
 // ============================================================================
 
 static char* test_evalstate_creation(void) {
-    printf("\n=== Testing EvalState creation ===\n");
     test_setup();
     
     mu_assert("EvalState should be created", global_eval_state != NULL);
@@ -84,7 +83,6 @@ static char* test_evalstate_creation(void) {
 }
 
 static char* test_evalstate_set_ns(void) {
-    printf("\n=== Testing evalstate_set_ns ===\n");
     test_setup();
     
     // Test setting namespace via C API
@@ -102,7 +100,6 @@ static char* test_evalstate_set_ns(void) {
 }
 
 static char* test_ns_get_or_create(void) {
-    printf("\n=== Testing ns_get_or_create ===\n");
     test_setup();
     
     // Test creating new namespace
@@ -125,7 +122,6 @@ static char* test_ns_get_or_create(void) {
 }
 
 static char* test_map_operations(void) {
-    printf("\n=== Testing map operations ===\n");
     test_setup();
     
     // Test map creation and basic operations
@@ -157,7 +153,6 @@ static char* test_map_operations(void) {
 }
 
 static char* test_namespace_isolation(void) {
-    printf("\n=== Testing namespace isolation (C API) ===\n");
     test_setup();
     
     // Test that different namespaces are isolated
@@ -187,7 +182,6 @@ static char* test_namespace_isolation(void) {
 }
 
 static char* test_eval_expr_simple_atoms(void) {
-    printf("\n=== Testing eval_expr_simple with atoms ===\n");
     test_setup();
     
     evalstate_set_ns(global_eval_state, "test.eval");
@@ -214,7 +208,6 @@ static char* test_eval_expr_simple_atoms(void) {
 }
 
 static char* test_eval_expr_simple_symbols(void) {
-    printf("\n=== Testing eval_expr_simple with symbols ===\n");
     test_setup();
     
     evalstate_set_ns(global_eval_state, "test.eval");
@@ -239,7 +232,6 @@ static char* test_eval_expr_simple_symbols(void) {
 // ============================================================================
 
 static char* test_ns_returns_nil(void) {
-    printf("\n=== Testing (ns) returns nil ===\n");
     test_setup();
     
     CljObject *result = eval_code("(ns test.namespace)");
@@ -252,7 +244,6 @@ static char* test_ns_returns_nil(void) {
 }
 
 static char* test_ns_switches_namespace(void) {
-    printf("\n=== Testing (ns) switches namespace ===\n");
     test_setup();
     
     // Start in 'user' namespace
@@ -279,7 +270,6 @@ static char* test_ns_switches_namespace(void) {
 }
 
 static char* test_ns_star_reflects_current_namespace(void) {
-    printf("\n=== Testing *ns* reflects current namespace ===\n");
     test_setup();
     
     // Check initial namespace
@@ -301,7 +291,6 @@ static char* test_ns_star_reflects_current_namespace(void) {
 }
 
 static char* test_namespace_variable_isolation(void) {
-    printf("\n=== Testing namespace variable isolation ===\n");
     test_setup();
     // Note: (def) is a built-in, doesn't need clojure.core
     
@@ -332,7 +321,6 @@ static char* test_namespace_variable_isolation(void) {
 }
 
 static char* test_ns_creates_namespace_if_not_exists(void) {
-    printf("\n=== Testing (ns) creates namespace if not exists ===\n");
     test_setup();
     
     // Switch to non-existent namespace
@@ -350,7 +338,6 @@ static char* test_ns_creates_namespace_if_not_exists(void) {
 }
 
 static char* test_ns_with_dots_in_name(void) {
-    printf("\n=== Testing (ns) with dots in name ===\n");
     test_setup();
     
     // Test namespace with multiple dots

@@ -19,7 +19,6 @@
 #define TEST_VECTOR_SIZE 5
 
 static char *test_singleton_memory_tracking(void) {
-    printf("\n=== Testing Singleton Memory Tracking ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create and release singleton objects (vectors, maps, lists)
@@ -37,12 +36,10 @@ static char *test_singleton_memory_tracking(void) {
         release(empty_list);
     });
     
-    printf("✓ Singleton memory tracking test passed\n");
     return 0;
 }
 
 static char *test_vector_memory_tracking(void) {
-    printf("\n=== Testing Vector Memory Tracking ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a vector
@@ -72,7 +69,6 @@ static char *test_vector_memory_tracking(void) {
         release(vec);
     });
     
-    printf("✓ Vector memory tracking test passed\n");
     return 0;
 }
 
@@ -97,7 +93,6 @@ static char *test_memory_efficiency_analysis(void) {
     printf("  • DEBUG builds: Full memory profiling enabled\n");
     printf("  • RELEASE builds: Zero overhead (all macros are no-ops)\n");
     
-    printf("✓ Memory efficiency analysis completed\n");
     return 0;
 }
 

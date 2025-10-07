@@ -38,7 +38,6 @@ static void test_teardown(void) {
 // ============================================================================
 
 static char *test_parse_basic_types(void) {
-  printf("\n=== Testing Parser Basic Types ===\n");
 
   CLJVALUE_POOL_SCOPE(pool) {
     EvalState st;
@@ -66,7 +65,6 @@ static char *test_parse_basic_types(void) {
     mu_assert_obj_not_null(sym_result);
     mu_assert_obj_type(sym_result, CLJ_SYMBOL);
 
-    printf("✓ Parser basic types tests passed\n");
   }
   return 0;
 }
@@ -91,7 +89,6 @@ static char *test_parse_collections(void) {
     mu_assert_obj_not_null(map_result);
     mu_assert_obj_type(map_result, CLJ_MAP);
 
-    printf("✓ Parser collections tests passed\n");
   }
   return 0;
 }
@@ -106,7 +103,6 @@ static char *test_parse_comments(void) {
     mu_assert_obj_not_null(result);
     mu_assert_obj_int(result, 42);
 
-    printf("✓ Parser comments tests passed\n");
   }
   return 0;
 }
@@ -121,7 +117,6 @@ static char *test_parse_metadata(void) {
     mu_assert_obj_not_null(result);
     mu_assert_obj_int(result, 42);
 
-    printf("✓ Parser metadata tests passed\n");
   }
   return 0;
 }
@@ -136,7 +131,6 @@ static char *test_parse_error_handling(void) {
     // Should not crash, but may return NULL or valid object
     mu_assert("Parser should not crash on invalid syntax", result == NULL || result != NULL);
 
-    printf("✓ Parser error handling tests passed\n");
   }
   return 0;
 }
@@ -152,7 +146,6 @@ static char *test_utf8_symbol_roundtrip(void) {
     mu_assert_obj_not_null(sym);
     mu_assert_obj_type(sym, CLJ_SYMBOL);
 
-    printf("✓ UTF-8 symbol roundtrip tests passed\n");
   }
   return 0;
 }
@@ -168,7 +161,6 @@ static char *test_utf8_string_roundtrip(void) {
     mu_assert_obj_not_null(str);
     mu_assert_obj_type(str, CLJ_STRING);
 
-    printf("✓ UTF-8 string roundtrip tests passed\n");
   }
   return 0;
 }
@@ -184,7 +176,6 @@ static char *test_utf8_delimiters(void) {
     mu_assert_obj_not_null(sym);
     mu_assert_obj_type(sym, CLJ_SYMBOL);
 
-    printf("✓ UTF-8 delimiters tests passed\n");
   }
   return 0;
 }

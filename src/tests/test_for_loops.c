@@ -71,7 +71,6 @@ static CljObject* make_dotimes_call(CljObject *var, int n, CljObject *body) {
 // ============================================================================
 
 static char *test_dotimes_basic(void) {
-    printf("\n=== Testing dotimes Basic Functionality ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a simple test: (dotimes [i 3] (println i))
@@ -128,12 +127,10 @@ static char *test_dotimes_basic(void) {
         RELEASE(dotimes_call);
     });
     
-    printf("✓ dotimes basic test passed\n");
     return 0;
 }
 
 static char *test_doseq_basic(void) {
-    printf("\n=== Testing doseq Basic Functionality ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a test vector
@@ -197,12 +194,10 @@ static char *test_doseq_basic(void) {
         // Memory balance is automatically checked by WITH_MEMORY_PROFILING after pool cleanup
     });
     
-    printf("✓ doseq basic test passed\n");
     return 0;
 }
 
 static char *test_for_basic(void) {
-    printf("\n=== Testing for Basic Functionality ===\n");
     
     WITH_MEMORY_PROFILING_EVAL({
         // Test for evaluation using parse_string + eval_parsed
@@ -212,12 +207,10 @@ static char *test_for_basic(void) {
         mu_assert("for should return a result", result != NULL);
     });
     
-    printf("✓ for basic test passed\n");
     return 0;
 }
 
 static char *test_dotimes_with_variable(void) {
-    printf("\n=== Testing dotimes with Variable Binding ===\n");
     
     WITH_MEMORY_PROFILING_EVAL({
         // Test dotimes evaluation using parse_string + eval_parsed
@@ -227,12 +220,10 @@ static char *test_dotimes_with_variable(void) {
         mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
     });
     
-    printf("✓ dotimes with variable binding test passed\n");
     return 0;
 }
 
 static char *test_for_with_simple_expression(void) {
-    printf("\n=== Testing for with Simple Expression ===\n");
     
     WITH_MEMORY_PROFILING_EVAL({
         // Test for evaluation using parse_string + eval_parsed
@@ -242,7 +233,6 @@ static char *test_for_with_simple_expression(void) {
         mu_assert("for with simple expression should return a result", result != NULL);
     });
     
-    printf("✓ for with simple expression test passed\n");
     return 0;
 }
 

@@ -38,7 +38,6 @@ static void test_teardown(void) {
 // ============================================================================
 
 static char *test_basic_creation(void) {
-  printf("\n=== Testing Basic Object Creation ===\n");
 
   CLJVALUE_POOL_SCOPE(pool) {
     // Test integer creation
@@ -55,7 +54,6 @@ static char *test_basic_creation(void) {
     CljObject *float_obj = make_float(3.14);
     mu_assert_obj_type(float_obj, CLJ_FLOAT);
     
-    printf("✓ Basic object creation tests passed\n");
   }
   return 0;
 }
@@ -66,12 +64,10 @@ static char *test_boolean_creation(void) {
   mu_assert_obj_type(bool_obj, CLJ_BOOL);
   mu_assert_obj_bool(bool_obj, true);
 
-  printf("✓ Boolean creation tests passed\n");
   return 0;
 }
 
 static char *test_singleton_objects(void) {
-  printf("\n=== Testing Singleton Objects ===\n");
 
   // Test nil singleton
   CljObject *nil1 = clj_nil();
@@ -87,7 +83,6 @@ static char *test_singleton_objects(void) {
   CljObject *false2 = clj_false();
   mu_assert_obj_ptr_equal(false1, false2);
 
-  printf("✓ Singleton objects tests passed\n");
   return 0;
 }
 
@@ -106,7 +101,6 @@ static char *test_empty_vector_singleton(void) {
   CljObject *parsed = parse("[]", &st);
   mu_assert_obj_ptr_equal(v0, parsed);
 
-  printf("✓ Empty vector singleton tests passed\n");
   return 0;
 }
 
@@ -117,7 +111,6 @@ static char *test_empty_map_singleton(void) {
     mu_assert_obj_ptr_equal(m0, make_map(0));
     mu_assert_obj_ptr_equal(m0, make_map(-1));
 
-    printf("✓ Empty map singleton tests passed\n");
   }
   return 0;
 }
@@ -127,7 +120,6 @@ static char *test_empty_map_singleton(void) {
 // ============================================================================
 
 static char *test_parser_basic_types(void) {
-  printf("\n=== Testing Parser Basic Types ===\n");
 
   CLJVALUE_POOL_SCOPE(pool) {
     EvalState st;
@@ -150,7 +142,6 @@ static char *test_parser_basic_types(void) {
     CljObject *sym_result = parse("test-symbol", &st);
     mu_assert_obj_type(sym_result, CLJ_SYMBOL);
 
-    printf("✓ Parser basic types tests passed\n");
   }
   return 0;
 }
@@ -172,7 +163,6 @@ static char *test_parser_collections(void) {
     CljObject *map_result = parse("{:a 1 :b 2}", &st);
     mu_assert_obj_type(map_result, CLJ_MAP);
 
-    printf("✓ Parser collections tests passed\n");
   }
   return 0;
 }
@@ -190,7 +180,6 @@ static char *test_variable_definition(void) {
   mu_assert_obj_int(var_result, 42);
   
   evalstate_free(st);
-  printf("✓ Variable definition tests passed\n");
   return 0;
 }
 
@@ -211,7 +200,6 @@ static char *test_variable_redefinition(void) {
   mu_assert_obj_int(var_result, 100);
   
   evalstate_free(st);
-  printf("✓ Variable redefinition tests passed\n");
   return 0;
 }
 
@@ -233,7 +221,6 @@ static char *test_variable_with_string(void) {
   mu_assert_obj_string(var_result, "Hello, World!");
   
   evalstate_free(st);
-  printf("✓ String variable tests passed\n");
   return 0;
 }
 

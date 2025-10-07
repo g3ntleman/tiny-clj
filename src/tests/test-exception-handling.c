@@ -3,48 +3,56 @@
  * Tests nested exception handling, auto-release, and exception stack
  */
 
-#include "unity.h"
+#include "minunit.h"
 #include "namespace.h"
 #include "exception.h"
 #include "object.h"
 #include "runtime.h"
 #include "function_call.h"
+#include "clj_symbols.h"
 #include <string.h>
 
 static EvalState *test_state = NULL;
 
-void setUp(void) {
+static void test_setup(void) {
     test_state = evalstate();
-    TEST_ASSERT_NOT_NULL(test_state);
+    if (!test_state) {
+        fprintf(stderr, "FATAL: evalstate() returned NULL\n");
+        exit(1);
+    }
     test_state->exception_stack = NULL;
     set_global_eval_state(test_state);
 }
 
-void tearDown(void) {
+static void test_teardown(void) {
     set_global_eval_state(NULL);
     test_state = NULL;
 }
 
 // Test 1: Simple TRY/CATCH - Exception caught
-void test_simple_try_catch_exception_caught(void) {
+static char *test_simple_try_catch_exception_caught(void) {
+    test_setup();
     EvalState *st = test_state;
     bool exception_caught = false;
     
     TRY {
         throw_exception("TestException", "Test error", __FILE__, __LINE__, 0);
-        TEST_FAIL_MESSAGE("Should not reach here after throw");
+        mu_assert("Should not reach here after throw", 0);
     } CATCH(ex) {
         exception_caught = true;
-        TEST_ASSERT_NOT_NULL(ex);
-        TEST_ASSERT_EQUAL_STRING("TestException", ex->type);
-        TEST_ASSERT_EQUAL_STRING("Test error", ex->message);
+        mu_assert("Exception should not be NULL", ex != NULL);
+        mu_assert("Exception type should be TestException", strcmp(ex->type, "TestException") == 0);
+        mu_assert("Exception message should be Test error", strcmp(ex->message, "Test error") == 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(exception_caught);
+    mu_assert("Exception should have been caught", exception_caught);
+    test_teardown();
+    return 0;
 }
 
 // Test 2: Simple TRY/CATCH - No exception
-void test_simple_try_catch_no_exception(void) {
+static char *test_simple_try_catch_no_exception(void) {
+    test_setup();
     EvalState *st = test_state;
     bool try_executed = false;
     bool catch_executed = false;
@@ -53,15 +61,18 @@ void test_simple_try_catch_no_exception(void) {
         try_executed = true;
     } CATCH(ex) {
         catch_executed = true;
-        TEST_FAIL_MESSAGE("CATCH should not run when no exception");
+        mu_assert("CATCH should not run when no exception", 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(try_executed);
-    TEST_ASSERT_FALSE(catch_executed);
+    mu_assert("TRY block should have executed", try_executed);
+    mu_assert("CATCH block should not have executed", !catch_executed);
+    test_teardown();
+    return 0;
 }
 
 // Test 3: Nested TRY/CATCH - Inner exception caught
-void test_nested_try_catch_inner_exception(void) {
+static char *test_nested_try_catch_inner_exception(void) {
+    test_setup();
     EvalState *st = test_state;
     bool outer_try = false, inner_try = false, inner_catch = false;
     bool outer_catch = false, after_inner = false;
@@ -71,23 +82,26 @@ void test_nested_try_catch_inner_exception(void) {
         TRY {
             inner_try = true;
             throw_exception("InnerException", "Inner error", __FILE__, __LINE__, 0);
-            TEST_FAIL_MESSAGE("Should not reach here");
+            mu_assert("Should not reach here", 0);
         } CATCH(ex) {
             inner_catch = true;
-            TEST_ASSERT_EQUAL_STRING("InnerException", ex->type);
+            mu_assert("Exception type should be InnerException", strcmp(ex->type, "InnerException") == 0);
         } END_TRY
         after_inner = true;
     } CATCH(ex) {
         outer_catch = true;
-        TEST_FAIL_MESSAGE("Outer CATCH should not run");
+        mu_assert("Outer CATCH should not run", 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(outer_try && inner_try && inner_catch && after_inner);
-    TEST_ASSERT_FALSE(outer_catch);
+    mu_assert("Outer and inner TRY blocks should execute", outer_try && inner_try && inner_catch && after_inner);
+    mu_assert("Outer CATCH should not execute", !outer_catch);
+    test_teardown();
+    return 0;
 }
 
 // Test 4: Nested TRY/CATCH - Outer exception caught
-void test_nested_try_catch_outer_exception(void) {
+static char *test_nested_try_catch_outer_exception(void) {
+    test_setup();
     EvalState *st = test_state;
     bool outer_try = false, inner_try = false, inner_catch = false;
     bool outer_catch = false, after_inner = false;
@@ -98,21 +112,24 @@ void test_nested_try_catch_outer_exception(void) {
             inner_try = true;
         } CATCH(ex) {
             inner_catch = true;
-            TEST_FAIL_MESSAGE("Inner CATCH should not run");
+            mu_assert("Inner CATCH should not run", 0);
         } END_TRY
         after_inner = true;
         throw_exception("OuterException", "Outer error", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         outer_catch = true;
-        TEST_ASSERT_EQUAL_STRING("OuterException", ex->type);
+        mu_assert("Exception type should be OuterException", strcmp(ex->type, "OuterException") == 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(outer_try && inner_try && after_inner && outer_catch);
-    TEST_ASSERT_FALSE(inner_catch);
+    mu_assert("All blocks should execute correctly", outer_try && inner_try && after_inner && outer_catch);
+    mu_assert("Inner CATCH should not execute", !inner_catch);
+    test_teardown();
+    return 0;
 }
 
 // Test 5: Triple nested TRY/CATCH
-void test_triple_nested_try_catch(void) {
+static char *test_triple_nested_try_catch(void) {
+    test_setup();
     EvalState *st = test_state;
     bool level1 = false, level2 = false, level3 = false;
     bool catch1 = false, catch2 = false, catch3 = false;
@@ -126,23 +143,26 @@ void test_triple_nested_try_catch(void) {
                 throw_exception("Level3Exception", "Deepest error", __FILE__, __LINE__, 0);
             } CATCH(ex) {
                 catch3 = true;
-                TEST_ASSERT_EQUAL_STRING("Level3Exception", ex->type);
+                mu_assert("Exception type should be Level3Exception", strcmp(ex->type, "Level3Exception") == 0);
             } END_TRY
         } CATCH(ex) {
             catch2 = true;
-            TEST_FAIL_MESSAGE("Level 2 CATCH should not run");
+            mu_assert("Level 2 CATCH should not run", 0);
         } END_TRY
     } CATCH(ex) {
         catch1 = true;
-        TEST_FAIL_MESSAGE("Level 1 CATCH should not run");
+        mu_assert("Level 1 CATCH should not run", 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(level1 && level2 && level3 && catch3);
-    TEST_ASSERT_FALSE(catch2 || catch1);
+    mu_assert("All levels should execute, only innermost CATCH", level1 && level2 && level3 && catch3);
+    mu_assert("Outer CATCHes should not execute", !(catch2 || catch1));
+    test_teardown();
+    return 0;
 }
 
 // Test 6: Re-throw from inner to outer CATCH
-void test_rethrow_from_inner_to_outer(void) {
+static char *test_rethrow_from_inner_to_outer(void) {
+    test_setup();
     EvalState *st = test_state;
     bool inner_catch = false, outer_catch = false;
     
@@ -153,33 +173,39 @@ void test_rethrow_from_inner_to_outer(void) {
             inner_catch = true;
             throw_exception("RethrowException", "Re-thrown from inner", __FILE__, __LINE__, 0);
         } END_TRY
-        TEST_FAIL_MESSAGE("Should not reach here");
+        mu_assert("Should not reach here", 0);
     } CATCH(ex) {
         outer_catch = true;
-        TEST_ASSERT_EQUAL_STRING("RethrowException", ex->type);
+        mu_assert("Re-thrown exception type should be RethrowException", strcmp(ex->type, "RethrowException") == 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(inner_catch && outer_catch);
+    mu_assert("Both inner and outer CATCH should execute", inner_catch && outer_catch);
+    test_teardown();
+    return 0;
 }
 
 // Test 7: Exception stack cleanup verification
-void test_exception_stack_cleanup(void) {
+static char *test_exception_stack_cleanup(void) {
+    test_setup();
     EvalState *st = test_state;
     ExceptionHandler *stack_before = test_state->exception_stack;
     
     TRY {
-        TEST_ASSERT_NOT_EQUAL(stack_before, test_state->exception_stack);
+        mu_assert("Stack should have changed inside TRY", stack_before != test_state->exception_stack);
         throw_exception("TestException", "Test", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         // During CATCH, stack is already popped
-        TEST_ASSERT_EQUAL(stack_before, test_state->exception_stack);
+        mu_assert("Stack should be restored during CATCH", stack_before == test_state->exception_stack);
     } END_TRY
     
-    TEST_ASSERT_EQUAL(stack_before, test_state->exception_stack);
+    mu_assert("Stack should be restored after END_TRY", stack_before == test_state->exception_stack);
+    test_teardown();
+    return 0;
 }
 
 // Test 8: Multiple sequential TRY/CATCH blocks
-void test_sequential_try_catch_blocks(void) {
+static char *test_sequential_try_catch_blocks(void) {
+    test_setup();
     EvalState *st = test_state;
     int catch_count = 0;
     
@@ -187,27 +213,30 @@ void test_sequential_try_catch_blocks(void) {
         throw_exception("Exception1", "First error", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         catch_count++;
-        TEST_ASSERT_EQUAL_STRING("Exception1", ex->type);
+        mu_assert("First exception type should be Exception1", strcmp(ex->type, "Exception1") == 0);
     } END_TRY
     
     TRY {
         // Normal code
     } CATCH(ex) {
-        TEST_FAIL_MESSAGE("Should not catch");
+        mu_assert("Should not catch", 0);
     } END_TRY
     
     TRY {
         throw_exception("Exception3", "Third error", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         catch_count++;
-        TEST_ASSERT_EQUAL_STRING("Exception3", ex->type);
+        mu_assert("Third exception type should be Exception3", strcmp(ex->type, "Exception3") == 0);
     } END_TRY
     
-    TEST_ASSERT_EQUAL(2, catch_count);
+    mu_assert("Should have caught exactly 2 exceptions", catch_count == 2);
+    test_teardown();
+    return 0;
 }
 
 // Test 9: Exception with empty message
-void test_exception_with_empty_message(void) {
+static char *test_exception_with_empty_message(void) {
+    test_setup();
     EvalState *st = test_state;
     bool caught = false;
     
@@ -215,16 +244,19 @@ void test_exception_with_empty_message(void) {
         throw_exception("TestType", "", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         caught = true;
-        TEST_ASSERT_NOT_NULL(ex);
-        TEST_ASSERT_EQUAL_STRING("TestType", ex->type);
-        TEST_ASSERT_EQUAL_STRING("", ex->message);
+        mu_assert("Exception should not be NULL", ex != NULL);
+        mu_assert("Exception type should be TestType", strcmp(ex->type, "TestType") == 0);
+        mu_assert("Exception message should be empty", strcmp(ex->message, "") == 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(caught);
+    mu_assert("Exception should have been caught", caught);
+    test_teardown();
+    return 0;
 }
 
 // Test 10: Verify exception content in CATCH
-void test_exception_content_in_catch(void) {
+static char *test_exception_content_in_catch(void) {
+    test_setup();
     EvalState *st = test_state;
     bool caught = false;
     
@@ -232,27 +264,43 @@ void test_exception_content_in_catch(void) {
         throw_exception("TestType", "TestMsg", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         caught = true;
-        TEST_ASSERT_NOT_NULL(ex);
-        TEST_ASSERT_EQUAL_STRING("TestType", ex->type);
-        TEST_ASSERT_EQUAL_STRING("TestMsg", ex->message);
+        mu_assert("Exception should not be NULL", ex != NULL);
+        mu_assert("Exception type should be TestType", strcmp(ex->type, "TestType") == 0);
+        mu_assert("Exception message should be TestMsg", strcmp(ex->message, "TestMsg") == 0);
     } END_TRY
     
-    TEST_ASSERT_TRUE(caught);
+    mu_assert("Exception should have been caught", caught);
+    test_teardown();
+    return 0;
+}
+
+// ============================================================================
+// TEST SUITE RUNNER
+// ============================================================================
+
+static char *all_exception_tests(void) {
+    mu_run_test(test_simple_try_catch_exception_caught);
+    mu_run_test(test_simple_try_catch_no_exception);
+    mu_run_test(test_nested_try_catch_inner_exception);
+    mu_run_test(test_nested_try_catch_outer_exception);
+    mu_run_test(test_triple_nested_try_catch);
+    mu_run_test(test_rethrow_from_inner_to_outer);
+    mu_run_test(test_exception_stack_cleanup);
+    mu_run_test(test_sequential_try_catch_blocks);
+    mu_run_test(test_exception_with_empty_message);
+    mu_run_test(test_exception_content_in_catch);
+    
+    return 0;
 }
 
 int main(void) {
-    UNITY_BEGIN();
+    printf("🧪 === Exception Handling Tests ===\n\n");
     
-    RUN_TEST(test_simple_try_catch_exception_caught);
-    RUN_TEST(test_simple_try_catch_no_exception);
-    RUN_TEST(test_nested_try_catch_inner_exception);
-    RUN_TEST(test_nested_try_catch_outer_exception);
-    RUN_TEST(test_triple_nested_try_catch);
-    RUN_TEST(test_rethrow_from_inner_to_outer);
-    RUN_TEST(test_exception_stack_cleanup);
-    RUN_TEST(test_sequential_try_catch_blocks);
-    RUN_TEST(test_exception_with_empty_message);
-    RUN_TEST(test_exception_content_in_catch);
+    init_special_symbols();
     
-    return UNITY_END();
+    int result = run_minunit_tests(all_exception_tests, "Exception Handling Tests");
+    
+    symbol_table_cleanup();
+    
+    return result;
 }

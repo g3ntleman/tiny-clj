@@ -34,7 +34,6 @@ static double get_time_ms(void) {
 // ============================================================================
 
 static char *test_basic_object_creation_memory(void) {
-    printf("\n=== Testing Basic Object Creation Memory Usage ===\n");
     
     MEMORY_TEST_START("Basic Object Creation");
     
@@ -54,12 +53,10 @@ static char *test_basic_object_creation_memory(void) {
     
     MEMORY_TEST_END("Basic Object Creation");
     
-    printf("✓ Basic object creation memory test passed\n");
     return 0;
 }
 
 static char *test_vector_creation_memory(void) {
-    printf("\n=== Testing Vector Creation Memory Usage ===\n");
     
     MEMORY_TEST_START("Vector Creation");
     
@@ -85,12 +82,10 @@ static char *test_vector_creation_memory(void) {
     
     MEMORY_TEST_END("Vector Creation");
     
-    printf("✓ Vector creation memory test passed\n");
     return 0;
 }
 
 static char *test_seq_iteration_memory(void) {
-    printf("\n=== Testing Seq Iteration Memory Usage ===\n");
     
     MEMORY_TEST_START("Seq Iteration");
     
@@ -125,12 +120,10 @@ static char *test_seq_iteration_memory(void) {
     
     MEMORY_TEST_END("Seq Iteration");
     
-    printf("✓ Seq iteration memory test passed\n");
     return 0;
 }
 
 static char *test_for_loop_memory(void) {
-    printf("\n=== Testing For-Loop Memory Usage ===\n");
     
     MEMORY_TEST_START("For-Loop Operations");
     
@@ -185,12 +178,10 @@ static char *test_for_loop_memory(void) {
     
     MEMORY_TEST_END("For-Loop Operations");
     
-    printf("✓ For-loop memory test passed\n");
     return 0;
 }
 
 static char *test_map_creation_memory(void) {
-    printf("\n=== Testing Map Creation and Operations Memory Usage ===\n");
     
     MEMORY_TEST_START("Map Creation");
     
@@ -241,7 +232,6 @@ static char *test_map_creation_memory(void) {
     
     MEMORY_TEST_END("Map Creation");
     
-    printf("✓ Map creation memory test passed\n");
     return 0;
 }
 
@@ -266,7 +256,6 @@ static char *test_memory_comparison_analysis(void) {
     printf("  │ • Consider iterator reuse for repeated seq operations\n");
     printf("  • Monitor memory leaks in complex nested operations\n");
     
-    printf("✓ Memory comparison analysis completed\n");
     return 0;
 }
 
@@ -287,7 +276,6 @@ static char *test_memory_benchmark_small_objects(void) {
     
     MEMORY_TEST_BENCHMARK_END("Small Object Creation");
     
-    printf("✓ Small objects memory benchmark passed\n");
     return 0;
 }
 
@@ -312,7 +300,6 @@ static char *test_memory_benchmark_large_vectors(void) {
     
     MEMORY_TEST_BENCHMARK_END("Large Vector Creation");
     
-    printf("✓ Large vectors memory benchmark passed\n");
     return 0;
 }
 
@@ -347,7 +334,6 @@ static char *test_memory_benchmark_large_maps(void) {
     
     MEMORY_TEST_BENCHMARK_END("Large Map Creation");
     
-    printf("✓ Large maps memory benchmark passed\n");
     return 0;
 }
 
@@ -356,7 +342,6 @@ static char *test_memory_benchmark_large_maps(void) {
 // ============================================================================
 
 static char *benchmark_vector_iteration_with_memory(void) {
-    printf("\n=== Performance+Memory: Vector Iteration ===\n");
     
     MEMORY_TEST_START("Vector Iteration Performance");
     
@@ -407,12 +392,10 @@ static char *benchmark_vector_iteration_with_memory(void) {
     
     MEMORY_TEST_END("Vector Iteration Performance");
     
-    printf("✓ Vector iteration benchmark passed\n");
     return 0;
 }
 
 static char *benchmark_map_lookup_with_memory(void) {
-    printf("\n=== Performance+Memory: Map Lookup ===\n");
     
     MEMORY_TEST_START("Map Lookup Performance");
     
@@ -452,12 +435,10 @@ static char *benchmark_map_lookup_with_memory(void) {
     
     MEMORY_TEST_END("Map Lookup Performance");
     
-    printf("✓ Map lookup benchmark passed\n");
     return 0;
 }
 
 static char *benchmark_symbol_lookup_with_memory(void) {
-    printf("\n=== Performance+Memory: Symbol Lookup ===\n");
     
     MEMORY_TEST_START("Symbol Lookup Performance");
     
@@ -493,7 +474,6 @@ static char *benchmark_symbol_lookup_with_memory(void) {
     
     MEMORY_TEST_END("Symbol Lookup Performance");
     
-    printf("✓ Symbol lookup benchmark passed\n");
     return 0;
 }
 

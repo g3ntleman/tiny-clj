@@ -106,9 +106,9 @@ target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENA
 # ============================================================================
 
 # Exception Handling Tests (TRY/CATCH nested exception handling)
-add_executable(test-exception-handling
+add_executable(test-exception-handling EXCLUDE_FROM_ALL
     src/tests/test-exception-handling.c
-    src/unity.c
+    src/tests/minunit.h
     src/object.c
     src/types.c
     src/vector.c
@@ -119,54 +119,17 @@ add_executable(test-exception-handling
     src/clj_parser.c
     src/reader.c
     src/function_call.c
-    src/clojure_core.c
     src/list_operations.c
     src/seq.c
     src/exception.c
     src/runtime.c
 )
 target_compile_definitions(test-exception-handling PRIVATE ENABLE_META)
+# Now using MinUnit instead of Unity
 
 # Integration Tests (component interaction tests)
-add_executable(test-integration
-    src/tests/test_integration_main.c
-    src/unity.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/clojure_core.c
-    src/list_operations.c
-    src/seq.c)
-
-# Legacy Benchmark Tests (Unity-based, kept for compatibility)
-# Note: For performance testing use test-performance (MinUnit-based)
-add_executable(test-benchmark EXCLUDE_FROM_ALL
-    src/tests/test_integration_main.c
-    src/unity.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/exception.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/clojure_core.c
-    src/benchmark.c
-    src/seq.c
-    src/list_operations.c)
-target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
+# Unity-based targets removed - all tests now use MinUnit
+# Use test-performance for benchmarks, run-tests for all other tests
 
 # Performance & Benchmark Tests (consolidated)
 add_executable(test-performance EXCLUDE_FROM_ALL
@@ -224,10 +187,9 @@ add_executable(test-seq-debug EXCLUDE_FROM_ALL
     src/clj_parser.h
     src/reader.c
     src/reader.h
-    src/unity.c
-    src/unity.h
-)
-
+    src/clojure_core.c
+    src/exception.c
+    src/runtime.c)
 target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
 
 # Memory Profiling Tests (Debug only)
@@ -258,11 +220,7 @@ add_executable(test-memory-profiling EXCLUDE_FROM_ALL
 # Meta-Funktionalität aktivieren
 target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 
-# Meta-Funktionalität für alle Test-Executables aktivieren
-target_compile_definitions(test-integration PRIVATE ENABLE_META)
-target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
-
-# Note: tiny-clj binary is EXCLUDE_FROM_ALL (optional build)
+# Meta-Funktionalität für Test-Executables aktivieren
 target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 
 # ============================================================================
@@ -276,17 +234,8 @@ add_custom_target(run-unit-tests
     COMMENT "Running unit tests"
 )
 
-add_custom_target(run-integration-tests
-    COMMAND test-integration
-    DEPENDS test-integration
-    COMMENT "Running integration tests"
-)
-
-add_custom_target(run-benchmark-tests
-    COMMAND test-benchmark
-    DEPENDS test-benchmark
-    COMMENT "Running benchmark tests"
-)
+# Custom targets for legacy test-integration and test-benchmark removed
+# Use: ./run-tests for all tests, ./test-performance for benchmarks
 
 add_custom_target(run-all-tests
     COMMAND test-all
@@ -305,7 +254,7 @@ add_custom_target(run-quick-tests
 # INSTALLATION
 # ============================================================================
 
-install(TARGETS tiny-clj run-tests test-integration test-benchmark
+install(TARGETS tiny-clj run-tests
     RUNTIME DESTINATION bin
 )
 
@@ -315,11 +264,8 @@ install(TARGETS tiny-clj run-tests test-integration test-benchmark
 include(CTest)
 enable_testing()
 
-# Note: unit and parser tests now in run-tests unified executable
+# Note: All tests now in run-tests unified executable
 # To run: ./run-tests --suite core  (runs both unit and parser)
-# Keeping CTest integration for backward compatibility - use old binaries if they exist
-add_test(NAME integration COMMAND test-integration --all)
-set_tests_properties(integration PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} LABELS "integration")
 
 # REPL tests (CLI-level)
 add_test(NAME repl-eval-add COMMAND tiny-clj-repl -e "(+ 1 2)")
