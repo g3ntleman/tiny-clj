@@ -42,8 +42,8 @@ static char *test_seq_create_list(void) {
         mu_assert("seq creation failed", seq != NULL);
         CljSeqIterator *seq_iter = as_seq(seq);
         mu_assert("seq iterator cast failed", seq_iter != NULL);
-        mu_assert("seq container mismatch", seq_iter->container == list);
-        mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_LIST);
+        mu_assert("seq container mismatch", seq_iter->iter.container == list);
+        mu_assert("seq type mismatch", seq_iter->iter.seq_type == CLJ_LIST);
         
         seq_release(seq);
         release(list);
@@ -72,8 +72,8 @@ static char *test_seq_create_vector(void) {
         mu_assert("seq creation failed", seq != NULL);
         CljSeqIterator *seq_iter = as_seq(seq);
         mu_assert("seq iterator cast failed", seq_iter != NULL);
-        mu_assert("seq container mismatch", seq_iter->container == vec);
-        mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_VECTOR);
+        mu_assert("seq container mismatch", seq_iter->iter.container == vec);
+        mu_assert("seq type mismatch", seq_iter->iter.seq_type == CLJ_VECTOR);
         
         seq_release(seq);
         release(vec);
@@ -94,8 +94,8 @@ static char *test_seq_create_string(void) {
     mu_assert("seq creation failed", seq != NULL);
     CljSeqIterator *seq_iter = as_seq(seq);
     mu_assert("seq iterator cast failed", seq_iter != NULL);
-    mu_assert("seq container mismatch", seq_iter->container == str);
-    mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_STRING);
+    mu_assert("seq container mismatch", seq_iter->iter.container == str);
+    mu_assert("seq type mismatch", seq_iter->iter.seq_type == CLJ_STRING);
     
     seq_release(seq);
     release(str);
@@ -107,14 +107,13 @@ static char *test_seq_create_string(void) {
 static char *test_seq_create_nil(void) {
     printf("\n=== Testing Seq Creation for Nil ===\n");
     
-    // Create sequence iterator for nil
+    // Create sequence for nil - should return nil singleton
     CljObject *seq = seq_create(NULL);
     mu_assert("seq creation failed", seq != NULL);
-    CljSeqIterator *seq_iter = as_seq(seq);
-    mu_assert("seq iterator cast failed", seq_iter != NULL);
-    mu_assert("seq type mismatch", seq_iter->seq_type == CLJ_NIL);
+    mu_assert("seq of nil should be nil", seq == clj_nil());
+    mu_assert("seq should be nil type", seq->type == CLJ_NIL);
     
-    seq_release(seq);
+    // No seq_release needed for nil singleton
     
     printf("✓ Nil seq creation test passed\n");
     return 0;

@@ -768,7 +768,7 @@ char* pr_str(CljObject *v) {
                 if (!result) return strdup("()");
                 
                 bool first = true;
-                CljObject *temp_seq = seq_create(seq->container);
+                CljObject *temp_seq = seq_create(seq->iter.container);
                 if (!temp_seq) {
                     free(result);
                     return strdup("()");

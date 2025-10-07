@@ -331,11 +331,10 @@ set_tests_properties(repl-ns-eval PROPERTIES PASS_REGULAR_EXPRESSION "4\n" LABEL
 add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
-# Fast Seq Benchmark (Optimization Test)
-add_executable(test-seq-fast-benchmark EXCLUDE_FROM_ALL
+# Seq Benchmark (Optimization Test)
+add_executable(test-seq-benchmark EXCLUDE_FROM_ALL
     src/tests/test_seq_fast_benchmark.c
     src/seq.c
-    src/seq_fast.c
     src/CljObject.c
     src/types.c
     src/vector.c
@@ -350,4 +349,4 @@ add_executable(test-seq-fast-benchmark EXCLUDE_FROM_ALL
     src/exception.c
     src/memory_profiler.c
     src/memory_hooks.c)
-target_compile_definitions(test-seq-fast-benchmark PRIVATE ENABLE_META DEBUG)
+target_compile_definitions(test-seq-benchmark PRIVATE ENABLE_META DEBUG)
