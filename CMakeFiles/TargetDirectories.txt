@@ -1,5 +1,6 @@
 /Users/theisen/Projects/tiny-clj/CMakeFiles/tiny-clj.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/tiny-clj-repl.dir
+/Users/theisen/Projects/tiny-clj/CMakeFiles/run-tests.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-unit.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-eval-string-api.dir
 /Users/theisen/Projects/tiny-clj/CMakeFiles/test-integration.dir

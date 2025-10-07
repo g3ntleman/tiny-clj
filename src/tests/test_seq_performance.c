@@ -128,13 +128,13 @@ static char *benchmark_seq_iteration(void) {
     double start = get_time_ms();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        SeqIterator *seq = seq_create(vec);
+        CljObject *seq = seq_create(vec);
         if (seq) {
             while (!seq_empty(seq)) {
                 CljObject *element = seq_first(seq);
                 (void)element; // Prevent optimization
                 
-                SeqIterator *next = seq_next(seq);
+                CljObject *next = seq_next(seq);
                 seq_release(seq);
                 seq = next;
             }
@@ -168,7 +168,7 @@ static char *benchmark_seq_iteration_with_access(void) {
     volatile int sum = 0;
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        SeqIterator *seq = seq_create(vec);
+        CljObject *seq = seq_create(vec);
         if (seq) {
             while (!seq_empty(seq)) {
                 CljObject *element = seq_first(seq);
@@ -176,7 +176,7 @@ static char *benchmark_seq_iteration_with_access(void) {
                     sum += element->as.i;
                 }
                 
-                SeqIterator *next = seq_next(seq);
+                CljObject *next = seq_next(seq);
                 seq_release(seq);
                 seq = next;
             }
@@ -214,7 +214,7 @@ static char *benchmark_seq_optimized_iteration(void) {
     double start = get_time_ms();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        SeqIterator *seq = seq_create(vec);
+        CljObject *seq = seq_create(vec);
         if (seq) {
             int count = seq_count(seq);
             for (int i = 0; i < count; i++) {
@@ -222,7 +222,7 @@ static char *benchmark_seq_optimized_iteration(void) {
                 (void)element; // Prevent optimization
                 
                 // Create next iterator
-                SeqIterator *next = seq_next(seq);
+                CljObject *next = seq_next(seq);
                 seq_release(seq);
                 seq = next;
                 if (!seq) break;

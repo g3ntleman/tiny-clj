@@ -208,7 +208,7 @@ add_executable(test-seq
     src/memory_hooks.c)
 
 # Seq Performance Tests
-add_executable(test-seq-performance
+add_executable(test-seq-performance EXCLUDE_FROM_ALL
     src/tests/test_seq_performance.c
     src/CljObject.c
     src/types.c
@@ -288,7 +288,9 @@ target_compile_definitions(test-for-loops PRIVATE DEBUG=1)
 target_compile_definitions(test-for-loops-comparison PRIVATE DEBUG=1)
 
 # Test executable for seq debugging
-add_executable(test-seq-debug
+# EXCLUDE_FROM_ALL: These debug tests access internal SeqIterator details
+# Build manually: make test-seq-debug test-seq-performance test-memory-profiling
+add_executable(test-seq-debug EXCLUDE_FROM_ALL
     src/tests/test_seq_debug.c
     src/tests/minunit.h
     src/CljObject.c
@@ -343,7 +345,7 @@ add_executable(test-for-performance
     src/seq.c)
 
 # Memory Profiling Tests (Debug only)
-add_executable(test-memory-profiling
+add_executable(test-memory-profiling EXCLUDE_FROM_ALL
     src/tests/test_memory_profiling.c
     src/CljObject.c
     src/types.c

@@ -198,6 +198,19 @@ tiny-clj-repl/fast:
 .PHONY : tiny-clj-repl/fast
 
 #=============================================================================
+# Target rules for targets named run-tests
+
+# Build rule for target.
+run-tests: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 run-tests
+.PHONY : run-tests
+
+# fast build rule for target.
+run-tests/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/build
+.PHONY : run-tests/fast
+
+#=============================================================================
 # Target rules for targets named test-unit
 
 # Build rule for target.
@@ -854,6 +867,7 @@ src/CljObject.o: src/CljObject.c.o
 src/CljObject.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/CljObject.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/CljObject.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/CljObject.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/CljObject.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/CljObject.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/CljObject.c.o
@@ -879,6 +893,7 @@ src/CljObject.i: src/CljObject.c.i
 src/CljObject.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/CljObject.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/CljObject.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/CljObject.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/CljObject.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/CljObject.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/CljObject.c.i
@@ -904,6 +919,7 @@ src/CljObject.s: src/CljObject.c.s
 src/CljObject.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/CljObject.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/CljObject.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/CljObject.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/CljObject.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/CljObject.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/CljObject.c.s
@@ -1031,6 +1047,7 @@ src/clj_parser.o: src/clj_parser.c.o
 src/clj_parser.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_parser.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clj_parser.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clj_parser.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_parser.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clj_parser.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_parser.c.o
@@ -1053,6 +1070,7 @@ src/clj_parser.i: src/clj_parser.c.i
 src/clj_parser.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_parser.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clj_parser.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clj_parser.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_parser.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clj_parser.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_parser.c.i
@@ -1075,6 +1093,7 @@ src/clj_parser.s: src/clj_parser.c.s
 src/clj_parser.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_parser.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clj_parser.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clj_parser.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_parser.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clj_parser.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_parser.c.s
@@ -1097,6 +1116,7 @@ src/clj_symbols.o: src/clj_symbols.c.o
 src/clj_symbols.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_symbols.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clj_symbols.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clj_symbols.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_symbols.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clj_symbols.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_symbols.c.o
@@ -1122,6 +1142,7 @@ src/clj_symbols.i: src/clj_symbols.c.i
 src/clj_symbols.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_symbols.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clj_symbols.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clj_symbols.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_symbols.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clj_symbols.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_symbols.c.i
@@ -1147,6 +1168,7 @@ src/clj_symbols.s: src/clj_symbols.c.s
 src/clj_symbols.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clj_symbols.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clj_symbols.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clj_symbols.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clj_symbols.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clj_symbols.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clj_symbols.c.s
@@ -1172,6 +1194,7 @@ src/clojure_core.o: src/clojure_core.c.o
 src/clojure_core.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clojure_core.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clojure_core.c.o
@@ -1186,6 +1209,7 @@ src/clojure_core.i: src/clojure_core.c.i
 src/clojure_core.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clojure_core.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clojure_core.c.i
@@ -1200,6 +1224,7 @@ src/clojure_core.s: src/clojure_core.c.s
 src/clojure_core.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/clojure_core.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/clojure_core.c.s
@@ -1214,6 +1239,7 @@ src/exception.o: src/exception.c.o
 src/exception.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/exception.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/exception.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/exception.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/exception.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/exception.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/exception.c.o
@@ -1228,6 +1254,7 @@ src/exception.i: src/exception.c.i
 src/exception.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/exception.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/exception.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/exception.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/exception.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/exception.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/exception.c.i
@@ -1242,6 +1269,7 @@ src/exception.s: src/exception.c.s
 src/exception.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/exception.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/exception.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/exception.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/exception.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-benchmark.dir/build.make CMakeFiles/test-benchmark.dir/src/exception.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/demo-array-system.dir/build.make CMakeFiles/demo-array-system.dir/src/exception.c.s
@@ -1256,6 +1284,7 @@ src/function_call.o: src/function_call.c.o
 src/function_call.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/function_call.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/function_call.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/function_call.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/function_call.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/function_call.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/function_call.c.o
@@ -1278,6 +1307,7 @@ src/function_call.i: src/function_call.c.i
 src/function_call.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/function_call.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/function_call.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/function_call.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/function_call.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/function_call.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/function_call.c.i
@@ -1300,6 +1330,7 @@ src/function_call.s: src/function_call.c.s
 src/function_call.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/function_call.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/function_call.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/function_call.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/function_call.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/function_call.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/function_call.c.s
@@ -1322,6 +1353,7 @@ src/list_operations.o: src/list_operations.c.o
 src/list_operations.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/list_operations.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/list_operations.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/list_operations.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/list_operations.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/list_operations.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/list_operations.c.o
@@ -1344,6 +1376,7 @@ src/list_operations.i: src/list_operations.c.i
 src/list_operations.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/list_operations.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/list_operations.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/list_operations.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/list_operations.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/list_operations.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/list_operations.c.i
@@ -1366,6 +1399,7 @@ src/list_operations.s: src/list_operations.c.s
 src/list_operations.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/list_operations.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/list_operations.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/list_operations.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/list_operations.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/list_operations.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/list_operations.c.s
@@ -1388,6 +1422,7 @@ src/map.o: src/map.c.o
 src/map.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/map.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/map.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/map.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/map.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/map.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/map.c.o
@@ -1410,6 +1445,7 @@ src/map.i: src/map.c.i
 src/map.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/map.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/map.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/map.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/map.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/map.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/map.c.i
@@ -1432,6 +1468,7 @@ src/map.s: src/map.c.s
 src/map.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/map.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/map.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/map.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/map.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/map.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/map.c.s
@@ -1452,6 +1489,7 @@ src/memory_hooks.o: src/memory_hooks.c.o
 
 # target to build an object file
 src/memory_hooks.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/memory_hooks.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/memory_hooks.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_hooks.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_hooks.c.o
@@ -1467,6 +1505,7 @@ src/memory_hooks.i: src/memory_hooks.c.i
 
 # target to preprocess a source file
 src/memory_hooks.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/memory_hooks.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/memory_hooks.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_hooks.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_hooks.c.i
@@ -1482,6 +1521,7 @@ src/memory_hooks.s: src/memory_hooks.c.s
 
 # target to generate assembly for a file
 src/memory_hooks.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/memory_hooks.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/memory_hooks.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_hooks.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_hooks.c.s
@@ -1497,6 +1537,7 @@ src/memory_profiler.o: src/memory_profiler.c.o
 
 # target to build an object file
 src/memory_profiler.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/memory_profiler.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/memory_profiler.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_profiler.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.o
@@ -1512,6 +1553,7 @@ src/memory_profiler.i: src/memory_profiler.c.i
 
 # target to preprocess a source file
 src/memory_profiler.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/memory_profiler.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/memory_profiler.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_profiler.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.i
@@ -1527,6 +1569,7 @@ src/memory_profiler.s: src/memory_profiler.c.s
 
 # target to generate assembly for a file
 src/memory_profiler.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/memory_profiler.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/memory_profiler.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/memory_profiler.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq-performance.dir/build.make CMakeFiles/test-seq-performance.dir/src/memory_profiler.c.s
@@ -1544,6 +1587,7 @@ src/namespace.o: src/namespace.c.o
 src/namespace.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/namespace.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/namespace.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/namespace.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/namespace.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/namespace.c.o
@@ -1569,6 +1613,7 @@ src/namespace.i: src/namespace.c.i
 src/namespace.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/namespace.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/namespace.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/namespace.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/namespace.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/namespace.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/namespace.c.i
@@ -1594,6 +1639,7 @@ src/namespace.s: src/namespace.c.s
 src/namespace.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/namespace.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/namespace.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/namespace.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/namespace.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/namespace.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/namespace.c.s
@@ -1643,6 +1689,7 @@ src/reader.o: src/reader.c.o
 src/reader.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/reader.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/reader.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/reader.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/reader.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/reader.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/reader.c.o
@@ -1665,6 +1712,7 @@ src/reader.i: src/reader.c.i
 src/reader.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/reader.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/reader.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/reader.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/reader.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/reader.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/reader.c.i
@@ -1687,6 +1735,7 @@ src/reader.s: src/reader.c.s
 src/reader.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/reader.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/reader.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/reader.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/reader.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/reader.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/reader.c.s
@@ -1763,6 +1812,7 @@ src/seq.o: src/seq.c.o
 src/seq.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/seq.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/seq.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/seq.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/seq.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/seq.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/seq.c.o
@@ -1785,6 +1835,7 @@ src/seq.i: src/seq.c.i
 src/seq.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/seq.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/seq.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/seq.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/seq.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/seq.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/seq.c.i
@@ -1807,6 +1858,7 @@ src/seq.s: src/seq.c.s
 src/seq.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/seq.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/seq.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/seq.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/seq.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/seq.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/seq.c.s
@@ -1829,6 +1881,7 @@ src/string.o: src/string.c.o
 src/string.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/string.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/string.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/string.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/string.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/string.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/string.c.o
@@ -1851,6 +1904,7 @@ src/string.i: src/string.c.i
 src/string.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/string.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/string.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/string.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/string.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/string.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/string.c.i
@@ -1873,6 +1927,7 @@ src/string.s: src/string.c.s
 src/string.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/string.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/string.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/string.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/string.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/string.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/string.c.s
@@ -1935,6 +1990,30 @@ src/tests/kv_macros_demo.s: src/tests/kv_macros_demo.c.s
 src/tests/kv_macros_demo.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/kv-macros-demo.dir/build.make CMakeFiles/kv-macros-demo.dir/src/tests/kv_macros_demo.c.s
 .PHONY : src/tests/kv_macros_demo.c.s
+
+src/tests/run_tests_main.o: src/tests/run_tests_main.c.o
+.PHONY : src/tests/run_tests_main.o
+
+# target to build an object file
+src/tests/run_tests_main.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/run_tests_main.c.o
+.PHONY : src/tests/run_tests_main.c.o
+
+src/tests/run_tests_main.i: src/tests/run_tests_main.c.i
+.PHONY : src/tests/run_tests_main.i
+
+# target to preprocess a source file
+src/tests/run_tests_main.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/run_tests_main.c.i
+.PHONY : src/tests/run_tests_main.c.i
+
+src/tests/run_tests_main.s: src/tests/run_tests_main.c.s
+.PHONY : src/tests/run_tests_main.s
+
+# target to generate assembly for a file
+src/tests/run_tests_main.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/run_tests_main.c.s
+.PHONY : src/tests/run_tests_main.c.s
 
 src/tests/test_all_main.o: src/tests/test_all_main.c.o
 .PHONY : src/tests/test_all_main.o
@@ -2037,6 +2116,7 @@ src/tests/test_eval_string_api.o: src/tests/test_eval_string_api.c.o
 
 # target to build an object file
 src/tests/test_eval_string_api.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_eval_string_api.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/tests/test_eval_string_api.c.o
 .PHONY : src/tests/test_eval_string_api.c.o
 
@@ -2045,6 +2125,7 @@ src/tests/test_eval_string_api.i: src/tests/test_eval_string_api.c.i
 
 # target to preprocess a source file
 src/tests/test_eval_string_api.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_eval_string_api.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/tests/test_eval_string_api.c.i
 .PHONY : src/tests/test_eval_string_api.c.i
 
@@ -2053,6 +2134,7 @@ src/tests/test_eval_string_api.s: src/tests/test_eval_string_api.c.s
 
 # target to generate assembly for a file
 src/tests/test_eval_string_api.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_eval_string_api.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/tests/test_eval_string_api.c.s
 .PHONY : src/tests/test_eval_string_api.c.s
 
@@ -2085,6 +2167,7 @@ src/tests/test_for_loops_minunit.o: src/tests/test_for_loops_minunit.c.o
 
 # target to build an object file
 src/tests/test_for_loops_minunit.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_for_loops_minunit.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/tests/test_for_loops_minunit.c.o
 .PHONY : src/tests/test_for_loops_minunit.c.o
 
@@ -2093,6 +2176,7 @@ src/tests/test_for_loops_minunit.i: src/tests/test_for_loops_minunit.c.i
 
 # target to preprocess a source file
 src/tests/test_for_loops_minunit.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_for_loops_minunit.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/tests/test_for_loops_minunit.c.i
 .PHONY : src/tests/test_for_loops_minunit.c.i
 
@@ -2101,6 +2185,7 @@ src/tests/test_for_loops_minunit.s: src/tests/test_for_loops_minunit.c.s
 
 # target to generate assembly for a file
 src/tests/test_for_loops_minunit.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_for_loops_minunit.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-for-loops.dir/build.make CMakeFiles/test-for-loops.dir/src/tests/test_for_loops_minunit.c.s
 .PHONY : src/tests/test_for_loops_minunit.c.s
 
@@ -2257,6 +2342,7 @@ src/tests/test_parser_minunit.o: src/tests/test_parser_minunit.c.o
 # target to build an object file
 src/tests/test_parser_minunit.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_parser_minunit.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser_minunit.c.o
 .PHONY : src/tests/test_parser_minunit.c.o
 
@@ -2266,6 +2352,7 @@ src/tests/test_parser_minunit.i: src/tests/test_parser_minunit.c.i
 # target to preprocess a source file
 src/tests/test_parser_minunit.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_parser_minunit.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser_minunit.c.i
 .PHONY : src/tests/test_parser_minunit.c.i
 
@@ -2275,6 +2362,7 @@ src/tests/test_parser_minunit.s: src/tests/test_parser_minunit.c.s
 # target to generate assembly for a file
 src/tests/test_parser_minunit.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_parser_minunit.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-parser.dir/build.make CMakeFiles/test-parser.dir/src/tests/test_parser_minunit.c.s
 .PHONY : src/tests/test_parser_minunit.c.s
 
@@ -2307,6 +2395,7 @@ src/tests/test_seq_minunit.o: src/tests/test_seq_minunit.c.o
 
 # target to build an object file
 src/tests/test_seq_minunit.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_seq_minunit.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/tests/test_seq_minunit.c.o
 .PHONY : src/tests/test_seq_minunit.c.o
 
@@ -2315,6 +2404,7 @@ src/tests/test_seq_minunit.i: src/tests/test_seq_minunit.c.i
 
 # target to preprocess a source file
 src/tests/test_seq_minunit.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_seq_minunit.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/tests/test_seq_minunit.c.i
 .PHONY : src/tests/test_seq_minunit.c.i
 
@@ -2323,6 +2413,7 @@ src/tests/test_seq_minunit.s: src/tests/test_seq_minunit.c.s
 
 # target to generate assembly for a file
 src/tests/test_seq_minunit.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_seq_minunit.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-seq.dir/build.make CMakeFiles/test-seq.dir/src/tests/test_seq_minunit.c.s
 .PHONY : src/tests/test_seq_minunit.c.s
 
@@ -2380,6 +2471,7 @@ src/tests/test_unit_minunit.o: src/tests/test_unit_minunit.c.o
 # target to build an object file
 src/tests/test_unit_minunit.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_unit_minunit.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_minunit.c.o
 .PHONY : src/tests/test_unit_minunit.c.o
 
@@ -2389,6 +2481,7 @@ src/tests/test_unit_minunit.i: src/tests/test_unit_minunit.c.i
 # target to preprocess a source file
 src/tests/test_unit_minunit.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_unit_minunit.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_minunit.c.i
 .PHONY : src/tests/test_unit_minunit.c.i
 
@@ -2398,6 +2491,7 @@ src/tests/test_unit_minunit.s: src/tests/test_unit_minunit.c.s
 # target to generate assembly for a file
 src/tests/test_unit_minunit.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/tests/test_unit_minunit.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/tests/test_unit_minunit.c.s
 .PHONY : src/tests/test_unit_minunit.c.s
 
@@ -2408,6 +2502,7 @@ src/types.o: src/types.c.o
 src/types.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/types.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/types.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/types.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/types.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/types.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/types.c.o
@@ -2433,6 +2528,7 @@ src/types.i: src/types.c.i
 src/types.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/types.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/types.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/types.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/types.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/types.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/types.c.i
@@ -2458,6 +2554,7 @@ src/types.s: src/types.c.s
 src/types.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/types.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/types.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/types.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/types.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/types.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/types.c.s
@@ -2513,6 +2610,7 @@ src/vector.o: src/vector.c.o
 src/vector.c.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/vector.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/vector.c.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/vector.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/vector.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/vector.c.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/vector.c.o
@@ -2535,6 +2633,7 @@ src/vector.i: src/vector.c.i
 src/vector.c.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/vector.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/vector.c.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/vector.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/vector.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/vector.c.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/vector.c.i
@@ -2557,6 +2656,7 @@ src/vector.s: src/vector.c.s
 src/vector.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj.dir/build.make CMakeFiles/tiny-clj.dir/src/vector.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiny-clj-repl.dir/build.make CMakeFiles/tiny-clj-repl.dir/src/vector.c.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/run-tests.dir/build.make CMakeFiles/run-tests.dir/src/vector.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-unit.dir/build.make CMakeFiles/test-unit.dir/src/vector.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-eval-string-api.dir/build.make CMakeFiles/test-eval-string-api.dir/src/vector.c.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/test-integration.dir/build.make CMakeFiles/test-integration.dir/src/vector.c.s
@@ -2620,6 +2720,7 @@ help:
 	@echo "... run-unit-tests"
 	@echo "... demo-array-system"
 	@echo "... kv-macros-demo"
+	@echo "... run-tests"
 	@echo "... test-all"
 	@echo "... test-benchmark"
 	@echo "... test-eval-string-api"
@@ -2703,6 +2804,9 @@ help:
 	@echo "... src/tests/kv_macros_demo.o"
 	@echo "... src/tests/kv_macros_demo.i"
 	@echo "... src/tests/kv_macros_demo.s"
+	@echo "... src/tests/run_tests_main.o"
+	@echo "... src/tests/run_tests_main.i"
+	@echo "... src/tests/run_tests_main.s"
 	@echo "... src/tests/test_all_main.o"
 	@echo "... src/tests/test_all_main.i"
 	@echo "... src/tests/test_all_main.s"

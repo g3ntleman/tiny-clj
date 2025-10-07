@@ -22,7 +22,7 @@ static char* test_seq_create_vector_debug(void) {
     printf("Created vector with %d elements\n", as_vector(test_vector)->count);
     
     // Try to create seq
-    SeqIterator *seq_iter = seq_create(test_vector);
+    CljObject *seq_iter = seq_create(test_vector);
     printf("seq_create returned: %p\n", (void*)seq_iter);
     
     if (seq_iter) {
@@ -72,13 +72,13 @@ static char* test_seq_iteration_debug(void) {
     printf("Created vector with %d elements\n", as_vector(test_vector)->count);
     
     // Create seq from vector (like in comparison test)
-    SeqIterator *seq_iter = seq_create(test_vector);
+    CljObject *seq_iter = seq_create(test_vector);
     printf("seq_create returned: %p\n", (void*)seq_iter);
     mu_assert("Seq should be created", seq_iter != NULL);
     
     // Iterate through seq (EXACTLY like in comparison test)
     int count = 0;
-    SeqIterator *current = seq_iter;
+    CljObject *current = seq_iter;
     while (current && !seq_empty(current)) {
         printf("Iteration %d: current=%p, empty=%s\n", count, (void*)current, seq_empty(current) ? "true" : "false");
         
@@ -89,7 +89,7 @@ static char* test_seq_iteration_debug(void) {
             count++;
         }
         
-        SeqIterator *next = seq_rest(current);
+        CljObject *next = seq_rest(current);
         printf("  seq_rest returned: %p\n", (void*)next);
         
         if (current != seq_iter) {

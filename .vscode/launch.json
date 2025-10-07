@@ -1,12 +1,11 @@
 {
-  // Cursor/VSCode launch configuration for Tiny-CLJ
   "version": "0.2.0",
   "configurations": [
     {
       "name": "Tiny-CLJ REPL",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/tiny-clj-repl",
+      "program": "${workspaceFolder}/tiny-clj-repl",
       "cwd": "${workspaceFolder}",
       "args": ["--repl"],
       "preLaunchTask": "build"
@@ -15,26 +14,18 @@
       "name": "Tiny-CLJ eval (-e)",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/tiny-clj-repl",
+      "program": "${workspaceFolder}/tiny-clj-repl",
       "cwd": "${workspaceFolder}",
       "args": ["--no-core", "-e", "(+ 1 2)"]
-    }
-  ]
-}
-
-{
-  "version": "0.2.0",
-  "configurations": [
+    },
     {
-      "name": "Run tiny-clj (LLDB)",
+      "name": "Tiny-CLJ test function",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/tiny-clj",
-      "args": [],
+      "program": "${workspaceFolder}/tiny-clj-repl",
       "cwd": "${workspaceFolder}",
-      "env": {},
-      "stopOnEntry": false,
-      "console": "integratedTerminal"
+      "args": ["--no-core", "-e", "(def add (fn [a b] (+ a b)))", "-e", "(add 1 2)"],
+      "preLaunchTask": "build"
     }
   ]
 }
