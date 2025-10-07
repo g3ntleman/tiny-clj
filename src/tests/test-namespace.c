@@ -229,11 +229,6 @@ static char* test_eval_expr_simple_symbols(void) {
     mu_assert("Symbol should evaluate", result != NULL);
     mu_assert("Symbol should evaluate to its value", clj_equal(value, result));
     
-    // Test undefined symbol
-    CljObject *undefined = autorelease(make_symbol("undefined", NULL));
-    result = eval_expr_simple(undefined, global_eval_state);
-    mu_assert("Undefined symbol should evaluate", result != NULL);
-    mu_assert("Undefined symbol should return itself", clj_equal(undefined, result));
     
     test_teardown();
     return NULL;

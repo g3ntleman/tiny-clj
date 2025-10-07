@@ -273,6 +273,90 @@ if (!shared_string_vector || shared_string_vector->type != CLJ_VECTOR) {
 - **Better debugging tools**
 - **Usage examples** and tutorials
 
+## 14. Pre-Commit Testing Best Practice
+
+### ✅ Always Run All Tests Before Committing
+
+**Rule**: Run the complete test suite before every commit to catch regressions early.
+
+```bash
+# Run all tests
+./run-tests
+
+# Or run specific suites if needed
+./run-tests --suite core
+./run-tests --suite data
+./run-tests --suite control
+./run-tests --suite api
+```
+
+### Benefits
+
+1. **Catch Regressions Early** - Find breaking changes before they enter the repository
+2. **Maintain Code Quality** - Ensure all functionality works together
+3. **Fast Feedback Loop** - Fix issues while context is fresh
+4. **Clean History** - Every commit in history is known to work
+5. **Easier Debugging** - Bisect works reliably when all commits pass tests
+6. **Team Confidence** - Colleagues can trust that main branch is stable
+
+### Workflow
+
+```bash
+# 1. Make changes
+vim src/function_call.c
+
+# 2. Run tests
+./run-tests
+
+# 3. Fix any failures
+# ... repeat until all tests pass ...
+
+# 4. Commit only when all tests pass
+git add -A
+git commit -m "Your changes"
+```
+
+### CI/CD Integration
+
+If tests fail during commit (via pre-commit hook), you have two options:
+
+```bash
+# Option 1: Fix the tests (preferred)
+# ... fix the failing tests ...
+./run-tests  # Verify all pass
+git commit
+
+# Option 2: Skip hook if tests are unrelated to your changes
+# Use sparingly, only for pre-existing failures
+git commit --no-verify
+```
+
+### Exception Handling
+
+- **Pre-existing failures**: Document them, but don't let them block unrelated work
+- **New failures**: Must be fixed before committing
+- **Flaky tests**: Mark or skip them, but don't ignore failures
+
+### Test-Driven Development Integration
+
+```bash
+# 1. Write failing test
+# 2. Run tests (should fail)
+./run-tests --test new_feature
+
+# 3. Implement feature
+# 4. Run tests (should pass)
+./run-tests --test new_feature
+
+# 5. Run all tests (should pass)
+./run-tests
+
+# 6. Commit
+git commit -m "Add new_feature"
+```
+
+**Key Insight**: Running all tests before commit is a simple practice that prevents most integration issues and maintains a clean, working codebase.
+
 ## Conclusion
 
 The refactoring of `test_for_loops_comparison.c` provided valuable insights into API design, memory management, and development practices. The key takeaway is to **trust the existing API design** and use **Test-First development** with **memory profiling** to validate implementations.
