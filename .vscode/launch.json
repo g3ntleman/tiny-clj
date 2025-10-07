@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tiny-CLJ REPL",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/tiny-clj-repl",
+      "cwd": "${workspaceFolder}",
+      "args": ["--repl"],
+      "preLaunchTask": "build-repl"
+    },
+    {
+      "name": "Tiny-CLJ eval (-e)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/tiny-clj-repl",
+      "cwd": "${workspaceFolder}",
+      "args": ["--no-core", "-e", "(+ 1 2)"],
+      "preLaunchTask": "build-repl"
+    },
+    {
+      "name": "Tiny-CLJ test function",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/tiny-clj-repl",
+      "cwd": "${workspaceFolder}",
+      "args": ["--no-core", "-e", "(def add (fn [a b] (+ a b)))", "-e", "(add 1 2)"],
+      "preLaunchTask": "build-repl"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+timestamp,name,time_ms,iterations,ops_per_sec,memory_bytes
+2025-10-04 10:00:00,primitive_object_creation,0.000200,1,5000000,0
+2025-10-04 10:00:00,type_checking,0.000002,1,500000000,0
+2025-10-04 10:00:00,reference_counting,0.000010,1,100000000,0
+2025-10-04 10:00:00,vector_creation,0.000250,1,4000000,0
+2025-10-04 10:00:00,map_operations,0.080000,1,12500,0
+2025-10-04 10:00:00,function_call,0.000600,1,1666667,0
