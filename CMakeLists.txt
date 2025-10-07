@@ -92,6 +92,7 @@ add_executable(run-tests
     src/memory_hooks.c
 )
 target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG)
+# Regular tests WITH memory profiling for early leak detection
 
 # ============================================================================
 # REDUNDANT TARGETS REMOVED - Now in run-tests unified executable
@@ -186,7 +187,9 @@ add_executable(test-performance EXCLUDE_FROM_ALL
     src/exception.c
     src/memory_profiler.c
     src/memory_hooks.c)
-target_compile_definitions(test-performance PRIVATE ENABLE_META DEBUG)
+# Performance tests WITHOUT memory profiling for clean benchmarks
+target_compile_definitions(test-performance PRIVATE ENABLE_META)
+target_compile_options(test-performance PRIVATE -O2)
 
 # Test executable for seq debugging
 # EXCLUDE_FROM_ALL: These debug tests access internal SeqIterator details

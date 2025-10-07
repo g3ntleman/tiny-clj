@@ -12,10 +12,10 @@ ctest --output-on-failure
 
 echo "\n=== All Tests Passed! Running Benchmarks ==="
 
-# Build and run benchmark target
+# Build and run performance benchmark target (optimized, no profiling)
 cmake . >/dev/null
-make -j test-benchmark >/dev/null
-./test-benchmark --report --compare
+make -j test-performance >/dev/null
+./test-performance
 
 echo "\n=== Benchmark Complete ==="
 echo "All tests passed and benchmarks completed successfully!"

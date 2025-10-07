@@ -22,8 +22,8 @@ make clean
 make -j
 
 # Run benchmark with profiling
-echo "Running benchmark with profiling..."
-./test-benchmark --profile > benchmark_profile.log 2>&1
+echo "Running performance tests (optimized build)..."
+./test-performance > benchmark_profile.log 2>&1
 
 # Generate profile report
 echo "Generating profile report..."
