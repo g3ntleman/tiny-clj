@@ -34,6 +34,14 @@ static int is_balanced_form(const char *s) {
 }
 
 static void print_result(CljObject *v) {
+    // For symbols, print their name directly (not as code)
+    if (v && v->type == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(v);
+        if (sym && sym->name) {
+            printf("%s\n", sym->name);
+            return;
+        }
+    }
     char *s = pr_str(v);
     if (s) { printf("%s\n", s); free(s); }
 }
@@ -69,14 +77,32 @@ int main(int argc, char **argv) {
     if (argc > 1) clojure_core_set_quiet(1);
 
     const char *ns_arg = NULL;
-    const char *eval_arg = NULL;
+    const char **eval_args = NULL;
+    int eval_count = 0;
     const char *file_arg = NULL;
     bool start_repl = false;
+    
+    // First pass: count -e arguments
+    for (int i = 1; i < argc; i++) {
+        if ((strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0) && i + 1 < argc) {
+            eval_count++;
+            i++; // skip the argument value
+        }
+    }
+    
+    // Allocate array for eval arguments
+    if (eval_count > 0) {
+        eval_args = malloc(sizeof(char*) * eval_count);
+        if (!eval_args) return 1;
+    }
+    
+    // Second pass: collect all arguments
+    int eval_idx = 0;
     for (int i = 1; i < argc; i++) {
         if ((strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--ns") == 0) && i + 1 < argc) {
             ns_arg = argv[++i];
         } else if ((strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0) && i + 1 < argc) {
-            eval_arg = argv[++i];
+            eval_args[eval_idx++] = argv[++i];
         } else if ((strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--file") == 0) && i + 1 < argc) {
             file_arg = argv[++i];
         } else if (strcmp(argv[i], "--no-core") == 0) {
@@ -85,9 +111,11 @@ int main(int argc, char **argv) {
             start_repl = true;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
+            if (eval_args) free(eval_args);
             return 0;
         } else {
             usage(argv[0]);
+            if (eval_args) free(eval_args);
             return 1;
         }
     }
@@ -124,27 +152,35 @@ int main(int argc, char **argv) {
                     release_exception((CLJException*)st->last_error);
                     st->last_error = NULL;
                 }
+                if (eval_args) free(eval_args);
                 return 1;
             }
         }
-        if (!start_repl && !eval_arg) return 0;
+        if (!start_repl && eval_count == 0) {
+            if (eval_args) free(eval_args);
+            return 0;
+        }
     }
 
-    if (eval_arg) {
+    // Execute all -e arguments in order
+    for (int i = 0; i < eval_count; i++) {
         CLJVALUE_POOL_SCOPE(pool) {
             if (setjmp(st->jmp_env) == 0) {
-                (void)eval_string_repl(eval_arg, st);
+                (void)eval_string_repl(eval_args[i], st);
             } else {
                 if (st->last_error) {
                     print_result(st->last_error);
                     release_exception((CLJException*)st->last_error);
                     st->last_error = NULL;
                 }
+                if (eval_args) free(eval_args);
                 return 1;
             }
         }
-        if (!start_repl) return 0;
     }
+    
+    if (eval_args) free(eval_args);
+    if (eval_count > 0 && !start_repl) return 0;
 
     // Interactive REPL
     printf("tiny-clj %s REPL (platform=%s). Ctrl-D to exit. \n", "0.1", platform_name());

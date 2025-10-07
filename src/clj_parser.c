@@ -124,7 +124,7 @@ static CljObject *parse_number(Reader *reader, EvalState *st);
  * @param st Evaluation state
  * @return Parsed CljObject or NULL on error, autoreleased
  */
-static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
+CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   if (reader_is_eof(reader))
     return NULL;
@@ -148,6 +148,13 @@ static CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
     return parse_symbol(reader, st);
   if (strchr("+*/=<>", c)) {
+    // Check if next character is also a symbol character (e.g., *ns* not just *)
+    char next = reader_peek_ahead(reader, 1);
+    if (next && (is_alphanumeric(next) || next == '*' || next == '+' || next == '/' || next == '=' || next == '<' || next == '>' || next == '-' || next == '_' || next == '?' || next == '!' || (unsigned char)next >= 0x80)) {
+      // Multi-character symbol like *ns* or *out*
+      return parse_symbol(reader, st);
+    }
+    // Single character operator
     reader_consume(reader);
     char buf[2] = {c, '\0'};
     return (CljObject *)intern_symbol_global(buf);
@@ -443,11 +450,11 @@ static CljObject *parse_meta(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   CljObject *obj = parse_expr_internal(reader, st);
   if (!obj) {
-    release(meta);
+    RELEASE(meta);
     return NULL;
   }
   meta_set(obj, meta);
-  release(meta);
+  RELEASE(meta);
   return obj;
 }
 
@@ -469,11 +476,11 @@ static CljObject *parse_meta_map(Reader *reader,
   reader_skip_all(reader);
   CljObject *obj = parse_expr_internal(reader, st);
   if (!obj) {
-    release(meta);
+    RELEASE(meta);
     return NULL;
   }
   meta_set(obj, meta);
-  release(meta);
+  RELEASE(meta);
   return obj;
 }
 

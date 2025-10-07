@@ -6,8 +6,11 @@
 #include "namespace.h"
 #include "runtime.h"
 #include "tiny_clj.h"
+#include "reader.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
+#include <setjmp.h>
 
 static bool g_core_quiet = false;
 
@@ -19,6 +22,9 @@ const char *clojure_core_code =
 
     ;
 
+// Forward declaration for parse_expr_internal
+extern CljObject *parse_expr_internal(Reader *reader, EvalState *st);
+
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
     return false;
@@ -26,25 +32,73 @@ static bool eval_core_source(const char *src, EvalState *st) {
     printf("[clojure.core] eval_core_source src=%p first=%d\n", (void *)src,
            (int)(unsigned char)src[0]);
   }
-  CljObject *form = NULL;
-  // Parse the entire source as one expression
-  form = parse(src, st);
-  if (!form)
-    return false;
-  CljObject *result = eval_expr_simple(form, st);
-  if (result)
-    release(result);
-  return true;
+  
+  // Use Reader to parse multiple expressions
+  Reader reader;
+  reader_init(&reader, src);
+  
+  int expr_count = 0;
+  int success_count = 0;
+  
+  // Save current exception handler
+  jmp_buf saved_env;
+  memcpy(saved_env, st->jmp_env, sizeof(jmp_buf));
+  
+  // Parse and evaluate all expressions in the source
+  while (!reader_is_eof(&reader)) {
+    reader_skip_all(&reader);
+    if (reader_is_eof(&reader)) break;
+    
+    CljObject *form = parse_expr_internal(&reader, st);
+    if (!form) {
+      if (!g_core_quiet) {
+        printf("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
+      }
+      break;
+    }
+    
+    // Evaluate with exception handling
+    if (setjmp(st->jmp_env) == 0) {
+      CljObject *result = eval_expr_simple(form, st);
+      if (result) release(result);
+      success_count++;
+    } else {
+      // Exception occurred during evaluation
+      if (!g_core_quiet) {
+        printf("[clojure.core] Exception in expression #%d\n", expr_count + 1);
+        if (st->last_error) {
+          char *err_str = pr_str(st->last_error);
+          if (err_str) {
+            printf("[clojure.core] Error: %s\n", err_str);
+            free(err_str);
+          }
+        }
+      }
+      // Continue with next expression
+    }
+    
+    // Restore exception handler for next iteration
+    memcpy(st->jmp_env, saved_env, sizeof(jmp_buf));
+    expr_count++;
+  }
+  
+  if (!g_core_quiet) {
+    printf("[clojure.core] Loaded %d/%d expressions successfully\n", 
+           success_count, expr_count);
+  }
+  
+  return success_count > 0;
 }
 
 int load_clojure_core() {
-  printf("[clojure.core] load_clojure_core start src=%p\n",
-         (void *)clojure_core_code);
-  if (clojure_core_code) {
-    printf("[clojure.core] first chars: %.32s\n", clojure_core_code);
-  }
-  if (!g_core_quiet)
+  if (!g_core_quiet) {
+    printf("[clojure.core] load_clojure_core start src=%p\n",
+           (void *)clojure_core_code);
+    if (clojure_core_code) {
+      printf("[clojure.core] first chars: %.32s\n", clojure_core_code);
+    }
     printf("=== Loading Clojure Core Functions ===\n");
+  }
   if (!clojure_core_code && !g_core_quiet) {
     printf("[clojure.core] source string missing\n");
     return 0;
@@ -56,7 +110,7 @@ int load_clojure_core() {
     return 0;
 
   set_global_eval_state(st);
-  evalstate_set_ns(st, "clojure.core");
+  evalstate_set_ns(st, "user");  // Load into user namespace so functions are accessible
 
   bool ok = eval_core_source(clojure_core_code, st);
 

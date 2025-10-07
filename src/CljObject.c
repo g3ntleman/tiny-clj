@@ -29,6 +29,13 @@
 
 static void release_object_deep(CljObject *v);
 
+/** @brief Release all elements in an array */
+static inline void release_array(CljObject **array, int count) {
+    for (int i = 0; i < count; i++) {
+        if (array[i]) release(array[i]);
+    }
+}
+
 /**
  * Convenience function for throwing exceptions with printf-style formatting
  * 
@@ -367,9 +374,7 @@ static void release_object_deep(CljObject *v) {
             {
                 CljPersistentVector *vec = as_vector(v);
                 if (vec) {
-                    for (int i = 0; i < vec->count; ++i) {
-                        if (vec->data[i]) release(vec->data[i]);
-                    }
+                    release_array(vec->data, vec->count);
                     free(vec->data);
                 }
             }
@@ -379,9 +384,7 @@ static void release_object_deep(CljObject *v) {
             {
                 CljPersistentVector *vec = as_vector(v);
                 if (vec) {
-                    for (int i = 0; i < vec->count; ++i) {
-                        if (vec->data[i]) release(vec->data[i]);
-                    }
+                    release_array(vec->data, vec->count);
                     free(vec->data);
                 }
             }
@@ -392,9 +395,7 @@ static void release_object_deep(CljObject *v) {
             {
                 CljMap *map = as_map(v);
                 if (map) {
-                    for (int i = 0; i < map->count * 2; ++i) {
-                        if (map->data[i]) release(map->data[i]);
-                    }
+                    release_array(map->data, map->count * 2);
                     free(map->data);
                     free(map);
                 }
@@ -424,9 +425,7 @@ static void release_object_deep(CljObject *v) {
                 CljFunction *func = as_function(v);
                 if (func) {
                     if (func->params) {
-                        for (int i = 0; i < func->param_count; i++) {
-                            if (func->params[i]) release(func->params[i]);
-                        }
+                        release_array(func->params, func->param_count);
                         free(func->params);
                     }
                     if (func->body) release(func->body);
