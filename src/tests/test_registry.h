@@ -17,6 +17,7 @@ typedef struct {
 // Forward declarations for all MinUnit test suite runners
 extern char *run_unit_tests(void);
 extern char *run_parser_tests(void);
+extern char *run_namespace_tests(void);
 extern char *run_seq_tests(void);
 extern char *run_for_loop_tests(void);
 extern char *run_eval_string_api_tests(void);
@@ -25,6 +26,7 @@ extern char *run_eval_string_api_tests(void);
 static TestEntry all_minunit_tests[] = {
     {"unit",            "core",    run_unit_tests},
     {"parser",          "core",    run_parser_tests},
+    {"namespace",       "core",    run_namespace_tests},
     {"seq",             "data",    run_seq_tests},
     {"for_loops",       "control", run_for_loop_tests},
     {"eval_string_api", "api",     run_eval_string_api_tests},

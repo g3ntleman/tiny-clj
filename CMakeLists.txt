@@ -69,6 +69,7 @@ add_executable(run-tests
     src/tests/run_tests_main.c
     src/tests/test_unit_minunit.c
     src/tests/test_parser_minunit.c
+    src/tests/test-namespace.c
     src/tests/test_seq_minunit.c
     src/tests/test_for_loops_minunit.c
     src/tests/test_eval_string_api.c

@@ -641,9 +641,9 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
         return value;  // Gefunden
     }
     
-    // Fehler: Undefinierte Variable
+    // Fehler: Symbol kann nicht aufgelöst werden
     const char *name = sym ? sym->name : "unknown";
-    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Undefined variable: %s", name);
+    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
     return NULL;
 }
 
