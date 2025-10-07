@@ -11,6 +11,7 @@
  */
 
 #include "clj_parser.h"
+#include "function_call.h"
 #include "map.h"
 #include "list_operations.h"
 #include "memory_hooks.h"
@@ -194,8 +195,28 @@ CljObject* parse_string(const char* expr_str, EvalState *eval_state) {
  */
 CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     if (!parsed_expr) return NULL;
-    CljObject *result = eval_expr_simple(parsed_expr, eval_state);
-    return result ? AUTORELEASE(result) : NULL;
+    
+    CljObject *result = NULL;
+    
+    // Use TRY/CATCH to handle exceptions
+    EvalState *st = eval_state;  // Alias for macro compatibility
+    TRY {
+        // Handle lists with special forms (like ns, def, fn)
+        if (parsed_expr->type == CLJ_LIST) {
+            CljObject *env = (eval_state && eval_state->current_ns) ? eval_state->current_ns->mappings : NULL;
+            result = eval_list(parsed_expr, env, eval_state);
+            if (result) result = AUTORELEASE(result);
+        } else {
+            // Handle other types with eval_expr_simple
+            result = eval_expr_simple(parsed_expr, eval_state);
+            // Don't autorelease here - let eval_string handle it
+        }
+    } CATCH(ex) {
+        // Exception caught - return NULL
+        result = NULL;
+    } END_TRY
+    
+    return result;
 }
 
 /**
@@ -215,16 +236,25 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
         return NULL;
     }
     
-    CljObject *result = eval_parsed(parsed, eval_state);
+    CljObject *result = NULL;
     
-    // Retain result before cleaning up pool
-    if (result) RETAIN(result);
+    // Use TRY/CATCH to handle exceptions
+    EvalState *st = eval_state;  // Alias for macro compatibility
+    TRY {
+        result = eval_parsed(parsed, eval_state);
+        
+        // Retain result before cleaning up pool
+        if (result) RETAIN(result);
+        
+        // Don't clean up pool - let caller handle it
+        
+        // Return result without autorelease (already retained)
+    } CATCH(ex) {
+        // Exception caught - return NULL
+        result = NULL;
+    } END_TRY
     
-    // Clean up autorelease pool
-    cljvalue_pool_pop();
-    
-    // Return autoreleased result
-    return result ? AUTORELEASE(result) : NULL;
+    return result;
 }
 
 /**

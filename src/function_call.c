@@ -643,8 +643,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
     }
     
     // Fehler: Symbol kann nicht aufgelöst werden
-    const char *name = sym ? sym->name : "unknown";
-    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
+    // Don't throw exception - return NULL instead
     return NULL;
 }
 
@@ -928,7 +927,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
             }
             
             // Evaluate body for side effects
-            RELEASE(body); // Discard result
+            // Note: body is a parameter, don't release it
             
             // Clean up environment objects
             RELEASE(new_env_data->tail);  // Freigabe der tail-Liste
@@ -942,8 +941,8 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
         seq_release(seq);
     }
     
-    // Clean up allocated objects (only collection is owned)
-    RELEASE(collection);
+    // Clean up allocated objects
+    // Note: collection is a parameter, don't release it
     return AUTORELEASE(clj_nil()); // doseq always returns nil
 }
 
@@ -991,8 +990,8 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     }
     
     CljObject *n_obj = n_data->head; // Simple: just use the expression directly
-    if (!n_obj || n_obj->type != CLJ_INT) {
-        if (n_obj) RELEASE(n_obj);
+    if (!is_type(n_obj, CLJ_INT)) {
+        RELEASE(n_obj);
         return clj_nil();
     }
     
@@ -1014,19 +1013,16 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
                 CljObject *int_obj = make_int(i);
                 tail_data->head = int_obj;
                 tail_data->tail = env; // Chain with existing environment
-                // Clean up objects (not returned as values)
-                RELEASE(int_obj);
+                // Note: int_obj is embedded in tail_list, don't release separately
             }
             // Clean up environment objects (not returned as values)
+            // Note: tail_list is embedded in new_env, don't release separately
             RELEASE(new_env);
-            RELEASE(tail_list);
         }
         
         // Evaluate body
-        CljObject *body_result = body; // Simple: just return the expression
-        if (body_result) {
-            RELEASE(body_result); // Discard result
-        }
+        // Note: body is a parameter, don't release it
+        // For now, we just skip body evaluation (placeholder)
     }
     
     return AUTORELEASE(clj_nil()); // dotimes always returns nil
