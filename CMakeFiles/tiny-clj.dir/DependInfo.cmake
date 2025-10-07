@@ -10,7 +10,6 @@ set(CMAKE_DEPENDS_LANGUAGES
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/theisen/Projects/tiny-clj/src/CljObject.c" "CMakeFiles/tiny-clj.dir/src/CljObject.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/CljObject.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/builtins.c" "CMakeFiles/tiny-clj.dir/src/builtins.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/builtins.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/clj_error.c" "CMakeFiles/tiny-clj.dir/src/clj_error.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/clj_error.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/clj_parser.c" "CMakeFiles/tiny-clj.dir/src/clj_parser.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/clj_parser.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/clj_symbols.c" "CMakeFiles/tiny-clj.dir/src/clj_symbols.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/clj_symbols.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/clojure_core.c" "CMakeFiles/tiny-clj.dir/src/clojure_core.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/clojure_core.c.o.d"
@@ -23,13 +22,6 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/Users/theisen/Projects/tiny-clj/src/runtime.c" "CMakeFiles/tiny-clj.dir/src/runtime.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/runtime.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/seq.c" "CMakeFiles/tiny-clj.dir/src/seq.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/seq.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/string.c" "CMakeFiles/tiny-clj.dir/src/string.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/string.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_alloc_macros.c" "CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_assertions.c" "CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_global_singletons.c" "CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_integration_main.c" "CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_parser_minunit.c" "CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c" "CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o.d"
-  "/Users/theisen/Projects/tiny-clj/src/tests/test_unit_minunit.c" "CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/types.c" "CMakeFiles/tiny-clj.dir/src/types.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/types.c.o.d"
   "/Users/theisen/Projects/tiny-clj/src/vector.c" "CMakeFiles/tiny-clj.dir/src/vector.c.o" "gcc" "CMakeFiles/tiny-clj.dir/src/vector.c.o.d"
   )

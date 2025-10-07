@@ -296,118 +296,6 @@ CMakeFiles/tiny-clj.dir/src/seq.c.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/seq.c.s"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/seq.c -o CMakeFiles/tiny-clj.dir/src/seq.c.s
 
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o: src/tests/test_unit_main.c
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c > CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_unit_main.c -o CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.s
-
-CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o: src/tests/test_integration_main.c
-CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_18) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_integration_main.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_integration_main.c > CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_integration_main.c -o CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.s
-
-CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o: src/tests/test_parser_minunit.c
-CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_19) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_parser_minunit.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_parser_minunit.c > CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_parser_minunit.c -o CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.s
-
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o: src/tests/test_unit_minunit.c
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_20) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_unit_minunit.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_unit_minunit.c > CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_unit_minunit.c -o CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.s
-
-CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o: src/tests/test_assertions.c
-CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_21) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_assertions.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_assertions.c > CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_assertions.c -o CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.s
-
-CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o: src/tests/test_global_singletons.c
-CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_22) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_global_singletons.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_global_singletons.c > CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_global_singletons.c -o CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.s
-
-CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o: src/tests/test_alloc_macros.c
-CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_23) "Building C object CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o -MF CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o.d -o CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o -c /Users/theisen/Projects/tiny-clj/src/tests/test_alloc_macros.c
-
-CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/tests/test_alloc_macros.c > CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.i
-
-CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/tests/test_alloc_macros.c -o CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.s
-
-CMakeFiles/tiny-clj.dir/src/clj_error.c.o: CMakeFiles/tiny-clj.dir/flags.make
-CMakeFiles/tiny-clj.dir/src/clj_error.c.o: src/clj_error.c
-CMakeFiles/tiny-clj.dir/src/clj_error.c.o: CMakeFiles/tiny-clj.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_24) "Building C object CMakeFiles/tiny-clj.dir/src/clj_error.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/tiny-clj.dir/src/clj_error.c.o -MF CMakeFiles/tiny-clj.dir/src/clj_error.c.o.d -o CMakeFiles/tiny-clj.dir/src/clj_error.c.o -c /Users/theisen/Projects/tiny-clj/src/clj_error.c
-
-CMakeFiles/tiny-clj.dir/src/clj_error.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing C source to CMakeFiles/tiny-clj.dir/src/clj_error.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /Users/theisen/Projects/tiny-clj/src/clj_error.c > CMakeFiles/tiny-clj.dir/src/clj_error.c.i
-
-CMakeFiles/tiny-clj.dir/src/clj_error.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling C source to assembly CMakeFiles/tiny-clj.dir/src/clj_error.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /Users/theisen/Projects/tiny-clj/src/clj_error.c -o CMakeFiles/tiny-clj.dir/src/clj_error.c.s
-
 # Object files for target tiny-clj
 tiny__clj_OBJECTS = \
 "CMakeFiles/tiny-clj.dir/src/clojure_core.c.o" \
@@ -425,15 +313,7 @@ tiny__clj_OBJECTS = \
 "CMakeFiles/tiny-clj.dir/src/vector.c.o" \
 "CMakeFiles/tiny-clj.dir/src/map.c.o" \
 "CMakeFiles/tiny-clj.dir/src/string.c.o" \
-"CMakeFiles/tiny-clj.dir/src/seq.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o" \
-"CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o" \
-"CMakeFiles/tiny-clj.dir/src/clj_error.c.o"
+"CMakeFiles/tiny-clj.dir/src/seq.c.o"
 
 # External object files for target tiny-clj
 tiny__clj_EXTERNAL_OBJECTS =
@@ -454,17 +334,9 @@ tiny-clj: CMakeFiles/tiny-clj.dir/src/vector.c.o
 tiny-clj: CMakeFiles/tiny-clj.dir/src/map.c.o
 tiny-clj: CMakeFiles/tiny-clj.dir/src/string.c.o
 tiny-clj: CMakeFiles/tiny-clj.dir/src/seq.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_unit_main.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_integration_main.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_parser_minunit.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_unit_minunit.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_assertions.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_global_singletons.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/tests/test_alloc_macros.c.o
-tiny-clj: CMakeFiles/tiny-clj.dir/src/clj_error.c.o
 tiny-clj: CMakeFiles/tiny-clj.dir/build.make
 tiny-clj: CMakeFiles/tiny-clj.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_25) "Linking C executable tiny-clj"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/theisen/Projects/tiny-clj/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Linking C executable tiny-clj"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/tiny-clj.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
