@@ -69,12 +69,10 @@ static char* test_zero_predicate(void) {
     test_setup();
     
     CljObject *result1 = eval_code("(zero? 0)");
-    mu_assert("(zero? 0) should return true", 
-        is_type(result1, CLJ_BOOL) && result1 == clj_true());
+    mu_assert("(zero? 0) should return true", result1 == clj_true());
     
     CljObject *result2 = eval_code("(zero? 1)");
-    mu_assert("(zero? 1) should return false", 
-        is_type(result2, CLJ_BOOL) && result2 == clj_false());
+    mu_assert("(zero? 1) should return false", result2 == clj_false());
     
     test_teardown();
     return NULL;
@@ -85,16 +83,13 @@ static char* test_pos_predicate(void) {
     test_setup();
     
     CljObject *result1 = eval_code("(pos? 5)");
-    mu_assert("(pos? 5) should return true", 
-        is_type(result1, CLJ_BOOL) && result1 == clj_true());
+    mu_assert("(pos? 5) should return true", result1 == clj_true());
     
     CljObject *result2 = eval_code("(pos? 0)");
-    mu_assert("(pos? 0) should return false", 
-        is_type(result2, CLJ_BOOL) && result2 == clj_false());
+    mu_assert("(pos? 0) should return false", result2 == clj_false());
     
     CljObject *result3 = eval_code("(pos? -5)");
-    mu_assert("(pos? -5) should return false", 
-        is_type(result3, CLJ_BOOL) && result3 == clj_false());
+    mu_assert("(pos? -5) should return false", result3 == clj_false());
     
     test_teardown();
     return NULL;
@@ -105,16 +100,13 @@ static char* test_neg_predicate(void) {
     test_setup();
     
     CljObject *result1 = eval_code("(neg? -5)");
-    mu_assert("(neg? -5) should return true", 
-        is_type(result1, CLJ_BOOL) && result1 == clj_true());
+    mu_assert("(neg? -5) should return true", result1 == clj_true());
     
     CljObject *result2 = eval_code("(neg? 0)");
-    mu_assert("(neg? 0) should return false", 
-        is_type(result2, CLJ_BOOL) && result2 == clj_false());
+    mu_assert("(neg? 0) should return false", result2 == clj_false());
     
     CljObject *result3 = eval_code("(neg? 5)");
-    mu_assert("(neg? 5) should return false", 
-        is_type(result3, CLJ_BOOL) && result3 == clj_false());
+    mu_assert("(neg? 5) should return false", result3 == clj_false());
     
     test_teardown();
     return NULL;
@@ -129,16 +121,13 @@ static char* test_not_function(void) {
     test_setup();
     
     CljObject *result1 = eval_code("(not true)");
-    mu_assert("(not true) should return false", 
-        is_type(result1, CLJ_BOOL) && result1 == clj_false());
+    mu_assert("(not true) should return false", result1 == clj_false());
     
     CljObject *result2 = eval_code("(not false)");
-    mu_assert("(not false) should return true", 
-        is_type(result2, CLJ_BOOL) && result2 == clj_true());
+    mu_assert("(not false) should return true", result2 == clj_true());
     
     CljObject *result3 = eval_code("(not 0)");
-    mu_assert("(not 0) should return false (0 is truthy)", 
-        is_type(result3, CLJ_BOOL) && result3 == clj_false());
+    mu_assert("(not 0) should return false (0 is truthy)", result3 == clj_false());
     
     test_teardown();
     return NULL;
@@ -205,12 +194,10 @@ static char* test_empty_predicate(void) {
     test_setup();
     
     CljObject *result1 = eval_code("(empty? [])");
-    mu_assert("(empty? []) should return true", 
-        is_type(result1, CLJ_BOOL) && result1 == clj_true());
+    mu_assert("(empty? []) should return true", result1 == clj_true());
     
     CljObject *result2 = eval_code("(empty? [1 2 3])");
-    mu_assert("(empty? [1 2 3]) should return false", 
-        is_type(result2, CLJ_BOOL) && result2 == clj_false());
+    mu_assert("(empty? [1 2 3]) should return false", result2 == clj_false());
     
     test_teardown();
     return NULL;
