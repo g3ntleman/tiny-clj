@@ -33,6 +33,18 @@ static int is_balanced_form(const char *s) {
     return (p == 0 && b == 0 && c == 0 && !in_str);
 }
 
+static void print_prompt(EvalState *st, bool balanced) {
+    const char *ns_name = "user";  // Default
+    if (st && st->current_ns && st->current_ns->name) {
+        CljSymbol *sym = as_symbol(st->current_ns->name);
+        if (sym && sym->name) {
+            ns_name = sym->name;
+        }
+    }
+    printf("%s%s ", ns_name, balanced ? "=>" : "...");
+    fflush(stdout);
+}
+
 static void print_result(CljObject *v) {
     // For symbols, print their name directly (not as code)
     if (v && v->type == CLJ_SYMBOL) {
@@ -191,8 +203,7 @@ int main(int argc, char **argv) {
     for (;;) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
-            printf(is_balanced_form(acc) ? "> " : "…> ");
-            fflush(stdout);
+            print_prompt(st, is_balanced_form(acc));
             prompt_shown = true;
         }
 
