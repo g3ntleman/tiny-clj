@@ -44,10 +44,17 @@ static char* all_tests() {
     return 0;
 }
 
+// Export for unified test runner
+char *run_eval_string_api_tests(void) {
+    return all_tests();
+}
+
+#ifndef UNIFIED_TEST_RUNNER
+// Standalone mode
 int main() {
     printf("🧪 === eval_string API Tests ===\n\n");
     
-    char *result = all_tests();
+    char *result = run_eval_string_api_tests();
     if (result != 0) {
         printf("❌ %s\n", result);
     } else {
@@ -56,3 +63,4 @@ int main() {
     
     return result != 0;
 }
+#endif

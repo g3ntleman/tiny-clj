@@ -339,13 +339,18 @@ static char *all_seq_tests(void) {
     return 0;
 }
 
+// Export for unified test runner
+char *run_seq_tests(void) {
+    init_special_symbols();
+    return all_seq_tests();
+}
+
+#ifndef UNIFIED_TEST_RUNNER
+// Standalone mode
 int main(void) {
     printf("=== Tiny-CLJ Seq Semantics Tests ===\n");
-    
-    // Initialize symbol table
     init_special_symbols();
-    
     int result = run_minunit_tests(all_seq_tests, "Seq Semantics Tests");
-    
     return result;
 }
+#endif

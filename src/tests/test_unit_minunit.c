@@ -255,6 +255,14 @@ static char *all_unit_tests(void) {
   return 0;
 }
 
+// Export for unified test runner
+char *run_unit_tests(void) {
+  return all_unit_tests();
+}
+
+#ifndef UNIFIED_TEST_RUNNER
+// Standalone mode - keep main() for backward compatibility
 int main(void) {
   return run_minunit_tests(all_unit_tests, "Unit Tests");
 }
+#endif

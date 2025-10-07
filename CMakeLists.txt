@@ -64,6 +64,33 @@ target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
 
+# Unified Test Runner (all MinUnit tests in one executable - STM32 compatible)
+add_executable(run-tests
+    src/tests/run_tests_main.c
+    src/tests/test_unit_minunit.c
+    src/tests/test_parser_minunit.c
+    src/tests/test_seq_minunit.c
+    src/tests/test_for_loops_minunit.c
+    src/tests/test_eval_string_api.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/clojure_core.c
+    src/exception.c
+    src/memory_profiler.c
+    src/memory_hooks.c
+)
+target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG)
+
 # Unit Tests (isolated, fast tests) - using MinUnit
 add_executable(test-unit
     src/tests/test_unit_minunit.c

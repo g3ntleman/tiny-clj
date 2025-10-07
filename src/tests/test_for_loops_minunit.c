@@ -4,17 +4,17 @@
  * Tests the for, doseq, and dotimes implementations
  */
 
+#include "../CljObject.h"
+#include "../clj_symbols.h"
+#include "../memory_hooks.h"
+#include "../memory_profiler.h"
+#include "../tiny_clj.h"
+#include "../clj_parser.h"
+#include "../seq.h"
+#include "../vector.h"
+#include "../list_operations.h"
+#include "../function_call.h"
 #include "minunit.h"
-#include "seq.h"
-#include "vector.h"
-#include "list_operations.h"
-#include "function_call.h"
-#include "CljObject.h"
-#include "clj_symbols.h"
-#include "memory_hooks.h"
-#include "memory_profiler.h"
-#include "tiny_clj.h"
-#include "clj_parser.h"
 #include <stdio.h>
 
 // Helper functions for simplified test creation
@@ -260,23 +260,29 @@ static char *all_for_loop_tests(void) {
     return 0;
 }
 
-int main(void) {
-    printf("=== Tiny-CLJ For-Loop Tests with Memory Profiling ===\n");
-    
-    // Initialize memory profiling with hooks
+// Export for unified test runner
+char *run_for_loop_tests(void) {
     memory_profiling_init_with_hooks();
-    
-    // Initialize symbol table
     init_special_symbols();
-    
-    // Load clojure.core to enable interpreted functions
-    printf("DEBUG: Loading clojure.core...\n");
     load_clojure_core();
     
-    int result = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
+    char *result = all_for_loop_tests();
     
-    // Cleanup memory profiling
     memory_profiling_cleanup_with_hooks();
-    
     return result;
 }
+
+#ifndef UNIFIED_TEST_RUNNER
+// Standalone mode
+int main(void) {
+    printf("=== Tiny-CLJ For-Loop Tests with Memory Profiling ===\n");
+    memory_profiling_init_with_hooks();
+    init_special_symbols();
+    load_clojure_core();
+    
+    int res = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
+    
+    memory_profiling_cleanup_with_hooks();
+    return res;
+}
+#endif

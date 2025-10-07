@@ -193,6 +193,14 @@ static char *all_parser_tests(void) {
   return 0;
 }
 
+// Export for unified test runner
+char *run_parser_tests(void) {
+  return all_parser_tests();
+}
+
+#ifndef UNIFIED_TEST_RUNNER
+// Standalone mode
 int main(void) {
   return run_minunit_tests(all_parser_tests, "Parser Tests");
 }
+#endif
