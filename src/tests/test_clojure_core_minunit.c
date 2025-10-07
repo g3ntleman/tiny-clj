@@ -60,6 +60,12 @@ static bool is_type(CljObject *obj, CljType expected_type) {
 extern CljObject* clj_true(void);
 extern CljObject* clj_false(void);
 
+// Boolean assertion macros
+#define assert_clj_true(msg, obj) mu_assert(msg, (obj) == clj_true())
+#define assert_clj_false(msg, obj) mu_assert(msg, (obj) == clj_false())
+#define assert_number(msg, obj, val) mu_assert(msg, is_number(obj, val))
+#define assert_type(msg, obj, type) mu_assert(msg, is_type(obj, type))
+
 // ============================================================================
 // NUMERIC PREDICATES
 // ============================================================================
@@ -68,11 +74,8 @@ static char* test_zero_predicate(void) {
     printf("\n=== Testing zero? ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(zero? 0)");
-    mu_assert("(zero? 0) should return true", result1 == clj_true());
-    
-    CljObject *result2 = eval_code("(zero? 1)");
-    mu_assert("(zero? 1) should return false", result2 == clj_false());
+    assert_clj_true("(zero? 0) should return true", eval_code("(zero? 0)"));
+    assert_clj_false("(zero? 1) should return false", eval_code("(zero? 1)"));
     
     test_teardown();
     return NULL;
@@ -82,14 +85,9 @@ static char* test_pos_predicate(void) {
     printf("\n=== Testing pos? ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(pos? 5)");
-    mu_assert("(pos? 5) should return true", result1 == clj_true());
-    
-    CljObject *result2 = eval_code("(pos? 0)");
-    mu_assert("(pos? 0) should return false", result2 == clj_false());
-    
-    CljObject *result3 = eval_code("(pos? -5)");
-    mu_assert("(pos? -5) should return false", result3 == clj_false());
+    assert_clj_true("(pos? 5) should return true", eval_code("(pos? 5)"));
+    assert_clj_false("(pos? 0) should return false", eval_code("(pos? 0)"));
+    assert_clj_false("(pos? -5) should return false", eval_code("(pos? -5)"));
     
     test_teardown();
     return NULL;
@@ -99,14 +97,9 @@ static char* test_neg_predicate(void) {
     printf("\n=== Testing neg? ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(neg? -5)");
-    mu_assert("(neg? -5) should return true", result1 == clj_true());
-    
-    CljObject *result2 = eval_code("(neg? 0)");
-    mu_assert("(neg? 0) should return false", result2 == clj_false());
-    
-    CljObject *result3 = eval_code("(neg? 5)");
-    mu_assert("(neg? 5) should return false", result3 == clj_false());
+    assert_clj_true("(neg? -5) should return true", eval_code("(neg? -5)"));
+    assert_clj_false("(neg? 0) should return false", eval_code("(neg? 0)"));
+    assert_clj_false("(neg? 5) should return false", eval_code("(neg? 5)"));
     
     test_teardown();
     return NULL;
@@ -120,14 +113,9 @@ static char* test_not_function(void) {
     printf("\n=== Testing not ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(not true)");
-    mu_assert("(not true) should return false", result1 == clj_false());
-    
-    CljObject *result2 = eval_code("(not false)");
-    mu_assert("(not false) should return true", result2 == clj_true());
-    
-    CljObject *result3 = eval_code("(not 0)");
-    mu_assert("(not 0) should return false (0 is truthy)", result3 == clj_false());
+    assert_clj_false("(not true) should return false", eval_code("(not true)"));
+    assert_clj_true("(not false) should return true", eval_code("(not false)"));
+    assert_clj_false("(not 0) should return false (0 is truthy)", eval_code("(not 0)"));
     
     test_teardown();
     return NULL;
@@ -141,14 +129,9 @@ static char* test_max_function(void) {
     printf("\n=== Testing max ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(max 10 20)");
-    mu_assert("(max 10 20) should return 20", is_number(result1, 20));
-    
-    CljObject *result2 = eval_code("(max 100 50)");
-    mu_assert("(max 100 50) should return 100", is_number(result2, 100));
-    
-    CljObject *result3 = eval_code("(max -5 -10)");
-    mu_assert("(max -5 -10) should return -5", is_number(result3, -5));
+    assert_number("(max 10 20) should return 20", eval_code("(max 10 20)"), 20);
+    assert_number("(max 100 50) should return 100", eval_code("(max 100 50)"), 100);
+    assert_number("(max -5 -10) should return -5", eval_code("(max -5 -10)"), -5);
     
     test_teardown();
     return NULL;
@@ -158,14 +141,9 @@ static char* test_min_function(void) {
     printf("\n=== Testing min ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(min 10 20)");
-    mu_assert("(min 10 20) should return 10", is_number(result1, 10));
-    
-    CljObject *result2 = eval_code("(min 100 50)");
-    mu_assert("(min 100 50) should return 50", is_number(result2, 50));
-    
-    CljObject *result3 = eval_code("(min -5 -10)");
-    mu_assert("(min -5 -10) should return -10", is_number(result3, -10));
+    assert_number("(min 10 20) should return 10", eval_code("(min 10 20)"), 10);
+    assert_number("(min 100 50) should return 50", eval_code("(min 100 50)"), 50);
+    assert_number("(min -5 -10) should return -10", eval_code("(min -5 -10)"), -10);
     
     test_teardown();
     return NULL;
@@ -179,11 +157,8 @@ static char* test_second_function(void) {
     printf("\n=== Testing second ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(second [1 2 3])");
-    mu_assert("(second [1 2 3]) should return 2", is_number(result1, 2));
-    
-    CljObject *result2 = eval_code("(second [42])");
-    mu_assert("(second [42]) should return nil", is_type(result2, CLJ_NIL));
+    assert_number("(second [1 2 3]) should return 2", eval_code("(second [1 2 3])"), 2);
+    assert_type("(second [42]) should return nil", eval_code("(second [42])"), CLJ_NIL);
     
     test_teardown();
     return NULL;
@@ -193,11 +168,8 @@ static char* test_empty_predicate(void) {
     printf("\n=== Testing empty? ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(empty? [])");
-    mu_assert("(empty? []) should return true", result1 == clj_true());
-    
-    CljObject *result2 = eval_code("(empty? [1 2 3])");
-    mu_assert("(empty? [1 2 3]) should return false", result2 == clj_false());
+    assert_clj_true("(empty? []) should return true", eval_code("(empty? [])"));
+    assert_clj_false("(empty? [1 2 3]) should return false", eval_code("(empty? [1 2 3])"));
     
     test_teardown();
     return NULL;
@@ -211,11 +183,8 @@ static char* test_identity_function(void) {
     printf("\n=== Testing identity ===\n");
     test_setup();
     
-    CljObject *result1 = eval_code("(identity 42)");
-    mu_assert("(identity 42) should return 42", is_number(result1, 42));
-    
-    CljObject *result2 = eval_code("(identity [1 2 3])");
-    mu_assert("(identity [1 2 3]) should return vector", is_type(result2, CLJ_VECTOR));
+    assert_number("(identity 42) should return 42", eval_code("(identity 42)"), 42);
+    assert_type("(identity [1 2 3]) should return vector", eval_code("(identity [1 2 3])"), CLJ_VECTOR);
     
     test_teardown();
     return NULL;
@@ -226,11 +195,8 @@ static char* test_constantly_function(void) {
     test_setup();
     
     // constantly returns a function that always returns the same value
-    CljObject *result1 = eval_code("((constantly 42) 99)");
-    mu_assert("((constantly 42) 99) should return 42", is_number(result1, 42));
-    
-    CljObject *result2 = eval_code("((constantly 10) 20)");
-    mu_assert("((constantly 10) 20) should return 10", is_number(result2, 10));
+    assert_number("((constantly 42) 99) should return 42", eval_code("((constantly 42) 99)"), 42);
+    assert_number("((constantly 10) 20) should return 10", eval_code("((constantly 10) 20)"), 10);
     
     test_teardown();
     return NULL;
