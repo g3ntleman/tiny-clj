@@ -103,6 +103,28 @@ target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENA
 #   - test-eval-string-api → run-tests --test eval_string_api
 # ============================================================================
 
+# Exception Handling Tests (TRY/CATCH nested exception handling)
+add_executable(test-exception-handling
+    src/tests/test-exception-handling.c
+    src/unity.c
+    src/CljObject.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/clojure_core.c
+    src/list_operations.c
+    src/seq.c
+    src/exception.c
+    src/runtime.c
+)
+target_compile_definitions(test-exception-handling PRIVATE ENABLE_META)
+
 # Integration Tests (component interaction tests)
 add_executable(test-integration
     src/tests/test_integration_main.c

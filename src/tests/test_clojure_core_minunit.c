@@ -27,7 +27,7 @@ static void test_setup(void) {
     init_special_symbols();
     meta_registry_init();
     global_eval_state = evalstate_new();
-    load_clojure_core();
+    load_clojure_core(global_eval_state);
 }
 
 static void test_teardown(void) {

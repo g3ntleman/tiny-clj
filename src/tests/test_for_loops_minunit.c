@@ -264,7 +264,9 @@ static char *all_for_loop_tests(void) {
 char *run_for_loop_tests(void) {
     memory_profiling_init_with_hooks();
     init_special_symbols();
-    load_clojure_core();
+    EvalState *st = evalstate_new();
+    set_global_eval_state(st);
+    load_clojure_core(st);
     
     char *result = all_for_loop_tests();
     
@@ -278,7 +280,9 @@ int main(void) {
     printf("=== Tiny-CLJ For-Loop Tests with Memory Profiling ===\n");
     memory_profiling_init_with_hooks();
     init_special_symbols();
-    load_clojure_core();
+    EvalState *st = evalstate_new();
+    set_global_eval_state(st);
+    load_clojure_core(st);
     
     int res = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
     

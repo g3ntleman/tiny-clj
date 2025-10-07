@@ -40,11 +40,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
   int expr_count = 0;
   int success_count = 0;
   
-  // Save current exception handler
-  jmp_buf saved_env;
-  memcpy(saved_env, st->jmp_env, sizeof(jmp_buf));
-  
-  // Parse and evaluate all expressions in the source
+  // Parse and evaluate all expressions in the source with TRY/CATCH
   while (!reader_is_eof(&reader)) {
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
@@ -57,28 +53,23 @@ static bool eval_core_source(const char *src, EvalState *st) {
       break;
     }
     
-    // Evaluate with exception handling
-    if (setjmp(st->jmp_env) == 0) {
+    // Evaluate with exception handling using TRY/CATCH
+    TRY {
       CljObject *result = eval_expr_simple(form, st);
       if (result) release(result);
       success_count++;
-    } else {
+    } CATCH(ex) {
       // Exception occurred during evaluation
       if (!g_core_quiet) {
         printf("[clojure.core] Exception in expression #%d\n", expr_count + 1);
-        if (st->last_error) {
-          char *err_str = pr_str(st->last_error);
-          if (err_str) {
-            printf("[clojure.core] Error: %s\n", err_str);
-            free(err_str);
-          }
+        char *err_str = pr_str((CljObject*)ex);
+        if (err_str) {
+          printf("[clojure.core] Error: %s\n", err_str);
+          free(err_str);
         }
       }
-      // Continue with next expression
-    }
+    } END_TRY
     
-    // Restore exception handler for next iteration
-    memcpy(st->jmp_env, saved_env, sizeof(jmp_buf));
     expr_count++;
   }
   
@@ -90,7 +81,9 @@ static bool eval_core_source(const char *src, EvalState *st) {
   return success_count > 0;
 }
 
-int load_clojure_core() {
+int load_clojure_core(EvalState *st) {
+  if (!st) return 0;
+  
   if (!g_core_quiet) {
     printf("[clojure.core] load_clojure_core start src=%p\n",
            (void *)clojure_core_code);
@@ -103,14 +96,6 @@ int load_clojure_core() {
     printf("[clojure.core] source string missing\n");
     return 0;
   }
-
-
-  EvalState *st = evalstate_new();
-  if (!st)
-    return 0;
-
-  set_global_eval_state(st);
-  evalstate_set_ns(st, "user");  // Load into user namespace so functions are accessible
 
   bool ok = eval_core_source(clojure_core_code, st);
 
@@ -127,17 +112,13 @@ int load_clojure_core() {
     }
   }
 
-  set_global_eval_state(NULL);
-  evalstate_free(st);
-
   return ok ? 1 : 0;
 }
 
 void clojure_core_set_quiet(bool quiet) {
   g_core_quiet = quiet;
-  if (!g_core_quiet) {
-    load_clojure_core();
-  }
+  // Note: load_clojure_core() now requires EvalState parameter
+  // Called from REPL main() instead
 }
 
 void clojure_core_set_source(const char *src) { clojure_core_code = src; }

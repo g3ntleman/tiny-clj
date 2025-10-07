@@ -11,7 +11,9 @@ void setUp(void) {
     // Setup before each test
     init_special_symbols();
     meta_registry_init();
-    load_clojure_core();
+    EvalState *st = evalstate_new();
+    set_global_eval_state(st);
+    load_clojure_core(st);
 }
 
 void tearDown(void) {

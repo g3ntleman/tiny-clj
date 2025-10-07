@@ -26,9 +26,9 @@ typedef struct {
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
     
-    // Exception-Handling
-    jmp_buf jmp_env;          // jump environment for setjmp/longjmp
-    CljObject *last_error;    // last occurred error
+    // Exception-Handling (TRY/CATCH stack-based)
+    struct ExceptionHandler *exception_stack;  // Stack of nested exception handlers
+    CljObject *last_error;    // last occurred error (backward compat)
     const char *file;         // current file
     int line;                 // current line
     int col;                  // current column

@@ -5,6 +5,7 @@
 #include "namespace.h"
 #include "CljObject.h"
 #include "function_call.h"
+#include "exception.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -145,7 +146,7 @@ int main(int argc, char **argv) {
     }
 
     if (!no_core) {
-        load_clojure_core();
+        load_clojure_core(st);
     }
 
     if (ns_arg) {
@@ -153,8 +154,8 @@ int main(int argc, char **argv) {
     }
 
     if (file_arg) {
-        CLJVALUE_POOL_SCOPE(pool) {
-            if (setjmp(st->jmp_env) == 0) {
+        TRY {
+            CLJVALUE_POOL_SCOPE(pool) {
                 FILE *fp = fopen(file_arg, "r");
                 if (!fp) {
                     throw_exception_formatted("IOError", __FILE__, __LINE__, 0,
@@ -170,16 +171,12 @@ int main(int argc, char **argv) {
                     }
                     fclose(fp);
                 }
-            } else {
-                if (st->last_error) {
-                    print_result(st->last_error);
-                    release_exception((CLJException*)st->last_error);
-                    st->last_error = NULL;
-                }
-                if (eval_args) free(eval_args);
-                return 1;
             }
-        }
+        } CATCH(ex) {
+            print_result((CljObject*)ex);
+            if (eval_args) free(eval_args);
+            return 1;
+        } END_TRY
         if (!start_repl && eval_count == 0) {
             if (eval_args) free(eval_args);
             return 0;
@@ -188,19 +185,15 @@ int main(int argc, char **argv) {
 
     // Execute all -e arguments in order
     for (int i = 0; i < eval_count; i++) {
-        CLJVALUE_POOL_SCOPE(pool) {
-            if (setjmp(st->jmp_env) == 0) {
+        TRY {
+            CLJVALUE_POOL_SCOPE(pool) {
                 (void)eval_string_repl(eval_args[i], st);
-            } else {
-                if (st->last_error) {
-                    print_result(st->last_error);
-                    release_exception((CLJException*)st->last_error);
-                    st->last_error = NULL;
-                }
-                if (eval_args) free(eval_args);
-                return 1;
             }
-        }
+        } CATCH(ex) {
+            print_result((CljObject*)ex);
+            if (eval_args) free(eval_args);
+            return 1;
+        } END_TRY
     }
     
     if (eval_args) free(eval_args);
@@ -244,24 +237,21 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        // Evaluate accumulated form
-        CLJVALUE_POOL_SCOPE(pool) {
-            if (setjmp(st->jmp_env) == 0) {
+        // Evaluate accumulated form with TRY/CATCH
+        TRY {
+            CLJVALUE_POOL_SCOPE(pool) {
                 const char *p = acc;
                 CljObject *ast = parse(p, st);
                 if (ast) {
                     CljObject *res = eval_expr_simple(ast, st);
                     if (res) print_result(res);
                 }
-            } else {
-                // Exception caught - print and continue REPL
-                if (st->last_error) {
-                    print_exception((CLJException*)st->last_error);
-                    release_exception((CLJException*)st->last_error);
-                    st->last_error = NULL;
-                }
             }
-        }
+        } CATCH(ex) {
+            // Exception caught - print and continue REPL
+            print_exception(ex);
+        } END_TRY
+        
         acc[0] = '\0';
         prompt_shown = false; // show fresh prompt after evaluation
     }

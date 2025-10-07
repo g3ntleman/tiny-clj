@@ -1,8 +1,61 @@
 #ifndef EXCEPTION_H
 #define EXCEPTION_H
 #include "CljObject.h"
+#include <setjmp.h>
+#include <stdbool.h>
 
 // CLJException is now defined in CljObject.h to avoid circular dependencies
+
+// ============================================================================
+// EXCEPTION HANDLER STACK (for nested TRY/CATCH)
+// ============================================================================
+
+// Exception handler for TRY/CATCH blocks
+typedef struct ExceptionHandler {
+    jmp_buf jump_state;                  // Jump target for longjmp
+    struct ExceptionHandler *next;       // Previous handler (stack)
+    CLJException *exception;             // Caught exception
+} ExceptionHandler;
+
+// ============================================================================
+// TRY/CATCH MACROS (Objective-C style, efficient by design)
+// ============================================================================
+
+// Usage:
+//   TRY {
+//       risky_code();
+//   } CATCH(ex) {
+//       handle_error(ex);
+//       // Exception is automatically released!
+//   } END_TRY
+//
+// Features:
+// - Exception auto-released (no manual release_exception call)
+// - Supports nesting (exception handler stack)
+// - Supports re-throw (throw_exception in CATCH goes to outer handler)
+// - Pure C99, embedded-friendly
+// - Simple, debuggable macro expansion
+//
+// Note: END_TRY is required (like Objective-C NS_ENDHANDLER)
+
+#define TRY { \
+    ExceptionHandler _h = {.next = st->exception_stack, .exception = NULL}; \
+    st->exception_stack = &_h; \
+    if (setjmp(_h.jump_state) == 0) {
+
+#define CATCH(ex) \
+        st->exception_stack = _h.next; \
+    } else { \
+        CLJException *ex = _h.exception; \
+        st->exception_stack = _h.next; \
+        if (ex) { \
+            /* Auto-release after user code */
+
+#define END_TRY \
+            release_exception(ex); \
+        } \
+    } \
+}
 
 // Wenn message dynamisch ist, kann strdup optional genutzt werden
 CLJException* exception(const char *msg, const char *file, int line, int col);

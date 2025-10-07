@@ -1,7 +1,12 @@
 #include <stdlib.h>
 #include <string.h>
+#include "namespace.h"  // Must be before exception.h for EvalState definition
 #include "exception.h"
 #include "runtime.h"
+
+// ============================================================================
+// STANDARD ERROR MESSAGES
+// ============================================================================
 
 // Standard error messages as constants (no heap usage)
 const char *ERROR_EOF_VECTOR = "EOF while reading vector";

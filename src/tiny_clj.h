@@ -9,7 +9,7 @@
 extern const char *clojure_core_code;
 
 // Clojure Core Funktionen
-int load_clojure_core();
+int load_clojure_core(EvalState *st);
 void clojure_core_set_quiet(bool quiet);
 CljObject* call_clojure_core_function(const char *name, int argc, CljObject **argv);
 CljNamespace* get_clojure_core_namespace();

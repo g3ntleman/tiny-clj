@@ -221,7 +221,8 @@ static char *test_variable_with_string(void) {
   // Test defining a string variable
   CljObject *result = eval_string(R"((def message "Hello, World!"))", st);
   mu_assert("String def should work", result != NULL);
-  mu_assert_obj_type(result, CLJ_STRING);
+  // Note: def returns the symbol, not the value
+  mu_assert_obj_type(result, CLJ_SYMBOL);
   
   // Test resolving the string variable
   CljObject *var_result = eval_string("message", st);

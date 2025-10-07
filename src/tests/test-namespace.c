@@ -22,7 +22,7 @@
 #include <string.h>
 
 // Forward declaration
-int load_clojure_core(void);
+int load_clojure_core(EvalState *st);
 
 // ============================================================================
 // TEST HELPERS

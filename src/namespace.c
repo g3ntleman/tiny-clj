@@ -9,6 +9,7 @@
 #include "list_operations.h"
 #include "function_call.h"
 #include "memory_hooks.h"
+#include "exception.h"
 
 // Global namespace registry
 CljNamespace *ns_registry = NULL;
@@ -185,39 +186,30 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
 void eval_error(const char *msg, EvalState *st) {
     if (!st) return;
     
-    CljObject *err = make_exception("RuntimeException", msg, st->file, st->line, st->col, NULL);
-    st->last_error = (CljObject*)err;
-    longjmp(st->jmp_env, 1);
+    // Use throw_exception which handles the exception_stack correctly
+    throw_exception("RuntimeException", msg, st->file, st->line, st->col);
 }
 
 void parse_error(const char *msg, EvalState *st) {
     if (!st) return;
     
-    CljObject *err = make_error(msg, st->file, st->line, st->col);
-    st->last_error = (CljObject*)err;
-    longjmp(st->jmp_env, 1);
+    // Use throw_exception which handles the exception_stack correctly
+    throw_exception("ParseError", msg, st->file, st->line, st->col);
 }
 
 
-// Try/Catch-Implementierung
+// Try/Catch-Implementierung using TRY/CATCH macros
 CljObject* eval_try(CljObject *form, EvalState *st) {
     if (!form || form->type != CLJ_LIST) return NULL;
     
-    jmp_buf saved_env;
-    memcpy(saved_env, st->jmp_env, sizeof(jmp_buf)); // aktuelle Sprungumgebung sichern
-    
     CljObject *result = NULL;
     
-    if (setjmp(st->jmp_env) == 0) {
+    TRY {
         // normaler Body (zweites Element)
         CljObject *body = list_nth(form, 1);
-        {
-            result = eval_expr_simple(body, st); // Vereinfachte Evaluierung
-        }
-    } else {
-    // We arrived here via eval_error
-        CljObject *err = st->last_error;
-        
+        result = eval_expr_simple(body, st);
+    } CATCH(ex) {
+        // We arrived here via eval_error
         // Search for catch clauses
         for (int i = 2; i < list_count(form); i++) {
             CljObject *clause = list_nth(form, i);
@@ -225,18 +217,18 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 CljObject *sym = list_nth(clause, 1);
                 CljObject *body = list_nth(clause, 2);
                 
-                {
-                    // Bind variable (sym = err) - simplified
-                    map_assoc(st->current_ns->mappings, sym, err);
-                    result = eval_expr_simple(body, st);
-                    break;
-                }
+                // Bind variable (sym = err) - simplified
+                map_assoc(st->current_ns->mappings, sym, (CljObject*)ex);
+                result = eval_expr_simple(body, st);
+                return result;
             }
         }
-    }
+        // No catch clause found - re-throw (handler is already popped!)
+        throw_exception(ex->type ? ex->type : "Error", 
+                       ex->message ? ex->message : "Unknown error",
+                       ex->file, ex->line, ex->col);
+    } END_TRY
     
-    // Restore previous jump environment
-    memcpy(st->jmp_env, saved_env, sizeof(jmp_buf));
     return result;
 }
 

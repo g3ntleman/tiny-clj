@@ -25,6 +25,7 @@
 #include "map.h"
 #include "kv_macros.h"
 #include "namespace.h"
+#include "exception.h"  // For ExceptionHandler definition
 #include "memory_profiler.h"
 
 static void release_object_deep(CljObject *v);
@@ -91,10 +92,21 @@ void throw_exception(const char *type, const char *message, const char *file, in
     global_exception = create_exception(type, message, file, line, col, NULL);
     
     if (global_eval_state) {
-        // Use existing try/catch system
-        // Transfer ownership to runtime slot before unwinding
-        global_eval_state->last_error = (CljObject*)global_exception;
-        longjmp(global_eval_state->jmp_env, 1);
+        // Use TRY/CATCH stack system (Objective-C style)
+        if (global_eval_state->exception_stack) {
+            // Transfer exception to handler and unwind stack
+            global_eval_state->exception_stack->exception = global_exception;
+            global_eval_state->last_error = (CljObject*)global_exception;  // backward compat
+            longjmp(global_eval_state->exception_stack->jump_state, 1);
+        } else {
+            // No handler on stack - unhandled exception
+            global_eval_state->last_error = (CljObject*)global_exception;
+            printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
+                   type, message, file ? file : "<unknown>", line, col);
+            release_exception(global_exception);
+            global_exception = NULL;
+            exit(1);
+        }
     } else {
         // Fallback: printf and exit if no EvalState available
         printf("EXCEPTION: %s: %s at %s:%d:%d\n", type, message, file ? file : "<unknown>", line, col);
