@@ -46,16 +46,28 @@ static void print_prompt(EvalState *st, bool balanced) {
 }
 
 static void print_result(CljObject *v) {
+    if (!v) return;
+    
     // For symbols, print their name directly (not as code)
-    if (v && v->type == CLJ_SYMBOL) {
+    if (v->type == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->name) {
             printf("%s\n", sym->name);
             return;
         }
     }
+    
     char *s = pr_str(v);
     if (s) { printf("%s\n", s); free(s); }
+}
+
+static void print_exception(CLJException *ex) {
+    if (!ex) return;
+    fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
+        ex->type ? ex->type : "Error",
+        ex->message ? ex->message : "Unknown error",
+        ex->file ? ex->file : "?",
+        ex->line, ex->col);
 }
 
 static int eval_string_repl(const char *code, EvalState *st) {
@@ -242,8 +254,9 @@ int main(int argc, char **argv) {
                     if (res) print_result(res);
                 }
             } else {
+                // Exception caught - print and continue REPL
                 if (st->last_error) {
-                    print_result(st->last_error);
+                    print_exception((CLJException*)st->last_error);
                     release_exception((CLJException*)st->last_error);
                     st->last_error = NULL;
                 }
