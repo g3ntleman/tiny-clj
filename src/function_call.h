@@ -15,6 +15,7 @@ CljObject* eval_add(CljObject *list, CljObject *env);
 CljObject* eval_sub(CljObject *list, CljObject *env);
 CljObject* eval_mul(CljObject *list, CljObject *env);
 CljObject* eval_div(CljObject *list, CljObject *env);
+CljObject* eval_equal(CljObject *list, CljObject *env);
 CljObject* eval_println(CljObject *list, CljObject *env);
 
 // Definition und Funktionen

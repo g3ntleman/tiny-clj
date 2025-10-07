@@ -354,6 +354,10 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return eval_div(list, env);
     }
     
+    if (sym_is(op, "=")) {
+        return eval_equal(list, env);
+    }
+    
     if (sym_is(op, "println")) {
         return eval_println(list, env);
     }
@@ -473,6 +477,16 @@ CljObject* eval_mul(CljObject *list, CljObject *env) {
 
 CljObject* eval_div(CljObject *list, CljObject *env) {
     return eval_arithmetic_generic(list, env, ARITH_DIV);
+}
+
+CljObject* eval_equal(CljObject *list, CljObject *env) {
+    CljObject *a = eval_arg(list, 1, env);
+    CljObject *b = eval_arg(list, 2, env);
+    
+    if (!a || !b) return clj_nil();
+    
+    bool equal = clj_equal(a, b);
+    return equal ? clj_true() : clj_false();
 }
 
 CljObject* eval_add_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
