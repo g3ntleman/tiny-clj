@@ -250,14 +250,8 @@ add_executable(test-memory-profiling EXCLUDE_FROM_ALL
 # LEGACY TEST EXECUTABLES (for backward compatibility)
 # ============================================================================
 
-# Array-System-Demo
-add_executable(demo-array-system EXCLUDE_FROM_ALL src/tests/demo_array_system.c src/CljObject.c src/types.c src/exception.c src/clj_symbols.c src/namespace.c)
-
-# KV-Makros-Test
+# KV-Makros-Test (legacy, rarely used)
 add_executable(test-kv-macros EXCLUDE_FROM_ALL src/tests/test_kv_macros.c src/CljObject.c src/types.c src/exception.c src/clj_symbols.c src/namespace.c)
-
-# KV-Makros-Demo
-add_executable(kv-macros-demo EXCLUDE_FROM_ALL src/tests/kv_macros_demo.c src/CljObject.c src/types.c src/exception.c src/clj_symbols.c src/namespace.c)
 
 
 # ============================================================================
