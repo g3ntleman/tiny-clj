@@ -277,6 +277,11 @@ void release_object(CljObject *obj);
 /** Free object memory immediately (no rc checks). */
 void free_object(CljObject *obj);
 
+// Type checking helper
+static inline bool is_type(CljObject *obj, CljType expected_type) {
+    return obj && obj->type == expected_type;
+}
+
 // Type-safe casting (static inline for performance)
 static inline CljSymbol* as_symbol(CljObject *obj) {
     return (type(obj) == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;

@@ -77,11 +77,11 @@ static char *test_dotimes_basic(void) {
         // For now, we'll just test that it doesn't crash
         
         // Create binding list: [i 3]
-        CljObject *binding_list = AUTORELEASE(make_list());
+        CljObject *binding_list = make_list();
         CljList *binding_data = as_list(binding_list);
         if (binding_data) {
             binding_data->head = intern_symbol_global("i");
-            binding_data->tail = AUTORELEASE(make_list());
+            binding_data->tail = make_list();
             CljList *tail_data = as_list(binding_data->tail);
             if (tail_data) {
                 tail_data->head = make_int(3);
@@ -90,11 +90,11 @@ static char *test_dotimes_basic(void) {
         }
         
         // Create body: (println i)
-        CljObject *body = AUTORELEASE(make_list());
+        CljObject *body = make_list();
         CljList *body_data = as_list(body);
         if (body_data) {
             body_data->head = intern_symbol_global("println");
-            body_data->tail = AUTORELEASE(make_list());
+            body_data->tail = make_list();
             CljList *body_tail = as_list(body_data->tail);
             if (body_tail) {
                 body_tail->head = intern_symbol_global("i");
@@ -103,15 +103,15 @@ static char *test_dotimes_basic(void) {
         }
         
         // Create function call: (dotimes [i 3] (println i))
-        CljObject *dotimes_call = AUTORELEASE(make_list());
+        CljObject *dotimes_call = make_list();
         CljList *call_data = as_list(dotimes_call);
         if (call_data) {
             call_data->head = intern_symbol_global("dotimes");
-            call_data->tail = AUTORELEASE(make_list());
+            call_data->tail = make_list();
             CljList *call_tail = as_list(call_data->tail);
             if (call_tail) {
                 call_tail->head = binding_list;
-                call_tail->tail = AUTORELEASE(make_list());
+                call_tail->tail = make_list();
                 CljList *call_tail2 = as_list(call_tail->tail);
                 if (call_tail2) {
                     call_tail2->head = body;
@@ -124,7 +124,49 @@ static char *test_dotimes_basic(void) {
         CljObject *result = eval_dotimes(dotimes_call, NULL);
         mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
         
-        RELEASE(dotimes_call);
+        // Clean up all objects - need to free nested structures
+        // Free binding_list and its nested tail
+        if (binding_list) {
+            CljList *binding_data = as_list(binding_list);
+            if (binding_data) {
+                if (binding_data->tail) {
+                    CljList *tail_data = as_list(binding_data->tail);
+                    if (tail_data && tail_data->head) {
+                        RELEASE(tail_data->head); // make_int(3)
+                    }
+                    RELEASE(binding_data->tail);
+                }
+                RELEASE(binding_list);
+            }
+        }
+        
+        // Free body and its nested tail
+        if (body) {
+            CljList *body_data = as_list(body);
+            if (body_data) {
+                if (body_data->tail) {
+                    RELEASE(body_data->tail);
+                }
+                RELEASE(body);
+            }
+        }
+        
+        // Free dotimes_call and its nested structures
+        if (dotimes_call) {
+            CljList *call_data = as_list(dotimes_call);
+            if (call_data) {
+                if (call_data->tail) {
+                    CljList *call_tail = as_list(call_data->tail);
+                    if (call_tail) {
+                        if (call_tail->tail) {
+                            RELEASE(call_tail->tail);
+                        }
+                        RELEASE(call_data->tail);
+                    }
+                }
+                RELEASE(dotimes_call);
+            }
+        }
     });
     
     return 0;
