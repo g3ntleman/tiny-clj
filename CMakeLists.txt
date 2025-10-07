@@ -75,6 +75,7 @@ add_executable(run-tests
     src/tests/test_eval_string_api.c
     src/tests/test_memory.c
     src/tests/test-exception-handling.c
+    src/tests/test-utils.c
     src/object.c
     src/types.c
     src/vector.c
