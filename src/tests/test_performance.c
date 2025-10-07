@@ -64,43 +64,53 @@ static CljObject* create_test_vector(int size) {
 // ============================================================================
 
 static char *benchmark_primitive_object_creation(void) {
-    printf("\n=== Benchmarking Primitive Object Creation ===\n");
+    printf("\n=== Benchmarking Primitive Object Creation (with Memory Management) ===\n");
     
     double start = get_time_ms();
     
     for (int i = 0; i < BENCHMARK_ITERATIONS_MEDIUM; i++) {
         CljObject *obj1 = make_int(i);
         CljObject *obj2 = make_string("test");
-        CljObject *obj3 = clj_true();
-        CljObject *obj4 = clj_nil();
-        (void)obj1; (void)obj2; (void)obj3; (void)obj4;
+        CljObject *obj3 = clj_true();  // Singleton - no release needed
+        CljObject *obj4 = clj_nil();   // Singleton - no release needed
+        (void)obj3; (void)obj4;  // Mark as intentionally accessed
+        
+        // Release non-singleton objects to measure full memory lifecycle
+        release(obj1);
+        release(obj2);
+        // Singletons (obj3, obj4) are not released
     }
     
     double elapsed = get_time_ms() - start;
-    double ops_per_sec = (BENCHMARK_ITERATIONS_MEDIUM * 4 * 1000.0) / elapsed;
+    // 2 objects per iteration (int + string, singletons don't count)
+    double ops_per_sec = (BENCHMARK_ITERATIONS_MEDIUM * 2 * 1000.0) / elapsed;
     
     printf("  Total time: %.3f ms\n", elapsed);
     printf("  Per iteration: %.6f ms\n", elapsed / BENCHMARK_ITERATIONS_MEDIUM);
-    printf("  Operations/sec: %.0f\n", ops_per_sec);
+    printf("  Operations/sec (alloc+free): %.0f\n", ops_per_sec);
     
     return NULL;
 }
 
 static char *benchmark_collection_creation(void) {
-    printf("\n=== Benchmarking Collection Creation ===\n");
+    printf("\n=== Benchmarking Collection Creation (with Memory Management) ===\n");
     
     double start = get_time_ms();
     
     for (int i = 0; i < BENCHMARK_ITERATIONS_SMALL; i++) {
         CljObject *vec = make_vector(16, 1);
         for (int j = 0; j < 16; j++) {
-            vector_conj(vec, make_int(j));
+            CljObject *num = make_int(j);
+            vector_conj(vec, num);
+            release(num);  // Release the integer after adding to vector
         }
+        release(vec);  // Release the vector
     }
     
     double elapsed = get_time_ms() - start;
     printf("  Total time: %.3f ms\n", elapsed);
     printf("  Per iteration: %.6f ms\n", elapsed / BENCHMARK_ITERATIONS_SMALL);
+    printf("  Per operation (alloc+free): %.6f ms\n", elapsed / (BENCHMARK_ITERATIONS_SMALL * 17));
     
     return NULL;
 }
@@ -287,7 +297,7 @@ static char *benchmark_parsing_expressions(void) {
 // ============================================================================
 
 static char *benchmark_memory_allocation(void) {
-    printf("\n=== Benchmarking Memory Allocation/Deallocation ===\n");
+    printf("\n=== Benchmarking Memory Allocation/Deallocation (Strings) ===\n");
     
     double start = get_time_ms();
     
@@ -297,8 +307,11 @@ static char *benchmark_memory_allocation(void) {
     }
     
     double elapsed = get_time_ms() - start;
+    double ops_per_sec = (BENCHMARK_ITERATIONS_MEDIUM * 1000.0) / elapsed;
+    
     printf("  Total time: %.3f ms\n", elapsed);
-    printf("  Per operation: %.6f ms\n", elapsed / BENCHMARK_ITERATIONS_MEDIUM);
+    printf("  Per cycle (alloc+free): %.6f ms\n", elapsed / BENCHMARK_ITERATIONS_MEDIUM);
+    printf("  Cycles/sec: %.0f\n", ops_per_sec);
     
     return NULL;
 }
@@ -310,7 +323,6 @@ static char *benchmark_memory_allocation(void) {
 static char *benchmark_clojure_doseq_vs_direct(void) {
     printf("\n=== Benchmarking doseq vs Direct Iteration ===\n");
     
-    const int TEST_VECTOR_SIZE = 10;
     EvalState *st = evalstate_new();
     init_special_symbols();
     load_clojure_core(st);
