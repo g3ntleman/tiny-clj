@@ -26,4 +26,7 @@ benchmark_history.csv
 benchmark_output.txt
 progress.marks
 *.csv
+# Test binaries
 test-*
+run-tests
+CTestTestfile.cmake
