@@ -355,7 +355,7 @@ void cljvalue_pool_pop_legacy(CljObjectPool *pool) {
     cljvalue_pool_pop_internal(pool);
 }
 
-// Globale Cleanup-Funktion für alle Autorelease-Pools
+// Global cleanup function for all autorelease pools
 void cljvalue_pool_cleanup_all() {
     while (g_cv_pool_top) {
         cljvalue_pool_pop_internal(g_cv_pool_top);
