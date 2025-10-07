@@ -76,8 +76,8 @@ static char *benchmark_primitive_object_creation(void) {
         (void)obj3; (void)obj4;  // Mark as intentionally accessed
         
         // Release non-singleton objects to measure full memory lifecycle
-        release(obj1);
-        release(obj2);
+        RELEASE(obj1);
+        RELEASE(obj2);
         // Singletons (obj3, obj4) are not released
     }
     
@@ -102,9 +102,9 @@ static char *benchmark_collection_creation(void) {
         for (int j = 0; j < 16; j++) {
             CljObject *num = make_int(j);
             vector_conj(vec, num);
-            release(num);  // Release the integer after adding to vector
+            RELEASE(num);  // Release the integer after adding to vector
         }
-        release(vec);  // Release the vector
+        RELEASE(vec);  // Release the vector
     }
     
     double elapsed = get_time_ms() - start;
@@ -303,7 +303,7 @@ static char *benchmark_memory_allocation(void) {
     
     for (int i = 0; i < BENCHMARK_ITERATIONS_MEDIUM; i++) {
         CljObject *s = make_string("test string");
-        release(s);
+        RELEASE(s);
     }
     
     double elapsed = get_time_ms() - start;
