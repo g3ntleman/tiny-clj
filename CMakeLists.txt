@@ -91,46 +91,16 @@ add_executable(run-tests
 )
 target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG)
 
-# Unit Tests (isolated, fast tests) - using MinUnit
-add_executable(test-unit
-    src/tests/test_unit_minunit.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/clojure_core.c
-)
-
-# eval_string API Tests
-add_executable(test-eval-string-api
-    src/tests/test_eval_string_api.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/clojure_core.c
-    src/runtime.c
-    src/exception.c
-    src/memory_profiler.c
-    src/memory_hooks.c
-)
+# ============================================================================
+# REDUNDANT TARGETS REMOVED - Now in run-tests unified executable
+# ============================================================================
+# The following targets were removed (all now accessible via run-tests):
+#   - test-unit            → run-tests --test unit
+#   - test-parser          → run-tests --test parser
+#   - test-seq             → run-tests --test seq
+#   - test-for-loops       → run-tests --test for_loops
+#   - test-eval-string-api → run-tests --test eval_string_api
+# ============================================================================
 
 # Integration Tests (component interaction tests)
 add_executable(test-integration
@@ -171,42 +141,6 @@ add_executable(test-benchmark
     src/seq.c
     src/list_operations.c)
 
-# Parser Tests (using MinUnit)
-add_executable(test-parser
-    src/tests/test_parser_minunit.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c)
-
-# Seq Tests (using MinUnit)
-add_executable(test-seq
-    src/tests/test_seq_minunit.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
-
 # Seq Performance Tests
 add_executable(test-seq-performance EXCLUDE_FROM_ALL
     src/tests/test_seq_performance.c
@@ -226,31 +160,10 @@ add_executable(test-seq-performance EXCLUDE_FROM_ALL
     src/memory_profiler.c
     src/memory_hooks.c)
 
-# Set DEBUG flag for memory profiling
-target_compile_definitions(test-seq PRIVATE DEBUG=1)
+# Set DEBUG flag for memory profiling (for-loops-comparison)
 
-# For-Loop Tests
-add_executable(test-for-loops
-    src/tests/test_for_loops_minunit.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/memory_profiler.c
-    src/memory_hooks.c
-    src/clojure_core.c)
-
-# Test executable for for-loops comparison
-add_executable(test-for-loops-comparison
+# Test executable for for-loops comparison (optional benchmark)
+add_executable(test-for-loops-comparison EXCLUDE_FROM_ALL
     src/tests/test_for_loops_comparison.c
     src/tests/minunit.h
     src/CljObject.c
@@ -283,8 +196,6 @@ add_executable(test-for-loops-comparison
     src/reader.h
 )
 
-# Set DEBUG flag for memory profiling
-target_compile_definitions(test-for-loops PRIVATE DEBUG=1)
 target_compile_definitions(test-for-loops-comparison PRIVATE DEBUG=1)
 
 # Test executable for seq debugging
@@ -327,23 +238,6 @@ add_executable(test-seq-debug EXCLUDE_FROM_ALL
 
 target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
 
-# For-Loop Performance Tests
-add_executable(test-for-performance
-    src/tests/test_for_performance.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c)
-
 # Memory Profiling Tests (Debug only)
 add_executable(test-memory-profiling EXCLUDE_FROM_ALL
     src/tests/test_memory_profiling.c
@@ -362,31 +256,6 @@ add_executable(test-memory-profiling EXCLUDE_FROM_ALL
     src/seq.c
     src/memory_profiler.c
     src/memory_hooks.c)
-
-# Simple Memory Profiling Tests (Debug only)
-add_executable(test-memory-simple
-    src/tests/test_memory_simple.c
-    src/CljObject.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
-
-# Set DEBUG flag for memory profiling
-target_compile_definitions(test-memory-simple PRIVATE DEBUG=1)
-
-# Test All (wrapper for all test categories)
-add_executable(test-all src/tests/test_all_main.c)
 
 # ============================================================================
 # LEGACY TEST EXECUTABLES (for backward compatibility)
@@ -410,22 +279,11 @@ add_executable(kv-macros-demo EXCLUDE_FROM_ALL src/tests/kv_macros_demo.c src/Cl
 target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 
 # Meta-Funktionalität für alle Test-Executables aktivieren
-target_compile_definitions(test-unit PRIVATE ENABLE_META)
 target_compile_definitions(test-integration PRIVATE ENABLE_META)
 target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
 
-# Embed tests into main build to allow direct invocation
+# Note: tiny-clj binary is EXCLUDE_FROM_ALL (optional build)
 target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
-target_compile_definitions(tiny-clj PRIVATE TINY_CLJ_EMBED_TESTS)
-target_sources(tiny-clj PRIVATE 
-    src/tests/test_unit_main.c 
-    src/tests/test_integration_main.c 
-    src/tests/test_parser_minunit.c 
-    src/tests/test_unit_minunit.c
-    src/tests/test_assertions.c
-    src/tests/test_global_singletons.c
-    src/tests/test_alloc_macros.c
-    src/clj_error.c)
 
 # ============================================================================
 # CUSTOM TARGETS
@@ -467,7 +325,7 @@ add_custom_target(run-quick-tests
 # INSTALLATION
 # ============================================================================
 
-install(TARGETS tiny-clj test-unit test-integration test-benchmark test-all
+install(TARGETS tiny-clj run-tests test-integration test-benchmark
     RUNTIME DESTINATION bin
 )
 
@@ -477,14 +335,11 @@ install(TARGETS tiny-clj test-unit test-integration test-benchmark test-all
 include(CTest)
 enable_testing()
 
-add_test(NAME unit COMMAND test-unit)
-set_tests_properties(unit PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} LABELS "unit")
-
+# Note: unit and parser tests now in run-tests unified executable
+# To run: ./run-tests --suite core  (runs both unit and parser)
+# Keeping CTest integration for backward compatibility - use old binaries if they exist
 add_test(NAME integration COMMAND test-integration --all)
 set_tests_properties(integration PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} LABELS "integration")
-
-add_test(NAME parser COMMAND test-parser)
-set_tests_properties(parser PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} LABELS "parser")
 
 # REPL tests (CLI-level)
 add_test(NAME repl-eval-add COMMAND tiny-clj-repl -e "(+ 1 2)")
