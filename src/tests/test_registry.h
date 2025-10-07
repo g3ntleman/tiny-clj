@@ -21,6 +21,7 @@ extern char *run_namespace_tests(void);
 extern char *run_seq_tests(void);
 extern char *run_for_loop_tests(void);
 extern char *run_eval_string_api_tests(void);
+extern char *run_memory_tests(void);
 
 // Global test registry (compile-time, no dlsym needed)
 static TestEntry all_minunit_tests[] = {
@@ -30,6 +31,7 @@ static TestEntry all_minunit_tests[] = {
     {"seq",             "data",    run_seq_tests},
     {"for_loops",       "control", run_for_loop_tests},
     {"eval_string_api", "api",     run_eval_string_api_tests},
+    {"memory",          "memory",  run_memory_tests},
 };
 
 static const int minunit_test_count = sizeof(all_minunit_tests) / sizeof(all_minunit_tests[0]);
