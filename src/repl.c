@@ -50,7 +50,7 @@ static void print_result(CljObject *v) {
     if (!v) return;
     
     // For symbols, print their name directly (not as code)
-    if (v->type == CLJ_SYMBOL) {
+    if (is_type(v, CLJ_SYMBOL)) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->name) {
             printf("%s\n", sym->name);
@@ -75,16 +75,24 @@ static int eval_string_repl(const char *code, EvalState *st) {
     const char *p = code;
     CljObject *ast = parse(p, st);
     if (!ast) return 0;
-    CljObject *res = NULL;
-    if (ast->type == CLJ_LIST) {
-        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        res = eval_list(ast, env, st);
-    } else {
-        res = eval_expr_simple(ast, st);
-    }
-    if (!res) return 0;
-    print_result(res);
-    return 1;
+    
+    // Use TRY/CATCH to handle exceptions in REPL
+    TRY {
+        CljObject *res = NULL;
+        if (is_type(ast, CLJ_LIST)) {
+            CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+            res = eval_list(ast, env, st);
+        } else {
+            res = eval_expr_simple(ast, st);
+        }
+        if (!res) return 0;
+        print_result(res);
+        return 1;
+    } CATCH(ex) {
+        // Exception caught - print and continue REPL
+        print_exception(ex);
+        return 0;
+    } END_TRY
 }
 
 static void usage(const char *prog) {
@@ -243,7 +251,13 @@ int main(int argc, char **argv) {
                 const char *p = acc;
                 CljObject *ast = parse(p, st);
                 if (ast) {
-                    CljObject *res = eval_expr_simple(ast, st);
+                    CljObject *res = NULL;
+                    if (is_type(ast, CLJ_LIST)) {
+                        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+                        res = eval_list(ast, env, st);
+                    } else {
+                        res = eval_expr_simple(ast, st);
+                    }
                     if (res) print_result(res);
                 }
             }

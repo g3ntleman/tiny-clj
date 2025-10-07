@@ -52,7 +52,7 @@ CljObject* list_from_stack(CljObject **stack, int count) {
 }
 
 bool is_list(CljObject *v) {
-    return v && v->type == CLJ_LIST;
+    return v && is_type(v, CLJ_LIST);
 }
 
 bool is_symbol(CljObject *v, const char *name) {

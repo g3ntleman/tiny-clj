@@ -61,7 +61,7 @@ CljObject *make_weak_vector(int capacity) {
 }
 
 static inline int is_weak_vec(CljObject *o) {
-  return o && o->type == CLJ_WEAK_VECTOR;
+  return o && is_type(o, CLJ_WEAK_VECTOR);
 }
 
 int vector_push_inplace(CljObject *vec, CljObject *item) {
