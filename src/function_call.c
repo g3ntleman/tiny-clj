@@ -552,6 +552,15 @@ CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
         return clj_nil();
     }
     
+    // If the value is a function, set its name
+    if (is_type(value, CLJ_FUNC)) {
+        CljFunction *func = as_function(value);
+        CljSymbol *sym = as_symbol(symbol);
+        if (func && sym && sym->name && !func->name) {
+            func->name = strdup(sym->name);
+        }
+    }
+    
     // Store the symbol-value binding in the environment
     if (st) {
         // Store in namespace
