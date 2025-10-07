@@ -301,6 +301,41 @@ static char *test_memory_benchmark_large_vectors(void) {
     return 0;
 }
 
+static char *test_memory_benchmark_large_maps(void) {
+    printf("\n=== Memory Benchmark: Large Maps ===\n");
+    
+    MEMORY_TEST_BENCHMARK_START("Large Map Creation");
+    
+    // Create maps with many key-value pairs
+    for (int i = 0; i < 10; i++) {
+        CljObject *map = make_map(50);
+        
+        // Fill with 50 key-value pairs
+        for (int j = 0; j < 50; j++) {
+            char key_buf[32];
+            snprintf(key_buf, sizeof(key_buf), "key-%d", j);
+            CljObject *key = make_string(key_buf);
+            CljObject *val = make_int(j * 10);
+            
+            map_assoc(map, key, val);
+            
+            release(key);
+            release(val);
+        }
+        
+        // Verify map size
+        int count = map_count(map);
+        mu_assert("map has correct count", count == 50);
+        
+        release(map);
+    }
+    
+    MEMORY_TEST_BENCHMARK_END("Large Map Creation");
+    
+    printf("✓ Large maps memory benchmark passed\n");
+    return 0;
+}
+
 // ============================================================================
 // TEST SUITE REGISTRY
 // ============================================================================
@@ -314,6 +349,7 @@ static char *all_memory_profiling_tests(void) {
     mu_run_test(test_memory_comparison_analysis);
     mu_run_test(test_memory_benchmark_small_objects);
     mu_run_test(test_memory_benchmark_large_vectors);
+    mu_run_test(test_memory_benchmark_large_maps);
     
     return 0;
 }
