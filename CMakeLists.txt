@@ -144,9 +144,10 @@ add_executable(test-integration
     src/list_operations.c
     src/seq.c)
 
-# Benchmark Tests (performance and size tests)
-add_executable(test-benchmark
-    src/tests/test_benchmark_main.c
+# Legacy Benchmark Tests (Unity-based, kept for compatibility)
+# Note: For performance testing use test-performance (MinUnit-based)
+add_executable(test-benchmark EXCLUDE_FROM_ALL
+    src/tests/test_integration_main.c
     src/unity.c
     src/CljObject.c
     src/types.c
@@ -163,16 +164,16 @@ add_executable(test-benchmark
     src/benchmark.c
     src/seq.c
     src/list_operations.c)
+target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
 
-# Seq Performance Tests
-add_executable(test-seq-performance EXCLUDE_FROM_ALL
-    src/tests/test_seq_performance.c
+# Performance & Benchmark Tests (consolidated)
+add_executable(test-performance EXCLUDE_FROM_ALL
+    src/tests/test_performance.c
     src/CljObject.c
     src/types.c
     src/vector.c
     src/map.c
     src/string.c
-    src/clj_error.c
     src/clj_symbols.c
     src/namespace.c
     src/clj_parser.c
@@ -180,50 +181,15 @@ add_executable(test-seq-performance EXCLUDE_FROM_ALL
     src/function_call.c
     src/list_operations.c
     src/seq.c
+    src/clojure_core.c
+    src/exception.c
     src/memory_profiler.c
     src/memory_hooks.c)
-
-# Set DEBUG flag for memory profiling (for-loops-comparison)
-
-# Test executable for for-loops comparison (optional benchmark)
-add_executable(test-for-loops-comparison EXCLUDE_FROM_ALL
-    src/tests/test_for_loops_comparison.c
-    src/tests/minunit.h
-    src/CljObject.c
-    src/CljObject.h
-    src/clj_object.h
-    src/types.c
-    src/vector.c
-    src/vector.h
-    src/list_operations.c
-    src/list_operations.h
-    src/function_call.c
-    src/function_call.h
-    src/namespace.c
-    src/namespace.h
-    src/clj_symbols.c
-    src/clj_symbols.h
-    src/memory_profiler.c
-    src/memory_profiler.h
-    src/memory_hooks.c
-    src/memory_hooks.h
-    src/seq.c
-    src/seq.h
-    src/map.c
-    src/map.h
-    src/string.c
-    src/clj_string.h
-    src/clj_parser.c
-    src/clj_parser.h
-    src/reader.c
-    src/reader.h
-)
-
-target_compile_definitions(test-for-loops-comparison PRIVATE DEBUG=1)
+target_compile_definitions(test-performance PRIVATE ENABLE_META DEBUG)
 
 # Test executable for seq debugging
 # EXCLUDE_FROM_ALL: These debug tests access internal SeqIterator details
-# Build manually: make test-seq-debug test-seq-performance test-memory-profiling
+# Build manually: make test-seq-debug test-performance test-memory-profiling
 add_executable(test-seq-debug EXCLUDE_FROM_ALL
     src/tests/test_seq_debug.c
     src/tests/minunit.h
