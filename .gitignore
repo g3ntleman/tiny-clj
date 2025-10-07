@@ -1,0 +1,32 @@
+/tiny-clj
+/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+tiny-cli.txt
+**/*.o
+**/*.d
+.vscode/
+# Build artifacts
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+Testing/
+*.dSYM/
+*.o
+*.a
+# Generated benchmarks
+benchmark_results.csv
+benchmark_report.csv
+benchmark_history.csv
+# Local outputs
+benchmark_output.txt
+progress.marks
+*.csv
+# Test binaries
+test-*
+run-tests
+CTestTestfile.cmake
