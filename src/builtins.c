@@ -73,7 +73,7 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
 CljObject* native_if(CljObject **args, int argc) {
     if (argc < 2) return clj_nil();
     CljObject *cond = args[0];
-    if (cond == clj_true()) {
+    if (clj_is_truthy(cond)) {
         return (RETAIN(args[1]), args[1]);
     } else if (argc > 2) {
         return (RETAIN(args[2]), args[2]);

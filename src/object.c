@@ -563,7 +563,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     CljFunction *func = ALLOC(CljFunction, 1);
     if (!func) return NULL;
     
-    func->base.type = CLJ_FUNC;
+    func->base.type = CLJ_FUNC;  // Both CljFunc and CljFunction use CLJ_FUNC type
     func->base.rc = 1;
     func->param_count = param_count;
     func->body = body ? (retain(body), body) : NULL;
@@ -762,8 +762,8 @@ char* pr_str(CljObject *v) {
                 CljFunction *clj_func = (CljFunction*)v;
                 CljFunc *native_func = (CljFunc*)v;
                 
-                // First check if it's a native function (has fn pointer)
-                if (native_func && native_func->fn) {
+                // First check if it's a native function (has fn pointer and no params/body)
+                if (native_func && native_func->fn && !clj_func->params && !clj_func->body) {
                     // It's a native function (CljFunc)
                     if (native_func->name) {
                         char buf[256];
