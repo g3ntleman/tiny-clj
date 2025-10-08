@@ -2,6 +2,8 @@
 
 An **embedded-first Clojure interpreter** for microcontrollers (STM32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
 
+## Status: Not usable, yet. Pre-alpha.
+
 ## Primary Objective
 **Follow the Clojure language as good as possible.** Maximum compatibility with standard Clojure features, syntax, and behavior.
 
@@ -9,7 +11,7 @@ An **embedded-first Clojure interpreter** for microcontrollers (STM32, ARM Corte
 - **Embedded Target:** STM32, ESP32, ARM Cortex-M microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
-- **Small Binary:** Target <200KB for embedded deployment
+- **Small Binary:** Target <60KB for embedded deployment
 - **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
 
 ## Quick Start

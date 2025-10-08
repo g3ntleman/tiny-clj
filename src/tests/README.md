@@ -38,7 +38,7 @@ Dieser Ordner enthält alle Test- und Demo-Programme für Tiny-Clj.
 - **`demo_array_system.c`** - Array-System-Demonstration
   - Zeigt Stack-Allokation für Argumente
   - Demonstriert interleaved Key/Value Arrays
-  - Verifiziert STM32-sichere Implementierung
+  - Verifiziert STM32-sichere Implementierung (Target: <60KB binary size)
 
 ### KV-Makros-Tests
 

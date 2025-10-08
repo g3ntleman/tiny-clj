@@ -7,7 +7,7 @@ Active/Next
   - Vendor sheredom/utf8.h (done)
   - Parser: validate & iterate codepoints for symbols/strings (no normalization)
   - Tests for UTF-8 roundtrip & delimiters
-  - Measure code size impact (Release) and record in `Reports/`
+  - Measure code size impact (Release) and record in `Reports/` (Target: <60KB binary size)
        - Seq Semantics (Core): ✅ COMPLETED
          - seq() for list, vector, map (entry view), string, nil
          - first/rest/next via iterator views (no heap alloc)
@@ -35,7 +35,7 @@ Planned
 
 Build & Benchmarks
 ------------------
-- Release builds: macOS fast (-O3), Embedded size (-Os), with dead_strip/gc-sections and LTO when available
+- Release builds: macOS fast (-O3), Embedded size (-Os), with dead_strip/gc-sections and LTO when available (Target: <60KB binary size)
 - Code-size and performance benchmarks tracked under `Reports/` with 2% significance threshold; baseline auto-update
 
 Design Decisions (Snapshot)

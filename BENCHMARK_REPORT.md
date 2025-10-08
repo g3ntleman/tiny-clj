@@ -10,7 +10,7 @@
 
 ## 🎯 Executive Summary
 
-All **16 performance benchmarks** passed successfully. This report measures the **complete memory lifecycle** (allocation + deallocation) for realistic performance metrics suitable for embedded systems.
+All **16 performance benchmarks** passed successfully. This report measures the **complete memory lifecycle** (allocation + deallocation) for realistic performance metrics suitable for embedded systems. Target binary size: <60KB for embedded deployment.
 
 ### Key Performance Indicators
 
@@ -233,7 +233,7 @@ Tiny-Clj demonstrates **excellent low-level performance** suitable for embedded 
 - 10M simple parses/second
 - Sub-microsecond primitive operations
 
-However, **abstraction overhead is significant** (16x-265x), requiring careful optimization in performance-critical embedded code. Direct memory access and primitive operations are recommended for hot paths on resource-constrained devices like STM32.
+However, **abstraction overhead is significant** (16x-265x), requiring careful optimization in performance-critical embedded code. Direct memory access and primitive operations are recommended for hot paths on resource-constrained devices like STM32. Target binary size: <60KB for embedded deployment.
 
 ---
 
