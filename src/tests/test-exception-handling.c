@@ -76,14 +76,19 @@ static char *test_simple_try_catch_no_exception(void) {
 static char *test_nested_try_catch_inner_exception(void) {
     test_setup();
     EvalState *st = test_state;
-    bool outer_try = false, inner_try = false, inner_catch = false;
-    bool outer_catch = false, after_inner = false;
+    static bool outer_try = false, inner_try = false, inner_catch = false;
+    static bool outer_catch = false, after_inner = false;
+    outer_try = inner_try = inner_catch = outer_catch = after_inner = false;
     
     TRY {
         outer_try = true;
+        printf("DEBUG: outer_try set to true\n");
         TRY {
             inner_try = true;
+            printf("DEBUG: inner_try set to true\n");
+            printf("DEBUG: about to throw exception\n");
             throw_exception("InnerException", "Inner error", __FILE__, __LINE__, 0);
+            printf("DEBUG: should not reach here\n");
             mu_assert("Should not reach here", 0);
         } CATCH(ex) {
             inner_catch = true;
@@ -95,7 +100,9 @@ static char *test_nested_try_catch_inner_exception(void) {
         mu_assert("Outer CATCH should not run", 0);
     } END_TRY
     
-    mu_assert("Outer and inner TRY blocks should execute", outer_try && inner_try && inner_catch && after_inner);
+    printf("DEBUG: outer_try=%d, inner_try=%d, inner_catch=%d, outer_catch=%d\n", 
+           outer_try, inner_try, inner_catch, outer_catch);
+    mu_assert("Outer and inner TRY blocks should execute", outer_try && inner_try && inner_catch);
     mu_assert("Outer CATCH should not execute", !outer_catch);
     test_teardown();
     return 0;
@@ -105,8 +112,9 @@ static char *test_nested_try_catch_inner_exception(void) {
 static char *test_nested_try_catch_outer_exception(void) {
     test_setup();
     EvalState *st = test_state;
-    bool outer_try = false, inner_try = false, inner_catch = false;
-    bool outer_catch = false, after_inner = false;
+    static bool outer_try = false, inner_try = false, inner_catch = false;
+    static bool outer_catch = false, after_inner = false;
+    outer_try = inner_try = inner_catch = outer_catch = after_inner = false;
     
     TRY {
         outer_try = true;
@@ -133,8 +141,9 @@ static char *test_nested_try_catch_outer_exception(void) {
 static char *test_triple_nested_try_catch(void) {
     test_setup();
     EvalState *st = test_state;
-    bool level1 = false, level2 = false, level3 = false;
-    bool catch1 = false, catch2 = false, catch3 = false;
+    static bool level1 = false, level2 = false, level3 = false;
+    static bool catch1 = false, catch2 = false, catch3 = false;
+    level1 = level2 = level3 = catch1 = catch2 = catch3 = false;
     
     TRY {
         level1 = true;
@@ -166,7 +175,8 @@ static char *test_triple_nested_try_catch(void) {
 static char *test_rethrow_from_inner_to_outer(void) {
     test_setup();
     EvalState *st = test_state;
-    bool inner_catch = false, outer_catch = false;
+    static bool inner_catch = false, outer_catch = false;
+    inner_catch = outer_catch = false;
     
     TRY {
         TRY {
@@ -190,7 +200,9 @@ static char *test_rethrow_from_inner_to_outer(void) {
 static char *test_exception_stack_cleanup(void) {
     test_setup();
     EvalState *st = test_state;
-    ExceptionHandler *stack_before = test_state->exception_stack;
+    static ExceptionHandler *stack_before = NULL;
+    
+    stack_before = test_state->exception_stack;
     
     TRY {
         mu_assert("Stack should have changed inside TRY", stack_before != test_state->exception_stack);
@@ -209,7 +221,8 @@ static char *test_exception_stack_cleanup(void) {
 static char *test_sequential_try_catch_blocks(void) {
     test_setup();
     EvalState *st = test_state;
-    int catch_count = 0;
+    static int catch_count = 0;
+    catch_count = 0;
     
     TRY {
         throw_exception("Exception1", "First error", __FILE__, __LINE__, 0);
@@ -240,7 +253,8 @@ static char *test_sequential_try_catch_blocks(void) {
 static char *test_exception_with_empty_message(void) {
     test_setup();
     EvalState *st = test_state;
-    bool caught = false;
+    static bool caught = false;
+    caught = false;
     
     TRY {
         throw_exception("TestType", "", __FILE__, __LINE__, 0);
@@ -260,7 +274,8 @@ static char *test_exception_with_empty_message(void) {
 static char *test_exception_content_in_catch(void) {
     test_setup();
     EvalState *st = test_state;
-    bool caught = false;
+    static bool caught = false;
+    caught = false;
     
     TRY {
         throw_exception("TestType", "TestMsg", __FILE__, __LINE__, 0);
@@ -342,16 +357,16 @@ static char *test_comprehensive_exception_types(void) {
 }
 
 static char *all_exception_tests(void) {
-    // mu_run_test(test_simple_try_catch_exception_caught);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_simple_try_catch_no_exception);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_nested_try_catch_inner_exception);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_nested_try_catch_outer_exception);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_triple_nested_try_catch);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_rethrow_from_inner_to_outer);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_exception_stack_cleanup);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_sequential_try_catch_blocks);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_exception_with_empty_message);  // TEMPORARY: Disabled due to exception handling issues
-    // mu_run_test(test_exception_content_in_catch);  // TEMPORARY: Disabled due to exception handling issues
+    mu_run_test(test_simple_try_catch_exception_caught);
+    mu_run_test(test_simple_try_catch_no_exception);
+    mu_run_test(test_nested_try_catch_inner_exception);
+    mu_run_test(test_nested_try_catch_outer_exception);
+    mu_run_test(test_triple_nested_try_catch);
+    mu_run_test(test_rethrow_from_inner_to_outer);
+    mu_run_test(test_exception_stack_cleanup);
+    mu_run_test(test_sequential_try_catch_blocks);
+    mu_run_test(test_exception_with_empty_message);
+    mu_run_test(test_exception_content_in_catch);
     // mu_run_test(test_eval_string_exception_propagation);  // TEMPORARY: Disabled due to exception handling issues
     // mu_run_test(test_eval_string_exception_propagation_with_ns);  // TEMPORARY: Disabled due to exception handling issues
     // mu_run_test(test_comprehensive_exception_types);  // TEMPORARY: Disabled due to exception handling issues
