@@ -1081,8 +1081,24 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     // Check index and evaluate element
     if (index < 0 || index >= count) return NULL;
     
-    // Simple evaluation - just return the element directly for now
-    return elements[index] ? (RETAIN(elements[index]), elements[index]) : clj_nil();
+    // Evaluate the element properly
+    CljObject *element = elements[index];
+    if (!element) return clj_nil();
+    
+    // If it's a list, evaluate it
+    if (is_type(element, CLJ_LIST)) {
+        EvalState *st = evalstate();
+        return eval_list(element, env, st);
+    }
+    
+    // If it's a symbol, resolve it
+    if (is_type(element, CLJ_SYMBOL)) {
+        EvalState *st = evalstate();
+        return eval_symbol(element, st);
+    }
+    
+    // Otherwise, return the literal value
+    return element ? (RETAIN(element), element) : clj_nil();
 }
 
 // Evaluate argument with parameter substitution

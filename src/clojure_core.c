@@ -28,10 +28,8 @@ extern CljObject *parse_expr_internal(Reader *reader, EvalState *st);
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
     return false;
-  if (!g_core_quiet) {
-    printf("[clojure.core] eval_core_source src=%p first=%d\n", (void *)src,
+  DEBUG_PRINTF("[clojure.core] eval_core_source src=%p first=%d\n", (void *)src,
            (int)(unsigned char)src[0]);
-  }
   
   // Use Reader to parse multiple expressions
   Reader reader;
@@ -47,9 +45,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     
     CljObject *form = parse_expr_internal(&reader, st);
     if (!form) {
-      if (!g_core_quiet) {
-        printf("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
-      }
+      DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
       break;
     }
     
@@ -60,13 +56,11 @@ static bool eval_core_source(const char *src, EvalState *st) {
       success_count++;
     } CATCH(ex) {
       // Exception occurred during evaluation
-      if (!g_core_quiet) {
-        printf("[clojure.core] Exception in expression #%d\n", expr_count + 1);
-        char *err_str = pr_str((CljObject*)ex);
-        if (err_str) {
-          printf("[clojure.core] Error: %s\n", err_str);
-          free(err_str);
-        }
+      DEBUG_PRINTF("[clojure.core] Exception in expression #%d\n", expr_count + 1);
+      char *err_str = pr_str((CljObject*)ex);
+      if (err_str) {
+        DEBUG_PRINTF("[clojure.core] Error: %s\n", err_str);
+        free(err_str);
       }
     } END_TRY
     

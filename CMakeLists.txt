@@ -10,7 +10,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0")
 # Production/Release: platform-specific optimization policy
 if(APPLE)
-  # macOS: favor speed
+  # macOS: favor speed with dead code elimination
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG -ffunction-sections -fdata-sections")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,-dead_strip")
 else()
@@ -52,6 +52,18 @@ list(APPEND SOURCES
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL ${SOURCES})
 
+# STM32-optimized main (no test code)
+add_executable(tiny-clj-stm32-main
+    src/main_stm32.c
+    src/platform_stm32.c
+    ${SOURCES}
+)
+target_compile_definitions(tiny-clj-stm32-main PRIVATE ENABLE_META STM32_BUILD)
+set_target_properties(tiny-clj-stm32-main PROPERTIES
+    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
+    LINK_FLAGS "-Wl,-dead_strip"
+)
+
 # REPL executable
 add_executable(tiny-clj-repl
     src/repl.c
@@ -59,6 +71,18 @@ add_executable(tiny-clj-repl
     ${SOURCES}
 )
 target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
+
+# STM32-optimized REPL (no test code, minimal size)
+add_executable(tiny-clj-stm32
+    src/repl.c
+    src/platform_stm32.c
+    ${SOURCES}
+)
+target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD)
+set_target_properties(tiny-clj-stm32 PROPERTIES
+    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
+    LINK_FLAGS "-Wl,-dead_strip"
+)
 
 # ============================================================================
 # CATEGORIZED TEST EXECUTABLES
