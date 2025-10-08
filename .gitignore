@@ -30,3 +30,16 @@ progress.marks
 test-*
 run-tests
 CTestTestfile.cmake
+
+# Executable binaries
+tiny-clj-repl
+build-release/
+*.exe
+*.bin
+
+# System files
+.DS_Store
+*.DS_Store
+
+# Testing artifacts
+Testing/
