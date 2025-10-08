@@ -759,12 +759,10 @@ char* pr_str(CljObject *v) {
         case CLJ_FUNC:
             {
                 // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
-                // We can distinguish by checking the structure layout
                 CljFunction *clj_func = (CljFunction*)v;
-                
-                // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
-                // We can distinguish by checking if the function has a fn pointer (native) or params (Clojure)
                 CljFunc *native_func = (CljFunc*)v;
+                
+                // First check if it's a native function (has fn pointer)
                 if (native_func && native_func->fn) {
                     // It's a native function (CljFunc)
                     if (native_func->name) {

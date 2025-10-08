@@ -65,7 +65,7 @@ static void print_result(CljObject *v) {
 
 static void print_exception(CLJException *ex) {
     if (!ex) return;
-    fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
+    DEBUG_FPRINTF(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
         ex->type ? ex->type : "Error",
         ex->message ? ex->message : "Unknown error",
         ex->file ? ex->file : "?",
