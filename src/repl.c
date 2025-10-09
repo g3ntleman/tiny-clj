@@ -209,12 +209,10 @@ int main(int argc, char **argv) {
             start_repl = true;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
-            if (eval_args) free(eval_args);
-            return 0;
+            cleanup_and_exit(eval_args, 0);
         } else {
             usage(argv[0]);
-            if (eval_args) free(eval_args);
-            return 1;
+            cleanup_and_exit(eval_args, 1);
         }
     }
 
@@ -247,14 +245,12 @@ int main(int argc, char **argv) {
                             if (result == 0) {
                                 // Parse error or evaluation failed
                                 fclose(fp);
-                                if (eval_args) free(eval_args);
-                                return 1;
+                                cleanup_and_exit(eval_args, 1);
                             }
                         } CATCH(ex) {
                             print_exception(ex);
                             fclose(fp);
-                            if (eval_args) free(eval_args);
-                            return 1;
+                            cleanup_and_exit(eval_args, 1);
                         } END_TRY
                         acc[0] = '\0';
                     }
@@ -263,12 +259,10 @@ int main(int argc, char **argv) {
             }
         } CATCH(ex) {
             print_result((CljObject*)ex);
-            if (eval_args) free(eval_args);
-            return 1;
+            cleanup_and_exit(eval_args, 1);
         } END_TRY
         if (!start_repl && eval_count == 0) {
-            if (eval_args) free(eval_args);
-            return 0;
+            cleanup_and_exit(eval_args, 0);
         }
     }
 
@@ -279,19 +273,18 @@ int main(int argc, char **argv) {
                 int result = eval_string_repl(eval_args[i], st);
                 if (result == 0) {
                     // Parse error or evaluation failed
-                    if (eval_args) free(eval_args);
-                    return 1;
+                    cleanup_and_exit(eval_args, 1);
                 }
             }
         } CATCH(ex) {
             print_exception(ex);
-            if (eval_args) free(eval_args);
-            return 1;
+            cleanup_and_exit(eval_args, 1);
         } END_TRY
     }
     
-    if (eval_args) free(eval_args);
-    if (eval_count > 0 && !start_repl) return 0;
+    if (eval_count > 0 && !start_repl) {
+        cleanup_and_exit(eval_args, 0);
+    }
 
     // Interactive REPL
     return run_interactive_repl(st);
