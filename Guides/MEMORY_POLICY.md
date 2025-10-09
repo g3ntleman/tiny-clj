@@ -150,6 +150,7 @@ RELEASE(obj);   // Reference decrement
 - ✅ **Use `AUTORELEASE(obj)`** instead of `autorelease(obj)`
 - ✅ **Use `CREATE(obj)`** instead of `make_*()` functions
 - ✅ **Use `DEALLOC(obj)`** instead of `free(obj)`
+- ✅ **Use `ASSIGN(var, new_obj)`** instead of manual retain/release patterns
 
 This ensures consistent memory profiling and better tracking of all memory operations throughout the codebase.
 
@@ -209,6 +210,95 @@ for (int i = 0; i < count; i++) {
 - **Better readability** - Intent is clearer
 - **Fluent API** - Enables chaining patterns
 - **Consistent style** - Same pattern as `AUTORELEASE()`
+
+### ASSIGN Macro for Safe Object Assignment
+
+The `ASSIGN(var, new_obj)` macro provides safe object assignment following the classic Objective-C pattern. It handles retain/release operations automatically and prevents common memory management errors.
+
+#### Usage Pattern:
+```c
+CljObject *obj = NULL;
+CljObject *new_obj = make_int(42);
+
+// Safe assignment - handles retain/release automatically
+ASSIGN(obj, new_obj);  // obj is now retained, old value (if any) is released
+```
+
+#### What ASSIGN Does:
+1. **Retains the new object** (if not NULL)
+2. **Releases the old object** (if not NULL) 
+3. **Assigns the new object** to the variable
+4. **Optimizes self-assignment** (skips operations if `new_obj == var`)
+
+#### Classic Objective-C Pattern:
+```c
+// ❌ Manual pattern (error-prone):
+if (old_obj) {
+    release(old_obj);
+}
+if (new_obj) {
+    retain(new_obj);
+}
+obj = new_obj;
+
+// ✅ ASSIGN macro (safe and concise):
+ASSIGN(obj, new_obj);
+```
+
+#### Common Use Cases:
+
+**Property-like Assignment:**
+```c
+// Setting instance variables safely
+ASSIGN(self->name, new_name);
+ASSIGN(self->value, new_value);
+```
+
+**Replacing Objects:**
+```c
+CljObject *old_vec = make_vector(3, 1);
+CljObject *new_vec = make_vector(5, 2);
+
+ASSIGN(old_vec, new_vec);  // old_vec now points to new_vec, old data released
+```
+
+**NULL Assignment (Cleanup):**
+```c
+CljObject *obj = make_int(42);
+// ... use obj ...
+ASSIGN(obj, NULL);  // Safely releases obj and sets to NULL
+```
+
+**Self-Assignment Optimization:**
+```c
+CljObject *obj = make_int(42);
+ASSIGN(obj, obj);  // Optimized - no operations performed
+```
+
+#### Macro Definition:
+```c
+#define ASSIGN(var, new_obj) do { \
+    typeof(var) _tmp = (new_obj); \
+    if (_tmp != (var)) { \
+        if (_tmp != NULL) { \
+            memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
+            retain(_tmp); \
+        } \
+        if ((var) != NULL) { \
+            memory_hook_trigger(MEMORY_HOOK_RELEASE, (var), 0); \
+            release(var); \
+        } \
+        (var) = _tmp; \
+    } \
+} while(0)
+```
+
+#### Benefits:
+- **Memory Safety** - Prevents leaks and double-frees
+- **Self-Assignment Safe** - Optimizes `ASSIGN(obj, obj)` 
+- **NULL Safe** - Handles NULL assignments correctly
+- **Consistent** - Same pattern as classic Objective-C
+- **Profiled** - Integrates with memory profiling system
 
 ## API Memory Policy
 
@@ -290,6 +380,13 @@ release(vec);  // Must release manually
 // WRONG: Assuming parse_string needs manual release
 CljObject *parsed = parse_string(expr, eval_state);
 release(parsed);  // ❌ UNNECESSARY: parse_string returns autoreleased object
+
+// WRONG: Manual retain/release assignment (error-prone)
+CljObject *obj = NULL;
+CljObject *new_obj = make_int(42);
+if (obj) release(obj);  // ❌ ERROR-PRONE: Easy to forget or get order wrong
+if (new_obj) retain(new_obj);
+obj = new_obj;
 ```
 
 ### ✅ Correct Usage
@@ -298,6 +395,11 @@ release(parsed);  // ❌ UNNECESSARY: parse_string returns autoreleased object
 CljObject *parsed = parse_string(expr, eval_state);
 CljObject *result = eval_parsed(parsed, eval_state);
 // Both are autoreleased - no manual cleanup needed
+
+// CORRECT: Use ASSIGN macro for safe assignment
+CljObject *obj = NULL;
+CljObject *new_obj = make_int(42);
+ASSIGN(obj, new_obj);  // ✅ SAFE: Handles retain/release automatically
 ```
 
 ### Memory Policy Verification

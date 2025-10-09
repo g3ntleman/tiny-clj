@@ -76,6 +76,25 @@ void memory_test_end(const char *test_name);
         autorelease(_tmp); \
         _tmp; \
     })
+    /** @brief Safe object assignment with automatic retain/release management.
+     *  @param var Variable to assign to
+     *  @param new_obj New object to assign (can be NULL)
+     *  Follows classic Objective-C pattern: retains new object, releases old one.
+     */
+    #define ASSIGN(var, new_obj) do { \
+        typeof(var) _tmp = (new_obj); \
+        if (_tmp != (var)) { \
+            if (_tmp != NULL) { \
+                memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
+                retain(_tmp); \
+            } \
+            if ((var) != NULL) { \
+                memory_hook_trigger(MEMORY_HOOK_RELEASE, (var), 0); \
+                release(var); \
+            } \
+            (var) = _tmp; \
+        } \
+    } while(0)
     
     // Test macros for backward compatibility
     // MEMORY_TEST_START/END are defined in memory_profiler.h
@@ -113,6 +132,14 @@ void memory_test_end(const char *test_name);
     #define RETAIN(obj) ({ typeof(obj) _tmp = (obj); retain(_tmp); _tmp; })
     #define RELEASE(obj) ({ typeof(obj) _tmp = (obj); release(_tmp); _tmp; })
     #define AUTORELEASE(obj) (obj)
+    #define ASSIGN(var, new_obj) do { \
+        typeof(var) _tmp = (new_obj); \
+        if (_tmp != (var)) { \
+            if (_tmp != NULL) retain(_tmp); \
+            if ((var) != NULL) release(var); \
+            (var) = _tmp; \
+        } \
+    } while(0)
     
     // No-op test macros for release builds
     // MEMORY_TEST_START/END are defined in memory_profiler.h
