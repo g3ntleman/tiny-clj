@@ -2,7 +2,7 @@
 
 An **embedded-first Clojure interpreter** for microcontrollers (STM32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
 
-## Status: Not usable, yet. Pre-alpha.
+## Status: Not usable, yet. Pre-alpha. Embedded target not functional, yet.
 
 ## Prerequisites
 
@@ -50,11 +50,6 @@ pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make
 - **STM32CubeIDE**: For STM32 development and debugging
 - **OpenOCD**: For STM32 flashing and debugging
 - **GDB**: For debugging (usually included with compiler toolchain)
-
-### Hardware Requirements
-- **Desktop Development**: 2GB RAM, 1GB disk space
-- **STM32 Target**: STM32F4 or newer (ARM Cortex-M4/M7)
-- **Debug Interface**: ST-Link V2 or compatible
 
 ## Primary Objective
 **Follow the Clojure language as good as possible.** Maximum compatibility with standard Clojure features, syntax, and behavior.
