@@ -65,7 +65,7 @@ static void print_result(CljObject *v) {
 
 static void print_exception(CLJException *ex) {
     if (!ex) return;
-    DEBUG_FPRINTF(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
+    fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
         ex->type ? ex->type : "Error",
         ex->message ? ex->message : "Unknown error",
         ex->file ? ex->file : "?",
@@ -94,6 +94,9 @@ static int eval_string_repl(const char *code, EvalState *st) {
         print_exception(ex);
         return 0;
     } END_TRY
+    
+    // This should never be reached, but added for completeness
+    return 0;
 }
 
 static void usage(const char *prog) {
@@ -178,7 +181,13 @@ int main(int argc, char **argv) {
                     while (fgets(line, sizeof(line), fp)) {
                         strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
                         if (!is_balanced_form(acc)) continue;
-                        (void)eval_string_repl(acc, st);
+                        int result = eval_string_repl(acc, st);
+                        if (result == 0) {
+                            // Exception occurred in eval_string_repl
+                            fclose(fp);
+                            if (eval_args) free(eval_args);
+                            return 1;
+                        }
                         acc[0] = '\0';
                     }
                     fclose(fp);
@@ -199,7 +208,12 @@ int main(int argc, char **argv) {
     for (int i = 0; i < eval_count; i++) {
         TRY {
             CLJVALUE_POOL_SCOPE(pool) {
-                (void)eval_string_repl(eval_args[i], st);
+                int result = eval_string_repl(eval_args[i], st);
+                if (result == 0) {
+                    // Exception occurred in eval_string_repl
+                    if (eval_args) free(eval_args);
+                    return 1;
+                }
             }
         } CATCH(ex) {
             print_result((CljObject*)ex);
