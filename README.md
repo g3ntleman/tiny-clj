@@ -4,6 +4,58 @@ An **embedded-first Clojure interpreter** for microcontrollers (STM32, ARM Corte
 
 ## Status: Not usable, yet. Pre-alpha.
 
+## Prerequisites
+
+### Required Tools
+- **C Compiler**: GCC 4.9+ or Clang 3.5+ (C99/C11 support)
+- **CMake**: 3.10+ for build system
+- **Make**: GNU Make or compatible
+- **Git**: For version control and cloning
+
+### Platform-Specific Requirements
+
+#### macOS
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Or install via Homebrew
+brew install cmake
+```
+
+#### Linux (Ubuntu/Debian)
+```bash
+sudo apt update
+sudo apt install build-essential cmake git
+```
+
+#### Linux (CentOS/RHEL/Fedora)
+```bash
+# CentOS/RHEL
+sudo yum groupinstall "Development Tools"
+sudo yum install cmake git
+
+# Fedora
+sudo dnf groupinstall "Development Tools"
+sudo dnf install cmake git
+```
+
+#### Windows (MinGW/MSYS2)
+```bash
+# Install MSYS2, then:
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make
+```
+
+### Optional Tools
+- **STM32CubeIDE**: For STM32 development and debugging
+- **OpenOCD**: For STM32 flashing and debugging
+- **GDB**: For debugging (usually included with compiler toolchain)
+
+### Hardware Requirements
+- **Desktop Development**: 2GB RAM, 1GB disk space
+- **STM32 Target**: STM32F4 or newer (ARM Cortex-M4/M7)
+- **Debug Interface**: ST-Link V2 or compatible
+
 ## Primary Objective
 **Follow the Clojure language as good as possible.** Maximum compatibility with standard Clojure features, syntax, and behavior.
 
