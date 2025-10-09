@@ -93,6 +93,77 @@ static void usage(const char *prog) {
     printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl]\n", prog);
 }
 
+static void cleanup_and_exit(const char **eval_args, int exit_code) {
+    if (eval_args) free(eval_args);
+    exit(exit_code);
+}
+
+static int run_interactive_repl(EvalState *st) {
+    printf("tiny-clj %s REPL (platform=%s). Ctrl-D to exit. \n", "0.1", platform_name());
+    platform_set_stdin_nonblocking(1);
+
+    char acc[4096]; acc[0] = '\0';
+    bool prompt_shown = false;
+    for (;;) {
+        // Print prompt only once per input cycle to avoid flooding
+        if (!prompt_shown) {
+            print_prompt(st, is_balanced_form(acc));
+            prompt_shown = true;
+        }
+
+        int once = 200; // poll iterations per loop for cooperative multitasking
+        int got = 0;
+        while (once--) {
+            char buf[512];
+            int n = platform_readline_nb(buf, sizeof(buf));
+            if (n < 0) { got = -1; break; }
+            if (n == 0) { usleep(1000); continue; }
+            // append to accumulator (strip CR)
+            if (n > 0) {
+                if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
+                // trim CR
+                for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
+                strncat(acc, buf, sizeof(acc) - strlen(acc) - 1);
+                got = 1; break;
+            }
+        }
+        if (got < 0) break;
+        if (!got) continue;
+
+        if (!is_balanced_form(acc)) {
+            // need more lines
+            prompt_shown = false; // show continuation prompt once
+            continue;
+        }
+
+        // Evaluate accumulated form with TRY/CATCH
+        TRY {
+            CLJVALUE_POOL_SCOPE(pool) {
+                const char *p = acc;
+                CljObject *ast = parse(p, st);
+                if (ast) {
+                    CljObject *res = NULL;
+                    if (is_type(ast, CLJ_LIST)) {
+                        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+                        res = eval_list(ast, env, st);
+                    } else {
+                        res = eval_expr_simple(ast, st);
+                    }
+                    if (res) print_result(res);
+                }
+            }
+        } CATCH(ex) {
+            // Exception caught - print and continue REPL
+            print_exception(ex);
+        } END_TRY
+        
+        acc[0] = '\0';
+        prompt_shown = false; // show fresh prompt after evaluation
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     platform_init();
     EvalState *st = evalstate_new();
@@ -223,69 +294,7 @@ int main(int argc, char **argv) {
     if (eval_count > 0 && !start_repl) return 0;
 
     // Interactive REPL
-    printf("tiny-clj %s REPL (platform=%s). Ctrl-D to exit. \n", "0.1", platform_name());
-    platform_set_stdin_nonblocking(1);
-
-    char acc[4096]; acc[0] = '\0';
-    bool prompt_shown = false;
-    for (;;) {
-        // Print prompt only once per input cycle to avoid flooding
-        if (!prompt_shown) {
-            print_prompt(st, is_balanced_form(acc));
-            prompt_shown = true;
-        }
-
-        int once = 200; // poll iterations per loop for cooperative multitasking
-        int got = 0;
-        while (once--) {
-            char buf[512];
-            int n = platform_readline_nb(buf, sizeof(buf));
-            if (n < 0) { got = -1; break; }
-            if (n == 0) { usleep(1000); continue; }
-            // append to accumulator (strip CR)
-            if (n > 0) {
-                if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
-                // trim CR
-                for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
-                strncat(acc, buf, sizeof(acc) - strlen(acc) - 1);
-                got = 1; break;
-            }
-        }
-        if (got < 0) break;
-        if (!got) continue;
-
-        if (!is_balanced_form(acc)) {
-            // need more lines
-            prompt_shown = false; // show continuation prompt once
-            continue;
-        }
-
-        // Evaluate accumulated form with TRY/CATCH
-        TRY {
-            CLJVALUE_POOL_SCOPE(pool) {
-                const char *p = acc;
-                CljObject *ast = parse(p, st);
-                if (ast) {
-                    CljObject *res = NULL;
-                    if (is_type(ast, CLJ_LIST)) {
-                        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-                        res = eval_list(ast, env, st);
-                    } else {
-                        res = eval_expr_simple(ast, st);
-                    }
-                    if (res) print_result(res);
-                }
-            }
-        } CATCH(ex) {
-            // Exception caught - print and continue REPL
-            print_exception(ex);
-        } END_TRY
-        
-        acc[0] = '\0';
-        prompt_shown = false; // show fresh prompt after evaluation
-    }
-
-    return 0;
+    return run_interactive_repl(st);
 }
 
 
