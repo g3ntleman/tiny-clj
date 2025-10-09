@@ -15,6 +15,10 @@
 #include <unistd.h>
 #include <stdbool.h>
 
+/** @brief Check if a string has balanced parentheses, brackets, and braces.
+ *  @param s String to check for balanced delimiters
+ *  @return true if balanced, false otherwise
+ */
 static int is_balanced_form(const char *s) {
     int p = 0, b = 0, c = 0; // () [] {}
     bool in_str = false; bool esc = false;
@@ -35,6 +39,10 @@ static int is_balanced_form(const char *s) {
     return (p == 0 && b == 0 && c == 0 && !in_str);
 }
 
+/** @brief Print REPL prompt with namespace and continuation indicator.
+ *  @param st Evaluation state containing current namespace
+ *  @param balanced Whether the current input is balanced
+ */
 static void print_prompt(EvalState *st, bool balanced) {
     const char *ns_name = "user";  // Default
     if (st && st->current_ns && st->current_ns->name) {
@@ -47,6 +55,9 @@ static void print_prompt(EvalState *st, bool balanced) {
     fflush(stdout);
 }
 
+/** @brief Print a CljObject result to stdout with proper formatting.
+ *  @param v Object to print (can be NULL)
+ */
 static void print_result(CljObject *v) {
     if (!v) return;
     
@@ -63,6 +74,9 @@ static void print_result(CljObject *v) {
     if (s) { printf("%s\n", s); free(s); }
 }
 
+/** @brief Print exception details to stderr with location information.
+ *  @param ex Exception to print (can be NULL)
+ */
 static void print_exception(CLJException *ex) {
     if (!ex) return;
     fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
@@ -72,10 +86,15 @@ static void print_exception(CLJException *ex) {
         ex->line, ex->col);
 }
 
-static int eval_string_repl(const char *code, EvalState *st) {
+/** @brief Evaluate a string expression in the REPL context.
+ *  @param code Expression string to evaluate
+ *  @param st Evaluation state
+ *  @return true if successful, false on parse or evaluation error
+ */
+static bool eval_string_repl(const char *code, EvalState *st) {
     const char *p = code;
     CljObject *ast = parse(p, st);
-    if (!ast) return 0;
+    if (!ast) return false;
     
     CljObject *res = NULL;
     if (is_type(ast, CLJ_LIST)) {
@@ -84,22 +103,33 @@ static int eval_string_repl(const char *code, EvalState *st) {
     } else {
         res = eval_expr_simple(ast, st);
     }
-    if (!res) return 0;
+    if (!res) return false;
     print_result(res);
-    return 1;
+    return true;
 }
 
+/** @brief Print command-line usage information.
+ *  @param prog Program name for usage display
+ */
 static void usage(const char *prog) {
     printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl]\n", prog);
 }
 
+/** @brief Clean up resources and exit with specified code.
+ *  @param eval_args Array to free before exit
+ *  @param exit_code Exit code to use
+ */
 static void cleanup_and_exit(const char **eval_args, int exit_code) {
     if (eval_args) free(eval_args);
     exit(exit_code);
 }
 
-static int run_interactive_repl(EvalState *st) {
-    printf("tiny-clj %s REPL (platform=%s). Ctrl-D to exit. \n", "0.1", platform_name());
+/** @brief Run the interactive REPL loop with input handling and evaluation.
+ *  @param st Evaluation state for the REPL session
+ *  @return true on successful completion
+ */
+static bool run_interactive_repl(EvalState *st) {
+    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
     platform_set_stdin_nonblocking(1);
 
     char acc[4096]; acc[0] = '\0';
@@ -112,11 +142,12 @@ static int run_interactive_repl(EvalState *st) {
         }
 
         int once = 200; // poll iterations per loop for cooperative multitasking
-        int got = 0;
+        bool got_input = false;
+        bool should_exit = false;
         while (once--) {
             char buf[512];
             int n = platform_readline_nb(buf, sizeof(buf));
-            if (n < 0) { got = -1; break; }
+            if (n < 0) { should_exit = true; break; }
             if (n == 0) { usleep(1000); continue; }
             // append to accumulator (strip CR)
             if (n > 0) {
@@ -124,11 +155,11 @@ static int run_interactive_repl(EvalState *st) {
                 // trim CR
                 for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
                 strncat(acc, buf, sizeof(acc) - strlen(acc) - 1);
-                got = 1; break;
+                got_input = true; break;
             }
         }
-        if (got < 0) break;
-        if (!got) continue;
+        if (should_exit) break;
+        if (!got_input) continue;
 
         if (!is_balanced_form(acc)) {
             // need more lines
@@ -161,7 +192,7 @@ static int run_interactive_repl(EvalState *st) {
         prompt_shown = false; // show fresh prompt after evaluation
     }
 
-    return 0;
+    return true;
 }
 
 int main(int argc, char **argv) {
@@ -241,8 +272,8 @@ int main(int argc, char **argv) {
                         strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
                         if (!is_balanced_form(acc)) continue;
                         TRY {
-                            int result = eval_string_repl(acc, st);
-                            if (result == 0) {
+                            bool success = eval_string_repl(acc, st);
+                            if (!success) {
                                 // Parse error or evaluation failed
                                 fclose(fp);
                                 cleanup_and_exit(eval_args, 1);
@@ -270,8 +301,8 @@ int main(int argc, char **argv) {
     for (int i = 0; i < eval_count; i++) {
         TRY {
             CLJVALUE_POOL_SCOPE(pool) {
-                int result = eval_string_repl(eval_args[i], st);
-                if (result == 0) {
+                bool success = eval_string_repl(eval_args[i], st);
+                if (!success) {
                     // Parse error or evaluation failed
                     cleanup_and_exit(eval_args, 1);
                 }
@@ -287,7 +318,8 @@ int main(int argc, char **argv) {
     }
 
     // Interactive REPL
-    return run_interactive_repl(st);
+    run_interactive_repl(st);
+    return 0;
 }
 
 
