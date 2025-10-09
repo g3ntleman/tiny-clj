@@ -77,26 +77,16 @@ static int eval_string_repl(const char *code, EvalState *st) {
     CljObject *ast = parse(p, st);
     if (!ast) return 0;
     
-    // Use TRY/CATCH to handle exceptions in REPL
-    TRY {
-        CljObject *res = NULL;
-        if (is_type(ast, CLJ_LIST)) {
-            CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-            res = eval_list(ast, env, st);
-        } else {
-            res = eval_expr_simple(ast, st);
-        }
-        if (!res) return 0;
-        print_result(res);
-        return 1;
-    } CATCH(ex) {
-        // Exception caught - print and continue REPL
-        print_exception(ex);
-        return 0;
-    } END_TRY
-    
-    // This should never be reached, but added for completeness
-    return 0;
+    CljObject *res = NULL;
+    if (is_type(ast, CLJ_LIST)) {
+        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        res = eval_list(ast, env, st);
+    } else {
+        res = eval_expr_simple(ast, st);
+    }
+    if (!res) return 0;
+    print_result(res);
+    return 1;
 }
 
 static void usage(const char *prog) {
@@ -181,13 +171,20 @@ int main(int argc, char **argv) {
                     while (fgets(line, sizeof(line), fp)) {
                         strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
                         if (!is_balanced_form(acc)) continue;
-                        int result = eval_string_repl(acc, st);
-                        if (result == 0) {
-                            // Exception occurred in eval_string_repl
+                        TRY {
+                            int result = eval_string_repl(acc, st);
+                            if (result == 0) {
+                                // Parse error or evaluation failed
+                                fclose(fp);
+                                if (eval_args) free(eval_args);
+                                return 1;
+                            }
+                        } CATCH(ex) {
+                            print_exception(ex);
                             fclose(fp);
                             if (eval_args) free(eval_args);
                             return 1;
-                        }
+                        } END_TRY
                         acc[0] = '\0';
                     }
                     fclose(fp);
@@ -210,13 +207,13 @@ int main(int argc, char **argv) {
             CLJVALUE_POOL_SCOPE(pool) {
                 int result = eval_string_repl(eval_args[i], st);
                 if (result == 0) {
-                    // Exception occurred in eval_string_repl
+                    // Parse error or evaluation failed
                     if (eval_args) free(eval_args);
                     return 1;
                 }
             }
         } CATCH(ex) {
-            print_result((CljObject*)ex);
+            print_exception(ex);
             if (eval_args) free(eval_args);
             return 1;
         } END_TRY
