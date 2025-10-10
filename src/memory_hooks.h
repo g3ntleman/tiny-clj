@@ -59,19 +59,19 @@ void memory_test_end(const char *test_name);
         memory_hook_trigger(MEMORY_HOOK_OBJECT_DESTRUCTION, _tmp, sizeof(CljObject)); \
     } while(0)
     #define RETAIN(obj) ({ \
-        typeof(obj) _tmp = (obj); \
+        CljObject* _tmp = (CljObject*)(obj); \
         memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
         retain(_tmp); \
         _tmp; \
     })
     #define RELEASE(obj) ({ \
-        typeof(obj) _tmp = (obj); \
+        CljObject* _tmp = (CljObject*)(obj); \
         memory_hook_trigger(MEMORY_HOOK_RELEASE, _tmp, 0); \
         release(_tmp); \
         _tmp; \
     })
     #define AUTORELEASE(obj) ({ \
-        typeof(obj) _tmp = (obj); \
+        CljObject* _tmp = (CljObject*)(obj); \
         memory_hook_trigger(MEMORY_HOOK_AUTORELEASE, _tmp, 0); \
         autorelease(_tmp); \
         _tmp; \
@@ -129,8 +129,8 @@ void memory_test_end(const char *test_name);
     // No-op macros for release builds
     #define CREATE(obj) ((void)0)
     #define DEALLOC(obj) ((void)0)
-    #define RETAIN(obj) ({ typeof(obj) _tmp = (obj); retain(_tmp); _tmp; })
-    #define RELEASE(obj) ({ typeof(obj) _tmp = (obj); release(_tmp); _tmp; })
+    #define RETAIN(obj) ({ CljObject* _tmp = (CljObject*)(obj); retain(_tmp); _tmp; })
+    #define RELEASE(obj) ({ CljObject* _tmp = (CljObject*)(obj); release(_tmp); _tmp; })
     #define AUTORELEASE(obj) (obj)
     #define ASSIGN(var, new_obj) do { \
         typeof(var) _tmp = (new_obj); \

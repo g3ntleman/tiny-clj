@@ -127,6 +127,53 @@ CljObject* apply_builtin(const BuiltinEntry *entry, CljObject **args, int argc) 
     return NULL;
 }
 
+// Wrapper functions for arithmetic operations
+CljObject* native_add(CljObject **args, int argc) {
+    if (argc < 2) return clj_nil();
+    if (!args[0] || !args[1] || args[0]->type != CLJ_INT || args[1]->type != CLJ_INT) {
+        return clj_nil();
+    }
+    return make_int(args[0]->as.i + args[1]->as.i);
+}
+
+CljObject* native_sub(CljObject **args, int argc) {
+    if (argc < 2) return clj_nil();
+    if (!args[0] || !args[1] || args[0]->type != CLJ_INT || args[1]->type != CLJ_INT) {
+        return clj_nil();
+    }
+    return make_int(args[0]->as.i - args[1]->as.i);
+}
+
+CljObject* native_mul(CljObject **args, int argc) {
+    if (argc < 2) return clj_nil();
+    if (!args[0] || !args[1] || args[0]->type != CLJ_INT || args[1]->type != CLJ_INT) {
+        return clj_nil();
+    }
+    return make_int(args[0]->as.i * args[1]->as.i);
+}
+
+CljObject* native_div(CljObject **args, int argc) {
+    if (argc < 2) return clj_nil();
+    if (!args[0] || !args[1] || args[0]->type != CLJ_INT || args[1]->type != CLJ_INT) {
+        return clj_nil();
+    }
+    if (args[1]->as.i == 0) {
+        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0, "Division by zero");
+        return clj_nil();
+    }
+    return make_int(args[0]->as.i / args[1]->as.i);
+}
+
+CljObject* native_println(CljObject **args, int argc) {
+    if (argc < 1) return clj_nil();
+    if (args[0]) {
+        char *str = pr_str(args[0]);
+        printf("%s\n", str);
+        free(str);
+    }
+    return clj_nil();
+}
+
 void register_builtins() {
     for (size_t i = 0; i < sizeof(builtins)/sizeof(builtins[0]); ++i) {
         register_builtin(builtins[i].name, (BuiltinFn)builtins[i].u.generic /* placeholder */);
@@ -135,13 +182,45 @@ void register_builtins() {
     // Register a test native function to demonstrate the difference
     register_builtin("test-native", (BuiltinFn)native_if);
     
-    // Also register it as a symbol in the current namespace
+    // Register arithmetic operations and other builtins in the namespace
     EvalState *st = evalstate();
     if (st) {
+        // Register test-native
         CljObject *symbol = intern_symbol(NULL, "test-native");
         CljObject *func = make_named_func(native_if, NULL, "test-native");
         if (symbol && func) {
             ns_define(st, symbol, func);
+        }
+        
+        // Register arithmetic operations
+        CljObject *add_symbol = intern_symbol(NULL, "+");
+        CljObject *add_func = make_named_func(native_add, NULL, "+");
+        if (add_symbol && add_func) {
+            ns_define(st, add_symbol, add_func);
+        }
+        
+        CljObject *sub_symbol = intern_symbol(NULL, "-");
+        CljObject *sub_func = make_named_func(native_sub, NULL, "-");
+        if (sub_symbol && sub_func) {
+            ns_define(st, sub_symbol, sub_func);
+        }
+        
+        CljObject *mul_symbol = intern_symbol(NULL, "*");
+        CljObject *mul_func = make_named_func(native_mul, NULL, "*");
+        if (mul_symbol && mul_func) {
+            ns_define(st, mul_symbol, mul_func);
+        }
+        
+        CljObject *div_symbol = intern_symbol(NULL, "/");
+        CljObject *div_func = make_named_func(native_div, NULL, "/");
+        if (div_symbol && div_func) {
+            ns_define(st, div_symbol, div_func);
+        }
+        
+        CljObject *println_symbol = intern_symbol(NULL, "println");
+        CljObject *println_func = make_named_func(native_println, NULL, "println");
+        if (println_symbol && println_func) {
+            ns_define(st, println_symbol, println_func);
         }
     }
 }

@@ -73,10 +73,10 @@ typedef struct {
     CljObject **data;  // [key1, val1, key2, val2, ...]
 } CljMap;
 
-typedef struct {
+typedef struct CljList {
     CljObject base;         // Embedded base object
     CljObject *head;
-    CljObject *tail;
+    struct CljList *tail;
 } CljList;
 
 // Safe accessor macros for CljList (Clojure-style)
@@ -144,7 +144,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 /** Create interpreted function with params/body/closure; rc=1. */
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
 /** Create empty list node (rc=1). */
-CljObject* make_list(CljObject *first, CljObject *rest);
+CljList* make_list(CljObject *first, CljList *rest);
 
 // Singleton access functions
 /** Return global nil singleton (rc=0). */
@@ -316,7 +316,7 @@ static inline CljMap* as_map(CljObject *obj) {
     return (type(obj) == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;
 }
 static inline CljList* as_list(CljObject *obj) {
-    return (type(obj) == CLJ_LIST) ? (CljList*)obj->as.data : NULL;
+    return (type(obj) == CLJ_LIST) ? (CljList*)obj : NULL;
 }
 static inline CljFunction* as_function(CljObject *obj) {
     return (type(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL;

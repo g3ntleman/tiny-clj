@@ -138,36 +138,11 @@ static char *test_for_loop_memory(void) {
     vec_data->count = 3;
     
     // Test dotimes
-    CljObject *binding_list = make_list(NULL, NULL);
-    CljList *binding_data = as_list(binding_list);
-    if (binding_data) {
-        binding_data->head = intern_symbol_global("i");
-        binding_data->tail = make_list(NULL, NULL);
-        CljList *tail_data = as_list(binding_data->tail);
-        if (tail_data) {
-            tail_data->head = make_int(3);
-            tail_data->tail = NULL;
-        }
-    }
+    CljList *binding_list = make_list(intern_symbol_global("i"), make_list(make_int(3), NULL));
     
     CljObject *body = intern_symbol_global("i");
     
-    CljObject *dotimes_call = make_list(NULL, NULL);
-    CljList *call_data = as_list(dotimes_call);
-    if (call_data) {
-        call_data->head = intern_symbol_global("dotimes");
-        call_data->tail = make_list(NULL, NULL);
-        CljList *call_tail = as_list(call_data->tail);
-        if (call_tail) {
-            call_tail->head = binding_list;
-            call_tail->tail = make_list(NULL, NULL);
-            CljList *call_tail2 = as_list(call_tail->tail);
-            if (call_tail2) {
-                call_tail2->head = body;
-                call_tail2->tail = NULL;
-            }
-        }
-    }
+    CljList *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
     
     // Execute dotimes
     CljObject *result = eval_dotimes(dotimes_call, NULL);

@@ -23,7 +23,7 @@ static char *test_singleton_memory_tracking(void) {
     WITH_MEMORY_PROFILING({
         // Create and release singleton objects (vectors, maps, lists)
         CljObject *empty_vec = make_vector(0, 0);
-        CljObject *empty_list = make_list(NULL, NULL);
+        CljList *empty_list = make_list(NULL, NULL);
         
         mu_assert("empty_vec created", empty_vec != NULL);
         mu_assert("empty_list created", empty_list != NULL);

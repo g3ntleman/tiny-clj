@@ -23,28 +23,6 @@ xcode-select --install
 brew install cmake
 ```
 
-#### Linux (Ubuntu/Debian)
-```bash
-sudo apt update
-sudo apt install build-essential cmake git
-```
-
-#### Linux (CentOS/RHEL/Fedora)
-```bash
-# CentOS/RHEL
-sudo yum groupinstall "Development Tools"
-sudo yum install cmake git
-
-# Fedora
-sudo dnf groupinstall "Development Tools"
-sudo dnf install cmake git
-```
-
-#### Windows (MinGW/MSYS2)
-```bash
-# Install MSYS2, then:
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make
-```
 
 ### Optional Tools
 - **STM32CubeIDE**: For STM32 development and debugging

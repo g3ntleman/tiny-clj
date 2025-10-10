@@ -204,7 +204,8 @@ static char *test_seq_count(void) {
 static char *test_is_seqable(void) {
     
     // Test seqable types
-    mu_assert("list should be seqable", is_seqable(make_list(NULL, NULL)) == true);
+    CljList *test_list = make_list(NULL, NULL);
+    mu_assert("list should be seqable", is_seqable((CljObject*)test_list) == true);
     mu_assert("vector should be seqable", is_seqable(make_vector(1, 1)) == true);
     mu_assert("string should be seqable", is_seqable(make_string("test")) == true);
     mu_assert("nil should be seqable", is_seqable(NULL) == true);
@@ -255,7 +256,7 @@ static char *test_seq_to_list(void) {
 static char *test_empty_list_nil_semantics(void) {
     
     // Test 1: empty-list is () (nil)
-    CljObject *empty_list = make_list(NULL, NULL);
+    CljList *empty_list = make_list(NULL, NULL);
     mu_assert("empty list should not be NULL", empty_list != NULL);
     mu_assert("empty list should be a list", empty_list->type == CLJ_LIST);
     
