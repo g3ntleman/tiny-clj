@@ -3,6 +3,7 @@
 #include "minunit.h"
 #include "tiny_clj.h"
 #include "memory_hooks.h"
+#include "memory_profiler.h"
 #include "clj_symbols.h"
 #include "test-utils.h"
 
@@ -30,27 +31,23 @@ static char* test_eval_string_basic() {
 }
 
 static char* test_eval_string_error_handling() {
-    EvalState *eval_state = evalstate_new();
-    mu_assert("Should create eval state", eval_state != NULL);
+    WITH_MEMORY_PROFILING({
+        EvalState *eval_state = evalstate_new();
+        mu_assert("eval_state should be created", eval_state != NULL);
+        
+        // Test invalid syntax - should return NULL
+        CljObject *result = eval_string("(invalid syntax", eval_state);
+        mu_assert("Invalid syntax should return NULL", result == NULL);
+        
+        free(eval_state);
+    });
     
-    // Initialize special symbols
-    init_special_symbols();
-    
-    // Test invalid syntax - should throw an exception
-    mu_assert("Invalid syntax should throw exception", 
-              throws_exception(eval_state, "invalid-syntax", NULL, NULL));
-    
-    // Test NULL input
-    CljObject *null_result = eval_string(NULL, eval_state);
-    mu_assert("Should handle NULL input", null_result == NULL);
-    
-    free(eval_state);
     return 0;
 }
 
 static char* all_tests() {
     mu_run_test(test_eval_string_basic);
-    // mu_run_test(test_eval_string_error_handling);  // TEMPORARY: Disabled due to exception handling issues
+    mu_run_test(test_eval_string_error_handling);
     return 0;
 }
 

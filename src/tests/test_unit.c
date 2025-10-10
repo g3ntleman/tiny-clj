@@ -11,6 +11,8 @@
 #include "../map.h"
 #include "../namespace.h"
 #include "../vector.h"
+#include "../memory_hooks.h"
+#include "../memory_profiler.h"
 #include "minunit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,29 +61,32 @@ static char *test_basic_creation(void) {
 }
 
 static char *test_boolean_creation(void) {
-  // Test boolean creation using singleton
-  CljObject *bool_obj = clj_true();
-  mu_assert_obj_type(bool_obj, CLJ_BOOL);
-  mu_assert_obj_bool(bool_obj, true);
+  WITH_MEMORY_PROFILING({
+    // Test boolean creation using singleton
+    CljObject *bool_obj = clj_true();
+    mu_assert_obj_type(bool_obj, CLJ_BOOL);
+    mu_assert_obj_bool(bool_obj, true);
+  });
 
   return 0;
 }
 
 static char *test_singleton_objects(void) {
+  WITH_MEMORY_PROFILING({
+    // Test nil singleton
+    CljObject *nil1 = clj_nil();
+    CljObject *nil2 = clj_nil();
+    mu_assert_obj_ptr_equal(nil1, nil2);
 
-  // Test nil singleton
-  CljObject *nil1 = clj_nil();
-  CljObject *nil2 = clj_nil();
-  mu_assert_obj_ptr_equal(nil1, nil2);
+    // Test boolean singletons
+    CljObject *true1 = clj_true();
+    CljObject *true2 = clj_true();
+    mu_assert_obj_ptr_equal(true1, true2);
 
-  // Test boolean singletons
-  CljObject *true1 = clj_true();
-  CljObject *true2 = clj_true();
-  mu_assert_obj_ptr_equal(true1, true2);
-
-  CljObject *false1 = clj_false();
-  CljObject *false2 = clj_false();
-  mu_assert_obj_ptr_equal(false1, false2);
+    CljObject *false1 = clj_false();
+    CljObject *false2 = clj_false();
+    mu_assert_obj_ptr_equal(false1, false2);
+  });
 
   return 0;
 }

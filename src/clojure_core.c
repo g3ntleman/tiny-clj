@@ -7,6 +7,7 @@
 #include "runtime.h"
 #include "tiny_clj.h"
 #include "reader.h"
+#include "memory_hooks.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -52,7 +53,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     // Evaluate with exception handling using TRY/CATCH
     TRY {
       CljObject *result = eval_expr_simple(form, st);
-      if (result) release(result);
+      if (result) RELEASE(result);
       success_count++;
     } CATCH(ex) {
       // Exception occurred during evaluation
@@ -102,7 +103,7 @@ int load_clojure_core(EvalState *st) {
         free(msg);
       }
       st->last_error = NULL;
-      release(err);
+      RELEASE(err);
     }
   }
 

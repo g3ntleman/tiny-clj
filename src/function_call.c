@@ -57,7 +57,7 @@ static CljObject* list_get_element(CljObject *list, int index) {
     if (index == 0) return node->head;
     int i = 0;
     while (node && i < index) {
-        node = node->tail ? as_list(node->tail) : NULL;
+        node = LIST_REST(node) ? (CljObject*)LIST_REST(node) : NULL;
         i++;
     }
     return (node && node->head) ? node->head : NULL;
@@ -695,7 +695,7 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
         while (current) {
             count++;
             CljList *current_list = as_list(current);
-            current = current_list ? current_list->tail : NULL;
+            current = current_list ? (CljObject*)current_list->tail : NULL;
         }
         return AUTORELEASE(make_int(count));
     }
@@ -818,7 +818,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     }
     
     CljObject *var = binding_data->head;
-    CljObject *coll = binding_data->tail;
+    CljObject *coll = (CljObject*)LIST_REST(binding_data);
     
     // Get collection to iterate over
     CljList *coll_data = as_list(coll);
@@ -841,7 +841,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding using make_list
-            CljList *new_env = make_list(var, make_list(element, env));
+            CljList *new_env = make_list(var, make_list(element, (CljList*)env));
             // Clean up environment objects (not returned as values)
             RELEASE((CljObject*)new_env);
             
@@ -888,7 +888,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
     }
     
     CljObject *var = binding_data->head;
-    CljObject *coll = binding_data->tail;
+    CljObject *coll = (CljObject*)LIST_REST(binding_data);
     
     // Get collection to iterate over
     CljList *coll_data = as_list(coll);
@@ -908,7 +908,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding using make_list
-            CljList *new_env = make_list(var, make_list(element, env));
+            CljList *new_env = make_list(var, make_list(element, (CljList*)env));
             
             // Evaluate body for side effects
             // Note: body is a parameter, don't release it
@@ -938,7 +938,7 @@ CljObject* eval_list_function(CljObject *list, CljObject *env) {
     if (!list_data) return clj_nil();
     
     // Create new list starting from the second element (skip 'list' symbol)
-    CljObject *args_list = list_data->tail;
+    CljObject *args_list = (CljObject*)LIST_REST(list_data);
     if (!args_list) return clj_nil();
     
     // Simply return the arguments as a list (they're already evaluated by eval_list)
@@ -964,7 +964,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     }
     
     CljObject *var = binding_data->head;
-    CljObject *n_expr = binding_data->tail;
+    CljObject *n_expr = (CljObject*)binding_data->tail;
     
     // Get number of iterations
     CljList *n_data = as_list(n_expr);
@@ -984,7 +984,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     // Execute body n times
     for (int i = 0; i < n; i++) {
         // Create new environment with binding using make_list
-        CljList *new_env = make_list(var, make_list(make_int(i), env));
+        CljList *new_env = make_list(var, make_list(make_int(i), (CljList*)env));
         // Clean up environment objects (not returned as values)
         RELEASE((CljObject*)new_env);
         
@@ -1018,13 +1018,12 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     }
     
     // Add tail elements
-    CljObject *current = (CljObject*)list_data->tail;
+    CljList *current = LIST_REST(list_data);
     while (current && count < 1000) {
-        CljList *current_list = as_list(current);
-        if (current_list && current_list->head) {
-            elements[count++] = current_list->head;
+        if (current->head) {
+            elements[count++] = current->head;
         }
-        current = (CljObject*)(current_list ? current_list->tail : NULL);
+        current = current->tail;
     }
     
     // Check index and evaluate element
@@ -1067,13 +1066,12 @@ CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **pa
     }
     
     // Add tail elements
-    CljObject *current = list_data->tail;
+    CljList *current = LIST_REST(list_data);
     while (current && count < 1000) {
-        CljList *current_list = as_list(current);
-        if (current_list && current_list->head) {
-            elements[count++] = current_list->head;
+        if (current->head) {
+            elements[count++] = current->head;
         }
-        current = current_list ? current_list->tail : NULL;
+        current = current->tail;
     }
     
     // Check index and evaluate element

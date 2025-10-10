@@ -6,7 +6,6 @@
 // List-Operationen für try/catch
 CljObject* list_first(CljObject *list) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
-    if (!list->as.data) return clj_nil();
     CljList *list_data = as_list(list);
     if (!list_data) return clj_nil();
     if (!LIST_FIRST(list_data)) return clj_nil();
@@ -19,7 +18,7 @@ CljObject* list_nth(CljObject *list, int n) {
     CljList *ld = as_list(list);
     CljObject *current = ld ? LIST_FIRST(ld) : clj_nil();
     for (int i = 0; i < n && current; i++) {
-        current = LIST_REST((CljList*)current->as.data);
+        current = (CljObject*)LIST_REST((CljList*)current->as.data);
     }
     return current ? current : clj_nil();
 }
@@ -31,7 +30,7 @@ int list_count(CljObject *list) {
     CljList *current = as_list(list);
     while (current && LIST_FIRST(current)) {
         count++;
-        current = as_list(LIST_REST(current));
+        current = LIST_REST(current);
     }
     return count;
 }

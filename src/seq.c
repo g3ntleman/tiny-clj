@@ -126,8 +126,8 @@ bool seq_iter_next(SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                if (node && LIST_REST(node)) {
-                    iter->state.list.current = LIST_REST(node);
+                if (node && node->tail) {
+                    iter->state.list.current = (CljObject*)node->tail;
                     iter->state.list.index++;
                     return true;
                 }
@@ -226,6 +226,12 @@ CljObject* seq_create(CljObject *obj) {
     if (!seq_iter_init(&heap_seq->iter, obj)) {
         free(heap_seq);
         return clj_nil();  // Empty or not seqable
+    }
+    
+    // If iterator is empty (seq_type == CLJ_NIL), return nil singleton
+    if (heap_seq->iter.seq_type == CLJ_NIL) {
+        free(heap_seq);
+        return clj_nil();
     }
     
     return (CljObject*)heap_seq;

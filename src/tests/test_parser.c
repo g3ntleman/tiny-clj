@@ -11,6 +11,8 @@
 #include "../function_call.h"
 #include "../map.h"
 #include "../namespace.h"
+#include "../memory_hooks.h"
+#include "../memory_profiler.h"
 #include "minunit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -94,16 +96,17 @@ static char *test_parse_collections(void) {
 }
 
 static char *test_parse_comments(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  WITH_MEMORY_PROFILING({
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
+    init_special_symbols();
 
     // Test line comment parsing
     CljObject *result = parse("; This is a comment\n42", &st);
     mu_assert_obj_not_null(result);
     mu_assert_obj_int(result, 42);
+  });
 
-  }
   return 0;
 }
 

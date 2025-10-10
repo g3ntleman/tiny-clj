@@ -13,16 +13,10 @@
 #include "function_call.h"
 #include "clj_symbols.h"
 #include "namespace.h"
-
-#ifdef ENABLE_MEMORY_PROFILER
+#include "memory_hooks.h"
 #include "memory_profiler.h"
-#else
-// Stub macros when memory profiler is not enabled
-#define MEMORY_TEST_START(name) do {} while(0)
-#define MEMORY_TEST_END(name) do {} while(0)
-#define MEMORY_TEST_BENCHMARK_START(name) do {} while(0)
-#define MEMORY_TEST_BENCHMARK_END(name) do {} while(0)
-#endif
+
+// Memory profiler is now always enabled via memory_hooks.h and memory_profiler.h
 
 #include <stdio.h>
 
@@ -32,23 +26,21 @@
 
 static char *test_basic_object_creation_memory(void) {
     
-    MEMORY_TEST_START("Basic Object Creation");
-    
-    // Create some basic objects
-    CljObject *int_obj = make_int(42);
-    CljObject *float_obj = make_float(3.14);
-    CljObject *str_obj = make_string("hello");
-    
-    mu_assert("int object created", int_obj != NULL);
-    mu_assert("float object created", float_obj != NULL);
-    mu_assert("string object created", str_obj != NULL);
-    
-    // Release objects
-    release(int_obj);
-    release(float_obj);
-    release(str_obj);
-    
-    MEMORY_TEST_END("Basic Object Creation");
+    WITH_MEMORY_PROFILING({
+        // Create some basic objects
+        CljObject *int_obj = make_int(42);
+        CljObject *float_obj = make_float(3.14);
+        CljObject *str_obj = make_string("hello");
+        
+        mu_assert("int object created", int_obj != NULL);
+        mu_assert("float object created", float_obj != NULL);
+        mu_assert("string object created", str_obj != NULL);
+        
+        // Release objects
+        RELEASE(int_obj);
+        RELEASE(float_obj);
+        RELEASE(str_obj);
+    });
     
     return 0;
 }

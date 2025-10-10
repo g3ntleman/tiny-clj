@@ -33,7 +33,7 @@ static void release_object_deep(CljObject *v);
 /** @brief Release all elements in an array */
 static inline void release_array(CljObject **array, int count) {
     for (int i = 0; i < count; i++) {
-        if (array[i]) release(array[i]);
+        if (array[i]) RELEASE(array[i]);
     }
 }
 
@@ -156,7 +156,7 @@ void release_exception(CLJException *exception) {
         if (exception->type) free((void*)exception->type);
         if (exception->message) free((void*)exception->message);
         if (exception->file) free((void*)exception->file);
-        if (exception->data) release(exception->data);
+        if (exception->data) RELEASE(exception->data);
         free(exception);
     }
 }
@@ -322,7 +322,7 @@ static void cljvalue_pool_pop_internal(CljObjectPool *pool) {
         for (int i = vec->count - 1; i >= 0; --i) {
             CljObject *obj = vec->data[i];
             vec->data[i] = NULL;  // First set to NULL to prevent double-free
-            release(obj);         // Then release (NULL-safe)
+            RELEASE(obj);         // Then release (NULL-safe)
         }
         vec->count = 0;
     }
@@ -415,18 +415,20 @@ static void release_object_deep(CljObject *v) {
             break;
             
         case CLJ_LIST:
-            // List finalizer: separate struct in as.data; walk and free
+            // List finalizer: release head and tail, but don't free the list itself
+            // (the list structure will be freed by release() after this function returns)
             {
                 CljList *list = as_list(v);
                 if (list) {
-                    CljObject *node = list->head;
-                    while (node) {
-                        CljList *node_list = as_list(node);
-                        CljObject *next = node_list ? node_list->tail : NULL;
-                        release(node);
-                        node = next;
+                    // Release head if it exists
+                    if (list->head) {
+                        RELEASE(list->head);
                     }
-                    free(list);
+                    // Release tail if it exists (tail is another CljList)
+                    if (list->tail) {
+                        RELEASE((CljObject*)list->tail);
+                    }
+                    // Don't free the list structure itself - release() will do that
                 }
             }
             break;
@@ -442,8 +444,8 @@ static void release_object_deep(CljObject *v) {
                         release_array(clj_func->params, clj_func->param_count);
                         free(clj_func->params);
                     }
-                    if (clj_func->body) release(clj_func->body);
-                    if (clj_func->closure_env) release(clj_func->closure_env);
+                    if (clj_func->body) RELEASE(clj_func->body);
+                    if (clj_func->closure_env) RELEASE(clj_func->closure_env);
                     if (clj_func->name) free((void*)clj_func->name);
                 } else {
                     // It's a CljFunc (native function)
@@ -588,7 +590,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
 }
 
 CljList* make_list(CljObject *first, CljList *rest) {
-    CljList *list = ALLOC(CljList, 1);
+    CljList *list = ALLOC_ZERO(CljList, 1);
     if (!list) return NULL;
     
     list->base.type = CLJ_LIST;
@@ -601,9 +603,10 @@ CljList* make_list(CljObject *first, CljList *rest) {
         RETAIN(first);
     }
     if (rest) {
-        RETAIN(rest);
+        RETAIN((CljObject*)rest);
     }
     
+    CREATE((CljObject*)list);
     return list;
 }
 
@@ -689,13 +692,12 @@ char* pr_str(CljObject *v) {
                 }
                 
                 // Tail-Elemente hinzufügen
-                CljObject *current = list->tail;
+                CljList *current = LIST_REST(list);
                 while (current && count < 1000) {
-                    CljList *current_list = as_list(current);
-                    if (current_list && current_list->head) {
-                        elements[count++] = current_list->head;
+                    if (current->head) {
+                        elements[count++] = current->head;
                     }
-                    current = current_list ? current_list->tail : NULL;
+                    current = current->tail;
                 }
                 
                 // Berechne benötigte Kapazität
@@ -821,7 +823,7 @@ char* pr_str(CljObject *v) {
                     if (!new_result) {
                         free(result);
                         free(el_str);
-                        release(temp_seq);
+                        RELEASE(temp_seq);
                         return strdup("()");
                     }
                     result = new_result;
@@ -837,7 +839,7 @@ char* pr_str(CljObject *v) {
                 }
                 
                 strcat(result, ")");
-                release(temp_seq);
+                RELEASE(temp_seq);
                 return result;
             }
 
@@ -1082,7 +1084,7 @@ void meta_clear(CljObject *v) {
     if (index >= 0) {
         // Entry found; remove it
         CljObject *old_value = KV_VALUE(((CljMap*)meta_registry->as.data)->data, index);
-        if (old_value) release(old_value);
+        if (old_value) RELEASE(old_value);
         
         // Shift following elements to the left
         for (int j = index; j < ((CljMap*)meta_registry->as.data)->count - 1; j++) {
@@ -1217,7 +1219,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     CljObject *result = func->body ? (retain(func->body), func->body) : clj_nil();
     
     // Release environment and parameter array
-    release(call_env);
+    RELEASE(call_env);
     free(heap_params);
     
     return result;
@@ -1324,7 +1326,7 @@ void free_object(CljObject *obj) {
             {
                 CljList *list = (CljList*)obj;
                 if (list->head) release_object(list->head);
-                if (list->tail) release_object(list->tail);
+                if (list->tail) release_object((CljObject*)LIST_REST(list));
                 free(list);
             }
             break;
