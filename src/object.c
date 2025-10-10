@@ -62,9 +62,16 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
         message[sizeof(message)-1] = '\0';
     }
     
+    // Shorten file path to show only from /src/ onwards
+    const char *short_file = file;
+    const char *src_pos = strstr(file, "/src/");
+    if (src_pos) {
+        short_file = src_pos + 1; // Skip the leading "/"
+    }
+    
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : "RuntimeException";
-    throw_exception(exception_type, message, file, line, code);
+    throw_exception(exception_type, message, short_file, line, code);
 }
 
 // Autorelease pool backed by a weak vector for locality and fewer allocations
