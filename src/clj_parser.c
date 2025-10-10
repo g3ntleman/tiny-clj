@@ -147,6 +147,42 @@ CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
     return parse_number(reader, st);
   if (isdigit(c))
     return parse_number(reader, st);
+  // Handle nil literal
+  if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
+      reader_peek_ahead(reader, 2) == 'l' && 
+      !is_alphanumeric(reader_peek_ahead(reader, 3))) {
+    reader_consume(reader); // 'n'
+    reader_consume(reader); // 'i'
+    reader_consume(reader); // 'l'
+    return clj_nil();
+  }
+  
+  // Handle true literal
+  if (c == 't' && reader_peek_ahead(reader, 1) == 'r' && 
+      reader_peek_ahead(reader, 2) == 'u' && 
+      reader_peek_ahead(reader, 3) == 'e' && 
+      !is_alphanumeric(reader_peek_ahead(reader, 4))) {
+    reader_consume(reader); // 't'
+    reader_consume(reader); // 'r'
+    reader_consume(reader); // 'u'
+    reader_consume(reader); // 'e'
+    return clj_true();
+  }
+  
+  // Handle false literal
+  if (c == 'f' && reader_peek_ahead(reader, 1) == 'a' && 
+      reader_peek_ahead(reader, 2) == 'l' && 
+      reader_peek_ahead(reader, 3) == 's' && 
+      reader_peek_ahead(reader, 4) == 'e' && 
+      !is_alphanumeric(reader_peek_ahead(reader, 5))) {
+    reader_consume(reader); // 'f'
+    reader_consume(reader); // 'a'
+    reader_consume(reader); // 'l'
+    reader_consume(reader); // 's'
+    reader_consume(reader); // 'e'
+    return clj_false();
+  }
+  
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
     return parse_symbol(reader, st);
   if (strchr("+*/=<>", c)) {

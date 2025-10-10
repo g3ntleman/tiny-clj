@@ -101,6 +101,7 @@ add_executable(run-tests
     src/tests/test-exception-handling.c
     src/tests/test-utils.c
     src/tests/test_function_types.c
+    src/tests/test_nil_arithmetic.c
     src/builtins.c
     src/object.c
     src/types.c

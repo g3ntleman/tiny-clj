@@ -334,7 +334,7 @@ static char *benchmark_vector_iteration_with_memory(void) {
     for (int iter = 0; iter < BENCHMARK_ITERATIONS_SMALL; iter++) {
         for (int i = 0; i < 100; i++) {
             CljObject *obj = vec_data->data[i];
-            if (obj && obj->type == CLJ_INT) {
+            if (obj && is_type(obj, CLJ_INT)) {
                 sum += obj->as.i;
             }
         }
@@ -349,7 +349,7 @@ static char *benchmark_vector_iteration_with_memory(void) {
         seq_iter_init(&it, vec);
         while (!seq_iter_empty(&it)) {
             CljObject *obj = seq_iter_first(&it);
-            if (obj && obj->type == CLJ_INT) {
+            if (obj && is_type(obj, CLJ_INT)) {
                 sum += obj->as.i;
             }
             seq_iter_next(&it);

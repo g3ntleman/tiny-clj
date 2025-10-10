@@ -155,11 +155,11 @@ static char *all_for_loop_tests(void) {
     // TEMPORARY: Tests disabled due to symbol resolution issues
     // The eval_dotimes and eval_doseq functions need proper environment setup
     // for symbol binding in loop constructs
-    // mu_run_test(test_dotimes_basic);
-    // mu_run_test(test_doseq_basic);
-    // mu_run_test(test_for_basic);
-    // mu_run_test(test_dotimes_with_variable);
-    // mu_run_test(test_for_with_simple_expression);
+    mu_run_test(test_dotimes_basic);
+    mu_run_test(test_doseq_basic);
+    mu_run_test(test_for_basic);
+    mu_run_test(test_dotimes_with_variable);
+    mu_run_test(test_for_with_simple_expression);
     
     return 0;
 }

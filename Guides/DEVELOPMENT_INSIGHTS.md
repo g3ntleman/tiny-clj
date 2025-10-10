@@ -1194,3 +1194,99 @@ Die `release()` Funktion selbst hat bereits den NULL-Check, daher ist der expliz
 - `AUTORELEASE(obj)` statt `if (obj) AUTORELEASE(obj)`
 
 Diese Regel macht den Code sauberer und konsistenter.
+
+## 16. Konsequente Verwendung von is_type()
+
+### ✅ Wichtige Regel: Immer is_type() verwenden statt direkte Typvergleiche
+
+Verwende konsequent `is_type(obj, CLJ_TYPE)` statt direkte Typvergleiche wie `obj->type == CLJ_TYPE`. Dies macht den Code konsistenter und robuster.
+
+#### ❌ Direkte Typvergleiche vermeiden
+```c
+// Unnötig - direkter Typvergleich
+if (obj->type == CLJ_NIL) { ... }
+if (obj->type == CLJ_INT) { ... }
+if (obj->type == CLJ_SYMBOL) { ... }
+```
+
+#### ✅ Korrekte Verwendung mit is_type()
+```c
+// Konsistent - is_type() verwenden
+if (is_type(obj, CLJ_NIL)) { ... }
+if (is_type(obj, CLJ_INT)) { ... }
+if (is_type(obj, CLJ_SYMBOL)) { ... }
+```
+
+#### Code-Cleanup-Beispiele
+```c
+// Vorher (direkt):
+if (a && a->type == CLJ_NIL) {
+    a = make_int(0);
+}
+
+// Nachher (konsistent):
+if (a && is_type(a, CLJ_NIL)) {
+    a = make_int(0);
+}
+```
+
+#### Vorteile der is_type() Verwendung
+- **Konsistenz** - Einheitlicher Stil im gesamten Codebase
+- **Robustheit** - is_type() hat eingebaute NULL-Checks
+- **Lesbarkeit** - Klarere Intent beim Typvergleich
+- **Wartbarkeit** - Einheitliche API für alle Typvergleiche
+
+#### Regel für zukünftige Entwicklung
+**Immer verwenden:**
+- `is_type(obj, CLJ_NIL)` statt `obj->type == CLJ_NIL`
+- `is_type(obj, CLJ_INT)` statt `obj->type == CLJ_INT`
+- `is_type(obj, CLJ_SYMBOL)` statt `obj->type == CLJ_SYMBOL`
+
+Diese Regel macht den Code konsistenter und robuster.
+
+## 17. NULL-Checks vor is_type() sind überflüssig
+
+### ✅ Wichtige Regel: is_type() hat eingebaute NULL-Checks
+
+Die `is_type()` Funktion hat bereits eingebaute NULL-Checks, daher sind explizite `if (obj && is_type(obj, TYPE))` Checks überflüssig.
+
+#### ❌ Überflüssige NULL-Checks
+```c
+// Unnötig - is_type() hat bereits NULL-Check
+if (obj && is_type(obj, CLJ_NIL)) { ... }
+if (a && is_type(a, CLJ_INT)) { ... }
+```
+
+#### ✅ Korrekte Verwendung
+```c
+// Direkt verwenden - is_type() handhabt NULL automatisch
+if (is_type(obj, CLJ_NIL)) { ... }
+if (is_type(a, CLJ_INT)) { ... }
+```
+
+#### Code-Cleanup-Beispiele
+```c
+// Vorher (überflüssig):
+if (a && is_type(a, CLJ_NIL)) {
+    a = make_int(0);
+}
+
+// Nachher (sauber):
+if (is_type(a, CLJ_NIL)) {
+    a = make_int(0);
+}
+```
+
+#### Vorteile der direkten Verwendung
+- **Sauberer Code** - Weniger Boilerplate
+- **Konsistenz** - Einheitlicher Stil im gesamten Codebase
+- **Weniger Fehlerquellen** - Keine vergessenen NULL-Checks
+- **Bessere Lesbarkeit** - Fokus auf die eigentliche Logik
+
+#### Regel für zukünftige Entwicklung
+**Immer direkt verwenden:**
+- `is_type(obj, CLJ_NIL)` statt `if (obj && is_type(obj, CLJ_NIL))`
+- `is_type(obj, CLJ_INT)` statt `if (obj && is_type(obj, CLJ_INT))`
+- `is_type(obj, CLJ_SYMBOL)` statt `if (obj && is_type(obj, CLJ_SYMBOL))`
+
+Diese Regel macht den Code sauberer und konsistenter.

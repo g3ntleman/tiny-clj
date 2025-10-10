@@ -24,6 +24,7 @@ extern char *run_eval_string_api_tests(void);
 extern char *run_memory_tests(void);
 extern char *run_exception_handling_tests(void);
 extern char *run_function_types_tests(void);
+extern char *test_nil_arithmetic_suite(void);
 
 // Global test registry (compile-time, no dlsym needed)
 static TestEntry all_minunit_tests[] = {
@@ -36,6 +37,7 @@ static TestEntry all_minunit_tests[] = {
     {"memory",          "memory",  run_memory_tests},
     {"exception",       "error",   run_exception_handling_tests},
     {"function_types",  "core",    run_function_types_tests},
+    {"nil_arithmetic",  "core",    test_nil_arithmetic_suite},
 };
 
 static const int minunit_test_count = sizeof(all_minunit_tests) / sizeof(all_minunit_tests[0]);

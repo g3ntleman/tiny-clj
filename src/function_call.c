@@ -10,7 +10,6 @@
  */
 
 #include "object.h"
-#include "vector.h"
 #include "function_call.h"
 #include "seq.h"
 #include "namespace.h"
@@ -61,7 +60,7 @@ static CljObject* list_get_element(CljObject *list, int index) {
     if (index == 0) return node->head;
     int i = 0;
     while (node && i < index) {
-        node = LIST_REST(node) ? (CljObject*)LIST_REST(node) : NULL;
+        node = LIST_REST(node) ? (CljList*)LIST_REST(node) : NULL;
         i++;
     }
     return (node && node->head) ? node->head : NULL;
@@ -78,31 +77,60 @@ static int sub_op(int a, int b) { return a - b; }
 static int mul_op(int a, int b) { return a * b; }
 static int div_op(int a, int b) { return a / b; }
 
-// Error messages
-static const char* arith_errors[] = {
-    "Invalid arguments for addition",
-    "Invalid arguments for subtraction", 
-    "Invalid arguments for multiplication",
-    "Invalid arguments for division"
-};
+// Error messages - removed unused array
+
+// Helper function to check if a type is numeric
+static bool is_numeric_type(CljObject *obj) {
+    if (!obj) return false;
+    return is_type(obj, CLJ_INT) || is_type(obj, CLJ_FLOAT);
+}
 
 /** @brief Generic arithmetic function (normal version) */
 CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op) {
     CljObject *a = eval_arg(list, 1, env);
     CljObject *b = eval_arg(list, 2, env);
     
-    if (!a || !b || a->type != CLJ_INT || b->type != CLJ_INT) {
-        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                "Invalid arguments for %s: expected two integers, got %s and %s", 
-                arith_errors[op], a ? clj_type_name(a->type) : "nil", b ? clj_type_name(b->type) : "nil");
-        return clj_nil();
+    // Check for NULL arguments
+    if (!a || !b) {
+        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+                "Invalid arguments for arithmetic operation");
+        return NULL;
+    }
+    
+    // Check for nil arguments (Clojure throws NumberFormatException)
+    if (is_type(a, CLJ_NIL) || is_type(b, CLJ_NIL)) {
+        throw_exception_formatted("NumberFormatException", __FILE__, __LINE__, 0,
+                "Cannot convert nil to Number");
+        return NULL;
+    }
+    
+    // Check for non-numeric types
+    if (!is_numeric_type(a) || !is_numeric_type(b)) {
+        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+                "String cannot be used as a Number");
+        return NULL;
     }
     
     // Division by zero check
-    if (op == ARITH_DIV && b->as.i == 0) {
-        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                "Division by zero: %d / %d", a->as.i, b->as.i);
-        return clj_nil();
+    if (op == ARITH_DIV) {
+        if (b->type == CLJ_INT && b->as.i == 0) {
+            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                    "Division by zero: %d / %d", a->as.i, b->as.i);
+            return NULL;
+        }
+        if (b->type == CLJ_FLOAT && b->as.f == 0.0) {
+            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                    "Division by zero: %f / %f", a->as.f, b->as.f);
+            return NULL;
+        }
+    }
+    
+    // For now, only support integer arithmetic
+    // TODO: Add mixed int/float support
+    if (a->type != CLJ_INT || b->type != CLJ_INT) {
+        throw_exception_formatted("NotImplementedError", __FILE__, __LINE__, 0,
+                "Mixed int/float arithmetic not yet implemented");
+        return NULL;
     }
     
     int (*op_func)(int, int) = (op == ARITH_ADD) ? add_op :
@@ -118,18 +146,40 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
     CljObject *a = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
     CljObject *b = eval_arg_with_substitution(list, 2, params, values, param_count, closure_env);
     
-    if (!a || !b || a->type != CLJ_INT || b->type != CLJ_INT) {
-        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                "Invalid arguments for %s: expected two integers, got %s and %s", 
-                arith_errors[op], a ? clj_type_name(a->type) : "nil", b ? clj_type_name(b->type) : "nil");
-        return clj_nil();
+    // Check for nil arguments
+    if (!a || !b) {
+        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+                "String cannot be used as a Number");
+        return NULL;
+    }
+    
+    // Check for non-numeric types
+    if (!is_numeric_type(a) || !is_numeric_type(b)) {
+        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+                "String cannot be used as a Number");
+        return NULL;
     }
     
     // Division by zero check
-    if (op == ARITH_DIV && b->as.i == 0) {
-        throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                "Division by zero: %d / %d", a->as.i, b->as.i);
-        return clj_nil();
+    if (op == ARITH_DIV) {
+        if (b->type == CLJ_INT && b->as.i == 0) {
+            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                    "Division by zero: %d / %d", a->as.i, b->as.i);
+            return NULL;
+        }
+        if (b->type == CLJ_FLOAT && b->as.f == 0.0) {
+            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                    "Division by zero: %f / %f", a->as.f, b->as.f);
+            return NULL;
+        }
+    }
+    
+    // For now, only support integer arithmetic
+    // TODO: Add mixed int/float support
+    if (a->type != CLJ_INT || b->type != CLJ_INT) {
+        throw_exception_formatted("NotImplementedError", __FILE__, __LINE__, 0,
+                "Mixed int/float arithmetic not yet implemented");
+        return NULL;
     }
     
     int (*op_func)(int, int) = (op == ARITH_ADD) ? add_op :
@@ -313,19 +363,19 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return eval_body_with_params(branch, params, values, param_count, closure_env);
     }
     if (sym_is(op, "+")) {
-        return eval_add(list, NULL);  // Simplified - no parameter substitution for now
+        return eval_arithmetic_generic(list, NULL, ARITH_ADD);
     }
     
     if (sym_is(op, "-")) {
-        return eval_sub(list, NULL);  // Simplified - no parameter substitution for now
+        return eval_arithmetic_generic(list, NULL, ARITH_SUB);
     }
     
     if (sym_is(op, "*")) {
-        return eval_mul(list, NULL);  // Simplified - no parameter substitution for now
+        return eval_arithmetic_generic(list, NULL, ARITH_MUL);
     }
     
     if (sym_is(op, "/")) {
-        return eval_div(list, NULL);  // Simplified - no parameter substitution for now
+        return eval_arithmetic_generic(list, NULL, ARITH_DIV);
     }
     
     if (sym_is(op, "println")) {
@@ -435,6 +485,23 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     
     if (sym_is(op, "fn")) {
         return eval_fn(list, env);
+    }
+    
+    // Arithmetic operations
+    if (sym_is(op, "+")) {
+        return eval_arithmetic_generic(list, env, ARITH_ADD);
+    }
+    
+    if (sym_is(op, "-")) {
+        return eval_arithmetic_generic(list, env, ARITH_SUB);
+    }
+    
+    if (sym_is(op, "*")) {
+        return eval_arithmetic_generic(list, env, ARITH_MUL);
+    }
+    
+    if (sym_is(op, "/")) {
+        return eval_arithmetic_generic(list, env, ARITH_DIV);
     }
     
     if (sym_is(op, "count")) {
@@ -611,7 +678,7 @@ CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
     if (is_type(value, CLJ_FUNC)) {
         CljFunction *func = as_function(value);
         CljSymbol *sym = as_symbol(symbol);
-        if (func && sym && sym->name && !func->name) {
+        if (func && sym && sym->name[0] && !func->name) {
             func->name = strdup(sym->name);
         }
     }
@@ -638,7 +705,7 @@ CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st) {
     }
     
     CljSymbol *ns_sym = as_symbol(ns_name_obj);
-    if (!ns_sym || !ns_sym->name) {
+    if (!ns_sym || !ns_sym->name[0]) {
         eval_error("ns symbol has no name", st);
         return clj_nil();
     }

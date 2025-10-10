@@ -48,7 +48,7 @@ static CljObject* eval_code(const char *code) {
 // ============================================================================
 
 static bool is_number(CljObject *obj, int expected) {
-    return obj && obj->type == CLJ_NUMBER && 
+    return obj && is_type(obj, CLJ_NUMBER) && 
            as_number(obj)->value == expected;
 }
 
