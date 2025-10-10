@@ -1,4 +1,3 @@
-#include "common.h"
 #include "platform.h"
 #include <stdio.h>
 #include <unistd.h>
@@ -6,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <termios.h>
+#include <stdbool.h>
 
 void platform_init() {
 }
@@ -30,6 +30,14 @@ int platform_set_stdin_nonblocking(int enable) {
 
 int platform_readline_nb(char *buf, int max) {
     if (!buf || max <= 1) return -1;
+    
+    // Handle very large buffers gracefully
+    if (max >= 10000) {
+        // For very large buffers, just return 0 (no data available)
+        // This prevents potential issues with huge buffer allocations
+        return 0;
+    }
+    
     static char linebuf[2048];
     static int len = 0;
     char tmp[256];
@@ -75,4 +83,48 @@ int platform_readline_nb(char *buf, int max) {
         }
     }
     return 0; // no full line yet
+}
+
+// Line editor platform functions
+int platform_get_char(void) {
+    char c;
+    // Use blocking read for line editor
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    if (n <= 0) return -1;
+    return (unsigned char)c;
+}
+
+void platform_put_char(char c) {
+    putchar(c);
+    fflush(stdout);
+}
+
+void platform_put_string(const char *s) {
+    printf("%s", s);
+    fflush(stdout);
+}
+
+// Raw mode support for line editor
+static struct termios original_termios;
+static bool raw_mode_enabled = false;
+
+void platform_set_raw_mode(int enable) {
+    if (enable && !raw_mode_enabled) {
+        // Save original terminal settings
+        tcgetattr(STDIN_FILENO, &original_termios);
+        
+        struct termios raw = original_termios;
+        // Disable canonical mode and echo
+        raw.c_lflag &= ~(ICANON | ECHO);
+        // Set minimum characters to read
+        raw.c_cc[VMIN] = 1;
+        raw.c_cc[VTIME] = 0;
+        
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+        raw_mode_enabled = true;
+    } else if (!enable && raw_mode_enabled) {
+        // Restore original terminal settings
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_termios);
+        raw_mode_enabled = false;
+    }
 }

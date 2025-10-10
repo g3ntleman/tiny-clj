@@ -26,6 +26,12 @@ extern char *run_exception_handling_tests(void);
 extern char *run_function_types_tests(void);
 extern char *test_nil_arithmetic_suite(void);
 
+// Line editor test declarations
+extern char *run_line_editor_tests(void);
+extern char *run_platform_mock_tests(void);
+extern char *run_platform_abstraction_tests(void);
+extern char *run_repl_line_editing_tests(void);
+
 // Global test registry (compile-time, no dlsym needed)
 static TestEntry all_minunit_tests[] = {
     {"unit",            "core",    run_unit_tests},
@@ -38,6 +44,12 @@ static TestEntry all_minunit_tests[] = {
     {"exception",       "error",   run_exception_handling_tests},
     {"function_types",  "core",    run_function_types_tests},
     {"nil_arithmetic",  "core",    test_nil_arithmetic_suite},
+    
+    // Line editor tests
+    {"line_editor",     "ui",      run_line_editor_tests},
+    {"platform_mock",   "ui",      run_platform_mock_tests},
+    {"platform_abstraction", "ui", run_platform_abstraction_tests},
+    {"repl_line_editing", "ui",    run_repl_line_editing_tests},
 };
 
 static const int minunit_test_count = sizeof(all_minunit_tests) / sizeof(all_minunit_tests[0]);

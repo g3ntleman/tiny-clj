@@ -66,13 +66,14 @@ set_target_properties(tiny-clj-stm32-main PROPERTIES
     LINK_FLAGS "-Wl,-dead_strip"
 )
 
-# REPL executable
+# REPL executable (with line editing support)
 add_executable(tiny-clj-repl
     src/repl.c
     src/platform_macos.c
+    src/line_editor.c
     ${SOURCES}
 )
-target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG)
+target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
 
 # STM32-optimized REPL (no test code, minimal size)
 add_executable(tiny-clj-stm32
@@ -104,6 +105,12 @@ add_executable(run-tests
     src/tests/test-utils.c
     src/tests/test_function_types.c
     src/tests/test_nil_arithmetic.c
+    src/tests/test_line_editor.c
+    src/tests/test_platform_mock.c
+    src/tests/test_platform_abstraction.c
+    src/tests/test_repl_line_editing.c
+    src/line_editor.c
+    src/platform_macos.c
     src/builtins.c
     src/object.c
     src/types.c
@@ -123,7 +130,7 @@ add_executable(run-tests
     src/memory_hooks.c
     src/runtime.c
 )
-target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG)
+target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG ENABLE_LINE_EDITING)
 # Regular tests WITH memory profiling for early leak detection
 
 # ============================================================================

@@ -17,6 +17,12 @@
 #include <string.h>
 #include <stdbool.h>
 
+// Line editor test declarations
+char *run_line_editor_tests(void);
+char *run_platform_mock_tests(void);
+char *run_platform_abstraction_tests(void);
+char *run_repl_line_editing_tests(void);
+
 // ============================================================================
 // GLOBAL CONFIGURATION
 // ============================================================================

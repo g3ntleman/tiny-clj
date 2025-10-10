@@ -1,4 +1,3 @@
-#include "common.h"
 #include "platform.h"
 #include "tiny_clj.h"
 #include "clj_parser.h"
@@ -8,6 +7,7 @@
 #include "exception.h"
 #include "builtins.h"
 #include "memory_profiler.h"
+#include "line_editor.h"
 #include <stdbool.h>
 
 #include <stdio.h>
@@ -132,10 +132,27 @@ static void cleanup_and_exit(const char **eval_args, int exit_code) {
  */
 static bool run_interactive_repl(EvalState *st) {
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
+#ifdef ENABLE_LINE_EDITING
+    // Line editor needs blocking input for proper character handling
+    platform_set_stdin_nonblocking(0);
+    // Enable raw mode for proper escape sequence handling
+    platform_set_raw_mode(1);
+#else
     platform_set_stdin_nonblocking(1);
+#endif
 
     char acc[4096]; acc[0] = '\0';
     bool prompt_shown = false;
+#ifdef ENABLE_LINE_EDITING
+    // Initialize line editor
+    LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string);
+    if (!editor) {
+        fprintf(stderr, "Failed to initialize line editor\n");
+        return false;
+    }
+    set_line_editor(editor);
+#endif
+
     for (;;) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
@@ -143,6 +160,30 @@ static bool run_interactive_repl(EvalState *st) {
             prompt_shown = true;
         }
 
+#ifdef ENABLE_LINE_EDITING
+        // Use line editor for input
+        bool got_input = false;
+        LineEditor *editor = get_line_editor();
+        if (editor) {
+            int result = line_editor_process_input(editor);
+            if (result == LINE_EDITOR_EOF) {
+                break;
+            }
+            if (result == LINE_EDITOR_LINE_READY) {
+                const char *line = line_editor_get_buffer(editor);
+                if (line && strlen(line) > 0) {
+                    if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
+                    strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
+                    line_editor_reset(editor);
+                    got_input = true;
+                }
+            }
+            // Continue processing - line editor handles its own timing
+            if (!got_input) {
+                continue;
+            }
+        }
+#else
         int once = 200; // poll iterations per loop for cooperative multitasking
         bool got_input = false;
         bool should_exit = false;
@@ -162,6 +203,7 @@ static bool run_interactive_repl(EvalState *st) {
         }
         if (should_exit) break;
         if (!got_input) continue;
+#endif
 
         // Check for EOF on stdin (Ctrl+D) - exit immediately, even with unbalanced forms
         if (feof(stdin)) {
@@ -306,6 +348,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    cleanup_line_editor();
+
     // Execute all -e arguments in order
     for (int i = 0; i < eval_count; i++) {
         TRY {
@@ -328,6 +372,12 @@ int main(int argc, char **argv) {
 
     // Interactive REPL
     run_interactive_repl(st);
+    
+#ifdef ENABLE_LINE_EDITING
+    // Restore terminal settings
+    platform_set_raw_mode(0);
+#endif
+    
     return 0;
 }
 
