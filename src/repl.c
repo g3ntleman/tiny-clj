@@ -7,6 +7,7 @@
 #include "function_call.h"
 #include "exception.h"
 #include "builtins.h"
+#include <stdbool.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -19,7 +20,7 @@
  *  @param s String to check for balanced delimiters
  *  @return true if balanced, false otherwise
  */
-static int is_balanced_form(const char *s) {
+static bool is_balanced_form(const char *s) {
     int p = 0, b = 0, c = 0; // () [] {}
     bool in_str = false; bool esc = false;
     for (const char *x = s; *x; ++x) {
@@ -34,7 +35,7 @@ static int is_balanced_form(const char *s) {
         if (ch == '(') p++; else if (ch == ')') p--;
         else if (ch == '[') b++; else if (ch == ']') b--;
         else if (ch == '{') c++; else if (ch == '}') c--;
-        if (p < 0 || b < 0 || c < 0) return 0;
+        if (p < 0 || b < 0 || c < 0) return false;
     }
     return (p == 0 && b == 0 && c == 0 && !in_str);
 }

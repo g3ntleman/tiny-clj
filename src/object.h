@@ -79,6 +79,10 @@ typedef struct {
     CljObject *tail;
 } CljList;
 
+// Safe accessor macros for CljList (Clojure-style)
+#define LIST_FIRST(list) ((list) ? (list)->head : NULL)
+#define LIST_REST(list) ((list) ? (list)->tail : NULL)
+
 typedef struct {
     CljObject base;         // Embedded base object
     CljObject* (*fn)(CljObject **args, int argc);
@@ -140,7 +144,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 /** Create interpreted function with params/body/closure; rc=1. */
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
 /** Create empty list node (rc=1). */
-CljObject* make_list();
+CljObject* make_list(CljObject *first, CljObject *rest);
 
 // Singleton access functions
 /** Return global nil singleton (rc=0). */

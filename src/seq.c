@@ -33,12 +33,12 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     switch (obj->type) {
         case CLJ_LIST: {
             CljList *list_data = as_list(obj);
-            if (!list_data || !list_data->head) {
+            if (!list_data || !LIST_FIRST(list_data)) {
                 iter->seq_type = CLJ_NIL;
                 return true;  // Empty list
             }
             
-            iter->state.list.current = list_data->head;
+            iter->state.list.current = LIST_FIRST(list_data);
             iter->state.list.index = 0;
             iter->seq_type = CLJ_LIST;
             return true;
@@ -91,7 +91,7 @@ CljObject* seq_iter_first(const SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                return node ? node->head : clj_nil();
+                return node ? LIST_FIRST(node) : clj_nil();
             }
             return clj_nil();
         }
@@ -126,8 +126,8 @@ bool seq_iter_next(SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                if (node && node->tail) {
-                    iter->state.list.current = node->tail;
+                if (node && LIST_REST(node)) {
+                    iter->state.list.current = LIST_REST(node);
                     iter->state.list.index++;
                     return true;
                 }
@@ -212,7 +212,7 @@ CljObject* seq_create(CljObject *obj) {
         if (vec && vec->count == 0) return clj_nil();
     } else if (is_type(obj, CLJ_LIST)) {
         CljList *list = as_list(obj);
-        if (!list || !list->head) return clj_nil();
+        if (!list || !LIST_FIRST(list)) return clj_nil();
     }
     
     // Allocate heap wrapper

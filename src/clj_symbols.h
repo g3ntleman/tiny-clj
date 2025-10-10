@@ -2,6 +2,7 @@
 #define TINY_CLJ_SYMBOLS_H
 
 #include "object.h"
+#include <stdbool.h>
 
 // Globale Symbol-Pointer für Spezialformen (direkt als CljObject*)
 extern CljObject *SYM_TRY;
@@ -52,7 +53,7 @@ extern CljObject *SYM_KW_STACK;
 void init_special_symbols();
 
 // Hilfsfunktionen für Symbol-Vergleiche
-int is_special_form(CljObject *symbol, CljObject *special_symbol);
-int is_builtin_function(CljObject *symbol, CljObject *builtin_symbol);
+bool is_special_form(CljObject *symbol, CljObject *special_symbol);
+bool is_builtin_function(CljObject *symbol, CljObject *builtin_symbol);
 
 #endif

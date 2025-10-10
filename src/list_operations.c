@@ -9,17 +9,17 @@ CljObject* list_first(CljObject *list) {
     if (!list->as.data) return clj_nil();
     CljList *list_data = as_list(list);
     if (!list_data) return clj_nil();
-    if (!list_data->head) return clj_nil();
-    return list_data->head;
+    if (!LIST_FIRST(list_data)) return clj_nil();
+    return LIST_FIRST(list_data);
 }
 
 CljObject* list_nth(CljObject *list, int n) {
     if (!list || list->type != CLJ_LIST || n < 0) return clj_nil();
     
     CljList *ld = as_list(list);
-    CljObject *current = ld ? ld->head : clj_nil();
+    CljObject *current = ld ? LIST_FIRST(ld) : clj_nil();
     for (int i = 0; i < n && current; i++) {
-        current = ((CljList*)current->as.data)->tail;
+        current = LIST_REST((CljList*)current->as.data);
     }
     return current ? current : clj_nil();
 }
@@ -29,9 +29,9 @@ int list_count(CljObject *list) {
     
     int count = 0;
     CljList *current = as_list(list);
-    while (current && current->head) {
+    while (current && LIST_FIRST(current)) {
         count++;
-        current = as_list(current->tail);
+        current = as_list(LIST_REST(current));
     }
     return count;
 }
@@ -40,7 +40,7 @@ CljObject* list_from_stack(CljObject **stack, int count) {
     if (count == 0) return clj_nil();
     CljObject *prev = NULL;
     for (int i = count - 1; i >= 0; i--) {
-        CljObject *node = make_list();
+        CljObject *node = make_list(NULL, NULL);
         CljList *node_list = as_list(node);
         if (!node_list) return clj_nil();
         node_list->head = stack[i];
@@ -80,7 +80,7 @@ CljObject* list_from_ints(int count, ...) {
     CljObject *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
-        CljObject *node = make_list();
+        CljObject *node = make_list(NULL, NULL);
         CljList *node_list = as_list(node);
         if (node_list) {
             node_list->head = make_int(value);

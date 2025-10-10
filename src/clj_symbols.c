@@ -1,4 +1,5 @@
 #include "clj_symbols.h"
+#include <stdbool.h>
 
 // Globale Symbol-Pointer Definitionen
 CljObject *SYM_TRY = NULL;
@@ -94,10 +95,10 @@ void init_special_symbols() {
 }
 
 // Hilfsfunktionen für Symbol-Vergleiche
-int is_special_form(CljObject *symbol, CljObject *special_symbol) {
+bool is_special_form(CljObject *symbol, CljObject *special_symbol) {
     return symbol == special_symbol;
 }
 
-int is_builtin_function(CljObject *symbol, CljObject *builtin_symbol) {
+bool is_builtin_function(CljObject *symbol, CljObject *builtin_symbol) {
     return symbol == builtin_symbol;
 }

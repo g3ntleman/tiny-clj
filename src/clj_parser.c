@@ -13,6 +13,7 @@
 #include "clj_parser.h"
 #include "function_call.h"
 #include "map.h"
+#include <stdbool.h>
 #include "list_operations.h"
 #include "memory_hooks.h"
 #include "runtime.h"
@@ -37,15 +38,15 @@
 
 
 /** @brief Check if character is a digit */
-static int is_digit(char c) { return c >= '0' && c <= '9'; }
+static bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
 /** @brief Check if character is alphabetic */
-static int is_alpha(char c) {
+static bool is_alpha(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
 /** @brief Check if character is alphanumeric or symbol character */
-static int is_alphanumeric(char c) {
+static bool is_alphanumeric(char c) {
   return is_alpha(c) || is_digit(c) || c == '-' || c == '_' || c == '?' ||
          c == '!' || c == '/';
 }

@@ -587,17 +587,27 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     return (CljObject*)func;
 }
 
-CljObject* make_list() {
+CljObject* make_list(CljObject *first, CljObject *rest) {
     CljList *list = ALLOC(CljList, 1);
     if (!list) return NULL;
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;
-    list->head = NULL;
-    list->tail = NULL;
+    list->head = first;
+    list->tail = rest;
+    
+    // RETAIN first and rest if they are not NULL
+    if (first) {
+        RETAIN(first);
+    }
+    if (rest) {
+        RETAIN(rest);
+    }
     
     CljObject *obj = ALLOC(CljObject, 1);
     if (!obj) {
+        if (first) RELEASE(first);
+        if (rest) RELEASE(rest);
         free(list);
         return NULL;
     }

@@ -774,13 +774,13 @@ CljObject* eval_rest(CljObject *list, CljObject *env) {
     
     // Handle NULL argument case - return empty list
     if (!arg) {
-        result = make_list();  // Create empty list for nil/empty case
+        result = make_list(NULL, NULL);  // Create empty list for nil/empty case
     } else {
         // Use new seq implementation for unified behavior across all sequence types
         CljObject *seq = seq_create(arg);  // Create sequence iterator
         if (!seq) {
             // Seq creation failed - return empty list as fallback
-            result = make_list();
+            result = make_list(NULL, NULL);
         } else {
             // Get the rest of the sequence (everything except first element)
             CljObject *rest_seq = seq_rest(seq);
@@ -788,7 +788,7 @@ CljObject* eval_rest(CljObject *list, CljObject *env) {
             
             if (!rest_seq) {
                 // No rest elements - return empty list
-                result = make_list();
+                result = make_list(NULL, NULL);
             } else {
                 // Return SeqIterator directly (no conversion needed)
                 // SeqIterator is already a CljObject, so we can cast it
@@ -863,7 +863,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     }
     
     // Create result list
-    CljObject *result = make_list();
+    CljObject *result = make_list(NULL, NULL);
     
     // Iterate over collection using seq
     CljObject *seq = seq_create(collection);
@@ -872,12 +872,12 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding
-            CljObject *new_env = make_list();
+            CljObject *new_env = make_list(NULL, NULL);
             CljList *new_env_data = as_list(new_env);
             if (new_env_data) {
                 // Add binding to environment
                 new_env_data->head = var;
-                CljObject *tail_list = make_list();
+                CljObject *tail_list = make_list(NULL, NULL);
                 new_env_data->tail = tail_list;
                 CljList *tail_data = as_list(tail_list);
                 if (tail_data) {
@@ -952,12 +952,12 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding
-            CljObject *new_env = make_list();
+            CljObject *new_env = make_list(NULL, NULL);
             CljList *new_env_data = as_list(new_env);
             if (new_env_data) {
                 // Add binding to environment
                 new_env_data->head = var;
-                new_env_data->tail = make_list();
+                new_env_data->tail = make_list(NULL, NULL);
                 CljList *tail_data = as_list(new_env_data->tail);
                 if (tail_data) {
                     tail_data->head = element;
@@ -1040,12 +1040,12 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     // Execute body n times
     for (int i = 0; i < n; i++) {
         // Create new environment with binding
-        CljObject *new_env = make_list();
+        CljObject *new_env = make_list(NULL, NULL);
         CljList *new_env_data = as_list(new_env);
         if (new_env_data) {
             // Add binding to environment
             new_env_data->head = var;
-            CljObject *tail_list = make_list();
+            CljObject *tail_list = make_list(NULL, NULL);
             new_env_data->tail = tail_list;
             CljList *tail_data = as_list(tail_list);
             if (tail_data) {
