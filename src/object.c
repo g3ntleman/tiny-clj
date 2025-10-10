@@ -228,6 +228,13 @@ void release(CljObject *v) {
         // Primitive types are never actually freed, so don't track as deallocation
         return;
     }
+    
+    // Native functions (CljFunc) are static and don't need reference counting
+    if (is_type(v, CLJ_FUNC)) {
+        // Native functions are static - no memory management needed
+        // Just return without decrementing reference count
+        return;
+    }
     // Guard: empty vector/map singletons must not be released
     if (is_type(v, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(v);
