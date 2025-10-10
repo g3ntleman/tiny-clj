@@ -1,0 +1,243 @@
+[  2%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/main_stm32.c.o
+/Users/theisen/Projects/tiny-clj/src/main_stm32.c:15:17: warning: unused variable 'name' [-Wunused-variable]
+   15 |     const char *name = platform_name();
+      |                 ^~~~
+1 warning generated.
+[  2%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/platform_stm32.c.o
+[  4%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/clojure_core.c.o
+[  4%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/types.c.o
+[  6%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/object.c.o
+/Users/theisen/Projects/tiny-clj/src/object.c:466:30: warning: unused variable 'native_func' [-Wunused-variable]
+  466 |                     CljFunc *native_func = (CljFunc*)v;
+      |                              ^~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/object.c:1364:30: warning: unused variable 'native_func' [-Wunused-variable]
+ 1364 |                     CljFunc *native_func = (CljFunc*)obj;
+      |                              ^~~~~~~~~~~
+2 warnings generated.
+[  6%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/builtins.c.o
+/Users/theisen/Projects/tiny-clj/src/builtins.c:89:97: warning: unused parameter 'name' [-Wunused-parameter]
+   89 | CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name) {
+      |                                                                                                 ^
+1 warning generated.
+[  8%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/runtime.c.o
+[  8%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/namespace.c.o
+[ 10%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/clj_symbols.c.o
+[ 10%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/exception.c.o
+[ 12%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/clj_parser.c.o
+[ 12%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/reader.c.o
+[ 14%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/function_call.c.o
+[ 14%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/list_operations.c.o
+[ 16%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/vector.c.o
+[ 16%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/map.c.o
+[ 18%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/string.c.o
+[ 18%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/seq.c.o
+[ 20%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/memory_profiler.c.o
+[ 20%] Building C object CMakeFiles/tiny-clj-stm32-main.dir/src/memory_hooks.c.o
+[ 22%] Linking C executable tiny-clj-stm32-main
+[ 22%] Built target tiny-clj-stm32-main
+[ 25%] Building C object CMakeFiles/tiny-clj-repl.dir/src/repl.c.o
+/Users/theisen/Projects/tiny-clj/src/repl.c:52:25: warning: address of array 'sym->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+   52 |         if (sym && sym->name) {
+      |                 ~~ ~~~~~^~~~
+/Users/theisen/Projects/tiny-clj/src/repl.c:69:25: warning: address of array 'sym->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+   69 |         if (sym && sym->name) {
+      |                 ~~ ~~~~~^~~~
+2 warnings generated.
+[ 25%] Building C object CMakeFiles/tiny-clj-repl.dir/src/platform_macos.c.o
+[ 27%] Building C object CMakeFiles/tiny-clj-repl.dir/src/clojure_core.c.o
+[ 27%] Building C object CMakeFiles/tiny-clj-repl.dir/src/types.c.o
+[ 29%] Building C object CMakeFiles/tiny-clj-repl.dir/src/object.c.o
+[ 29%] Building C object CMakeFiles/tiny-clj-repl.dir/src/builtins.c.o
+[ 31%] Building C object CMakeFiles/tiny-clj-repl.dir/src/runtime.c.o
+[ 31%] Building C object CMakeFiles/tiny-clj-repl.dir/src/namespace.c.o
+[ 33%] Building C object CMakeFiles/tiny-clj-repl.dir/src/clj_symbols.c.o
+[ 33%] Building C object CMakeFiles/tiny-clj-repl.dir/src/exception.c.o
+[ 35%] Building C object CMakeFiles/tiny-clj-repl.dir/src/clj_parser.c.o
+[ 35%] Building C object CMakeFiles/tiny-clj-repl.dir/src/reader.c.o
+[ 37%] Building C object CMakeFiles/tiny-clj-repl.dir/src/function_call.c.o
+[ 37%] Building C object CMakeFiles/tiny-clj-repl.dir/src/list_operations.c.o
+[ 39%] Building C object CMakeFiles/tiny-clj-repl.dir/src/vector.c.o
+[ 39%] Building C object CMakeFiles/tiny-clj-repl.dir/src/map.c.o
+[ 41%] Building C object CMakeFiles/tiny-clj-repl.dir/src/string.c.o
+[ 41%] Building C object CMakeFiles/tiny-clj-repl.dir/src/seq.c.o
+[ 43%] Building C object CMakeFiles/tiny-clj-repl.dir/src/memory_profiler.c.o
+[ 43%] Building C object CMakeFiles/tiny-clj-repl.dir/src/memory_hooks.c.o
+[ 45%] Linking C executable tiny-clj-repl
+[ 45%] Built target tiny-clj-repl
+[ 45%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/repl.c.o
+/Users/theisen/Projects/tiny-clj/src/repl.c:52:25: warning: address of array 'sym->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+   52 |         if (sym && sym->name) {
+      |                 ~~ ~~~~~^~~~
+/Users/theisen/Projects/tiny-clj/src/repl.c:69:25: warning: address of array 'sym->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+   69 |         if (sym && sym->name) {
+      |                 ~~ ~~~~~^~~~
+2 warnings generated.
+[ 47%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/platform_stm32.c.o
+[ 47%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/clojure_core.c.o
+[ 50%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/types.c.o
+[ 50%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/object.c.o
+/Users/theisen/Projects/tiny-clj/src/object.c:466:30: warning: unused variable 'native_func' [-Wunused-variable]
+  466 |                     CljFunc *native_func = (CljFunc*)v;
+      |                              ^~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/object.c:1364:30: warning: unused variable 'native_func' [-Wunused-variable]
+ 1364 |                     CljFunc *native_func = (CljFunc*)obj;
+      |                              ^~~~~~~~~~~
+2 warnings generated.
+[ 52%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/builtins.c.o
+/Users/theisen/Projects/tiny-clj/src/builtins.c:89:97: warning: unused parameter 'name' [-Wunused-parameter]
+   89 | CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name) {
+      |                                                                                                 ^
+1 warning generated.
+[ 52%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/runtime.c.o
+[ 54%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/namespace.c.o
+[ 54%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/clj_symbols.c.o
+[ 56%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/exception.c.o
+[ 56%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/clj_parser.c.o
+[ 58%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/reader.c.o
+[ 58%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/function_call.c.o
+[ 60%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/list_operations.c.o
+[ 60%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/vector.c.o
+[ 62%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/map.c.o
+[ 62%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/string.c.o
+[ 64%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/seq.c.o
+[ 64%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/memory_profiler.c.o
+[ 66%] Building C object CMakeFiles/tiny-clj-stm32.dir/src/memory_hooks.c.o
+[ 66%] Linking C executable tiny-clj-stm32
+[ 66%] Built target tiny-clj-stm32
+[ 68%] Building C object CMakeFiles/run-tests.dir/src/tests/run_tests_main.c.o
+[ 68%] Building C object CMakeFiles/run-tests.dir/src/tests/test_unit.c.o
+[ 70%] Building C object CMakeFiles/run-tests.dir/src/tests/test_parser.c.o
+[ 70%] Building C object CMakeFiles/run-tests.dir/src/tests/test-namespace.c.o
+[ 72%] Building C object CMakeFiles/run-tests.dir/src/tests/test_seq.c.o
+[ 72%] Building C object CMakeFiles/run-tests.dir/src/tests/test_for_loops.c.o
+/Users/theisen/Projects/tiny-clj/src/tests/test_for_loops.c:93:18: warning: incompatible pointer types initializing 'CljList *' (aka 'struct CljList *') with an expression of type 'CljObject *' (aka 'struct CljObject *') [-Wincompatible-pointer-types]
+   81 |             vec_data->data[0] = make_int(1);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   82 |             vec_data->data[1] = make_int(2);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   83 |             vec_data->data[2] = make_int(3);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   84 |             vec_data->count = 3;
+      |             ~~~~~~~~~~~~~~~~~~~~
+   85 |         }
+      |         ~
+   86 |         
+   87 |         // Create binding list: [x [1 2 3]]
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   88 |         CljList *binding_list = AUTORELEASE(make_list(intern_symbol_global("x"), make_list(vec, NULL)));
+      |         ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   89 |         
+   90 |         // Create body: 42 - simple literal without symbol resolution
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   91 |         CljObject *body = make_int(42);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   92 |         
+   93 |         // Create function call: (doseq [x [1 2 3]] 42)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   94 |         CljList *doseq_call = AUTORELEASE(make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL))));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   95 |         
+   96 |         // Test doseq evaluation
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/../memory_hooks.h:106:9: note: expanded from macro 'WITH_MEMORY_PROFILING'
+  106 |         code; \
+      |         ^~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_for_loops.c:99:18: warning: incompatible pointer types initializing 'CljList *' (aka 'struct CljList *') with an expression of type 'CljObject *' (aka 'struct CljObject *') [-Wincompatible-pointer-types]
+   81 |         
+   82 |         // Create binding list: [x [1 2 3]]
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   83 |         CljList *binding_list = AUTORELEASE(make_list(intern_symbol_global("x"), make_list(vec, NULL)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   84 |         
+   85 |         // Create body: 42 - simple literal without symbol resolution
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   86 |         CljObject *body = make_int(42);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   87 |         
+   88 |         // Create function call: (doseq [x [1 2 3]] 42)
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   89 |         CljList *doseq_call = AUTORELEASE(make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL))));
+      |         ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   90 |         
+   91 |         // Test doseq evaluation
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~
+   92 |         CljObject *result = eval_doseq(doseq_call, NULL);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   93 |         mu_assert("doseq should return nil", result == NULL || result->type == CLJ_NIL);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   94 |         
+   95 |         // Memory balance is automatically checked by WITH_MEMORY_PROFILING after pool cleanup
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   96 |     });
+      |     ~~
+/Users/theisen/Projects/tiny-clj/src/tests/../memory_hooks.h:106:9: note: expanded from macro 'WITH_MEMORY_PROFILING'
+  106 |         code; \
+      |         ^~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_for_loops.c:102:40: warning: incompatible pointer types passing 'CljList *' (aka 'struct CljList *') to parameter of type 'CljObject *' (aka 'struct CljObject *') [-Wincompatible-pointer-types]
+  102 |         CljObject *result = eval_doseq(doseq_call, NULL);
+      |                                        ^~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/../memory_hooks.h:106:9: note: expanded from macro 'WITH_MEMORY_PROFILING'
+  106 |         code; \
+      |         ^~~~
+/Users/theisen/Projects/tiny-clj/src/tests/../function_call.h:38:34: note: passing argument to parameter 'list' here
+   38 | CljObject* eval_doseq(CljObject *list, CljObject *env);
+      |                                  ^
+/Users/theisen/Projects/tiny-clj/src/tests/test_for_loops.c:21:19: warning: unused function 'make_for_call' [-Wunused-function]
+   21 | static CljObject* make_for_call(CljObject *binding_var, CljObject *collection, CljObject *body) {
+      |                   ^~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_for_loops.c:34:19: warning: unused function 'make_dotimes_call' [-Wunused-function]
+   34 | static CljObject* make_dotimes_call(CljObject *var, int n, CljObject *body) {
+      |                   ^~~~~~~~~~~~~~~~~
+5 warnings generated.
+[ 75%] Building C object CMakeFiles/run-tests.dir/src/tests/test_eval_string_api.c.o
+[ 75%] Building C object CMakeFiles/run-tests.dir/src/tests/test_memory.c.o
+[ 77%] Building C object CMakeFiles/run-tests.dir/src/tests/test-exception-handling.c.o
+/Users/theisen/Projects/tiny-clj/src/tests/test-exception-handling.c:298:14: warning: unused function 'test_eval_string_exception_propagation' [-Wunused-function]
+  298 | static char *test_eval_string_exception_propagation(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test-exception-handling.c:312:14: warning: unused function 'test_eval_string_exception_propagation_with_ns' [-Wunused-function]
+  312 | static char *test_eval_string_exception_propagation_with_ns(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test-exception-handling.c:329:14: warning: unused function 'test_comprehensive_exception_types' [-Wunused-function]
+  329 | static char *test_comprehensive_exception_types(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+3 warnings generated.
+[ 77%] Building C object CMakeFiles/run-tests.dir/src/tests/test-utils.c.o
+[ 79%] Building C object CMakeFiles/run-tests.dir/src/tests/test_function_types.c.o
+/Users/theisen/Projects/tiny-clj/src/tests/test_function_types.c:82:16: warning: unused variable 'args' [-Wunused-variable]
+   82 |     CljObject *args[2] = {make_int(1), make_int(2)};
+      |                ^~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_function_types.c:13:14: warning: unused function 'test_native_function_call' [-Wunused-function]
+   13 | static char *test_native_function_call(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_function_types.c:36:14: warning: unused function 'test_clojure_function_call' [-Wunused-function]
+   36 | static char *test_clojure_function_call(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_function_types.c:61:14: warning: unused function 'test_function_type_distinction' [-Wunused-function]
+   61 | static char *test_function_type_distinction(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/theisen/Projects/tiny-clj/src/tests/test_function_types.c:111:14: warning: unused function 'test_function_call_evaluation' [-Wunused-function]
+  111 | static char *test_function_call_evaluation(void) {
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+5 warnings generated.
+[ 79%] Building C object CMakeFiles/run-tests.dir/src/tests/test_nil_arithmetic.c.o
+[ 81%] Building C object CMakeFiles/run-tests.dir/src/builtins.c.o
+[ 81%] Building C object CMakeFiles/run-tests.dir/src/object.c.o
+[ 83%] Building C object CMakeFiles/run-tests.dir/src/types.c.o
+[ 83%] Building C object CMakeFiles/run-tests.dir/src/vector.c.o
+[ 85%] Building C object CMakeFiles/run-tests.dir/src/map.c.o
+[ 85%] Building C object CMakeFiles/run-tests.dir/src/string.c.o
+[ 87%] Building C object CMakeFiles/run-tests.dir/src/clj_symbols.c.o
+[ 87%] Building C object CMakeFiles/run-tests.dir/src/namespace.c.o
+[ 89%] Building C object CMakeFiles/run-tests.dir/src/clj_parser.c.o
+[ 89%] Building C object CMakeFiles/run-tests.dir/src/reader.c.o
+[ 91%] Building C object CMakeFiles/run-tests.dir/src/function_call.c.o
+[ 91%] Building C object CMakeFiles/run-tests.dir/src/list_operations.c.o
+[ 93%] Building C object CMakeFiles/run-tests.dir/src/seq.c.o
+[ 93%] Building C object CMakeFiles/run-tests.dir/src/clojure_core.c.o
+[ 95%] Building C object CMakeFiles/run-tests.dir/src/exception.c.o
+[ 95%] Building C object CMakeFiles/run-tests.dir/src/memory_profiler.c.o
+[ 97%] Building C object CMakeFiles/run-tests.dir/src/memory_hooks.c.o
+[ 97%] Building C object CMakeFiles/run-tests.dir/src/runtime.c.o
+[100%] Linking C executable run-tests
+[100%] Built target run-tests

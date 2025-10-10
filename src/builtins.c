@@ -87,6 +87,7 @@ CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env) {
 }
 
 CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name) {
+    (void)name; // Suppress unused parameter warning
     CljFunc *func = ALLOC(CljFunc, 1);
     if (!func) return NULL;
     

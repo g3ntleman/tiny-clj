@@ -17,32 +17,7 @@
 #include "minunit.h"
 #include <stdio.h>
 
-// Helper functions for simplified test creation
-static CljObject* make_for_call(CljObject *binding_var, CljObject *collection, CljObject *body) {
-    // Build (for [var coll] body)
-    CljObject *for_sym = make_symbol("for", NULL);
-    
-    // Create binding list: [var coll]
-    CljList *binding_list = make_list(binding_var, make_list(collection, NULL));
-    
-    // Create function call: (for [var coll] body)
-    CljList *for_call = make_list(for_sym, make_list((CljObject*)binding_list, make_list(body, NULL)));
-    
-    return (CljObject*)for_call;
-}
-
-static CljObject* make_dotimes_call(CljObject *var, int n, CljObject *body) {
-    // Build (dotimes [var n] body)
-    CljObject *dotimes_sym = make_symbol("dotimes", NULL);
-    
-    // Create binding list: [var n]
-    CljList *binding_list = make_list(var, make_list(make_int(n), NULL));
-    
-    // Create function call: (dotimes [var n] body)
-    CljList *dotimes_call = make_list(dotimes_sym, make_list((CljObject*)binding_list, make_list(body, NULL)));
-    
-    return (CljObject*)dotimes_call;
-}
+// Helper functions removed - not used in current tests
 
 // ============================================================================
 // FOR-LOOP TESTS
@@ -90,13 +65,13 @@ static char *test_doseq_basic(void) {
         }
         
         // Create binding list: [x [1 2 3]]
-        CljList *binding_list = AUTORELEASE(make_list(intern_symbol_global("x"), make_list(vec, NULL)));
+        CljObject *binding_list = AUTORELEASE(make_list(intern_symbol_global("x"), make_list(vec, NULL)));
         
         // Create body: 42 - simple literal without symbol resolution
         CljObject *body = make_int(42);
         
         // Create function call: (doseq [x [1 2 3]] 42)
-        CljList *doseq_call = AUTORELEASE(make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL))));
+        CljObject *doseq_call = AUTORELEASE(make_list(intern_symbol_global("doseq"), make_list(binding_list, make_list(body, NULL))));
         
         // Test doseq evaluation
         CljObject *result = eval_doseq(doseq_call, NULL);

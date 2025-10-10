@@ -49,7 +49,7 @@ static void print_prompt(EvalState *st, bool balanced) {
     const char *ns_name = "user";  // Default
     if (st && st->current_ns && st->current_ns->name) {
         CljSymbol *sym = as_symbol(st->current_ns->name);
-        if (sym && sym->name) {
+        if (sym && sym->name[0] != '\0') {
             ns_name = sym->name;
         }
     }
@@ -66,7 +66,7 @@ static void print_result(CljObject *v) {
     // For symbols, print their name directly (not as code)
     if (is_type(v, CLJ_SYMBOL)) {
         CljSymbol *sym = as_symbol(v);
-        if (sym && sym->name) {
+        if (sym && sym->name[0] != '\0') {
             printf("%s\n", sym->name);
             return;
         }
@@ -162,6 +162,11 @@ static bool run_interactive_repl(EvalState *st) {
         }
         if (should_exit) break;
         if (!got_input) continue;
+
+        // Check for EOF on stdin (Ctrl+D) - exit immediately, even with unbalanced forms
+        if (feof(stdin)) {
+            break;
+        }
 
         if (!is_balanced_form(acc)) {
             // need more lines

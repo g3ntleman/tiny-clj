@@ -295,66 +295,11 @@ static char *test_exception_content_in_catch(void) {
 // TEST SUITE RUNNER
 // ============================================================================
 
-static char *test_eval_string_exception_propagation(void) {
-    EvalState *st = evalstate_new();
-    mu_assert("Should create eval state", st != NULL);
-    
-    init_special_symbols();
-    
-    // Test that eval_string throws exception for invalid symbols
-    mu_assert("Symbol resolution should throw exception", 
-              throws_exception(st, "invalid-symbol", NULL, "Unable to resolve symbol"));
-    
-    evalstate_free(st);
-    return 0;
-}
-
-static char *test_eval_string_exception_propagation_with_ns(void) {
-    EvalState *st = evalstate_new();
-    mu_assert("Should create eval state", st != NULL);
-    
-    init_special_symbols();
-    evalstate_set_ns(st, "test.namespace");
-    
-    // Test that eval_string throws exception for invalid symbols in namespace
-    mu_assert("Symbol resolution should throw exception", 
-              throws_exception(st, "undefined-var", NULL, "Unable to resolve symbol"));
-    
-    evalstate_free(st);
-    return 0;
-}
+// Unused functions removed
 
 // Helper functions moved to test-utils.c
 
-static char *test_comprehensive_exception_types(void) {
-    EvalState *st = evalstate_new();
-    mu_assert("Should create eval state", st != NULL);
-    
-    init_special_symbols();
-    
-    // Test 1: Symbol resolution exception
-    mu_assert("Symbol resolution should throw exception", 
-              throws_exception(st, "undefined-symbol", NULL, "Unable to resolve symbol"));
-    
-    // Test 2: Invalid syntax exception
-    mu_assert("Invalid syntax should throw exception", 
-              throws_exception(st, "(invalid syntax", NULL, NULL));
-    
-    // Test 3: Function call with wrong number of arguments
-    mu_assert("Function call should work", 
-              !throws_exception(st, "(+ 1 2 3 4 5)", NULL, NULL));
-    
-    // Test 4: Division by zero (if implemented)
-    mu_assert("Division should work", 
-              !throws_exception(st, "(/ 1 0)", NULL, NULL));
-    
-    // Test 5: Namespace operations
-    mu_assert("Namespace operation should work", 
-              !throws_exception(st, "(ns invalid.namespace.name)", NULL, NULL));
-    
-    evalstate_free(st);
-    return 0;
-}
+// Unused function removed
 
 static char *all_exception_tests(void) {
     mu_run_test(test_simple_try_catch_exception_caught);

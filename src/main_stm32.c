@@ -12,7 +12,6 @@
 int main() {
     platform_init();
     
-    const char *name = platform_name();
     char message[64];  // Smaller buffer for STM32
     snprintf(message, sizeof(message), "Tiny-Clj STM32 v1.0");
     platform_print(message);

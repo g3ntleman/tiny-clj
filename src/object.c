@@ -464,6 +464,7 @@ static void release_object_deep(CljObject *v) {
                 } else {
                     // It's a CljFunc (native function)
                     CljFunc *native_func = (CljFunc*)v;
+                    (void)native_func; // Suppress unused variable warning
 #ifdef DEBUG
                     if (native_func && native_func->name) {
                         // In Debug-Builds ist name ein String-Literal, kein malloc'd String
@@ -1362,6 +1363,7 @@ void free_object(CljObject *obj) {
                 } else {
                     // It's a CljFunc (native function)
                     CljFunc *native_func = (CljFunc*)obj;
+                    (void)native_func; // Suppress unused variable warning
 #ifdef DEBUG
                     if (native_func && native_func->name) {
                         // In Debug-Builds ist name ein String-Literal, kein malloc'd String

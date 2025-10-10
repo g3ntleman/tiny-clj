@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
+#include <errno.h>
+#include <termios.h>
 
 void platform_init() {
 }
@@ -32,9 +34,26 @@ int platform_readline_nb(char *buf, int max) {
     static int len = 0;
     char tmp[256];
     ssize_t n = read(STDIN_FILENO, tmp, sizeof(tmp));
-    if (n <= 0) {
-        // no data or error (EAGAIN handled by caller as 0)
-        return 0;
+    if (n == 0) {
+        // EOF detected - flush terminal input buffer
+        tcflush(STDIN_FILENO, TCIFLUSH);
+        if (len > 0) {
+            // Return any buffered content first
+            int outlen = (len < max - 1) ? len : (max - 1);
+            memcpy(buf, linebuf, (size_t)outlen);
+            buf[outlen] = '\0';
+            len = 0;
+            return outlen;
+        }
+        return -1;
+    }
+    if (n < 0) {
+        if (errno == EAGAIN) {
+            // No data available (non-blocking)
+            return 0;
+        }
+        // Real error
+        return -1;
     }
     if (len + (int)n >= (int)sizeof(linebuf)) {
         len = 0; // overflow protection: reset buffer
