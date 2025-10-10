@@ -234,17 +234,17 @@ typedef struct CljObjectPool CljObjectPool;
 /** Add object to current autorelease pool and return it. */
 CljObject *autorelease(CljObject *v);
 /** Push a new autorelease pool; returns pool handle. */
-CljObjectPool *cljvalue_pool_push();
+CljObjectPool *autorelease_pool_push();
 /** Pop and drain current autorelease pool (most common usage). */
-void cljvalue_pool_pop(void);
+void autorelease_pool_pop(void);
 /** Pop and drain specific autorelease pool (advanced usage). */
-void cljvalue_pool_pop_specific(CljObjectPool *pool);
+void autorelease_pool_pop_specific(CljObjectPool *pool);
 /** Legacy API: Pop and drain given autorelease pool (backward compatibility). */
-void cljvalue_pool_pop_legacy(CljObjectPool *pool);
+void autorelease_pool_pop_legacy(CljObjectPool *pool);
 /** Drain all autorelease pools (global cleanup). */
-void cljvalue_pool_cleanup_all();
+void autorelease_pool_cleanup_all();
 
-#define CLJVALUE_POOL_SCOPE(name) for (CljObjectPool *(name) = cljvalue_pool_push(); (name) != NULL; cljvalue_pool_pop_specific(name), (name) = NULL)
+#define AUTORELEASE_POOL_SCOPE(name) for (CljObjectPool *(name) = autorelease_pool_push(); (name) != NULL; autorelease_pool_pop_specific(name), (name) = NULL)
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */

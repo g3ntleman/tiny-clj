@@ -25,7 +25,7 @@ int main() {
     
     // Cleanup
     meta_registry_cleanup();
-    cljvalue_pool_cleanup_all();
+    autorelease_pool_cleanup_all();
     
     return 0;
 }

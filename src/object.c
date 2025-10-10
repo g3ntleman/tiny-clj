@@ -284,7 +284,7 @@ CljObject *autorelease(CljObject *v) {
     if (!g_cv_pool_top) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
-                "This indicates missing cljvalue_pool_push() or premature cljvalue_pool_pop().", 
+                "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
                 v, v ? v->type : -1);
     }
     
@@ -297,7 +297,7 @@ CljObject *autorelease(CljObject *v) {
     return v;
 }
 
-CljObjectPool *cljvalue_pool_push() {
+CljObjectPool *autorelease_pool_push() {
     CljObjectPool *p = ALLOC(CljObjectPool, 1);
     if (!p) return NULL;
     p->backing = make_weak_vector(16);
@@ -308,11 +308,11 @@ CljObjectPool *cljvalue_pool_push() {
 }
 
 // Internal implementation
-static void cljvalue_pool_pop_internal(CljObjectPool *pool) {
+static void autorelease_pool_pop_internal(CljObjectPool *pool) {
     // 🚨 ASSERTION: Check for pop/push imbalance (before early return)
     if (g_pool_push_count <= 0) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "cljvalue_pool_pop() called more times than cljvalue_pool_push()! "
+                "autorelease_pool_pop() called more times than autorelease_pool_push()! "
                 "Push count: %d, attempting to pop pool %p. "
                 "This indicates unbalanced pool operations.", 
                 g_pool_push_count, pool);
@@ -348,24 +348,24 @@ static void cljvalue_pool_pop_internal(CljObjectPool *pool) {
 }
 
 // Public API: Pop current pool (most common usage)
-void cljvalue_pool_pop(void) {
-    cljvalue_pool_pop_internal(NULL);
+void autorelease_pool_pop(void) {
+    autorelease_pool_pop_internal(NULL);
 }
 
 // Public API: Pop specific pool (for advanced usage)
-void cljvalue_pool_pop_specific(CljObjectPool *pool) {
-    cljvalue_pool_pop_internal(pool);
+void autorelease_pool_pop_specific(CljObjectPool *pool) {
+    autorelease_pool_pop_internal(pool);
 }
 
 // Legacy API: Keep for backward compatibility
-void cljvalue_pool_pop_legacy(CljObjectPool *pool) {
-    cljvalue_pool_pop_internal(pool);
+void autorelease_pool_pop_legacy(CljObjectPool *pool) {
+    autorelease_pool_pop_internal(pool);
 }
 
 // Global cleanup function for all autorelease pools
-void cljvalue_pool_cleanup_all() {
+void autorelease_pool_cleanup_all() {
     while (g_cv_pool_top) {
-        cljvalue_pool_pop_internal(g_cv_pool_top);
+        autorelease_pool_pop_internal(g_cv_pool_top);
     }
 }
 // Central dispatcher for finalizers based on type tag

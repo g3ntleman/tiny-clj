@@ -43,7 +43,7 @@ int main() {
     
     // Cleanup
     meta_registry_cleanup(); // Cleanup meta functionality
-    cljvalue_pool_cleanup_all(); // Cleanup alle Autorelease-Pools
+    autorelease_pool_cleanup_all(); // Cleanup alle Autorelease-Pools
     
     return 0;
 }

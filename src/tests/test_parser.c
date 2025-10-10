@@ -32,7 +32,7 @@ static void test_teardown(void) {
   symbol_table_cleanup();
 
   // Cleanup autorelease pool
-  cljvalue_pool_cleanup_all();
+  autorelease_pool_cleanup_all();
 }
 
 // ============================================================================
@@ -41,7 +41,7 @@ static void test_teardown(void) {
 
 static char *test_parse_basic_types(void) {
 
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
     
@@ -72,7 +72,7 @@ static char *test_parse_basic_types(void) {
 }
 
 static char *test_parse_collections(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -111,7 +111,7 @@ static char *test_parse_comments(void) {
 }
 
 static char *test_parse_metadata(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -125,7 +125,7 @@ static char *test_parse_metadata(void) {
 }
 
 static char *test_parse_error_handling(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -139,7 +139,7 @@ static char *test_parse_error_handling(void) {
 }
 
 static char *test_utf8_symbol_roundtrip(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -154,7 +154,7 @@ static char *test_utf8_symbol_roundtrip(void) {
 }
 
 static char *test_utf8_string_roundtrip(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -169,7 +169,7 @@ static char *test_utf8_string_roundtrip(void) {
 }
 
 static char *test_utf8_delimiters(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 

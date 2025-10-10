@@ -170,7 +170,9 @@ char *run_for_loop_tests(void) {
     init_special_symbols();
     EvalState *st = evalstate_new();
     set_global_eval_state(st);
-    // Don't load clojure_core - we use native C functions directly
+    
+    // Load clojure_core (objects are manually released in eval_core_source)
+    load_clojure_core(st);
     
     char *result = all_for_loop_tests();
     
@@ -186,7 +188,10 @@ int main(void) {
     init_special_symbols();
     EvalState *st = evalstate_new();
     set_global_eval_state(st);
-    // Don't load clojure_core - we use native C functions directly
+    // Load clojure_core with autorelease pool to clean up temporary objects
+    AUTORELEASE_POOL_SCOPE(pool) {
+        load_clojure_core(st);
+    }
     
     int res = run_minunit_tests(all_for_loop_tests, "For-Loop Tests");
     

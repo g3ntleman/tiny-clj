@@ -133,7 +133,7 @@ EvalState* evalstate() {
     }
     
     memset(st, 0, sizeof(EvalState));
-    st->pool = cljvalue_pool_push();
+    st->pool = autorelease_pool_push();
     if (!st->pool) {
         printf("FAILED: Autorelease pool creation failed at %s:%d\n", __FILE__, __LINE__);
         free(st);
@@ -143,7 +143,7 @@ EvalState* evalstate() {
     st->current_ns = ns_get_or_create("user", NULL); // Default namespace
     if (!st->current_ns) {
         printf("FAILED: Namespace creation failed at %s:%d\n", __FILE__, __LINE__);
-        cljvalue_pool_pop_specific(st->pool);
+        autorelease_pool_pop_specific(st->pool);
         free(st);
         return NULL;
     }
@@ -164,7 +164,7 @@ EvalState* evalstate_new() {
 void evalstate_free(EvalState *st) {
     if (!st) return;
     
-    if (st->pool) cljvalue_pool_pop_specific(st->pool);
+    if (st->pool) autorelease_pool_pop_specific(st->pool);
     if (st->stack) free(st->stack);
     free(st);
 }

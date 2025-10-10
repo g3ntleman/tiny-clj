@@ -102,20 +102,20 @@ void memory_test_end(const char *test_name);
     // Fluent memory profiling macro
     #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
-        cljvalue_pool_push(); \
+        autorelease_pool_push(); \
         code; \
-        cljvalue_pool_cleanup_all(); \
+        autorelease_pool_cleanup_all(); \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
     // Fluent memory profiling macro with EvalState management
     #define WITH_MEMORY_PROFILING_EVAL(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
-        cljvalue_pool_push(); \
+        autorelease_pool_push(); \
         EvalState *eval_state = evalstate_new(); \
         code; \
         evalstate_free(eval_state); \
-        cljvalue_pool_cleanup_all(); \
+        autorelease_pool_cleanup_all(); \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     

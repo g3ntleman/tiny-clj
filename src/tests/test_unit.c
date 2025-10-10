@@ -32,7 +32,7 @@ static void test_teardown(void) {
   symbol_table_cleanup();
 
   // Cleanup autorelease pool
-  cljvalue_pool_cleanup_all();
+  autorelease_pool_cleanup_all();
 }
 
 // ============================================================================
@@ -41,7 +41,7 @@ static void test_teardown(void) {
 
 static char *test_basic_creation(void) {
 
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     // Test integer creation
     CljObject *int_obj = make_int(42);
     mu_assert_obj_type(int_obj, CLJ_INT);
@@ -110,7 +110,7 @@ static char *test_empty_vector_singleton(void) {
 }
 
 static char *test_empty_map_singleton(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     // make_map(0) returns the empty-map singleton
     CljObject *m0 = make_map(0);
     mu_assert_obj_ptr_equal(m0, make_map(0));
@@ -126,7 +126,7 @@ static char *test_empty_map_singleton(void) {
 
 static char *test_parser_basic_types(void) {
 
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -152,7 +152,7 @@ static char *test_parser_basic_types(void) {
 }
 
 static char *test_parser_collections(void) {
-  CLJVALUE_POOL_SCOPE(pool) {
+  AUTORELEASE_POOL_SCOPE(pool) {
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 

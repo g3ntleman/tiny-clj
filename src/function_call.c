@@ -33,6 +33,10 @@ CljObject* eval_div_with_substitution(CljObject *list, CljObject **params, CljOb
 
 CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 
+// Forward declarations for loop evaluation
+CljObject* eval_body_with_env(CljObject *body, CljObject *env);
+CljObject* eval_list_with_env(CljObject *list, CljObject *env);
+
 /** @brief Compare symbol name directly (works for non-interned symbols) */
 static inline int sym_is(CljObject *value, const char *name) {
     CljSymbol *sym = as_symbol(value);
@@ -178,16 +182,76 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObje
 }
 
 
+// Evaluate body with environment lookup (for loops)
+CljObject* eval_body_with_env(CljObject *body, CljObject *env) {
+    if (!body) return clj_nil();
+    
+    if (is_type(body, CLJ_SYMBOL)) {
+        // Look up symbol in environment
+        return env_get_stack(env, body);
+    }
+    
+    // For lists, evaluate them with environment
+    if (is_type(body, CLJ_LIST)) {
+        return eval_list_with_env(body, env);
+    }
+    
+    // Literal value
+    return body ? (RETAIN(body), body) : clj_nil();
+}
+
+// Evaluate list with environment (for loops)
+CljObject* eval_list_with_env(CljObject *list, CljObject *env) {
+    if (!list || list->type != CLJ_LIST) return clj_nil();
+    
+    CljList *list_data = as_list(list);
+    if (!list_data) return clj_nil();
+    
+    CljObject *head = list_data->head;
+    if (!head) return clj_nil();
+    
+    // First element is the operator
+    CljObject *op = head;
+    
+    // For symbols, look up in environment
+    if (is_type(op, CLJ_SYMBOL)) {
+        CljObject *resolved = env_get_stack(env, op);
+        if (resolved) {
+            // If it's a function, call it
+            if (is_type(resolved, CLJ_FUNC)) {
+                // Count arguments
+                int total_count = list_count(list);
+                int argc = total_count - 1;
+                if (argc < 0) argc = 0;
+                
+                // Evaluate arguments
+                CljObject *args_stack[16];
+                CljObject **args = alloc_obj_array(argc, args_stack);
+                
+                for (int i = 0; i < argc; i++) {
+                    args[i] = eval_body_with_env(list_get_element(list, i + 1), env);
+                    if (!args[i]) args[i] = clj_nil();
+                }
+                
+                // Call the function
+                CljObject *result = eval_function_call(resolved, args, argc, env);
+                
+                free_obj_array(args, args_stack);
+                
+                return result;
+            }
+            // Otherwise, return the resolved value
+            return resolved ? (RETAIN(resolved), resolved) : clj_nil();
+        }
+    }
+    
+    // Fallback: return first element
+    return head ? (RETAIN(head), head) : clj_nil();
+}
+
 // Simplified body evaluation with parameter binding
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
     if (!body) return clj_nil();
-    
-    // Simplified implementation - would normally evaluate the AST
-    if (is_type(body, CLJ_LIST)) {
-        // For now, just return the body as-is (for literal values)
-        // TODO: Implement proper parameter substitution for complex expressions
-        return body ? (RETAIN(body), body) : clj_nil();
-    }
     
     if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol - check parameters first
@@ -211,8 +275,15 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
                 return resolved ? (RETAIN(resolved), resolved) : clj_nil();
             }
         }
-        // Fallback: return symbol itself
+        // If not found in parameters or closure_env, try to resolve from global namespace
+        // This is a fallback for global symbols
+        // For now, just return the symbol itself to avoid complex resolution
         return body ? (RETAIN(body), body) : clj_nil();
+    }
+    
+    // For lists, evaluate them normally
+    if (is_type(body, CLJ_LIST)) {
+        return eval_list(body, closure_env, NULL);
     }
     
     // Literal value
@@ -910,8 +981,11 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
             // Create new environment with binding using make_list
             CljList *new_env = make_list(var, make_list(element, (CljList*)env));
             
-            // Evaluate body for side effects
-            // Note: body is a parameter, don't release it
+            // Evaluate body with environment lookup
+            CljObject *body_result = eval_body_with_env(body, (CljObject*)new_env);
+            if (body_result) {
+                RELEASE(body_result);
+            }
             
             // Clean up environment objects
             RELEASE((CljObject*)new_env);
@@ -950,8 +1024,14 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
     
-    CljObject *binding_list = eval_arg(list, 1, env);
-    CljObject *body = eval_arg(list, 2, env);
+    // Parse arguments directly without evaluation
+    CljList *list_data = as_list(list);
+    if (!list_data || !list_data->tail) {
+        return clj_nil();
+    }
+    
+    CljObject *binding_list = list_data->tail->head;
+    CljObject *body = list_data->tail->tail ? list_data->tail->tail->head : NULL;
     
     if (!binding_list || binding_list->type != CLJ_LIST) {
         return clj_nil();
@@ -985,17 +1065,14 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     for (int i = 0; i < n; i++) {
         // Create new environment with binding using make_list
         CljList *new_env = make_list(var, make_list(make_int(i), (CljList*)env));
-        // Clean up environment objects (not returned as values)
-        RELEASE((CljObject*)new_env);
         
-        // Evaluate body with parameter substitution
-        CljObject *params[1] = {var};
-        CljObject *values[1] = {make_int(i)};
-        CljObject *body_result = eval_body_with_params(body, params, values, 1, new_env);
+        // Evaluate body with environment lookup
+        CljObject *body_result = eval_body_with_env(body, (CljObject*)new_env);
         if (body_result) {
             RELEASE(body_result);
         }
-        RELEASE(values[0]); // Release the int we created
+        // Clean up environment objects (not returned as values)
+        RELEASE((CljObject*)new_env);
     }
     
     return AUTORELEASE(clj_nil()); // dotimes always returns nil

@@ -192,11 +192,11 @@ int main(void) {
     printf("Iterations: %d\n\n", BENCHMARK_ITERATIONS);
     
     init_special_symbols();
-    cljvalue_pool_push();
+    autorelease_pool_push();
     
     int result = run_minunit_tests(all_seq_benchmarks, "Seq Performance Comparison");
     
-    cljvalue_pool_pop();
+    autorelease_pool_pop();
     
     printf("\n✅ Benchmark completed\n");
     printf("   Tests run: %d\n", tests_run);

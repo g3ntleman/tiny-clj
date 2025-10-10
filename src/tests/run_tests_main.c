@@ -30,7 +30,7 @@ static bool enable_memory_profiling = false;
 static void global_setup(void) {
     init_special_symbols();
     meta_registry_init();
-    cljvalue_pool_push(); // Create global autorelease pool for all tests
+    autorelease_pool_push(); // Create global autorelease pool for all tests
     
 #ifdef ENABLE_MEMORY_PROFILING
     if (enable_memory_profiling) {
@@ -41,7 +41,7 @@ static void global_setup(void) {
 }
 
 static void global_teardown(void) {
-    cljvalue_pool_cleanup_all();
+    autorelease_pool_cleanup_all();
     symbol_table_cleanup();
     meta_registry_cleanup();
     

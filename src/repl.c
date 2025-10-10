@@ -170,7 +170,7 @@ static bool run_interactive_repl(EvalState *st) {
 
         // Evaluate accumulated form with TRY/CATCH
         TRY {
-            CLJVALUE_POOL_SCOPE(pool) {
+            AUTORELEASE_POOL_SCOPE(pool) {
                 const char *p = acc;
                 CljObject *ast = parse(p, st);
                 if (ast) {
@@ -261,7 +261,7 @@ int main(int argc, char **argv) {
 
     if (file_arg) {
         TRY {
-            CLJVALUE_POOL_SCOPE(pool) {
+            AUTORELEASE_POOL_SCOPE(pool) {
                 FILE *fp = fopen(file_arg, "r");
                 if (!fp) {
                     throw_exception_formatted("IOError", __FILE__, __LINE__, 0,
@@ -301,7 +301,7 @@ int main(int argc, char **argv) {
     // Execute all -e arguments in order
     for (int i = 0; i < eval_count; i++) {
         TRY {
-            CLJVALUE_POOL_SCOPE(pool) {
+            AUTORELEASE_POOL_SCOPE(pool) {
                 bool success = eval_string_repl(eval_args[i], st);
                 if (!success) {
                     // Parse error or evaluation failed

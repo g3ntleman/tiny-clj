@@ -1131,3 +1131,66 @@ echo "All tests passed!"
 - No timeout needed
 - Easy to debug individual test cases
 - Composable and maintainable
+
+## 15. Memory Management Macros haben eingebaute NULL-Checks
+
+### ✅ Wichtige Regel: Explizite NULL-Checks vor Memory-Management-Makros sind unnötig
+
+Die Memory-Management-Makros `RELEASE`, `RETAIN` und `AUTORELEASE` haben bereits eingebaute NULL-Checks. Explizite `if`-Statements vor diesen Makros sind unnötig und sollten entfernt werden.
+
+#### ❌ Unnötige NULL-Checks
+```c
+// Unnötig - RELEASE hat bereits NULL-Check
+if (obj) RELEASE(obj);
+
+// Unnötig - RETAIN hat bereits NULL-Check  
+if (result) RETAIN(result);
+
+// Unnötig - AUTORELEASE hat bereits NULL-Check
+if (value) AUTORELEASE(value);
+```
+
+#### ✅ Korrekte Verwendung
+```c
+// Direkt verwenden - Makros handhaben NULL automatisch
+RELEASE(obj);
+RETAIN(result);
+AUTORELEASE(value);
+```
+
+#### Code-Cleanup-Beispiele
+```c
+// Vorher (unnötig):
+if (body_result) {
+    RELEASE(body_result);
+}
+
+// Nachher (sauber):
+RELEASE(body_result);
+```
+
+#### Vorteile der direkten Verwendung
+- **Sauberer Code** - Weniger Boilerplate
+- **Konsistenz** - Einheitlicher Stil im gesamten Codebase
+- **Weniger Fehlerquellen** - Keine vergessenen NULL-Checks
+- **Bessere Lesbarkeit** - Fokus auf die eigentliche Logik
+
+#### Implementierung in memory_hooks.h
+```c
+#define RELEASE(obj) ({ \
+    CljObject* _tmp = (CljObject*)(obj); \
+    memory_hook_trigger(MEMORY_HOOK_RELEASE, _tmp, 0); \
+    release(_tmp); \
+    _tmp; \
+})
+```
+
+Die `release()` Funktion selbst hat bereits den NULL-Check, daher ist der explizite Check redundant.
+
+#### Regel für zukünftige Entwicklung
+**Immer direkt verwenden:**
+- `RELEASE(obj)` statt `if (obj) RELEASE(obj)`
+- `RETAIN(obj)` statt `if (obj) RETAIN(obj)`  
+- `AUTORELEASE(obj)` statt `if (obj) AUTORELEASE(obj)`
+
+Diese Regel macht den Code sauberer und konsistenter.

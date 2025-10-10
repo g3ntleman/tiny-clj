@@ -228,12 +228,12 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
     // Create autorelease pool for this evaluation
-    CljObjectPool *pool = cljvalue_pool_push();
+    CljObjectPool *pool = autorelease_pool_push();
     if (!pool) return NULL;
     
     CljObject *parsed = parse_string(expr_str, eval_state);
     if (!parsed) {
-        cljvalue_pool_pop();
+        autorelease_pool_pop();
         return NULL;
     }
     
