@@ -160,42 +160,35 @@ static bool run_interactive_repl(EvalState *st) {
             prompt_shown = true;
         }
 
-#ifdef ENABLE_LINE_EDITING
-        // Use line editor for input
+        // Unified input processing
         bool got_input = false;
+#ifdef ENABLE_LINE_EDITING
         LineEditor *editor = get_line_editor();
         if (editor) {
             int result = line_editor_process_input(editor);
-            if (result == LINE_EDITOR_EOF) {
-                break;
-            }
+            if (result == LINE_EDITOR_EOF) break;
             if (result == LINE_EDITOR_LINE_READY) {
-                const char *line = line_editor_get_buffer(editor);
-                if (line && strlen(line) > 0) {
+                LineEditorState state;
+                if (line_editor_get_state(editor, &state) == LINE_EDITOR_SUCCESS && 
+                    state.length > 0) {
                     if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
-                    strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
+                    strncat(acc, state.buffer, sizeof(acc) - strlen(acc) - 1);
                     line_editor_reset(editor);
                     got_input = true;
                 }
             }
-            // Continue processing - line editor handles its own timing
-            if (!got_input) {
-                continue;
-            }
+            if (!got_input) continue;
         }
 #else
-        int once = 200; // poll iterations per loop for cooperative multitasking
-        bool got_input = false;
+        int once = 200;
         bool should_exit = false;
         while (once--) {
             char buf[512];
             int n = platform_readline_nb(buf, sizeof(buf));
             if (n < 0) { should_exit = true; break; }
             if (n == 0) { usleep(1000); continue; }
-            // append to accumulator (strip CR)
             if (n > 0) {
                 if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
-                // trim CR
                 for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
                 strncat(acc, buf, sizeof(acc) - strlen(acc) - 1);
                 got_input = true; break;

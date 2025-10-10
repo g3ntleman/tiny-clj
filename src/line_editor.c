@@ -6,6 +6,13 @@
 // Global line editor instance
 static LineEditor *global_editor = NULL;
 
+// ANSI escape sequence constants
+static const char ESC_RIGHT[] = "\033[C";
+static const char ESC_LEFT[] = "\033[D";
+static const char ESC_CLEAR[] = "\033[K";
+static const char ESC_HOME[] = "\033[1G";
+
+
 #ifdef ENABLE_LINE_EDITING
 
 struct LineEditor {
@@ -22,6 +29,41 @@ struct LineEditor {
     int escape_pos;
     bool in_escape_sequence;
 };
+
+// Generic cursor movement functions
+static void move_cursor_right(LineEditor *editor, int steps) {
+    for (int i = 0; i < steps; i++) {
+        editor->put_string(ESC_RIGHT);
+    }
+}
+
+static void move_cursor_left(LineEditor *editor, int steps) {
+    for (int i = 0; i < steps; i++) {
+        editor->put_string(ESC_LEFT);
+    }
+}
+
+// Generic buffer shift functions
+static void shift_buffer_left(LineEditor *editor, int start, int count) {
+    for (int i = start; i < editor->length - count; i++) {
+        editor->buffer[i] = editor->buffer[i + count];
+    }
+}
+
+static void shift_buffer_right(LineEditor *editor, int start, int count) {
+    for (int i = editor->length; i > start; i--) {
+        editor->buffer[i] = editor->buffer[i - count];
+    }
+}
+
+// Inline helper functions (better than macros)
+static inline bool editor_is_valid(const LineEditor *editor) {
+    return editor != NULL;
+}
+
+static inline void editor_put_esc(LineEditor *editor, const char *seq) {
+    editor->put_string(seq);
+}
 
 // ANSI escape sequence handling
 static bool is_ansi_escape_sequence(const char *input, int len) {
@@ -42,50 +84,40 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
         case 'C': // Right arrow
             if (editor->cursor_pos < editor->length) {
                 editor->cursor_pos++;
-                // Move cursor right visually
-                editor->put_string("\033[C");
+                editor->put_string(ESC_RIGHT);
             }
             return 3;
         case 'D': // Left arrow
             if (editor->cursor_pos > 0) {
                 editor->cursor_pos--;
-                // Move cursor left visually
-                editor->put_string("\033[D");
+                editor->put_string(ESC_LEFT);
             }
             return 3;
         case 'H': // Home
             editor->cursor_pos = 0;
-            // Move cursor to beginning of line
-            editor->put_string("\033[1G");
+            editor->put_string(ESC_HOME);
             return 3;
         case 'F': // End
             editor->cursor_pos = editor->length;
-            // Move cursor to end of line
-            editor->put_string("\033[1G");
-            for (int i = 0; i < editor->length; i++) {
-                editor->put_string("\033[C");
-            }
+            editor->put_string(ESC_HOME);
+            move_cursor_right(editor, editor->length);
             return 3;
         case 'K': // Clear line from cursor
-            editor->put_string("\033[K");
+            editor->put_string(ESC_CLEAR);
             return 3;
         case '3': // Delete key
             if (len >= 4 && input[3] == '~') {
                 if (editor->cursor_pos < editor->length) {
                     // Delete character at cursor position
-                    for (int i = editor->cursor_pos; i < editor->length - 1; i++) {
-                        editor->buffer[i] = editor->buffer[i + 1];
-                    }
+                    shift_buffer_left(editor, editor->cursor_pos, 1);
                     editor->length--;
                     // Redraw from cursor position
-                    editor->put_string("\033[K");
+                    editor->put_string(ESC_CLEAR);
                     for (int i = editor->cursor_pos; i < editor->length; i++) {
                         editor->put_char(editor->buffer[i]);
                     }
                     // Move cursor back to position
-                    for (int i = editor->cursor_pos; i < editor->length; i++) {
-                        editor->put_string("\033[D");
-                    }
+                    move_cursor_left(editor, editor->length - editor->cursor_pos);
                 }
                 return 4; // Consumed 4 bytes
             }
@@ -102,9 +134,7 @@ static void insert_character(LineEditor *editor, char c) {
     }
     
     // Shift characters right to make space
-    for (int i = editor->length; i > editor->cursor_pos; i--) {
-        editor->buffer[i] = editor->buffer[i - 1];
-    }
+    shift_buffer_right(editor, editor->cursor_pos, 1);
     
     // Insert character
     editor->buffer[editor->cursor_pos] = c;
@@ -121,7 +151,7 @@ static void insert_character(LineEditor *editor, char c) {
     
     // Move cursor back to correct position
     for (int i = editor->cursor_pos; i < editor->length; i++) {
-        editor->put_string("\033[D");
+        editor->put_string(ESC_LEFT);
     }
 }
 
@@ -129,16 +159,14 @@ static void backspace_character(LineEditor *editor) {
     if (editor->cursor_pos > 0) {
         // Move cursor left
         editor->cursor_pos--;
-        editor->put_string("\033[D");
+        editor->put_string(ESC_LEFT);
         
         // Delete character
-        for (int i = editor->cursor_pos; i < editor->length - 1; i++) {
-            editor->buffer[i] = editor->buffer[i + 1];
-        }
+        shift_buffer_left(editor, editor->cursor_pos, 1);
         editor->length--;
         
         // Clear from cursor to end of line
-        editor->put_string("\033[K");
+        editor->put_string(ESC_CLEAR);
         
         // Redraw remaining characters
         for (int i = editor->cursor_pos; i < editor->length; i++) {
@@ -146,9 +174,7 @@ static void backspace_character(LineEditor *editor) {
         }
         
         // Move cursor back to position
-        for (int i = editor->cursor_pos; i < editor->length; i++) {
-            editor->put_string("\033[D");
-        }
+        move_cursor_left(editor, editor->length - editor->cursor_pos);
     }
 }
 
@@ -215,19 +241,15 @@ int line_editor_process_input(LineEditor *editor) {
                 // Handle delete key - don't display escape sequence
                 if (editor->cursor_pos < editor->length) {
                     // Delete character at cursor position
-                    for (int i = editor->cursor_pos; i < editor->length - 1; i++) {
-                        editor->buffer[i] = editor->buffer[i + 1];
-                    }
+                    shift_buffer_left(editor, editor->cursor_pos, 1);
                     editor->length--;
                     // Redraw from cursor position
-                    editor->put_string("\033[K");
+                    editor->put_string(ESC_CLEAR);
                     for (int i = editor->cursor_pos; i < editor->length; i++) {
                         editor->put_char(editor->buffer[i]);
                     }
                     // Move cursor back to position
-                    for (int i = editor->cursor_pos; i < editor->length; i++) {
-                        editor->put_string("\033[D");
-                    }
+                    move_cursor_left(editor, editor->length - editor->cursor_pos);
                 }
                 return LINE_EDITOR_SUCCESS;
             }
@@ -282,28 +304,20 @@ int line_editor_process_input(LineEditor *editor) {
     return LINE_EDITOR_SUCCESS;
 }
 
-const char* line_editor_get_buffer(const LineEditor *editor) {
-    if (!editor) return NULL;
-    return editor->buffer;
-}
-
-int line_editor_get_cursor_pos(const LineEditor *editor) {
-    if (!editor) return -1;
-    return editor->cursor_pos;
-}
-
-int line_editor_get_length(const LineEditor *editor) {
-    if (!editor) return -1;
-    return editor->length;
-}
-
-bool line_editor_is_line_ready(const LineEditor *editor) {
-    if (!editor) return false;
-    return editor->line_ready;
+int line_editor_get_state(const LineEditor *editor, LineEditorState *state) {
+    if (!editor_is_valid(editor) || !state) return LINE_EDITOR_ERROR;
+    
+    strncpy(state->buffer, editor->buffer, sizeof(state->buffer) - 1);
+    state->buffer[sizeof(state->buffer) - 1] = '\0';
+    state->cursor_pos = editor->cursor_pos;
+    state->length = editor->length;
+    state->line_ready = editor->line_ready;
+    
+    return LINE_EDITOR_SUCCESS;
 }
 
 void line_editor_clear(LineEditor *editor) {
-    if (!editor) return;
+    if (!editor_is_valid(editor)) return;
     editor->buffer[0] = '\0';
     editor->cursor_pos = 0;
     editor->length = 0;

@@ -11,6 +11,14 @@ typedef int (*GetCharFunc)(void);
 typedef void (*PutCharFunc)(char);
 typedef void (*PutStringFunc)(const char*);
 
+// Line editor state structure for reduced API
+typedef struct {
+    char buffer[512];
+    int cursor_pos;
+    int length;
+    bool line_ready;
+} LineEditorState;
+
 // Return codes for line editor operations
 #define LINE_EDITOR_SUCCESS    0
 #define LINE_EDITOR_EOF       -1
@@ -24,11 +32,8 @@ void line_editor_free(LineEditor *editor);
 // Process input and return status
 int line_editor_process_input(LineEditor *editor);
 
-// Get current state
-const char* line_editor_get_buffer(const LineEditor *editor);
-int line_editor_get_cursor_pos(const LineEditor *editor);
-int line_editor_get_length(const LineEditor *editor);
-bool line_editor_is_line_ready(const LineEditor *editor);
+// Get current state (reduced API)
+int line_editor_get_state(const LineEditor *editor, LineEditorState *state);
 
 // Reset editor state
 void line_editor_clear(LineEditor *editor);
