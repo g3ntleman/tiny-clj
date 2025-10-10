@@ -244,23 +244,46 @@ void memory_profiler_init(void) { /* no-op */ }
 void memory_profiler_reset(void) { /* no-op */ }
 void memory_profiler_cleanup(void) { /* no-op */ }
 MemoryStats memory_profiler_get_stats(void) { MemoryStats empty = {0}; return empty; }
-void memory_profiler_print_stats(const char *test_name) { /* no-op */ }
+void memory_profiler_print_stats(const char *test_name) { 
+    (void)test_name; /* no-op */ 
+}
 
-void memory_profiler_track_allocation(size_t size) { /* no-op */ }
-void memory_profiler_track_deallocation(size_t size) { /* no-op */ }
-void memory_profiler_track_object_creation(CljObject *obj) { /* no-op */ }
-void memory_profiler_track_object_destruction(CljObject *obj) { /* no-op */ }
-void memory_profiler_track_retain(CljObject *obj) { /* no-op */ }
-void memory_profiler_track_release(CljObject *obj) { /* no-op */ }
-void memory_profiler_track_autorelease(CljObject *obj) { /* no-op */ }
+void memory_profiler_track_allocation(size_t size) { 
+    (void)size; /* no-op */ 
+}
+void memory_profiler_track_deallocation(size_t size) { 
+    (void)size; /* no-op */ 
+}
+void memory_profiler_track_object_creation(CljObject *obj) { 
+    (void)obj; /* no-op */ 
+}
+void memory_profiler_track_object_destruction(CljObject *obj) { 
+    (void)obj; /* no-op */ 
+}
+void memory_profiler_track_retain(CljObject *obj) { 
+    (void)obj; /* no-op */ 
+}
+void memory_profiler_track_release(CljObject *obj) { 
+    (void)obj; /* no-op */ 
+}
+void memory_profiler_track_autorelease(CljObject *obj) { 
+    (void)obj; /* no-op */ 
+}
 
-void memory_profiler_check_leaks(const char *location) { /* no-op */ }
+void memory_profiler_check_leaks(const char *location) { 
+    (void)location; /* no-op */ 
+}
 bool memory_profiler_has_leaks(void) { return false; }
 
 MemoryStats memory_profiler_diff_stats(const MemoryStats *after, const MemoryStats *before) { 
+    (void)after;
+    (void)before;
     MemoryStats empty = {0}; return empty; 
 }
-void memory_profiler_print_diff(MemoryStats diff, const char *test_name) { /* no-op */ }
+void memory_profiler_print_diff(MemoryStats diff, const char *test_name) { 
+    (void)diff;
+    (void)test_name; /* no-op */ 
+}
 
 #endif // DEBUG
 
