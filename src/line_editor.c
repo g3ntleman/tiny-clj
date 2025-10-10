@@ -277,6 +277,11 @@ int line_editor_process_input(LineEditor *editor) {
         return line_editor_process_input(editor);
     }
     
+    // Handle Ctrl-D (EOF)
+    if (c == 4) {
+        return LINE_EDITOR_EOF;
+    }
+    
     // Handle newline (submit line)
     if (c == '\n' || c == '\r') {
         if (editor->length > 0) {
