@@ -45,6 +45,10 @@ void memory_profiler_cleanup(void);
 MemoryStats memory_profiler_get_stats(void);
 void memory_profiler_print_stats(const char *test_name);
 
+// Memory profiling control
+void enable_memory_profiling(bool enabled);
+bool is_memory_profiling_enabled(void);
+
 // Memory tracking functions
 void memory_profiler_track_allocation(size_t size);
 void memory_profiler_track_deallocation(size_t size);

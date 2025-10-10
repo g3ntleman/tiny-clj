@@ -7,6 +7,7 @@
 #include "function_call.h"
 #include "exception.h"
 #include "builtins.h"
+#include "memory_profiler.h"
 #include <stdbool.h>
 
 #include <stdio.h>
@@ -250,6 +251,8 @@ int main(int argc, char **argv) {
 
     if (!no_core) {
         load_clojure_core(st);
+        // Enable memory profiling after clojure.core is loaded
+        enable_memory_profiling(true);
     }
     
     // Register builtin functions

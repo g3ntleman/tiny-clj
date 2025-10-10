@@ -16,6 +16,7 @@
 // ============================================================================
 
 MemoryStats g_memory_stats = {0};
+bool g_memory_profiling_enabled = false;
 
 #ifdef DEBUG
 
@@ -262,3 +263,32 @@ MemoryStats memory_profiler_diff_stats(const MemoryStats *after, const MemorySta
 void memory_profiler_print_diff(MemoryStats diff, const char *test_name) { /* no-op */ }
 
 #endif // DEBUG
+
+// ============================================================================
+// MEMORY PROFILING CONTROL (ALWAYS AVAILABLE)
+// ============================================================================
+
+void enable_memory_profiling(bool enabled) {
+#ifdef DEBUG
+    g_memory_profiling_enabled = enabled;
+    if (enabled) {
+        // Reset statistics when enabling profiling
+        memset(&g_memory_stats, 0, sizeof(MemoryStats));
+        printf("🔍 Memory profiling enabled (statistics reset)\n");
+    } else {
+        printf("🔍 Memory profiling disabled\n");
+    }
+#else
+    // In release builds, this is a no-op
+    (void)enabled;
+#endif
+}
+
+bool is_memory_profiling_enabled(void) {
+#ifdef DEBUG
+    return g_memory_profiling_enabled;
+#else
+    return false;
+#endif
+}
+

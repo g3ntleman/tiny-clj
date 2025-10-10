@@ -21,7 +21,7 @@
 // GLOBAL CONFIGURATION
 // ============================================================================
 
-static bool enable_memory_profiling = false;
+static bool memory_profiling_enabled = false;
 
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
@@ -33,7 +33,7 @@ static void global_setup(void) {
     autorelease_pool_push(); // Create global autorelease pool for all tests
     
 #ifdef ENABLE_MEMORY_PROFILING
-    if (enable_memory_profiling) {
+    if (memory_profiling_enabled) {
         MEMORY_PROFILER_INIT();
         printf("🔍 Memory profiling enabled\n");
     }
@@ -46,7 +46,7 @@ static void global_teardown(void) {
     meta_registry_cleanup();
     
 #ifdef ENABLE_MEMORY_PROFILING
-    if (enable_memory_profiling) {
+    if (memory_profiling_enabled) {
         MEMORY_PROFILER_CLEANUP();
     }
 #endif
@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
 #ifdef ENABLE_MEMORY_PROFILING
         if (strcmp(argv[i], "--profile") == 0) {
-            enable_memory_profiling = true;
+            memory_profiling_enabled = true;
             // Shift remaining args
             for (int j = i; j < argc - 1; j++) {
                 argv[j] = argv[j + 1];

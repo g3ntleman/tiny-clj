@@ -47,6 +47,8 @@ list(APPEND SOURCES
     src/map.c
     src/string.c
     src/seq.c
+    src/memory_profiler.c
+    src/memory_hooks.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -70,7 +72,7 @@ add_executable(tiny-clj-repl
     src/platform_macos.c
     ${SOURCES}
 )
-target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
+target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG)
 
 # STM32-optimized REPL (no test code, minimal size)
 add_executable(tiny-clj-stm32
