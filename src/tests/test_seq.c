@@ -52,7 +52,7 @@ static char *test_seq_create_vector(void) {
     mu_assert("seq type mismatch", seq_iter->iter.seq_type == CLJ_VECTOR);
     
     seq_release(seq);
-    release(vec);
+    RELEASE(vec);
     
     return 0;
 }
@@ -71,7 +71,7 @@ static char *test_seq_create_string(void) {
     mu_assert("seq type mismatch", seq_iter->iter.seq_type == CLJ_STRING);
     
     seq_release(seq);
-    release(str);
+    RELEASE(str);
     
     return 0;
 }
@@ -112,7 +112,7 @@ static char *test_seq_first(void) {
     mu_assert_obj_int_detailed(first, 42);
     
     seq_release(seq);
-    release(vec);
+    RELEASE(vec);
     
     return 0;
 }
@@ -141,7 +141,7 @@ static char *test_seq_rest(void) {
     
     seq_release(seq);
     seq_release(rest_seq);
-    release(vec);
+    RELEASE(vec);
     
     return 0;
 }
@@ -156,7 +156,7 @@ static char *test_seq_empty(void) {
     mu_assert("empty sequence should be empty", seq_empty(seq) == true);
     
     seq_release(seq);
-    release(vec);
+    RELEASE(vec);
     
     return 0;
 }
@@ -180,7 +180,7 @@ static char *test_seq_count(void) {
     mu_assert("count mismatch", count == 3);
     
     seq_release(seq);
-    release(vec);
+    RELEASE(vec);
     
     return 0;
 }
@@ -236,7 +236,7 @@ static char *test_seq_to_list(void) {
     mu_assert("seq first should be integer", first_elem->type == CLJ_INT);
     
     seq_release(seq);
-    release(vec);
+    RELEASE(vec);
     
     return 0;
 }
@@ -267,7 +267,7 @@ static char *test_empty_list_nil_semantics(void) {
     // Test that empty list is seqable but seq is nil
     mu_assert("empty list should be seqable", is_seqable((CljObject*)empty_list));
     
-    release((CljObject*)empty_list);
+    RELEASE((CljObject*)empty_list);
     
     return 0;
 }

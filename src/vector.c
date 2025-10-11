@@ -113,7 +113,7 @@ CljObject *vector_conj(CljObject *vec, CljObject *item) {
   // append the new item using push helper (handles retain and growth)
   vector_push_inplace(new_vec_obj, item);
 
-  return autorelease(new_vec_obj);
+  return AUTORELEASE(new_vec_obj);
 }
 
 CljObject *vector_from_items(CljObject **items, int count) {

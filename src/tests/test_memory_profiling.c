@@ -47,9 +47,9 @@ static char *test_basic_object_creation_memory(void) {
     mu_assert("string object created", str_obj != NULL);
     
     // Release objects
-    release(int_obj);
-    release(float_obj);
-    release(str_obj);
+    RELEASE(int_obj);
+    RELEASE(float_obj);
+    RELEASE(str_obj);
     
     MEMORY_TEST_END("Basic Object Creation");
     
@@ -116,7 +116,7 @@ static char *test_seq_iteration_memory(void) {
     
     mu_assert("all elements iterated", count == 5);
     
-    release(vec);
+    RELEASE(vec);
     
     MEMORY_TEST_END("Seq Iteration");
     
@@ -148,8 +148,8 @@ static char *test_for_loop_memory(void) {
     CljObject *result = eval_dotimes(dotimes_call, NULL);
     mu_assert("dotimes executed", result == NULL || result->type == CLJ_NIL);
     
-    release(dotimes_call);
-    release(vec);
+    RELEASE(dotimes_call);
+    RELEASE(vec);
     
     MEMORY_TEST_END("For-Loop Operations");
     
@@ -197,13 +197,13 @@ static char *test_map_creation_memory(void) {
     mu_assert("map contains k2", map_contains(map, k2));
     
     // Release all objects
-    release(map);
-    release(k1);
-    release(v1);
-    release(k2);
-    release(v2);
-    release(k3);
-    release(v3);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(v1);
+    RELEASE(k2);
+    RELEASE(v2);
+    RELEASE(k3);
+    RELEASE(v3);
     
     MEMORY_TEST_END("Map Creation");
     
@@ -246,7 +246,7 @@ static char *test_memory_benchmark_small_objects(void) {
     // Create many small objects
     for (int i = 0; i < 1000; i++) {
         CljObject *obj = make_int(i);
-        release(obj);
+        RELEASE(obj);
     }
     
     MEMORY_TEST_BENCHMARK_END("Small Object Creation");
@@ -270,7 +270,7 @@ static char *test_memory_benchmark_large_vectors(void) {
         }
         vec_data->count = 100;
         
-        release(vec);
+        RELEASE(vec);
     }
     
     MEMORY_TEST_BENCHMARK_END("Large Vector Creation");
@@ -296,15 +296,15 @@ static char *test_memory_benchmark_large_maps(void) {
             
             map_assoc(map, key, val);
             
-            release(key);
-            release(val);
+            RELEASE(key);
+            RELEASE(val);
         }
         
         // Verify map size
         int count = map_count(map);
         mu_assert("map has correct count", count == 50);
         
-        release(map);
+        RELEASE(map);
     }
     
     MEMORY_TEST_BENCHMARK_END("Large Map Creation");
@@ -357,7 +357,7 @@ static char *benchmark_vector_iteration_with_memory(void) {
     }
     double seq_time = get_time_ms() - start;
     
-    release(vec);
+    RELEASE(vec);
     
     printf("  Direct iteration: %.2f ms (%.0f ops/sec)\n", 
            direct_time, (BENCHMARK_ITERATIONS_SMALL * 100) / (direct_time / 1000.0));
@@ -383,7 +383,7 @@ static char *benchmark_map_lookup_with_memory(void) {
         keys[i] = make_string(buf);
         CljObject *val = make_int(i * 10);
         map_assoc(map, keys[i], val);
-        release(val);
+        RELEASE(val);
     }
     
     // Benchmark map lookups
@@ -404,9 +404,9 @@ static char *benchmark_map_lookup_with_memory(void) {
     
     // Cleanup
     for (int i = 0; i < 10; i++) {
-        release(keys[i]);
+        RELEASE(keys[i]);
     }
-    release(map);
+    RELEASE(map);
     
     MEMORY_TEST_END("Map Lookup Performance");
     

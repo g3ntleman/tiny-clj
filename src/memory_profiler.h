@@ -119,13 +119,14 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name);
 #ifdef DEBUG
 // Test memory profiling macros
 #define MEMORY_TEST_START(test_name) do { \
-    MEMORY_PROFILER_RESET(); \
+    memory_profiling_init_with_hooks(); \
     printf("🔍 Memory Profiling: %s\n", test_name); \
 } while(0)
 
 #define MEMORY_TEST_END(test_name) do { \
     MEMORY_PROFILER_PRINT_STATS(test_name); \
     MEMORY_PROFILER_CHECK_LEAKS(test_name); \
+    memory_profiling_cleanup_with_hooks(); \
 } while(0)
 
 #define MEMORY_TEST_BENCHMARK_START(test_name) do { \

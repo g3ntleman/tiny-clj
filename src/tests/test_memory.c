@@ -67,7 +67,7 @@ static char *test_vector_creation_memory(void) {
     CljObject *first_elem = vec_data->data[0];
     mu_assert("first element accessible", first_elem != NULL);
     
-    release(vec);
+    RELEASE(vec);
     
     MEMORY_TEST_END("Vector Creation");
     
@@ -115,13 +115,13 @@ static char *test_map_creation_memory(void) {
     mu_assert("map contains k2", map_contains(map, k2));
     
     // Release all objects
-    release(map);
-    release(k1);
-    release(v1);
-    release(k2);
-    release(v2);
-    release(k3);
-    release(v3);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(v1);
+    RELEASE(k2);
+    RELEASE(v2);
+    RELEASE(k3);
+    RELEASE(v3);
     
     MEMORY_TEST_END("Map Creation");
     
@@ -153,7 +153,7 @@ static char *test_seq_iteration_memory(void) {
     
     mu_assert("seq iterated correct count", count == 5);
     
-    release(vec);
+    RELEASE(vec);
     
     MEMORY_TEST_END("Seq Iteration");
     

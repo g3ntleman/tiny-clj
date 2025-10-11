@@ -30,14 +30,22 @@ brew install cmake
 - **GDB**: For debugging (usually included with compiler toolchain)
 
 ## Primary Objective
-**Follow the Clojure language as good as possible.** Maximum compatibility with standard Clojure features, syntax, and behavior.
+**Follow the Clojure language as good as possible.** Maximum compatibility with standard [Clojure](https://clojure.org) features, syntax, and behavior.
 
 ## Key Features
+
+### Core Language Features
+- **Basic UTF-8 Support:** Unicode character handling for international text
+- **REPL Line Editing:** Interactive command-line editing with arrow keys (aka linereader)
+- **Error Messages with Source References:** Detailed error reporting with line numbers and context
+- **Persistent Collections:** Inefficient, partially implemented vectors, maps, and sequences
+- **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
+
+### Technical Features
 - **Embedded Target:** STM32, ESP32, ARM Cortex-M microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
 - **Small Binary:** Target <60KB for embedded deployment
-- **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
 
 ## Quick Start
 

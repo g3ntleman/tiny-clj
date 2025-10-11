@@ -145,7 +145,7 @@ CLJException* create_exception(const char *type, const char *message, const char
     exc->file = file ? strdup(file) : NULL;
     exc->line = line;
     exc->col = col;
-    exc->data = data ? (retain(data), data) : NULL;
+    exc->data = RETAIN(data);
     
     return exc;
 }
@@ -583,8 +583,8 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     func->base.type = CLJ_FUNC;  // Both CljFunc and CljFunction use CLJ_FUNC type
     func->base.rc = 1;
     func->param_count = param_count;
-    func->body = body ? (retain(body), body) : NULL;
-    func->closure_env = closure_env ? (retain(closure_env), closure_env) : NULL;
+    func->body = RETAIN(body);
+    func->closure_env = RETAIN(closure_env);
     func->name = name ? strdup(name) : NULL;
     
     // Parameter-Array kopieren
@@ -595,7 +595,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
             return NULL;
         }
         for (int i = 0; i < param_count; i++) {
-            func->params[i] = params[i] ? (retain(params[i]), params[i]) : NULL;
+            func->params[i] = RETAIN(params[i]);
         }
     } else {
         func->params = NULL;
@@ -1220,7 +1220,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     // Heap-allocated parameter array
     CljObject **heap_params = ALLOC(CljObject*, argc);
     for (int i = 0; i < argc; i++) {
-        heap_params[i] = argv[i] ? (retain(argv[i]), argv[i]) : NULL;
+        heap_params[i] = RETAIN(argv[i]);
     }
     
     // Extend environment with parameters
@@ -1231,7 +1231,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     }
     
     // Evaluate function body (simplified; would normally call eval())
-    CljObject *result = func->body ? (retain(func->body), func->body) : clj_nil();
+    CljObject *result = func->body ? RETAIN(func->body) : clj_nil();
     
     // Release environment and parameter array
     RELEASE(call_env);
@@ -1247,7 +1247,7 @@ CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObje
     // Evaluate arguments (simplified; would normally call eval())
     CljObject **eval_args = STACK_ALLOC(CljObject*, argc);
     for (int i = 0; i < argc; i++) {
-        eval_args[i] = args[i] ? (retain(args[i]), args[i]) : NULL;
+        eval_args[i] = RETAIN(args[i]);
     }
     
     return clj_call_function(fn, argc, eval_args);

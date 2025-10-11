@@ -49,9 +49,9 @@ static char* test_seq_create_vector_debug(void) {
     
     // Cleanup
     for (int i = 0; i < 3; i++) {
-        release(string_objects[i]);
+        RELEASE(string_objects[i]);
     }
-    release(test_vector);
+    RELEASE(test_vector);
     
     return 0;
 }
@@ -104,9 +104,9 @@ static char* test_seq_iteration_debug(void) {
     // Cleanup
     if (seq_iter) free(seq_iter);
     for (int i = 0; i < 3; i++) {
-        release(string_objects[i]);
+        RELEASE(string_objects[i]);
     }
-    release(test_vector);
+    RELEASE(test_vector);
     
     return 0;
 }

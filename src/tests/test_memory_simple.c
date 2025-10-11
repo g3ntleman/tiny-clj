@@ -29,11 +29,11 @@ static char *test_singleton_memory_tracking(void) {
         mu_assert("empty_list created", empty_list != NULL);
         
         // Test retain/release on singletons
-        retain(empty_vec);
-        retain(empty_list);
+        RETAIN(empty_vec);
+        RETAIN(empty_list);
         
-        release(empty_vec);
-        release(empty_list);
+        RELEASE(empty_vec);
+        RELEASE(empty_list);
     });
     
     return 0;
@@ -62,11 +62,11 @@ static char *test_vector_memory_tracking(void) {
         
         // Free all vector elements first
         for (int i = 0; i < TEST_VECTOR_SIZE; i++) {
-            release(vec_data->data[i]);
+            RELEASE(vec_data->data[i]);
         }
         
         // Then free the vector
-        release(vec);
+        RELEASE(vec);
     });
     
     return 0;

@@ -526,22 +526,22 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     
     if (sym_is(op, "for")) {
         CljObject *result = eval_for(list, env);
-        return result ? AUTORELEASE(result) : NULL;
+        return AUTORELEASE(result);
     }
     
     if (sym_is(op, "doseq")) {
         CljObject *result = eval_doseq(list, env);
-        return result ? AUTORELEASE(result) : NULL;
+        return AUTORELEASE(result);
     }
     
     if (sym_is(op, "dotimes")) {
         CljObject *result = eval_dotimes(list, env);
-        return result ? AUTORELEASE(result) : NULL;
+        return AUTORELEASE(result);
     }
     
     if (sym_is(op, "list")) {
         CljObject *result = eval_list_function(list, env);
-        return result ? AUTORELEASE(result) : NULL;
+        return AUTORELEASE(result);
     }
     
     // Fallback: try to resolve symbol and call as function
