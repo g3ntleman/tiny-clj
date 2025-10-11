@@ -22,13 +22,6 @@
 CljObject *parse(const char *input, EvalState *st);
 
 // Convenience API
-/**
- * @brief Parse a Clojure expression from a string
- * @param expr_str The Clojure expression as a string
- * @param eval_state The evaluation state
- * @return The parsed AST (caller must release) or NULL on error
- */
-CljObject* parse_string(const char* expr_str, EvalState *eval_state);
 
 /**
  * @brief Evaluate a parsed Clojure expression

@@ -214,15 +214,6 @@ CljObject *parse(const char *input, EvalState *st) {
   return parse_expr_internal(&reader, st);
 }
 
-/**
- * @brief Parse a Clojure expression from a string
- * @param expr_str The Clojure expression as a string
- * @param eval_state The evaluation state
- * @return The parsed AST (autoreleased) or NULL on error
- */
-CljObject* parse_string(const char* expr_str, EvalState *eval_state) {
-    return parse(expr_str, eval_state);
-}
 
 /**
  * @brief Evaluate a parsed Clojure expression
@@ -263,7 +254,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
-    CljObject *parsed = parse_string(expr_str, eval_state);
+    CljObject *parsed = parse(expr_str, eval_state);
     if (!parsed) {
         return NULL;
     }

@@ -147,15 +147,15 @@ static char *test_nil_literals_parse_correctly() {
     EvalState *st = evalstate_new();
     
     // Test nil literal
-    CljObject *nil_obj = parse_string("nil", st);
+    CljObject *nil_obj = parse("nil", st);
     mu_assert("nil should parse as CLJ_NIL", nil_obj && is_type(nil_obj, CLJ_NIL));
     
     // Test true literal
-    CljObject *true_obj = parse_string("true", st);
+    CljObject *true_obj = parse("true", st);
     mu_assert("true should parse as CLJ_BOOL true", true_obj && is_type(true_obj, CLJ_BOOL) && true_obj->as.b);
     
     // Test false literal
-    CljObject *false_obj = parse_string("false", st);
+    CljObject *false_obj = parse("false", st);
     mu_assert("false should parse as CLJ_BOOL false", false_obj && is_type(false_obj, CLJ_BOOL) && !false_obj->as.b);
     
     evalstate_free(st);

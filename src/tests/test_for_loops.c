@@ -86,9 +86,9 @@ static char *test_doseq_basic(void) {
 static char *test_for_basic(void) {
     
     WITH_MEMORY_PROFILING_EVAL({
-        // Test for evaluation using parse_string + eval_parsed
+        // Test for evaluation using parse + eval_parsed
         char *for_expr = "(for [x [1 2 3]] x)";
-        CljObject *parsed = parse_string(for_expr, eval_state);
+        CljObject *parsed = parse(for_expr, eval_state);
         CljObject *result = eval_parsed(parsed, eval_state);
         mu_assert("for should return a result", result != NULL);
     });
@@ -99,9 +99,9 @@ static char *test_for_basic(void) {
 static char *test_dotimes_with_variable(void) {
     
     WITH_MEMORY_PROFILING_EVAL({
-        // Test dotimes evaluation using parse_string + eval_parsed
+        // Test dotimes evaluation using parse + eval_parsed
         char *dotimes_expr = "(dotimes [i 5] i)";
-        CljObject *parsed = parse_string(dotimes_expr, eval_state);
+        CljObject *parsed = parse(dotimes_expr, eval_state);
         CljObject *result = eval_parsed(parsed, eval_state);
         mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
     });
@@ -112,9 +112,9 @@ static char *test_dotimes_with_variable(void) {
 static char *test_for_with_simple_expression(void) {
     
     WITH_MEMORY_PROFILING_EVAL({
-        // Test for evaluation using parse_string + eval_parsed
+        // Test for evaluation using parse + eval_parsed
         char *for_expr = "(for [x [1 2]] x)";
-        CljObject *parsed = parse_string(for_expr, eval_state);
+        CljObject *parsed = parse(for_expr, eval_state);
         CljObject *result = eval_parsed(parsed, eval_state);
         mu_assert("for with simple expression should return a result", result != NULL);
     });
