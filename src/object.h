@@ -30,10 +30,10 @@ struct CljNamespace;
 
 // Check if object type tracks references (should be reference counted)
 // Returns false only for singletons (which don't use reference counting)
-#define tracks_references(obj) ((obj) && !IS_SINGLETON_TYPE((obj)->type))
+#define TRACKS_REFERENCES(obj) ((obj) && !IS_SINGLETON_TYPE((obj)->type))
 
 // Legacy alias for backward compatibility
-#define is_singleton(obj) ((obj) && IS_SINGLETON_TYPE((obj)->type))
+#define IS_SINGLETON(obj) ((obj) && IS_SINGLETON_TYPE((obj)->type))
 
 typedef struct CljObject CljObject;
 // Macro: safe type extraction (returns CLJ_UNKNOWN for NULL objects)

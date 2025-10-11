@@ -204,7 +204,7 @@ void retain(CljObject *v) {
     
     
     // Objects that don't track references (singletons) have no reference counting
-    if (!tracks_references(v)) return;
+    if (!TRACKS_REFERENCES(v)) return;
     // Guard: empty vector/map singletons must not be retained
     if (is_type(v, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(v);
@@ -231,7 +231,7 @@ void release(CljObject *v) {
     if (!v) return;
     
     // Objects that don't track references (singletons) have no reference counting
-    if (!tracks_references(v)) {
+    if (!TRACKS_REFERENCES(v)) {
         // These objects are never actually freed, so don't track as deallocation
         return;
     }
@@ -384,7 +384,7 @@ static void release_object_deep(CljObject *v) {
     if (!v) return;
     
     // Objects that don't track references (singletons) need no finalizer
-    if (!tracks_references(v)) {
+    if (!TRACKS_REFERENCES(v)) {
         return;
     }
     
