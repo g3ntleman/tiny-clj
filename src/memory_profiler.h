@@ -33,6 +33,10 @@ typedef struct {
     size_t release_calls;         // release() calls
     size_t autorelease_calls;     // autorelease() calls
     size_t memory_leaks;          // Potential memory leaks (allocations - deallocations)
+    
+    // Object type breakdown
+    size_t allocations_by_type[CLJ_TYPE_COUNT];  // Allocations per CljType
+    size_t deallocations_by_type[CLJ_TYPE_COUNT]; // Deallocations per CljType
 } MemoryStats;
 
 // Global memory statistics

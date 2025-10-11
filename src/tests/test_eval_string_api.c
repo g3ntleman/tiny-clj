@@ -26,7 +26,7 @@ static char* test_eval_string_basic() {
     CljObject *vec_result = eval_string("[1 2 3]", eval_state);
     mu_assert_obj_type(vec_result, CLJ_VECTOR);
     
-    free(eval_state);
+    evalstate_free(eval_state);
     return 0;
 }
 
@@ -39,7 +39,7 @@ static char* test_eval_string_error_handling() {
         CljObject *result = eval_string("(invalid syntax", eval_state);
         mu_assert("Invalid syntax should return NULL", result == NULL);
         
-        free(eval_state);
+        evalstate_free(eval_state);
     });
     
     return 0;

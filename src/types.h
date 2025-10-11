@@ -23,6 +23,8 @@ typedef enum {
     CLJ_UNKNOWN  // Unknown/invalid type sentinel (should not occur at runtime)
 } CljType;
 
+#define CLJ_TYPE_COUNT (CLJ_UNKNOWN + 1)
+
 const char* clj_type_name(CljType type);
 
 #endif

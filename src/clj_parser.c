@@ -263,13 +263,8 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
-    // Create autorelease pool for this evaluation
-    CljObjectPool *pool = autorelease_pool_push();
-    if (!pool) return NULL;
-    
     CljObject *parsed = parse_string(expr_str, eval_state);
     if (!parsed) {
-        autorelease_pool_pop();
         return NULL;
     }
     
@@ -280,12 +275,9 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
     TRY {
         result = eval_parsed(parsed, eval_state);
         
-        // Retain result before cleaning up pool
-        if (result) RETAIN(result);
+        // Return result (will be managed by caller's autorelease pool)
+        if (result) result = AUTORELEASE(result);
         
-        // Don't clean up pool - let caller handle it
-        
-        // Return result without autorelease (already retained)
     } CATCH(ex) {
         // Exception caught - re-throw to let caller handle it
         throw_exception_formatted(ex->type, ex->file, ex->line, ex->col, "%s", ex->message);
