@@ -41,7 +41,7 @@ static void test_teardown(void) {
 
 static char *test_basic_creation(void) {
 
-  AUTORELEASE_POOL_SCOPE(pool) {
+  WITH_MEMORY_PROFILING({
     // Test integer creation
     CljObject *int_obj = make_int(42);
     mu_assert_obj_type(int_obj, CLJ_INT);
@@ -56,7 +56,7 @@ static char *test_basic_creation(void) {
     CljObject *float_obj = make_float(3.14);
     mu_assert_obj_type(float_obj, CLJ_FLOAT);
     
-  }
+  });
   return 0;
 }
 
@@ -92,31 +92,32 @@ static char *test_singleton_objects(void) {
 }
 
 static char *test_empty_vector_singleton(void) {
-  // make_vector(0, ...) returns the empty-vector singleton
-  CljObject *v0 = make_vector(0, 0);
-  mu_assert_obj_type(v0, CLJ_VECTOR);
+  WITH_MEMORY_PROFILING({
+    // make_vector(0, ...) returns the empty-vector singleton
+    CljObject *v0 = make_vector(0, 0);
+    mu_assert_obj_type(v0, CLJ_VECTOR);
 
-  // capacity <= 0 also returns the same singleton
-  CljObject *vneg = make_vector(-1, 1);
-  mu_assert_obj_ptr_equal(v0, vneg);
+    // capacity <= 0 also returns the same singleton
+    CljObject *vneg = make_vector(-1, 1);
+    mu_assert_obj_ptr_equal(v0, vneg);
 
-  // Parsing [] should yield the same singleton pointer
-  EvalState st;
-  memset(&st, 0, sizeof(EvalState));
-  CljObject *parsed = parse("[]", &st);
-  mu_assert_obj_ptr_equal(v0, parsed);
+    // Parsing [] should yield the same singleton pointer
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+    CljObject *parsed = parse("[]", &st);
+    mu_assert_obj_ptr_equal(v0, parsed);
+  });
 
   return 0;
 }
 
 static char *test_empty_map_singleton(void) {
-  AUTORELEASE_POOL_SCOPE(pool) {
+  WITH_MEMORY_PROFILING({
     // make_map(0) returns the empty-map singleton
     CljObject *m0 = make_map(0);
     mu_assert_obj_ptr_equal(m0, make_map(0));
     mu_assert_obj_ptr_equal(m0, make_map(-1));
-
-  }
+  });
   return 0;
 }
 
@@ -126,7 +127,7 @@ static char *test_empty_map_singleton(void) {
 
 static char *test_parser_basic_types(void) {
 
-  AUTORELEASE_POOL_SCOPE(pool) {
+  WITH_MEMORY_PROFILING({
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -147,12 +148,12 @@ static char *test_parser_basic_types(void) {
     CljObject *sym_result = parse("test-symbol", &st);
     mu_assert_obj_type(sym_result, CLJ_SYMBOL);
 
-  }
+  });
   return 0;
 }
 
 static char *test_parser_collections(void) {
-  AUTORELEASE_POOL_SCOPE(pool) {
+  WITH_MEMORY_PROFILING({
     EvalState st;
     memset(&st, 0, sizeof(EvalState));
 
@@ -168,7 +169,7 @@ static char *test_parser_collections(void) {
     CljObject *map_result = parse("{:a 1 :b 2}", &st);
     mu_assert_obj_type(map_result, CLJ_MAP);
 
-  }
+  });
   return 0;
 }
 

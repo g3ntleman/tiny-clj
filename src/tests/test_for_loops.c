@@ -151,6 +151,9 @@ char *run_for_loop_tests(void) {
     
     char *result = all_for_loop_tests();
     
+    // Fix memory leak: Free the EvalState
+    evalstate_free(st);
+    
     memory_profiling_cleanup_with_hooks();
     return result;
 }

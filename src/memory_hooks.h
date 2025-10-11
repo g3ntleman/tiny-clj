@@ -104,7 +104,7 @@ void memory_test_end(const char *test_name);
         MEMORY_TEST_START(__FUNCTION__); \
         autorelease_pool_push(); \
         code; \
-        autorelease_pool_cleanup_all(); \
+        autorelease_pool_pop(); \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
@@ -115,7 +115,7 @@ void memory_test_end(const char *test_name);
         EvalState *eval_state = evalstate_new(); \
         code; \
         evalstate_free(eval_state); \
-        autorelease_pool_cleanup_all(); \
+        autorelease_pool_pop(); \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     

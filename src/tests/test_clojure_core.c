@@ -37,6 +37,8 @@ static void test_teardown(void) {
     }
     symbol_table_cleanup();
     meta_registry_cleanup();
+    // Ensure autorelease pool is cleaned up
+    autorelease_pool_cleanup_all();
 }
 
 static CljObject* eval_code(const char *code) {

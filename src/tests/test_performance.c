@@ -128,15 +128,21 @@ static char *benchmark_dotimes_performance(void) {
     
     double start = get_time_ms();
     
-    for (int iter = 0; iter < 100; iter++) {
-        const char *dotimes_code = "(dotimes [i 100] (+ i 1))";
-        CljObject *result = eval_string(dotimes_code, st);
-        (void)result;
+    // Use autorelease pool to automatically clean up eval_string results
+    AUTORELEASE_POOL_SCOPE(pool) {
+        for (int iter = 0; iter < 100; iter++) {
+            const char *dotimes_code = "(dotimes [i 100] (+ i 1))";
+            CljObject *result = eval_string(dotimes_code, st);
+            (void)result;
+        }
     }
     
     double elapsed = get_time_ms() - start;
     printf("  Total time: %.3f ms (100 iterations)\n", elapsed);
     printf("  Per iteration: %.6f ms\n", elapsed / 100);
+    
+    // Fix memory leak: Free the EvalState
+    evalstate_free(st);
     
     return NULL;
 }
@@ -149,15 +155,21 @@ static char *benchmark_doseq_performance(void) {
     
     double start = get_time_ms();
     
-    for (int iter = 0; iter < 100; iter++) {
-        const char *doseq_code = "(doseq [x [1 2 3 4 5]] (+ x 1))";
-        CljObject *result = eval_string(doseq_code, st);
-        (void)result;
+    // Use autorelease pool to automatically clean up eval_string results
+    AUTORELEASE_POOL_SCOPE(pool) {
+        for (int iter = 0; iter < 100; iter++) {
+            const char *doseq_code = "(doseq [x [1 2 3 4 5]] (+ x 1))";
+            CljObject *result = eval_string(doseq_code, st);
+            (void)result;
+        }
     }
     
     double elapsed = get_time_ms() - start;
     printf("  Total time: %.3f ms (100 iterations)\n", elapsed);
     printf("  Per iteration: %.6f ms\n", elapsed / 100);
+    
+    // Fix memory leak: Free the EvalState
+    evalstate_free(st);
     
     return NULL;
 }
@@ -170,15 +182,21 @@ static char *benchmark_for_performance(void) {
     
     double start = get_time_ms();
     
-    for (int iter = 0; iter < 100; iter++) {
-        const char *for_code = "(for [x [1 2 3 4 5]] (* x 2))";
-        CljObject *result = eval_string(for_code, st);
-        (void)result;
+    // Use autorelease pool to automatically clean up eval_string results
+    AUTORELEASE_POOL_SCOPE(pool) {
+        for (int iter = 0; iter < 100; iter++) {
+            const char *for_code = "(for [x [1 2 3 4 5]] (* x 2))";
+            CljObject *result = eval_string(for_code, st);
+            (void)result;
+        }
     }
     
     double elapsed = get_time_ms() - start;
     printf("  Total time: %.3f ms (100 iterations)\n", elapsed);
     printf("  Per iteration: %.6f ms\n", elapsed / 100);
+    
+    // Fix memory leak: Free the EvalState
+    evalstate_free(st);
     
     return NULL;
 }
