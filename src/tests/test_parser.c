@@ -105,6 +105,9 @@ static char *test_parse_comments(void) {
     CljObject *result = parse("; This is a comment\n42", &st);
     mu_assert_obj_not_null(result);
     mu_assert_obj_int(result, 42);
+    
+    // Free the parsed result
+    RELEASE(result);
   });
 
   return 0;
