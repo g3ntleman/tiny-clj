@@ -14,6 +14,7 @@
 #include "function_call.h"
 #include "clj_symbols.h"
 #include "namespace.h"
+#include "memory.h"
 #include <stdio.h>
 #include <time.h>
 

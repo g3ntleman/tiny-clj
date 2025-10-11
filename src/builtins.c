@@ -4,7 +4,7 @@
 #include "vector.h"
 #include "builtins.h"
 #include "runtime.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include "clj_symbols.h"
 #include "namespace.h"
 

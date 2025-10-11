@@ -5,6 +5,7 @@
 #include "namespace.h"
 #include "clj_symbols.h"
 #include "runtime.h"
+#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 

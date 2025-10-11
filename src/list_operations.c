@@ -1,6 +1,6 @@
 #include "list_operations.h"
 #include "clj_symbols.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include <stdarg.h>
 
 // List-Operationen für try/catch

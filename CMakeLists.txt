@@ -49,6 +49,7 @@ list(APPEND SOURCES
     src/seq.c
     src/memory_profiler.c
     src/memory_hooks.c
+    src/memory.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -128,6 +129,7 @@ add_executable(run-tests
     src/exception.c
     src/memory_profiler.c
     src/memory_hooks.c
+    src/memory.c
     src/runtime.c
 )
 target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG ENABLE_LINE_EDITING)

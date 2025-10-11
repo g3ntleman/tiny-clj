@@ -28,7 +28,7 @@
 #include "exception.h"  // For ExceptionHandler definition
 #include "memory_profiler.h"
 
-static void release_object_deep(CljObject *v);
+// release_object_deep() function moved to memory.c
 
 /** @brief Release all elements in an array */
 static inline void release_array(CljObject **array, int count) {
@@ -74,10 +74,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
     throw_exception(exception_type, message, short_file, line, code);
 }
 
-// Autorelease pool backed by a weak vector for locality and fewer allocations
-struct CljObjectPool { CljObject *backing; struct CljObjectPool *prev; };
-static CljObjectPool *g_cv_pool_top = NULL;
-static int g_pool_push_count = 0;  // Track push/pop balance
+// Memory management functions moved to memory.c
 
 // Helper functions for optimized structure
 // Note: is_primitive_type function replaced by IS_PRIMITIVE_TYPE macro in header
@@ -191,316 +188,26 @@ CljObject* make_float(double x) {
     return v;
 }
 
-/** @brief Increment reference count
- * 
- * @param v Pointer to CljObject to retain (NULL parameters are safely ignored)
- * 
- * This function safely handles NULL parameters by returning early without
- * performing any operations. This prevents crashes and follows defensive
- * programming practices.
- */
-void retain(CljObject *v) {
-    if (!v) return;
-    
-    
-    // Objects that don't track references (singletons) have no reference counting
-    if (!TRACKS_REFERENCES(v)) return;
-    // Guard: empty vector/map singletons must not be retained
-    if (is_type(v, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector(v);
-        if (vec && vec->base.rc == 0 && vec->data == NULL) return;
-    }
-    if (is_type(v, CLJ_MAP)) {
-        CljMap *map = as_map(v);
-        if (map && map->base.rc == 0 && map->data == NULL) return;
-    }
-    v->rc++;
-    
-    // RETAIN(v); // Hook now called via RELEASE macro
-}
+// retain() function moved to memory.c
 
-/** @brief Decrement reference count and free if zero
- * 
- * @param v Pointer to CljObject to release (NULL parameters are safely ignored)
- * 
- * This function safely handles NULL parameters by returning early without
- * performing any operations. This prevents crashes and follows defensive
- * programming practices.
- */
-void release(CljObject *v) {
-    if (!v) return;
-    
-    // Objects that don't track references (singletons) have no reference counting
-    if (!TRACKS_REFERENCES(v)) {
-        // These objects are never actually freed, so don't track as deallocation
-        return;
-    }
-    
-    // Native functions (CljFunc) are static and don't need reference counting
-    if (is_type(v, CLJ_FUNC)) {
-        // Native functions are static - no memory management needed
-        // Just return without decrementing reference count
-        return;
-    }
-    // Guard: empty vector/map singletons must not be released
-    if (is_type(v, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector(v);
-        if (vec && vec->base.rc == 0 && vec->data == NULL) return;
-    }
-    if (is_type(v, CLJ_MAP)) {
-        CljMap *map = as_map(v);
-        if (map && map->base.rc == 0 && map->data == NULL) return;
-    }
-    v->rc--;
-    
-    // Check for double-free after decrement
-    if (v->rc < 0) {
-        throw_exception_formatted("DoubleFreeError", __FILE__, __LINE__, 0,
-                "Double free detected! Object %p (type=%d, rc=%d) was freed twice. "
-                "Object type: %s. This indicates a memory management bug.", 
-                v, v->type, v->rc, clj_type_name(v->type));
-    }
-    
-    // RELEASE(v); // Hook now called via RELEASE macro
-    
-    if (v->rc == 0) { 
-        DEALLOC(v); // Hook for memory profiling
-        release_object_deep(v); 
-        free(v); 
-    }
-}
+// release() function moved to memory.c
 
-// Helper function to check if autorelease pool is active
-bool is_autorelease_pool_active(void) {
-    return g_cv_pool_top != NULL;
-}
+// is_autorelease_pool_active() function moved to memory.c
 
-/** @brief Add object to autorelease pool for deferred cleanup
- * 
- * @param v Pointer to CljObject to autorelease (NULL parameters are safely ignored)
- * @return The same object pointer, or NULL if input was NULL
- * 
- * This function safely handles NULL parameters by returning NULL without
- * performing any operations. This prevents crashes and follows defensive
- * programming practices.
- */
-CljObject *autorelease(CljObject *v) {
-    if (!v) return NULL;
-    
-    // 🚨 ASSERTION: Autorelease pool must exist
-    if (!g_cv_pool_top) {
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
-                "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
-                v, v ? v->type : -1);
-    }
-    
-    // Weak vector push: does not retain the item
-    vector_push_inplace(g_cv_pool_top->backing, v);
-    
-    // Memory profiling
-    MEMORY_PROFILER_TRACK_AUTORELEASE(v);
-    
-    return v;
-}
+// autorelease() function moved to memory.c
 
-CljObjectPool *autorelease_pool_push() {
-    CljObjectPool *p = ALLOC(CljObjectPool, 1);
-    if (!p) return NULL;
-    p->backing = make_weak_vector(16);
-    p->prev = g_cv_pool_top;
-    g_cv_pool_top = p;
-    g_pool_push_count++;  // Increment push counter
-    return p;
-}
+// autorelease_pool_push() function moved to memory.c
 
-// Internal implementation
-static void autorelease_pool_pop_internal(CljObjectPool *pool) {
-    // 🚨 ASSERTION: Check for pop/push imbalance (before early return)
-    if (g_pool_push_count <= 0) {
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "autorelease_pool_pop() called more times than autorelease_pool_push()! "
-                "Push count: %d, attempting to pop pool %p. "
-                "This indicates unbalanced pool operations.", 
-                g_pool_push_count, pool);
-    }
-    
-    // If no pool specified or pool doesn't match current top, pop current top
-    if (!pool) {
-        pool = g_cv_pool_top;
-    }
-    if (!pool || g_cv_pool_top != pool) return;
-    
-    CljPersistentVector *vec = as_vector(pool->backing);
-    if (vec) {
-        for (int i = vec->count - 1; i >= 0; --i) {
-            CljObject *obj = vec->data[i];
-            vec->data[i] = NULL;  // First set to NULL to prevent double-free
-            RELEASE(obj);         // Then release (NULL-safe)
-        }
-        vec->count = 0;
-    }
-    g_cv_pool_top = pool->prev;
-    g_pool_push_count--;  // Decrement push counter
-    
-    // Assertion: Check for negative push count (imbalance)
-    if (g_pool_push_count < 0) {
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "Pool push/pop imbalance! Push count: %d. "
-                "This indicates more pop() calls than push() calls.", g_pool_push_count);
-    }
-    // Release the weak vector backing (it was created with make_weak_vector)
-    // WEAK_VECTOR objects use reference counting, so we use RELEASE()
-    if (pool->backing) {
-        RELEASE(pool->backing);
-    }
-    
-    free(pool);
-}
+// autorelease_pool_pop_internal() function moved to memory.c
 
-// Public API: Pop current pool (most common usage)
-void autorelease_pool_pop(void) {
-    autorelease_pool_pop_internal(NULL);
-}
+// autorelease_pool_pop() function moved to memory.c
 
-// Public API: Pop specific pool (for advanced usage)
-void autorelease_pool_pop_specific(CljObjectPool *pool) {
-    autorelease_pool_pop_internal(pool);
-}
+// autorelease_pool_pop_specific() function moved to memory.c
 
-// Legacy API: Keep for backward compatibility
-void autorelease_pool_pop_legacy(CljObjectPool *pool) {
-    autorelease_pool_pop_internal(pool);
-}
+// autorelease_pool_pop_legacy() function moved to memory.c
 
-// Global cleanup function for all autorelease pools
-void autorelease_pool_cleanup_all() {
-    while (g_cv_pool_top) {
-        autorelease_pool_pop_internal(g_cv_pool_top);
-    }
-}
-// Central dispatcher for finalizers based on type tag
-static void release_object_deep(CljObject *v) {
-    if (!v) return;
-    
-    // Objects that don't track references (singletons) need no finalizer
-    if (!TRACKS_REFERENCES(v)) {
-        return;
-    }
-    
-    // Dispatcher: Decide based on type tag whether finalizer is needed
-    switch (v->type) {
-        case CLJ_STRING:
-            // String finalizer: free memory
-            if (v->as.data) free(v->as.data);
-            break;
-            
-        case CLJ_SYMBOL:
-            // Symbols are embedded; nothing to free here (interned / no RC)
-            break;
-            
-        case CLJ_VECTOR:
-            // Vector finalizer: embedded object; free backing store and elements only
-            {
-                CljPersistentVector *vec = as_vector(v);
-                if (vec) {
-                    release_array(vec->data, vec->count);
-                    free(vec->data);
-                }
-            }
-            break;
-        case CLJ_WEAK_VECTOR:
-            // Weak vector finalizer: does not retain on push; releasing elements here is still required
-            {
-                CljPersistentVector *vec = as_vector(v);
-                if (vec) {
-                    release_array(vec->data, vec->count);
-                    free(vec->data);
-                }
-            }
-            break;
-            
-        case CLJ_MAP:
-            // Map finalizer: separate struct in as.data; free pairs and struct
-            {
-                CljMap *map = as_map(v);
-                if (map) {
-                    release_array(map->data, map->count * 2);
-                    free(map->data);
-                    free(map);
-                }
-            }
-            break;
-            
-        case CLJ_LIST:
-            // List finalizer: release head and tail, but don't free the list itself
-            // (the list structure will be freed by release() after this function returns)
-            {
-                CljList *list = as_list(v);
-                if (list) {
-                    // Release head if it exists
-                    if (list->head) {
-                        RELEASE(list->head);
-                    }
-                    // Release tail if it exists (tail is another CljList)
-                    if (list->tail) {
-                        RELEASE((CljObject*)list->tail);
-                    }
-                    // Don't free the list structure itself - release() will do that
-                }
-            }
-            break;
-            
-        case CLJ_FUNC:
-            // Function finalizer: embedded; free internals only
-            {
-                // Check if it's a CljFunction or CljFunc
-                CljFunction *clj_func = (CljFunction*)v;
-                if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
-                    // It's a CljFunction
-                    if (clj_func->params) {
-                        release_array(clj_func->params, clj_func->param_count);
-                        free(clj_func->params);
-                    }
-                    if (clj_func->body) RELEASE(clj_func->body);
-                    if (clj_func->closure_env) RELEASE(clj_func->closure_env);
-                    if (clj_func->name) free((void*)clj_func->name);
-                } else {
-                    // It's a CljFunc (native function)
-                    CljFunc *native_func = (CljFunc*)v;
-                    (void)native_func; // Suppress unused variable warning
-#ifdef DEBUG
-                    if (native_func && native_func->name) {
-                        // In Debug-Builds ist name ein String-Literal, kein malloc'd String
-                        // Daher kein free() nötig
-                    }
-#endif
-                }
-            }
-            break;
-            
-        case CLJ_EXCEPTION:
-            // Exception finalizer: use exception RC management
-            {
-                CLJException *exc = (CLJException*)v->as.data;
-                if (exc) {
-                    release_exception(exc);
-                }
-            }
-            break;
-            
-        case CLJ_INT:
-        case CLJ_FLOAT:
-        case CLJ_BOOL:
-        case CLJ_NIL:
-            // Primitive types: no finalizer needed
-            break;
-            
-        default:
-            // Unknown type: no finalizer
-            break;
-    }
-}
+// autorelease_pool_cleanup_all() function moved to memory.c
+// release_object_deep() function moved to memory.c
 
 // moved to string.c
 

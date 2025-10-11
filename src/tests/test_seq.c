@@ -12,7 +12,7 @@
 #include "map.h"
 #include "clj_symbols.h"
 #include "memory_profiler.h"
-#include "memory_hooks.h"
+#include "memory.h"
 
 // ============================================================================
 // SEQ CREATION TESTS

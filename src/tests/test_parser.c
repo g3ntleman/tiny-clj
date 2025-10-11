@@ -11,7 +11,7 @@
 #include "../function_call.h"
 #include "../map.h"
 #include "../namespace.h"
-#include "../memory_hooks.h"
+#include "../memory.h"
 #include "../memory_profiler.h"
 #include "minunit.h"
 #include <stdio.h>

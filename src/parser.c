@@ -17,7 +17,7 @@
 #include "map.h"
 #include <stdbool.h>
 #include "list_operations.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include "runtime.h"
 #include "utf8.h"
 #include "vector.h"
@@ -212,7 +212,7 @@ CljObject *parse(const char *input, EvalState *st) {
     return NULL;
   Reader reader;
   reader_init(&reader, input);
-  return make_object_by_parsing_expr(&reader, st);
+  return AUTORELEASE(make_object_by_parsing_expr(&reader, st));
 }
 
 

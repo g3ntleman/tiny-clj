@@ -6,6 +6,7 @@
 #include "clj_symbols.h"
 #include "runtime.h"
 #include "tests/test_api.h"
+#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 

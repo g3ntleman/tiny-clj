@@ -14,7 +14,7 @@
 #include "function_call.h"
 #include "clj_symbols.h"
 #include "namespace.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include "memory_profiler.h"
 
 // Memory profiler is now always enabled via memory_hooks.h and memory_profiler.h

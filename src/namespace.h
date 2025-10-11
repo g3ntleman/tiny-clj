@@ -2,6 +2,7 @@
 #define TINY_CLJ_NAMESPACE_H
 
 #include "object.h"
+#include "memory.h"
 #include <stdbool.h>
 #include <setjmp.h>
 

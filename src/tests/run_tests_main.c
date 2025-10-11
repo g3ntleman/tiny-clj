@@ -7,6 +7,7 @@
 
 #include "../object.h"
 #include "../clj_symbols.h"
+#include "../memory.h"
 #include "minunit.h"
 #include "test_registry.h"
 #ifdef ENABLE_MEMORY_PROFILING

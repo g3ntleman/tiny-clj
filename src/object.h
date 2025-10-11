@@ -160,10 +160,7 @@ CljObject* clj_true();
 CljObject* clj_false();
 
 
-/** Increase rc if applicable; ignored for singletons/primitives. */
-void retain(CljObject *v);
-/** Decrease rc and free at rc==0; ignored for singletons/primitives. */
-void release(CljObject *v);
+// Memory management functions moved to memory.h
 
 // String representation of CljObject
 /** Return newly allocated C-string representation (caller frees). */
@@ -234,22 +231,7 @@ void meta_registry_cleanup();
 #define meta_registry_cleanup() ((void)0)
 #endif
 
-// Autorelease-pool API similar to obj.c
-typedef struct CljObjectPool CljObjectPool;
-/** Add object to current autorelease pool and return it. */
-CljObject *autorelease(CljObject *v);
-/** Push a new autorelease pool; returns pool handle. */
-CljObjectPool *autorelease_pool_push();
-/** Pop and drain current autorelease pool (most common usage). */
-void autorelease_pool_pop(void);
-/** Pop and drain specific autorelease pool (advanced usage). */
-void autorelease_pool_pop_specific(CljObjectPool *pool);
-/** Legacy API: Pop and drain given autorelease pool (backward compatibility). */
-void autorelease_pool_pop_legacy(CljObjectPool *pool);
-/** Drain all autorelease pools (global cleanup). */
-void autorelease_pool_cleanup_all();
-
-#define AUTORELEASE_POOL_SCOPE(name) for (CljObjectPool *(name) = autorelease_pool_push(); (name) != NULL; autorelease_pool_pop_specific(name), (name) = NULL)
+// Autorelease-pool API moved to memory.h
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */
@@ -333,7 +315,6 @@ static inline int is_native_fn(CljObject *fn) {
     return TYPE(fn) == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
 }
 
-// Helper function to check if autorelease pool is active
-bool is_autorelease_pool_active(void);
+// is_autorelease_pool_active() function moved to memory.h
 
 #endif

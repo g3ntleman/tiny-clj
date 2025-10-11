@@ -12,7 +12,7 @@
 #include "../map.h"
 #include "../namespace.h"
 #include "../vector.h"
-#include "../memory_hooks.h"
+#include "../memory.h"
 #include "../memory_profiler.h"
 #include "minunit.h"
 #include <stdio.h>
@@ -46,15 +46,19 @@ static char *test_basic_creation(void) {
     CljObject *int_obj = make_int(42);
     mu_assert_obj_type(int_obj, CLJ_INT);
     mu_assert_obj_int(int_obj, 42);
+    RELEASE(int_obj);
+
 
     // Test string creation
     CljObject *str_obj = make_string("hello");
     mu_assert_obj_type(str_obj, CLJ_STRING);
     mu_assert_obj_string(str_obj, "hello");
+    RELEASE(str_obj);
     
     // Test float creation
     CljObject *float_obj = make_float(3.14);
     mu_assert_obj_type(float_obj, CLJ_FLOAT);
+    RELEASE(float_obj);
     
   });
   return 0;

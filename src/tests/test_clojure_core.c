@@ -11,6 +11,7 @@
 #include "../function_call.h"
 #include "../parser.h"
 #include "../tiny_clj.h"
+#include "../memory.h"
 #include <stdio.h>
 #include <string.h>
 

@@ -3,7 +3,7 @@
 #include "kv_macros.h"
 #include "runtime.h"
 #include "vector.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include <stdlib.h>
 #include <stdbool.h>
 

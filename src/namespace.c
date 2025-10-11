@@ -8,7 +8,7 @@
 #include "map.h"
 #include "list_operations.h"
 #include "function_call.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include "exception.h"
 
 // Global namespace registry

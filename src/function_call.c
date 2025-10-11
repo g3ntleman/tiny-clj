@@ -15,7 +15,7 @@
 #include "clj_string.h"
 #include "seq.h"
 #include "namespace.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include "list_operations.h"
 #include <stdio.h>
 #include <stdlib.h>

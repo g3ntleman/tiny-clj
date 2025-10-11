@@ -7,7 +7,7 @@
 #include "runtime.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include "memory_hooks.h"
+#include "memory.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
