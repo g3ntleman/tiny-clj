@@ -203,8 +203,8 @@ void retain(CljObject *v) {
     if (!v) return;
     
     
-    // Singletons have no reference counting
-    if (is_singleton(v)) return;
+    // Objects that don't track references (singletons) have no reference counting
+    if (!tracks_references(v)) return;
     // Guard: empty vector/map singletons must not be retained
     if (is_type(v, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(v);
@@ -230,9 +230,9 @@ void retain(CljObject *v) {
 void release(CljObject *v) {
     if (!v) return;
     
-    // Singletons have no reference counting
-    if (is_singleton(v)) {
-        // Singletons are never actually freed, so don't track as deallocation
+    // Objects that don't track references (singletons) have no reference counting
+    if (!tracks_references(v)) {
+        // These objects are never actually freed, so don't track as deallocation
         return;
     }
     
@@ -349,8 +349,12 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
                 "Pool push/pop imbalance! Push count: %d. "
                 "This indicates more pop() calls than push() calls.", g_pool_push_count);
     }
-    // Weak vector is not released - it only contains weak references
-    // The objects were already released in the loop above
+    // Release the weak vector backing (it was created with make_weak_vector)
+    // WEAK_VECTOR objects use reference counting, so we use RELEASE()
+    if (pool->backing) {
+        RELEASE(pool->backing);
+    }
+    
     free(pool);
 }
 
@@ -379,8 +383,8 @@ void autorelease_pool_cleanup_all() {
 static void release_object_deep(CljObject *v) {
     if (!v) return;
     
-    // Singletons need no finalizer
-    if (is_singleton(v)) {
+    // Objects that don't track references (singletons) need no finalizer
+    if (!tracks_references(v)) {
         return;
     }
     
