@@ -23,17 +23,17 @@
 struct CljNamespace;
 
 // Type optimization constants
-#define LAST_PRIMITIVE_TYPE CLJ_SYMBOL  // Last primitive type (0-4)
+#define LAST_SINGLETON_TYPE CLJ_SYMBOL  // Last singleton type (0-2)
 
 // Type checking macros for performance
-#define IS_PRIMITIVE_TYPE(type) ((type) <= LAST_PRIMITIVE_TYPE)
+#define IS_SINGLETON_TYPE(type) ((type) <= LAST_SINGLETON_TYPE)
 
 // Singleton check - only true singletons that should not be reference counted
-#define is_singleton(obj) ((obj) && ((obj)->type == CLJ_NIL || (obj)->type == CLJ_BOOL || (obj)->type == CLJ_SYMBOL))
+#define is_singleton(obj) ((obj) && IS_SINGLETON_TYPE((obj)->type))
 
 typedef struct CljObject CljObject;
 // Macro: safe type extraction (returns CLJ_UNKNOWN for NULL objects)
-#define type(object) ((object) ? (object)->type : CLJ_UNKNOWN)
+#define TYPE(object) ((object) ? (object)->type : CLJ_UNKNOWN)
 
 
 // Optimized CljObject structure (tight union-based layout)
@@ -287,7 +287,7 @@ void free_object(CljObject *obj);
 
 // Type checking helper
 static inline bool is_type(CljObject *obj, CljType expected_type) {
-    return obj && obj->type == expected_type;
+    return TYPE(obj) == expected_type;
 }
 
 // Debug macros - only include debug code in debug builds
@@ -310,25 +310,25 @@ static inline bool is_type(CljObject *obj, CljType expected_type) {
 
 // Type-safe casting (static inline for performance)
 static inline CljSymbol* as_symbol(CljObject *obj) {
-    return (type(obj) == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;
+    return (TYPE(obj) == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
-    return (type(obj) == CLJ_VECTOR || type(obj) == CLJ_WEAK_VECTOR) ? (CljPersistentVector*)obj : NULL;
+    return (TYPE(obj) == CLJ_VECTOR || TYPE(obj) == CLJ_WEAK_VECTOR) ? (CljPersistentVector*)obj : NULL;
 }
 static inline CljMap* as_map(CljObject *obj) {
-    return (type(obj) == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;
+    return (TYPE(obj) == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;
 }
 static inline CljList* as_list(CljObject *obj) {
-    return (type(obj) == CLJ_LIST) ? (CljList*)obj : NULL;
+    return (TYPE(obj) == CLJ_LIST) ? (CljList*)obj : NULL;
 }
 static inline CljFunction* as_function(CljObject *obj) {
-    return (type(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL;
+    return (TYPE(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL;
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)
 static inline int is_native_fn(CljObject *fn) {
     // Native builtins are represented as CljFunc; interpreted functions as CljFunction
-    return type(fn) == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
+    return TYPE(fn) == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
 }
 
 // Helper function to check if autorelease pool is active

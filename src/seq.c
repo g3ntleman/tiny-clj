@@ -345,6 +345,6 @@ bool is_seqable(CljObject *obj) {
 }
 
 bool is_seq(CljObject *obj) {
-    return type(obj) == CLJ_SEQ || type(obj) == CLJ_LIST;
+    return TYPE(obj) == CLJ_SEQ || TYPE(obj) == CLJ_LIST;
 }
 
