@@ -12,6 +12,7 @@
 
 #include "parser.h"
 #include "function_call.h"
+#include <string.h>
 #include "clj_string.h"
 #include "map.h"
 #include <stdbool.h>
@@ -23,7 +24,6 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 // Stack-based parser constants
 #define MAX_STACK_VECTOR_SIZE 64

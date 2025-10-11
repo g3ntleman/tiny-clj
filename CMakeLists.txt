@@ -221,7 +221,6 @@ add_executable(test-seq-debug EXCLUDE_FROM_ALL
     src/map.c
     src/map.h
     src/string.c
-    src/clj_string.h
     src/parser.c
     src/parser.h
     src/reader.c

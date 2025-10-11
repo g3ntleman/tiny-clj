@@ -17,7 +17,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include "object.h"
-#include <string.h>
+#include "clj_string.h"
 #include "vector.h"
 #include "seq.h"
 #include "memory_hooks.h"

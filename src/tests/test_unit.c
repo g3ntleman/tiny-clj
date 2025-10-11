@@ -17,7 +17,6 @@
 #include "minunit.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 // Test setup and teardown functions
 static void test_setup(void) {

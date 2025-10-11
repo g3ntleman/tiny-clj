@@ -1,5 +1,5 @@
-#ifndef STRING_H
-#define STRING_H
+#ifndef CLJ_STRING_H
+#define CLJ_STRING_H
 
 // Forward declaration to avoid circular dependencies
 struct CljObject;

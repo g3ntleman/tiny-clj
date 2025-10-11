@@ -11,6 +11,7 @@
 
 #include "object.h"
 #include "function_call.h"
+#include <string.h>
 #include "clj_string.h"
 #include "seq.h"
 #include "namespace.h"
@@ -18,7 +19,6 @@
 #include "list_operations.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <stdbool.h>
 
 
