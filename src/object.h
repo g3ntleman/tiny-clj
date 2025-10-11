@@ -28,6 +28,9 @@ struct CljNamespace;
 // Type checking macros for performance
 #define IS_PRIMITIVE_TYPE(type) ((type) <= LAST_PRIMITIVE_TYPE)
 
+// Singleton check - only true singletons that should not be reference counted
+#define is_singleton(obj) ((obj) && ((obj)->type == CLJ_NIL || (obj)->type == CLJ_BOOL || (obj)->type == CLJ_SYMBOL))
+
 typedef struct CljObject CljObject;
 // Macro: safe type extraction (returns CLJ_UNKNOWN for NULL objects)
 #define type(object) ((object) ? (object)->type : CLJ_UNKNOWN)

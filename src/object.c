@@ -204,7 +204,7 @@ void retain(CljObject *v) {
     
     
     // Singletons have no reference counting
-    if (IS_PRIMITIVE_TYPE(v->type)) return;
+    if (is_singleton(v)) return;
     // Guard: empty vector/map singletons must not be retained
     if (is_type(v, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(v);
@@ -231,8 +231,8 @@ void release(CljObject *v) {
     if (!v) return;
     
     // Singletons have no reference counting
-    if (IS_PRIMITIVE_TYPE(v->type)) {
-        // Primitive types are never actually freed, so don't track as deallocation
+    if (is_singleton(v)) {
+        // Singletons are never actually freed, so don't track as deallocation
         return;
     }
     
@@ -379,8 +379,8 @@ void autorelease_pool_cleanup_all() {
 static void release_object_deep(CljObject *v) {
     if (!v) return;
     
-    // Primitive values need no finalizer
-    if (IS_PRIMITIVE_TYPE(v->type)) {
+    // Singletons need no finalizer
+    if (is_singleton(v)) {
         return;
     }
     

@@ -78,6 +78,11 @@ static char *test_vector_creation_memory(void) {
     CljObject *first_elem = vec_data->data[0];
     mu_assert("first element accessible", first_elem != NULL);
     
+    // Free all vector elements first (explicit cleanup)
+    for (int i = 0; i < 10; i++) {
+        RELEASE(vec_data->data[i]);
+    }
+    
     release(vec);
     
     MEMORY_TEST_END("Vector Creation");
