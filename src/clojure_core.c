@@ -1,6 +1,6 @@
 // clojure.core.c
 
-#include "clj_parser.h"
+#include "parser.h"
 #include "exception.h"
 #include "function_call.h"
 #include "namespace.h"
@@ -23,8 +23,8 @@ const char *clojure_core_code =
 
     ;
 
-// Forward declaration for parse_expr_internal
-extern CljObject *parse_expr_internal(Reader *reader, EvalState *st);
+// Forward declaration for make_object_by_parsing_expr
+extern CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st);
 
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
@@ -44,7 +44,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
     
-    CljObject *form = parse_expr_internal(&reader, st);
+    CljObject *form = make_object_by_parsing_expr(&reader, st);
     if (!form) {
       DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
       break;

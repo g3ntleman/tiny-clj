@@ -10,7 +10,7 @@
 #include "runtime.h"
 #include "function_call.h"
 #include "clj_symbols.h"
-#include "clj_parser.h"
+#include "parser.h"
 #include "test-utils.h"
 #include <string.h>
 

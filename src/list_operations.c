@@ -35,7 +35,8 @@ int list_count(CljObject *list) {
     return count;
 }
 
-CljObject* list_from_stack(CljObject **stack, int count) {
+/** Create a list from stack items. Returns new object with RC=1. */
+CljObject* make_list_from_stack(CljObject **stack, int count) {
     if (count == 0) return clj_nil();
     
     // Build list from end to start using make_list

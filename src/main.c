@@ -1,7 +1,7 @@
 #include "platform.h"
 #include "object.h"
 #include "exception.h"
-#include "clj_parser.h"
+#include "parser.h"
 #include "namespace.h"
 #include "clj_symbols.h"
 #include "runtime.h"

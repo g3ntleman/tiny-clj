@@ -11,6 +11,7 @@
 
 #include "object.h"
 #include "function_call.h"
+#include "clj_string.h"
 #include "seq.h"
 #include "namespace.h"
 #include "memory_hooks.h"

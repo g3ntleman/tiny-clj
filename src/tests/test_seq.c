@@ -6,10 +6,10 @@
 
 #include "minunit.h"
 #include "seq.h"
+#include "clj_string.h"
 #include "vector.h"
 #include "list_operations.h"
 #include "map.h"
-#include "string.h"
 #include "clj_symbols.h"
 #include "memory_profiler.h"
 #include "memory_hooks.h"

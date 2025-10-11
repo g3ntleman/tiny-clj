@@ -10,8 +10,9 @@
  * - STM32-compatible implementation
  */
 
-#include "clj_parser.h"
+#include "parser.h"
 #include "function_call.h"
+#include "clj_string.h"
 #include "map.h"
 #include <stdbool.h>
 #include "list_operations.h"
@@ -121,12 +122,12 @@ static CljObject *parse_symbol(Reader *reader, EvalState *st);
 static CljObject *parse_number(Reader *reader, EvalState *st);
 
 /**
- * @brief Internal expression parser using Reader
+ * @brief Create CljObject by parsing expression from Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return Parsed CljObject or NULL on error, autoreleased
+ * @return New CljObject with RC=1 or NULL on error (caller must release)
  */
-CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
+CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   if (reader_is_eof(reader))
     return NULL;
@@ -204,14 +205,14 @@ CljObject *parse_expr_internal(Reader *reader, EvalState *st) {
  * @brief Parse Clojure expression from string input
  * @param input Input string to parse
  * @param st Evaluation state
- * @return Parsed CljObject (autoreleased) or NULL on error
+ * @return Parsed CljObject (caller must release) or NULL on error
  */
 CljObject *parse(const char *input, EvalState *st) {
   if (!input)
     return NULL;
   Reader reader;
   reader_init(&reader, input);
-  return parse_expr_internal(&reader, st);
+  return make_object_by_parsing_expr(&reader, st);
 }
 
 
@@ -292,7 +293,7 @@ static CljObject *parse_vector(Reader *reader, EvalState *st) {
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       if (count >= MAX_STACK_VECTOR_SIZE)
         return NULL;
-      CljObject *value = parse_expr_internal(reader, st);
+      CljObject *value = make_object_by_parsing_expr(reader, st);
       if (!value)
         return NULL;
       stack[count++] = value;
@@ -300,7 +301,7 @@ static CljObject *parse_vector(Reader *reader, EvalState *st) {
     }
     if (reader_eof(reader) || !reader_match(reader, ']'))
       return NULL;
-    return vector_from_stack(stack, count);
+    return make_vector_from_stack(stack, count);
   }
   return NULL;
 }
@@ -318,11 +319,11 @@ static CljObject *parse_map(Reader *reader, EvalState *st) {
   CljObject *pairs[MAX_STACK_MAP_PAIRS * 2];
   int pair_count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
-    CljObject *key = parse_expr_internal(reader, st);
+    CljObject *key = make_object_by_parsing_expr(reader, st);
     if (!key)
       return NULL;
     reader_skip_all(reader);
-    CljObject *value = parse_expr_internal(reader, st);
+    CljObject *value = make_object_by_parsing_expr(reader, st);
     if (!value)
       return NULL;
     reader_skip_all(reader);
@@ -348,7 +349,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   CljObject *stack[MAX_STACK_LIST_SIZE];
   int count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
-    CljObject *expr = parse_expr_internal(reader, st);
+    CljObject *expr = make_object_by_parsing_expr(reader, st);
     if (!expr)
       return NULL;
     stack[count++] = expr;
@@ -356,7 +357,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   }
   if (reader_eof(reader) || !reader_match(reader, ')'))
     return NULL;
-  return list_from_stack(stack, count);
+  return make_list_from_stack(stack, count);
 }
 
 /**
@@ -495,11 +496,11 @@ static CljObject *parse_meta(Reader *reader, EvalState *st) {
   if (!reader_eof(reader) && reader_next(reader) != '^')
     return NULL;
   reader_skip_all(reader);
-  CljObject *meta = parse_expr_internal(reader, st);
+  CljObject *meta = make_object_by_parsing_expr(reader, st);
   if (!meta)
     return NULL;
   reader_skip_all(reader);
-  CljObject *obj = parse_expr_internal(reader, st);
+  CljObject *obj = make_object_by_parsing_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
     return NULL;
@@ -525,7 +526,7 @@ static CljObject *parse_meta_map(Reader *reader,
   if (!meta)
     return NULL;
   reader_skip_all(reader);
-  CljObject *obj = parse_expr_internal(reader, st);
+  CljObject *obj = make_object_by_parsing_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
     return NULL;

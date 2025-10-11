@@ -18,7 +18,7 @@ static void init_empty_string_once(void) {
 
 CljObject* make_string(const char *s) {
     if (!s || s[0] == '\0') {
-        init_empty_string_once();
+        init_empty_string_once(); // TODO: do not call every time. Create an initialze_* funtction.
         return &empty_string_singleton;
     }
     CljObject *v = ALLOC(CljObject, 1);

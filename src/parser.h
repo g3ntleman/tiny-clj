@@ -8,8 +8,8 @@
  * - Stack-allocated parsing utilities
  */
 
-#ifndef CLJ_PARSER_H
-#define CLJ_PARSER_H
+#ifndef PARSER_H
+#define PARSER_H
 
 #include "object.h"
 #include "exception.h"
@@ -19,6 +19,12 @@
 
 
 // Parser entry points
+/**
+ * @brief Parse Clojure expression from string input
+ * @param input Input string to parse
+ * @param st Evaluation state
+ * @return Parsed CljObject (caller must release) or NULL on error
+ */
 CljObject *parse(const char *input, EvalState *st);
 
 // Convenience API

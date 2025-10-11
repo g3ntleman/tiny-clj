@@ -8,7 +8,7 @@
 #include "seq.h"
 #include "list_operations.h"
 #include "vector.h"
-#include "string.h"
+#include "clj_string.h"
 #include <stdlib.h>
 #include <string.h>
 

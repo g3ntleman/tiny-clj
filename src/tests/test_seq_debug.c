@@ -4,6 +4,7 @@
 #include "seq.h"
 #include "vector.h"
 #include "object.h"
+#include "clj_string.h"
 #include "memory_profiler.h"
 
 // Test-First: Debug seq_create with vector

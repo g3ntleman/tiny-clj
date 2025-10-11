@@ -39,7 +39,7 @@ list(APPEND SOURCES
     src/namespace.c
     src/clj_symbols.c
     src/exception.c
-    src/clj_parser.c
+    src/parser.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -119,7 +119,7 @@ add_executable(run-tests
     src/string.c
     src/clj_symbols.c
     src/namespace.c
-    src/clj_parser.c
+    src/parser.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -155,7 +155,7 @@ add_executable(test-exception-handling EXCLUDE_FROM_ALL
     src/string.c
     src/clj_symbols.c
     src/namespace.c
-    src/clj_parser.c
+    src/parser.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -180,7 +180,7 @@ add_executable(test-performance EXCLUDE_FROM_ALL
     src/string.c
     src/clj_symbols.c
     src/namespace.c
-    src/clj_parser.c
+    src/parser.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -222,8 +222,8 @@ add_executable(test-seq-debug EXCLUDE_FROM_ALL
     src/map.h
     src/string.c
     src/clj_string.h
-    src/clj_parser.c
-    src/clj_parser.h
+    src/parser.c
+    src/parser.h
     src/reader.c
     src/reader.h
     src/clojure_core.c
@@ -242,7 +242,7 @@ add_executable(test-memory-profiling EXCLUDE_FROM_ALL
     src/clj_error.c
     src/clj_symbols.c
     src/namespace.c
-    src/clj_parser.c
+    src/parser.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -331,7 +331,7 @@ add_executable(test-seq-benchmark EXCLUDE_FROM_ALL
     src/map.c
     src/clj_symbols.c
     src/namespace.c
-    src/clj_parser.c
+    src/parser.c
     src/reader.c
     src/function_call.c
     src/exception.c

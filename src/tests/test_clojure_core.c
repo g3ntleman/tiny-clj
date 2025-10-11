@@ -9,7 +9,7 @@
 #include "../clj_symbols.h"
 #include "../namespace.h"
 #include "../function_call.h"
-#include "../clj_parser.h"
+#include "../parser.h"
 #include "../tiny_clj.h"
 #include <stdio.h>
 #include <string.h>

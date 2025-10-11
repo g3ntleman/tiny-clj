@@ -133,7 +133,6 @@ CljObject* make_int(int x);
 /** Create a float object (rc=1). */
 CljObject* make_float(double x);
 /** Create a string object (rc=1), copies input with strdup. */
-CljObject* make_string(const char *s);
 // make_nil() and make_bool() removed - use clj_nil(), clj_true(), clj_false() instead
 // moved to vector.h
 /** Create/intern a symbol with optional namespace; rc=1. */

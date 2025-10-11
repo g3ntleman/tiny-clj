@@ -7,6 +7,7 @@
 
 #include "minunit.h"
 #include "object.h"
+#include "clj_string.h"
 #include "vector.h"
 #include "seq.h"
 #include "map.h"

@@ -137,7 +137,8 @@ CljObject *vector_from_items(CljObject **items, int count) {
   return vec;
 }
 
-CljObject* vector_from_stack(CljObject **stack, int count) {
+/** Create a vector from stack items. Returns new object with RC=1. */
+CljObject* make_vector_from_stack(CljObject **stack, int count) {
     CljObject *vec_obj = make_vector(count, 0);
     CljPersistentVector *vec = as_vector(vec_obj);
     if (!vec) return NULL;

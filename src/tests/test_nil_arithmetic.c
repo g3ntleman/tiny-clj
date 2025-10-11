@@ -1,7 +1,7 @@
 #include "minunit.h"
 #include "../object.h"
 #include "../function_call.h"
-#include "../clj_parser.h"
+#include "../parser.h"
 #include "../namespace.h"
 #include <stdio.h>
 #include <string.h>

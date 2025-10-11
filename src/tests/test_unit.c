@@ -5,8 +5,9 @@
  */
 
 #include "../object.h"
-#include "../clj_parser.h"
+#include "../parser.h"
 #include "../clj_symbols.h"
+#include "../clj_string.h"
 #include "../exception.h"
 #include "../map.h"
 #include "../namespace.h"

@@ -9,7 +9,7 @@
 #include "../memory_hooks.h"
 #include "../memory_profiler.h"
 #include "../tiny_clj.h"
-#include "../clj_parser.h"
+#include "../parser.h"
 #include "../seq.h"
 #include "../vector.h"
 #include "../list_operations.h"
