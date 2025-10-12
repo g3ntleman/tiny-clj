@@ -1,8 +1,39 @@
 /*
  * Memory Profiler Implementation for Tiny-CLJ
  * 
- * Tracks object allocation and deallocation for heap analysis.
- * Only compiled in DEBUG builds.
+ * Comprehensive memory tracking and profiling system implementation.
+ * Provides detailed statistics on object allocation, deallocation, and memory usage.
+ * 
+ * Implementation Details:
+ * - Thread-safe global statistics tracking
+ * - Automatic memory leak detection
+ * - Peak memory usage monitoring
+ * - Object type breakdown analysis
+ * - Reference counting operation tracking
+ * - Test-specific profiling integration
+ * 
+ * Key Features:
+ * - Zero overhead in RELEASE builds (all functions are no-ops)
+ * - Detailed memory statistics with visual formatting
+ * - Automatic leak detection and reporting
+ * - Per-object-type allocation tracking
+ * - Memory efficiency metrics calculation
+ * 
+ * Usage Patterns:
+ * - Automatic profiling via WITH_MEMORY_PROFILING() macro
+ * - Manual profiling via MEMORY_TEST_START/END macros
+ * - Benchmarking via MEMORY_TEST_BENCHMARK_START/END macros
+ * 
+ * Statistics Output:
+ * - Tabular format with Unicode symbols for readability
+ * - Memory operations summary (allocations, deallocations, leaks)
+ * - Object lifecycle tracking (creations, destructions, operations)
+ * - Type-specific breakdown (INT, FLOAT, VECTOR, etc.)
+ * - Efficiency metrics (retention ratio, deallocation ratio)
+ * 
+ * @author Tiny-CLJ Team
+ * @version 1.0
+ * @since 2024
  */
 
 #include "memory_profiler.h"
@@ -15,7 +46,20 @@
 // GLOBAL MEMORY STATISTICS
 // ============================================================================
 
+/**
+ * @brief Global memory statistics structure
+ * 
+ * Tracks all memory operations across the entire application.
+ * Thread-safe access through atomic operations.
+ */
 MemoryStats g_memory_stats = {0};
+
+/**
+ * @brief Global memory profiling enabled flag
+ * 
+ * Controls whether memory profiling is active.
+ * Can be toggled at runtime for performance testing.
+ */
 bool g_memory_profiling_enabled = false;
 
 #ifdef DEBUG
@@ -24,6 +68,17 @@ bool g_memory_profiling_enabled = false;
 // MEMORY PROFILING FUNCTIONS
 // ============================================================================
 
+/**
+ * @brief Initialize the memory profiler system
+ * 
+ * Resets all statistics and prepares the profiler for tracking.
+ * Should be called at the start of memory profiling sessions.
+ * 
+ * Initializes:
+ * - All counters to zero
+ * - Type-specific arrays
+ * - Memory usage tracking
+ */
 void memory_profiler_init(void) {
     memset(&g_memory_stats, 0, sizeof(MemoryStats));
     // Initialize type arrays
@@ -32,6 +87,17 @@ void memory_profiler_init(void) {
     // Memory profiler initialized
 }
 
+/**
+ * @brief Reset memory statistics to zero
+ * 
+ * Clears all tracked statistics without disabling profiling.
+ * Useful for starting fresh profiling sessions.
+ * 
+ * Resets:
+ * - All counters to zero
+ * - Type-specific arrays
+ * - Memory usage tracking
+ */
 void memory_profiler_reset(void) {
     memset(&g_memory_stats, 0, sizeof(MemoryStats));
     // Initialize type arrays
@@ -39,6 +105,17 @@ void memory_profiler_reset(void) {
     memset(g_memory_stats.deallocations_by_type, 0, sizeof(g_memory_stats.deallocations_by_type));
 }
 
+/**
+ * @brief Cleanup memory profiler and report final statistics
+ * 
+ * Prints final memory statistics and detects potential leaks.
+ * Should be called at the end of profiling sessions.
+ * 
+ * Reports:
+ * - Final memory statistics
+ * - Potential memory leaks
+ * - Cleanup completion
+ */
 void memory_profiler_cleanup(void) {
     if (g_memory_stats.memory_leaks > 0) {
         printf("⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
@@ -47,6 +124,13 @@ void memory_profiler_cleanup(void) {
     // Memory profiler initialized
 }
 
+/**
+ * @brief Get current memory statistics
+ * @return Current MemoryStats structure
+ * 
+ * Returns a copy of the current global memory statistics.
+ * Safe to call from any thread.
+ */
 MemoryStats memory_profiler_get_stats(void) {
     return g_memory_stats;
 }

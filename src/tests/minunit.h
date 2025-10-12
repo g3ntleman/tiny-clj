@@ -10,7 +10,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "../object.h"
+#include "object.h"
 
 // Core MinUnit macros with better error reporting
 #define mu_assert(message, test) do { \

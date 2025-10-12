@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
     platform_init();
     EvalState *st = evalstate_new();
     if (!st) return 1;
-    set_global_eval_state(st);
+    // Note: set_global_eval_state() removed - Exception handling now independent
     evalstate_set_ns(st, "user");
     // Quiet mode for CLI eval (no banner)
     bool no_core = false;

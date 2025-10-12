@@ -241,7 +241,8 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
             // Don't autorelease here - let eval_string handle it
         }
     } CATCH(ex) {
-        // Exception caught - return NULL
+        // Re-throw exception to let caller handle it
+        throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
         result = NULL;
     } END_TRY
     
@@ -271,8 +272,8 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
         if (result) result = AUTORELEASE(result);
         
     } CATCH(ex) {
-        // Exception caught - re-throw to let caller handle it
-        throw_exception_formatted(ex->type, ex->file, ex->line, ex->col, "%s", ex->message);
+        // Re-throw exception to let caller handle it
+        throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
         result = NULL;
     } END_TRY
     
@@ -327,8 +328,8 @@ static CljObject *parse_map(Reader *reader, EvalState *st) {
     if (!value)
       return NULL;
     reader_skip_all(reader);
-    pairs[pair_count * 2] = key;
-    pairs[pair_count * 2 + 1] = value;
+    pairs[pair_count * 2] = (key);
+    pairs[pair_count * 2 + 1] = (value);
     pair_count++;
   }
   if (reader_eof(reader) || !reader_match(reader, '}'))
@@ -346,18 +347,52 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '('))
     return NULL;
   reader_skip_all(reader);
-  CljObject *stack[MAX_STACK_LIST_SIZE];
-  int count = 0;
-  while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
-    CljObject *expr = make_object_by_parsing_expr(reader, st);
-    if (!expr)
-      return NULL;
-    stack[count++] = expr;
-    reader_skip_all(reader);
+  
+  // Handle empty list
+  if (reader_peek_char(reader) == ')') {
+    reader_next(reader);
+    return clj_nil();
   }
-  if (reader_eof(reader) || !reader_match(reader, ')'))
+  
+  // Parse elements iteratively and build list from start to end
+  CljObject *elements[MAX_STACK_LIST_SIZE];
+  int count = 0;
+  
+  while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
+    CljObject *element = make_object_by_parsing_expr(reader, st);
+    if (!element) {
+      // Clean up already parsed elements
+      for (int i = 0; i < count; i++) {
+        RELEASE(elements[i]);
+      }
+      return NULL;
+    }
+    reader_skip_all(reader);
+    
+    // Store element in array
+    if (count >= MAX_STACK_LIST_SIZE) {
+      // Clean up already parsed elements
+      for (int i = 0; i < count; i++) {
+        RELEASE(elements[i]);
+      }
+      RELEASE(element);
+      return NULL;
+    }
+    elements[count++] = element;
+  }
+  
+  // Build list from array in correct order
+  CljObject *result = clj_nil();
+  for (int i = count - 1; i >= 0; i--) {
+    result = (CljObject*)make_list(elements[i], (CljList*)result);
+  }
+  
+  if (reader_eof(reader) || !reader_match(reader, ')')) {
+    RELEASE(result);
     return NULL;
-  return make_list_from_stack(stack, count);
+  }
+  
+  return result;
 }
 
 /**

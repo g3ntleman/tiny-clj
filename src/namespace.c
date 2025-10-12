@@ -148,8 +148,7 @@ EvalState* evalstate() {
         return NULL;
     }
     
-    // Initialize exception handling
-    st->last_error = NULL;
+    // Note: Exception handling now uses global exception stack
     st->file = NULL;
     st->line = 0;
     st->col = 0;

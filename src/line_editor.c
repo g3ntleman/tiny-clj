@@ -61,9 +61,6 @@ static inline bool editor_is_valid(const LineEditor *editor) {
     return editor != NULL;
 }
 
-static inline void editor_put_esc(LineEditor *editor, const char *seq) {
-    editor->put_string(seq);
-}
 
 // ANSI escape sequence handling
 static bool is_ansi_escape_sequence(const char *input, int len) {

@@ -22,19 +22,18 @@ static void test_setup(void) {
         fprintf(stderr, "FATAL: evalstate() returned NULL\n");
         exit(1);
     }
-    test_state->exception_stack = NULL;
-    set_global_eval_state(test_state);
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
 }
 
 static void test_teardown(void) {
-    set_global_eval_state(NULL);
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     test_state = NULL;
 }
 
 // Test 1: Simple TRY/CATCH - Exception caught
 static char *test_simple_try_catch_exception_caught(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     bool exception_caught = false;
     
     TRY {
@@ -55,7 +54,7 @@ static char *test_simple_try_catch_exception_caught(void) {
 // Test 2: Simple TRY/CATCH - No exception
 static char *test_simple_try_catch_no_exception(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     bool try_executed = false;
     bool catch_executed = false;
     
@@ -75,7 +74,7 @@ static char *test_simple_try_catch_no_exception(void) {
 // Test 3: Nested TRY/CATCH - Inner exception caught
 static char *test_nested_try_catch_inner_exception(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static bool outer_try = false, inner_try = false, inner_catch = false;
     static bool outer_catch = false, after_inner = false;
     outer_try = inner_try = inner_catch = outer_catch = after_inner = false;
@@ -111,7 +110,7 @@ static char *test_nested_try_catch_inner_exception(void) {
 // Test 4: Nested TRY/CATCH - Outer exception caught
 static char *test_nested_try_catch_outer_exception(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static bool outer_try = false, inner_try = false, inner_catch = false;
     static bool outer_catch = false, after_inner = false;
     outer_try = inner_try = inner_catch = outer_catch = after_inner = false;
@@ -140,7 +139,7 @@ static char *test_nested_try_catch_outer_exception(void) {
 // Test 5: Triple nested TRY/CATCH
 static char *test_triple_nested_try_catch(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static bool level1 = false, level2 = false, level3 = false;
     static bool catch1 = false, catch2 = false, catch3 = false;
     level1 = level2 = level3 = catch1 = catch2 = catch3 = false;
@@ -174,7 +173,7 @@ static char *test_triple_nested_try_catch(void) {
 // Test 6: Re-throw from inner to outer CATCH
 static char *test_rethrow_from_inner_to_outer(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static bool inner_catch = false, outer_catch = false;
     inner_catch = outer_catch = false;
     
@@ -199,20 +198,20 @@ static char *test_rethrow_from_inner_to_outer(void) {
 // Test 7: Exception stack cleanup verification
 static char *test_exception_stack_cleanup(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static ExceptionHandler *stack_before = NULL;
     
-    stack_before = test_state->exception_stack;
+    stack_before = global_exception_stack.top;
     
     TRY {
-        mu_assert("Stack should have changed inside TRY", stack_before != test_state->exception_stack);
+        mu_assert("Stack should have changed inside TRY", stack_before != global_exception_stack.top);
         throw_exception("TestException", "Test", __FILE__, __LINE__, 0);
     } CATCH(ex) {
         // During CATCH, stack is already popped
-        mu_assert("Stack should be restored during CATCH", stack_before == test_state->exception_stack);
+        mu_assert("Stack should be restored during CATCH", stack_before == global_exception_stack.top);
     } END_TRY
     
-    mu_assert("Stack should be restored after END_TRY", stack_before == test_state->exception_stack);
+    mu_assert("Stack should be restored after END_TRY", stack_before == global_exception_stack.top);
     test_teardown();
     return 0;
 }
@@ -220,7 +219,7 @@ static char *test_exception_stack_cleanup(void) {
 // Test 8: Multiple sequential TRY/CATCH blocks
 static char *test_sequential_try_catch_blocks(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static int catch_count = 0;
     catch_count = 0;
     
@@ -252,7 +251,7 @@ static char *test_sequential_try_catch_blocks(void) {
 // Test 9: Exception with empty message
 static char *test_exception_with_empty_message(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static bool caught = false;
     caught = false;
     
@@ -273,7 +272,7 @@ static char *test_exception_with_empty_message(void) {
 // Test 10: Verify exception content in CATCH
 static char *test_exception_content_in_catch(void) {
     test_setup();
-    EvalState *st = test_state;
+    // Note: Exception handling now uses global exception stack (independent of EvalState)
     static bool caught = false;
     caught = false;
     
@@ -324,4 +323,9 @@ char *run_exception_handling_tests(void) {
     return all_exception_tests();
 }
 
-// Standalone main removed - now integrated into unified test runner
+#ifdef STANDALONE_TEST
+// Standalone main for direct execution
+int main(void) {
+    return run_minunit_tests(all_exception_tests, "Exception Handling Tests");
+}
+#endif

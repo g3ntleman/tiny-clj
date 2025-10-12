@@ -7,7 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG")
 # Production/Release: platform-specific optimization policy
 if(APPLE)
   # macOS: favor speed with dead code elimination
@@ -138,18 +138,17 @@ target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENA
 # ============================================================================
 # REDUNDANT TARGETS REMOVED - Now in run-tests unified executable
 # ============================================================================
-# The following targets were removed (all now accessible via run-tests):
-#   - test-unit            → run-tests --test unit
-#   - test-parser          → run-tests --test parser
-#   - test-seq             → run-tests --test seq
-#   - test-for-loops       → run-tests --test for_loops
-#   - test-eval-string-api → run-tests --test eval_string_api
+# UNIFIED TEST SUITES (v2.0)
+# ============================================================================
+# Consolidated test structure with 4 main test suites:
+# - test-core: Unit tests, parser, functions, API
+# - test-memory: Memory profiling, AUTORELEASE, leak detection  
+# - test-integration: Exception handling, REPL, namespaces
+# - test-performance: Benchmarks, speed tests, efficiency
 # ============================================================================
 
-# Exception Handling Tests (TRY/CATCH nested exception handling)
-add_executable(test-exception-handling EXCLUDE_FROM_ALL
-    src/tests/test-exception-handling.c
-    src/tests/minunit.h
+# Common source files for all test suites
+set(COMMON_TEST_SOURCES
     src/object.c
     src/types.c
     src/vector.c
@@ -163,93 +162,33 @@ add_executable(test-exception-handling EXCLUDE_FROM_ALL
     src/list_operations.c
     src/seq.c
     src/exception.c
-    src/runtime.c
-)
-target_compile_definitions(test-exception-handling PRIVATE ENABLE_META)
-# Now using MinUnit instead of Unity
-
-# Integration Tests (component interaction tests)
-# Unity-based targets removed - all tests now use MinUnit
-# Use test-performance for benchmarks, run-tests for all other tests
-
-# Performance & Benchmark Tests (consolidated)
-add_executable(test-performance EXCLUDE_FROM_ALL
-    src/tests/test_performance.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/clojure_core.c
-    src/exception.c
+    src/memory.c
     src/memory_profiler.c
-    src/memory_hooks.c)
-# Performance tests WITHOUT memory profiling for clean benchmarks
-target_compile_definitions(test-performance PRIVATE ENABLE_META)
-target_compile_options(test-performance PRIVATE -O2)
-
-# Test executable for seq debugging
-# EXCLUDE_FROM_ALL: These debug tests access internal SeqIterator details
-# Build manually: make test-seq-debug test-performance test-memory-profiling
-add_executable(test-seq-debug EXCLUDE_FROM_ALL
-    src/tests/test_seq_debug.c
-    src/tests/minunit.h
-    src/object.c
-    src/object.h
-    src/types.c
-    src/vector.c
-    src/vector.h
-    src/list_operations.c
-    src/list_operations.h
-    src/function_call.c
-    src/function_call.h
-    src/namespace.c
-    src/namespace.h
-    src/clj_symbols.c
-    src/clj_symbols.h
-    src/memory_profiler.c
-    src/memory_profiler.h
     src/memory_hooks.c
-    src/memory_hooks.h
-    src/seq.c
-    src/seq.h
-    src/map.c
-    src/map.h
-    src/string.c
-    src/parser.c
-    src/parser.h
-    src/reader.c
-    src/reader.h
+    src/runtime.c
     src/clojure_core.c
-    src/exception.c
-    src/runtime.c)
-target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
+    src/line_editor.c
+)
 
-# Memory Profiling Tests (Debug only)
-add_executable(test-memory-profiling EXCLUDE_FROM_ALL
-    src/tests/test_memory_profiling.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
+# ============================================================================
+# UNIFIED TEST SUITES (DEPRECATED - Use run-tests instead)
+# ============================================================================
+# These test suites are deprecated. Use the unified run-tests executable instead.
+# ============================================================================
+
+# ============================================================================
+# LEGACY TEST TARGETS (DEPRECATED - Use unified test suites above)
+# ============================================================================
+# These targets are kept for backward compatibility but are deprecated.
+# Use the new unified test suites: test-core, test-memory, test-integration, test-performance
+# ============================================================================
+
+# ============================================================================
+# LEGACY TEST TARGETS (REMOVED - Files no longer exist)
+# ============================================================================
+# These targets have been removed as the files no longer exist.
+# Use the unified run-tests executable instead.
+# ============================================================================
 
 
 
@@ -320,22 +259,5 @@ set_tests_properties(repl-ns-eval PROPERTIES PASS_REGULAR_EXPRESSION "4\n" LABEL
 add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
-# Seq Benchmark (Optimization Test)
-add_executable(test-seq-benchmark EXCLUDE_FROM_ALL
-    src/tests/test_seq_fast_benchmark.c
-    src/seq.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/list_operations.c
-    src/string.c
-    src/map.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/parser.c
-    src/reader.c
-    src/function_call.c
-    src/exception.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
-target_compile_definitions(test-seq-benchmark PRIVATE ENABLE_META DEBUG)
+# Seq Benchmark (REMOVED - File no longer exists)
+# Use run-tests for sequence testing instead

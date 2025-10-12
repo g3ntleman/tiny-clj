@@ -74,7 +74,7 @@ static char* test_evalstate_creation(void) {
     
     mu_assert("EvalState should be created", global_eval_state != NULL);
     mu_assert("EvalState should have current_ns", global_eval_state->current_ns != NULL);
-    mu_assert("EvalState should have no error", global_eval_state->last_error == NULL);
+    // Note: last_error removed - Exception handling now uses global exception stack
     
     test_teardown();
     return NULL;

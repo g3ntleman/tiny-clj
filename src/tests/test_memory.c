@@ -27,7 +27,7 @@
 
 static char *test_basic_object_creation_memory(void) {
     
-    WITH_MEMORY_PROFILING({
+    WITH_AUTORELEASE_POOL({
         // Create some basic objects
         CljObject *int_obj = make_int(42);
         CljObject *float_obj = make_float(3.14);
@@ -48,7 +48,7 @@ static char *test_basic_object_creation_memory(void) {
 
 static char *test_vector_creation_memory(void) {
     
-    MEMORY_TEST_START("Vector Creation");
+    WITH_AUTORELEASE_POOL({
     
     // Create a vector with multiple elements
     CljObject *vec = make_vector(10, 1);
@@ -70,14 +70,14 @@ static char *test_vector_creation_memory(void) {
     
     RELEASE(vec);
     
-    MEMORY_TEST_END("Vector Creation");
+    });
     
     return 0;
 }
 
 static char *test_map_creation_memory(void) {
     
-    MEMORY_TEST_START("Map Creation");
+    WITH_AUTORELEASE_POOL({
     
     // Create a map with initial capacity
     CljObject *map = make_map(10);
@@ -124,14 +124,14 @@ static char *test_map_creation_memory(void) {
     RELEASE(k3);
     RELEASE(v3);
     
-    MEMORY_TEST_END("Map Creation");
+    });
     
     return 0;
 }
 
 static char *test_seq_iteration_memory(void) {
     
-    MEMORY_TEST_START("Seq Iteration");
+    WITH_AUTORELEASE_POOL({
     
     // Create a test vector
     CljObject *vec = make_vector(5, 1);
@@ -156,7 +156,7 @@ static char *test_seq_iteration_memory(void) {
     
     RELEASE(vec);
     
-    MEMORY_TEST_END("Seq Iteration");
+    });
     
     return 0;
 }

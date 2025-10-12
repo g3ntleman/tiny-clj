@@ -44,9 +44,6 @@ void memory_hook_trigger(MemoryHookType type, void *ptr, size_t size);
 void memory_profiling_init_with_hooks(void);
 void memory_profiling_cleanup_with_hooks(void);
 
-// Test helpers (for backward compatibility)
-void memory_test_start(const char *test_name);
-void memory_test_end(const char *test_name);
 
 // Memory management macros are now defined in memory.h
 // This file only provides the hook infrastructure

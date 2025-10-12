@@ -9,25 +9,6 @@ static int mock_input_pos = 0;
 static char mock_output_buffer[1024];
 static int mock_output_pos = 0;
 
-static int mock_get_char(void) {
-    if (mock_input_pos >= (int)strlen(mock_input_buffer)) {
-        return -1; // EOF
-    }
-    return mock_input_buffer[mock_input_pos++];
-}
-
-static void mock_put_char(char c) {
-    if (mock_output_pos < (int)sizeof(mock_output_buffer) - 1) {
-        mock_output_buffer[mock_output_pos++] = c;
-        mock_output_buffer[mock_output_pos] = '\0';
-    }
-}
-
-static void mock_put_string(const char *s) {
-    while (*s) {
-        mock_put_char(*s++);
-    }
-}
 
 static void setup_mock_repl_input(const char *input) {
     strncpy(mock_input_buffer, input, sizeof(mock_input_buffer) - 1);

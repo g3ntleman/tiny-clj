@@ -249,7 +249,7 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value);
 
 // Exception handling
 /** Set thread/global eval state for exception handling. */
-void set_global_eval_state(void *state);
+// Note: set_global_eval_state() removed - Exception handling now independent of EvalState
 
 // Exception management with reference counting (analogous to CljVector)
 /** Allocate CLJException with type/message/location and optional data. */

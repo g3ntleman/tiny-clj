@@ -54,6 +54,9 @@ void autorelease_pool_cleanup_all();
 /** Check if autorelease pool is active. */
 bool is_autorelease_pool_active(void);
 
+/** Get reference count of object (0 for singletons, actual rc for others). */
+int get_reference_count(CljObject *obj);
+
 // Convenience macro for scoped autorelease pool usage
 #define AUTORELEASE_POOL_SCOPE(name) for (CljObjectPool *(name) = autorelease_pool_push(); (name) != NULL; autorelease_pool_pop_specific(name), (name) = NULL)
 
@@ -85,8 +88,10 @@ bool is_autorelease_pool_active(void);
     })
     #define AUTORELEASE(obj) ({ \
         CljObject* _tmp = (CljObject*)(obj); \
-        memory_hook_trigger(MEMORY_HOOK_AUTORELEASE, _tmp, 0); \
-        autorelease(_tmp); \
+        if (_tmp != NULL) { \
+            memory_hook_trigger(MEMORY_HOOK_AUTORELEASE, _tmp, 0); \
+            autorelease(_tmp); \
+        } \
         _tmp; \
     })
     /** @brief Safe object assignment with automatic retain/release management.
@@ -109,8 +114,8 @@ bool is_autorelease_pool_active(void);
         } \
     } while(0)
     
-    // Fluent memory profiling macro
-    #define WITH_MEMORY_PROFILING(code) do { \
+    // Fluent autorelease pool macro
+    #define WITH_AUTORELEASE_POOL(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
         autorelease_pool_push(); \
         code; \
@@ -118,8 +123,11 @@ bool is_autorelease_pool_active(void);
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
-    // Fluent memory profiling macro with EvalState management
-    #define WITH_MEMORY_PROFILING_EVAL(code) do { \
+    // Reference count macro for testing
+    #define REFERENCE_COUNT(obj) get_reference_count(obj)
+    
+    // Fluent autorelease pool macro with EvalState management
+    #define WITH_AUTORELEASE_POOL_EVAL(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
         autorelease_pool_push(); \
         EvalState *eval_state = evalstate_new(); \
@@ -152,8 +160,10 @@ bool is_autorelease_pool_active(void);
     } while(0)
     
     // No-op test macros for release builds
-    #define WITH_MEMORY_PROFILING(code) do { code } while(0)
+    #define WITH_AUTORELEASE_POOL(code) do { code } while(0)
+    #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
     #define WITH_TIME_PROFILING(code) do { code } while(0)
+    #define REFERENCE_COUNT(obj) get_reference_count(obj)
 #endif
 
 #ifdef __cplusplus

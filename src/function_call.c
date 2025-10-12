@@ -87,7 +87,7 @@ static bool is_numeric_type(CljObject *obj) {
 }
 
 /** @brief Generic arithmetic function (normal version) */
-CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op) {
+CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op, EvalState *st) {
     CljObject *a = eval_arg(list, 1, env);
     CljObject *b = eval_arg(list, 2, env);
     
@@ -364,19 +364,19 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return eval_body_with_params(branch, params, values, param_count, closure_env);
     }
     if (sym_is(op, "+")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_ADD);
+        return eval_arithmetic_generic(list, NULL, ARITH_ADD, NULL);
     }
     
     if (sym_is(op, "-")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_SUB);
+        return eval_arithmetic_generic(list, NULL, ARITH_SUB, NULL);
     }
     
     if (sym_is(op, "*")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_MUL);
+        return eval_arithmetic_generic(list, NULL, ARITH_MUL, NULL);
     }
     
     if (sym_is(op, "/")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_DIV);
+        return eval_arithmetic_generic(list, NULL, ARITH_DIV, NULL);
     }
     
     if (sym_is(op, "println")) {
@@ -490,19 +490,19 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     
     // Arithmetic operations
     if (sym_is(op, "+")) {
-        return eval_arithmetic_generic(list, env, ARITH_ADD);
+        return eval_arithmetic_generic(list, env, ARITH_ADD, st);
     }
     
     if (sym_is(op, "-")) {
-        return eval_arithmetic_generic(list, env, ARITH_SUB);
+        return eval_arithmetic_generic(list, env, ARITH_SUB, st);
     }
     
     if (sym_is(op, "*")) {
-        return eval_arithmetic_generic(list, env, ARITH_MUL);
+        return eval_arithmetic_generic(list, env, ARITH_MUL, st);
     }
     
     if (sym_is(op, "/")) {
-        return eval_arithmetic_generic(list, env, ARITH_DIV);
+        return eval_arithmetic_generic(list, env, ARITH_DIV, st);
     }
     
     if (sym_is(op, "count")) {
@@ -587,19 +587,19 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
 
 // Small wrapper functions for arithmetic operations
 CljObject* eval_add(CljObject *list, CljObject *env) {
-    return eval_arithmetic_generic(list, env, ARITH_ADD);
+    return eval_arithmetic_generic(list, env, ARITH_ADD, NULL);
 }
 
 CljObject* eval_sub(CljObject *list, CljObject *env) {
-    return eval_arithmetic_generic(list, env, ARITH_SUB);
+    return eval_arithmetic_generic(list, env, ARITH_SUB, NULL);
 }
 
 CljObject* eval_mul(CljObject *list, CljObject *env) {
-    return eval_arithmetic_generic(list, env, ARITH_MUL);
+    return eval_arithmetic_generic(list, env, ARITH_MUL, NULL);
 }
 
 CljObject* eval_div(CljObject *list, CljObject *env) {
-    return eval_arithmetic_generic(list, env, ARITH_DIV);
+    return eval_arithmetic_generic(list, env, ARITH_DIV, NULL);
 }
 
 CljObject* eval_equal(CljObject *list, CljObject *env) {
@@ -1162,13 +1162,18 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
         elements[count++] = list_data->head;
     }
     
-    // Add tail elements
-    CljList *current = LIST_REST(list_data);
+    // Add tail elements - ultra-safe approach
+    CljList *current = list_data->tail;
     while (current && count < 1000) {
-        if (current->head) {
-            elements[count++] = current->head;
+        // Check if current is a valid pointer before accessing its members
+        if (current && (uintptr_t)current > 0x1000) { // Basic pointer validity check
+            if (current->head) {
+                elements[count++] = current->head;
+            }
+            current = current->tail;
+        } else {
+            break;
         }
-        current = current->tail;
     }
     
     // Check index and evaluate element
@@ -1210,13 +1215,18 @@ CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **pa
         elements[count++] = list_data->head;
     }
     
-    // Add tail elements
-    CljList *current = LIST_REST(list_data);
+    // Add tail elements - ultra-safe approach
+    CljList *current = list_data->tail;
     while (current && count < 1000) {
-        if (current->head) {
-            elements[count++] = current->head;
+        // Check if current is a valid pointer before accessing its members
+        if (current && (uintptr_t)current > 0x1000) { // Basic pointer validity check
+            if (current->head) {
+                elements[count++] = current->head;
+            }
+            current = current->tail;
+        } else {
+            break;
         }
-        current = current->tail;
     }
     
     // Check index and evaluate element

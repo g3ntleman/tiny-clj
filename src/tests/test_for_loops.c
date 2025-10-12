@@ -4,16 +4,16 @@
  * Tests the for, doseq, and dotimes implementations
  */
 
-#include "../object.h"
-#include "../clj_symbols.h"
-#include "../memory_hooks.h"
-#include "../memory_profiler.h"
-#include "../tiny_clj.h"
-#include "../parser.h"
-#include "../seq.h"
-#include "../vector.h"
-#include "../list_operations.h"
-#include "../function_call.h"
+#include "object.h"
+#include "clj_symbols.h"
+#include "memory_hooks.h"
+#include "memory_profiler.h"
+#include "tiny_clj.h"
+#include "parser.h"
+#include "seq.h"
+#include "vector.h"
+#include "list_operations.h"
+#include "function_call.h"
 #include "minunit.h"
 #include <stdio.h>
 
@@ -25,7 +25,7 @@
 
 static char *test_dotimes_basic(void) {
     
-    WITH_MEMORY_PROFILING({
+    WITH_AUTORELEASE_POOL({
         // Create a simple test: (dotimes [i 3] (println 42))
         // Test that dotimes doesn't crash with a simple body
         
@@ -53,7 +53,7 @@ static char *test_dotimes_basic(void) {
 
 static char *test_doseq_basic(void) {
     
-    WITH_MEMORY_PROFILING({
+    WITH_AUTORELEASE_POOL({
         // Create a test vector
         CljObject *vec = AUTORELEASE(make_vector(3, 1));
         CljPersistentVector *vec_data = as_vector(vec);
@@ -85,7 +85,7 @@ static char *test_doseq_basic(void) {
 
 static char *test_for_basic(void) {
     
-    WITH_MEMORY_PROFILING_EVAL({
+    WITH_AUTORELEASE_POOL_EVAL({
         // Test for evaluation using parse + eval_parsed
         char *for_expr = "(for [x [1 2 3]] x)";
         CljObject *parsed = parse(for_expr, eval_state);
@@ -98,7 +98,7 @@ static char *test_for_basic(void) {
 
 static char *test_dotimes_with_variable(void) {
     
-    WITH_MEMORY_PROFILING_EVAL({
+    WITH_AUTORELEASE_POOL_EVAL({
         // Test dotimes evaluation using parse + eval_parsed
         char *dotimes_expr = "(dotimes [i 5] i)";
         CljObject *parsed = parse(dotimes_expr, eval_state);
@@ -111,7 +111,7 @@ static char *test_dotimes_with_variable(void) {
 
 static char *test_for_with_simple_expression(void) {
     
-    WITH_MEMORY_PROFILING_EVAL({
+    WITH_AUTORELEASE_POOL_EVAL({
         // Test for evaluation using parse + eval_parsed
         char *for_expr = "(for [x [1 2]] x)";
         CljObject *parsed = parse(for_expr, eval_state);
@@ -144,7 +144,7 @@ char *run_for_loop_tests(void) {
     memory_profiling_init_with_hooks();
     init_special_symbols();
     EvalState *st = evalstate_new();
-    set_global_eval_state(st);
+    // Note: set_global_eval_state() removed - Exception handling now independent
     
     // Load clojure_core (objects are manually released in eval_core_source)
     load_clojure_core(st);
@@ -165,7 +165,7 @@ int main(void) {
     memory_profiling_init_with_hooks();
     init_special_symbols();
     EvalState *st = evalstate_new();
-    set_global_eval_state(st);
+    // Note: set_global_eval_state() removed - Exception handling now independent
     // Load clojure_core with autorelease pool to clean up temporary objects
     AUTORELEASE_POOL_SCOPE(pool) {
         load_clojure_core(st);

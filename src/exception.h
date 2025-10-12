@@ -7,7 +7,7 @@
 // CLJException is now defined in CljObject.h to avoid circular dependencies
 
 // ============================================================================
-// EXCEPTION HANDLER STACK (for nested TRY/CATCH)
+// GLOBAL EXCEPTION STACK (independent of EvalState)
 // ============================================================================
 
 // Exception handler for TRY/CATCH blocks
@@ -16,6 +16,15 @@ typedef struct ExceptionHandler {
     struct ExceptionHandler *next;       // Previous handler (stack)
     CLJException *exception;             // Caught exception
 } ExceptionHandler;
+
+// Global exception stack (thread-local if needed)
+typedef struct GlobalExceptionStack {
+    ExceptionHandler *top;               // Top of exception handler stack
+    CLJException *current_exception;    // Current exception being handled
+} GlobalExceptionStack;
+
+// Global exception stack instance
+extern GlobalExceptionStack global_exception_stack;
 
 // ============================================================================
 // TRY/CATCH MACROS (Objective-C style, efficient by design)
@@ -39,20 +48,21 @@ typedef struct ExceptionHandler {
 // Note: END_TRY is required (like Objective-C NS_ENDHANDLER)
 
 #define TRY { \
-    ExceptionHandler _h = {.next = st->exception_stack, .exception = NULL}; \
-    st->exception_stack = &_h; \
+    ExceptionHandler _h = {.next = global_exception_stack.top, .exception = NULL}; \
+    global_exception_stack.top = &_h; \
     if (setjmp(_h.jump_state) == 0) {
 
 #define CATCH(ex) \
-        st->exception_stack = _h.next; \
+        global_exception_stack.top = _h.next; \
     } else { \
         CLJException *ex = _h.exception; \
-        st->exception_stack = _h.next; \
+        global_exception_stack.top = _h.next; \
         if (ex) { \
-            /* Auto-release after user code */
+            global_exception_stack.current_exception = ex; \
 
 #define END_TRY \
             release_exception(ex); \
+            global_exception_stack.current_exception = NULL; \
         } \
     } \
 }

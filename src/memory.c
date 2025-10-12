@@ -253,6 +253,27 @@ bool is_autorelease_pool_active(void) {
     return g_cv_pool_top != NULL;
 }
 
+/** @brief Get reference count of object
+ * 
+ * @param obj Object to check (can be NULL)
+ * @return Reference count (0 for singletons, actual rc for others)
+ * 
+ * Returns 0 for singleton objects (nil, true, false) since they don't use
+ * reference counting. For other objects, returns the actual reference count.
+ * Note: AUTORELEASE objects are not counted as they are deferred.
+ */
+int get_reference_count(CljObject *obj) {
+    if (!obj) return 0;
+    
+    // Singletons don't use reference counting
+    if (IS_SINGLETON_TYPE(obj->type)) {
+        return 0;
+    }
+    
+    // Return actual reference count for tracked objects
+    return obj->rc;
+}
+
 // ============================================================================
 // DEEP OBJECT RELEASE IMPLEMENTATION
 // ============================================================================

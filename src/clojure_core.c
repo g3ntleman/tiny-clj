@@ -95,16 +95,8 @@ int load_clojure_core(EvalState *st) {
   bool ok = eval_core_source(clojure_core_code, st);
 
   if (!ok) {
-    CljObject *err = st->last_error;
-    if (err) {
-      char *msg = pr_str(err);
-      if (msg) {
-        printf("[clojure.core] load error: %s\n", msg);
-        free(msg);
-      }
-      st->last_error = NULL;
-      RELEASE(err);
-    }
+    // Note: last_error removed - Exception handling now uses global exception stack
+    printf("[clojure.core] load error: Exception occurred during core loading\n");
   }
 
   return ok ? 1 : 0;

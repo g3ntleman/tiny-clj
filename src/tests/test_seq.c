@@ -22,7 +22,7 @@
 
 static char *test_seq_create_list(void) {
     
-    WITH_MEMORY_PROFILING({
+    WITH_AUTORELEASE_POOL({
         // Test with nil first
         CljObject *seq_nil = seq_create(NULL);
         mu_assert("seq of nil should be nil", seq_nil == clj_nil());

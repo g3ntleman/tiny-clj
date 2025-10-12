@@ -30,12 +30,6 @@
 
 // release_object_deep() function moved to memory.c
 
-/** @brief Release all elements in an array */
-static inline void release_array(CljObject **array, int count) {
-    for (int i = 0; i < count; i++) {
-        if (array[i]) RELEASE(array[i]);
-    }
-}
 
 /**
  * Convenience function for throwing exceptions with printf-style formatting
@@ -81,7 +75,9 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 
 // Global exception for runtime errors
 static CLJException *global_exception = NULL;
-static EvalState *global_eval_state = NULL;
+
+// Global exception stack (independent of EvalState)
+GlobalExceptionStack global_exception_stack = {0};
 
 // Exception throwing (compatible with try/catch system)
 // Ownership/RC:
@@ -95,37 +91,21 @@ void throw_exception(const char *type, const char *message, const char *file, in
     }
     global_exception = create_exception(type, message, file, line, col, NULL);
     
-    if (global_eval_state) {
-        // Use TRY/CATCH stack system (Objective-C style)
-        if (global_eval_state->exception_stack) {
-            // Transfer exception to handler and unwind stack
-            global_eval_state->exception_stack->exception = global_exception;
-            global_eval_state->last_error = (CljObject*)global_exception;  // backward compat
-            longjmp(global_eval_state->exception_stack->jump_state, 1);
-        } else {
-            // No handler on stack - unhandled exception
-            global_eval_state->last_error = (CljObject*)global_exception;
-            printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
-                   type, message, file ? file : "<unknown>", line, col);
-            release_exception(global_exception);
-            global_exception = NULL;
-            exit(1);
-        }
+    if (global_exception_stack.top) {
+        // Use global exception stack
+        global_exception_stack.top->exception = global_exception;
+        longjmp(global_exception_stack.top->jump_state, 1);
     } else {
-        // Fallback: printf and exit if no EvalState available
-        printf("EXCEPTION: %s: %s at %s:%d:%d\n", type, message, file ? file : "<unknown>", line, col);
-        // No catch → avoid leak
+        // No handler - unhandled exception
+        printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
+               type, message, file ? file : "<unknown>", line, col);
         release_exception(global_exception);
         global_exception = NULL;
         exit(1);
     }
 }
 
-// Set EvalState for try/catch
-/** @brief Set global evaluation state */
-void set_global_eval_state(void *state) {
-    global_eval_state = (EvalState*)state;
-}
+// Note: set_global_eval_state() removed - Exception handling now independent of EvalState
 
 
 // Exception management with reference counting (analogous to CljVector)

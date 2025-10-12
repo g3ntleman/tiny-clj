@@ -72,11 +72,6 @@ void memory_profiling_cleanup_with_hooks(void) {
     memory_profiler_cleanup();
 }
 
-// Test helpers for backward compatibility
-void memory_test_start(const char *test_name) {
-    memory_profiler_reset();
-    printf("🔍 Memory Profiling: %s\n", test_name);
-}
 
 void memory_test_end(const char *test_name) {
     memory_profiler_print_stats(test_name);
