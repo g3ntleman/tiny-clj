@@ -141,7 +141,7 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     const char *operations_title = is_delta ? "Memory Operations (Delta)" : "Memory Operations";
     const char *clj_title = is_delta ? "CljObject Operations (Delta)" : "CljObject Operations";
     
-    printf("\n📊 %s for %s:\n", title, test_name);
+    printf("\n📊 %s:\n", title);
     printf("  ┌─────────────────────────────────────────────────────────┐\n");
     printf("  │ %-55s │\n", operations_title);
     printf("  ├─────────────────────────────────────────────────────────┤\n");
@@ -235,7 +235,6 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
 }
 
 void memory_profiler_print_stats(const char *test_name) {
-    printf("\n🔍 MEMORY_PROFILER_PRINT_STATS called for: %s\n", test_name);
     print_memory_table(&g_memory_stats, test_name, false);
 }
 
@@ -332,10 +331,10 @@ void memory_profiler_track_autorelease(CljObject *obj) {
 
 void memory_profiler_check_leaks(const char *location) {
     if (g_memory_stats.memory_leaks > 0) {
-        printf("⚠️  Memory Leak Warning at %s: %zu allocations not freed\n", 
-               location, g_memory_stats.memory_leaks);
+        printf("⚠️  Memory Leak Warning: %zu allocations not freed\n", 
+               g_memory_stats.memory_leaks);
     } else {
-        printf("✅ Memory Clean at %s: All allocations freed\n", location);
+        printf("✅ Memory Clean: All allocations freed\n");
     }
 }
 

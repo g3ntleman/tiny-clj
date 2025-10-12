@@ -21,35 +21,12 @@ const char *ERROR_MEMORY_ALLOCATION = "Memory allocation failed";
 
 // Für Standardmeldungen: direkt const Pointer nutzen (minimaler Heap)
 CLJException* exception(const char *msg, const char *file, int line, int col) {
-    CLJException *e = ALLOC(CLJException, 1);
-    if (!e) return NULL;
-    
-    e->rc = 1;
-    
-    // Für Standardmeldungen: direkt const Pointer nutzen
-    e->message = msg;   // Kein strdup() - direkter Pointer auf const String
-    e->file = file;     // optional, kann NULL sein
-    e->line = line;
-    e->col = col;
-    
-    return e;
+    return create_exception("Error", msg, file, line, col, NULL);
 }
 
 // Für dynamische Fehlermeldungen (mit Variablen)
 CLJException* exception_dynamic(const char *msg, const char *file, int line, int col) {
-    CLJException *e = ALLOC(CLJException, 1);
-    if (!e) return NULL;
-    
-    e->rc = 1;
-    
-    // Für dynamische Meldungen: strdup() verwenden (C-String allocation)
-    e->message = strdup(msg);
-    e->file = file ? strdup(file) : NULL;
-    e->line = line;
-    e->col = col;
-    
-    // Return raw exception; managed via retain_exception/release_exception
-    return e;
+    return create_exception("Error", msg, file, line, col, NULL);
 }
 
 // ============================================================================

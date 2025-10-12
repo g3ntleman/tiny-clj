@@ -116,7 +116,11 @@ CLJException* create_exception(const char *type, const char *message, const char
     CLJException *exc = ALLOC(CLJException, 1);
     if (!exc) return NULL;
     
-    exc->rc = 1;  // Start with reference count 1
+    // Initialize base object
+    exc->base.type = CLJ_EXCEPTION;
+    exc->base.rc = 1;  // Start with reference count 1
+    exc->base.as.data = NULL;  // Not used for exceptions
+    
     exc->type = strdup(type);
     exc->message = strdup(message);
     exc->file = file ? strdup(file) : NULL;
@@ -129,20 +133,12 @@ CLJException* create_exception(const char *type, const char *message, const char
 
 void retain_exception(CLJException *exception) {
     if (!exception) return;
-    exception->rc++;
+    retain((CljObject*)exception);
 }
 
 void release_exception(CLJException *exception) {
     if (!exception) return;
-    exception->rc--;
-    if (exception->rc == 0) {
-        // Free exception
-        if (exception->type) free((void*)exception->type);
-        if (exception->message) free((void*)exception->message);
-        if (exception->file) free((void*)exception->file);
-        if (exception->data) RELEASE(exception->data);
-        free(exception);
-    }
+    release((CljObject*)exception);
 }
 
 /** @brief Create integer object */
@@ -252,17 +248,11 @@ CljObject* make_error(const char *message, const char *file, int line, int col) 
 
 CljObject* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
-    CljObject *v = ALLOC(CljObject, 1);
-    if (!v) return NULL;
     
     CLJException *exc = create_exception(type, message, file, line, col, data);
-    if (!exc) { free(v); return NULL; }
+    if (!exc) return NULL;
     
-    v->type = CLJ_EXCEPTION;
-    v->rc = 1;
-    v->as.data = exc;
-    
-    return v;
+    return (CljObject*)exc;
 }
 
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
@@ -296,21 +286,14 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
 }
 
 CljList* make_list(CljObject *first, CljList *rest) {
-    CljList *list = ALLOC_ZERO(CljList, 1);
+    CljList *list = ALLOC(CljList, 1);
     if (!list) return NULL;
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;
-    list->head = first;
-    list->tail = rest;
+    list->head = RETAIN(first);
+    list->tail = (CljList*)RETAIN(rest);
     
-    // RETAIN first and rest if they are not NULL
-    if (first) {
-        RETAIN(first);
-    }
-    if (rest) {
-        RETAIN((CljObject*)rest);
-    }
     
     CREATE((CljObject*)list);
     return list;
@@ -551,7 +534,7 @@ char* pr_str(CljObject *v) {
 
         case CLJ_EXCEPTION:
             {
-                CLJException *exc = (CLJException*)v->as.data;
+                CLJException *exc = (CLJException*)v;
                 char *result;
                 if (exc->file) {
                     char buf[1024];
@@ -1067,11 +1050,13 @@ void free_object(CljObject *obj) {
             break;
         case CLJ_EXCEPTION:
             {
-                CLJException *exc = (CLJException*)obj->as.data;
-                if (exc) {
-                    release_exception(exc);
-                }
-                free(obj);
+                CLJException *exc = (CLJException*)obj;
+                // Free exception-specific data
+                if (exc->type) free((void*)exc->type);
+                if (exc->message) free((void*)exc->message);
+                if (exc->file) free((void*)exc->file);
+                if (exc->data) RELEASE(exc->data);
+                free(exc);
             }
             break;
         default:

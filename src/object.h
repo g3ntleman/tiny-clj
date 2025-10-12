@@ -106,19 +106,19 @@ typedef struct {
 } CljFunction;
 
 // ============================================================================
-// Exception structure with explicit reference counting
+// Exception structure as CljObject subtype (embedded pattern)
 //
-// Ownership & RC rules (pre-ARC-like model):
-// - Exceptions MUST NOT use autorelease.
-// - Creator starts with rc=1.
+// Ownership & RC rules:
+// - Uses standard CljObject reference counting via base.rc
+// - Creator starts with base.rc=1.
 // - throw_exception transfers ownership to EvalState->last_error and longjmps.
 // - The catch handler must take ownership from last_error,
-//   set last_error=NULL and call release_exception(exc) exactly once.
+//   set last_error=NULL and call release((CljObject*)exc) exactly once.
 // - Any embedded data (e.g., 'data' map) is retained when stored and
 //   released in the exception finalizer.
 // ============================================================================
 typedef struct {
-    int rc;                 // Reference Count
+    CljObject base;         // Embedded base object
     const char *type;       // Exception type (e.g., "DoubleFreeError")
     const char *message;    // Error message
     const char *file;       // Source file
@@ -307,6 +307,9 @@ static inline CljList* as_list(CljObject *obj) {
 }
 static inline CljFunction* as_function(CljObject *obj) {
     return (TYPE(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL;
+}
+static inline CLJException* as_exception(CljObject *obj) {
+    return (TYPE(obj) == CLJ_EXCEPTION) ? (CLJException*)obj : NULL;
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)

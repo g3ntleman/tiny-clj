@@ -8,6 +8,7 @@ benchmark: test-all
 	@echo "=== All Tests Passed! Running Performance Benchmarks with Analysis ==="
 	@./scripts/benchmark_with_analysis.sh
 
+
 # Run benchmarks with detailed change analysis
 benchmark-analyze: test-all
 	@echo "=== Running Enhanced Benchmark Analysis ==="

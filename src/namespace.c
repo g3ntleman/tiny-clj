@@ -50,15 +50,37 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     CljObject *v = map_get(st->current_ns->mappings, sym);
     if (v) return v;
 
-    // Optionally search global namespaces (e.g., clojure.core)
+    // OPTIMIZATION: Priority-based namespace search
+    // 1. Search clojure.core first (most common)
+    CljNamespace *clojure_core = NULL;
     CljNamespace *cur = ns_registry;
     while (cur) {
-        if (cur->mappings) {
+        if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
+            CljSymbol *name_sym = as_symbol(cur->name);
+            if (name_sym && strcmp(name_sym->name, "clojure.core") == 0) {
+                clojure_core = cur;
+                break;
+            }
+        }
+        cur = cur->next;
+    }
+    
+    // Search clojure.core first if found
+    if (clojure_core && clojure_core->mappings) {
+        v = map_get(clojure_core->mappings, sym);
+        if (v) return v;
+    }
+    
+    // 2. Search other namespaces (excluding clojure.core to avoid double search)
+    cur = ns_registry;
+    while (cur) {
+        if (cur != clojure_core && cur->mappings) {
             v = map_get(cur->mappings, sym);
             if (v) return v;
         }
         cur = cur->next;
     }
+    
     return NULL;
 }
 
