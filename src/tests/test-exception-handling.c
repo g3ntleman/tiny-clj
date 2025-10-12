@@ -9,10 +9,11 @@
 #include "object.h"
 #include "runtime.h"
 #include "function_call.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "parser.h"
-#include "test-utils.h"
 #include <string.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
 static EvalState *test_state = NULL;
 

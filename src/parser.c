@@ -16,9 +16,7 @@
 #include "clj_string.h"
 #include "map.h"
 #include <stdbool.h>
-#include "list_operations.h"
 #include "memory.h"
-#include "runtime.h"
 #include "utf8.h"
 #include "vector.h"
 #include <ctype.h>
@@ -119,7 +117,7 @@ static CljObject *parse_map(Reader *reader, EvalState *st);
 static CljObject *parse_list(Reader *reader, EvalState *st);
 static CljObject *parse_string_internal(Reader *reader, EvalState *st);
 static CljObject *parse_symbol(Reader *reader, EvalState *st);
-static CljObject *parse_number(Reader *reader, EvalState *st);
+static CljObject *make_number_by_parsing(Reader *reader, EvalState *st);
 
 /**
  * @brief Create CljObject by parsing expression from Reader
@@ -145,9 +143,9 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   if (c == '"')
     return parse_string_internal(reader, st);
   if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return parse_number(reader, st);
+    return make_number_by_parsing(reader, st);
   if (isdigit(c))
-    return parse_number(reader, st);
+    return make_number_by_parsing(reader, st);
   // Handle nil literal
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
       reader_peek_ahead(reader, 2) == 'l' && 
@@ -228,7 +226,6 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     CljObject *result = NULL;
     
     // Use TRY/CATCH to handle exceptions
-    EvalState *st = eval_state;  // Alias for macro compatibility
     TRY {
         // Handle lists with special forms (like ns, def, fn)
         if (is_type(parsed_expr, CLJ_LIST)) {
@@ -264,7 +261,6 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
     CljObject *result = NULL;
     
     // Use TRY/CATCH to handle exceptions
-    EvalState *st = eval_state;  // Alias for macro compatibility
     TRY {
         result = eval_parsed(parsed, eval_state);
         
@@ -499,7 +495,7 @@ static CljObject *parse_string_internal(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljObject or NULL on error
  */
-static CljObject *parse_number(Reader *reader, EvalState *st) {
+static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;

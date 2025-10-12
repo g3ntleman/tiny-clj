@@ -37,7 +37,7 @@ list(APPEND SOURCES
     src/builtins.c
     src/runtime.c
     src/namespace.c
-    src/clj_symbols.c
+    src/symbol.c
     src/exception.c
     src/parser.c
     src/reader.c
@@ -118,7 +118,7 @@ add_executable(run-tests
     src/vector.c
     src/map.c
     src/string.c
-    src/clj_symbols.c
+    src/symbol.c
     src/namespace.c
     src/parser.c
     src/reader.c
@@ -154,7 +154,7 @@ set(COMMON_TEST_SOURCES
     src/vector.c
     src/map.c
     src/string.c
-    src/clj_symbols.c
+    src/symbol.c
     src/namespace.c
     src/parser.c
     src/reader.c

@@ -1,17 +1,14 @@
 // clojure.core.c
 
-#include "parser.h"
 #include "exception.h"
-#include "function_call.h"
 #include "namespace.h"
-#include "runtime.h"
 #include "tiny_clj.h"
 #include "reader.h"
 #include "memory.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <setjmp.h>
+#include <stdlib.h>
 
 static bool g_core_quiet = false;
 

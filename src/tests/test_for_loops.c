@@ -5,7 +5,7 @@
  */
 
 #include "object.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "memory_hooks.h"
 #include "memory_profiler.h"
 #include "tiny_clj.h"

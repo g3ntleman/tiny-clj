@@ -4,7 +4,7 @@
 #include "src/vector.c"
 #include "src/string.c"
 #include "src/list_operations.c"
-#include "src/clj_symbols.c"
+#include "src/symbol.c"
 #include "src/memory_profiler.c"
 #include "src/memory_hooks.c"
 #include "src/types.c"

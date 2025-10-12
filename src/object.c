@@ -17,16 +17,12 @@
 #include <assert.h>
 #include <stdarg.h>
 #include "object.h"
-#include "clj_string.h"
-#include "vector.h"
 #include "seq.h"
-#include "memory_hooks.h"
 #include "runtime.h"
 #include "map.h"
 #include "kv_macros.h"
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
-#include "memory_profiler.h"
 
 // release_object_deep() function moved to memory.c
 

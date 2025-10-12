@@ -18,7 +18,7 @@ make test-benchmark-simple
 
 # Step 2.1: Run namespace lookup benchmark
 echo "Step 2.1: Running namespace lookup benchmark..."
-gcc -o test-namespace-lookup-benchmark src/tests/test_namespace_lookup_benchmark.c src/benchmark.c src/object.c src/namespace.c src/parser.c src/clj_symbols.c src/clj_string.c src/exception.c src/vector.c src/map.c src/function_call.c src/tiny_clj.c src/memory.c src/types.c src/list_operations.c src/line_editor.c src/platform_macos.c src/builtins.c -I. -std=c99 -Wall -Wextra -O2
+gcc -o test-namespace-lookup-benchmark src/tests/test_namespace_lookup_benchmark.c src/benchmark.c src/object.c src/namespace.c src/parser.c src/symbol.c src/clj_string.c src/exception.c src/vector.c src/map.c src/function_call.c src/tiny_clj.c src/memory.c src/types.c src/list_operations.c src/line_editor.c src/platform_macos.c src/builtins.c -I. -std=c99 -Wall -Wextra -O2
 ./test-namespace-lookup-benchmark >> benchmark_output.txt
 
 # Step 2.5: Measure executable sizes

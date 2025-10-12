@@ -3,7 +3,7 @@
 #include "exception.h"
 #include "parser.h"
 #include "namespace.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "runtime.h"
 #include "tests/test_api.h"
 #include "memory.h"

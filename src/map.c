@@ -1,5 +1,4 @@
 #include "map.h"
-#include "common.h"
 #include "kv_macros.h"
 #include "runtime.h"
 #include "vector.h"

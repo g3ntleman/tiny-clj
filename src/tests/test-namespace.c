@@ -8,16 +8,13 @@
  * - *ns* special variable
  */
 
-#include "../object.h"
-#include "../parser.h"
-#include "../clj_symbols.h"
-#include "../clj_string.h"
-#include "../exception.h"
-#include "../namespace.h"
-#include "../vector.h"
-#include "../map.h"
-#include "../function_call.h"
-#include "../tiny_clj.h"
+#include "object.h"
+#include "parser.h"
+#include "symbol.h"
+#include "clj_string.h"
+#include "namespace.h"
+#include "map.h"
+#include "tiny_clj.h"
 #include "minunit.h"
 #include <stdio.h>
 #include <string.h>

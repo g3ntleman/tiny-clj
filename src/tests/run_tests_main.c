@@ -6,7 +6,7 @@
  */
 
 #include "object.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "memory.h"
 #include "minunit.h"
 #include "test_registry.h"

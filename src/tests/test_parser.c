@@ -7,7 +7,7 @@
 
 #include "object.h"
 #include "parser.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "function_call.h"
 #include "map.h"
 #include "namespace.h"

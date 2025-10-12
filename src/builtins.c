@@ -5,7 +5,6 @@
 #include "builtins.h"
 #include "runtime.h"
 #include "memory.h"
-#include "clj_symbols.h"
 #include "namespace.h"
 
 CljObject* nth2(CljObject *vec, CljObject *idx) {

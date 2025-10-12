@@ -12,7 +12,7 @@
 #include "seq.h"
 #include "map.h"
 #include "function_call.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "namespace.h"
 #include "memory.h"
 #include "memory_profiler.h"

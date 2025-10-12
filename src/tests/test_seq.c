@@ -10,7 +10,7 @@
 #include "vector.h"
 #include "list_operations.h"
 #include "map.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "memory_profiler.h"
 #include "memory.h"
 

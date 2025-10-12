@@ -6,7 +6,7 @@
 
 #include "object.h"
 #include "parser.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "clj_string.h"
 #include "exception.h"
 #include "map.h"

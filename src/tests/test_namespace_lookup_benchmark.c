@@ -11,14 +11,8 @@
 
 #include "../object.h"
 #include "../namespace.h"
-#include "../parser.h"
-#include "../clj_symbols.h"
-#include "../clj_string.h"
-#include "../exception.h"
-#include "../vector.h"
+#include "symbol.h"
 #include "../map.h"
-#include "../function_call.h"
-#include "../tiny_clj.h"
 #include "../benchmark.h"
 #include <stdio.h>
 #include <string.h>

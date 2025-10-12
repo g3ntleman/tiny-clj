@@ -1,4 +1,4 @@
-#include "clj_symbols.h"
+#include "symbol.h"
 #include <stdbool.h>
 
 // Globale Symbol-Pointer Definitionen

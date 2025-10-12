@@ -1,5 +1,4 @@
 #include "list_operations.h"
-#include "clj_symbols.h"
 #include "memory.h"
 #include <stdarg.h>
 

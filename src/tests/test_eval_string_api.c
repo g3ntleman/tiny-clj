@@ -4,7 +4,7 @@
 #include "tiny_clj.h"
 #include "memory_hooks.h"
 #include "memory_profiler.h"
-#include "clj_symbols.h"
+#include "symbol.h"
 #include "test-utils.h"
 
 // Test the new eval_string API

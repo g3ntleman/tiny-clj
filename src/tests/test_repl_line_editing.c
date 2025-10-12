@@ -2,6 +2,7 @@
 #include "line_editor.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 // Mock functions for testing
 static char mock_input_buffer[1024];
