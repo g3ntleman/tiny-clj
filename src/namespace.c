@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
 #include "namespace.h"
 #include "clj_symbols.h"
 #include "runtime.h"

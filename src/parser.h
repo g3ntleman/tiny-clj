@@ -15,7 +15,6 @@
 #include "exception.h"
 #include "namespace.h"
 #include "reader.h"
-#include <setjmp.h>
 
 
 // Parser entry points

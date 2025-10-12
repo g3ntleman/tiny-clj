@@ -9,13 +9,11 @@
 #include "memory_profiler.h"
 #include "line_editor.h"
 #include <stdbool.h>
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
-#include <stdbool.h>
 
 /** @brief Check if a string has balanced parentheses, brackets, and braces.
  *  @param s String to check for balanced delimiters

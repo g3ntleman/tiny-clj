@@ -4,7 +4,6 @@
 #include "object.h"
 #include "memory.h"
 #include <stdbool.h>
-#include <setjmp.h>
 
 // Namespace structure
 typedef struct CljNamespace {
