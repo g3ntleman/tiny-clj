@@ -292,9 +292,9 @@ static char *all_unit_tests(void) {
   mu_run_test(test_variable_redefinition);
   mu_run_test(test_variable_with_string);
   
-  // Variadic function tests - temporarily disabled due to eval_string issues
+  // Variadic function tests - test one at a time
   // mu_run_test(test_native_str);
-  // mu_run_test(test_native_add_variadic);
+  mu_run_test(test_native_add_variadic);
   // mu_run_test(test_native_sub_variadic);
   // mu_run_test(test_native_mul_variadic);
   // mu_run_test(test_native_div_variadic);
