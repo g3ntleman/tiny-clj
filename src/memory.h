@@ -72,7 +72,7 @@ int get_reference_count(CljObject *obj);
     #define ALLOC(type, count) ({ \
         type *_alloc_result = (type*) malloc(sizeof(type) * (count)); \
         if (_alloc_result) { \
-            memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _alloc_result, sizeof(type) * (count)); \
+            memory_hook_trigger(MEMORY_HOOK_ALLOCATION, _alloc_result, sizeof(type) * (count)); \
         } \
         _alloc_result; \
     })
@@ -85,7 +85,7 @@ int get_reference_count(CljObject *obj);
     #define ALLOC_ZERO(type, count) ({ \
         type *_alloc_result = (type*) calloc(count, sizeof(type)); \
         if (_alloc_result) { \
-            memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _alloc_result, sizeof(type) * (count)); \
+            memory_hook_trigger(MEMORY_HOOK_ALLOCATION, _alloc_result, sizeof(type) * (count)); \
         } \
         _alloc_result; \
     })
@@ -145,11 +145,9 @@ int get_reference_count(CljObject *obj);
     
     // Fluent autorelease pool macro
     #define WITH_AUTORELEASE_POOL(code) do { \
-        MEMORY_TEST_START(__FUNCTION__); \
         autorelease_pool_push(); \
         code; \
         autorelease_pool_pop(); \
-        MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
     // Reference count macro for testing

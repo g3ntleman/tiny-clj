@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 // ============================================================================
 // GLOBAL MEMORY STATISTICS
@@ -306,14 +307,19 @@ void memory_profiler_track_deallocation(size_t size) {
 
 void memory_profiler_track_object_creation(CljObject *obj) {
     if (obj) {
+        // Skip singleton objects - they don't use reference counting
+        // and are never freed, so they shouldn't be tracked as allocations
+        if (IS_SINGLETON(obj)) {
+            return; // Skip singleton tracking
+        }
+        
         g_memory_stats.object_creations++;
         // Track the allocation size (approximate)
         memory_profiler_track_allocation(sizeof(CljObject));
         
-        // Track by object type
-        if (obj->type < CLJ_TYPE_COUNT) {
-            g_memory_stats.allocations_by_type[obj->type]++;
-        }
+        // Track by object type with bounds checking
+        assert(obj->type >= 0 && obj->type < CLJ_TYPE_COUNT && "Invalid object type for memory tracking");
+        g_memory_stats.allocations_by_type[obj->type]++;
     }
 }
 
@@ -323,10 +329,9 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
         // Track the deallocation size (approximate)
         memory_profiler_track_deallocation(sizeof(CljObject));
         
-        // Track by object type
-        if (obj->type < CLJ_TYPE_COUNT) {
-            g_memory_stats.deallocations_by_type[obj->type]++;
-        }
+        // Track by object type with bounds checking
+        assert(obj->type >= 0 && obj->type < CLJ_TYPE_COUNT && "Invalid object type for memory tracking");
+        g_memory_stats.deallocations_by_type[obj->type]++;
     }
 }
 

@@ -74,7 +74,7 @@ void memory_profiling_cleanup_with_hooks(void) {
 
 
 void memory_test_start(const char *test_name) {
-    // Reset memory statistics for this test
+    // Reset memory statistics for this test to get isolated results
     memory_profiler_reset();
     printf("🔍 Memory Test Start: %s\n", test_name);
 }

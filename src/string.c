@@ -27,6 +27,7 @@ CljObject* make_string(const char *s) {
     v->type = CLJ_STRING;
     v->rc = 1;
     v->as.data = strdup(s);
+    
     return v;
 }
 
