@@ -36,6 +36,10 @@ void register_builtins();
 
 // Variadic functions (Phase 1)
 CljObject* native_str(CljObject **args, int argc);
+CljObject* native_add(CljObject **args, int argc);
+CljObject* native_sub(CljObject **args, int argc);
+CljObject* native_mul(CljObject **args, int argc);
+CljObject* native_div(CljObject **args, int argc);
 CljObject* native_add_variadic(CljObject **args, int argc);
 CljObject* native_sub_variadic(CljObject **args, int argc);
 CljObject* native_mul_variadic(CljObject **args, int argc);
