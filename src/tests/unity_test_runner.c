@@ -1,0 +1,301 @@
+/*
+ * Unity Test Runner for Tiny-CLJ
+ * 
+ * Central test runner that includes all test suites with command-line parameter support.
+ */
+
+#include "unity.h"
+#include "object.h"
+#include "memory.h"
+#include "memory_profiler.h"
+#include "memory_hooks.h"
+#include "symbol.h"
+#include "namespace.h"
+#include <stdio.h>
+#include <string.h>
+
+// ============================================================================
+// GLOBAL SETUP/TEARDOWN
+// ============================================================================
+
+void setUp(void) {
+    // Global setup for each test
+    init_special_symbols();
+    meta_registry_init();
+    autorelease_pool_push();
+    MEMORY_PROFILER_INIT();
+    // Initialize memory profiling with hooks for automatic tracking
+    memory_profiling_init_with_hooks();
+}
+
+void tearDown(void) {
+    // Global teardown for each test
+    autorelease_pool_cleanup_all();
+    symbol_table_cleanup();
+    meta_registry_cleanup();
+    // Print memory statistics and check for leaks
+    memory_profiler_print_stats("Test Complete");
+    memory_profiler_check_leaks("Test Complete");
+    // Cleanup memory profiling hooks
+    memory_profiling_cleanup_with_hooks();
+}
+
+// ============================================================================
+// MEMORY TESTS (from memory_tests.c)
+// ============================================================================
+
+// Forward declarations for memory tests
+extern void test_memory_allocation(void);
+extern void test_memory_deallocation(void);
+extern void test_memory_leak_detection(void);
+extern void test_vector_memory(void);
+
+static void test_group_memory(void) {
+    RUN_TEST(test_memory_allocation);
+    RUN_TEST(test_memory_deallocation);
+    RUN_TEST(test_memory_leak_detection);
+    RUN_TEST(test_vector_memory);
+}
+
+// ============================================================================
+// PARSER TESTS (from parser_tests.c)
+// ============================================================================
+
+// Forward declarations for parser tests
+extern void test_parse_basic_types(void);
+extern void test_parse_collections(void);
+extern void test_parse_comments(void);
+extern void test_parse_metadata(void);
+extern void test_parse_utf8_symbols(void);
+
+static void test_group_parser(void) {
+    RUN_TEST(test_parse_basic_types);
+    RUN_TEST(test_parse_collections);
+    RUN_TEST(test_parse_comments);
+    RUN_TEST(test_parse_metadata);
+    RUN_TEST(test_parse_utf8_symbols);
+}
+
+// ============================================================================
+// EXCEPTION TESTS (from exception_tests.c)
+// ============================================================================
+
+// Forward declarations for exception tests
+extern void test_simple_try_catch_exception_caught(void);
+extern void test_simple_try_catch_no_exception(void);
+extern void test_nested_try_catch_inner_exception(void);
+extern void test_nested_try_catch_outer_exception(void);
+extern void test_exception_with_autorelease(void);
+
+static void test_group_exception(void) {
+    RUN_TEST(test_simple_try_catch_exception_caught);
+    RUN_TEST(test_simple_try_catch_no_exception);
+    RUN_TEST(test_nested_try_catch_inner_exception);
+    RUN_TEST(test_nested_try_catch_outer_exception);
+    RUN_TEST(test_exception_with_autorelease);
+}
+
+// ============================================================================
+// UNIT TESTS (from unit_tests.c)
+// ============================================================================
+
+// Forward declarations for unit tests
+extern void test_list_count(void);
+extern void test_list_creation(void);
+extern void test_symbol_creation(void);
+extern void test_string_creation(void);
+extern void test_vector_creation(void);
+extern void test_map_creation(void);
+extern void test_integer_creation(void);
+extern void test_float_creation(void);
+extern void test_nil_creation(void);
+
+static void test_group_unit(void) {
+    RUN_TEST(test_list_count);
+    RUN_TEST(test_list_creation);
+    RUN_TEST(test_symbol_creation);
+    RUN_TEST(test_string_creation);
+    RUN_TEST(test_vector_creation);
+    RUN_TEST(test_map_creation);
+    RUN_TEST(test_integer_creation);
+    RUN_TEST(test_float_creation);
+    RUN_TEST(test_nil_creation);
+}
+
+// ============================================================================
+// NAMESPACE TESTS (from namespace_tests.c)
+// ============================================================================
+
+// Forward declarations for namespace tests
+extern void test_evalstate_creation(void);
+extern void test_namespace_switching(void);
+extern void test_namespace_isolation(void);
+extern void test_special_ns_variable(void);
+extern void test_namespace_lookup(void);
+extern void test_namespace_binding(void);
+
+static void test_group_namespace(void) {
+    RUN_TEST(test_evalstate_creation);
+    RUN_TEST(test_namespace_switching);
+    RUN_TEST(test_namespace_isolation);
+    RUN_TEST(test_special_ns_variable);
+    RUN_TEST(test_namespace_lookup);
+    RUN_TEST(test_namespace_binding);
+}
+
+// ============================================================================
+// SEQ TESTS (from seq_tests.c)
+// ============================================================================
+
+// Forward declarations for seq tests
+extern void test_seq_create_list(void);
+extern void test_seq_create_vector(void);
+extern void test_seq_create_string(void);
+extern void test_seq_create_map(void);
+extern void test_seq_first(void);
+extern void test_seq_rest(void);
+extern void test_seq_next(void);
+extern void test_seq_equality(void);
+
+static void test_group_seq(void) {
+    RUN_TEST(test_seq_create_list);
+    RUN_TEST(test_seq_create_vector);
+    RUN_TEST(test_seq_create_string);
+    RUN_TEST(test_seq_create_map);
+    RUN_TEST(test_seq_first);
+    RUN_TEST(test_seq_rest);
+    RUN_TEST(test_seq_next);
+    RUN_TEST(test_seq_equality);
+}
+
+// ============================================================================
+// FOR-LOOP TESTS (from for_loop_tests.c)
+// ============================================================================
+
+// Forward declarations for for-loop tests
+extern void test_dotimes_basic(void);
+extern void test_doseq_basic(void);
+extern void test_for_basic(void);
+extern void test_dotimes_with_environment(void);
+extern void test_doseq_with_environment(void);
+
+static void test_group_for_loops(void) {
+    RUN_TEST(test_dotimes_basic);
+    RUN_TEST(test_doseq_basic);
+    RUN_TEST(test_for_basic);
+    RUN_TEST(test_dotimes_with_environment);
+    RUN_TEST(test_doseq_with_environment);
+}
+
+// ============================================================================
+// COMMAND LINE INTERFACE
+// ============================================================================
+
+static void print_usage(const char *program_name) {
+    printf("Unity Test Runner for Tiny-CLJ\n");
+    printf("Usage: %s [suite] [test_name]\n\n", program_name);
+    printf("Available test suites:\n");
+    printf("  memory        Memory management tests\n");
+    printf("  parser        Parser functionality tests\n");
+    printf("  exception     Exception handling tests\n");
+    printf("  unit          Core unit tests\n");
+    printf("  namespace     Namespace management tests\n");
+    printf("  seq           Sequence semantics tests\n");
+    printf("  for-loops      For-loop implementation tests\n");
+    printf("  all           All test suites (default)\n\n");
+    printf("Examples:\n");
+    printf("  %s                    # Run all tests\n", program_name);
+    printf("  %s memory            # Run memory tests\n", program_name);
+    printf("  %s parser            # Run parser tests\n", program_name);
+    printf("  %s exception         # Run exception tests\n", program_name);
+    printf("  %s unit              # Run unit tests\n", program_name);
+    printf("  %s namespace         # Run namespace tests\n", program_name);
+    printf("  %s seq               # Run sequence tests\n", program_name);
+    printf("  %s for-loops         # Run for-loop tests\n", program_name);
+}
+
+static void run_memory_tests(void) {
+    RUN_TEST(test_group_memory);
+}
+
+static void run_parser_tests(void) {
+    RUN_TEST(test_group_parser);
+}
+
+static void run_exception_tests(void) {
+    RUN_TEST(test_group_exception);
+}
+
+static void run_unit_tests(void) {
+    RUN_TEST(test_group_unit);
+}
+
+static void run_namespace_tests(void) {
+    RUN_TEST(test_group_namespace);
+}
+
+static void run_seq_tests(void) {
+    RUN_TEST(test_group_seq);
+}
+
+static void run_for_loop_tests(void) {
+    RUN_TEST(test_group_for_loops);
+}
+
+static void run_all_tests(void) {
+    RUN_TEST(test_group_memory);
+    RUN_TEST(test_group_parser);
+    RUN_TEST(test_group_exception);
+    RUN_TEST(test_group_unit);
+    RUN_TEST(test_group_namespace);
+    RUN_TEST(test_group_seq);
+    RUN_TEST(test_group_for_loops);
+}
+
+// ============================================================================
+// MAIN FUNCTION
+// ============================================================================
+
+int main(int argc, char **argv) {
+    UNITY_BEGIN();
+    
+    if (argc > 1) {
+        if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        } else if (strcmp(argv[1], "memory") == 0) {
+            run_memory_tests();
+        } else if (strcmp(argv[1], "parser") == 0) {
+            run_parser_tests();
+        } else if (strcmp(argv[1], "exception") == 0) {
+            run_exception_tests();
+        } else if (strcmp(argv[1], "unit") == 0) {
+            run_unit_tests();
+        } else if (strcmp(argv[1], "namespace") == 0) {
+            run_namespace_tests();
+        } else if (strcmp(argv[1], "seq") == 0) {
+            run_seq_tests();
+        } else if (strcmp(argv[1], "for-loops") == 0) {
+            run_for_loop_tests();
+        } else if (strcmp(argv[1], "all") == 0) {
+            run_all_tests();
+        } else {
+            printf("Unknown test suite: %s\n", argv[1]);
+            printf("Use --help to see available options\n");
+            return 1;
+        }
+    } else {
+        // Run all tests by default
+        run_all_tests();
+    }
+    
+    // Final memory leak summary after all tests
+    printf("\n");
+    printf("================================================================================\n");
+    printf("🔍 FINAL MEMORY LEAK SUMMARY\n");
+    printf("================================================================================\n");
+    memory_profiler_check_leaks("All Tests Complete");
+    printf("================================================================================\n\n");
+    
+    return UNITY_END();
+}

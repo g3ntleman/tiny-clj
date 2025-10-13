@@ -17,18 +17,31 @@ Active/Next
          - for, doseq, dotimes implementations
          - Seq-based iteration with environment binding
          - Performance benchmarks and optimization analysis
+       - Unity Test Framework: ✅ COMPLETED
+         - Unity C Test Framework integration with command-line parameters
+         - Separate test files: memory_tests.c, parser_tests.c, exception_tests.c
+         - Central test runner with flexible test suite selection
+         - Memory profiling integration with WITH_AUTORELEASE_POOL
+         - 17 tests across 3 test suites with individual execution support
 
 Next Priority
 -------------
-- Large-Map:
-  - Small→Large promotion; open addressing; pointer-key fastpath for interned symbols
-  - Benchmarks vs small maps (N≥16)
+- Test Framework Migration:
+  - Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
+  - Implement individual test execution: `./unity-tests memory allocation`
+  - Add CTest integration for CI/CD pipeline
+  - Performance benchmarks for test execution time
 
 Planned
 -------
 - Large-Map:
   - Small→Large promotion; open addressing; pointer-key fastpath for interned symbols
   - Benchmarks vs small maps (N≥16)
+- Test Framework Enhancements:
+  - Additional test suites: namespace_tests.c, function_tests.c, ui_tests.c
+  - Test categories: core, data, control, api, memory, error, ui
+  - Parallel test execution for multiple suites
+  - JUnit XML output for CI/CD integration
 - Optional: Chunked vector seqs for performance (semantics unchanged)
 - Symbol lookup:
   - Interning + pointer-key env maps; cache resolution per AST node (optional)
@@ -37,16 +50,23 @@ Build & Benchmarks
 ------------------
 - Release builds: macOS fast (-O3), Embedded size (-Os), with dead_strip/gc-sections and LTO when available (Target: <60KB binary size)
 - Code-size and performance benchmarks tracked under `Reports/` with 2% significance threshold; baseline auto-update
+- Test execution benchmarks: Unity vs MinUnit performance comparison
+- Memory profiling integration: Test memory usage tracking and leak detection
 
 Design Decisions (Snapshot)
 ---------------------------
 - No UTF-8 normalization; equality is byte-based
 - Borrowed-view iterators: container must outlive view; retain for long-lived views
 - Single English README; docs consolidated
+- Unity Test Framework: Single target with separate test files for better organization
+- Command-line parameter support for test isolation and debugging
+- Memory profiling integration with existing WITH_AUTORELEASE_POOL pattern
 
 Housekeeping
 ------------
 - All test_* files live in `Tests/` (root tests consolidated)
+- Unity test files: memory_tests.c, parser_tests.c, exception_tests.c in `src/tests/`
 - Generated binaries live in `build/` or `build-release/`
 - CSV reports live in `Reports/`
+- Unity test framework: `external/unity/` as git submodule
 

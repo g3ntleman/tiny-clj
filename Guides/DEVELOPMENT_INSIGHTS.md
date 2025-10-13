@@ -1380,3 +1380,199 @@ if (is_type(a, CLJ_NIL)) {
 - `is_type(obj, CLJ_SYMBOL)` statt `if (obj && is_type(obj, CLJ_SYMBOL))`
 
 Diese Regel macht den Code sauberer und konsistenter.
+
+## Unity Test Framework Integration
+
+### Overview
+The project has been enhanced with Unity Test Framework integration, providing a modern, flexible testing solution with command-line parameter support for test isolation and debugging.
+
+### Architecture
+
+#### Test Organization
+```
+unity-tests (single target)
+├── unity_test_runner.c     # Central test runner with CLI
+├── memory_tests.c          # Memory management tests
+├── parser_tests.c          # Parser functionality tests
+└── exception_tests.c       # Exception handling tests
+```
+
+#### Key Features
+- **Single Target**: One executable (`unity-tests`) with multiple test files
+- **Command-Line Parameters**: Flexible test execution and isolation
+- **Memory Profiling**: Integrated with existing memory management
+- **Test Fixtures**: Global `setUp()`/`tearDown()` with `WITH_AUTORELEASE_POOL`
+- **Better Assertions**: `TEST_ASSERT_EQUAL_INT()` vs `mu_assert()`
+
+### Usage Examples
+
+#### Running Tests
+```bash
+# All tests (17 tests)
+./unity-tests
+
+# Specific test suites
+./unity-tests memory        # Memory tests (5 tests)
+./unity-tests parser        # Parser tests (6 tests)
+./unity-tests exception     # Exception tests (6 tests)
+
+# Help
+./unity-tests --help
+```
+
+#### Test Structure
+```c
+// Individual test files (e.g., memory_tests.c)
+void test_memory_allocation(void) {
+    WITH_AUTORELEASE_POOL({
+        CljObject *obj = make_int(42);
+        TEST_ASSERT_NOT_NULL(obj);
+        TEST_ASSERT_EQUAL_INT(42, obj->as.i);
+        // Automatic cleanup
+    });
+}
+
+// Central runner (unity_test_runner.c)
+static void test_group_memory(void) {
+    RUN_TEST(test_memory_allocation);
+    RUN_TEST(test_memory_deallocation);
+    // ...
+}
+```
+
+### Benefits Over MinUnit
+
+| Feature | MinUnit | Unity |
+|---------|---------|-------|
+| **Test Isolation** | ❌ All or nothing | ✅ Command-line selection |
+| **Assertions** | `mu_assert()` | `TEST_ASSERT_EQUAL_INT()` |
+| **Test Groups** | Manual | Automatic |
+| **Memory Profiling** | ✅ | ✅ |
+| **WITH_AUTORELEASE_POOL** | ✅ | ✅ |
+| **STM32 Compatible** | ✅ | ✅ |
+
+### Migration Strategy
+
+#### Phase 1: Framework Integration
+1. Add Unity as git submodule: `external/unity`
+2. Create central test runner: `unity_test_runner.c`
+3. Migrate test suites to separate files
+4. Update CMakeLists.txt for single target
+
+#### Phase 2: Test Migration
+1. Convert MinUnit tests to Unity format
+2. Replace `mu_assert()` with `TEST_ASSERT_*()`
+3. Remove individual `main()` functions
+4. Use global `setUp()`/`tearDown()`
+
+#### Phase 3: Command-Line Interface
+1. Implement test suite selection
+2. Add help and list functionality
+3. Support individual test execution
+4. Integrate with CI/CD
+
+### Best Practices
+
+#### Test Organization
+- **One file per test suite** (memory, parser, exception)
+- **Global fixtures** in central runner
+- **WITH_AUTORELEASE_POOL** for additional isolation
+- **External function declarations** for cross-file access
+
+#### Memory Management
+```c
+void setUp(void) {
+    init_special_symbols();
+    meta_registry_init();
+    autorelease_pool_push();
+    MEMORY_PROFILER_INIT();
+}
+
+void tearDown(void) {
+    autorelease_pool_cleanup_all();
+    symbol_table_cleanup();
+    meta_registry_cleanup();
+    MEMORY_PROFILER_CLEANUP();
+}
+```
+
+#### Test Isolation
+```c
+// Individual test with additional isolation
+void test_memory_allocation(void) {
+    WITH_AUTORELEASE_POOL({
+        // Test code here
+        // Automatic cleanup
+    });
+}
+```
+
+### Future Enhancements
+
+#### Planned Features
+- **Individual Test Execution**: `./unity-tests memory allocation`
+- **Test Categories**: Core, data, control, api, memory, error, ui
+- **Parallel Execution**: Multiple test suites simultaneously
+- **Test Reporting**: JUnit XML output for CI/CD
+
+#### Additional Test Suites
+- **Namespace Tests**: `namespace_tests.c`
+- **Function Tests**: `function_tests.c`
+- **UI Tests**: `ui_tests.c`
+- **Integration Tests**: `integration_tests.c`
+
+### CMake Integration
+
+```cmake
+# Unity Test Framework (central runner with separate test files)
+add_executable(unity-tests
+    src/tests/unity_test_runner.c
+    src/tests/memory_tests.c
+    src/tests/parser_tests.c
+    src/tests/exception_tests.c
+    external/unity/src/unity.c
+    ${SOURCES}
+)
+target_compile_definitions(unity-tests PRIVATE ENABLE_META DEBUG ENABLE_MEMORY_PROFILING)
+target_include_directories(unity-tests PRIVATE external/unity/src)
+```
+
+### Debugging and Development
+
+#### Test Development Workflow
+1. **Write test** in appropriate `.c` file
+2. **Declare function** in `unity_test_runner.c`
+3. **Add to test group** in runner
+4. **Test individually**: `./unity-tests <suite>`
+5. **Verify integration**: `./unity-tests all`
+
+#### Common Patterns
+```c
+// Test with memory management
+void test_example(void) {
+    WITH_AUTORELEASE_POOL({
+        CljObject *obj = make_int(42);
+        TEST_ASSERT_NOT_NULL(obj);
+        TEST_ASSERT_EQUAL_INT(42, obj->as.i);
+        // Objects automatically cleaned up
+    });
+}
+
+// Test with exception handling
+void test_exception_example(void) {
+    bool exception_caught = false;
+    
+    TRY {
+        throw_exception("TestException", "Test error", __FILE__, __LINE__, 0);
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_EQUAL_STRING("TestException", ex->type);
+    } END_TRY
+    
+    TEST_ASSERT_TRUE(exception_caught);
+}
+```
+
+### Conclusion
+
+Unity Test Framework provides a modern, flexible testing solution that enhances the project's testing capabilities while maintaining compatibility with existing memory management and STM32 constraints. The command-line parameter support enables efficient test isolation and debugging, making it an ideal replacement for MinUnit while preserving the project's core testing features.

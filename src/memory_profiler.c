@@ -239,11 +239,20 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         printf("  📈 %s: %.2f%s\n", ratio_label, deallocation_ratio, ratio_suffix);
     }
     
-    // Memory efficiency assessment
+    // Memory efficiency assessment with enhanced warnings
     if (stats->memory_leaks > 0) {
-        printf("  ⚠️  Memory Leak Detected: %zu allocations not freed\n", stats->memory_leaks);
+        printf("\n🚨 CRITICAL MEMORY LEAK DETECTED!\n");
+        printf("   ┌─────────────────────────────────────────────────────────┐\n");
+        printf("   │ LEAK ALERT: %zu allocations not freed!                    │\n", stats->memory_leaks);
+        printf("   │ Current Memory Usage: %zu bytes                         │\n", stats->current_memory_usage);
+        printf("   │ Peak Memory Usage: %zu bytes                             │\n", stats->peak_memory_usage);
+        printf("   └─────────────────────────────────────────────────────────┘\n");
+        printf("   ⚠️  This indicates potential memory management issues!\n");
+        printf("   ⚠️  Check for missing RELEASE() calls or incorrect lifecycle management.\n");
     } else if (stats->total_allocations == stats->total_deallocations && stats->total_allocations > 0) {
-        printf("  ✅ Perfect Memory Management: All allocations freed\n");
+        printf("\n✅ PERFECT MEMORY MANAGEMENT: All allocations properly freed\n");
+    } else if (stats->total_allocations == 0) {
+        printf("\n📊 No memory operations detected in this test\n");
     }
 }
 
@@ -344,14 +353,59 @@ void memory_profiler_track_autorelease(CljObject *obj) {
 // ============================================================================
 
 void memory_profiler_check_leaks(const char *location) {
-    (void)location; // Suppress unused parameter warning
     if (g_memory_stats.memory_leaks > 0) {
-        printf("⚠️  Memory Leak Warning: %zu allocations not freed\n", 
+        printf("\n🚨 MEMORY LEAK DETECTED at %s:\n", location ? location : "Unknown");
+        printf("   ┌─────────────────────────────────────────────────────────┐\n");
+        printf("   │ LEAK SUMMARY                                            │\n");
+        printf("   ├─────────────────────────────────────────────────────────┤\n");
+        printf("   │ Total Leaks:        %10zu allocations                    │\n", g_memory_stats.memory_leaks);
+        printf("   │ Current Memory:     %10zu bytes                         │\n", g_memory_stats.current_memory_usage);
+        printf("   │ Peak Memory:       %10zu bytes                         │\n", g_memory_stats.peak_memory_usage);
+        printf("   │ Allocations:        %10zu                               │\n", g_memory_stats.total_allocations);
+        printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
+        printf("   └─────────────────────────────────────────────────────────┘\n");
+        
+        // Show detailed leak breakdown by type
+        printf("\n🔍 LEAK BREAKDOWN BY OBJECT TYPE:\n");
+        printf("   ┌─────────────────────────────────────────────────────────┐\n");
+        printf("   │ Type                │ Allocations │ Deallocations │ Leaks │\n");
+        printf("   ├─────────────────────────────────────────────────────────┤\n");
+        
+        const char* type_names[] = {
+            "NIL", "BOOL", "SYMBOL", "INT", "FLOAT", "STRING", "VECTOR", 
+            "WEAK_VECTOR", "MAP", "LIST", "SEQ", 
+            "FUNC", "EXCEPTION", "UNKNOWN"
+        };
+        
+        size_t total_type_leaks = 0;
+        int max_types = (CLJ_TYPE_COUNT < (int)(sizeof(type_names)/sizeof(type_names[0]))) ? 
+                        CLJ_TYPE_COUNT : (int)(sizeof(type_names)/sizeof(type_names[0]));
+        
+        for (int i = 0; i < max_types; i++) {
+            size_t allocs = g_memory_stats.allocations_by_type[i];
+            size_t deallocs = g_memory_stats.deallocations_by_type[i];
+            size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
+            total_type_leaks += leaks;
+            
+            if (leaks > 0) {
+                const char* type_name = (i >= 0 && i < (int)(sizeof(type_names)/sizeof(type_names[0]))) 
+                                       ? type_names[i] : "UNKNOWN";
+                printf("   │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
+                       type_name, allocs, deallocs, leaks);
+            }
+        }
+        
+        printf("   ├─────────────────────────────────────────────────────────┤\n");
+        printf("   │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
+               "TOTAL", g_memory_stats.object_creations, g_memory_stats.object_destructions, total_type_leaks);
+        printf("   └─────────────────────────────────────────────────────────┘\n");
+        
+        printf("\n⚠️  CRITICAL: %zu memory leaks detected! Objects were not properly freed.\n", 
                g_memory_stats.memory_leaks);
-        printf("⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
-               g_memory_stats.memory_leaks);
+        printf("   This indicates potential memory management issues in the code.\n");
+        printf("   Check for missing RELEASE() calls or incorrect object lifecycle management.\n\n");
     } else {
-        printf("✅ Memory Clean: All allocations freed\n");
+        printf("\n✅ MEMORY CLEAN: All allocations properly freed at %s\n", location ? location : "Unknown");
     }
 }
 

@@ -92,26 +92,17 @@ set_target_properties(tiny-clj-stm32 PROPERTIES
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
 
-# Unified Test Runner (all MinUnit tests in one executable - STM32 compatible)
-add_executable(run-tests
-    src/tests/run_tests_main.c
-    src/tests/test_unit.c
-    src/tests/test_parser.c
-    src/tests/test-namespace.c
-    src/tests/test_seq.c
-    src/tests/test_for_loops.c
-    src/tests/test_eval_string_api.c
-    src/tests/test_memory.c
-    src/tests/test-exception-handling.c
-    src/tests/test-utils.c
-    src/tests/test_function_types.c
-    src/tests/test_nil_arithmetic.c
-    src/tests/test_line_editor.c
-    src/tests/test_platform_mock.c
-    src/tests/test_platform_abstraction.c
-    src/tests/test_repl_line_editing.c
-    src/line_editor.c
-    src/platform_macos.c
+# Unity Test Framework (central runner with separate test files)
+add_executable(unity-tests
+    src/tests/unity_test_runner.c
+    src/tests/memory_tests.c
+    src/tests/parser_tests.c
+    src/tests/exception_tests.c
+    src/tests/unit_tests.c
+    src/tests/namespace_tests.c
+    src/tests/seq_tests.c
+    src/tests/for_loop_tests.c
+    external/unity/src/unity.c
     src/builtins.c
     src/object.c
     src/types.c
@@ -132,7 +123,10 @@ add_executable(run-tests
     src/memory.c
     src/runtime.c
 )
-target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER DEBUG ENABLE_LINE_EDITING)
+target_compile_definitions(unity-tests PRIVATE ENABLE_META DEBUG ENABLE_MEMORY_PROFILING)
+target_include_directories(unity-tests PRIVATE external/unity/src)
+
+# Utility tests removed - no main function available
 # target_compile_options(run-tests PRIVATE -fsanitize=address -g)
 # target_link_options(run-tests PRIVATE -fsanitize=address)
 # Regular tests WITH memory profiling for early leak detection
@@ -235,7 +229,7 @@ add_custom_target(run-quick-tests
 # INSTALLATION
 # ============================================================================
 
-install(TARGETS tiny-clj run-tests
+install(TARGETS tiny-clj
     RUNTIME DESTINATION bin
 )
 
