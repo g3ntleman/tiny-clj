@@ -13,6 +13,7 @@
 #define TINY_CLJ_RUNTIME_H
 
 #include "object.h"
+#include "memory.h"
 #include <alloca.h>
 #include <stdlib.h>
 
@@ -21,10 +22,30 @@
 #define STACK_ALLOC(type, count) ((type*) alloca(sizeof(type) * (count)))
 
 // Allocate `count` objects of type `type` on the heap
-#define ALLOC(type, count) ((type*) malloc(sizeof(type) * (count)))
+#ifdef DEBUG
+    #define ALLOC(type, count) ({ \
+        type *_alloc_result = (type*) malloc(sizeof(type) * (count)); \
+        if (_alloc_result) { \
+            memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _alloc_result, sizeof(type) * (count)); \
+        } \
+        _alloc_result; \
+    })
+#else
+    #define ALLOC(type, count) ((type*) malloc(sizeof(type) * (count)))
+#endif
 
 // Allocate and zero-initialize `count` objects of type `type` on the heap
-#define ALLOC_ZERO(type, count) ((type*) calloc(count, sizeof(type)))
+#ifdef DEBUG
+    #define ALLOC_ZERO(type, count) ({ \
+        type *_alloc_result = (type*) calloc(count, sizeof(type)); \
+        if (_alloc_result) { \
+            memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _alloc_result, sizeof(type) * (count)); \
+        } \
+        _alloc_result; \
+    })
+#else
+    #define ALLOC_ZERO(type, count) ((type*) calloc(count, sizeof(type)))
+#endif
 
 // Maximum number of function parameters (STM32-safe)
 #define MAX_FUNCTION_PARAMS 32

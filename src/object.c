@@ -145,7 +145,6 @@ CljObject* make_int(int x) {
     v->rc = 1;
     v->as.i = x;
     
-    CREATE(v);
     return v;
 }
 
@@ -156,7 +155,6 @@ CljObject* make_float(double x) {
     v->rc = 1;
     v->as.f = x;
     
-    CREATE(v);
     return v;
 }
 
@@ -290,8 +288,6 @@ CljList* make_list(CljObject *first, CljList *rest) {
     list->head = RETAIN(first);
     list->tail = (CljList*)RETAIN(rest);
     
-    
-    CREATE((CljObject*)list);
     return list;
 }
 

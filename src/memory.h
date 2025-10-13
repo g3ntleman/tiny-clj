@@ -66,10 +66,6 @@ int get_reference_count(CljObject *obj);
 
 // Clean, simple macros for memory operations
 #ifdef DEBUG
-    #define CREATE(obj) do { \
-        typeof(obj) _tmp = (obj); \
-        memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _tmp, sizeof(CljObject)); \
-    } while(0)
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
         memory_hook_trigger(MEMORY_HOOK_OBJECT_DESTRUCTION, _tmp, sizeof(CljObject)); \
@@ -145,7 +141,6 @@ int get_reference_count(CljObject *obj);
     } while(0)
 #else
     // No-op macros for release builds
-    #define CREATE(obj) ((void)0)
     #define DEALLOC(obj) ((void)0)
     #define RETAIN(obj) ({ CljObject* _tmp = (CljObject*)(obj); retain(_tmp); _tmp; })
     #define RELEASE(obj) ({ CljObject* _tmp = (CljObject*)(obj); release(_tmp); _tmp; })
