@@ -16,8 +16,6 @@ typedef enum {
     CLJ_MAP,
     CLJ_LIST,
     CLJ_SEQ,         // Sequence iterator (embedded CljSeqIterator)
-    CLJ_ARRAY,       // Strong array (retains on push)
-    CLJ_WEAK_ARRAY,  // Weak array (no retain on push; single release on clear)
     CLJ_FUNC,
     CLJ_EXCEPTION,
     CLJ_UNKNOWN  // Unknown/invalid type sentinel (should not occur at runtime)
