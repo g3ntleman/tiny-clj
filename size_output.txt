@@ -1,0 +1,3 @@
+Executable size analysis:
+-rwxr-xr-x@ 1 theisen  admin   195K Oct 13 05:59 tiny-clj-repl
+Size: 199312 bytes
