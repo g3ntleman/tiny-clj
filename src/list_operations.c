@@ -6,8 +6,6 @@
 CljObject* list_first(CljObject *list) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     CljList *list_data = as_list(list);
-    if (!list_data) return clj_nil();
-    if (!LIST_FIRST(list_data)) return clj_nil();
     return LIST_FIRST(list_data);
 }
 
@@ -15,11 +13,11 @@ CljObject* list_nth(CljObject *list, int n) {
     if (!list || list->type != CLJ_LIST || n < 0) return clj_nil();
     
     CljList *ld = as_list(list);
-    CljObject *current = ld ? LIST_FIRST(ld) : clj_nil();
+    CljObject *current = LIST_FIRST(ld);
     for (int i = 0; i < n && current; i++) {
         current = (CljObject*)LIST_REST((CljList*)current->as.data);
     }
-    return current ? current : clj_nil();
+    return current;
 }
 
 int list_count(CljObject *list) {
@@ -27,7 +25,7 @@ int list_count(CljObject *list) {
     
     int count = 0;
     CljList *current = as_list(list);
-    while (current && LIST_FIRST(current)) {
+    while (LIST_FIRST(current)) {
         count++;
         current = LIST_REST(current);
     }

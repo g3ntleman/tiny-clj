@@ -62,10 +62,10 @@ static CljObject* list_get_element(CljObject *list, int index) {
     if (index == 0) return node->head;
     int i = 0;
     while (node && i < index) {
-        node = LIST_REST(node) ? (CljList*)LIST_REST(node) : NULL;
+        node = (CljList*)LIST_REST(node);
         i++;
     }
-    return (node && node->head) ? node->head : NULL;
+    return node ? node->head : NULL;
 }
 
 // Arithmetic operation types

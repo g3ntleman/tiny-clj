@@ -30,7 +30,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     switch (obj->type) {
         case CLJ_LIST: {
             CljList *list_data = as_list(obj);
-            if (!list_data || !LIST_FIRST(list_data)) {
+            if (!LIST_FIRST(list_data)) {
                 iter->seq_type = CLJ_NIL;
                 return true;  // Empty list
             }
@@ -209,7 +209,7 @@ CljObject* seq_create(CljObject *obj) {
         if (vec && vec->count == 0) return clj_nil();
     } else if (is_type(obj, CLJ_LIST)) {
         CljList *list = as_list(obj);
-        if (!list || !LIST_FIRST(list)) return clj_nil();
+        if (!LIST_FIRST(list)) return clj_nil();
     }
     
     // Allocate heap wrapper
