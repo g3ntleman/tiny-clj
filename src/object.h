@@ -323,7 +323,10 @@ static inline CljMap* as_map(CljObject *obj) {
     return (CljMap*)((CljObject*)assert_type(obj, CLJ_MAP, "Map"))->as.data;
 }
 static inline CljList* as_list(CljObject *obj) {
-    return (CljList*)assert_type(obj, CLJ_LIST, "List");
+    if (!obj || obj->type != CLJ_LIST) {
+        return NULL;
+    }
+    return (CljList*)obj;
 }
 static inline CljFunction* as_function(CljObject *obj) {
     return (CljFunction*)assert_type(obj, CLJ_FUNC, "Function");

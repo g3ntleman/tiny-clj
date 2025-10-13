@@ -6,6 +6,7 @@
 CljObject* list_first(CljObject *list) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     CljList *list_data = as_list(list);
+    if (!list_data) return clj_nil();
     return LIST_FIRST(list_data);
 }
 
@@ -13,6 +14,8 @@ CljObject* list_nth(CljObject *list, int n) {
     if (!list || list->type != CLJ_LIST || n < 0) return clj_nil();
     
     CljList *ld = as_list(list);
+    if (!ld) return clj_nil();
+    
     CljList *current = ld;
     
     // Traverse the list properly

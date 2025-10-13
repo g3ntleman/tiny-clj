@@ -481,9 +481,20 @@ CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st) {
 
 // Simplified list evaluation
 CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
-    if (!list || list->type != CLJ_LIST) return clj_nil();
+    printf("DEBUG: eval_list called with list=%p, type=%d\n", list, list ? list->type : -1);
+    
+    if (!list || list->type != CLJ_LIST) {
+        printf("DEBUG: eval_list returning clj_nil() - not a list\n");
+        return clj_nil();
+    }
     
     CljList *list_data = as_list(list);
+    printf("DEBUG: eval_list got list_data=%p\n", list_data);
+    
+    if (!list_data) {
+        printf("DEBUG: eval_list returning clj_nil() - as_list returned NULL\n");
+        return clj_nil();
+    }
     
     CljObject *head = LIST_FIRST(list_data);
     

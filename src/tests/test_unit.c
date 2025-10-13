@@ -47,25 +47,27 @@ static void test_setup(void) {
 // ============================================================================
 
 static char *test_list_count(void) {
-  // Test without autorelease pool to isolate memory management issues
-  printf("DEBUG: Starting test_list_count\n");
+  WITH_AUTORELEASE_POOL({
+    printf("DEBUG: Starting test_list_count\n");
+    
+    // Test null pointer
+    printf("DEBUG: Testing null pointer\n");
+    mu_assert("null pointer should return count 0", list_count(NULL) == 0);
+    
+    // Test non-list object (this should not crash)
+    printf("DEBUG: Testing non-list object\n");
+    CljObject *int_obj = make_int(42);
+    mu_assert("non-list object should return count 0", list_count(int_obj) == 0);
+    release(int_obj);
+    
+    // Test empty list (clj_nil is not a list)
+    printf("DEBUG: Testing empty list\n");
+    CljObject *empty_list = clj_nil();
+    mu_assert("clj_nil should return count 0", list_count(empty_list) == 0);
+    
+    printf("DEBUG: test_list_count completed successfully\n");
+  });
   
-  // Test null pointer
-  printf("DEBUG: Testing null pointer\n");
-  mu_assert("null pointer should return count 0", list_count(NULL) == 0);
-  
-  // Test non-list object (this should not crash)
-  printf("DEBUG: Testing non-list object\n");
-  CljObject *int_obj = make_int(42);
-  mu_assert("non-list object should return count 0", list_count(int_obj) == 0);
-  release(int_obj);
-  
-  // Test empty list (clj_nil is not a list)
-  printf("DEBUG: Testing empty list\n");
-  CljObject *empty_list = clj_nil();
-  mu_assert("clj_nil should return count 0", list_count(empty_list) == 0);
-  
-  printf("DEBUG: test_list_count completed successfully\n");
   return 0;
 }
 
