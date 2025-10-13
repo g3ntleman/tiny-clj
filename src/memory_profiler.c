@@ -137,6 +137,8 @@ MemoryStats memory_profiler_get_stats(void) {
 
 // Helper function to print memory statistics table (shared between print_stats and print_diff)
 static void print_memory_table(const MemoryStats *stats, const char *test_name, bool is_delta) {
+    if (!stats) return;
+    
     const char *title = is_delta ? "Memory Delta" : "Memory Statistics";
     const char *operations_title = is_delta ? "Memory Operations (Delta)" : "Memory Operations";
     const char *clj_title = is_delta ? "CljObject Operations (Delta)" : "CljObject Operations";
