@@ -11,7 +11,7 @@
 
 #include "../object.h"
 #include "../namespace.h"
-#include "symbol.h"
+#include "../symbol.h"
 #include "../map.h"
 #include "../benchmark.h"
 #include <stdio.h>

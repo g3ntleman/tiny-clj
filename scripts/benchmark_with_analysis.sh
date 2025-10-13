@@ -24,9 +24,10 @@ echo "Core loading: 21/21 expressions loaded successfully" >> benchmark_output.t
 echo "Quote syntax: ✓ Working" >> benchmark_output.txt
 echo "Exception handling: ✓ Detailed error messages" >> benchmark_output.txt
 
-# Step 2.1: Skip namespace lookup benchmark (missing headers)
-echo "Step 2.1: Skipping namespace lookup benchmark (missing symbol.h header)..."
-echo "Namespace lookup benchmark: SKIPPED (missing headers)" >> benchmark_output.txt
+# Step 2.1: Run namespace lookup benchmark
+echo "Step 2.1: Running namespace lookup benchmark..."
+gcc -o test-namespace-lookup-benchmark src/tests/test_namespace_lookup_benchmark.c src/benchmark.c src/object.c src/namespace.c src/parser.c src/symbol.c src/string.c src/exception.c src/vector.c src/map.c src/function_call.c src/runtime.c src/memory.c src/types.c src/list_operations.c src/line_editor.c src/platform_macos.c src/builtins.c src/reader.c src/seq.c -I. -std=c99 -Wall -Wextra -O2
+./test-namespace-lookup-benchmark >> benchmark_output.txt
 
 # Step 2.5: Measure executable sizes
 echo "Step 2.5: Measuring executable sizes..."
