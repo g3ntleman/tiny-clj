@@ -69,37 +69,31 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 // Helper functions for optimized structure
 // Note: is_primitive_type function replaced by IS_PRIMITIVE_TYPE macro in header
 
-// Global exception for runtime errors
-static CLJException *global_exception = NULL;
-
 // Global exception stack (independent of EvalState)
 GlobalExceptionStack global_exception_stack = {0};
 
 // Exception throwing (compatible with try/catch system)
 // Ownership/RC:
 // - create_exception returns rc=1 (no autorelease)
-// - Ownership is transferred to EvalState->last_error before longjmp
-// - Catch handler must set last_error=NULL and release_exception(ex)
+// - Ownership is transferred to exception stack before longjmp
+// - Catch handler automatically releases exception in END_TRY
 /** @brief Throw an exception with type, message, and location */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
-    if (global_exception) {
-        release_exception(global_exception);
-    }
-    global_exception = create_exception(type, message, file, line, col, NULL);
+    CLJException *exception = create_exception(type, message, file, line, col, NULL);
     
     if (global_exception_stack.top) {
         // Use global exception stack
-        global_exception_stack.top->exception = global_exception;
+        global_exception_stack.top->exception = exception;
         longjmp(global_exception_stack.top->jump_state, 1);
     } else {
         // No handler - unhandled exception
         printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
                type, message, file ? file : "<unknown>", line, col);
-        release_exception(global_exception);
-        global_exception = NULL;
+        release_exception(exception);
         exit(1);
     }
 }
+
 
 // Note: set_global_eval_state() removed - Exception handling now independent of EvalState
 

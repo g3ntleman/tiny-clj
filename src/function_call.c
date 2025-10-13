@@ -524,7 +524,22 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return RETAIN(quoted_expr), quoted_expr;
     }
     
-    // Arithmetic operations removed - using namespace lookup (Option B)
+    // Arithmetic operations
+    if (sym_is(op, "+")) {
+        return eval_arithmetic_generic(list, env, ARITH_ADD, st);
+    }
+    
+    if (sym_is(op, "-")) {
+        return eval_arithmetic_generic(list, env, ARITH_SUB, st);
+    }
+    
+    if (sym_is(op, "*")) {
+        return eval_arithmetic_generic(list, env, ARITH_MUL, st);
+    }
+    
+    if (sym_is(op, "/")) {
+        return eval_arithmetic_generic(list, env, ARITH_DIV, st);
+    }
     
     if (sym_is(op, "str")) {
         // Call native_str with evaluated arguments
@@ -1198,11 +1213,28 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     CljObject *element = list_nth(list, index);
     if (!element) return clj_nil();
     
-    // TEMPORARY FIX: Don't evaluate nested expressions to prevent infinite loops
-    // This is a simplified version that just returns the element as-is
-    // The proper evaluation should happen in the calling context
+    // For simple types (numbers, strings, booleans), return as-is
+    if (is_type(element, CLJ_INT) || is_type(element, CLJ_FLOAT) || 
+        is_type(element, CLJ_STRING) || is_type(element, CLJ_BOOL)) {
+        return element ? (RETAIN(element), element) : clj_nil();
+    }
     
-    // For now, just return the literal value
+    // For symbols, resolve them
+    if (is_type(element, CLJ_SYMBOL)) {
+        // TEMPORARY FIX: Don't resolve symbols in eval_arg to prevent memory issues
+        // This is a simplified version that just returns the element as-is
+        return element ? (RETAIN(element), element) : clj_nil();
+    }
+    
+    // For lists, don't evaluate them here to prevent infinite loops
+    // The evaluation should happen in the calling context
+    if (is_type(element, CLJ_LIST)) {
+        // TEMPORARY FIX: Don't evaluate nested lists to prevent infinite loops
+        // This is a simplified version that just returns the element as-is
+        return element ? (RETAIN(element), element) : clj_nil();
+    }
+    
+    // For other types, return as-is
     return element ? (RETAIN(element), element) : clj_nil();
 }
 

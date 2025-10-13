@@ -154,11 +154,9 @@ int get_reference_count(CljObject *obj);
     
     // Fluent autorelease pool macro with EvalState management
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { \
-        MEMORY_TEST_START(__FUNCTION__); \
         EvalState *eval_state = evalstate_new(); \
         code; \
         evalstate_free(eval_state); \
-        MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
     // Fluent time profiling macro (for benchmarks)

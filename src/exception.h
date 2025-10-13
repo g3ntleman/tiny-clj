@@ -31,7 +31,6 @@ typedef struct ExceptionHandler {
  */
 typedef struct GlobalExceptionStack {
     ExceptionHandler *top;               // Top of exception handler stack
-    CLJException *current_exception;    // Current exception being handled
 } GlobalExceptionStack;
 
 /** @brief Global exception stack instance. */
@@ -64,17 +63,14 @@ extern GlobalExceptionStack global_exception_stack;
     if (setjmp(_h.jump_state) == 0) {
 
 #define CATCH(ex) \
-        global_exception_stack.top = _h.next; \
     } else { \
         CLJException *ex = _h.exception; \
-        global_exception_stack.top = _h.next; \
         if (ex) { \
-            global_exception_stack.current_exception = ex; \
 
 #define END_TRY \
             release_exception(ex); \
-            global_exception_stack.current_exception = NULL; \
         } \
+        global_exception_stack.top = _h.next; \
     } \
 }
 

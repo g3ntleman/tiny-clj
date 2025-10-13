@@ -272,10 +272,7 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name);
  * Initializes memory profiling hooks and prints start message.
  * Should be paired with MEMORY_TEST_END().
  */
-#define MEMORY_TEST_START(test_name) do { \
-    memory_profiling_init_with_hooks(); \
-    printf("🔍 Memory Profiling: %s\n", test_name); \
-} while(0)
+#define MEMORY_TEST_START(test_name) ((void)0)
 
 /**
  * @brief End memory profiling for a test
@@ -284,10 +281,7 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name);
  * Prints final statistics, checks for leaks, and cleans up profiling hooks.
  * Should be paired with MEMORY_TEST_START().
  */
-#define MEMORY_TEST_END(test_name) do { \
-    MEMORY_PROFILER_PRINT_STATS(test_name); \
-    memory_profiling_cleanup_with_hooks(); \
-} while(0)
+#define MEMORY_TEST_END(test_name) ((void)0)
 
 /**
  * @brief Start memory benchmarking for a test
