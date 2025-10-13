@@ -4,8 +4,9 @@
 #include "tiny_clj.h"
 #include "memory_hooks.h"
 #include "memory_profiler.h"
+#include "memory.h"
 #include "symbol.h"
-#include "test-utils.h"
+// #include "test-utils.h" // Not used directly
 
 // Test the new eval_string API
 static char* test_eval_string_basic() {

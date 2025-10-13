@@ -7,7 +7,7 @@
 #include "../object.h"
 #include "../exception.h"
 #include "../memory.h"
-#include "../vector.h"
+// #include "../vector.h" // Not used directly
 #include "../namespace.h"
 #include "../clj_string.h"
 #include <string.h>
@@ -425,8 +425,8 @@ static char *all_exception_tests(void) {
     mu_run_test(test_exception_with_empty_message);
     mu_run_test(test_exception_content_in_catch);
     mu_run_test(test_type_safe_casting_exceptions);
-    // mu_run_test(test_triple_nested_rethrow);  // DISABLED: Causes infinite loop
-    // mu_run_test(test_complex_nested_rethrow);  // DISABLED: Causes infinite loop
+    mu_run_test(test_triple_nested_rethrow);
+    mu_run_test(test_complex_nested_rethrow);
     // mu_run_test(test_eval_string_exception_propagation);  // TEMPORARY: Disabled due to exception handling issues
     // mu_run_test(test_eval_string_exception_propagation_with_ns);  // TEMPORARY: Disabled due to exception handling issues
     // mu_run_test(test_comprehensive_exception_types);  // TEMPORARY: Disabled due to exception handling issues

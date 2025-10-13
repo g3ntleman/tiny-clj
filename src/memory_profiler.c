@@ -137,6 +137,7 @@ MemoryStats memory_profiler_get_stats(void) {
 
 // Helper function to print memory statistics table (shared between print_stats and print_diff)
 static void print_memory_table(const MemoryStats *stats, const char *test_name, bool is_delta) {
+    (void)test_name; // Suppress unused parameter warning
     if (!stats) return;
     
     const char *title = is_delta ? "Memory Delta" : "Memory Statistics";
@@ -343,6 +344,7 @@ void memory_profiler_track_autorelease(CljObject *obj) {
 // ============================================================================
 
 void memory_profiler_check_leaks(const char *location) {
+    (void)location; // Suppress unused parameter warning
     if (g_memory_stats.memory_leaks > 0) {
         printf("⚠️  Memory Leak Warning: %zu allocations not freed\n", 
                g_memory_stats.memory_leaks);

@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "clj_string.h"
 #include "object.h"
+#include "memory.h"
 #include "runtime.h"
 
 // Empty-string singleton: CLJ_STRING with rc=0 and data="" (static storage)

@@ -198,64 +198,49 @@ static char *test_parser_map(void) {
 }
 
 static char *test_variable_definition(void) {
-  // Temporarily disabled due to crash - investigating eval_string issues
-  printf("DEBUG: Skipping test_variable_definition due to crash\n");
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test defining a variable
+    CljObject *result = eval_string("(def x 42)", eval_state);
+    mu_assert("def result should not be NULL", result != NULL);
+    
+    // def returns the symbol (Clojure-compatible behavior)
+    mu_assert_obj_type(result, CLJ_SYMBOL);
+    
+    // Test retrieving the variable
+    CljObject *var_result = eval_string("x", eval_state);
+    mu_assert_obj_int(var_result, 42);
+  });
   return 0;
-  
-  // WITH_AUTORELEASE_POOL_EVAL({
-  //   // Test defining a variable
-  //   CljObject *result = eval_string("(def x 42)", eval_state);
-  //   mu_assert("def result should not be NULL", result != NULL);
-  //   
-  //   // def returns the symbol (Clojure-compatible behavior)
-  //   mu_assert_obj_type(result, CLJ_SYMBOL);
-  //   
-  //   // FIXME: Variable lookup is broken - skip this test for now
-  //   // Test retrieving the variable
-  //   // CljObject *var_result = eval_string("x", eval_state);
-  //   // mu_assert_obj_int(var_result, 42);
-  // });
-  // return 0;
 }
 
 static char *test_variable_redefinition(void) {
-  // Temporarily disabled due to crash - investigating variadic function list issues
-  printf("DEBUG: Skipping test_variable_redefinition due to crash\n");
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Define variable first time
+    CljObject *result1 = eval_string("(def x 42)", eval_state);
+    mu_assert_obj_type(result1, CLJ_SYMBOL);  // def returns the symbol (Clojure-compatible)
+    
+    // Redefine variable
+    CljObject *result2 = eval_string("(def x 100)", eval_state);
+    mu_assert_obj_type(result2, CLJ_SYMBOL);  // def returns the symbol (Clojure-compatible)
+    
+    // Test that variable now has new value
+    CljObject *var_result = eval_string("x", eval_state);
+    mu_assert_obj_int(var_result, 100);
+  });
   return 0;
-  
-  // WITH_AUTORELEASE_POOL_EVAL({
-  //   // Define variable first time
-  //   CljObject *result1 = eval_string("(def x 42)", eval_state);
-  //   mu_assert_obj_type(result1, CLJ_SYMBOL);  // def returns the symbol (Clojure-compatible)
-  //   
-  //   // Redefine variable
-  //   CljObject *result2 = eval_string("(def x 100)", eval_state);
-  //   mu_assert_obj_type(result2, CLJ_SYMBOL);  // def returns the symbol (Clojure-compatible)
-  //   
-  //   // FIXME: Variable lookup is broken - skip this test for now
-  //   // Test that variable now has new value
-  //   // CljObject *var_result = eval_string("x", eval_state);
-  //   // mu_assert_obj_int(var_result, 100);
-  // });
-  // return 0;
 }
 
 static char *test_variable_with_string(void) {
-  // Temporarily disabled due to crash - investigating def function issues
-  printf("DEBUG: Skipping test_variable_with_string due to crash\n");
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test defining a string variable
+    CljObject *result = eval_string("(def message \"Hello, World!\")", eval_state);
+    mu_assert_obj_type(result, CLJ_SYMBOL);  // def returns the symbol (Clojure-compatible)
+    
+    // Test retrieving the string variable
+    CljObject *var_result = eval_string("message", eval_state);
+    mu_assert_obj_string(var_result, "Hello, World!");
+  });
   return 0;
-  
-  // WITH_AUTORELEASE_POOL_EVAL({
-  //   // Test defining a string variable
-  //   CljObject *result = eval_string(R"((def message "Hello, World!"))", eval_state);
-  //   mu_assert_obj_type(result, CLJ_SYMBOL);  // def returns the symbol (Clojure-compatible)
-  //   
-  //   // FIXME: Variable lookup is broken - skip this test for now
-  //   // Test retrieving the string variable
-  //   // CljObject *var_result = eval_string("message", eval_state);
-  //   // mu_assert_obj_string(var_result, "Hello, World!");
-  // });
-  // return 0;
 }
 
 // ============================================================================
@@ -293,12 +278,12 @@ static char *all_unit_tests(void) {
   mu_run_test(test_variable_with_string);
   
   // Variadic function tests
-  // mu_run_test(test_native_str);  // DISABLED: Causes hanging
-  // mu_run_test(test_native_add_variadic);  // DISABLED: Causes hanging
-  // mu_run_test(test_native_sub_variadic);  // DISABLED: Causes hanging
-  // mu_run_test(test_native_mul_variadic);  // DISABLED: Causes hanging
-  // mu_run_test(test_native_div_variadic);  // DISABLED: Causes hanging
-  // mu_run_test(test_to_string_function);  // DISABLED: Causes hanging
+  mu_run_test(test_native_str);
+  mu_run_test(test_native_add_variadic);
+  mu_run_test(test_native_sub_variadic);
+  mu_run_test(test_native_mul_variadic);
+  mu_run_test(test_native_div_variadic);
+  mu_run_test(test_to_string_function);
   
   return 0;
 }

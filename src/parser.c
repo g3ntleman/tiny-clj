@@ -52,7 +52,7 @@ static bool is_alpha(char c) {
 /** @brief Check if character is alphanumeric or symbol character */
 static bool is_alphanumeric(char c) {
   return is_alpha(c) || is_digit(c) || c == '-' || c == '_' || c == '?' ||
-         c == '!' || c == '/';
+         c == '!' || c == '/' || c == '.';
 }
 
 
@@ -238,7 +238,21 @@ CljObject *parse(const char *input, EvalState *st) {
     return NULL;
   Reader reader;
   reader_init(&reader, input);
-  return AUTORELEASE(make_object_by_parsing_expr(&reader, st));
+  
+  CljObject *result = NULL;
+  
+  // Use TRY/CATCH to handle parsing exceptions
+  TRY {
+    result = make_object_by_parsing_expr(&reader, st);
+    if (result) {
+      result = AUTORELEASE(result);
+    }
+  } CATCH(ex) {
+    // Exception caught - return NULL for parse errors
+    result = NULL;
+  } END_TRY
+  
+  return result;
 }
 
 
@@ -253,23 +267,16 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     
     CljObject *result = NULL;
     
-    // Use TRY/CATCH to handle exceptions
-    TRY {
-        // Handle lists with special forms (like ns, def, fn)
-        if (is_type(parsed_expr, CLJ_LIST)) {
-            CljObject *env = (eval_state && eval_state->current_ns) ? eval_state->current_ns->mappings : NULL;
-            result = eval_list(parsed_expr, env, eval_state);
-            if (result) result = AUTORELEASE(result);
-        } else {
-            // Handle other types with eval_expr_simple
-            result = eval_expr_simple(parsed_expr, eval_state);
-            // Don't autorelease here - let eval_string handle it
-        }
-    } CATCH(ex) {
-        // Re-throw exception to let caller handle it
-        throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
-        result = NULL;
-    } END_TRY
+    // Don't catch exceptions here - let them propagate to the caller
+    if (is_type(parsed_expr, CLJ_LIST)) {
+        CljObject *env = (eval_state && eval_state->current_ns) ? eval_state->current_ns->mappings : NULL;
+        result = eval_list(parsed_expr, env, eval_state);
+        // Don't autorelease here - eval_list already does it
+    } else {
+        // Handle other types with eval_expr_simple
+        result = eval_expr_simple(parsed_expr, eval_state);
+        // Don't autorelease here - eval_expr_simple already does it
+    }
     
     return result;
 }
@@ -286,20 +293,8 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
         return NULL;
     }
     
-    CljObject *result = NULL;
-    
-    // Use TRY/CATCH to handle exceptions
-    TRY {
-        result = eval_parsed(parsed, eval_state);
-        
-        // Return result (will be managed by caller's autorelease pool)
-        if (result) result = AUTORELEASE(result);
-        
-    } CATCH(ex) {
-        // Re-throw exception to let caller handle it
-        throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
-        result = NULL;
-    } END_TRY
+    // Don't catch exceptions here - let them propagate to the caller
+    CljObject *result = eval_parsed(parsed, eval_state);
     
     return result;
 }

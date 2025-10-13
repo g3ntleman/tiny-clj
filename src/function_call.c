@@ -88,6 +88,7 @@ static bool is_numeric_type(CljObject *obj) {
 
 /** @brief Generic arithmetic function (variadic version) */
 CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op, EvalState *st) {
+    (void)st; // Suppress unused parameter warning
     int total_count = list_count(list);
     int argc = total_count - 1;  // Subtract 1 for the operator
     
@@ -1205,9 +1206,10 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
 
 // Helper function for evaluating arguments
 CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
+    (void)env; // Suppress unused parameter warning
     if (!list || list->type != CLJ_LIST) return NULL;
     
-    CljList *list_data = as_list(list);
+    // CljList *list_data = as_list(list); // Unused variable
     
     // Use the existing list_nth function which is safer
     CljObject *element = list_nth(list, index);

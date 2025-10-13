@@ -7,7 +7,10 @@ CljObject* list_first(CljObject *list) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     CljList *list_data = as_list(list);
     if (!list_data) return clj_nil();
-    return LIST_FIRST(list_data);
+    
+    // For empty lists, LIST_FIRST returns NULL, but we should return clj_nil() singleton
+    CljObject *first = LIST_FIRST(list_data);
+    return first ? first : clj_nil();
 }
 
 CljObject* list_nth(CljObject *list, int n) {

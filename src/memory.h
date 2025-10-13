@@ -29,6 +29,9 @@ void release(CljObject *v);
 /** Add object to autorelease pool for deferred cleanup. */
 CljObject *autorelease(CljObject *v);
 
+/** Check if a pointer points to stack memory. */
+bool is_pointer_on_stack(const void *ptr);
+
 // ============================================================================
 // AUTORELEASE POOL MANAGEMENT
 // ============================================================================

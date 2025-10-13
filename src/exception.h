@@ -8,6 +8,7 @@
 #include "object.h"
 #include <setjmp.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 // CLJException is now defined in CljObject.h to avoid circular dependencies
 
@@ -58,19 +59,29 @@ extern GlobalExceptionStack global_exception_stack;
 // Note: END_TRY is required (like Objective-C NS_ENDHANDLER)
 
 #define TRY { \
-    ExceptionHandler _h = {.next = global_exception_stack.top, .exception = NULL}; \
-    global_exception_stack.top = &_h; \
-    if (setjmp(_h.jump_state) == 0) {
+    ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
+    _h->next = global_exception_stack.top; \
+    _h->exception = NULL; \
+    global_exception_stack.top = _h; \
+    if (setjmp(_h->jump_state) == 0) {
 
 #define CATCH(ex) \
+        /* Success path: pop stack and free handler */ \
+        ExceptionHandler *_success_handler = global_exception_stack.top; \
+        global_exception_stack.top = _success_handler->next; \
+        free(_success_handler); \
     } else { \
-        CLJException *ex = _h.exception; \
+        /* Exception path: pop stack and get exception */ \
+        ExceptionHandler *_caught_h = global_exception_stack.top; \
+        CLJException *ex = _caught_h->exception; \
+        global_exception_stack.top = _caught_h->next; \
+        free(_caught_h); \
         if (ex) { \
 
 #define END_TRY \
             release_exception(ex); \
         } \
-        global_exception_stack.top = _h.next; \
+        /* ExceptionHandler already freed in CATCH */ \
     } \
 }
 

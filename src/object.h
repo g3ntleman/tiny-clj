@@ -323,8 +323,12 @@ static inline CljMap* as_map(CljObject *obj) {
     return (CljMap*)((CljObject*)assert_type(obj, CLJ_MAP, "Map"))->as.data;
 }
 static inline CljList* as_list(CljObject *obj) {
-    if (!obj || obj->type != CLJ_LIST) {
-        return NULL;
+    if (!is_type(obj, CLJ_LIST)) {
+        char error_msg[128];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Type mismatch: expected List, got %s", 
+                clj_type_name(TYPE(obj)));
+        throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
     }
     return (CljList*)obj;
 }

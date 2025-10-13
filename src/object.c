@@ -17,6 +17,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include "object.h"
+#include "memory.h"
 #include "seq.h"
 #include "runtime.h"
 #include "map.h"
