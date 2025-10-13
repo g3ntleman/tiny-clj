@@ -193,7 +193,8 @@ EvalState* evalstate_new() {
 void evalstate_free(EvalState *st) {
     if (!st) return;
     
-    if (st->pool) autorelease_pool_pop_specific(st->pool);
+    // Don't pop the pool here - it's already been popped by the global autorelease pool
+    // if (st->pool) autorelease_pool_pop_specific(st->pool);
     if (st->stack) free(st->stack);
     free(st);
 }
