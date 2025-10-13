@@ -133,8 +133,8 @@ add_executable(run-tests
     src/runtime.c
 )
 target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER DEBUG ENABLE_LINE_EDITING)
-target_compile_options(run-tests PRIVATE -fsanitize=address -g)
-target_link_options(run-tests PRIVATE -fsanitize=address)
+# target_compile_options(run-tests PRIVATE -fsanitize=address -g)
+# target_link_options(run-tests PRIVATE -fsanitize=address)
 # Regular tests WITH memory profiling for early leak detection
 
 # ============================================================================

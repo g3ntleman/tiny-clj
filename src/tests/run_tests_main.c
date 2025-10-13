@@ -35,26 +35,16 @@ static bool memory_profiling_enabled = false;
 // ============================================================================
 
 static void global_setup(void) {
-    printf("DEBUG: Starting global_setup\n");
-    
-    printf("DEBUG: Calling init_special_symbols\n");
     init_special_symbols();
-    
-    printf("DEBUG: Calling meta_registry_init\n");
     meta_registry_init();
-    
-    printf("DEBUG: Calling autorelease_pool_push\n");
     autorelease_pool_push(); // Create global autorelease pool for all tests
-    
+
 #ifdef ENABLE_MEMORY_PROFILING
     if (memory_profiling_enabled) {
-        printf("DEBUG: Initializing memory profiler\n");
         MEMORY_PROFILER_INIT();
         printf("🔍 Memory profiling enabled\n");
     }
 #endif
-    
-    printf("DEBUG: global_setup completed\n");
 }
 
 static void global_teardown(void) {
@@ -211,10 +201,8 @@ static int run_all_tests(void) {
 // ============================================================================
 
 int main(int argc, char **argv) {
-    printf("DEBUG: Starting main function\n");
     int result = 0;
-    
-    printf("DEBUG: Parsing command line arguments\n");
+
     // Parse flags (can appear anywhere)
     for (int i = 1; i < argc; i++) {
 #ifdef ENABLE_MEMORY_PROFILING

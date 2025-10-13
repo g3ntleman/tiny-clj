@@ -21,24 +21,14 @@
 
 // Test setup and teardown functions
 static void test_setup(void) {
-  printf("DEBUG: Starting test_setup\n");
-  
   // Initialize symbol table
-  printf("DEBUG: Calling init_special_symbols\n");
   init_special_symbols();
-  printf("DEBUG: init_special_symbols completed\n");
 
   // Initialize meta registry
-  printf("DEBUG: Calling meta_registry_init\n");
   meta_registry_init();
-  printf("DEBUG: meta_registry_init completed\n");
-  
+
   // Register builtin functions (after memory profiler is initialized)
-  printf("DEBUG: Calling register_builtins\n");
   register_builtins();
-  printf("DEBUG: register_builtins completed\n");
-  
-  printf("DEBUG: test_setup completed\n");
 }
 
 
@@ -48,26 +38,19 @@ static void test_setup(void) {
 
 static char *test_list_count(void) {
   WITH_AUTORELEASE_POOL({
-    printf("DEBUG: Starting test_list_count\n");
-    
     // Test null pointer
-    printf("DEBUG: Testing null pointer\n");
     mu_assert("null pointer should return count 0", list_count(NULL) == 0);
-    
+
     // Test non-list object (this should not crash)
-    printf("DEBUG: Testing non-list object\n");
     CljObject *int_obj = make_int(42);
     mu_assert("non-list object should return count 0", list_count(int_obj) == 0);
     release(int_obj);
-    
+
     // Test empty list (clj_nil is not a list)
-    printf("DEBUG: Testing empty list\n");
     CljObject *empty_list = clj_nil();
     mu_assert("clj_nil should return count 0", list_count(empty_list) == 0);
-    
-    printf("DEBUG: test_list_count completed successfully\n");
   });
-  
+
   return 0;
 }
 
@@ -290,32 +273,32 @@ static char *test_to_string_function(void);
 static char *all_unit_tests(void) {
   test_setup();
   
-  // Only run basic tests to isolate the problem
-  mu_run_test(test_basic_creation);  // Enable basic test
-  mu_run_test(test_list_count);  // Test with debug output
+  // Run all tests
+  mu_run_test(test_basic_creation);
+  mu_run_test(test_list_count);
   mu_run_test(test_boolean_creation);
   mu_run_test(test_singleton_objects);
   mu_run_test(test_empty_vector_singleton);
   mu_run_test(test_empty_map_singleton);
   
-  // Test parser tests one by one
+  // Parser tests
   mu_run_test(test_parser_basic_types);
   mu_run_test(test_parser_vector);
   mu_run_test(test_parser_list);
   mu_run_test(test_parser_map);
   
-  // Temporarily disable variable tests
-  // mu_run_test(test_variable_definition);
-  // mu_run_test(test_variable_redefinition);
-  // mu_run_test(test_variable_with_string);
+  // Variable tests
+  mu_run_test(test_variable_definition);
+  mu_run_test(test_variable_redefinition);
+  mu_run_test(test_variable_with_string);
   
-  // Test variadic function tests one by one
-  // mu_run_test(test_native_str);  // Disabled - uses eval_string
-  // mu_run_test(test_native_add_variadic);  // Disabled - uses eval_string
-  // mu_run_test(test_native_sub_variadic);  // Disabled - uses eval_string
-  // mu_run_test(test_native_mul_variadic);  // Disabled - uses eval_string
-  // mu_run_test(test_native_div_variadic);  // Disabled - uses eval_string
-  // mu_run_test(test_to_string_function);  // Disabled - uses eval_string
+  // Variadic function tests - temporarily disabled due to eval_string issues
+  // mu_run_test(test_native_str);
+  // mu_run_test(test_native_add_variadic);
+  // mu_run_test(test_native_sub_variadic);
+  // mu_run_test(test_native_mul_variadic);
+  // mu_run_test(test_native_div_variadic);
+  // mu_run_test(test_to_string_function);
   
   return 0;
 }
