@@ -30,7 +30,8 @@ int list_count(CljObject *list) {
     if (!list || list->type != CLJ_LIST) return 0;
     
     int count = 0;
-    CljList *current = as_list(list);
+    // Don't use as_list here since we already checked the type
+    CljList *current = (CljList*)list;
     while (current) {
         count++;
         current = LIST_REST(current);

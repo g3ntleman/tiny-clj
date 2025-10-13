@@ -41,7 +41,7 @@ static char *test_list_count(void) {
     // Test null pointer
     mu_assert("null pointer should return count 0", list_count(NULL) == 0);
     
-    // Test non-list object
+    // Test non-list object (this should not crash)
     CljObject *int_obj = make_int(42);
     mu_assert("non-list object should return count 0", list_count(int_obj) == 0);
     RELEASE(int_obj);
@@ -275,7 +275,7 @@ static char *all_unit_tests(void) {
   
   // Only run basic tests to isolate the problem
   mu_run_test(test_basic_creation);
-  // mu_run_test(test_list_count);  // Temporarily disabled - system issue
+  // mu_run_test(test_list_count);  // Temporarily disabled
   // mu_run_test(test_boolean_creation);
   // mu_run_test(test_singleton_objects);
   // mu_run_test(test_empty_vector_singleton);
