@@ -45,3 +45,5 @@ build-release/
 
 # Testing artifacts
 Testing/
+test_stack_simple
+test_unit.i
