@@ -4,13 +4,12 @@
  */
 
 #include "minunit.h"
-#include "namespace.h"
-#include "exception.h"
-#include "object.h"
-#include "runtime.h"
-#include "function_call.h"
-#include "symbol.h"
-#include "parser.h"
+#include "../object.h"
+#include "../exception.h"
+#include "../memory.h"
+#include "../vector.h"
+#include "../namespace.h"
+#include "../clj_string.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -291,6 +290,60 @@ static char *test_exception_content_in_catch(void) {
     return 0;
 }
 
+// Test 11: Type-safe casting exceptions (when implemented)
+static char *test_type_safe_casting_exceptions(void) {
+    test_setup();
+    
+    // Create test objects of different types
+    CljObject *int_obj = make_int(42);
+    CljObject *string_obj = make_string("hello");
+    CljObject *nil_obj = clj_nil();
+    
+    // Test as_list with wrong type (should throw exception when implemented)
+    bool exception_caught = false;
+    TRY {
+        CljList *result = as_list(int_obj);  // int_obj is CLJ_INT, not CLJ_LIST
+        // If we reach here, no exception was thrown (current behavior)
+        mu_assert("as_list should return NULL for wrong type", result == NULL);
+    } CATCH(ex) {
+        exception_caught = true;
+        mu_assert("Exception should contain type mismatch info", ex != NULL);
+        // When implemented, should contain type mismatch message
+        printf("DEBUG: Caught exception: %s - %s\n", ex->type, ex->message);
+    } END_TRY
+    
+    // Currently as_* functions return NULL, so no exception is thrown
+    // This test documents the expected behavior when exceptions are implemented
+    mu_assert("Currently no exception thrown (returns NULL)", !exception_caught);
+    
+    // Test as_symbol with wrong type
+    TRY {
+        CljSymbol *result = as_symbol(string_obj);  // string_obj is CLJ_STRING, not CLJ_SYMBOL
+        mu_assert("as_symbol should return NULL for wrong type", result == NULL);
+    } CATCH(ex) {
+        exception_caught = true;
+        printf("DEBUG: Caught symbol exception: %s - %s\n", ex->type, ex->message);
+    } END_TRY
+    
+    // Test as_vector with wrong type
+    TRY {
+        CljPersistentVector *result = as_vector(nil_obj);  // nil_obj is CLJ_NIL, not CLJ_VECTOR
+        mu_assert("as_vector should return NULL for wrong type", result == NULL);
+    } CATCH(ex) {
+        exception_caught = true;
+        printf("DEBUG: Caught vector exception: %s - %s\n", ex->type, ex->message);
+    } END_TRY
+    
+    // Clean up
+    RELEASE(int_obj);
+    RELEASE(string_obj);
+    // nil_obj is singleton, no need to release
+    
+    test_teardown();
+    return 0;
+}
+
+
 // ============================================================================
 // TEST SUITE RUNNER
 // ============================================================================
@@ -312,6 +365,7 @@ static char *all_exception_tests(void) {
     mu_run_test(test_sequential_try_catch_blocks);
     mu_run_test(test_exception_with_empty_message);
     mu_run_test(test_exception_content_in_catch);
+    mu_run_test(test_type_safe_casting_exceptions);
     // mu_run_test(test_eval_string_exception_propagation);  // TEMPORARY: Disabled due to exception handling issues
     // mu_run_test(test_eval_string_exception_propagation_with_ns);  // TEMPORARY: Disabled due to exception handling issues
     // mu_run_test(test_comprehensive_exception_types);  // TEMPORARY: Disabled due to exception handling issues
