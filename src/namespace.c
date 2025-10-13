@@ -12,6 +12,9 @@
 // Global namespace registry
 CljNamespace *ns_registry = NULL;
 
+// Cached reference to clojure.core for priority lookup
+static CljNamespace *clojure_core_cache = NULL;
+
 CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!name) return NULL;
     
@@ -37,6 +40,11 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     ns->next = ns_registry;
     ns_registry = ns;
     
+    // Cache clojure.core for priority lookup
+    if (strcmp(name, "clojure.core") == 0) {
+        clojure_core_cache = ns;
+    }
+    
     return ns;
 }
 
@@ -50,30 +58,32 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     if (v) return v;
 
     // OPTIMIZATION: Priority-based namespace search
-    // 1. Search clojure.core first (most common)
-    CljNamespace *clojure_core = NULL;
-    CljNamespace *cur = ns_registry;
-    while (cur) {
-        if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
-            CljSymbol *name_sym = as_symbol(cur->name);
-            if (name_sym && strcmp(name_sym->name, "clojure.core") == 0) {
-                clojure_core = cur;
-                break;
+    // 1. Search clojure.core first (most common) - use cache for O(1) lookup
+    if (!clojure_core_cache) {
+        // Find and cache clojure.core namespace
+        CljNamespace *cur = ns_registry;
+        while (cur) {
+            if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
+                CljSymbol *name_sym = as_symbol(cur->name);
+                if (name_sym && strcmp(name_sym->name, "clojure.core") == 0) {
+                    clojure_core_cache = cur;
+                    break;
+                }
             }
+            cur = cur->next;
         }
-        cur = cur->next;
     }
     
-    // Search clojure.core first if found
-    if (clojure_core && clojure_core->mappings) {
-        v = map_get(clojure_core->mappings, sym);
+    // Search clojure.core first if cached
+    if (clojure_core_cache && clojure_core_cache->mappings) {
+        v = map_get(clojure_core_cache->mappings, sym);
         if (v) return v;
     }
     
     // 2. Search other namespaces (excluding clojure.core to avoid double search)
-    cur = ns_registry;
+    CljNamespace *cur = ns_registry;
     while (cur) {
-        if (cur != clojure_core && cur->mappings) {
+        if (cur != clojure_core_cache && cur->mappings) {
             v = map_get(cur->mappings, sym);
             if (v) return v;
         }
