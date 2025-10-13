@@ -73,10 +73,7 @@ typedef enum {
 } ArithOp;
 
 // Arithmetic operation functions
-static int add_op(int a, int b) { return a + b; }
-static int sub_op(int a, int b) { return a - b; }
-static int mul_op(int a, int b) { return a * b; }
-static int div_op(int a, int b) { return a / b; }
+// Arithmetic helper functions removed - now using inline switch statements in eval_arithmetic_generic_with_substitution
 
 // Error messages - removed unused array
 
@@ -214,11 +211,24 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
         return NULL;
     }
     
-    int (*op_func)(int, int) = (op == ARITH_ADD) ? add_op :
-                              (op == ARITH_SUB) ? sub_op :
-                              (op == ARITH_MUL) ? mul_op : div_op;
+    int result;
+    switch (op) {
+        case ARITH_ADD:
+            result = a->as.i + b->as.i;
+            break;
+        case ARITH_SUB:
+            result = a->as.i - b->as.i;
+            break;
+        case ARITH_MUL:
+            result = a->as.i * b->as.i;
+            break;
+        case ARITH_DIV:
+            result = a->as.i / b->as.i;
+            break;
+        default:
+            return NULL;
+    }
     
-    int result = op_func(a->as.i, b->as.i);
     return make_int(result);
 }
 
@@ -232,9 +242,9 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObje
     }
     
     // Check if it's a native function (CljFunc) or Clojure function (CljFunction)
-    CljFunc *native_func = (CljFunc*)fn;
-    if (native_func && native_func->fn) {
+    if (is_native_fn(fn)) {
         // It's a native function (CljFunc)
+        CljFunc *native_func = (CljFunc*)fn;
         return native_func->fn(args, argc);
     }
     
@@ -250,11 +260,7 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObje
         return clj_nil();
     }
     
-    // TEMPORARY: Disable Clojure functions with parameters to prevent crashes
-    if (argc > 0) {
-        throw_exception("NotImplementedError", "Clojure functions with parameters not yet implemented", NULL, 0, 0);
-        return clj_nil();
-    }
+    // Clojure functions with parameters are now supported
     
     // Simplified parameter binding
     // Replace parameter symbols with their values in the body
@@ -361,9 +367,9 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         return body ? (RETAIN(body), body) : clj_nil();
     }
     
-    // For lists, evaluate them normally
+    // For lists, evaluate them with parameter substitution
     if (is_type(body, CLJ_LIST)) {
-        return eval_list(body, closure_env, NULL);
+        return eval_list_with_param_substitution(body, params, values, param_count, closure_env);
     }
     
     // Literal value
@@ -391,19 +397,19 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return eval_body_with_params(branch, params, values, param_count, closure_env);
     }
     if (sym_is(op, "+")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_ADD, NULL);
+        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_ADD, closure_env);
     }
     
     if (sym_is(op, "-")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_SUB, NULL);
+        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_SUB, closure_env);
     }
     
     if (sym_is(op, "*")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_MUL, NULL);
+        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_MUL, closure_env);
     }
     
     if (sym_is(op, "/")) {
-        return eval_arithmetic_generic(list, NULL, ARITH_DIV, NULL);
+        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_DIV, closure_env);
     }
     
     if (sym_is(op, "println")) {
