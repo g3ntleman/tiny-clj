@@ -61,6 +61,36 @@ int get_reference_count(CljObject *obj);
 #define AUTORELEASE_POOL_SCOPE(name) for (CljObjectPool *(name) = autorelease_pool_push(); (name) != NULL; autorelease_pool_pop_specific(name), (name) = NULL)
 
 // ============================================================================
+// MEMORY ALLOCATION MACROS
+// ============================================================================
+
+// Allocate `count` objects of type `type` on the heap
+#ifdef DEBUG
+    #define ALLOC(type, count) ({ \
+        type *_alloc_result = (type*) malloc(sizeof(type) * (count)); \
+        if (_alloc_result) { \
+            memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _alloc_result, sizeof(type) * (count)); \
+        } \
+        _alloc_result; \
+    })
+#else
+    #define ALLOC(type, count) ((type*) malloc(sizeof(type) * (count)))
+#endif
+
+// Allocate and zero-initialize `count` objects of type `type` on the heap
+#ifdef DEBUG
+    #define ALLOC_ZERO(type, count) ({ \
+        type *_alloc_result = (type*) calloc(count, sizeof(type)); \
+        if (_alloc_result) { \
+            memory_hook_trigger(MEMORY_HOOK_OBJECT_CREATION, _alloc_result, sizeof(type) * (count)); \
+        } \
+        _alloc_result; \
+    })
+#else
+    #define ALLOC_ZERO(type, count) ((type*) calloc(count, sizeof(type)))
+#endif
+
+// ============================================================================
 // MEMORY MANAGEMENT MACROS
 // ============================================================================
 

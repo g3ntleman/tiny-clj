@@ -291,13 +291,16 @@ CljList* make_list(CljObject *first, CljList *rest) {
     return list;
 }
 
-char* pr_str(CljObject *v) {
-    if (!v) return strdup("nil");
+char* to_string(CljObject *v) {
+    // For nil: return empty string (Clojure str behavior)
+    if (is_type(v, CLJ_NIL)) {
+        return strdup("");
+    }
 
     char buf[64];
     switch(v->type) {
         case CLJ_NIL:
-            return strdup("nil");
+            return strdup("");  // Empty string for str function
 
         case CLJ_INT:
             snprintf(buf, sizeof(buf), "%d", v->as.i);
@@ -312,11 +315,9 @@ char* pr_str(CljObject *v) {
 
         case CLJ_STRING:
             {
+                // Return raw string WITHOUT quotes (for str function)
                 char *str = (char*)v->as.data;
-                size_t len = strlen(str) + 3;
-                char *s = ALLOC(char, len);
-                snprintf(s, len, "\"%s\"", str);
-                return s;
+                return strdup(str);
             }
 
         case CLJ_SYMBOL:
@@ -549,11 +550,33 @@ char* pr_str(CljObject *v) {
     }
 }
 
+char* pr_str(CljObject *v) {
+    // pr_str shows nil as "nil" (not empty string)
+    if (is_type(v, CLJ_NIL)) {
+        return strdup("nil");
+    }
+    
+    // pr_str adds quotes around strings
+    if (is_type(v, CLJ_STRING)) {
+        char *raw = to_string(v);
+        if (!raw) return strdup("\"\"");
+        
+        size_t len = strlen(raw) + 3;  // +2 for quotes, +1 for \0
+        char *result = ALLOC(char, len);
+        snprintf(result, len, "\"%s\"", raw);
+        free(raw);
+        return result;
+    }
+    
+    // For all other types: delegate to to_string
+    return to_string(v);
+}
+
 // Korrekte Gleichheitsprüfung mit Inhalt-Vergleich
 bool clj_equal(CljObject *a, CljObject *b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
     if (!a || !b) return false;
-    if (a->type != b->type) return false;
+    if (!is_type(a, b->type)) return false;
     
     // Inhalt-Vergleich basierend auf Typ
     // Hinweis: CLJ_NIL, CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
@@ -872,7 +895,7 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
 
 // Function call implementation using stack allocation
 CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
-    if (!fn || fn->type != CLJ_FUNC) return NULL;
+    if (!is_type(fn, CLJ_FUNC)) return NULL;
     
     // Arity check
     CljFunction *func = as_function(fn);
@@ -907,7 +930,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
 }
 
 CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObject *env) {
-    if (!fn || fn->type != CLJ_FUNC) return NULL;
+    if (!is_type(fn, CLJ_FUNC)) return NULL;
     (void)env;
     
     // Evaluate arguments (simplified; would normally call eval())

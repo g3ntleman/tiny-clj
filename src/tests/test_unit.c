@@ -14,6 +14,7 @@
 #include "vector.h"
 #include "memory.h"
 #include "memory_profiler.h"
+#include "builtins.h"
 #include "minunit.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -228,6 +229,14 @@ static char *test_variable_with_string(void) {
 // TEST RUNNER
 // ============================================================================
 
+// Forward declarations for test functions
+static char *test_native_str(void);
+static char *test_native_add_variadic(void);
+static char *test_native_sub_variadic(void);
+static char *test_native_mul_variadic(void);
+static char *test_native_div_variadic(void);
+static char *test_to_string_function(void);
+
 static char *all_unit_tests(void) {
   test_setup();
   
@@ -244,6 +253,203 @@ static char *all_unit_tests(void) {
   mu_run_test(test_variable_redefinition);
   mu_run_test(test_variable_with_string);
   
+  // New variadic function tests
+  mu_run_test(test_native_str);
+  mu_run_test(test_native_add_variadic);
+  mu_run_test(test_native_sub_variadic);
+  mu_run_test(test_native_mul_variadic);
+  mu_run_test(test_native_div_variadic);
+  mu_run_test(test_to_string_function);
+  
+  return 0;
+}
+
+// ============================================================================
+// VARIADIC FUNCTIONS TESTS
+// ============================================================================
+
+static char *test_native_str(void) {
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test case 1: no arguments
+    CljObject *result1 = eval_string("(str)", eval_state);
+    mu_assert_obj_type(result1, CLJ_STRING);
+    mu_assert_obj_string(result1, "");
+    RELEASE(result1);
+    
+    // Test case 2: single string
+    CljObject *result2 = eval_string("(str \"hello\")", eval_state);
+    mu_assert_obj_type(result2, CLJ_STRING);
+    mu_assert_obj_string(result2, "hello");
+    RELEASE(result2);
+    
+    // Test case 3: multiple strings
+    CljObject *result3 = eval_string("(str \"hello\" \" \" \"world\")", eval_state);
+    mu_assert_obj_type(result3, CLJ_STRING);
+    mu_assert_obj_string(result3, "hello world");
+    RELEASE(result3);
+    
+    // Test case 4: mixed types
+    CljObject *result4 = eval_string("(str \"Number: \" 42 \"!\")", eval_state);
+    mu_assert_obj_type(result4, CLJ_STRING);
+    mu_assert_obj_string(result4, "Number: 42!");
+    RELEASE(result4);
+    
+    // Test case 5: with nil
+    CljObject *result5 = eval_string("(str \"nil: \" nil)", eval_state);
+    mu_assert_obj_type(result5, CLJ_STRING);
+    mu_assert_obj_string(result5, "nil: ");
+    RELEASE(result5);
+  });
+  return 0;
+}
+
+static char *test_native_add_variadic(void) {
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test case 1: no arguments (identity)
+    CljObject *result1 = eval_string("(+)", eval_state);
+    mu_assert_obj_type(result1, CLJ_INT);
+    mu_assert_obj_int(result1, 0);
+    RELEASE(result1);
+    
+    // Test case 2: single argument
+    CljObject *result2 = eval_string("(+ 5)", eval_state);
+    mu_assert_obj_type(result2, CLJ_INT);
+    mu_assert_obj_int(result2, 5);
+    RELEASE(result2);
+    
+    // Test case 3: multiple arguments
+    CljObject *result3 = eval_string("(+ 1 2 3 4)", eval_state);
+    mu_assert_obj_type(result3, CLJ_INT);
+    mu_assert_obj_int(result3, 10);
+    RELEASE(result3);
+    
+    // Test case 4: negative numbers
+    CljObject *result4 = eval_string("(+ -1 -2 -3)", eval_state);
+    mu_assert_obj_type(result4, CLJ_INT);
+    mu_assert_obj_int(result4, -6);
+    RELEASE(result4);
+  });
+  return 0;
+}
+
+static char *test_native_sub_variadic(void) {
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test case 1: single argument (unary minus)
+    CljObject *result1 = eval_string("(- 5)", eval_state);
+    mu_assert_obj_type(result1, CLJ_INT);
+    mu_assert_obj_int(result1, -5);
+    RELEASE(result1);
+    
+    // Test case 2: two arguments
+    CljObject *result2 = eval_string("(- 10 3)", eval_state);
+    mu_assert_obj_type(result2, CLJ_INT);
+    mu_assert_obj_int(result2, 7);
+    RELEASE(result2);
+    
+    // Test case 3: multiple arguments
+    CljObject *result3 = eval_string("(- 20 5 3)", eval_state);
+    mu_assert_obj_type(result3, CLJ_INT);
+    mu_assert_obj_int(result3, 12);
+    RELEASE(result3);
+  });
+  return 0;
+}
+
+static char *test_native_mul_variadic(void) {
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test case 1: no arguments (identity)
+    CljObject *result1 = eval_string("(*)", eval_state);
+    mu_assert_obj_type(result1, CLJ_INT);
+    mu_assert_obj_int(result1, 1);
+    RELEASE(result1);
+    
+    // Test case 2: single argument
+    CljObject *result2 = eval_string("(* 5)", eval_state);
+    mu_assert_obj_type(result2, CLJ_INT);
+    mu_assert_obj_int(result2, 5);
+    RELEASE(result2);
+    
+    // Test case 3: multiple arguments
+    CljObject *result3 = eval_string("(* 2 3 4)", eval_state);
+    mu_assert_obj_type(result3, CLJ_INT);
+    mu_assert_obj_int(result3, 24);
+    RELEASE(result3);
+    
+    // Test case 4: with zero
+    CljObject *result4 = eval_string("(* 5 0 3)", eval_state);
+    mu_assert_obj_type(result4, CLJ_INT);
+    mu_assert_obj_int(result4, 0);
+    RELEASE(result4);
+  });
+  return 0;
+}
+
+static char *test_native_div_variadic(void) {
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test case 1: two arguments
+    CljObject *result1 = eval_string("(/ 10 2)", eval_state);
+    mu_assert_obj_type(result1, CLJ_INT);
+    mu_assert_obj_int(result1, 5);
+    RELEASE(result1);
+    
+    // Test case 2: multiple arguments
+    CljObject *result2 = eval_string("(/ 20 2 2)", eval_state);
+    mu_assert_obj_type(result2, CLJ_INT);
+    mu_assert_obj_int(result2, 5);
+    RELEASE(result2);
+    
+    // Test case 3: division by zero (should throw exception)
+    CljObject *result3 = eval_string("(/ 10 0)", eval_state);
+    // This should return NULL due to exception
+    if (result3 != NULL) {
+      RELEASE(result3);
+      return "Division by zero should throw exception";
+    }
+  });
+  return 0;
+}
+
+static char *test_to_string_function(void) {
+  WITH_AUTORELEASE_POOL_EVAL({
+    // Test case 1: nil
+    char *result1 = to_string(clj_nil());
+    if (strcmp(result1, "") != 0) {
+      free(result1);
+      return "nil should convert to empty string";
+    }
+    free(result1);
+    
+    // Test case 2: integer
+    CljObject *int_obj = make_int(42);
+    char *result2 = to_string(int_obj);
+    if (strcmp(result2, "42") != 0) {
+      free(result2);
+      RELEASE(int_obj);
+      return "integer should convert to string";
+    }
+    free(result2);
+    RELEASE(int_obj);
+    
+    // Test case 3: string (without quotes)
+    CljObject *str_obj = make_string("hello");
+    char *result3 = to_string(str_obj);
+    if (strcmp(result3, "hello") != 0) {
+      free(result3);
+      RELEASE(str_obj);
+      return "string should convert without quotes";
+    }
+    free(result3);
+    RELEASE(str_obj);
+    
+    // Test case 4: boolean
+    CljObject *bool_obj = clj_true();
+    char *result4 = to_string(bool_obj);
+    if (strcmp(result4, "true") != 0) {
+      free(result4);
+      return "boolean should convert to string";
+    }
+    free(result4);
+  });
   return 0;
 }
 

@@ -6,6 +6,7 @@
 #include "runtime.h"
 #include "memory.h"
 #include "namespace.h"
+#include "clj_string.h"
 
 CljObject* nth2(CljObject *vec, CljObject *idx) {
     if (!vec || !idx || vec->type != CLJ_VECTOR || idx->type != CLJ_INT) return NULL;
@@ -174,6 +175,136 @@ CljObject* native_println(CljObject **args, int argc) {
     return clj_nil();
 }
 
+// ============================================================================
+// VARIADIC FUNCTIONS (Phase 1)
+// ============================================================================
+
+// String concatenation (variadic)
+CljObject* native_str(CljObject **args, int argc) {
+    if (argc == 0) {
+        return make_string("");
+    }
+    
+    // Calculate total length
+    size_t total_len = 0;
+    for (int i = 0; i < argc; i++) {
+        char *s = to_string(args[i]);
+        if (s) {
+            total_len += strlen(s);
+            free(s);
+        }
+    }
+    
+    // Allocate buffer
+    char *buffer = ALLOC(char, total_len + 1);
+    if (!buffer) return make_string("");
+    buffer[0] = '\0';
+    
+    // Concatenate all strings
+    for (int i = 0; i < argc; i++) {
+        char *s = to_string(args[i]);
+        if (s) {
+            strcat(buffer, s);
+            free(s);
+        }
+    }
+    
+    CljObject *result = make_string(buffer);
+    free(buffer);
+    return result;
+}
+
+// Binary operations (inline for performance)
+static inline int add_op(int a, int b) { return a + b; }
+static inline int sub_op(int a, int b) { return a - b; }
+static inline int mul_op(int a, int b) { return a * b; }
+static inline int div_op(int a, int b) { return a / b; }
+
+// Generic reducer with Mutable Result Pattern
+static CljObject* variadic_reduce_int(CljObject **args, int argc, 
+                                      int identity_val,
+                                      int (*op)(int, int),
+                                      bool needs_at_least_one,
+                                      bool is_division) {
+    // argc == 0: return identity or Exception
+    if (argc == 0) {
+        if (needs_at_least_one) {
+            throw_exception_formatted("ArityError", __FILE__, __LINE__, 0,
+                "Wrong number of args: 0");
+            return NULL;
+        }
+        return make_int(identity_val);
+    }
+    
+    // argc == 1: return arg or unary operation (- or /)
+    if (argc == 1) {
+        // Validation
+        if (!args[0] || args[0]->type != CLJ_INT) {
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
+                "Expected integer");
+            return NULL;
+        }
+        if (needs_at_least_one) {
+            // (- 5) → -5,  (/ 8) → 0 (integer division 1/8)
+            return make_int(op(identity_val, args[0]->as.i));
+        }
+        // For addition and multiplication: (+ 5) → 5, (* 5) → 5
+        return RETAIN(args[0]);
+    }
+    
+    // Validation: first argument
+    if (!args[0] || args[0]->type != CLJ_INT) {
+        throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
+            "Expected integer");
+        return NULL;
+    }
+    
+    // ONE allocation for the result
+    CljObject *result = make_int(args[0]->as.i);
+    if (!result) return NULL;
+    
+    // Happy Path: Mutate result in-place (no further allocations!)
+    for (int i = 1; i < argc; i++) {
+        // Type validation
+        if (!args[i] || args[i]->type != CLJ_INT) {
+            RELEASE(result);
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
+                "Expected integer");
+            return NULL;
+        }
+        
+        // Division-by-zero pre-check
+        if (is_division && args[i]->as.i == 0) {
+            RELEASE(result);
+            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                "Divide by zero");
+            return NULL;
+        }
+        
+        // Operation (mutates result in-place)
+        result->as.i = op(result->as.i, args[i]->as.i);
+    }
+    
+    return result;  // rc=1, caller takes ownership
+}
+
+// Public API
+CljObject* native_add_variadic(CljObject **args, int argc) {
+    return variadic_reduce_int(args, argc, 0, add_op, false, false);
+}
+
+CljObject* native_mul_variadic(CljObject **args, int argc) {
+    return variadic_reduce_int(args, argc, 1, mul_op, false, false);
+}
+
+CljObject* native_sub_variadic(CljObject **args, int argc) {
+    return variadic_reduce_int(args, argc, 0, sub_op, true, false);
+}
+
+CljObject* native_div_variadic(CljObject **args, int argc) {
+    return variadic_reduce_int(args, argc, 1, div_op, true, true);
+}
+
 void register_builtins() {
     for (size_t i = 0; i < sizeof(builtins)/sizeof(builtins[0]); ++i) {
         register_builtin(builtins[i].name, (BuiltinFn)builtins[i].u.generic /* placeholder */);
@@ -192,29 +323,36 @@ void register_builtins() {
             ns_define(st, symbol, func);
         }
         
-        // Register arithmetic operations
+        // Register variadic arithmetic operations
         CljObject *add_symbol = intern_symbol(NULL, "+");
-        CljObject *add_func = make_named_func(native_add, NULL, "+");
+        CljObject *add_func = make_named_func(native_add_variadic, NULL, "+");
         if (add_symbol && add_func) {
             ns_define(st, add_symbol, add_func);
         }
         
         CljObject *sub_symbol = intern_symbol(NULL, "-");
-        CljObject *sub_func = make_named_func(native_sub, NULL, "-");
+        CljObject *sub_func = make_named_func(native_sub_variadic, NULL, "-");
         if (sub_symbol && sub_func) {
             ns_define(st, sub_symbol, sub_func);
         }
         
         CljObject *mul_symbol = intern_symbol(NULL, "*");
-        CljObject *mul_func = make_named_func(native_mul, NULL, "*");
+        CljObject *mul_func = make_named_func(native_mul_variadic, NULL, "*");
         if (mul_symbol && mul_func) {
             ns_define(st, mul_symbol, mul_func);
         }
         
         CljObject *div_symbol = intern_symbol(NULL, "/");
-        CljObject *div_func = make_named_func(native_div, NULL, "/");
+        CljObject *div_func = make_named_func(native_div_variadic, NULL, "/");
         if (div_symbol && div_func) {
             ns_define(st, div_symbol, div_func);
+        }
+        
+        // Register str function
+        CljObject *str_symbol = intern_symbol(NULL, "str");
+        CljObject *str_func = make_named_func(native_str, NULL, "str");
+        if (str_symbol && str_func) {
+            ns_define(st, str_symbol, str_func);
         }
         
         CljObject *println_symbol = intern_symbol(NULL, "println");

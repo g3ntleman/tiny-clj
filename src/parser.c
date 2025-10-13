@@ -23,6 +23,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// Helper function for parser exceptions
+static void throw_parser_exception(const char *message, Reader *reader) {
+    throw_exception("ParseError", message, "parser", reader->line, reader->column);
+}
+
 // Stack-based parser constants
 #define MAX_STACK_VECTOR_SIZE 64
 #define MAX_STACK_MAP_PAIRS 32
@@ -182,6 +187,23 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     return clj_false();
   }
   
+  // Handle quote 'x => (quote x)
+  if (c == '\'') {
+    reader_consume(reader); // consume '
+    reader_skip_all(reader);
+    CljObject *quoted = make_object_by_parsing_expr(reader, st);
+    if (!quoted) return NULL;
+    // Create (quote <expr>) list: (quote expr)
+    // Build list using the same pattern as parse_list
+    CljObject *quote_sym = (CljObject*)intern_symbol_global("quote");
+    CljObject *elements[2] = {quote_sym, quoted};
+    CljObject *result = (CljObject*)clj_nil();
+    for (int i = 1; i >= 0; i--) {
+        result = (CljObject*)make_list(elements[i], (CljList*)result);
+    }
+    return result;
+  }
+  
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
     return parse_symbol(reader, st);
   if (strchr("+*/=<>", c)) {
@@ -196,6 +218,12 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     char buf[2] = {c, '\0'};
     return (CljObject *)intern_symbol_global(buf);
   }
+  
+  // Unknown character - throw exception with helpful message
+  char msg[256];
+  snprintf(msg, sizeof(msg), "Unexpected character '%c' (0x%02x) at position %zu (line %d, col %d)", 
+           (c >= 32 && c < 127) ? c : '?', (unsigned char)c, reader->index, reader->line, reader->column);
+  throw_parser_exception(msg, reader);
   return NULL;
 }
 
@@ -296,8 +324,10 @@ static CljObject *parse_vector(Reader *reader, EvalState *st) {
       stack[count++] = value;
       reader_skip_all(reader);
     }
-    if (reader_eof(reader) || !reader_match(reader, ']'))
-      return NULL;
+  if (reader_eof(reader) || !reader_match(reader, ']')) {
+    throw_parser_exception("Unclosed vector - missing closing ']'", reader);
+    return NULL;
+  }
     return make_vector_from_stack(stack, count);
   }
   return NULL;
@@ -328,8 +358,10 @@ static CljObject *parse_map(Reader *reader, EvalState *st) {
     pairs[pair_count * 2 + 1] = (value);
     pair_count++;
   }
-  if (reader_eof(reader) || !reader_match(reader, '}'))
+  if (reader_eof(reader) || !reader_match(reader, '}')) {
+    throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
+  }
   return map_from_stack(pairs, pair_count);
 }
 
@@ -385,6 +417,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
+    throw_parser_exception("Unclosed list - missing closing ')'", reader);
     return NULL;
   }
   
@@ -481,8 +514,10 @@ static CljObject *parse_string_internal(Reader *reader, EvalState *st) {
       buf[pos++] = c;
     }
   }
-  if (reader_eof(reader) || reader_next(reader) != '"')
+  if (reader_eof(reader) || reader_next(reader) != '"') {
+    throw_parser_exception("Unclosed string - missing closing '\"'", reader);
     return NULL;
+  }
   buf[pos] = '\0';
   if (!utf8valid(buf))
     return NULL;

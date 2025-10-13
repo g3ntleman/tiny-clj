@@ -34,4 +34,11 @@ CljObject* apply_builtin(const BuiltinEntry *entry, CljObject **args, int argc);
 // Builtins registration
 void register_builtins();
 
+// Variadic functions (Phase 1)
+CljObject* native_str(CljObject **args, int argc);
+CljObject* native_add_variadic(CljObject **args, int argc);
+CljObject* native_sub_variadic(CljObject **args, int argc);
+CljObject* native_mul_variadic(CljObject **args, int argc);
+CljObject* native_div_variadic(CljObject **args, int argc);
+
 #endif

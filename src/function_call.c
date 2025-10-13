@@ -17,6 +17,7 @@
 #include "namespace.h"
 #include "memory.h"
 #include "list_operations.h"
+#include "builtins.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -86,60 +87,90 @@ static bool is_numeric_type(CljObject *obj) {
     return is_type(obj, CLJ_INT) || is_type(obj, CLJ_FLOAT);
 }
 
-/** @brief Generic arithmetic function (normal version) */
+/** @brief Generic arithmetic function (variadic version) */
 CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op, EvalState *st) {
-    CljObject *a = eval_arg(list, 1, env);
-    CljObject *b = eval_arg(list, 2, env);
+    int total_count = list_count(list);
+    int argc = total_count - 1;  // Subtract 1 for the operator
     
-    // Check for NULL arguments
-    if (!a || !b) {
-        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-                "Invalid arguments for arithmetic operation");
-        return NULL;
+    if (argc == 0) {
+        // Handle zero arguments case
+        switch (op) {
+            case ARITH_ADD:
+                return make_int(0);  // (+) → 0
+            case ARITH_MUL:
+                return make_int(1);  // (*) → 1
+            case ARITH_SUB:
+            case ARITH_DIV:
+                throw_exception_formatted("ArityError", __FILE__, __LINE__, 0,
+                    "Wrong number of args: 0");
+                return NULL;
+        }
     }
     
-    // Check for nil arguments (Clojure throws NumberFormatException)
-    if (is_type(a, CLJ_NIL) || is_type(b, CLJ_NIL)) {
-        throw_exception_formatted("NumberFormatException", __FILE__, __LINE__, 0,
+    // Evaluate all arguments
+    CljObject **args = ALLOC(CljObject*, argc);
+    if (!args) return NULL;
+    
+    for (int i = 0; i < argc; i++) {
+        args[i] = eval_arg(list, i + 1, env);
+        if (!args[i]) {
+            // Clean up already evaluated arguments
+            for (int j = 0; j < i; j++) {
+                RELEASE(args[j]);
+            }
+            free(args);
+            return NULL;
+        }
+        
+        // Check for nil arguments
+        if (is_type(args[i], CLJ_NIL)) {
+            // Clean up already evaluated arguments
+            for (int j = 0; j <= i; j++) {
+                RELEASE(args[j]);
+            }
+            free(args);
+            throw_exception_formatted("NumberFormatException", __FILE__, __LINE__, 0,
                 "Cannot convert nil to Number");
-        return NULL;
-    }
-    
-    // Check for non-numeric types
-    if (!is_numeric_type(a) || !is_numeric_type(b)) {
-        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+            return NULL;
+        }
+        
+        // Check for non-numeric types
+        if (!is_numeric_type(args[i])) {
+            // Clean up already evaluated arguments
+            for (int j = 0; j <= i; j++) {
+                RELEASE(args[j]);
+            }
+            free(args);
+            throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
                 "String cannot be used as a Number");
-        return NULL;
-    }
-    
-    // Division by zero check
-    if (op == ARITH_DIV) {
-        if (b->type == CLJ_INT && b->as.i == 0) {
-            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %d / %d", a->as.i, b->as.i);
-            return NULL;
-        }
-        if (b->type == CLJ_FLOAT && b->as.f == 0.0) {
-            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %f / %f", a->as.f, b->as.f);
             return NULL;
         }
     }
     
-    // For now, only support integer arithmetic
-    // TODO: Add mixed int/float support
-    if (a->type != CLJ_INT || b->type != CLJ_INT) {
-        throw_exception_formatted("NotImplementedError", __FILE__, __LINE__, 0,
-                "Mixed int/float arithmetic not yet implemented");
-        return NULL;
+    // Call the appropriate variadic function
+    CljObject *result = NULL;
+    switch (op) {
+        case ARITH_ADD:
+            result = native_add_variadic(args, argc);
+            break;
+        case ARITH_SUB:
+            result = native_sub_variadic(args, argc);
+            break;
+        case ARITH_MUL:
+            result = native_mul_variadic(args, argc);
+            break;
+        case ARITH_DIV:
+            result = native_div_variadic(args, argc);
+            break;
     }
     
-    int (*op_func)(int, int) = (op == ARITH_ADD) ? add_op :
-                              (op == ARITH_SUB) ? sub_op :
-                              (op == ARITH_MUL) ? mul_op : div_op;
+    // Clean up arguments
+    for (int i = 0; i < argc; i++) {
+        RELEASE(args[i]);
+    }
+    free(args);
     
-    int result = op_func(a->as.i, b->as.i);
-    return make_int(result);
+    return result;
 }
 
 // Generic arithmetic function (with parameter substitution)
@@ -163,12 +194,12 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
     
     // Division by zero check
     if (op == ARITH_DIV) {
-        if (b->type == CLJ_INT && b->as.i == 0) {
+        if (is_type(b, CLJ_INT) && b->as.i == 0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
                     "Division by zero: %d / %d", a->as.i, b->as.i);
             return NULL;
         }
-        if (b->type == CLJ_FLOAT && b->as.f == 0.0) {
+        if (is_type(b, CLJ_FLOAT) && b->as.f == 0.0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
                     "Division by zero: %f / %f", a->as.f, b->as.f);
             return NULL;
@@ -401,7 +432,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     // If not found in parameters, try closure_env
-    if (!resolved_op && is_type(op, CLJ_SYMBOL) && closure_env && is_type(closure_env, CLJ_MAP)) {
+    if (!resolved_op && is_type(op, CLJ_SYMBOL) && is_type(closure_env, CLJ_MAP)) {
         resolved_op = map_get(closure_env, op);
     }
     
@@ -488,21 +519,31 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return eval_fn(list, env);
     }
     
-    // Arithmetic operations
-    if (sym_is(op, "+")) {
-        return eval_arithmetic_generic(list, env, ARITH_ADD, st);
+    if (sym_is(op, "quote")) {
+        // (quote expr) - return expr without evaluating
+        CljObject *quoted_expr = list_get_element(list, 1);
+        if (!quoted_expr) return clj_nil();
+        return RETAIN(quoted_expr), quoted_expr;
     }
     
-    if (sym_is(op, "-")) {
-        return eval_arithmetic_generic(list, env, ARITH_SUB, st);
-    }
+    // Arithmetic operations removed - using namespace lookup (Option B)
     
-    if (sym_is(op, "*")) {
-        return eval_arithmetic_generic(list, env, ARITH_MUL, st);
-    }
-    
-    if (sym_is(op, "/")) {
-        return eval_arithmetic_generic(list, env, ARITH_DIV, st);
+    if (sym_is(op, "str")) {
+        // Call native_str with evaluated arguments
+        int total_count = list_count(list);
+        int argc = total_count - 1;
+        if (argc < 0) argc = 0;
+        
+        CljObject *args_stack[16];
+        CljObject **args = alloc_obj_array(argc, args_stack);
+        for (int i = 0; i < argc; i++) {
+            args[i] = eval_arg(list, i + 1, env);
+            if (!args[i]) args[i] = clj_nil();
+        }
+        
+        CljObject *result = native_str(args, argc);
+        free_obj_array(args, args_stack);
+        return result;
     }
     
     if (sym_is(op, "count")) {

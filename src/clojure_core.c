@@ -26,8 +26,6 @@ extern CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st);
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
     return false;
-  DEBUG_PRINTF("[clojure.core] eval_core_source src=%p first=%d\n", (void *)src,
-           (int)(unsigned char)src[0]);
   
   // Use Reader to parse multiple expressions
   Reader reader;
@@ -77,11 +75,6 @@ int load_clojure_core(EvalState *st) {
   if (!st) return 0;
   
   if (!g_core_quiet) {
-    printf("[clojure.core] load_clojure_core start src=%p\n",
-           (void *)clojure_core_code);
-    if (clojure_core_code) {
-      printf("[clojure.core] first chars: %.32s\n", clojure_core_code);
-    }
     printf("=== Loading Clojure Core Functions ===\n");
   }
   if (!clojure_core_code && !g_core_quiet) {

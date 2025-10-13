@@ -165,13 +165,19 @@ CljObject* clj_false();
 // String representation of CljObject
 /** Return newly allocated C-string representation (caller frees). */
 char* pr_str(CljObject *v);
+char* to_string(CljObject *v);
+
+// Type checking helper
+static inline bool is_type(CljObject *obj, CljType expected_type) {
+    return TYPE(obj) == expected_type;
+}
 
 // Equality comparison
 /** Structural equality for collections; pointer equality fast path. */
 bool clj_equal(CljObject *a, CljObject *b);
 static inline bool clj_is_truthy(CljObject *v) {
     if (!v || v == clj_nil()) return false;
-    if (v->type == CLJ_BOOL) return v->as.b;
+    if (is_type(v, CLJ_BOOL)) return v->as.b;
     return true;
 }
 
@@ -268,11 +274,6 @@ void retain_object(CljObject *obj);
 void release_object(CljObject *obj);
 /** Free object memory immediately (no rc checks). */
 void free_object(CljObject *obj);
-
-// Type checking helper
-static inline bool is_type(CljObject *obj, CljType expected_type) {
-    return TYPE(obj) == expected_type;
-}
 
 // Debug macros - only include debug code in debug builds
 #ifdef DEBUG
