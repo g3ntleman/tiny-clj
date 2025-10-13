@@ -337,11 +337,9 @@ static void release_object_deep(CljObject *v) {
         case CLJ_LIST:
             {
                 CljList *list = as_list(v);
-                if (list) {
-                    // Release head and tail elements
-                    if (list->head) RELEASE(list->head);
-                    if (list->tail) RELEASE(list->tail);
-                }
+                // Release head and tail elements
+                if (list->head) RELEASE(list->head);
+                if (list->tail) RELEASE(list->tail);
             }
             break;
             

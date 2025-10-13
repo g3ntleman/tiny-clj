@@ -312,25 +312,22 @@ static char *test_type_safe_casting_exceptions(void) {
         printf("DEBUG: Caught exception: %s - %s\n", ex->type, ex->message);
     } END_TRY
     
-    // Currently as_* functions return NULL, so no exception is thrown
-    // This test documents the expected behavior when exceptions are implemented
-    mu_assert("Currently no exception thrown (returns NULL)", !exception_caught);
+    // Now as_* functions throw exceptions on type mismatch
+    mu_assert("Exception should be thrown for type mismatch", exception_caught);
     
     // Test as_symbol with wrong type
     TRY {
         CljSymbol *result = as_symbol(string_obj);  // string_obj is CLJ_STRING, not CLJ_SYMBOL
-        mu_assert("as_symbol should return NULL for wrong type", result == NULL);
+        mu_assert("Should not reach here - exception should be thrown", 0);
     } CATCH(ex) {
-        exception_caught = true;
         printf("DEBUG: Caught symbol exception: %s - %s\n", ex->type, ex->message);
     } END_TRY
     
     // Test as_vector with wrong type
     TRY {
         CljPersistentVector *result = as_vector(nil_obj);  // nil_obj is CLJ_NIL, not CLJ_VECTOR
-        mu_assert("as_vector should return NULL for wrong type", result == NULL);
+        mu_assert("Should not reach here - exception should be thrown", 0);
     } CATCH(ex) {
-        exception_caught = true;
         printf("DEBUG: Caught vector exception: %s - %s\n", ex->type, ex->message);
     } END_TRY
     

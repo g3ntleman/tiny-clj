@@ -293,24 +293,43 @@ void free_object(CljObject *obj);
     #define STM32_FPRINTF(stream, fmt, ...) fprintf(stream, fmt, ##__VA_ARGS__)
 #endif
 
+// Type-safe casting with exception throwing (DRY principle)
+static inline void* assert_type(CljObject *obj, CljType expected_type, const char *type_name) {
+    if (!is_type(obj, expected_type)) {
+        char error_msg[128];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Type mismatch: expected %s, got %s", 
+                type_name, clj_type_name(TYPE(obj)));
+        throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
+    }
+    return obj;
+}
+
 // Type-safe casting (static inline for performance)
 static inline CljSymbol* as_symbol(CljObject *obj) {
-    return (TYPE(obj) == CLJ_SYMBOL) ? (CljSymbol*)obj : NULL;
+    return (CljSymbol*)assert_type(obj, CLJ_SYMBOL, "Symbol");
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
-    return (TYPE(obj) == CLJ_VECTOR || TYPE(obj) == CLJ_WEAK_VECTOR) ? (CljPersistentVector*)obj : NULL;
+    if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR)) {
+        char error_msg[128];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Type mismatch: expected Vector, got %s", 
+                clj_type_name(TYPE(obj)));
+        throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
+    }
+    return (CljPersistentVector*)obj;
 }
 static inline CljMap* as_map(CljObject *obj) {
-    return (TYPE(obj) == CLJ_MAP) ? (CljMap*)obj->as.data : NULL;
+    return (CljMap*)((CljObject*)assert_type(obj, CLJ_MAP, "Map"))->as.data;
 }
 static inline CljList* as_list(CljObject *obj) {
-    return (TYPE(obj) == CLJ_LIST) ? (CljList*)obj : NULL;
+    return (CljList*)assert_type(obj, CLJ_LIST, "List");
 }
 static inline CljFunction* as_function(CljObject *obj) {
-    return (TYPE(obj) == CLJ_FUNC) ? (CljFunction*)obj : NULL;
+    return (CljFunction*)assert_type(obj, CLJ_FUNC, "Function");
 }
 static inline CLJException* as_exception(CljObject *obj) {
-    return (TYPE(obj) == CLJ_EXCEPTION) ? (CLJException*)obj : NULL;
+    return (CLJException*)assert_type(obj, CLJ_EXCEPTION, "Exception");
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)

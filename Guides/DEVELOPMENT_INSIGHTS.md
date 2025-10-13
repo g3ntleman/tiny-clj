@@ -5,7 +5,97 @@ This document captures key learnings from the refactoring of `test_for_loops_com
 
 ## Key Learnings
 
-### 1. API Design and Memory Policy
+### 1. DRY Principle - Core Development Philosophy
+
+#### Central Rule: "Don't Repeat Yourself"
+
+**Code compaction is one of the core goals of this project.**
+
+The DRY principle is fundamental to maintaining a clean, efficient, and maintainable codebase. Every piece of knowledge or logic should have a single, unambiguous representation in the system.
+
+#### Key Guidelines
+
+##### When to Apply DRY
+
+- **3+ occurrences of similar code** → Extract to shared function
+- **Repeated type checking patterns** → Create helper functions (e.g., `assert_type()`)
+- **Duplicated NULL checks** → Use macros with built-in checks (e.g., `RELEASE`, `is_type`)
+- **Similar assertion patterns** → Create assertion helpers
+- **Repeated setup/teardown** → Extract into helper functions
+
+##### Implementation Strategies
+
+1. **Static Inline Helper Functions** - For frequently used operations
+2. **Macros with Built-in Safety** - For operations that need compile-time optimization
+3. **Shared Utility Functions** - For common operations across modules
+4. **Consistent APIs** - Same patterns reduce learning curve and errors
+
+##### Example: Type-Safe Casting with DRY
+
+Instead of implementing type checking in every `as_*` function separately:
+
+```c
+// ❌ Before: Repeated logic in every function
+static inline CljSymbol* as_symbol(CljObject *obj) {
+    if (!obj || TYPE(obj) != CLJ_SYMBOL) {
+        throw_exception(...);
+    }
+    return (CljSymbol*)obj;
+}
+
+static inline CljList* as_list(CljObject *obj) {
+    if (!obj || TYPE(obj) != CLJ_LIST) {
+        throw_exception(...);
+    }
+    return (CljList*)obj;
+}
+// ... repeated for every type
+
+// ✅ After: Single source of truth
+static inline void* assert_type(CljObject *obj, CljType expected, const char *name) {
+    if (!is_type(obj, expected)) {
+        throw_exception(exception_dynamic(...));
+    }
+    return obj;
+}
+
+static inline CljSymbol* as_symbol(CljObject *obj) {
+    return (CljSymbol*)assert_type(obj, CLJ_SYMBOL, "Symbol");
+}
+
+static inline CljList* as_list(CljObject *obj) {
+    return (CljList*)assert_type(obj, CLJ_LIST, "List");
+}
+```
+
+#### Benefits of DRY Approach
+
+- **Single Source of Truth** - Logic defined once, used everywhere
+- **Easier Maintenance** - Changes in one place affect all usages
+- **Reduced Code Size** - Fewer lines = less to maintain
+- **Consistent Behavior** - Same logic produces same results everywhere
+- **Fewer Bugs** - No duplicate logic means no divergent implementations
+- **Better Readability** - Intent clear, no boilerplate noise
+
+#### Code Compaction Goals
+
+This project prioritizes compact, efficient code:
+
+- **Eliminate redundancy** - Every line should serve a purpose
+- **Extract common patterns** - Shared logic should be centralized
+- **Use existing utilities** - Don't reinvent what already exists (e.g., `is_type()`, macros)
+- **Avoid defensive programming** - Don't check what's already checked
+- **Trust the infrastructure** - Use provided safety mechanisms
+
+#### Related Best Practices
+
+See also:
+- Section 10: DRY Principle and Code Compaction (detailed examples)
+- Section 16: Memory Management Macros with built-in NULL checks
+- Section 17: Consistent use of `is_type()`
+- Section 18: Avoiding redundant NULL checks before `is_type()`
+
+### 2. API Design and Memory Policy
 
 #### ❌ Common Misconception
 - **Assumption**: `parse_string` returns objects that need manual release
@@ -17,7 +107,7 @@ This document captures key learnings from the refactoring of `test_for_loops_com
 - Doxygen documentation was already correct: `@return (autoreleased)`
 - Trust the existing API design and documentation
 
-### 2. Test-First Development Strategy
+### 3. Test-First Development Strategy
 
 #### ✅ Correct Test-First Process
 ```c
@@ -52,7 +142,7 @@ mu_assert("This always passes", true);
 - **Memory profiling** validates implementation
 - **Tests serve as living documentation** of expected behavior
 
-### 3. Separated Parse/Eval API Architecture
+### 4. Separated Parse/Eval API Architecture
 
 #### Design Decision
 ```c
@@ -68,7 +158,7 @@ CljObject* eval_string(...);      // Convenience (both)
 - **Easier debugging** of parsing vs. evaluation issues
 - **Flexible usage patterns** (parse once, evaluate multiple times)
 
-### 4. Memory Management Insights
+### 5. Memory Management Insights
 
 #### Singleton Objects
 - **Singleton objects are allowed to leak** (performance optimization)
@@ -80,7 +170,7 @@ CljObject* eval_string(...);      // Convenience (both)
 - **Memory profiling** shows autorelease calls being tracked
 - **Consistent behavior** across all evaluation functions
 
-### 5. Code Quality Improvements
+### 6. Code Quality Improvements
 
 #### String Literals - Raw Strings (C11)
 ```c
@@ -111,7 +201,7 @@ const char* symbol_name = "my-symbol";  // No quotes, no need for Raw String
 
 **Rule**: Only use Raw Strings when the string literal contains quotes or other characters that would require escaping.
 
-### **9. Memory-Testing-Integration:**
+### **10. Memory-Testing-Integration:**
 ```c
 // Statt:
 MEMORY_TEST_START("test_name");
@@ -130,7 +220,7 @@ WITH_MEMORY_PROFILING({
 - **Konsistente Nutzung** - ein Makro für alle Memory-Tests
 - **Automatisches Cleanup** - Start/End wird automatisch verwaltet
 
-### **10. Test-Code-Verbesserungen:**
+### **11. Test-Code-Verbesserungen:**
 ```c
 // Statt Magic Numbers:
 for (int i = 0; i < 5; i++) { /* ... */ }
@@ -146,7 +236,7 @@ for (int i = 0; i < TEST_VECTOR_SIZE; i++) { /* ... */ }
 - **Konsistenz** - alle Operationen verwenden dieselbe Größe
 - **Weniger Fehlerquellen** - keine unterschiedlichen Magic Numbers
 
-### **11. MinUnit-Makro-Optimierung:**
+### **12. MinUnit-Makro-Optimierung:**
 ```c
 // Statt redundante Checks:
 mu_assert_obj_not_null(result);  // ← redundant
@@ -168,7 +258,7 @@ mu_assert_obj_int(result, 3);  // ← enthält NULL- und Typ-Check
 - **Consistent API documentation** across all functions
 - **Clear parameter and return value descriptions**
 
-### 6. Error Handling and Debugging
+### 7. Error Handling and Debugging
 
 #### Memory Profiling
 - **Essential tool** for correct implementation
@@ -184,7 +274,7 @@ if (!shared_string_vector || shared_string_vector->type != CLJ_VECTOR) {
 }
 ```
 
-### 7. Project Organization
+### 8. Project Organization
 
 #### Public API Structure
 - **`tiny_clj.h`**: Main public API
@@ -273,7 +363,7 @@ if (!shared_string_vector || shared_string_vector->type != CLJ_VECTOR) {
 - **Better debugging tools**
 - **Usage examples** and tutorials
 
-## 14. Pre-Commit Testing Best Practice
+## 15. Pre-Commit Testing Best Practice
 
 ### ✅ Always Run All Tests Before Committing
 
@@ -363,7 +453,7 @@ The refactoring of `test_for_loops_comparison.c` provided valuable insights into
 
 The separated parse/eval API provides better control and performance measurement capabilities, while maintaining consistency with the existing memory management policy of tiny-clj.
 
-### 8. MinUnit String Assertion Enhancement
+### 9. MinUnit String Assertion Enhancement
 
 #### ✅ New Macro: mu_assert_string_eq
 ```c
@@ -394,7 +484,7 @@ mu_assert_string_eq(result_str, "(1 2 3)");
 - Consistent error message format
 - No performance overhead - just syntactic sugar
 
-### 9. DRY Principle and Code Compaction
+### 10. DRY Principle and Code Compaction
 
 #### ✅ Core Principle: "Don't Repeat Yourself"
 **Kompaktheit im Code ist eins der Kerziele dieses Projektes.**
@@ -454,7 +544,7 @@ test_list_eval(&st, "(list 1 2 3)", "(1 2 3)");
 - **Eliminate boilerplate** - Extract repetitive patterns
 - **Focus on intent** - Code should read like documentation
 
-### 10. MinUnit Design Pattern: char* as Boolean
+### 11. MinUnit Design Pattern: char* as Boolean
 
 #### ✅ Understanding MinUnit's Return Type
 MinUnit uses `char*` as a boolean-like return type, which is unconventional but works:
@@ -512,7 +602,7 @@ static char *test_list_function(void) {
 #### Key Insight
 While `char*` seems like it should be `bool*`, it's actually a clever design that provides both success/failure status AND error messages in a single return value.
 
-## 11. Function Call Evaluation and Symbol Resolution
+## 12. Function Call Evaluation and Symbol Resolution
 
 ### Problem: Function Calls Not Working
 **Symptom**: `(add 1 2)` returned `"add"` (the symbol) instead of `3` (the result).
@@ -706,7 +796,7 @@ return head ? (RETAIN(head), head) : clj_nil();  // RC+1
 - **Name comparison** only as fallback after pointer comparison fails
 - **Single-pass argument evaluation** without temporary copies
 
-## 12. VSCode/Cursor Configuration Issues
+## 13. VSCode/Cursor Configuration Issues
 
 ### Problem: Build Task Fails with Exit Code 1
 **Symptom**: `The preLaunchTask 'build' terminated with exit code 1.`
@@ -854,7 +944,7 @@ test -x tiny-clj-repl && echo "OK"
 ✅ **Do**: Test preLaunchTask independently  
 ✅ **Do**: Use valid JSON (single root object)
 
-## 13. REPL Testing Best Practices
+## 14. REPL Testing Best Practices
 
 ### Problem: Interactive REPL Hangs in Tests
 **Symptom**: When testing REPL without `-e` flag, it waits for input and never returns.
@@ -1132,7 +1222,7 @@ echo "All tests passed!"
 - Easy to debug individual test cases
 - Composable and maintainable
 
-## 15. Memory Management Macros haben eingebaute NULL-Checks
+## 16. Memory Management Macros haben eingebaute NULL-Checks
 
 ### ✅ Wichtige Regel: Explizite NULL-Checks vor Memory-Management-Makros sind unnötig
 
@@ -1195,7 +1285,7 @@ Die `release()` Funktion selbst hat bereits den NULL-Check, daher ist der expliz
 
 Diese Regel macht den Code sauberer und konsistenter.
 
-## 16. Konsequente Verwendung von is_type()
+## 17. Konsequente Verwendung von is_type()
 
 ### ✅ Wichtige Regel: Immer is_type() verwenden statt direkte Typvergleiche
 
@@ -1244,7 +1334,7 @@ if (a && is_type(a, CLJ_NIL)) {
 
 Diese Regel macht den Code konsistenter und robuster.
 
-## 17. NULL-Checks vor is_type() sind überflüssig
+## 18. NULL-Checks vor is_type() sind überflüssig
 
 ### ✅ Wichtige Regel: is_type() hat eingebaute NULL-Checks
 

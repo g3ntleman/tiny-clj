@@ -58,14 +58,13 @@ static inline void free_obj_array(CljObject **array, CljObject **stack_buffer) {
 static CljObject* list_get_element(CljObject *list, int index) {
     if (!list || list->type != CLJ_LIST || index < 0) return NULL;
     CljList *node = as_list(list);
-    if (!node) return NULL;
     if (index == 0) return node->head;
     int i = 0;
-    while (node && i < index) {
+    while (i < index) {
         node = (CljList*)LIST_REST(node);
         i++;
     }
-    return node ? node->head : NULL;
+    return node->head;
 }
 
 // Arithmetic operation types
@@ -287,10 +286,8 @@ CljObject* eval_list_with_env(CljObject *list, CljObject *env) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     
     CljList *list_data = as_list(list);
-    if (!list_data) return clj_nil();
     
     CljObject *head = list_data->head;
-    if (!head) return clj_nil();
     
     // First element is the operator
     CljObject *op = head;
@@ -377,10 +374,8 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     if (!list || list->type != CLJ_LIST) return clj_nil();
     
     CljList *list_data = as_list(list);
-    if (!list_data) return clj_nil();
     
     CljObject *head = list_data->head;
-    if (!head) return clj_nil();
     
     // First element is the operator
     CljObject *op = head;
@@ -489,10 +484,8 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     
     CljList *list_data = as_list(list);
-    if (!list_data) return clj_nil();
     
     CljObject *head = list_data->head;
-    if (!head) return clj_nil();
     
     // First element is the operator
     CljObject *op = head;
@@ -875,11 +868,11 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
     if (is_type(arg, CLJ_LIST)) {
         CljList *list_data = as_list(arg);
         int count = 0;
-        CljObject *current = list_data ? list_data->head : NULL;
+        CljObject *current = list_data->head;
         while (current) {
             count++;
-            CljList *current_list = as_list(current);
-            current = current_list ? (CljObject*)current_list->tail : NULL;
+        CljList *current_list = as_list(current);
+        current = (CljObject*)current_list->tail;
         }
         return AUTORELEASE(make_int(count));
     }
@@ -997,7 +990,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     
     // Parse binding: [var coll]
     CljList *binding_data = as_list(binding_list);
-    if (!binding_data || !binding_data->head || !binding_data->tail) {
+    if (!binding_data->head || !binding_data->tail) {
         return clj_nil();
     }
     
@@ -1006,7 +999,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     
     // Get collection to iterate over
     CljList *coll_data = as_list(coll);
-    if (!coll_data || !coll_data->head) {
+    if (!coll_data->head) {
         return clj_nil();
     }
     
@@ -1067,7 +1060,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
     
     // Parse binding: [var coll]
     CljList *binding_data = as_list(binding_list);
-    if (!binding_data || !binding_data->head || !binding_data->tail) {
+    if (!binding_data->head || !binding_data->tail) {
         return clj_nil();
     }
     
@@ -1076,7 +1069,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
     
     // Get collection to iterate over
     CljList *coll_data = as_list(coll);
-    if (!coll_data || !coll_data->head) {
+    if (!coll_data->head) {
         return clj_nil();
     }
     
@@ -1122,7 +1115,6 @@ CljObject* eval_list_function(CljObject *list, CljObject *env) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     
     CljList *list_data = as_list(list);
-    if (!list_data) return clj_nil();
     
     // Create new list starting from the second element (skip 'list' symbol)
     CljObject *args_list = (CljObject*)LIST_REST(list_data);
@@ -1139,7 +1131,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     
     // Parse arguments directly without evaluation
     CljList *list_data = as_list(list);
-    if (!list_data || !list_data->tail) {
+    if (!list_data->tail) {
         return clj_nil();
     }
     
@@ -1152,7 +1144,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     
     // Parse binding: [var n]
     CljList *binding_data = as_list(binding_list);
-    if (!binding_data || !binding_data->head || !binding_data->tail) {
+    if (!binding_data->head || !binding_data->tail) {
         return clj_nil();
     }
     
@@ -1161,7 +1153,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     
     // Get number of iterations
     CljList *n_data = as_list(n_expr);
-    if (!n_data || !n_data->head) {
+    if (!n_data->head) {
         return clj_nil();
     }
     
@@ -1196,7 +1188,6 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     if (!list || list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
-    if (!list_data) return NULL;
     
     // Collect all elements in an array
     CljObject *elements[1000]; // Max 1000 elements
@@ -1249,7 +1240,6 @@ CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **pa
     if (!list || list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
-    if (!list_data) return NULL;
     
     // Collect all elements in an array
     CljObject *elements[1000]; // Max 1000 elements

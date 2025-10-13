@@ -362,7 +362,6 @@ char* to_string(CljObject *v) {
         case CLJ_LIST:
             {
                 CljList *list = as_list(v);
-                if (!list) return strdup("()");
                 
                 // Sammle alle Elemente in einem Array
                 CljObject *elements[1000]; // Max 1000 Elemente

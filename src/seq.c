@@ -88,7 +88,7 @@ CljObject* seq_iter_first(const SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                return node ? LIST_FIRST(node) : clj_nil();
+                return LIST_FIRST(node);
             }
             return clj_nil();
         }
@@ -123,7 +123,7 @@ bool seq_iter_next(SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                if (node && node->tail) {
+                if (node->tail) {
                     iter->state.list.current = (CljObject*)node->tail;
                     iter->state.list.index++;
                     return true;
