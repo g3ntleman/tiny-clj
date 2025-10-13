@@ -209,7 +209,7 @@ CljObject* make_symbol(const char *name, const char *ns) {
                 name, SYMBOL_NAME_MAX_LEN - 1);
     }
     
-    CljSymbol *sym = malloc(sizeof(CljSymbol));
+    CljSymbol *sym = ALLOC(CljSymbol, 1);
     if (!sym) {
         throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
                 "Failed to allocate memory for symbol '%s'", name);
@@ -226,7 +226,7 @@ CljObject* make_symbol(const char *name, const char *ns) {
     if (ns) {
         sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
         if (!sym->ns) {
-            free(sym);
+            RELEASE((CljObject*)sym);
             throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
                     "Failed to create namespace '%s' for symbol '%s'", ns, name);
         }
@@ -980,6 +980,7 @@ void free_object(CljObject *obj) {
                 CljSymbol *sym = (CljSymbol*)obj;
                 // Note: CljNamespace doesn't have reference counting yet
                 // TODO: Implement reference counting for CljNamespace
+                // CljSymbol is a CljObject subtype, use standard free() for final cleanup
                 free(sym);
             }
             break;

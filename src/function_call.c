@@ -509,6 +509,10 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return eval_count(list, env);
     }
     
+    if (sym_is(op, "println")) {
+        return eval_println(list, env);
+    }
+    
     if (sym_is(op, "first")) {
         return eval_first(list, env);
     }
