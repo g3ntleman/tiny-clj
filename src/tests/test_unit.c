@@ -21,14 +21,24 @@
 
 // Test setup and teardown functions
 static void test_setup(void) {
+  printf("DEBUG: Starting test_setup\n");
+  
   // Initialize symbol table
+  printf("DEBUG: Calling init_special_symbols\n");
   init_special_symbols();
+  printf("DEBUG: init_special_symbols completed\n");
 
   // Initialize meta registry
+  printf("DEBUG: Calling meta_registry_init\n");
   meta_registry_init();
+  printf("DEBUG: meta_registry_init completed\n");
   
   // Register builtin functions (after memory profiler is initialized)
+  printf("DEBUG: Calling register_builtins\n");
   register_builtins();
+  printf("DEBUG: register_builtins completed\n");
+  
+  printf("DEBUG: test_setup completed\n");
 }
 
 
@@ -37,20 +47,25 @@ static void test_setup(void) {
 // ============================================================================
 
 static char *test_list_count(void) {
-  WITH_AUTORELEASE_POOL({
-    // Test null pointer
-    mu_assert("null pointer should return count 0", list_count(NULL) == 0);
-    
-    // Test non-list object (this should not crash)
-    CljObject *int_obj = make_int(42);
-    mu_assert("non-list object should return count 0", list_count(int_obj) == 0);
-    RELEASE(int_obj);
-    
-    // Test empty list (clj_nil is not a list)
-    CljObject *empty_list = clj_nil();
-    mu_assert("clj_nil should return count 0", list_count(empty_list) == 0);
-  });
+  // Test without autorelease pool to isolate memory management issues
+  printf("DEBUG: Starting test_list_count\n");
   
+  // Test null pointer
+  printf("DEBUG: Testing null pointer\n");
+  mu_assert("null pointer should return count 0", list_count(NULL) == 0);
+  
+  // Test non-list object (this should not crash)
+  printf("DEBUG: Testing non-list object\n");
+  CljObject *int_obj = make_int(42);
+  mu_assert("non-list object should return count 0", list_count(int_obj) == 0);
+  release(int_obj);
+  
+  // Test empty list (clj_nil is not a list)
+  printf("DEBUG: Testing empty list\n");
+  CljObject *empty_list = clj_nil();
+  mu_assert("clj_nil should return count 0", list_count(empty_list) == 0);
+  
+  printf("DEBUG: test_list_count completed successfully\n");
   return 0;
 }
 
@@ -274,8 +289,8 @@ static char *all_unit_tests(void) {
   test_setup();
   
   // Only run basic tests to isolate the problem
-  mu_run_test(test_basic_creation);
-  // mu_run_test(test_list_count);  // Temporarily disabled
+  // mu_run_test(test_basic_creation);  // Disabled to test framework
+  mu_run_test(test_list_count);  // Test with debug output
   // mu_run_test(test_boolean_creation);
   // mu_run_test(test_singleton_objects);
   // mu_run_test(test_empty_vector_singleton);

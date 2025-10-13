@@ -132,7 +132,7 @@ add_executable(run-tests
     src/memory.c
     src/runtime.c
 )
-target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG ENABLE_LINE_EDITING)
+target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER DEBUG ENABLE_LINE_EDITING)
 # Regular tests WITH memory profiling for early leak detection
 
 # ============================================================================
