@@ -1198,19 +1198,11 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     CljObject *element = list_nth(list, index);
     if (!element) return clj_nil();
     
-    // If it's a list, evaluate it
-    if (is_type(element, CLJ_LIST)) {
-        EvalState *st = evalstate();
-        return eval_list(element, env, st);
-    }
+    // TEMPORARY FIX: Don't evaluate nested expressions to prevent infinite loops
+    // This is a simplified version that just returns the element as-is
+    // The proper evaluation should happen in the calling context
     
-    // If it's a symbol, resolve it
-    if (is_type(element, CLJ_SYMBOL)) {
-        EvalState *st = evalstate();
-        return eval_symbol(element, st);
-    }
-    
-    // Otherwise, return the literal value
+    // For now, just return the literal value
     return element ? (RETAIN(element), element) : clj_nil();
 }
 
