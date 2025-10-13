@@ -58,13 +58,13 @@ static inline void free_obj_array(CljObject **array, CljObject **stack_buffer) {
 static CljObject* list_get_element(CljObject *list, int index) {
     if (!list || list->type != CLJ_LIST || index < 0) return NULL;
     CljList *node = as_list(list);
-    if (index == 0) return node->head;
+    if (index == 0) return LIST_FIRST(node);
     int i = 0;
     while (i < index) {
-        node = (CljList*)LIST_REST(node);
+        node = LIST_REST(node);
         i++;
     }
-    return node->head;
+    return LIST_FIRST(node);
 }
 
 // Arithmetic operation types
@@ -485,7 +485,7 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     
     CljList *list_data = as_list(list);
     
-    CljObject *head = list_data->head;
+    CljObject *head = LIST_FIRST(list_data);
     
     // First element is the operator
     CljObject *op = head;
@@ -1189,34 +1189,8 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     
     CljList *list_data = as_list(list);
     
-    // Collect all elements in an array
-    CljObject *elements[1000]; // Max 1000 elements
-    int count = 0;
-    
-    // Add head
-    if (list_data->head) {
-        elements[count++] = list_data->head;
-    }
-    
-    // Add tail elements - ultra-safe approach
-    CljList *current = list_data->tail;
-    while (current && count < 1000) {
-        // Check if current is a valid pointer before accessing its members
-        if (current && (uintptr_t)current > 0x1000) { // Basic pointer validity check
-            if (current->head) {
-                elements[count++] = current->head;
-            }
-            current = current->tail;
-        } else {
-            break;
-        }
-    }
-    
-    // Check index and evaluate element
-    if (index < 0 || index >= count) return NULL;
-    
-    // Evaluate the element properly
-    CljObject *element = elements[index];
+    // Use the existing list_nth function which is safer
+    CljObject *element = list_nth(list, index);
     if (!element) return clj_nil();
     
     // If it's a list, evaluate it
@@ -1239,35 +1213,11 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
 CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
     if (!list || list->type != CLJ_LIST) return NULL;
     
-    CljList *list_data = as_list(list);
+    // Use the existing list_nth function which is safer
+    CljObject *element = list_nth(list, index);
+    if (!element) return clj_nil();
     
-    // Collect all elements in an array
-    CljObject *elements[1000]; // Max 1000 elements
-    int count = 0;
-    
-    // Add head
-    if (list_data->head) {
-        elements[count++] = list_data->head;
-    }
-    
-    // Add tail elements - ultra-safe approach
-    CljList *current = list_data->tail;
-    while (current && count < 1000) {
-        // Check if current is a valid pointer before accessing its members
-        if (current && (uintptr_t)current > 0x1000) { // Basic pointer validity check
-            if (current->head) {
-                elements[count++] = current->head;
-            }
-            current = current->tail;
-        } else {
-            break;
-        }
-    }
-    
-    // Check index and evaluate element
-    if (index < 0 || index >= count) return NULL;
-    
-    return eval_body_with_params(elements[index], params, values, param_count, closure_env);
+    return eval_body_with_params(element, params, values, param_count, closure_env);
 }
 
 // is_symbol is already defined in namespace.c

@@ -188,21 +188,31 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     
     const char* type_names[] = {
         "NIL", "BOOL", "SYMBOL", "INT", "FLOAT", "STRING", "VECTOR", 
-        "WEAK_VECTOR", "MAP", "LIST", "SEQ", "ARRAY", "WEAK_ARRAY", 
+        "WEAK_VECTOR", "MAP", "LIST", "SEQ", 
         "FUNC", "EXCEPTION", "UNKNOWN"
     };
     
     size_t total_type_leaks = 0;
-    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+    // Safety check: ensure CLJ_TYPE_COUNT doesn't exceed array bounds
+    int max_types = (CLJ_TYPE_COUNT < (int)(sizeof(type_names)/sizeof(type_names[0]))) ? 
+                    CLJ_TYPE_COUNT : (int)(sizeof(type_names)/sizeof(type_names[0]));
+    
+    for (int i = 0; i < max_types; i++) {
         size_t allocs = stats->allocations_by_type[i];
         size_t deallocs = stats->deallocations_by_type[i];
         size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
         total_type_leaks += leaks;
         
         if (allocs > 0 || deallocs > 0 || leaks > 0) {
-            const char* type_name = (i < sizeof(type_names)/sizeof(type_names[0])) ? type_names[i] : "UNKNOWN";
-            printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-                   type_name, allocs, deallocs, leaks);
+            // Bounds check to prevent array overflow
+            if (i >= 0 && i < (int)(sizeof(type_names)/sizeof(type_names[0]))) {
+                const char* type_name = type_names[i];
+                printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
+                       type_name, allocs, deallocs, leaks);
+            } else {
+                printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
+                       "UNKNOWN", allocs, deallocs, leaks);
+            }
         }
     }
     
@@ -211,7 +221,7 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
            "TOTAL", stats->object_creations, stats->object_destructions, total_type_leaks);
     printf("  └─────────────────────────────────────────────────────────┘\n");
     
-    // Calculate efficiency metrics
+    // Calculate efficiency metrics with safety checks
     if (stats->object_creations > 0) {
         double retention_ratio = (double)stats->retain_calls / stats->object_creations;
         const char *ratio_label = is_delta ? "Delta Retention Ratio" : "Retention Ratio";
@@ -235,6 +245,7 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
 }
 
 void memory_profiler_print_stats(const char *test_name) {
+    printf("\n📊 Memory Statistics:\n");
     print_memory_table(&g_memory_stats, test_name, false);
 }
 
@@ -332,6 +343,8 @@ void memory_profiler_track_autorelease(CljObject *obj) {
 void memory_profiler_check_leaks(const char *location) {
     if (g_memory_stats.memory_leaks > 0) {
         printf("⚠️  Memory Leak Warning: %zu allocations not freed\n", 
+               g_memory_stats.memory_leaks);
+        printf("⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
                g_memory_stats.memory_leaks);
     } else {
         printf("✅ Memory Clean: All allocations freed\n");

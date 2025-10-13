@@ -13,11 +13,17 @@ CljObject* list_nth(CljObject *list, int n) {
     if (!list || list->type != CLJ_LIST || n < 0) return clj_nil();
     
     CljList *ld = as_list(list);
-    CljObject *current = LIST_FIRST(ld);
-    for (int i = 0; i < n && current; i++) {
-        current = (CljObject*)LIST_REST((CljList*)current->as.data);
+    CljList *current = ld;
+    
+    // Traverse the list properly
+    for (int i = 0; i <= n && current; i++) {
+        if (i == n) {
+            return LIST_FIRST(current);
+        }
+        current = LIST_REST(current);
     }
-    return current;
+    
+    return clj_nil();
 }
 
 int list_count(CljObject *list) {
@@ -25,7 +31,7 @@ int list_count(CljObject *list) {
     
     int count = 0;
     CljList *current = as_list(list);
-    while (LIST_FIRST(current)) {
+    while (current) {
         count++;
         current = LIST_REST(current);
     }

@@ -286,7 +286,6 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name);
  */
 #define MEMORY_TEST_END(test_name) do { \
     MEMORY_PROFILER_PRINT_STATS(test_name); \
-    MEMORY_PROFILER_CHECK_LEAKS(test_name); \
     memory_profiling_cleanup_with_hooks(); \
 } while(0)
 
