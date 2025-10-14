@@ -40,6 +40,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env);
 
 // Hilfsfunktionen
 CljObject* eval_arg(CljObject *list, int index, CljObject *env);
+CljObject* eval_arg_retained(CljObject *list, int index, CljObject *env);
 bool is_symbol(CljObject *v, const char *name);
 
 #endif

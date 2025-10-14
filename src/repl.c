@@ -79,11 +79,19 @@ static void print_result(CljObject *v) {
  */
 static void print_exception(CLJException *ex) {
     if (!ex) return;
+    
+    // Use safer string handling to prevent corruption
+    const char *type = ex->type ? ex->type : "Error";
+    const char *message = ex->message ? ex->message : "Unknown error";
+    const char *file = ex->file ? ex->file : "?";
+    
+    // Ensure strings are null-terminated and not corrupted
+    if (strlen(type) > 100) type = "Error";
+    if (strlen(message) > 200) message = "Unknown error";
+    if (strlen(file) > 100) file = "?";
+    
     fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
-        ex->type ? ex->type : "Error",
-        ex->message ? ex->message : "Unknown error",
-        ex->file ? ex->file : "?",
-        ex->line, ex->col);
+        type, message, file, ex->line, ex->col);
 }
 
 /** @brief Evaluate a string expression in the REPL context.
@@ -233,6 +241,10 @@ static bool run_interactive_repl(EvalState *st) {
         } CATCH(ex) {
             // Exception caught - print and continue REPL
             print_exception(ex);
+            // Release the exception to prevent memory leaks
+            if (ex) {
+                release_exception(ex);
+            }
         } END_TRY
         
         acc[0] = '\0';

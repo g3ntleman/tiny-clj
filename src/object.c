@@ -112,12 +112,23 @@ CLJException* create_exception(const char *type, const char *message, const char
     exc->base.rc = 1;  // Start with reference count 1
     exc->base.as.data = NULL;  // Not used for exceptions
     
+    // Use safer string duplication with bounds checking
     exc->type = strdup(type);
     exc->message = strdup(message);
     exc->file = file ? strdup(file) : NULL;
     exc->line = line;
     exc->col = col;
     exc->data = RETAIN(data);
+    
+    // Verify that string duplication succeeded
+    if (!exc->type || !exc->message) {
+        // Cleanup on failure
+        if (exc->type) free((void*)exc->type);
+        if (exc->message) free((void*)exc->message);
+        if (exc->file) free((void*)exc->file);
+        free(exc);
+        return NULL;
+    }
     
     return exc;
 }

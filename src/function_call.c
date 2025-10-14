@@ -109,7 +109,7 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op, 
     if (!args) return NULL;
     
     for (int i = 0; i < argc; i++) {
-        args[i] = eval_arg(list, i + 1, env);
+        args[i] = eval_arg_retained(list, i + 1, env);
         if (!args[i]) {
             // Clean up already evaluated arguments
             for (int j = 0; j < i; j++) {
@@ -505,7 +505,7 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
     // Special forms that need special handling
     if (sym_is(op, "if")) {
         // (if cond then else?)
-        CljObject *cond_val = eval_arg(list, 1, env);
+        CljObject *cond_val = eval_arg_retained(list, 1, env);
         bool truthy = clj_is_truthy(cond_val);
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
         if (!branch) return clj_nil();
@@ -557,7 +557,7 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         CljObject *args_stack[16];
         CljObject **args = alloc_obj_array(argc, args_stack);
         for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg(list, i + 1, env);
+            args[i] = eval_arg_retained(list, i + 1, env);
             if (!args[i]) args[i] = clj_nil();
         }
         
@@ -629,7 +629,7 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
             
             // Evaluate arguments
             for (int i = 0; i < argc; i++) {
-                args[i] = eval_arg(list, i + 1, env);
+                args[i] = eval_arg_retained(list, i + 1, env);
                 if (!args[i]) args[i] = clj_nil();
             }
             
@@ -646,7 +646,14 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return fn ? (RETAIN(fn), fn) : clj_nil();
     }
     
-    // Fallback: return first element
+    // Error: first element is not a function
+    if (is_type(op, CLJ_INT) || is_type(op, CLJ_FLOAT) || is_type(op, CLJ_STRING) || is_type(op, CLJ_BOOL)) {
+        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+                "Cannot call %s as a function", clj_type_name(op->type));
+        return NULL;
+    }
+    
+    // Fallback: return first element (for other types)
     return head ? (RETAIN(head), head) : clj_nil();
 }
 
@@ -668,8 +675,8 @@ CljObject* eval_div(CljObject *list, CljObject *env) {
 }
 
 CljObject* eval_equal(CljObject *list, CljObject *env) {
-    CljObject *a = eval_arg(list, 1, env);
-    CljObject *b = eval_arg(list, 2, env);
+    CljObject *a = eval_arg_retained(list, 1, env);
+    CljObject *b = eval_arg_retained(list, 2, env);
     
     if (!a || !b) return clj_nil();
     
@@ -705,11 +712,12 @@ CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, C
 
 
 CljObject* eval_println(CljObject *list, CljObject *env) {
-    CljObject *arg = eval_arg(list, 1, env);
+    CljObject *arg = eval_arg_retained(list, 1, env);
     if (arg) {
         char *str = pr_str(arg);
         printf("println: %s\n", str);
         free(str);
+        RELEASE(arg); // Release after use
     }
     return clj_nil();
 }
@@ -860,7 +868,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
 }
 
 CljObject* eval_str(CljObject *list, CljObject *env) {
-    CljObject *arg = eval_arg(list, 1, env);
+    CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return AUTORELEASE(make_string(""));
     
     char *str = pr_str(arg);
@@ -870,7 +878,7 @@ CljObject* eval_str(CljObject *list, CljObject *env) {
 }
 
 CljObject* eval_prn(CljObject *list, CljObject *env) {
-    CljObject *arg = eval_arg(list, 1, env);
+    CljObject *arg = eval_arg_retained(list, 1, env);
     if (arg) {
         char *str = pr_str(arg);
         printf("%s\n", str);
@@ -880,7 +888,7 @@ CljObject* eval_prn(CljObject *list, CljObject *env) {
 }
 
 CljObject* eval_count(CljObject *list, CljObject *env) {
-    CljObject *arg = eval_arg(list, 1, env);
+    CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return AUTORELEASE(make_int(0));
     
     if (is_type(arg, CLJ_NIL)) {
@@ -917,7 +925,7 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
 }
 
 CljObject* eval_first(CljObject *list, CljObject *env) {
-    CljObject *arg = eval_arg(list, 1, env);
+    CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return clj_nil();
     
     // Use new seq implementation for unified behavior
@@ -943,7 +951,7 @@ CljObject* eval_first(CljObject *list, CljObject *env) {
  */
 CljObject* eval_rest(CljObject *list, CljObject *env) {
     CljObject *result = NULL;  // Single result variable for clean return pattern
-    CljObject *arg = eval_arg(list, 1, env);  // Get the sequence argument
+    CljObject *arg = eval_arg_retained(list, 1, env);  // Get the sequence argument
     
     // Handle NULL argument case - return empty list
     if (!arg) {
@@ -975,7 +983,7 @@ CljObject* eval_rest(CljObject *list, CljObject *env) {
 }
 
 CljObject* eval_seq(CljObject *list, CljObject *env) {
-    CljObject *arg = eval_arg(list, 1, env);
+    CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return clj_nil();
     
     // If argument is already nil, return nil
@@ -1008,8 +1016,8 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     // (for [binding coll] expr)
     // Returns a lazy sequence of results
     
-    CljObject *binding_list = eval_arg(list, 1, env);
-    CljObject *body = eval_arg(list, 2, env);
+    CljObject *binding_list = eval_arg_retained(list, 1, env);
+    CljObject *body = eval_arg_retained(list, 2, env);
     
     if (!binding_list || binding_list->type != CLJ_LIST) {
         return clj_nil();
@@ -1210,6 +1218,13 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     return AUTORELEASE(clj_nil()); // dotimes always returns nil
 }
 
+// Helper function for evaluating arguments with automatic retention
+CljObject* eval_arg_retained(CljObject *list, int index, CljObject *env) {
+    CljObject *result = eval_arg(list, index, env);
+    if (result) RETAIN(result);
+    return result;
+}
+
 // Helper function for evaluating arguments
 CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     (void)env; // Suppress unused parameter warning
@@ -1224,14 +1239,14 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     // For simple types (numbers, strings, booleans), return as-is
     if (is_type(element, CLJ_INT) || is_type(element, CLJ_FLOAT) || 
         is_type(element, CLJ_STRING) || is_type(element, CLJ_BOOL)) {
-        return element ? (RETAIN(element), element) : clj_nil();
+        return element; // Don't retain - caller will handle retention
     }
     
     // For symbols, resolve them
     if (is_type(element, CLJ_SYMBOL)) {
         // TEMPORARY FIX: Don't resolve symbols in eval_arg to prevent memory issues
         // This is a simplified version that just returns the element as-is
-        return element ? (RETAIN(element), element) : clj_nil();
+        return element; // Don't retain - caller will handle retention
     }
     
     // For lists, don't evaluate them here to prevent infinite loops
@@ -1239,11 +1254,11 @@ CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
     if (is_type(element, CLJ_LIST)) {
         // TEMPORARY FIX: Don't evaluate nested lists to prevent infinite loops
         // This is a simplified version that just returns the element as-is
-        return element ? (RETAIN(element), element) : clj_nil();
+        return element; // Don't retain - caller will handle retention
     }
     
     // For other types, return as-is
-    return element ? (RETAIN(element), element) : clj_nil();
+    return element; // Don't retain - caller will handle retention
 }
 
 // Evaluate argument with parameter substitution

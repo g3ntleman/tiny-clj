@@ -16,6 +16,7 @@
 #include "types.h"
 #include <stdbool.h>
 #include <errno.h>
+#include <stdlib.h>
 
 
 // Forward declaration to avoid circular dependency
@@ -320,11 +321,12 @@ void free_object(CljObject *obj);
 // Type-safe casting with exception throwing (DRY principle)
 static inline void* assert_type(CljObject *obj, CljType expected_type, const char *type_name) {
     if (!is_type(obj, expected_type)) {
-        char error_msg[128];
-        snprintf(error_msg, sizeof(error_msg), 
-                "Type mismatch: expected %s, got %s", 
-                type_name, clj_type_name(TYPE(obj)));
-        throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
+        // Direct error output with expected and actual types
+        const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
+        const char *expected_type_name = clj_type_name(expected_type);
+        fprintf(stderr, "Assertion failed: Expected %s, got %s at %s:%d\n", 
+                expected_type_name, actual_type, __FILE__, __LINE__);
+        abort();
     }
     return obj;
 }
