@@ -199,7 +199,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     CljObject *elements[2] = {quote_sym, quoted};
     CljObject *result = (CljObject*)clj_nil();
     for (int i = 1; i >= 0; i--) {
-        result = (CljObject*)make_list(elements[i], (CljList*)result);
+        result = (CljObject*)make_list(elements[i], result);
     }
     return result;
   }
@@ -407,7 +407,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   // Build list from array in correct order
   CljObject *result = clj_nil();
   for (int i = count - 1; i >= 0; i--) {
-    result = (CljObject*)make_list(elements[i], (CljList*)result);
+    result = (CljObject*)make_list(elements[i], result);
   }
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {

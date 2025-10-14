@@ -106,13 +106,13 @@ typedef struct {
 
 typedef struct CljList {
     CljObject base;         // Embedded base object
-    CljObject *head;
-    struct CljList *tail;
+    CljObject *first;
+    CljObject *rest;
 } CljList;
 
 // Safe accessor macros for CljList (Clojure-style)
-#define LIST_FIRST(list) ((list) ? (list)->head : NULL)
-#define LIST_REST(list) ((list) ? (list)->tail : NULL)
+#define LIST_FIRST(list) ((list) ? (list)->first : NULL)
+#define LIST_REST(list) ((list) ? (list)->rest : NULL)
 
 typedef struct {
     CljObject base;         // Embedded base object
@@ -174,7 +174,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 /** Create interpreted function with params/body/closure; rc=1. */
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
 /** Create empty list node (rc=1). */
-CljList* make_list(CljObject *first, CljList *rest);
+CljList* make_list(CljObject *first, CljObject *rest);
 
 // Singleton access functions
 /** Return global nil singleton (rc=0). */

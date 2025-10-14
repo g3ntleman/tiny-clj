@@ -46,7 +46,7 @@ void test_list_count(void) {
 void test_list_creation(void) {
     WITH_AUTORELEASE_POOL({
         // Test list creation
-        CljObject *list = make_list(NULL, NULL);
+        CljObject *list = (CljObject*)make_list(NULL, NULL);
         TEST_ASSERT_NOT_NULL(list);
         TEST_ASSERT_EQUAL_INT(CLJ_LIST, list->type);
         // make_list(NULL, NULL) creates a list with one nil element

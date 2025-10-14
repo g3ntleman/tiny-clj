@@ -123,8 +123,8 @@ bool seq_iter_next(SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                if (node->tail) {
-                    iter->state.list.current = (CljObject*)node->tail;
+                if (node->rest) {
+                    iter->state.list.current = node->rest;
                     iter->state.list.index++;
                     return true;
                 }

@@ -19,14 +19,19 @@ CljObject* list_nth(CljObject *list, int n) {
     CljList *ld = as_list(list);
     if (!ld) return clj_nil();
     
-    CljList *current = ld;
+    CljObject *current = (CljObject*)ld;
     
     // Traverse the list properly
-    for (int i = 0; i <= n && current && is_type((CljObject*)current, CLJ_LIST); i++) {
+    for (int i = 0; i <= n && current && is_type(current, CLJ_LIST); i++) {
         if (i == n) {
-            return LIST_FIRST(current);
+            CljList *current_list = as_list(current);
+            return LIST_FIRST(current_list);
         }
-        current = LIST_REST(current);
+        CljList *current_list = as_list(current);
+        current = LIST_REST(current_list);
+        if (current && !is_type(current, CLJ_LIST)) {
+            current = NULL; // Stop if rest is not a list
+        }
     }
     
     return clj_nil();
@@ -37,10 +42,14 @@ int list_count(CljObject *list) {
     
     int count = 0;
     // Don't use as_list here since we already checked the type
-    CljList *current = (CljList*)list;
-    while (current && is_type((CljObject*)current, CLJ_LIST)) {
+    CljObject *current = list;
+    while (current && is_type(current, CLJ_LIST)) {
         count++;
-        current = LIST_REST(current);
+        CljList *current_list = as_list(current);
+        current = LIST_REST(current_list);
+        if (current && !is_type(current, CLJ_LIST)) {
+            current = NULL; // Stop if rest is not a list
+        }
     }
     return count;
 }
@@ -52,7 +61,7 @@ CljObject* make_list_from_stack(CljObject **stack, int count) {
     // Build list from end to start using make_list
     CljList *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
-        CljList *new_node = make_list(stack[i], result);
+        CljList *new_node = make_list(stack[i], (CljObject*)result);
         if (stack[i]) RETAIN(stack[i]);
         result = new_node;
     }
@@ -88,7 +97,7 @@ CljObject* list_from_ints(int count, ...) {
     CljList *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
-        CljList *new_node = make_list(make_int(value), result);
+        CljList *new_node = make_list(make_int(value), (CljObject*)result);
         result = new_node;
     }
     

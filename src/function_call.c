@@ -61,7 +61,9 @@ static CljObject* list_get_element(CljObject *list, int index) {
     if (index == 0) return LIST_FIRST(node);
     int i = 0;
     while (i < index) {
-        node = LIST_REST(node);
+        CljObject *rest = LIST_REST(node);
+        if (!rest || !is_type(rest, CLJ_LIST)) return clj_nil();
+        node = as_list(rest);
         i++;
     }
     return LIST_FIRST(node);
@@ -294,7 +296,7 @@ CljObject* eval_list_with_env(CljObject *list, CljObject *env) {
     
     CljList *list_data = as_list(list);
     
-    CljObject *head = list_data->head;
+    CljObject *head = list_data->first;
     
     // First element is the operator
     CljObject *op = head;
@@ -382,7 +384,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     
     CljList *list_data = as_list(list);
     
-    CljObject *head = list_data->head;
+    CljObject *head = list_data->first;
     
     // First element is the operator
     CljObject *op = head;
@@ -903,11 +905,15 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
     if (is_type(arg, CLJ_LIST)) {
         CljList *list_data = as_list(arg);
         int count = 0;
-        CljObject *current = list_data->head;
+        CljObject *current = list_data->first;
         while (current) {
             count++;
-        CljList *current_list = as_list(current);
-        current = (CljObject*)current_list->tail;
+            if (is_type(current, CLJ_LIST)) {
+                CljList *current_list = as_list(current);
+                current = current_list ? current_list->rest : NULL;
+            } else {
+                current = NULL;
+            }
         }
         return AUTORELEASE(make_int(count));
     }
@@ -1025,20 +1031,20 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     
     // Parse binding: [var coll]
     CljList *binding_data = as_list(binding_list);
-    if (!binding_data->head || !binding_data->tail) {
+    if (!binding_data->first || !binding_data->rest) {
         return clj_nil();
     }
     
-    CljObject *var = binding_data->head;
+    CljObject *var = binding_data->first;
     CljObject *coll = (CljObject*)LIST_REST(binding_data);
     
     // Get collection to iterate over
     CljList *coll_data = as_list(coll);
-    if (!coll_data->head) {
+    if (!coll_data->first) {
         return clj_nil();
     }
     
-    CljObject *collection = coll_data->head; // Simple: just use the expression directly
+    CljObject *collection = coll_data->first; // Simple: just use the expression directly
     if (!collection) {
         return clj_nil();
     }
@@ -1053,7 +1059,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding using make_list
-            CljList *new_env = make_list(var, make_list(element, (CljList*)env));
+            CljList *new_env = make_list(var, (CljObject*)make_list(element, env));
             // Clean up environment objects (not returned as values)
             RELEASE((CljObject*)new_env);
             
@@ -1095,20 +1101,20 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
     
     // Parse binding: [var coll]
     CljList *binding_data = as_list(binding_list);
-    if (!binding_data->head || !binding_data->tail) {
+    if (!binding_data->first || !binding_data->rest) {
         return clj_nil();
     }
     
-    CljObject *var = binding_data->head;
+    CljObject *var = binding_data->first;
     CljObject *coll = (CljObject*)LIST_REST(binding_data);
     
     // Get collection to iterate over
     CljList *coll_data = as_list(coll);
-    if (!coll_data->head) {
+    if (!coll_data->first) {
         return clj_nil();
     }
     
-    CljObject *collection = coll_data->head; // Simple: just use the expression directly
+    CljObject *collection = coll_data->first; // Simple: just use the expression directly
     if (!collection) {
         return clj_nil();
     }
@@ -1120,7 +1126,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding using make_list
-            CljList *new_env = make_list(var, make_list(element, (CljList*)env));
+            CljList *new_env = make_list(var, (CljObject*)make_list(element, env));
             
             // Evaluate body with environment lookup
             CljObject *body_result = eval_body_with_env(body, (CljObject*)new_env);
@@ -1166,12 +1172,12 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     
     // Parse arguments directly without evaluation
     CljList *list_data = as_list(list);
-    if (!list_data->tail) {
+    if (!list_data->rest) {
         return clj_nil();
     }
     
-    CljObject *binding_list = list_data->tail->head;
-    CljObject *body = list_data->tail->tail ? list_data->tail->tail->head : NULL;
+    CljObject *binding_list = list_data->rest && is_type(list_data->rest, CLJ_LIST) ? as_list(list_data->rest)->first : NULL;
+    CljObject *body = list_data->rest && is_type(list_data->rest, CLJ_LIST) && as_list(list_data->rest)->rest && is_type(as_list(list_data->rest)->rest, CLJ_LIST) ? as_list(as_list(list_data->rest)->rest)->first : NULL;
     
     if (!binding_list || binding_list->type != CLJ_LIST) {
         return clj_nil();
@@ -1179,20 +1185,20 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     
     // Parse binding: [var n]
     CljList *binding_data = as_list(binding_list);
-    if (!binding_data->head || !binding_data->tail) {
+    if (!binding_data->first || !binding_data->rest) {
         return clj_nil();
     }
     
-    CljObject *var = binding_data->head;
-    CljObject *n_expr = (CljObject*)binding_data->tail;
+    CljObject *var = binding_data->first;
+    CljObject *n_expr = binding_data->rest;
     
     // Get number of iterations
     CljList *n_data = as_list(n_expr);
-    if (!n_data->head) {
+    if (!n_data->first) {
         return clj_nil();
     }
     
-    CljObject *n_obj = n_data->head; // Simple: just use the expression directly
+    CljObject *n_obj = n_data->first; // Simple: just use the expression directly
     if (!is_type(n_obj, CLJ_INT)) {
         RELEASE(n_obj);
         return clj_nil();
@@ -1204,7 +1210,7 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     // Execute body n times
     for (int i = 0; i < n; i++) {
         // Create new environment with binding using make_list
-        CljList *new_env = make_list(var, make_list(make_int(i), (CljList*)env));
+        CljList *new_env = make_list(var, (CljObject*)make_list(make_int(i), env));
         
         // Evaluate body with environment lookup
         CljObject *body_result = eval_body_with_env(body, (CljObject*)new_env);

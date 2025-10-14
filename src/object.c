@@ -287,14 +287,14 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     return (CljObject*)func;
 }
 
-CljList* make_list(CljObject *first, CljList *rest) {
+CljList* make_list(CljObject *first, CljObject *rest) {
     CljList *list = ALLOC(CljList, 1);
     if (!list) return NULL;
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;
-    list->head = RETAIN(first);
-    list->tail = (CljList*)RETAIN(rest);
+    list->first = RETAIN(first);
+    list->rest = RETAIN(rest);
     
     return list;
 }
@@ -376,17 +376,18 @@ char* to_string(CljObject *v) {
                 int count = 0;
                 
                 // Head hinzufügen
-                if (list->head) {
-                    elements[count++] = list->head;
+                if (list->first) {
+                    elements[count++] = list->first;
                 }
                 
                 // Tail-Elemente hinzufügen
-                CljList *current = LIST_REST(list);
-                while (current && count < 1000) {
-                    if (current->head) {
-                        elements[count++] = current->head;
+                CljObject *current = LIST_REST(list);
+                while (current && is_type(current, CLJ_LIST) && count < 1000) {
+                    CljList *current_list = as_list(current);
+                    if (current_list && current_list->first) {
+                        elements[count++] = current_list->first;
                     }
-                    current = current->tail;
+                    current = current_list ? current_list->rest : NULL;
                 }
                 
                 // Berechne benötigte Kapazität
@@ -1037,8 +1038,8 @@ void free_object(CljObject *obj) {
         case CLJ_LIST:
             {
                 CljList *list = (CljList*)obj;
-                if (list->head) release_object(list->head);
-                if (list->tail) release_object((CljObject*)LIST_REST(list));
+                if (list->first) release_object(list->first);
+                if (list->rest) release_object(list->rest);
                 free(list);
             }
             break;
