@@ -48,7 +48,6 @@ list(APPEND SOURCES
     src/string.c
     src/seq.c
     src/memory_profiler.c
-    src/memory_hooks.c
     src/memory.c
 )
 
@@ -119,7 +118,6 @@ add_executable(unity-tests
     src/clojure_core.c
     src/exception.c
     src/memory_profiler.c
-    src/memory_hooks.c
     src/memory.c
     src/runtime.c
 )
@@ -160,7 +158,6 @@ set(COMMON_TEST_SOURCES
     src/exception.c
     src/memory.c
     src/memory_profiler.c
-    src/memory_hooks.c
     src/runtime.c
     src/clojure_core.c
     src/line_editor.c

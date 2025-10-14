@@ -7,7 +7,6 @@
 #include "unity.h"
 #include "object.h"
 #include "symbol.h"
-#include "memory_hooks.h"
 #include "memory_profiler.h"
 #include "tiny_clj.h"
 #include "parser.h"

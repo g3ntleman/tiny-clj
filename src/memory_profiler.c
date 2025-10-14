@@ -63,7 +63,81 @@ MemoryStats g_memory_stats = {0};
  */
 bool g_memory_profiling_enabled = false;
 
+// ============================================================================
+// MEMORY HOOKS IMPLEMENTATION
+// ============================================================================
+
+// Global hook function (only one hook supported for simplicity)
+static MemoryHookFunc g_hook_func = NULL;
+
 #ifdef DEBUG
+
+// ============================================================================
+// MEMORY HOOKS FUNCTIONS
+// ============================================================================
+
+void memory_hooks_init(void) {
+    g_hook_func = NULL;
+}
+
+void memory_hooks_cleanup(void) {
+    g_hook_func = NULL;
+}
+
+void memory_hooks_register(MemoryHookFunc hook) {
+    g_hook_func = hook;
+}
+
+void memory_hooks_unregister(void) {
+    g_hook_func = NULL;
+}
+
+void memory_hook_trigger(MemoryHookType type, void *ptr, size_t size) {
+    if (g_hook_func) {
+        g_hook_func(type, ptr, size);
+    }
+}
+
+// Default memory profiler hook implementation
+static void memory_profiler_hook(MemoryHookType type, void *ptr, size_t size) {
+    switch (type) {
+        case MEMORY_HOOK_DEALLOCATION:
+            MEMORY_PROFILER_TRACK_DEALLOCATION(size);
+            break;
+        case MEMORY_HOOK_RETAIN:
+            MEMORY_PROFILER_TRACK_RETAIN((CljObject*)ptr);
+            break;
+        case MEMORY_HOOK_RELEASE:
+            MEMORY_PROFILER_TRACK_RELEASE((CljObject*)ptr);
+            break;
+        case MEMORY_HOOK_AUTORELEASE:
+            MEMORY_PROFILER_TRACK_AUTORELEASE((CljObject*)ptr);
+            break;
+    }
+}
+
+// Initialize memory profiling hooks
+void memory_profiling_init_with_hooks(void) {
+    memory_profiler_init();
+    memory_hooks_register(memory_profiler_hook);
+}
+
+// Cleanup memory profiling hooks
+void memory_profiling_cleanup_with_hooks(void) {
+    memory_hooks_unregister();
+    memory_profiler_cleanup();
+}
+
+void memory_test_start(const char *test_name) {
+    // Reset memory statistics for this test to get isolated results
+    memory_profiler_reset();
+    printf("🔍 Memory Test Start: %s\n", test_name);
+}
+
+void memory_test_end(const char *test_name) {
+    memory_profiler_print_stats(test_name);
+    memory_profiler_check_leaks(test_name);
+}
 
 // ============================================================================
 // MEMORY PROFILING FUNCTIONS
@@ -169,13 +243,13 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     printf("  ├─────────────────────────────────────────────────────────┤\n");
     
     if (is_delta) {
-        printf("  │ Object Creations: %+10ld                                │\n", (long)stats->object_creations);
+        printf("  │ Object Creations: %+10ld                                │\n", (long)stats->total_allocations);
         printf("  │ Object Destructions: %+8ld                              │\n", (long)stats->object_destructions);
         printf("  │ retain() calls:   %+10ld                                │\n", (long)stats->retain_calls);
         printf("  │ release() calls:  %+10ld                                │\n", (long)stats->release_calls);
         printf("  │ autorelease() calls: %+7ld                              │\n", (long)stats->autorelease_calls);
     } else {
-        printf("  │ Object Creations: %10zu                                │\n", stats->object_creations);
+        printf("  │ Object Creations: %10zu                                │\n", stats->total_allocations);
         printf("  │ Object Destructions: %8zu                              │\n", stats->object_destructions);
         printf("  │ retain() calls:   %10zu                                │\n", stats->retain_calls);
         printf("  │ release() calls:  %10zu                                │\n", stats->release_calls);
@@ -222,14 +296,14 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     
     printf("  ├─────────────────────────────────────────────────────────┤\n");
     printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-           "TOTAL", stats->object_creations, stats->object_destructions, total_type_leaks);
+           "TOTAL", stats->total_allocations, stats->object_destructions, total_type_leaks);
     printf("  └─────────────────────────────────────────────────────────┘\n");
     
     // Calculate efficiency metrics with safety checks
-    if (stats->object_creations > 0) {
-        double retention_ratio = (double)stats->retain_calls / stats->object_creations;
+    if (stats->total_allocations > 0) {
+        double retention_ratio = (double)stats->retain_calls / stats->total_allocations;
         const char *ratio_label = is_delta ? "Delta Retention Ratio" : "Retention Ratio";
-        const char *ratio_suffix = is_delta ? "" : " (retain calls per object)";
+        const char *ratio_suffix = is_delta ? "" : " (retain calls per allocation)";
         printf("  📈 %s: %.2f%s\n", ratio_label, retention_ratio, ratio_suffix);
     }
     
@@ -268,32 +342,24 @@ void memory_profiler_print_stats(const char *test_name) {
 
 // Helper function to update memory leak statistics and detect double-frees
 static void update_memory_leak_stats(void) {
-    // Calculate memory leaks safely (avoid integer overflow)
-    if (g_memory_stats.total_allocations >= g_memory_stats.total_deallocations) {
-        g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.total_deallocations;
+    // Calculate memory leaks based on allocations vs destructions
+    if (g_memory_stats.total_allocations >= g_memory_stats.object_destructions) {
+        g_memory_stats.memory_leaks = g_memory_stats.total_allocations - g_memory_stats.object_destructions;
     } else {
-        g_memory_stats.memory_leaks = 0; // No leaks if deallocations exceed allocations
+        g_memory_stats.memory_leaks = 0; // No leaks if destructions exceed allocations
         // This is not necessarily a double-free - could be normal cleanup
         // Only warn if the difference is significant
-        if (g_memory_stats.total_deallocations > g_memory_stats.total_allocations + 2) {
+        if (g_memory_stats.object_destructions > g_memory_stats.total_allocations + 2) {
             static bool double_free_warning_shown = false;
             if (!double_free_warning_shown) {
-                printf("⚠️  WARNING: Potential double-free detected! Deallocations (%zu) significantly exceed allocations (%zu).\n", 
-                       g_memory_stats.total_deallocations, g_memory_stats.total_allocations);
+                printf("⚠️  WARNING: Potential double-free detected! Object destructions (%zu) significantly exceed allocations (%zu).\n", 
+                       g_memory_stats.object_destructions, g_memory_stats.total_allocations);
                 double_free_warning_shown = true;
             }
         }
     }
 }
 
-void memory_profiler_track_allocation(size_t size) {
-    g_memory_stats.total_allocations++;
-    g_memory_stats.current_memory_usage += size;
-    if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
-        g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
-    }
-    update_memory_leak_stats();
-}
 
 void memory_profiler_track_deallocation(size_t size) {
     g_memory_stats.total_deallocations++;
@@ -307,15 +373,14 @@ void memory_profiler_track_deallocation(size_t size) {
 
 void memory_profiler_track_object_creation(CljObject *obj) {
     if (obj) {
-        // Skip singleton objects - they don't use reference counting
-        // and are never freed, so they shouldn't be tracked as allocations
-        if (IS_SINGLETON(obj)) {
-            return; // Skip singleton tracking
-        }
+        g_memory_stats.total_allocations++;
         
-        g_memory_stats.object_creations++;
-        // Track the allocation size (approximate)
-        memory_profiler_track_allocation(sizeof(CljObject));
+        // Add memory tracking
+        size_t obj_size = sizeof(CljObject);
+        g_memory_stats.current_memory_usage += obj_size;
+        if (g_memory_stats.current_memory_usage > g_memory_stats.peak_memory_usage) {
+            g_memory_stats.peak_memory_usage = g_memory_stats.current_memory_usage;
+        }
         
         // Track by object type with bounds checking
         assert(obj->type >= 0 && obj->type < CLJ_TYPE_COUNT && "Invalid object type for memory tracking");
@@ -402,7 +467,7 @@ void memory_profiler_check_leaks(const char *location) {
         
         printf("   ├─────────────────────────────────────────────────────────┤\n");
         printf("   │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-               "TOTAL", g_memory_stats.object_creations, g_memory_stats.object_destructions, total_type_leaks);
+               "TOTAL", g_memory_stats.total_allocations, g_memory_stats.object_destructions, total_type_leaks);
         printf("   └─────────────────────────────────────────────────────────┘\n");
         
         printf("\n⚠️  CRITICAL: %zu memory leaks detected! Objects were not properly freed.\n", 
@@ -429,7 +494,6 @@ MemoryStats memory_profiler_diff_stats(const MemoryStats *after, const MemorySta
     diff.total_deallocations = after->total_deallocations - before->total_deallocations;
     diff.peak_memory_usage = after->peak_memory_usage - before->peak_memory_usage;
     diff.current_memory_usage = after->current_memory_usage - before->current_memory_usage;
-    diff.object_creations = after->object_creations - before->object_creations;
     diff.object_destructions = after->object_destructions - before->object_destructions;
     diff.retain_calls = after->retain_calls - before->retain_calls;
     diff.release_calls = after->release_calls - before->release_calls;
@@ -445,6 +509,19 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name) {
 
 #else
 // No-op implementations for release builds
+
+// Memory hooks no-op implementations
+void memory_hooks_init(void) { /* no-op */ }
+void memory_hooks_cleanup(void) { /* no-op */ }
+void memory_hooks_register(MemoryHookFunc hook) { (void)hook; /* no-op */ }
+void memory_hooks_unregister(void) { /* no-op */ }
+void memory_hook_trigger(MemoryHookType type, void *ptr, size_t size) { 
+    (void)type; (void)ptr; (void)size; /* no-op */ 
+}
+void memory_profiling_init_with_hooks(void) { /* no-op */ }
+void memory_profiling_cleanup_with_hooks(void) { /* no-op */ }
+void memory_test_start(const char *test_name) { (void)test_name; /* no-op */ }
+void memory_test_end(const char *test_name) { (void)test_name; /* no-op */ }
 
 void memory_profiler_init(void) { /* no-op */ }
 void memory_profiler_reset(void) { /* no-op */ }

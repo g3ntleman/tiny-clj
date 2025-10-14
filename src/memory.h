@@ -9,8 +9,8 @@
 #define TINY_CLJ_MEMORY_H
 
 #include "object.h"
-#include "memory_hooks.h"
 #include <stdbool.h>
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,8 +48,6 @@ void autorelease_pool_pop(void);
 /** Pop and drain specific autorelease pool (advanced usage). */
 void autorelease_pool_pop_specific(CljObjectPool *pool);
 
-/** Legacy API: Pop and drain given autorelease pool (backward compatibility). */
-void autorelease_pool_pop_legacy(CljObjectPool *pool);
 
 /** Drain all autorelease pools (global cleanup). */
 void autorelease_pool_cleanup_all();
@@ -58,7 +56,7 @@ void autorelease_pool_cleanup_all();
 bool is_autorelease_pool_active(void);
 
 /** Get reference count of object (0 for singletons, actual rc for others). */
-int get_reference_count(CljObject *obj);
+int get_retain_count(CljObject *obj);
 
 // Convenience macro for scoped autorelease pool usage
 #define AUTORELEASE_POOL_SCOPE(name) for (CljObjectPool *(name) = autorelease_pool_push(); (name) != NULL; autorelease_pool_pop_specific(name), (name) = NULL)
@@ -68,30 +66,28 @@ int get_reference_count(CljObject *obj);
 // ============================================================================
 
 // Allocate `count` objects of type `type` on the heap
+// Note: ALLOC should only be used for CljObject subtypes per MEMORY_POLICY
 #ifdef DEBUG
-    #define ALLOC(type, count) ({ \
-        type *_alloc_result = (type*) malloc(sizeof(type) * (count)); \
-        if (_alloc_result) { \
-            memory_hook_trigger(MEMORY_HOOK_ALLOCATION, _alloc_result, sizeof(type) * (count)); \
-        } \
-        _alloc_result; \
-    })
+    #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 #else
     #define ALLOC(type, count) ((type*) malloc(sizeof(type) * (count)))
 #endif
 
 // Allocate and zero-initialize `count` objects of type `type` on the heap
+// Note: ALLOC_ZERO should only be used for CljObject subtypes per MEMORY_POLICY
 #ifdef DEBUG
-    #define ALLOC_ZERO(type, count) ({ \
-        type *_alloc_result = (type*) calloc(count, sizeof(type)); \
-        if (_alloc_result) { \
-            memory_hook_trigger(MEMORY_HOOK_ALLOCATION, _alloc_result, sizeof(type) * (count)); \
-        } \
-        _alloc_result; \
-    })
+    #define ALLOC_ZERO(type, count) ((type*) alloc_zero(sizeof(type), (count), TYPE_OF(type)))
 #else
     #define ALLOC_ZERO(type, count) ((type*) calloc(count, sizeof(type)))
 #endif
+
+// Special allocation for CljObject with dynamic type
+#ifdef DEBUG
+    #define ALLOC_OBJECT(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
+#else
+    #define ALLOC_OBJECT(obj_type) ((CljObject*) malloc(sizeof(CljObject)))
+#endif
+
 
 // ============================================================================
 // MEMORY MANAGEMENT MACROS
@@ -101,24 +97,21 @@ int get_reference_count(CljObject *obj);
 #ifdef DEBUG
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
-        memory_hook_trigger(MEMORY_HOOK_OBJECT_DESTRUCTION, _tmp, sizeof(CljObject)); \
+        memory_profiler_track_object_destruction(_tmp); \
     } while(0)
     #define RETAIN(obj) ({ \
         CljObject* _tmp = (CljObject*)(obj); \
-        memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
         retain(_tmp); \
         _tmp; \
     })
     #define RELEASE(obj) ({ \
         CljObject* _tmp = (CljObject*)(obj); \
-        memory_hook_trigger(MEMORY_HOOK_RELEASE, _tmp, 0); \
         release(_tmp); \
         _tmp; \
     })
     #define AUTORELEASE(obj) ({ \
         CljObject* _tmp = (CljObject*)(obj); \
         if (_tmp != NULL) { \
-            memory_hook_trigger(MEMORY_HOOK_AUTORELEASE, _tmp, 0); \
             autorelease(_tmp); \
         } \
         _tmp; \
@@ -132,11 +125,9 @@ int get_reference_count(CljObject *obj);
         typeof(var) _tmp = (new_obj); \
         if (_tmp != (var)) { \
             if (_tmp != NULL) { \
-                memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
                 retain(_tmp); \
             } \
             if ((var) != NULL) { \
-                memory_hook_trigger(MEMORY_HOOK_RELEASE, (var), 0); \
                 release(var); \
             } \
             (var) = _tmp; \
@@ -150,8 +141,8 @@ int get_reference_count(CljObject *obj);
         autorelease_pool_pop(); \
     } while(0)
     
-    // Reference count macro for testing
-    #define REFERENCE_COUNT(obj) get_reference_count(obj)
+    // Retain count macro for testing
+    #define REFERENCE_COUNT(obj) get_retain_count(obj)
     
     // Fluent autorelease pool macro with EvalState management
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { \
@@ -185,8 +176,32 @@ int get_reference_count(CljObject *obj);
     #define WITH_AUTORELEASE_POOL(code) do { code } while(0)
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
     #define WITH_TIME_PROFILING(code) do { code } while(0)
-    #define REFERENCE_COUNT(obj) get_reference_count(obj)
+    #define REFERENCE_COUNT(obj) get_retain_count(obj)
+    
 #endif
+
+// ============================================================================
+// MEMORY ALLOCATION FUNCTIONS
+// ============================================================================
+
+/**
+ * @brief Allocate memory with automatic profiling for CljObject types
+ * @param type_size Size of the type to allocate
+ * @param count Number of elements to allocate
+ * @param obj_type Type of the CljObject (for singleton filtering)
+ * @return Pointer to allocated memory
+ */
+void* alloc(size_t type_size, size_t count, CljType obj_type);
+
+/**
+ * @brief Allocate and zero-initialize memory with automatic profiling for CljObject types
+ * @param type_size Size of the type to allocate
+ * @param count Number of elements to allocate
+ * @param obj_type Type of the CljObject (for singleton filtering)
+ * @return Pointer to allocated memory
+ */
+void* alloc_zero(size_t type_size, size_t count, CljType obj_type);
+
 
 #ifdef __cplusplus
 }

@@ -2,7 +2,9 @@
 
 ## Übersicht
 
-Das Memory-Profiling-System ermöglicht es, die Heap-Last und Objekt-Freigaben in Tiny-CLJ zu überwachen. Dies ist besonders nützlich für:
+Das Memory-Profiling-System ermöglicht es, die Heap-Last und Objekt-Freigaben in Tiny-CLJ zu überwachen. **Wichtig**: Memory-Profiling findet nur für Subtypen von `CljObject` statt, nicht für andere Strukturen wie `SymbolEntry`, `CljNamespace`, `EvalState`, etc.
+
+Dies ist besonders nützlich für:
 
 - **Performance-Optimierung**: Identifikation von Memory-Hotspots
 - **Memory-Leak-Detection**: Automatische Erkennung von Speicherlecks
@@ -76,8 +78,8 @@ MEMORY_PROFILER_CHECK_LEAKS("After Operation");
 
 | Metrik | Beschreibung |
 |--------|--------------|
-| **total_allocations** | Gesamtanzahl der malloc-Aufrufe |
-| **total_deallocations** | Gesamtanzahl der free-Aufrufe |
+| **total_allocations** | Gesamtanzahl der CljObject-Allokationen |
+| **total_deallocations** | Gesamtanzahl der CljObject-Deallokationen |
 | **peak_memory_usage** | Spitzen-Speichernutzung in Bytes |
 | **current_memory_usage** | Aktuelle Speichernutzung in Bytes |
 | **object_creations** | Anzahl der CljObject-Erstellungen |
@@ -86,6 +88,8 @@ MEMORY_PROFILER_CHECK_LEAKS("After Operation");
 | **release_calls** | Anzahl der release()-Aufrufe |
 | **autorelease_calls** | Anzahl der autorelease()-Aufrufe |
 | **memory_leaks** | Potentielle Memory-Leaks (allocations - deallocations) |
+
+**Hinweis**: Nur CljObject-Subtypen werden getrackt. Andere Strukturen wie `SymbolEntry`, `CljNamespace`, etc. verwenden direkt `malloc`/`calloc` ohne Profiling.
 
 ### Beispiel-Output
 
@@ -223,6 +227,18 @@ Das Memory-Profiling ist automatisch in folgende Funktionen integriert:
 - `retain()` - Reference-Count-Inkrement
 - `release()` - Reference-Count-Dekrement und Objekt-Zerstörung
 - `autorelease()` - Autorelease-Pool-Integration
+
+### Was wird NICHT getrackt
+
+Memory-Profiling findet **nur** für Subtypen von `CljObject` statt. Folgende Strukturen werden **nicht** getrackt:
+
+- `SymbolEntry` - Symbol-Tabelle-Einträge
+- `CljNamespace` - Namespace-Strukturen  
+- `EvalState` - Evaluierungs-Zustand
+- `CljObjectPool` - Autorelease-Pool-Strukturen
+- Pointer-Arrays (`CljObject**`) - Arrays von CljObject-Pointern
+
+Diese verwenden direkt `malloc`/`calloc` ohne Memory-Profiling.
 
 ## Debugging-Tipps
 

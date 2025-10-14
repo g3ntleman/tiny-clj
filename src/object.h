@@ -27,12 +27,36 @@ struct CljNamespace;
 // Type checking macros for performance
 #define IS_SINGLETON_TYPE(type) ((type) <= LAST_SINGLETON_TYPE)
 
-// Check if object type tracks references (should be reference counted)
-// Returns false only for singletons (which don't use reference counting)
-#define TRACKS_REFERENCES(obj) ((obj) && !IS_SINGLETON_TYPE((obj)->type))
+// Check if object type tracks retains (should be retain counted)
+// Returns false only for singletons (which don't use retain counting)
+#define TRACKS_RETAINS(obj) ((obj) && !IS_SINGLETON_TYPE((obj)->type))
 
 // Legacy alias for backward compatibility
 #define IS_SINGLETON(obj) ((obj) && IS_SINGLETON_TYPE((obj)->type))
+
+// Automatic type mapping for ALLOC macros
+#define TYPE_OF_CljObject CLJ_UNKNOWN
+#define TYPE_OF_CljList CLJ_LIST
+#define TYPE_OF_CljSymbol CLJ_SYMBOL
+#define TYPE_OF_CljFunction CLJ_FUNC
+#define TYPE_OF_CljFunc CLJ_FUNC
+#define TYPE_OF_CljPersistentVector CLJ_VECTOR
+#define TYPE_OF_CljPersistentMap CLJ_MAP
+#define TYPE_OF_CljMap CLJ_MAP
+#define TYPE_OF_CLJException CLJ_EXCEPTION
+#define TYPE_OF_CljSeqIterator CLJ_SEQ
+// Für primitive Typen die nicht als Struct existieren
+#define TYPE_OF_int CLJ_INT
+#define TYPE_OF_double CLJ_FLOAT
+#define TYPE_OF_char CLJ_STRING
+// Für interne Strukturen ohne CLJ_TYPE
+#define TYPE_OF_SymbolEntry CLJ_UNKNOWN
+#define TYPE_OF_CljNamespace CLJ_UNKNOWN
+#define TYPE_OF_EvalState CLJ_UNKNOWN
+#define TYPE_OF_CljObjectPool CLJ_UNKNOWN
+
+// Makro zur Typableitung
+#define TYPE_OF(struct_type) TYPE_OF_##struct_type
 
 typedef struct CljObject CljObject;
 // Macro: safe type extraction (returns CLJ_UNKNOWN for NULL objects)

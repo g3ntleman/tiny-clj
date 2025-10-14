@@ -104,7 +104,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
 CLJException* create_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
     
-    CLJException *exc = ALLOC(CLJException, 1);
+    CLJException *exc = (CLJException*)ALLOC_OBJECT(CLJ_EXCEPTION);
     if (!exc) return NULL;
     
     // Initialize base object
@@ -134,21 +134,23 @@ void release_exception(CLJException *exception) {
 
 /** @brief Create integer object */
 CljObject* make_int(int x) {
-    CljObject *v = ALLOC(CljObject, 1);
+    CljObject *v = ALLOC_OBJECT(CLJ_INT);
     if (!v) return NULL;
     v->type = CLJ_INT;
     v->rc = 1;
     v->as.i = x;
     
+    
     return v;
 }
 
 CljObject* make_float(double x) {
-    CljObject *v = ALLOC(CljObject, 1);
+    CljObject *v = ALLOC_OBJECT(CLJ_FLOAT);
     if (!v) return NULL;
     v->type = CLJ_FLOAT;
     v->rc = 1;
     v->as.f = x;
+    
     
     return v;
 }
@@ -259,7 +261,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     
     // Parameter-Array kopieren
     if (param_count > 0 && params) {
-        func->params = ALLOC(CljObject*, param_count);
+        func->params = (CljObject**)malloc(sizeof(CljObject*) * param_count);
         if (!func->params) {
             free(func);
             return NULL;
@@ -673,7 +675,7 @@ static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
 
 // Add symbol to the table
 static SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
-    SymbolEntry *entry = ALLOC(SymbolEntry, 1);
+    SymbolEntry *entry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
     if (!entry) return NULL;
     
     entry->ns = ns ? strdup(ns) : NULL;
@@ -901,7 +903,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     }
     
     // Heap-allocated parameter array
-    CljObject **heap_params = ALLOC(CljObject*, argc);
+    CljObject **heap_params = (CljObject**)malloc(sizeof(CljObject*) * argc);
     for (int i = 0; i < argc; i++) {
         heap_params[i] = RETAIN(argv[i]);
     }
@@ -938,7 +940,7 @@ CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObje
 
 // Polymorphe Funktionen für Subtyping
 CljObject* create_object(CljType type) {
-    CljObject *obj = ALLOC(CljObject, 1);
+    CljObject *obj = ALLOC_OBJECT(type);
     if (!obj) return NULL;
     
     obj->type = type;

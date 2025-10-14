@@ -40,6 +40,23 @@
 #include "object.h"
 #include <stdbool.h>
 
+// Forward declaration to avoid circular include
+typedef enum {
+    MEMORY_HOOK_DEALLOCATION,
+    MEMORY_HOOK_RETAIN,
+    MEMORY_HOOK_RELEASE,
+    MEMORY_HOOK_AUTORELEASE
+} MemoryHookType;
+
+// ============================================================================
+// MEMORY HOOKS DEFINITIONS
+// ============================================================================
+
+// Memory operation types are now defined in memory.h
+
+// Hook function type
+typedef void (*MemoryHookFunc)(MemoryHookType type, void *ptr, size_t size);
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,7 +78,7 @@ extern "C" {
  * - total_deallocations: Total free() calls tracked
  * - peak_memory_usage: Maximum memory usage in bytes
  * - current_memory_usage: Current memory usage in bytes
- * - object_creations: CljObject creation count
+ * - total_allocations: Total object allocation count
  * - object_destructions: CljObject destruction count
  * - retain_calls: retain() operation count
  * - release_calls: release() operation count
@@ -71,11 +88,10 @@ extern "C" {
  * - deallocations_by_type: Per-type deallocation counts
  */
 typedef struct {
-    size_t total_allocations;     // Total number of malloc calls
-    size_t total_deallocations;   // Total number of free calls
+    size_t total_allocations;     // Total number of object allocations
+    size_t total_deallocations;   // Total number of object deallocations
     size_t peak_memory_usage;     // Peak memory usage in bytes
     size_t current_memory_usage;  // Current memory usage in bytes
-    size_t object_creations;      // CljObject creations
     size_t object_destructions;   // CljObject destructions
     size_t retain_calls;          // retain() calls
     size_t release_calls;         // release() calls
@@ -96,6 +112,17 @@ extern MemoryStats g_memory_stats;
  * Resets all statistics and prepares the profiler for tracking.
  * Should be called at the start of memory profiling sessions.
  */
+// Memory hooks functions
+void memory_hooks_init(void);
+void memory_hooks_cleanup(void);
+void memory_hooks_register(MemoryHookFunc hook);
+void memory_hooks_unregister(void);
+void memory_hook_trigger(MemoryHookType type, void *ptr, size_t size);
+
+// Memory profiling integration
+void memory_profiling_init_with_hooks(void);
+void memory_profiling_cleanup_with_hooks(void);
+
 void memory_profiler_init(void);
 
 /**
@@ -142,7 +169,6 @@ bool is_memory_profiling_enabled(void);
  * @brief Track a memory allocation
  * @param size Size of allocated memory in bytes
  */
-void memory_profiler_track_allocation(size_t size);
 
 /**
  * @brief Track a memory deallocation
@@ -230,13 +256,13 @@ void memory_test_end(const char *test_name);
 #define MEMORY_PROFILER_CHECK_LEAKS(location) memory_profiler_check_leaks(location)
 
 // Object tracking macros
-#define MEMORY_PROFILER_TRACK_ALLOCATION(size) memory_profiler_track_allocation(size)
 #define MEMORY_PROFILER_TRACK_DEALLOCATION(size) memory_profiler_track_deallocation(size)
 #define MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj) memory_profiler_track_object_creation(obj)
 #define MEMORY_PROFILER_TRACK_OBJECT_DESTRUCTION(obj) memory_profiler_track_object_destruction(obj)
 #define MEMORY_PROFILER_TRACK_RETAIN(obj) memory_profiler_track_retain(obj)
 #define MEMORY_PROFILER_TRACK_RELEASE(obj) memory_profiler_track_release(obj)
 #define MEMORY_PROFILER_TRACK_AUTORELEASE(obj) memory_profiler_track_autorelease(obj)
+
 
 // Memory comparison macros for tests
 #define MEMORY_PROFILER_COMPARE_STATS(before, after, test_name) do { \
@@ -253,13 +279,14 @@ void memory_test_end(const char *test_name);
 #define MEMORY_PROFILER_PRINT_STATS(test_name) ((void)0)
 #define MEMORY_PROFILER_CHECK_LEAKS(location) ((void)0)
 
-#define MEMORY_PROFILER_TRACK_ALLOCATION(size) ((void)0)
+// No-op object tracking macros for release builds
 #define MEMORY_PROFILER_TRACK_DEALLOCATION(size) ((void)0)
 #define MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_OBJECT_DESTRUCTION(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_RETAIN(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_RELEASE(obj) ((void)0)
 #define MEMORY_PROFILER_TRACK_AUTORELEASE(obj) ((void)0)
+
 
 #define MEMORY_PROFILER_COMPARE_STATS(before, after, test_name) ((void)0)
 

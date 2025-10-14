@@ -8,7 +8,6 @@
 #include "object.h"
 #include "memory.h"
 #include "memory_profiler.h"
-#include "memory_hooks.h"
 #include "symbol.h"
 #include "namespace.h"
 #include <stdio.h>

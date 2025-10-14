@@ -31,7 +31,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     }
 
     // Create a new namespace
-    CljNamespace *ns = ALLOC(CljNamespace, 1);
+    CljNamespace *ns = (CljNamespace*)malloc(sizeof(CljNamespace));
     if (!ns) return NULL;
     
     ns->name = intern_symbol(NULL, name);
@@ -156,7 +156,7 @@ void ns_cleanup() {
 
 // EvalState functions
 EvalState* evalstate() {
-    EvalState *st = ALLOC(EvalState, 1);
+    EvalState *st = (EvalState*)malloc(sizeof(EvalState));
     if (!st) {
         printf("FAILED: EvalState allocation failed at %s:%d\n", __FILE__, __LINE__);
         return NULL;

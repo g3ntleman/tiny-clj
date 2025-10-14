@@ -50,16 +50,16 @@ void test_memory_deallocation(void) {
         CljObject *obj = make_int(42);
         TEST_ASSERT_NOT_NULL(obj);
         
-        // Test reference counting
-        int initial_refs = get_reference_count(obj);
+        // Test retain counting
+        int initial_refs = get_retain_count(obj);
         TEST_ASSERT_EQUAL_INT(1, initial_refs);
         
         // Retain and release
         CljObject *retained = RETAIN(obj);
-        TEST_ASSERT_EQUAL_INT(2, get_reference_count(obj));
+        TEST_ASSERT_EQUAL_INT(2, get_retain_count(obj));
         
         RELEASE(retained);
-        TEST_ASSERT_EQUAL_INT(1, get_reference_count(obj));
+        TEST_ASSERT_EQUAL_INT(1, get_retain_count(obj));
         
         // Final cleanup by WITH_AUTORELEASE_POOL
     });

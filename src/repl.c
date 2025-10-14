@@ -123,7 +123,7 @@ static void cleanup_and_exit(const char **eval_args, int exit_code) {
     // Print memory profiling stats in debug mode
 #ifdef DEBUG
     printf("\n🔍 === REPL Memory Profiling Stats ===\n");
-    memory_profiler_print_stats("REPL Session");
+    MEMORY_PROFILER_PRINT_STATS("REPL Session");
     printf("📊 Final memory state before exit\n");
 #endif
     
@@ -242,7 +242,7 @@ static bool run_interactive_repl(EvalState *st) {
     // Print memory profiling stats before exiting REPL
 #ifdef DEBUG
     printf("\n🔍 === REPL Memory Profiling Stats (EOF) ===\n");
-    memory_profiler_print_stats("REPL Session");
+    MEMORY_PROFILER_PRINT_STATS("REPL Session");
     printf("📊 Final memory state before exit\n");
 #endif
 
@@ -304,7 +304,7 @@ int main(int argc, char **argv) {
     if (!no_core) {
         load_clojure_core(st);
         // Enable memory profiling after clojure.core is loaded
-        enable_memory_profiling(true);
+        MEMORY_PROFILER_INIT();
         // Initialize memory profiling hooks for detailed tracking
         memory_profiling_init_with_hooks();
     }

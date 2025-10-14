@@ -105,7 +105,7 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op, 
     }
     
     // Evaluate all arguments
-    CljObject **args = ALLOC(CljObject*, argc);
+    CljObject **args = (CljObject**)malloc(sizeof(CljObject*) * argc);
     if (!args) return NULL;
     
     for (int i = 0; i < argc; i++) {

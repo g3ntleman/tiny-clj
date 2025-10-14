@@ -15,6 +15,53 @@
 #include <string.h>
 
 // ============================================================================
+// MEMORY ALLOCATION WITH PROFILING
+// ============================================================================
+
+/**
+ * @brief Allocate memory with automatic profiling for CljObject types
+ * @param type The type to allocate
+ * @param count Number of elements to allocate
+ * @return Pointer to allocated memory
+ */
+void* alloc(size_t type_size, size_t count, CljType obj_type) {
+    void *result = malloc(type_size * count);
+    
+    // Track object creation if it's a CljObject and NOT a singleton
+    if (result != NULL && type_size == sizeof(CljObject)) {
+        if (!IS_SINGLETON_TYPE(obj_type)) {
+            CljObject *obj = (CljObject*)result;
+            obj->type = obj_type;  // Set type before tracking
+            MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
+        }
+    }
+    
+    return result;
+}
+
+/**
+ * @brief Allocate and zero-initialize memory with automatic profiling for CljObject types
+ * @param type_size Size of the type to allocate
+ * @param count Number of elements to allocate
+ * @return Pointer to allocated memory
+ */
+void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
+    void *result = calloc(count, type_size);
+    
+    // Track object creation if it's a CljObject and NOT a singleton
+    if (result != NULL && type_size == sizeof(CljObject)) {
+        if (!IS_SINGLETON_TYPE(obj_type)) {
+            CljObject *obj = (CljObject*)result;
+            obj->type = obj_type;  // Set type before tracking
+            MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
+        }
+    }
+    
+    return result;
+}
+
+
+// ============================================================================
 // AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
 
@@ -45,18 +92,13 @@ static void release_object_deep(CljObject *v);
 void retain(CljObject *v) {
     if (!v) return;
     
-    // Skip singletons (they don't use reference counting)
-    if (!TRACKS_REFERENCES(v)) return;
+    // Track retain call for profiling
+    memory_profiler_track_retain(v);
     
-    // Skip empty vector/map singletons
-    if (is_type(v, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector(v);
-        if (vec && vec->base.rc == 0 && vec->data == NULL) return;
-    }
-    if (is_type(v, CLJ_MAP)) {
-        CljMap *map = as_map(v);
-        if (map && map->base.rc == 0 && map->data == NULL) return;
-    }
+    // Skip singletons (they don't use retain counting)
+    if (!TRACKS_RETAINS(v)) return;
+    
+
     v->rc++;
 }
 
@@ -71,8 +113,8 @@ void retain(CljObject *v) {
 void release(CljObject *v) {
     if (!v) return;
     
-    // Skip singletons (they don't use reference counting)
-    if (!TRACKS_REFERENCES(v)) {
+    // Skip singletons (they don't use retain counting)
+    if (!TRACKS_RETAINS(v)) {
         return;
     }
     
@@ -81,16 +123,11 @@ void release(CljObject *v) {
         return;
     }
     
-    // Skip empty vector/map singletons
-    if (is_type(v, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector(v);
-        if (vec && vec->base.rc == 0 && vec->data == NULL) return;
-    }
-    if (is_type(v, CLJ_MAP)) {
-        CljMap *map = as_map(v);
-        if (map && map->base.rc == 0 && map->data == NULL) return;
-    }
+
     v->rc--;
+    
+    // Track release operation
+    MEMORY_PROFILER_TRACK_RELEASE(v);
     
     // Check for double-free after decrement
     if (v->rc < 0) {
@@ -148,7 +185,7 @@ CljObject *autorelease(CljObject *v) {
  * the pool is popped.
  */
 CljObjectPool *autorelease_pool_push() {
-    CljObjectPool *p = ALLOC(CljObjectPool, 1);
+    CljObjectPool *p = (CljObjectPool*)malloc(sizeof(CljObjectPool));
     if (!p) return NULL;
     p->backing = make_weak_vector(16);
     p->prev = g_cv_pool_top;
@@ -227,9 +264,6 @@ void autorelease_pool_pop_specific(CljObjectPool *pool) {
  * 
  * Kept for backward compatibility with existing code.
  */
-void autorelease_pool_pop_legacy(CljObjectPool *pool) {
-    autorelease_pool_pop_internal(pool);
-}
 
 /** @brief Drain all autorelease pools (global cleanup)
  * 
@@ -252,7 +286,7 @@ bool is_autorelease_pool_active(void) {
     return g_cv_pool_top != NULL;
 }
 
-/** @brief Get reference count of object
+/** @brief Get retain count of object
  * 
  * @param obj Object to check (can be NULL)
  * @return Reference count (0 for singletons, actual rc for others)
@@ -261,15 +295,15 @@ bool is_autorelease_pool_active(void) {
  * reference counting. For other objects, returns the actual reference count.
  * Note: AUTORELEASE objects are not counted as they are deferred.
  */
-int get_reference_count(CljObject *obj) {
+int get_retain_count(CljObject *obj) {
     if (!obj) return 0;
     
-    // Singletons don't use reference counting
+    // Singletons don't use retain counting
     if (IS_SINGLETON_TYPE(obj->type)) {
         return 0;
     }
     
-    // Return actual reference count for tracked objects
+    // Return actual retain count for tracked objects
     return obj->rc;
 }
 
@@ -289,7 +323,7 @@ static void release_object_deep(CljObject *v) {
     if (!v) return;
     
     // Skip singletons (they don't need cleanup)
-    if (!TRACKS_REFERENCES(v)) {
+    if (!TRACKS_RETAINS(v)) {
         return;
     }
     
