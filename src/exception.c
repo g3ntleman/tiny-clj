@@ -43,7 +43,7 @@ const char *ERROR_MEMORY_ALLOCATION = "Memory allocation failed";
  * @return New exception object or NULL on failure
  */
 CLJException* exception(const char *msg, const char *file, int line, int col) {
-    return create_exception("Error", msg, file, line, col, NULL);
+    return make_exception("Error", msg, file, line, col, NULL);
 }
 
 /**
@@ -55,5 +55,5 @@ CLJException* exception(const char *msg, const char *file, int line, int col) {
  * @return New exception object or NULL on failure
  */
 CLJException* exception_dynamic(const char *msg, const char *file, int line, int col) {
-    return create_exception("Error", msg, file, line, col, NULL);
+    return make_exception("Error", msg, file, line, col, NULL);
 }

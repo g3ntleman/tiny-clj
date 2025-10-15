@@ -77,11 +77,11 @@ extern GlobalExceptionStack global_exception_stack;
         global_exception_stack.top = _caught_h->next; \
         free(_caught_h); \
         if (ex) { \
+            AUTORELEASE((CljObject*)ex); \
 
 #define END_TRY \
-            release_exception(ex); \
         } \
-        /* ExceptionHandler already freed in CATCH */ \
+        /* ExceptionHandler already freed in CATCH, exception autoreleased */ \
     } \
 }
 

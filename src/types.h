@@ -18,6 +18,9 @@ typedef enum {
     CLJ_SEQ,         // Sequence iterator (embedded CljSeqIterator)
     CLJ_FUNC,
     CLJ_EXCEPTION,
+    // Transient types (Clojure-kompatibel: nur Vector und Map)
+    CLJ_TRANSIENT_VECTOR,
+    CLJ_TRANSIENT_MAP,
     CLJ_UNKNOWN  // Unknown/invalid type sentinel (should not occur at runtime)
 } CljType;
 

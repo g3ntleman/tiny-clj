@@ -22,7 +22,7 @@ CljObject* make_string(const char *s) {
         init_empty_string_once(); // TODO: do not call every time. Create an initialze_* funtction.
         return &empty_string_singleton;
     }
-    CljObject *v = ALLOC_OBJECT(CLJ_STRING);
+    CljObject *v = ALLOC(CljObject, 1);
     if (!v) return NULL;
     v->type = CLJ_STRING;
     v->rc = 1;

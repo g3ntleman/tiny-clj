@@ -80,17 +80,17 @@ GlobalExceptionStack global_exception_stack = {0};
 // - Catch handler automatically releases exception in END_TRY
 /** @brief Throw an exception with type, message, and location */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
-    CLJException *exception = create_exception(type, message, file, line, col, NULL);
+    CLJException *exception = make_exception(type, message, file, line, col, NULL);
     
     if (global_exception_stack.top) {
         // Use global exception stack
-        global_exception_stack.top->exception = exception;
+        global_exception_stack.top->exception = exception; // assign new excpetion with rc=1
         longjmp(global_exception_stack.top->jump_state, 1);
     } else {
         // No handler - unhandled exception
         printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
                type, message, file ? file : "<unknown>", line, col);
-        release_exception(exception);
+        RELEASE((CljObject*)exception);
         exit(1);
     }
 }
@@ -101,7 +101,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
 
 // Exception management with reference counting (analogous to CljVector)
 /** @brief Create exception with reference counting */
-CLJException* create_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
     
     CLJException *exc = (CLJException*)ALLOC_OBJECT(CLJ_EXCEPTION);
@@ -112,40 +112,32 @@ CLJException* create_exception(const char *type, const char *message, const char
     exc->base.rc = 1;  // Start with reference count 1
     exc->base.as.data = NULL;  // Not used for exceptions
     
-    // Use safer string duplication with bounds checking
-    exc->type = strdup(type);
-    exc->message = strdup(message);
-    exc->file = file ? strdup(file) : NULL;
+    // Copy strings directly into the structure (no strdup needed)
+    strncpy(exc->type, type, sizeof(exc->type) - 1);
+    exc->type[sizeof(exc->type) - 1] = '\0';  // Ensure null termination
+    
+    strncpy(exc->message, message, sizeof(exc->message) - 1);
+    exc->message[sizeof(exc->message) - 1] = '\0';  // Ensure null termination
+    
+    if (file) {
+        strncpy(exc->file, file, sizeof(exc->file) - 1);
+        exc->file[sizeof(exc->file) - 1] = '\0';  // Ensure null termination
+    } else {
+        exc->file[0] = '\0';  // Empty string
+    }
+    
     exc->line = line;
     exc->col = col;
     exc->data = RETAIN(data);
     
-    // Verify that string duplication succeeded
-    if (!exc->type || !exc->message) {
-        // Cleanup on failure
-        if (exc->type) free((void*)exc->type);
-        if (exc->message) free((void*)exc->message);
-        if (exc->file) free((void*)exc->file);
-        free(exc);
-        return NULL;
-    }
-    
     return exc;
 }
 
-void retain_exception(CLJException *exception) {
-    if (!exception) return;
-    retain((CljObject*)exception);
-}
 
-void release_exception(CLJException *exception) {
-    if (!exception) return;
-    release((CljObject*)exception);
-}
 
 /** @brief Create integer object */
 CljObject* make_int(int x) {
-    CljObject *v = ALLOC_OBJECT(CLJ_INT);
+    CljObject *v = ALLOC(CljObject, 1);
     if (!v) return NULL;
     v->type = CLJ_INT;
     v->rc = 1;
@@ -248,11 +240,10 @@ CljObject* make_error(const char *message, const char *file, int line, int col) 
     return make_exception("Error", message, file, line, col, NULL);
 }
 
-CljObject* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
+CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
     
-    CLJException *exc = create_exception(type, message, file, line, col, data);
-    if (!exc) return NULL;
+    CLJException *exc = make_exception(type, message, file, line, col, data);
     
     return (CljObject*)exc;
 }
@@ -485,22 +476,18 @@ char* to_string(CljObject *v) {
                 if (!result) return strdup("()");
                 
                 bool first = true;
-                CljObject *temp_seq = seq_create(seq->iter.container);
-                if (!temp_seq) {
-                    free(result);
-                    return strdup("()");
-                }
-                
-                while (!seq_empty(temp_seq)) {
-                    CljObject *element = seq_first(temp_seq);
+                // Use the existing iterator instead of creating a new seq
+                SeqIterator temp_iter = seq->iter;
+                while (!seq_iter_empty(&temp_iter)) {
+                    CljObject *element = seq_iter_first(&temp_iter);
                     if (!element) {
-                        seq_next(temp_seq);
+                        seq_iter_next(&temp_iter);
                         continue;
                     }
                     
                     char *el_str = pr_str(element);
                     if (!el_str) {
-                        seq_next(temp_seq);
+                        seq_iter_next(&temp_iter);
                         continue;
                     }
                     
@@ -513,7 +500,6 @@ char* to_string(CljObject *v) {
                     if (!new_result) {
                         free(result);
                         free(el_str);
-                        RELEASE(temp_seq);
                         return strdup("()");
                     }
                     result = new_result;
@@ -525,11 +511,10 @@ char* to_string(CljObject *v) {
                     first = false;
                     
                     free(el_str);
-                    seq_next(temp_seq);
+                    seq_iter_next(&temp_iter);
                 }
                 
                 strcat(result, ")");
-                RELEASE(temp_seq);
                 return result;
             }
 
@@ -537,7 +522,7 @@ char* to_string(CljObject *v) {
             {
                 CLJException *exc = (CLJException*)v;
                 char *result;
-                if (exc->file) {
+                if (exc->file[0] != '\0') {
                     char buf[1024];
                     snprintf(buf, sizeof(buf), "%s: %s at %s:%d:%d", 
                             exc->type, exc->message, 
@@ -1075,10 +1060,7 @@ void free_object(CljObject *obj) {
         case CLJ_EXCEPTION:
             {
                 CLJException *exc = (CLJException*)obj;
-                // Free exception-specific data
-                if (exc->type) free((void*)exc->type);
-                if (exc->message) free((void*)exc->message);
-                if (exc->file) free((void*)exc->file);
+                // Strings are now embedded, no need to free them
                 if (exc->data) RELEASE(exc->data);
                 free(exc);
             }

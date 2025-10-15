@@ -1,5 +1,6 @@
 #include "map.h"
 #include "kv_macros.h"
+#include "object.h"
 #include "runtime.h"
 #include "vector.h"
 #include "memory.h"
@@ -33,7 +34,7 @@ CljObject *make_map(int capacity) {
   map->count = 0;
   map->capacity = capacity;
   map->data = (CljObject **)calloc((size_t)capacity * 2, sizeof(CljObject *));
-  CljObject *obj = ALLOC_OBJECT(CLJ_MAP);
+  CljObject *obj = ALLOC(CljMap, 1);
   if (!obj) {
     free(map);
     return NULL;

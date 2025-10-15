@@ -1,5 +1,4 @@
 #include "vector.h"
-#include "runtime.h"
 #include "memory.h"
 #include <stdlib.h>
 #include <stdbool.h>
@@ -147,4 +146,112 @@ CljObject* make_vector_from_stack(CljObject **stack, int count) {
     }
     vec->count = count;
     return vec_obj;
+}
+
+// === Neue CljValue API (Phase 1: Parallel) ===
+
+/** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
+CljValue make_vector_v(int capacity, int is_mutable) {
+    return make_vector(capacity, is_mutable);
+}
+
+/** Return a new vector with item appended; original vector remains unchanged. */
+CljValue vector_conj_v(CljValue vec, CljValue item) {
+    return vector_conj(vec, item);
+}
+
+// === Transient API (Phase 2) ===
+
+/** Convert persistent vector to transient. */
+CljValue transient(CljValue vec) {
+    if (!vec || vec->type != CLJ_VECTOR) {
+        return NULL;
+    }
+    
+    CljPersistentVector *v = as_vector(vec);
+    if (!v) return NULL;
+    
+    // Erstelle Kopie mit transient type
+    CljPersistentVector *tvec = ALLOC(CljPersistentVector, 1);
+    if (!tvec) return NULL;
+    
+    tvec->base.type = CLJ_TRANSIENT_VECTOR;
+    tvec->base.rc = 1;
+    tvec->count = v->count;
+    tvec->capacity = v->capacity;
+    tvec->mutable_flag = 1; // Transients sind immer mutable
+    
+    // Kopiere data array
+    if (v->capacity > 0) {
+        tvec->data = (CljObject**)calloc((size_t)v->capacity, sizeof(CljObject*));
+        if (!tvec->data) {
+            free(tvec);
+            return NULL;
+        }
+        for (int i = 0; i < v->count; i++) {
+            if (v->data[i]) {
+                tvec->data[i] = v->data[i];
+                RETAIN(v->data[i]);
+            }
+        }
+    } else {
+        tvec->data = NULL;
+    }
+    
+    return (CljValue)tvec;
+}
+
+/** Append to transient vector (guaranteed in-place). */
+CljValue conj_v(CljValue tvec, CljValue item) {
+    if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR || !item) {
+        return NULL;
+    }
+    
+    CljPersistentVector *v = as_vector(tvec);
+    if (!v) return NULL;
+    
+    // Garantiert in-place für Transients
+    if (v->count >= v->capacity) {
+        int newcap = v->capacity ? v->capacity * 2 : 4;
+        void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject *));
+        if (!p) return NULL;
+        v->data = (CljObject **)p;
+        for (int i = v->capacity; i < newcap; ++i)
+            v->data[i] = NULL;
+        v->capacity = newcap;
+    }
+    
+    v->data[v->count++] = item;
+    RETAIN(item);
+    
+    return tvec; // In-place mutation
+}
+
+/** Convert transient vector back to persistent. */
+CljValue persistent_v(CljValue tvec) {
+    if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR) {
+        return NULL;
+    }
+    
+    CljPersistentVector *v = as_vector(tvec);
+    if (!v) return NULL;
+    
+    // Clojure-Semantik: Erstelle NEUE persistent collection
+    CljValue new_vec = make_vector_v(v->capacity, 0);  // Neue Instanz
+    CljPersistentVector *new_v = as_vector(new_vec);
+    if (!new_v) return NULL;
+    
+    // Kopiere alle Elemente
+    for (int i = 0; i < v->count; i++) {
+        if (v->data[i]) {
+            new_v->data[i] = v->data[i];
+            RETAIN(v->data[i]);
+        }
+    }
+    new_v->count = v->count;
+    
+    // Original transient wird "invalidated" (kann später implementiert werden)
+    // v->base.type = CLJ_INVALID;  // TODO: Invalidierung implementieren
+    
+    return new_vec; // NEUE persistent collection
 }

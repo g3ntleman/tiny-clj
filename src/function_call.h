@@ -31,6 +31,7 @@ CljObject* eval_prn(CljObject *list, CljObject *env);
 CljObject* eval_count(CljObject *list, CljObject *env);
 CljObject* eval_first(CljObject *list, CljObject *env);
 CljObject* eval_rest(CljObject *list, CljObject *env);
+CljObject* eval_cons(CljObject *list, CljObject *env);
 CljObject* eval_seq(CljObject *list, CljObject *env);
 
 // For-loop functions

@@ -584,6 +584,10 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
         return eval_rest(list, env);
     }
     
+    if (sym_is(op, "cons")) {
+        return eval_cons(list, env);
+    }
+    
     if (sym_is(op, "seq")) {
         return eval_seq(list, env);
     }
@@ -985,6 +989,46 @@ CljObject* eval_rest(CljObject *list, CljObject *env) {
     }
     
     // Single return point with autorelease for consistent memory management
+    return AUTORELEASE(result);
+}
+
+CljObject* eval_cons(CljObject *list, CljObject *env) {
+    CljObject *elem = eval_arg_retained(list, 1, env);
+    CljObject *coll = eval_arg_retained(list, 2, env);
+    
+    if (!elem) elem = clj_nil();
+    
+    CljObject *result = NULL;
+    
+    // Fall 1: nil oder leer
+    if (!coll || is_type(coll, CLJ_NIL)) {
+        result = (CljObject*)make_list(elem, NULL);
+        RELEASE(elem);
+        return AUTORELEASE(result);
+    }
+    
+    // Fall 2: Bereits CLJ_LIST oder CLJ_SEQ → direkt als rest verwenden
+    if (is_type(coll, CLJ_LIST) || is_type(coll, CLJ_SEQ)) {
+        result = (CljObject*)make_list(elem, coll);
+        RELEASE(elem);   // Balance: make_list macht RETAIN
+        RELEASE(coll);   // Balance: make_list macht RETAIN
+        return AUTORELEASE(result);
+    }
+    
+    // Fall 3: Vektor oder andere → zu Seq konvertieren
+    CljObject *seq = seq_create(coll);  // Heap-Objekt 1
+    RELEASE(coll);  // Balance aus eval_arg_retained
+    
+    if (!seq || is_type(seq, CLJ_NIL)) {
+        // Leere Seq → nur Element
+        result = (CljObject*)make_list(elem, NULL);
+    } else {
+        // Seq als rest → make_list macht RETAIN auf seq
+        result = (CljObject*)make_list(elem, seq);  // Heap-Objekt 2
+        RELEASE(seq);  // Balance: make_list macht RETAIN
+    }
+    
+    RELEASE(elem);
     return AUTORELEASE(result);
 }
 

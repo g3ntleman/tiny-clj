@@ -104,15 +104,22 @@ typedef struct {
     CljObject **data;  // [key1, val1, key2, val2, ...]
 } CljMap;
 
+// CljList represents a Clojure-style linked list with flexible rest handling:
+// - first: The first element of the list (can be any CljObject)
+// - rest: The rest of the list, which can be:
+//   * Another CljList (proper list)
+//   * A CljSeq (sequence iterator)
+//   * Any other CljObject (improper list, e.g., for dotted pairs)
+//   * NULL (empty rest)
 typedef struct CljList {
     CljObject base;         // Embedded base object
-    CljObject *first;
-    CljObject *rest;
+    CljObject *first;      // First element of the list
+    CljObject *rest;       // Rest of the list (can be a CljList, CljSeq, or any CljObject for improper lists)
 } CljList;
 
 // Safe accessor macros for CljList (Clojure-style)
 #define LIST_FIRST(list) ((list) ? (list)->first : NULL)
-#define LIST_REST(list) ((list) ? (list)->rest : NULL)
+#define LIST_REST(list) ((list) ? (list)->rest : NULL)  // Returns CljObject* (can be CljList, CljSeq, or other)
 
 typedef struct {
     CljObject base;         // Embedded base object
@@ -144,9 +151,9 @@ typedef struct {
 // ============================================================================
 typedef struct {
     CljObject base;         // Embedded base object
-    const char *type;       // Exception type (e.g., "DoubleFreeError")
-    const char *message;    // Error message
-    const char *file;       // Source file
+    char type[64];           // Exception type (e.g., "DoubleFreeError") - embedded string
+    char message[256];       // Error message - embedded string
+    char file[128];          // Source file - embedded string
     int line;               // Source line
     int col;                // Source column
     CljObject *data;        // Additional data (map)
@@ -164,7 +171,9 @@ CljObject* make_symbol(const char *name, const char *ns);
 /** Convenience: create generic error exception object. */
 CljObject* make_error(const char *message, const char *file, int line, int col);
 /** Create a CLJException object (rc=1) with optional data. */
-CljObject* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data);
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data);
+/** Create a CljObject wrapper for CLJException (rc=1) with optional data. */
+CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col, CljObject *data);
 
 // Exception throwing
 /** Throw exception via longjmp; transfers ownership to runtime. */
@@ -284,11 +293,7 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value);
 
 // Exception management with reference counting (analogous to CljVector)
 /** Allocate CLJException with type/message/location and optional data. */
-CLJException* create_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data);
-/** Increment exception rc (not autoreleased). */
-void retain_exception(CLJException *exception);
-/** Decrement exception rc and free at rc==0. */
-void release_exception(CLJException *exception);
+
 
 // Polymorphic helpers for subtyping
 /** Allocate CljObject shell with given type (no data). */
@@ -336,7 +341,7 @@ static inline CljSymbol* as_symbol(CljObject *obj) {
     return (CljSymbol*)assert_type(obj, CLJ_SYMBOL, "Symbol");
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
-    if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR)) {
+    if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR) && !is_type(obj, CLJ_TRANSIENT_VECTOR)) {
         char error_msg[128];
         snprintf(error_msg, sizeof(error_msg), 
                 "Type mismatch: expected Vector, got %s", 

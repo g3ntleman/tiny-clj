@@ -19,6 +19,7 @@
 #include "memory.h"
 #include "utf8.h"
 #include "vector.h"
+#include "value.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -545,6 +546,44 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   if (strchr(buf, '.'))
     return make_float(atof(buf));
   return make_int(atoi(buf));
+}
+
+/**
+ * @brief Parse number literal with CljValue API (Phase 1)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed number CljValue or NULL on error
+ */
+static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
+  (void)st;
+  char buf[MAX_STACK_STRING_SIZE];
+  int pos = 0;
+  if (reader_peek_char(reader) == '-')
+    buf[pos++] = reader_next(reader);
+  if (!isdigit(reader_peek_char(reader)))
+    return NULL;
+  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+    buf[pos++] = reader_next(reader);
+  if (reader_peek_char(reader) == '.' &&
+      isdigit(reader_peek_ahead(reader, 1))) {
+    buf[pos++] = reader_next(reader);
+    while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+      buf[pos++] = reader_next(reader);
+  }
+  buf[pos] = '\0';
+  
+  if (strchr(buf, '.')) {
+    return make_float_v(atof(buf));
+  }
+  
+  // Für kleine Integers: verwende make_fixnum (wenn implementiert)
+  int int_val = atoi(buf);
+  // TODO: Implementiere make_fixnum für 29-bit signed integers
+  // if (int_val >= -(1<<28) && int_val <= (1<<28)-1) {
+  //   return make_fixnum(int_val);
+  // }
+  
+  return make_int_v(int_val);
 }
 
 /**

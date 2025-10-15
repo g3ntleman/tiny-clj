@@ -239,12 +239,7 @@ static bool run_interactive_repl(EvalState *st) {
                 }
             }
         } CATCH(ex) {
-            // Exception caught - print and continue REPL
             print_exception(ex);
-            // Release the exception to prevent memory leaks
-            if (ex) {
-                release_exception(ex);
-            }
         } END_TRY
         
         acc[0] = '\0';

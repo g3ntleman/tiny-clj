@@ -19,6 +19,12 @@
 
 void setUp(void) {
     // Global setup for each test
+    // Ensure clean state by clearing any remaining autorelease pools
+    while (is_autorelease_pool_active()) {
+        autorelease_pool_pop();
+    }
+    autorelease_pool_cleanup_all();
+    
     init_special_symbols();
     meta_registry_init();
     autorelease_pool_push();
@@ -29,6 +35,10 @@ void setUp(void) {
 
 void tearDown(void) {
     // Global teardown for each test
+    // Force cleanup of all autorelease pools to prevent cross-test contamination
+    while (is_autorelease_pool_active()) {
+        autorelease_pool_pop();
+    }
     autorelease_pool_cleanup_all();
     symbol_table_cleanup();
     meta_registry_cleanup();
@@ -109,6 +119,13 @@ extern void test_integer_creation(void);
 extern void test_float_creation(void);
 extern void test_nil_creation(void);
 
+// CljValue API tests
+extern void test_cljvalue_immediate_helpers(void);
+extern void test_cljvalue_vector_api(void);
+extern void test_cljvalue_transient_vector(void);
+extern void test_cljvalue_clojure_semantics(void);
+extern void test_cljvalue_wrapper_functions(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -119,6 +136,14 @@ static void test_group_unit(void) {
     RUN_TEST(test_integer_creation);
     RUN_TEST(test_float_creation);
     RUN_TEST(test_nil_creation);
+}
+
+static void test_group_cljvalue(void) {
+    RUN_TEST(test_cljvalue_immediate_helpers);
+    RUN_TEST(test_cljvalue_vector_api);
+    RUN_TEST(test_cljvalue_transient_vector);
+    RUN_TEST(test_cljvalue_clojure_semantics);
+    RUN_TEST(test_cljvalue_wrapper_functions);
 }
 
 // ============================================================================
@@ -198,6 +223,7 @@ static void print_usage(const char *program_name) {
     printf("  parser        Parser functionality tests\n");
     printf("  exception     Exception handling tests\n");
     printf("  unit          Core unit tests\n");
+    printf("  cljvalue      CljValue API and Transient tests\n");
     printf("  namespace     Namespace management tests\n");
     printf("  seq           Sequence semantics tests\n");
     printf("  for-loops      For-loop implementation tests\n");
@@ -229,6 +255,10 @@ static void run_unit_tests(void) {
     RUN_TEST(test_group_unit);
 }
 
+static void run_cljvalue_tests(void) {
+    RUN_TEST(test_group_cljvalue);
+}
+
 static void run_namespace_tests(void) {
     RUN_TEST(test_group_namespace);
 }
@@ -246,6 +276,7 @@ static void run_all_tests(void) {
     RUN_TEST(test_group_parser);
     RUN_TEST(test_group_exception);
     RUN_TEST(test_group_unit);
+    RUN_TEST(test_group_cljvalue);
     RUN_TEST(test_group_namespace);
     RUN_TEST(test_group_seq);
     RUN_TEST(test_group_for_loops);
@@ -270,6 +301,8 @@ int main(int argc, char **argv) {
             run_exception_tests();
         } else if (strcmp(argv[1], "unit") == 0) {
             run_unit_tests();
+        } else if (strcmp(argv[1], "cljvalue") == 0) {
+            run_cljvalue_tests();
         } else if (strcmp(argv[1], "namespace") == 0) {
             run_namespace_tests();
         } else if (strcmp(argv[1], "seq") == 0) {
