@@ -81,9 +81,9 @@ static void print_exception(CLJException *ex) {
     if (!ex) return;
     
     // Use safer string handling to prevent corruption
-    const char *type = ex->type ? ex->type : "Error";
-    const char *message = ex->message ? ex->message : "Unknown error";
-    const char *file = ex->file ? ex->file : "?";
+    const char *type = strlen(ex->type) > 0 ? ex->type : "Error";
+    const char *message = strlen(ex->message) > 0 ? ex->message : "Unknown error";
+    const char *file = strlen(ex->file) > 0 ? ex->file : "?";
     
     // Ensure strings are null-terminated and not corrupted
     if (strlen(type) > 100) type = "Error";
@@ -106,7 +106,7 @@ static bool eval_string_repl(const char *code, EvalState *st) {
     
     CljObject *res = NULL;
     if (is_type(ast, CLJ_LIST)) {
-        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
         res = eval_list(ast, env, st);
     } else {
         res = eval_expr_simple(ast, st);
@@ -223,24 +223,24 @@ static bool run_interactive_repl(EvalState *st) {
         }
 
         // Evaluate accumulated form with TRY/CATCH
-        TRY {
-            AUTORELEASE_POOL_SCOPE(pool) {
+        AUTORELEASE_POOL_SCOPE(pool) {
+            TRY {
                 const char *p = acc;
                 CljObject *ast = parse(p, st);
                 if (ast) {
                     CljObject *res = NULL;
                     if (is_type(ast, CLJ_LIST)) {
-                        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+                        CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
                         res = eval_list(ast, env, st);
                     } else {
                         res = eval_expr_simple(ast, st);
                     }
                     if (res) print_result(res);
                 }
-            }
-        } CATCH(ex) {
-            print_exception(ex);
-        } END_TRY
+            } CATCH(ex) {
+                print_exception(ex);
+            } END_TRY
+        }
         
         acc[0] = '\0';
         prompt_shown = false; // show fresh prompt after evaluation
@@ -324,8 +324,8 @@ int main(int argc, char **argv) {
     }
 
     if (file_arg) {
-        TRY {
-            AUTORELEASE_POOL_SCOPE(pool) {
+        AUTORELEASE_POOL_SCOPE(pool) {
+            TRY {
                 FILE *fp = fopen(file_arg, "r");
                 if (!fp) {
                     throw_exception_formatted("IOError", __FILE__, __LINE__, 0,
@@ -352,11 +352,11 @@ int main(int argc, char **argv) {
                     }
                     fclose(fp);
                 }
-            }
-        } CATCH(ex) {
-            print_result((CljObject*)ex);
-            cleanup_and_exit(eval_args, 1);
-        } END_TRY
+            } CATCH(ex) {
+                print_result((CljObject*)ex);
+                cleanup_and_exit(eval_args, 1);
+            } END_TRY
+        }
         if (!start_repl && eval_count == 0) {
             cleanup_and_exit(eval_args, 0);
         }
@@ -366,18 +366,18 @@ int main(int argc, char **argv) {
 
     // Execute all -e arguments in order
     for (int i = 0; i < eval_count; i++) {
-        TRY {
-            AUTORELEASE_POOL_SCOPE(pool) {
+        AUTORELEASE_POOL_SCOPE(pool) {
+            TRY {
                 bool success = eval_string_repl(eval_args[i], st);
                 if (!success) {
                     // Parse error or evaluation failed
                     cleanup_and_exit(eval_args, 1);
                 }
-            }
-        } CATCH(ex) {
-            print_exception(ex);
-            cleanup_and_exit(eval_args, 1);
-        } END_TRY
+            } CATCH(ex) {
+                print_exception(ex);
+                cleanup_and_exit(eval_args, 1);
+            } END_TRY
+        }
     }
     
     if (eval_count > 0 && !start_repl) {

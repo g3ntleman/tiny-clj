@@ -8,7 +8,7 @@
 // Namespace structure
 typedef struct CljNamespace {
     CljObject *name;          // z.B. 'user', 'math'
-    CljObject *mappings;      // Map: Symbol → CljObject (def, defn, vars)
+    CljMap *mappings;      // Map: Symbol → CljObject (def, defn, vars)
     const char *filename;    // optional: zugeordnetes File
     struct CljNamespace *next;
 } CljNamespace;
