@@ -45,7 +45,7 @@ void test_namespace_switching(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Test initial namespace
-        CljObject *initial_ns = eval_state->current_ns;
+        CljNamespace *initial_ns = eval_state->current_ns;
         TEST_ASSERT_NOT_NULL(initial_ns);
         
         // Test namespace switching (simplified)
@@ -79,7 +79,7 @@ void test_special_ns_variable(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Test that *ns* special variable exists
-        CljObject *ns_var = eval_state->current_ns;
+        CljNamespace *ns_var = eval_state->current_ns;
         TEST_ASSERT_NOT_NULL(ns_var);
         
         evalstate_free(eval_state);

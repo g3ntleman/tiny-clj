@@ -9,14 +9,17 @@
 
 // Empty-map singleton: CLJ_MAP object with rc=0 and no backing store
 // (data=NULL)
-static CljObject clj_empty_map_singleton;
+static CljMap clj_empty_map_singleton;
 static void init_empty_map_singleton_once(void) {
   static bool initialized = false;
   if (initialized)
     return;
-  clj_empty_map_singleton.type = CLJ_MAP;
-  clj_empty_map_singleton.rc = 0;
-  clj_empty_map_singleton.as.data = NULL;
+  clj_empty_map_singleton.base.type = CLJ_MAP;
+  clj_empty_map_singleton.base.rc = 0;
+  clj_empty_map_singleton.base.as.data = NULL;
+  clj_empty_map_singleton.count = 0;
+  clj_empty_map_singleton.capacity = 0;
+  clj_empty_map_singleton.data = NULL;
     initialized = true;
 }
 
@@ -24,7 +27,7 @@ static void init_empty_map_singleton_once(void) {
 CljObject *make_map(int capacity) {
   if (capacity <= 0) {
     init_empty_map_singleton_once();
-    return &clj_empty_map_singleton;
+    return (CljObject*)&clj_empty_map_singleton;
   }
   CljMap *map = ALLOC(CljMap, 1);
   if (!map)
@@ -34,15 +37,11 @@ CljObject *make_map(int capacity) {
   map->count = 0;
   map->capacity = capacity;
   map->data = (CljObject **)calloc((size_t)capacity * 2, sizeof(CljObject *));
-  CljObject *obj = ALLOC(CljMap, 1);
-  if (!obj) {
+  if (!map->data) {
     free(map);
     return NULL;
   }
-  obj->type = CLJ_MAP;
-  obj->rc = 1;
-  obj->as.data = (void *)map;
-  return obj;
+  return (CljObject*)map;
 }
 
 /** @brief Get value from map by key */

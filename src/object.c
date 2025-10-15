@@ -237,7 +237,7 @@ CljObject* make_symbol(const char *name, const char *ns) {
 }
 
 CljObject* make_error(const char *message, const char *file, int line, int col) {
-    return make_exception("Error", message, file, line, col, NULL);
+    return make_exception_wrapper("Error", message, file, line, col, NULL);
 }
 
 CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
@@ -859,6 +859,7 @@ CljObject* clj_false() {
 
 // clj_empty_map() no longer part of public API; make_map(0) returns singleton
 
+#define id CljObject*
 
 // Stack-based environment helpers (outside of #ifdef)
 CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject **values, int count) {
@@ -868,9 +869,8 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
     CljObject *new_env = make_map(4);
-    if (!new_env) return NULL;
     
-    return new_env;
+    return (id)new_env;
 }
 
 CljObject* env_get_stack(CljObject *env, CljObject *key) {

@@ -83,6 +83,7 @@ void test_seq_create_map(void) {
         
         // Create sequence iterator - may return NULL for empty map
         CljObject *seq = seq_create(map);
+        (void)seq; // Suppress unused variable warning
         // Note: seq_create may return NULL for empty maps - this is expected behavior
         // TEST_ASSERT_NOT_NULL(seq); // Commented out - NULL is valid for empty maps
     });
