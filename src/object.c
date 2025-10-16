@@ -413,7 +413,7 @@ char* to_string(CljObject *v) {
                     if (!k) continue;
                     char *ks = pr_str(k);
                     char *vs = pr_str(val);
-                    cap += strlen(ks) + strlen(vs) + 2;
+                    cap += strlen(ks) + strlen(vs) + 3; // +1 space, +1 comma, +1 space = +3
                     free(ks); free(vs);
                 }
                 char *s = ALLOC(char, cap+1);
@@ -423,7 +423,7 @@ char* to_string(CljObject *v) {
                     CljObject *k = KV_KEY(map->data, i);
                     CljObject *val = KV_VALUE(map->data, i);
                     if (!k) continue;
-                    if (!first) strcat(s, " ");
+                    if (!first) strcat(s, ", ");
                     char *ks = pr_str(k);
                     char *vs = pr_str(val);
                     strcat(s, ks);
@@ -781,7 +781,7 @@ void meta_clear(CljObject *v) {
     if (index >= 0) {
         // Entry found; remove it
         CljObject *old_value = KV_VALUE(((CljMap*)meta_registry->as.data)->data, index);
-        if (old_value) RELEASE(old_value);
+        RELEASE(old_value);
         
         // Shift following elements to the left
         for (int j = index; j < ((CljMap*)meta_registry->as.data)->count - 1; j++) {
@@ -1061,7 +1061,7 @@ void free_object(CljObject *obj) {
             {
                 CLJException *exc = (CLJException*)obj;
                 // Strings are now embedded, no need to free them
-                if (exc->data) RELEASE(exc->data);
+                RELEASE(exc->data);
                 free(exc);
             }
             break;

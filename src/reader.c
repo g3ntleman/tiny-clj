@@ -70,7 +70,8 @@ bool reader_skip_whitespace(Reader *reader) {
         
         // Check if codepoint is whitespace
         // Note: utf8_is_delimiter includes quotes which are NOT whitespace for parsing
-        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r');
+        // In Clojure, commas are treated as whitespace
+        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == ',');
         
         if (!is_whitespace) break;
         
