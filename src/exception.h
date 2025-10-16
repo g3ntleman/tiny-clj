@@ -77,7 +77,7 @@ extern GlobalExceptionStack global_exception_stack;
         global_exception_stack.top = _caught_h->next; \
         free(_caught_h); \
         if (ex) { \
-            (void)AUTORELEASE(ex); \
+            (void)AUTORELEASE(RETAIN(ex));  /* Retain then autorelease exception (rc=1→2→pool) */ \
 
 #define END_TRY \
         } \
