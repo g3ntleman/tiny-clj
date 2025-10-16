@@ -54,7 +54,7 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     }
     
     // First search in the current namespace
-    CljObject *v = map_get(st->current_ns->mappings, sym);
+    CljObject *v = map_get((CljObject*)st->current_ns->mappings, sym);
     if (v) return v;
 
     // OPTIMIZATION: Priority-based namespace search
@@ -76,7 +76,7 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     
     // Search clojure.core first if cached
     if (clojure_core_cache && clojure_core_cache->mappings) {
-        v = map_get(clojure_core_cache->mappings, sym);
+        v = map_get((CljObject*)clojure_core_cache->mappings, sym);
         if (v) return v;
     }
     
@@ -84,7 +84,7 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     CljNamespace *cur = ns_registry;
     while (cur) {
         if (cur != clojure_core_cache && cur->mappings) {
-            v = map_get(cur->mappings, sym);
+            v = map_get((CljObject*)cur->mappings, sym);
             if (v) return v;
         }
         cur = cur->next;
@@ -248,14 +248,14 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 CljObject *body = list_nth(clause, 2);
                 
                 // Bind variable (sym = err) - simplified
-                map_assoc(st->current_ns->mappings, sym, (CljObject*)ex);
+                map_assoc((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);
                 result = eval_expr_simple(body, st);
                 return result;
             }
         }
         // No catch clause found - re-throw (handler is already popped!)
-        throw_exception(ex->type ? ex->type : "Error", 
-                       ex->message ? ex->message : "Unknown error",
+        throw_exception(strlen(ex->type) > 0 ? ex->type : "Error", 
+                       strlen(ex->message) > 0 ? ex->message : "Unknown error",
                        ex->file, ex->line, ex->col);
     } END_TRY
     
@@ -279,8 +279,8 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
             result = eval_symbol(expr, st);
             if (result) result = AUTORELEASE(result);
         } else if (is_type(expr, CLJ_LIST)) {
-            CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-            result = eval_list(expr, env, st);
+            CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
+            result = eval_list(expr, (CljMap*)env, st);
             if (result) result = AUTORELEASE(result);
         } else {
             result = AUTORELEASE(expr);
@@ -316,5 +316,5 @@ void ns_define(EvalState *st, CljObject *symbol, CljObject *value) {
     }
     
     // Store symbol-value binding (overwrites existing)
-    map_assoc(ns->mappings, symbol, value);
+    map_assoc((CljObject*)ns->mappings, symbol, value);
 }

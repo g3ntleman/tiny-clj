@@ -159,7 +159,7 @@ static void test_group_advanced_exceptions(void) {
 // COMMAND LINE INTERFACE
 // ============================================================================
 
-static void print_usage(const char *program_name) {
+static void __attribute__((unused)) print_usage(const char *program_name) {
     printf("Exception Tests for Tiny-CLJ\n");
     printf("Usage: %s [test_name]\n\n", program_name);
     printf("Available tests:\n");
@@ -174,7 +174,7 @@ static void print_usage(const char *program_name) {
     printf("  all             Run all tests (default)\n");
 }
 
-static void run_specific_test(const char *test_name) {
+static void __attribute__((unused)) run_specific_test(const char *test_name) {
     if (strcmp(test_name, "simple-caught") == 0) {
         RUN_TEST(test_simple_try_catch_exception_caught);
     } else if (strcmp(test_name, "simple-no-ex") == 0) {

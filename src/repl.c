@@ -106,7 +106,7 @@ static bool eval_string_repl(const char *code, EvalState *st) {
     
     CljObject *res = NULL;
     if (is_type(ast, CLJ_LIST)) {
-        CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
+        CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
         res = eval_list(ast, env, st);
     } else {
         res = eval_expr_simple(ast, st);
@@ -230,8 +230,8 @@ static bool run_interactive_repl(EvalState *st) {
                 if (ast) {
                     CljObject *res = NULL;
                     if (is_type(ast, CLJ_LIST)) {
-                        CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
-                        res = eval_list(ast, env, st);
+        CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        res = eval_list(ast, env, st);
                     } else {
                         res = eval_expr_simple(ast, st);
                     }

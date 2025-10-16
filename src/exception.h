@@ -77,7 +77,7 @@ extern GlobalExceptionStack global_exception_stack;
         global_exception_stack.top = _caught_h->next; \
         free(_caught_h); \
         if (ex) { \
-            AUTORELEASE((CljObject*)ex); \
+            (void)AUTORELEASE(ex); \
 
 #define END_TRY \
         } \

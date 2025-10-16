@@ -120,7 +120,7 @@ static void test_group_advanced_memory(void) {
 // COMMAND LINE INTERFACE
 // ============================================================================
 
-static void print_usage(const char *program_name) {
+static void __attribute__((unused)) print_usage(const char *program_name) {
     printf("Unity Memory Tests for Tiny-CLJ\n");
     printf("Usage: %s [options] [test_name]\n\n", program_name);
     printf("Options:\n");
@@ -137,7 +137,7 @@ static void print_usage(const char *program_name) {
     printf("  all            Run all tests (default)\n");
 }
 
-static void list_tests(void) {
+static void __attribute__((unused)) list_tests(void) {
     printf("Available Unity Memory Tests:\n");
     printf("  allocation     - Test basic memory allocation\n");
     printf("  deallocation   - Test memory deallocation\n");
@@ -148,7 +148,7 @@ static void list_tests(void) {
     printf("  all            - Run all tests\n");
 }
 
-static void run_specific_test(const char *test_name) {
+static void __attribute__((unused)) run_specific_test(const char *test_name) {
     if (strcmp(test_name, "allocation") == 0) {
         RUN_TEST(test_memory_allocation);
     } else if (strcmp(test_name, "deallocation") == 0) {

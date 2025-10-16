@@ -67,10 +67,9 @@ bool g_memory_profiling_enabled = false;
 // MEMORY HOOKS IMPLEMENTATION
 // ============================================================================
 
+#ifdef DEBUG
 // Global hook function (only one hook supported for simplicity)
 static MemoryHookFunc g_hook_func = NULL;
-
-#ifdef DEBUG
 
 // ============================================================================
 // MEMORY HOOKS FUNCTIONS

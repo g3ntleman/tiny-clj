@@ -59,11 +59,11 @@ CljObject* make_list_from_stack(CljObject **stack, int count) {
     if (count == 0) return clj_nil();
     
     // Build list from end to start using make_list
-    CljList *result = NULL;
+    CljObject *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
-        CljList *new_node = make_list(stack[i], (CljObject*)result);
+        CljList *new_node = make_list(stack[i], result);
         if (stack[i]) RETAIN(stack[i]);
-        result = new_node;
+        result = (CljObject*)new_node;
     }
     return (CljObject*)result;
 }
@@ -94,11 +94,11 @@ CljObject* list_from_ints(int count, ...) {
     va_start(args, count);
     
     // Build list from end to start using make_list
-    CljList *result = NULL;
+    CljObject *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
-        CljList *new_node = make_list(make_int(value), (CljObject*)result);
-        result = new_node;
+        CljList *new_node = make_list(make_int(value), result);
+        result = (CljObject*)new_node;
     }
     
     va_end(args);

@@ -4,7 +4,7 @@
 #include "object.h"
 
 /** Create a map with capacity; capacity<=0 returns empty-map singleton. */
-CljObject* make_map(int capacity);
+CljMap* make_map(int capacity);
 /** Get value for key or NULL if absent (structural key equality). */
 CljObject* map_get(CljObject *map, CljObject *key);
 /** Associate key->value (replace if key exists; retains value). */

@@ -324,7 +324,7 @@ void free_object(CljObject *obj);
 #endif
 
 // Type-safe casting with exception throwing (DRY principle)
-static inline void* assert_type(CljObject *obj, CljType expected_type, const char *type_name) {
+static inline void* assert_type(CljObject *obj, CljType expected_type) {
     if (!is_type(obj, expected_type)) {
         // Direct error output with expected and actual types
         const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
@@ -338,7 +338,7 @@ static inline void* assert_type(CljObject *obj, CljType expected_type, const cha
 
 // Type-safe casting (static inline for performance)
 static inline CljSymbol* as_symbol(CljObject *obj) {
-    return (CljSymbol*)assert_type(obj, CLJ_SYMBOL, "Symbol");
+    return (CljSymbol*)assert_type(obj, CLJ_SYMBOL);
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
     if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR) && !is_type(obj, CLJ_TRANSIENT_VECTOR)) {
@@ -351,7 +351,7 @@ static inline CljPersistentVector* as_vector(CljObject *obj) {
     return (CljPersistentVector*)obj;
 }
 static inline CljMap* as_map(CljObject *obj) {
-    return (CljMap*)((CljObject*)assert_type(obj, CLJ_MAP, "Map"))->as.data;
+    return (CljMap*)((CljObject*)assert_type(obj, CLJ_MAP))->as.data;
 }
 static inline CljList* as_list(CljObject *obj) {
     if (!is_type(obj, CLJ_LIST)) {
@@ -364,10 +364,10 @@ static inline CljList* as_list(CljObject *obj) {
     return (CljList*)obj;
 }
 static inline CljFunction* as_function(CljObject *obj) {
-    return (CljFunction*)assert_type(obj, CLJ_FUNC, "Function");
+    return (CljFunction*)assert_type(obj, CLJ_FUNC);
 }
 static inline CLJException* as_exception(CljObject *obj) {
-    return (CLJException*)assert_type(obj, CLJ_EXCEPTION, "Exception");
+    return (CLJException*)assert_type(obj, CLJ_EXCEPTION);
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)

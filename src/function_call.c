@@ -18,6 +18,7 @@
 #include "memory.h"
 #include "list_operations.h"
 #include "builtins.h"
+#include "map.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -35,8 +36,8 @@ CljObject* eval_div_with_substitution(CljObject *list, CljObject **params, CljOb
 CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 
 // Forward declarations for loop evaluation
-CljObject* eval_body_with_env(CljObject *body, CljObject *env);
-CljObject* eval_list_with_env(CljObject *list, CljObject *env);
+CljObject* eval_body_with_env(CljObject *body, CljMap *env);
+CljObject* eval_list_with_env(CljObject *list, CljMap *env);
 
 /** @brief Compare symbol name directly (works for non-interned symbols) */
 static inline int sym_is(CljObject *value, const char *name) {
@@ -86,7 +87,7 @@ static bool is_numeric_type(CljObject *obj) {
 }
 
 /** @brief Generic arithmetic function (variadic version) */
-CljObject* eval_arithmetic_generic(CljObject *list, CljObject *env, ArithOp op, EvalState *st) {
+CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, EvalState *st) {
     (void)st; // Suppress unused parameter warning
     int total_count = list_count(list);
     int argc = total_count - 1;  // Subtract 1 for the operator
@@ -236,7 +237,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 
 // Extended function call implementation with complete evaluation
 /** @brief Main function call evaluator */
-CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObject *env) {
+CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap *env) {
     (void)env;
     if (!is_type(fn, CLJ_FUNC)) {
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
@@ -273,12 +274,12 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObje
 
 
 // Evaluate body with environment lookup (for loops)
-CljObject* eval_body_with_env(CljObject *body, CljObject *env) {
+CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
     if (!body) return clj_nil();
     
     if (is_type(body, CLJ_SYMBOL)) {
         // Look up symbol in environment
-        return env_get_stack(env, body);
+        return env_get_stack((CljObject*)env, body);
     }
     
     // For lists, evaluate them with environment
@@ -291,7 +292,7 @@ CljObject* eval_body_with_env(CljObject *body, CljObject *env) {
 }
 
 // Evaluate list with environment (for loops)
-CljObject* eval_list_with_env(CljObject *list, CljObject *env) {
+CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
     if (!list || list->type != CLJ_LIST) return clj_nil();
     
     CljList *list_data = as_list(list);
@@ -303,7 +304,7 @@ CljObject* eval_list_with_env(CljObject *list, CljObject *env) {
     
     // For symbols, look up in environment
     if (is_type(op, CLJ_SYMBOL)) {
-        CljObject *resolved = env_get_stack(env, op);
+        CljObject *resolved = env_get_stack((CljObject*)env, op);
         if (resolved) {
             // If it's a function, call it
             if (is_type(resolved, CLJ_FUNC)) {
@@ -470,7 +471,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
 
 // Simplified body evaluation (basic implementation)
 /** @brief Evaluate function body expressions */
-CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st) {
+CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
     if (!body) return clj_nil();
     
     // Simplified implementation - would normally evaluate the AST
@@ -481,7 +482,7 @@ CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st) {
     
     if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol
-        return env_get_stack(env, body);
+        return env_get_stack((CljObject*)env, body);
     }
     
     // Literal value
@@ -489,7 +490,7 @@ CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st) {
 }
 
 // Simplified list evaluation
-CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
+CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     if (!list || list->type != CLJ_LIST) {
         return clj_nil();
     }
@@ -664,23 +665,23 @@ CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
 }
 
 // Small wrapper functions for arithmetic operations
-CljObject* eval_add(CljObject *list, CljObject *env) {
+CljObject* eval_add(CljObject *list, CljMap *env) {
     return eval_arithmetic_generic(list, env, ARITH_ADD, NULL);
 }
 
-CljObject* eval_sub(CljObject *list, CljObject *env) {
+CljObject* eval_sub(CljObject *list, CljMap *env) {
     return eval_arithmetic_generic(list, env, ARITH_SUB, NULL);
 }
 
-CljObject* eval_mul(CljObject *list, CljObject *env) {
+CljObject* eval_mul(CljObject *list, CljMap *env) {
     return eval_arithmetic_generic(list, env, ARITH_MUL, NULL);
 }
 
-CljObject* eval_div(CljObject *list, CljObject *env) {
+CljObject* eval_div(CljObject *list, CljMap *env) {
     return eval_arithmetic_generic(list, env, ARITH_DIV, NULL);
 }
 
-CljObject* eval_equal(CljObject *list, CljObject *env) {
+CljObject* eval_equal(CljObject *list, CljMap *env) {
     CljObject *a = eval_arg_retained(list, 1, env);
     CljObject *b = eval_arg_retained(list, 2, env);
     
@@ -717,7 +718,7 @@ CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, C
 }
 
 
-CljObject* eval_println(CljObject *list, CljObject *env) {
+CljObject* eval_println(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (arg) {
         char *str = pr_str(arg);
@@ -728,7 +729,7 @@ CljObject* eval_println(CljObject *list, CljObject *env) {
     return clj_nil();
 }
 
-CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
+CljObject* eval_def(CljObject *list, CljMap *env, EvalState *st) {
     if (!is_list(list)) return clj_nil();
     
     // Get the symbol name (second argument) - don't evaluate it, just get the symbol
@@ -773,7 +774,7 @@ CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st) {
     return symbol;
 }
 
-CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st) {
+CljObject* eval_ns(CljObject *list, CljMap *env, EvalState *st) {
     (void)env;  // Not used
     if (!list || !st) return clj_nil();
     
@@ -796,7 +797,7 @@ CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st) {
     return clj_nil();
 }
 
-CljObject* eval_fn(CljObject *list, CljObject *env) {
+CljObject* eval_fn(CljObject *list, CljMap *env) {
     if (!is_list(list)) return clj_nil();
     
     // Get the parameter list (second argument) - don't evaluate it
@@ -839,7 +840,7 @@ CljObject* eval_fn(CljObject *list, CljObject *env) {
     }
     
     // Create function object
-    CljObject *fn = make_function(params, param_count, body, env, NULL);
+    CljObject *fn = make_function(params, param_count, body, (CljObject*)env, NULL);
     
     // Cleanup heap-allocated params if any
     free_obj_array(params, params_stack);
@@ -873,7 +874,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
     return NULL;
 }
 
-CljObject* eval_str(CljObject *list, CljObject *env) {
+CljObject* eval_str(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return AUTORELEASE(make_string(""));
     
@@ -883,7 +884,7 @@ CljObject* eval_str(CljObject *list, CljObject *env) {
     return result;
 }
 
-CljObject* eval_prn(CljObject *list, CljObject *env) {
+CljObject* eval_prn(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (arg) {
         char *str = pr_str(arg);
@@ -893,7 +894,7 @@ CljObject* eval_prn(CljObject *list, CljObject *env) {
     return clj_nil();
 }
 
-CljObject* eval_count(CljObject *list, CljObject *env) {
+CljObject* eval_count(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return AUTORELEASE(make_int(0));
     
@@ -934,7 +935,7 @@ CljObject* eval_count(CljObject *list, CljObject *env) {
     return AUTORELEASE(make_int(1)); // Single value (int, bool, symbol, etc.)
 }
 
-CljObject* eval_first(CljObject *list, CljObject *env) {
+CljObject* eval_first(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return clj_nil();
     
@@ -959,7 +960,7 @@ CljObject* eval_first(CljObject *list, CljObject *env) {
  * - Uses single return pattern for cleaner code structure
  * - SeqIterator objects are managed by the caller
  */
-CljObject* eval_rest(CljObject *list, CljObject *env) {
+CljObject* eval_rest(CljObject *list, CljMap *env) {
     CljObject *result = NULL;  // Single result variable for clean return pattern
     CljObject *arg = eval_arg_retained(list, 1, env);  // Get the sequence argument
     
@@ -992,7 +993,7 @@ CljObject* eval_rest(CljObject *list, CljObject *env) {
     return AUTORELEASE(result);
 }
 
-CljObject* eval_cons(CljObject *list, CljObject *env) {
+CljObject* eval_cons(CljObject *list, CljMap *env) {
     CljObject *elem = eval_arg_retained(list, 1, env);
     CljObject *coll = eval_arg_retained(list, 2, env);
     
@@ -1032,7 +1033,7 @@ CljObject* eval_cons(CljObject *list, CljObject *env) {
     return AUTORELEASE(result);
 }
 
-CljObject* eval_seq(CljObject *list, CljObject *env) {
+CljObject* eval_seq(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return clj_nil();
     
@@ -1062,7 +1063,7 @@ CljObject* eval_seq(CljObject *list, CljObject *env) {
 // FOR-LOOP IMPLEMENTATIONS
 // ============================================================================
 
-CljObject* eval_for(CljObject *list, CljObject *env) {
+CljObject* eval_for(CljObject *list, CljMap *env) {
     // (for [binding coll] expr)
     // Returns a lazy sequence of results
     
@@ -1102,24 +1103,28 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
         while (!seq_empty(seq)) {
             CljObject *element = seq_first(seq);
             
-            // Create new environment with binding using make_list
-            CljList *new_env = make_list(var, (CljObject*)make_list(element, env));
-            // Clean up environment objects (not returned as values)
-            RELEASE((CljObject*)new_env);
-            
-            // Evaluate body with new binding
-            CljObject *body_result = body; // Simple: just return the expression
-            
-            // Add result to result list (simple implementation)
-            if (body_result) {
-                // For now, just return the first result
-                // In a full implementation, this would be a lazy sequence
-                RELEASE(result);
-                RELEASE(collection);
-                seq_release(seq);
-                return AUTORELEASE(body_result);
+            // Create new environment with binding using map_assoc
+            CljMap *new_env = make_map(4); // Small capacity for loop environment
+            if (new_env) {
+                // Copy existing environment bindings
+                if (env) {
+                    // For now, just use the existing environment
+                    // TODO: Implement proper environment copying
+                }
+                // Add new binding
+                map_assoc((CljObject*)new_env, var, element);
+                
+                // Evaluate body with new binding
+                CljObject *body_result = eval_body_with_env(body, new_env);
+                if (body_result) {
+                    RELEASE(body_result);
+                }
+                
+                // Clean up environment
+                RELEASE(new_env);
             }
             
+            // Move to next element
             CljObject *next = seq_next(seq);
             seq_release(seq);
             seq = next;
@@ -1132,7 +1137,7 @@ CljObject* eval_for(CljObject *list, CljObject *env) {
     return AUTORELEASE((CljObject*)result);
 }
 
-CljObject* eval_doseq(CljObject *list, CljObject *env) {
+CljObject* eval_doseq(CljObject *list, CljMap *env) {
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
     
@@ -1169,17 +1174,27 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
         while (!seq_empty(seq)) {
             CljObject *element = seq_first(seq);
             
-            // Create new environment with binding using make_list
-            CljList *new_env = make_list(var, (CljObject*)make_list(element, env));
-            
-            // Evaluate body with environment lookup
-            CljObject *body_result = eval_body_with_env(body, (CljObject*)new_env);
-            if (body_result) {
-                RELEASE(body_result);
+            // Create new environment with binding using map_assoc
+            CljMap *new_env = make_map(4); // Small capacity for loop environment
+            if (new_env) {
+                // Copy existing environment bindings
+                if (env) {
+                    // For now, just use the existing environment
+                    // TODO: Implement proper environment copying
+                }
+                // Add new binding
+                map_assoc((CljObject*)new_env, var, element);
+                
+                // Evaluate body with new binding
+                CljObject *body_result = eval_body_with_env(body, new_env);
+                if (body_result) {
+                    RELEASE(body_result);
+                }
+                
+                // Clean up environment
+                RELEASE(new_env);
             }
             
-            // Clean up environment objects
-            RELEASE((CljObject*)new_env);
             
             CljObject *next = seq_next(seq);
             seq_release(seq);
@@ -1194,7 +1209,7 @@ CljObject* eval_doseq(CljObject *list, CljObject *env) {
     return AUTORELEASE(clj_nil()); // doseq always returns nil
 }
 
-CljObject* eval_list_function(CljObject *list, CljObject *env) {
+CljObject* eval_list_function(CljObject *list, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     // (list arg1 arg2 ...) - creates a list from the arguments
     if (!list || list->type != CLJ_LIST) return clj_nil();
@@ -1210,7 +1225,7 @@ CljObject* eval_list_function(CljObject *list, CljObject *env) {
     return args_list;
 }
 
-CljObject* eval_dotimes(CljObject *list, CljObject *env) {
+CljObject* eval_dotimes(CljObject *list, CljMap *env) {
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
     
@@ -1253,30 +1268,40 @@ CljObject* eval_dotimes(CljObject *list, CljObject *env) {
     
     // Execute body n times
     for (int i = 0; i < n; i++) {
-        // Create new environment with binding using make_list
-        CljList *new_env = make_list(var, (CljObject*)make_list(make_int(i), env));
-        
-        // Evaluate body with environment lookup
-        CljObject *body_result = eval_body_with_env(body, (CljObject*)new_env);
-        if (body_result) {
-            RELEASE(body_result);
+        // Create new environment with binding using map_assoc
+        CljMap *new_env = make_map(4); // Small capacity for loop environment
+        if (new_env) {
+            // Copy existing environment bindings
+            if (env) {
+                // For now, just use the existing environment
+                // TODO: Implement proper environment copying
+            }
+            // Add new binding
+            map_assoc((CljObject*)new_env, var, make_int(i));
+            
+            // Evaluate body with new binding
+            CljObject *body_result = eval_body_with_env(body, new_env);
+            if (body_result) {
+                RELEASE(body_result);
+            }
+            
+            // Clean up environment
+            RELEASE(new_env);
         }
-        // Clean up environment objects (not returned as values)
-        RELEASE((CljObject*)new_env);
     }
     
     return AUTORELEASE(clj_nil()); // dotimes always returns nil
 }
 
 // Helper function for evaluating arguments with automatic retention
-CljObject* eval_arg_retained(CljObject *list, int index, CljObject *env) {
+CljObject* eval_arg_retained(CljObject *list, int index, CljMap *env) {
     CljObject *result = eval_arg(list, index, env);
     if (result) RETAIN(result);
     return result;
 }
 
 // Helper function for evaluating arguments
-CljObject* eval_arg(CljObject *list, int index, CljObject *env) {
+CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     if (!list || list->type != CLJ_LIST) return NULL;
     

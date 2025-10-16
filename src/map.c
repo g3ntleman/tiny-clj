@@ -24,10 +24,10 @@ static void init_empty_map_singleton_once(void) {
 }
 
 /** @brief Create a new map with specified capacity */
-CljObject *make_map(int capacity) {
+CljMap *make_map(int capacity) {
   if (capacity <= 0) {
     init_empty_map_singleton_once();
-    return (CljObject*)&clj_empty_map_singleton;
+    return &clj_empty_map_singleton;
   }
   CljMap *map = ALLOC(CljMap, 1);
   if (!map)
@@ -41,7 +41,7 @@ CljObject *make_map(int capacity) {
     free(map);
     return NULL;
   }
-  return (CljObject*)map;
+  return map;
 }
 
 /** @brief Get value from map by key */
@@ -205,10 +205,10 @@ void map_remove(CljObject *map, CljObject *key) {
 
 CljObject* map_from_stack(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
-        return make_map(0);
+        return (CljObject*)make_map(0);
     }
-    CljObject *map = make_map(pair_count * 2);
-    CljMap *map_data = as_map(map);
+    CljMap *map = make_map(pair_count * 2);
+    CljMap *map_data = as_map((CljObject*)map);
     if (!map_data) return NULL;
       for (int i = 0; i < pair_count; i++) {
           map_data->data[i * 2] = pairs[i * 2];
@@ -217,5 +217,5 @@ CljObject* map_from_stack(CljObject **pairs, int pair_count) {
           if (pairs[i * 2 + 1]) RETAIN(pairs[i * 2 + 1]);
       }
       map_data->count = pair_count;
-    return map;
+    return (CljObject*)map;
 }

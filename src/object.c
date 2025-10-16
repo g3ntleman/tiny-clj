@@ -745,7 +745,7 @@ CljObject *meta_registry = NULL;
 
 void meta_registry_init() {
     {
-        meta_registry = make_map(32); // Initial capacity for metadata entries
+        meta_registry = (CljObject*)make_map(32); // Initial capacity for metadata entries
     }
 }
 
@@ -868,7 +868,7 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
-    CljObject *new_env = make_map(4);
+    CljObject *new_env = (CljObject*)make_map(4);
     
     return (id)new_env;
 }

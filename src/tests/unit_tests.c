@@ -98,9 +98,9 @@ void test_vector_creation(void) {
 void test_map_creation(void) {
     WITH_AUTORELEASE_POOL({
         // Test map creation
-        CljObject *map = make_map(16);
+        CljMap *map = make_map(16);
         TEST_ASSERT_NOT_NULL(map);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
         
         RELEASE(map);
     });

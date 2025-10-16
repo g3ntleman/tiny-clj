@@ -137,19 +137,7 @@ static void test_group_advanced_parsing(void) {
 // COMMAND LINE INTERFACE
 // ============================================================================
 
-static void __attribute__((unused)) print_usage(const char *program_name) {
-    printf("Parser Tests for Tiny-CLJ\n");
-    printf("Usage: %s [test_name]\n\n", program_name);
-    printf("Available tests:\n");
-    printf("  basic-types     Test basic type parsing\n");
-    printf("  collections     Test collection parsing\n");
-    printf("  comments        Test comment parsing\n");
-    printf("  metadata        Test metadata parsing\n");
-    printf("  utf8            Test UTF-8 symbol parsing\n");
-    printf("  basic           Run basic parsing tests\n");
-    printf("  advanced        Run advanced parsing tests\n");
-    printf("  all             Run all tests (default)\n");
-}
+
 
 static void __attribute__((unused)) run_specific_test(const char *test_name) {
     if (strcmp(test_name, "basic-types") == 0) {
