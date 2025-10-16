@@ -13,6 +13,8 @@
 #include "namespace.h"
 #include "symbol.h"
 #include "clj_string.h"
+#include "map.h"
+#include "parser.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -137,6 +139,65 @@ void test_exception_with_autorelease(void) {
     });
 }
 
+void test_repl_crash_scenario(void) {
+    // This test reproduces the exact crash scenario from the REPL
+    // The problem is in the autorelease pool cleanup after exceptions
+    
+    WITH_AUTORELEASE_POOL({
+        TRY {
+            // Create some objects that will be in the autorelease pool
+            CljObject *obj1 = make_int(42);
+            CljObject *obj2 = make_string("test");
+            CljObject *obj3 = make_symbol("test", NULL);
+            
+            // Throw exception - this should cause memory corruption
+            // when the autorelease pool is cleaned up
+            throw_exception("WrongArgumentException", "String cannot be used as a Number", 
+                          "src/function_call.c", 144, 0);
+            
+        } CATCH(ex) {
+            // This should catch the exception but may crash during cleanup
+            TEST_ASSERT_NOT_NULL(ex);
+            TEST_ASSERT_EQUAL_STRING("WrongArgumentException", ex->type);
+        } END_TRY
+    });
+}
+
+void test_map_arity_exception_zero_args(void) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        bool exception_caught = false;
+        
+        TRY {
+            // Create a map and bind it to 'm'
+            CljObject *map_obj = (CljObject*)make_map(2);
+            CljObject *key = (CljObject*)make_symbol(":a", NULL);
+            CljObject *val = make_int(1);
+            map_assoc(map_obj, key, val);
+            
+            // Define 'm' in current namespace
+            CljObject *m_sym = (CljObject*)make_symbol("m", NULL);
+            ns_define(st, m_sym, map_obj);
+            
+            // Try to call map with 0 arguments: (m)
+            CljObject *result = eval_string("(m)", st);
+            
+            // Should not reach here
+            TEST_ASSERT_TRUE_MESSAGE(false, "Should throw ArityException when calling map with 0 args");
+        } CATCH(ex) {
+            exception_caught = true;
+            TEST_ASSERT_NOT_NULL(ex);
+            // Check exception type (might be ArityException or RuntimeException)
+            // Accept both as valid error indicators
+        } END_TRY
+        
+        TEST_ASSERT_TRUE_MESSAGE(exception_caught, 
+            "Exception should be thrown when calling map with wrong arity");
+        
+        evalstate_free(st);
+    });
+}
+
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
@@ -153,6 +214,8 @@ static void test_group_nested_exceptions(void) {
 
 static void test_group_advanced_exceptions(void) {
     RUN_TEST(test_exception_with_autorelease);
+    RUN_TEST(test_repl_crash_scenario);
+    RUN_TEST(test_map_arity_exception_zero_args);
 }
 
 // ============================================================================
@@ -185,6 +248,8 @@ static void __attribute__((unused)) run_specific_test(const char *test_name) {
         RUN_TEST(test_nested_try_catch_outer_exception);
     } else if (strcmp(test_name, "autorelease") == 0) {
         RUN_TEST(test_exception_with_autorelease);
+    } else if (strcmp(test_name, "map-arity") == 0) {
+        RUN_TEST(test_map_arity_exception_zero_args);
     } else if (strcmp(test_name, "basic") == 0) {
         RUN_TEST(test_group_basic_exceptions);
     } else if (strcmp(test_name, "nested") == 0) {
@@ -197,6 +262,7 @@ static void __attribute__((unused)) run_specific_test(const char *test_name) {
         RUN_TEST(test_nested_try_catch_inner_exception);
         RUN_TEST(test_nested_try_catch_outer_exception);
         RUN_TEST(test_exception_with_autorelease);
+        RUN_TEST(test_map_arity_exception_zero_args);
     } else {
         printf("Unknown test: %s\n", test_name);
         printf("Use --help to see available tests\n");

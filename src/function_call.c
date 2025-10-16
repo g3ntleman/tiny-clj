@@ -419,6 +419,24 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return eval_println(list, NULL);  // Simplified - no parameter substitution for now
     }
     
+    // Handle maps as functions (for key lookup)
+    if (is_type(op, CLJ_MAP)) {
+        int total_count = list_count(list);
+        int argc = total_count - 1;
+        
+        if (argc != 1) {
+            throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
+            return NULL;
+        }
+        
+        CljObject *key = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
+        if (!key) return clj_nil();
+        
+        CljObject *result = map_get(op, key);
+        return result ? RETAIN(result) : clj_nil();
+    }
+    
     // Check if head is a parameter or in closure_env
     CljObject *resolved_op = NULL;
     for (int i = 0; i < param_count; i++) {
@@ -504,6 +522,31 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     // First element is the operator
     CljObject *op = head;
+    
+    // Handle maps as functions (for key lookup) - must be first
+    if (is_type(op, CLJ_MAP)) {
+        int total_count = list_count(list);
+        int argc = total_count - 1;
+        
+        // Maps require exactly 1 argument (the key)
+        if (argc != 1) {
+            throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
+            return NULL;
+        }
+        
+        // Get the key argument
+        CljObject *key = eval_arg_retained(list, 1, env);
+        if (!key) {
+            return clj_nil();
+        }
+        
+        // Perform map lookup
+        CljObject *result = map_get(op, key);
+        RELEASE(key);
+        
+        return result ? RETAIN(result) : clj_nil();
+    }
     
     // Special forms that need special handling
     if (sym_is(op, "if")) {
@@ -650,6 +693,31 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         CljObject *fn = eval_symbol(op, st);
         if (!fn) {
             return clj_nil();
+        }
+        
+        // Check if it's a map (for map lookup)
+        if (is_type(fn, CLJ_MAP)) {
+            int total_count = list_count(list);
+            int argc = total_count - 1;
+            
+            // Maps require exactly 1 argument (the key)
+            if (argc != 1) {
+                throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                    "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
+                return NULL;
+            }
+            
+            // Get the key argument
+            CljObject *key = eval_arg_retained(list, 1, env);
+            if (!key) {
+                return clj_nil();
+            }
+            
+            // Perform map lookup
+            CljObject *result = map_get(fn, key);
+            RELEASE(key);
+            
+            return result ? RETAIN(result) : clj_nil();
         }
         
         // Check if it's a function

@@ -55,7 +55,9 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     
     // First search in the current namespace
     CljObject *v = map_get((CljObject*)st->current_ns->mappings, sym);
-    if (v) return v;
+    if (v) {
+        return v;
+    }
 
     // OPTIMIZATION: Priority-based namespace search
     // 1. Search clojure.core first (most common) - use cache for O(1) lookup

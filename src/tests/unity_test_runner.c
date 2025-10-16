@@ -76,6 +76,8 @@ extern void test_parse_collections(void);
 extern void test_parse_comments(void);
 extern void test_parse_metadata(void);
 extern void test_parse_utf8_symbols(void);
+extern void test_keyword_evaluation(void);
+extern void test_keyword_map_access(void);
 
 static void test_group_parser(void) {
     RUN_TEST(test_parse_basic_types);
@@ -83,6 +85,8 @@ static void test_group_parser(void) {
     RUN_TEST(test_parse_comments);
     RUN_TEST(test_parse_metadata);
     RUN_TEST(test_parse_utf8_symbols);
+    RUN_TEST(test_keyword_evaluation);
+    RUN_TEST(test_keyword_map_access);
 }
 
 // ============================================================================
@@ -115,6 +119,7 @@ extern void test_symbol_creation(void);
 extern void test_string_creation(void);
 extern void test_vector_creation(void);
 extern void test_map_creation(void);
+extern void test_array_map_builtin(void);
 extern void test_integer_creation(void);
 extern void test_float_creation(void);
 extern void test_nil_creation(void);
@@ -133,6 +138,7 @@ static void test_group_unit(void) {
     RUN_TEST(test_string_creation);
     RUN_TEST(test_vector_creation);
     RUN_TEST(test_map_creation);
+    RUN_TEST(test_array_map_builtin);
     RUN_TEST(test_integer_creation);
     RUN_TEST(test_float_creation);
     RUN_TEST(test_nil_creation);

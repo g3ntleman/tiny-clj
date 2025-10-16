@@ -48,7 +48,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     // Evaluate with exception handling using TRY/CATCH
     TRY {
       CljObject *result = eval_expr_simple(form, st);
-      if (result) RELEASE(result);
+      RELEASE(result);
       success_count++;
     } CATCH(ex) {
       // Exception occurred during evaluation

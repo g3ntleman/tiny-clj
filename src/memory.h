@@ -45,6 +45,9 @@ CljObjectPool *autorelease_pool_push();
 /** Pop and drain current autorelease pool (most common usage). */
 void autorelease_pool_pop(void);
 
+// CFAutoreleasePool: Exception-safe cleanup
+void autorelease_pool_cleanup_after_exception();
+
 /** Pop and drain specific autorelease pool (advanced usage). */
 void autorelease_pool_pop_specific(CljObjectPool *pool);
 
@@ -58,8 +61,8 @@ bool is_autorelease_pool_active(void);
 /** Get reference count of object (0 for singletons, actual rc for others). */
 int get_retain_count(CljObject *obj);
 
-// Convenience macro for scoped autorelease pool usage
-#define AUTORELEASE_POOL_SCOPE(name) for (CljObjectPool *(name) = autorelease_pool_push(); (name) != NULL; autorelease_pool_pop_specific(name), (name) = NULL)
+// AUTORELEASE_POOL_SCOPE removed - use WITH_AUTORELEASE_POOL instead
+// The for-loop implementation was incompatible with setjmp/longjmp
 
 // ============================================================================
 // MEMORY ALLOCATION MACROS
@@ -134,11 +137,26 @@ int get_retain_count(CljObject *obj);
         } \
     } while(0)
     
-    // Fluent autorelease pool macro
+    // CFAutoreleasePool: Exception-safe autorelease pool macro
+    // Compatible with setjmp/longjmp by using stack-based management
     #define WITH_AUTORELEASE_POOL(code) do { \
-        autorelease_pool_push(); \
-        code; \
-        autorelease_pool_pop(); \
+        CljObjectPool *_pool = autorelease_pool_push(); \
+        bool _pool_cleaned_up = false; \
+        do { \
+            code; \
+        } while(0); \
+        if (!_pool_cleaned_up) { \
+            autorelease_pool_pop_specific(_pool); \
+        } \
+    } while(0)
+    
+    // CFAutoreleasePool: Exception-safe pool for TRY/CATCH
+    #define CFAUTORELEASE_POOL_SCOPE(var, code) do { \
+        CljObjectPool *var = autorelease_pool_push(); \
+        do { \
+            code; \
+        } while(0); \
+        autorelease_pool_pop_specific(var); \
     } while(0)
     
     // Retain count macro for testing

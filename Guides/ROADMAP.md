@@ -26,6 +26,12 @@ Active/Next
 
 Next Priority
 -------------
+- Core Control Flow: `(do)` Implementation
+  - Implement `(do)` special form for sequential evaluation
+  - Support multiple expressions in sequence: `(do expr1 expr2 ... exprN)`
+  - Return value of last expression, nil for empty do
+  - Integration with existing special forms (if, let, fn, etc.)
+  - Unit tests for do evaluation and return values
 - Test Framework Migration:
   - Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
   - Implement individual test execution: `./unity-tests memory allocation`

@@ -2,6 +2,7 @@
 #include <string.h>
 #include "object.h"
 #include "vector.h"
+#include "map.h"
 #include "builtins.h"
 #include "runtime.h"
 #include "memory.h"
@@ -53,7 +54,7 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
     if (!v || i < 0 || i >= v->count) return NULL;
     int is_mutable = v->mutable_flag;
     if (is_mutable) {
-        if (v->data[i]) RELEASE(v->data[i]);
+        RELEASE(v->data[i]);
         v->data[i] = (RETAIN(val), val);
         return RETAIN(vec);
     } else {
@@ -64,7 +65,7 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
             c->data[j] = (RETAIN(v->data[j]), v->data[j]);
         }
         c->count = v->count;
-        if (c->data[i]) RELEASE(c->data[i]);
+        RELEASE(c->data[i]);
         c->data[i] = (RETAIN(val), val);
         return copy;
     }
@@ -80,6 +81,77 @@ CljObject* native_if(CljObject **args, int argc) {
     } else {
         return clj_nil();
     }
+}
+
+CljObject* native_type(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    CljObject *obj = args[0];
+    if (!obj) return (CljObject*)intern_symbol_global("nil");
+    
+    // Check for keyword (symbol with ':' prefix)
+    if (obj->type == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(obj);
+        if (sym && sym->name[0] == ':') {
+            return (CljObject*)intern_symbol_global("Keyword");
+        }
+    }
+    
+    // Return type name for other types
+    switch (obj->type) {
+        case CLJ_SYMBOL:
+            return (CljObject*)intern_symbol_global("Symbol");
+        case CLJ_INT:
+            return (CljObject*)intern_symbol_global("Long");
+        case CLJ_FLOAT:
+            return (CljObject*)intern_symbol_global("Double");
+        case CLJ_STRING:
+            return (CljObject*)intern_symbol_global("String");
+        case CLJ_BOOL:
+            return (CljObject*)intern_symbol_global("Boolean");
+        case CLJ_NIL:
+            return (CljObject*)intern_symbol_global("nil");
+        case CLJ_VECTOR:
+            return (CljObject*)intern_symbol_global("Vector");
+        case CLJ_MAP:
+            return (CljObject*)intern_symbol_global("Map");
+        case CLJ_LIST:
+            return (CljObject*)intern_symbol_global("List");
+        case CLJ_FUNC:
+            return (CljObject*)intern_symbol_global("Function");
+        case CLJ_EXCEPTION:
+            return (CljObject*)intern_symbol_global("Exception");
+        default:
+            return (CljObject*)intern_symbol_global(clj_type_name(obj->type));
+    }
+}
+
+CljObject* native_array_map(CljObject **args, int argc) {
+    // Must have even number of arguments (key-value pairs)
+    if (argc % 2 != 0) {
+        return NULL; // or throw exception for odd number of args
+    }
+    
+    // Create map with appropriate capacity
+    int pair_count = argc / 2;
+    
+    // Handle empty map case specially
+    if (pair_count == 0) {
+        return (CljObject*)make_map(0);
+    }
+    
+    CljMap *map = make_map(pair_count);
+    if (!map) {
+        return NULL;
+    }
+    
+    // Add all key-value pairs
+    for (int i = 0; i < argc; i += 2) {
+        CljObject *key = args[i];
+        CljObject *value = args[i + 1];
+        map_assoc((CljObject*)map, key, value);
+    }
+    
+    return (CljObject*)map;
 }
 
 CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env) {
@@ -108,7 +180,9 @@ static const BuiltinEntry builtins[] = {
     {"nth", FN_ARITY2, .u.fn2 = nth2},
     {"conj", FN_ARITY2, .u.fn2 = conj2},
     {"assoc", FN_ARITY3, .u.fn3 = assoc3},
+    {"array-map", FN_GENERIC, .u.generic = native_array_map},
     {"if", FN_GENERIC, .u.generic = native_if},
+    {"type", FN_GENERIC, .u.generic = native_type},
     {"+", FN_GENERIC, .u.generic = native_add},
     {"-", FN_GENERIC, .u.generic = native_sub},
     {"*", FN_GENERIC, .u.generic = native_mul},
@@ -340,6 +414,22 @@ CljObject* native_div_variadic(CljObject **args, int argc) {
     return variadic_reduce_int(args, argc, 1, div_op, true, true);
 }
 
+// Helper function to register a builtin in current namespace (DRY principle)
+static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
+    EvalState *st = evalstate();
+    if (!st) return;
+    
+    // Register the builtin in current namespace (user)
+    CljObject *symbol = intern_symbol(NULL, name);
+    CljObject *func_obj = make_named_func(func, NULL, name);
+    if (symbol && func_obj) {
+        ns_define(st, symbol, func_obj);
+        // Builtin registered successfully
+    } else {
+        // Failed to register builtin
+    }
+}
+
 void register_builtins() {
     for (size_t i = 0; i < sizeof(builtins)/sizeof(builtins[0]); ++i) {
         register_builtin(builtins[i].name, (BuiltinFn)builtins[i].u.generic /* placeholder */);
@@ -348,52 +438,14 @@ void register_builtins() {
     // Register a test native function to demonstrate the difference
     register_builtin("test-native", (BuiltinFn)native_if);
     
-    // Register arithmetic operations and other builtins in the namespace
-    EvalState *st = evalstate();
-    if (st) {
-        // Register arithmetic operations
-        CljObject *add_symbol = intern_symbol(NULL, "+");
-        CljObject *add_func = make_named_func(native_add, NULL, "+");
-        if (add_symbol && add_func) {
-            ns_define(st, add_symbol, add_func);
-        }
-        
-        CljObject *sub_symbol = intern_symbol(NULL, "-");
-        CljObject *sub_func = make_named_func(native_sub, NULL, "-");
-        if (sub_symbol && sub_func) {
-            ns_define(st, sub_symbol, sub_func);
-        }
-        
-        CljObject *mul_symbol = intern_symbol(NULL, "*");
-        CljObject *mul_func = make_named_func(native_mul, NULL, "*");
-        if (mul_symbol && mul_func) {
-            ns_define(st, mul_symbol, mul_func);
-        }
-        
-        CljObject *div_symbol = intern_symbol(NULL, "/");
-        CljObject *div_func = make_named_func(native_div, NULL, "/");
-        if (div_symbol && div_func) {
-            ns_define(st, div_symbol, div_func);
-        }
-        
-        CljObject *str_symbol = intern_symbol(NULL, "str");
-        CljObject *str_func = make_named_func(native_str, NULL, "str");
-        if (str_symbol && str_func) {
-            ns_define(st, str_symbol, str_func);
-        }
-        
-        // Register test-native
-        CljObject *symbol = intern_symbol(NULL, "test-native");
-        CljObject *func = make_named_func(native_if, NULL, "test-native");
-        if (symbol && func) {
-            ns_define(st, symbol, func);
-        }
-        
-        
-        CljObject *println_symbol = intern_symbol(NULL, "println");
-        CljObject *println_func = make_named_func(native_println, NULL, "println");
-        if (println_symbol && println_func) {
-            ns_define(st, println_symbol, println_func);
-        }
-    }
+    // Register all builtins in clojure.core namespace (DRY principle)
+    register_builtin_in_namespace("+", native_add);
+    register_builtin_in_namespace("-", native_sub);
+    register_builtin_in_namespace("*", native_mul);
+    register_builtin_in_namespace("/", native_div);
+    register_builtin_in_namespace("str", native_str);
+    register_builtin_in_namespace("type", native_type);
+    register_builtin_in_namespace("array-map", native_array_map);
+    register_builtin_in_namespace("test-native", native_if);
+    register_builtin_in_namespace("println", native_println);
 }

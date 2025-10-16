@@ -466,7 +466,7 @@ static CljObject *parse_symbol(Reader *reader, EvalState *st) {
   buffer[pos] = '\0';
   if (!utf8valid(buffer))
     return NULL;
-  return AUTORELEASE(make_symbol(buffer, NULL));
+  return AUTORELEASE(intern_symbol_global(buffer));
 }
 
 /**

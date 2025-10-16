@@ -30,10 +30,10 @@ struct CljNamespace;
 
 // Check if object type tracks retains (should be retain counted)
 // Returns false only for singletons (which don't use retain counting)
-#define TRACKS_RETAINS(obj) ((obj) && !IS_SINGLETON_TYPE((obj)->type))
+#define TRACKS_RETAINS(obj) ((obj) && !is_singleton(obj))
 
 // Legacy alias for backward compatibility
-#define IS_SINGLETON(obj) ((obj) && IS_SINGLETON_TYPE((obj)->type))
+#define IS_SINGLETON(obj) is_singleton(obj)
 
 // Automatic type mapping for ALLOC macros
 #define TYPE_OF_CljObject CLJ_UNKNOWN
@@ -78,6 +78,19 @@ struct CljObject {
         void* data;
     } as;
 };
+
+// Check if an object is a singleton (should not be reference counted)
+static inline bool is_singleton(CljObject *obj) {
+    if (!obj) return false;
+    
+    // Standard singleton types
+    if (IS_SINGLETON_TYPE(obj->type)) return true;
+    
+    // Special case: empty map singleton (rc == 0)
+    if (obj->type == CLJ_MAP && obj->rc == 0) return true;
+    
+    return false;
+}
 
 // Subtypes via struct embedding (composition/inheritance-like)
 // Symbol name buffer size - fixed allocation for performance and memory
@@ -342,16 +355,15 @@ static inline CljSymbol* as_symbol(CljObject *obj) {
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
     if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR) && !is_type(obj, CLJ_TRANSIENT_VECTOR)) {
-        char error_msg[128];
-        snprintf(error_msg, sizeof(error_msg), 
-                "Type mismatch: expected Vector, got %s", 
-                clj_type_name(TYPE(obj)));
-        throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
+        const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
+        fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
+                actual_type, __FILE__, __LINE__);
+        abort();
     }
     return (CljPersistentVector*)obj;
 }
 static inline CljMap* as_map(CljObject *obj) {
-    return (CljMap*)((CljObject*)assert_type(obj, CLJ_MAP))->as.data;
+    return (CljMap*)assert_type(obj, CLJ_MAP);
 }
 static inline CljList* as_list(CljObject *obj) {
     if (!is_type(obj, CLJ_LIST)) {
@@ -373,7 +385,7 @@ static inline CLJException* as_exception(CljObject *obj) {
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)
 static inline int is_native_fn(CljObject *fn) {
     // Native builtins are represented as CljFunc; interpreted functions as CljFunction
-    return TYPE(fn) == CLJ_FUNC && ((CljFunction*)fn)->params == NULL && ((CljFunction*)fn)->body == NULL && ((CljFunction*)fn)->closure_env == NULL;
+    return TYPE(fn) == CLJ_FUNC;
 }
 
 // is_autorelease_pool_active() function moved to memory.h

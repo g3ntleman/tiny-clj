@@ -105,14 +105,32 @@ static bool eval_string_repl(const char *code, EvalState *st) {
     if (!ast) return false;
     
     CljObject *res = NULL;
-    if (is_type(ast, CLJ_LIST)) {
-        CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        res = eval_list(ast, env, st);
-    } else {
-        res = eval_expr_simple(ast, st);
+    
+    // Use TRY/CATCH only for evaluation, not for autorelease pools
+    TRY {
+        if (is_type(ast, CLJ_LIST)) {
+            CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+            res = eval_list(ast, env, st);
+        } else {
+            res = eval_expr_simple(ast, st);
+        }
+    } CATCH(ex) {
+        // Exception occurred - print it and return false
+        print_exception(ex);
+        // Manual release of exception since no autorelease pool
+        RELEASE(ex);
+        RELEASE(ast);
+        return false;
+    } END_TRY
+    
+    if (!res) {
+        RELEASE(ast);
+        return false;
     }
-    if (!res) return false;
+    
     print_result(res);
+    RELEASE(res);
+    RELEASE(ast);
     return true;
 }
 
@@ -166,7 +184,7 @@ static bool run_interactive_repl(EvalState *st) {
     set_line_editor(editor);
 #endif
 
-    for (;;) {
+    while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
             print_prompt(st, is_balanced_form(acc));
@@ -222,24 +240,10 @@ static bool run_interactive_repl(EvalState *st) {
             continue;
         }
 
-        // Evaluate accumulated form with TRY/CATCH
-        AUTORELEASE_POOL_SCOPE(pool) {
-            TRY {
-                const char *p = acc;
-                CljObject *ast = parse(p, st);
-                if (ast) {
-                    CljObject *res = NULL;
-                    if (is_type(ast, CLJ_LIST)) {
-        CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        res = eval_list(ast, env, st);
-                    } else {
-                        res = eval_expr_simple(ast, st);
-                    }
-                    if (res) print_result(res);
-                }
-            } CATCH(ex) {
-                print_exception(ex);
-            } END_TRY
+        // Use eval_string_repl for proper exception handling
+        bool success = eval_string_repl(acc, st);
+        if (!success) {
+            // Error already printed by eval_string_repl
         }
         
         acc[0] = '\0';
@@ -324,39 +328,28 @@ int main(int argc, char **argv) {
     }
 
     if (file_arg) {
-        AUTORELEASE_POOL_SCOPE(pool) {
-            TRY {
-                FILE *fp = fopen(file_arg, "r");
-                if (!fp) {
-                    throw_exception_formatted("IOError", __FILE__, __LINE__, 0,
-                            "Failed to open file '%s': %s", file_arg, strerror(errno));
-                } else {
-                    char line[1024];
-                    char acc[8192]; acc[0] = '\0';
-                    while (fgets(line, sizeof(line), fp)) {
-                        strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
-                        if (!is_balanced_form(acc)) continue;
-                        TRY {
-                            bool success = eval_string_repl(acc, st);
-                            if (!success) {
-                                // Parse error or evaluation failed
-                                fclose(fp);
-                                cleanup_and_exit(eval_args, 1);
-                            }
-                        } CATCH(ex) {
-                            print_exception(ex);
-                            fclose(fp);
-                            cleanup_and_exit(eval_args, 1);
-                        } END_TRY
-                        acc[0] = '\0';
-                    }
-                    fclose(fp);
-                }
-            } CATCH(ex) {
-                print_result((CljObject*)ex);
-                cleanup_and_exit(eval_args, 1);
-            } END_TRY
+        // Simple file evaluation without TRY/CATCH
+        FILE *fp = fopen(file_arg, "r");
+        if (!fp) {
+            printf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
+            cleanup_and_exit(eval_args, 1);
         }
+        
+        char line[1024];
+        char acc[8192]; acc[0] = '\0';
+        while (fgets(line, sizeof(line), fp)) {
+            strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
+            if (!is_balanced_form(acc)) continue;
+            
+            bool success = eval_string_repl(acc, st);
+            if (!success) {
+                // Parse error or evaluation failed
+                fclose(fp);
+                cleanup_and_exit(eval_args, 1);
+            }
+            acc[0] = '\0';
+        }
+        fclose(fp);
         if (!start_repl && eval_count == 0) {
             cleanup_and_exit(eval_args, 0);
         }
@@ -365,19 +358,15 @@ int main(int argc, char **argv) {
     cleanup_line_editor();
 
     // Execute all -e arguments in order
-    for (int i = 0; i < eval_count; i++) {
-        AUTORELEASE_POOL_SCOPE(pool) {
-            TRY {
-                bool success = eval_string_repl(eval_args[i], st);
-                if (!success) {
-                    // Parse error or evaluation failed
-                    cleanup_and_exit(eval_args, 1);
-                }
-            } CATCH(ex) {
-                print_exception(ex);
-                cleanup_and_exit(eval_args, 1);
-            } END_TRY
+    int i = 0;
+    while (i < eval_count) {
+        // Simple eval-args without TRY/CATCH
+        bool success = eval_string_repl(eval_args[i], st);
+        if (!success) {
+            // Parse error or evaluation failed
+            cleanup_and_exit(eval_args, 1);
         }
+        i++;
     }
     
     if (eval_count > 0 && !start_repl) {

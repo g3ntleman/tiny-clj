@@ -23,6 +23,8 @@ CljObject* nth2(CljObject *vec, CljObject *idx);
 CljObject* conj2(CljObject *vec, CljObject *val);
 CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val);
 CljObject* native_if(CljObject **args, int argc);
+CljObject* native_type(CljObject **args, int argc);
+CljObject* native_array_map(CljObject **args, int argc);
 
 // Function value constructors
 CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env);

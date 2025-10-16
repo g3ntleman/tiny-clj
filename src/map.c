@@ -61,11 +61,13 @@ CljObject *map_get(CljObject *map, CljObject *key) {
 
 /** @brief Associate key-value pair in map */
 void map_assoc(CljObject *map, CljObject *key, CljObject *value) {
-  if (!map || map->type != CLJ_MAP || !key)
+  if (!map || map->type != CLJ_MAP || !key) {
     return;
+  }
   CljMap *map_data = as_map(map);
-  if (!map_data)
+  if (!map_data) {
     return;
+  }
   for (int i = 0; i < map_data->count; i++) {
     CljObject *k = map_data->data[2 * i];
     if (k && clj_equal(k, key)) {
