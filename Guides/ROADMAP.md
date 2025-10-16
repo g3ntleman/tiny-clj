@@ -32,7 +32,7 @@ Next Priority
   - Return value of last expression, nil for empty do
   - Integration with existing special forms (if, let, fn, etc.)
   - Unit tests for do evaluation and return values
-- Test Framework Migration:
+- Test Framework Enhancements:
   - Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
   - Implement individual test execution: `./unity-tests memory allocation`
   - Add CTest integration for CI/CD pipeline
