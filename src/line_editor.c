@@ -264,8 +264,10 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->escape_pos = 0;
     editor->in_escape_sequence = false;
     
-    // Initialize history support
-    editor->history = make_vector(50, 1);  // Mutable vector with capacity 50
+    // Initialize history support with transient vector for efficient in-place operations
+    CljObject *persistent_vec = make_vector(50, 0);  // Start with persistent vector
+    editor->history = transient(persistent_vec);      // Convert to transient for efficient operations
+    RELEASE(persistent_vec);  // Release the persistent version
     editor->history_index = -1;  // -1 means we're on a new line
     editor->temp_buffer[0] = '\0';
     
@@ -416,10 +418,10 @@ void line_editor_reset(LineEditor *editor) {
 void line_editor_add_to_history(LineEditor *editor, const char *line) {
     if (!editor || !line || !editor->history) return;
     
-    // Create string object and add to history vector
+    // Create string object and add to history vector using transient conj
     CljObject *line_obj = make_string(line);
     if (line_obj) {
-        vector_push_inplace(editor->history, line_obj);
+        editor->history = conj_v(editor->history, line_obj);
         // line_obj is now retained by the vector, we can release our reference
         RELEASE(line_obj);
     }
