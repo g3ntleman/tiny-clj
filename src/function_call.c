@@ -136,14 +136,14 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, Eva
         
         // Check for non-numeric types
         if (!is_numeric_type(args[i])) {
-            // Clean up already evaluated arguments
+            // Clean up already evaluated arguments BEFORE throwing exception
             for (int j = 0; j <= i; j++) {
                 RELEASE(args[j]);
             }
             free(args);
             throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
                 "String cannot be used as a Number");
-            return NULL;
+            return NULL; // Unreachable, but prevents fallthrough
         }
     }
     
@@ -619,9 +619,38 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     // Fallback: try to resolve symbol and call as function
     if (is_type(op, CLJ_SYMBOL)) {
+        // Handle keywords as functions (for map lookup)
+        CljSymbol *sym = as_symbol(op);
+        if (sym->name[0] == ':') {
+            // Keyword as function - perform map lookup
+            int total_count = list_count(list);
+            int argc = total_count - 1;
+            
+            if (argc == 1) {
+                CljObject *arg = eval_arg_retained(list, 1, env);
+                
+                // If argument is a symbol, resolve it to get the actual value
+                if (is_type(arg, CLJ_SYMBOL)) {
+                    CljObject *resolved = eval_symbol(arg, st);
+                    if (resolved) {
+                        RELEASE(arg);  // Release the symbol
+                        arg = resolved;  // Use the resolved value
+                    }
+                }
+                
+                if (is_type(arg, CLJ_MAP)) {
+                    CljObject *result = map_get(arg, op);
+                    return result ? RETAIN(result) : clj_nil();
+                }
+            }
+            
+            // Invalid usage - fall through to error handling
+        }
         // Resolve the symbol to get the function
         CljObject *fn = eval_symbol(op, st);
-        if (!fn) return clj_nil();
+        if (!fn) {
+            return clj_nil();
+        }
         
         // Check if it's a function
         if (is_type(fn, CLJ_FUNC)) {
@@ -853,8 +882,14 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
         return clj_nil();
     }
     
-    // Special handling for *ns* - return current namespace name as symbol
     CljSymbol *sym = as_symbol(symbol);
+    
+    // Keywords evaluate to themselves
+    if (sym && sym->name[0] == ':') {
+        return RETAIN(symbol);
+    }
+    
+    // Special handling for *ns* - return current namespace name as symbol
     if (sym && strcmp(sym->name, "*ns*") == 0) {
         if (st && st->current_ns && st->current_ns->name) {
             return st->current_ns->name;  // Return the namespace symbol (e.g., 'user')
