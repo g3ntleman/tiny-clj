@@ -244,6 +244,13 @@ static bool run_interactive_repl(EvalState *st) {
         bool success = eval_string_repl(acc, st);
         if (!success) {
             // Error already printed by eval_string_repl
+            // Reset history index after exception to prevent hanging
+#ifdef ENABLE_LINE_EDITING
+            LineEditor *editor = get_line_editor();
+            if (editor) {
+                line_editor_reset_history_index(editor);
+            }
+#endif
         } else if (acc[0] != '\0') {
             // Add successful command to history
 #ifdef ENABLE_LINE_EDITING

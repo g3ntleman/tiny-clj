@@ -462,6 +462,13 @@ void cleanup_line_editor(void) {
     }
 }
 
+// Reset history index to new line mode (used after exceptions)
+void line_editor_reset_history_index(LineEditor *editor) {
+    if (editor) {
+        editor->history_index = -1;  // Reset to new line mode
+    }
+}
+
 #else
 // Stub implementations when line editing is disabled
 LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStringFunc put_string) {
@@ -530,6 +537,11 @@ LineEditor* get_line_editor(void) {
 }
 
 void cleanup_line_editor(void) {
+    // Nothing to do when line editing is disabled
+}
+
+void line_editor_reset_history_index(LineEditor *editor) {
+    (void)editor;
     // Nothing to do when line editing is disabled
 }
 

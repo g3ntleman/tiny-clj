@@ -50,4 +50,7 @@ void set_line_editor(LineEditor *editor);
 LineEditor* get_line_editor(void);
 void cleanup_line_editor(void);
 
+// Reset history index (used after exceptions)
+void line_editor_reset_history_index(LineEditor *editor);
+
 #endif // TINY_CLJ_LINE_EDITOR_H
