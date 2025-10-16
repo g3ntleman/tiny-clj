@@ -254,5 +254,9 @@ set_tests_properties(repl-ns-eval PROPERTIES PASS_REGULAR_EXPRESSION "4\n" LABEL
 add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
+# History test (test that REPL can handle multiple commands)
+add_test(NAME repl-history-multiple COMMAND bash -c "echo -e '(+ 1 2)\n(* 3 4)\n(str \"test\")' | timeout 5s ./tiny-clj-repl")
+set_tests_properties(repl-history-multiple PROPERTIES PASS_REGULAR_EXPRESSION "3.*12.*test" LABELS "repl;history")
+
 # Seq Benchmark (REMOVED - File no longer exists)
 # Use run-tests for sequence testing instead

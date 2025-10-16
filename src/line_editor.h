@@ -2,6 +2,7 @@
 #define TINY_CLJ_LINE_EDITOR_H
 
 #include <stdbool.h>
+#include "object.h"
 
 // Forward declarations
 typedef struct LineEditor LineEditor;
