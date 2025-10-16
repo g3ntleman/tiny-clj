@@ -78,20 +78,14 @@ static void print_result(CljObject *v) {
  *  @param ex Exception to print (can be NULL)
  */
 static void print_exception(CLJException *ex) {
-    if (!ex) return;
+    if (!ex) {
+        fprintf(stderr, "EXCEPTION: NULL exception\n");
+        return;
+    }
     
-    // Use safer string handling to prevent corruption
-    const char *type = strlen(ex->type) > 0 ? ex->type : "Error";
-    const char *message = strlen(ex->message) > 0 ? ex->message : "Unknown error";
-    const char *file = strlen(ex->file) > 0 ? ex->file : "?";
-    
-    // Ensure strings are null-terminated and not corrupted
-    if (strlen(type) > 100) type = "Error";
-    if (strlen(message) > 200) message = "Unknown error";
-    if (strlen(file) > 100) file = "?";
-    
-    fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
-        type, message, file, ex->line, ex->col);
+    // Safely print exception with bounds checking
+    fprintf(stderr, "EXCEPTION: %.127s: %.255s at %.127s:%d:%d\n",
+        ex->type, ex->message, ex->file, ex->line, ex->col);
 }
 
 /** @brief Evaluate a string expression in the REPL context.
@@ -106,7 +100,8 @@ static bool eval_string_repl(const char *code, EvalState *st) {
     
     CljObject *res = NULL;
     
-    // Simple evaluation without TRY/CATCH for now
+    // Simple evaluation without TRY/CATCH to avoid AUTORELEASE issues
+    // The unhandled exception handler will print the exception and exit
     if (is_type(ast, CLJ_LIST)) {
         CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
         res = eval_list(ast, env, st);
