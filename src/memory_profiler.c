@@ -331,7 +331,6 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
 }
 
 void memory_profiler_print_stats(const char *test_name) {
-    printf("\n📊 Memory Statistics:\n");
     print_memory_table(&g_memory_stats, test_name, false);
 }
 
