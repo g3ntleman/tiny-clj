@@ -41,6 +41,7 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env);
 
 /** @brief Compare symbol name directly (works for non-interned symbols) */
 static inline int sym_is(CljObject *value, const char *name) {
+    if (!value || value->type != CLJ_SYMBOL) return 0;
     CljSymbol *sym = as_symbol(value);
     return sym && strcmp(sym->name, name) == 0;
 }
@@ -522,6 +523,13 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     // First element is the operator
     CljObject *op = head;
+    
+    // If first element is a list, evaluate it first (for nested calls like ((array-map)))
+    if (is_type(op, CLJ_LIST)) {
+        op = eval_list(op, env, st);
+        if (!op) return clj_nil();
+        // Now op is the result of evaluating the inner list - continue with it
+    }
     
     // Handle maps as functions (for key lookup) - must be first
     if (is_type(op, CLJ_MAP)) {
