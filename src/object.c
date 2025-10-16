@@ -80,19 +80,23 @@ GlobalExceptionStack global_exception_stack = {0};
 // - Catch handler automatically releases exception in END_TRY
 /** @brief Throw an exception with type, message, and location */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
-    CLJException *exception = make_exception(type, message, file, line, col, NULL);
-    
-    if (global_exception_stack.top) {
-        // Use global exception stack
-        global_exception_stack.top->exception = exception; // assign new excpetion with rc=1
-        longjmp(global_exception_stack.top->jump_state, 1);
-    } else {
+    if (!global_exception_stack.top) {
         // No handler - unhandled exception
         printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
                type, message, file ? file : "<unknown>", line, col);
-        RELEASE((CljObject*)exception);
         exit(1);
     }
+    
+    CLJException *exception = make_exception(type, message, file, line, col, NULL);
+    if (!exception) {
+        printf("FAILED TO CREATE EXCEPTION: %s: %s at %s:%d:%d\n", 
+               type, message, file ? file : "<unknown>", line, col);
+        exit(1);
+    }
+    
+    // Exception in den AKTUELLEN Pool autoreleasen (nicht TRY-Pool!)
+    global_exception_stack.top->exception = (CLJException*)AUTORELEASE((CljObject*)exception);
+    longjmp(global_exception_stack.top->jump_state, 1);
 }
 
 
@@ -128,7 +132,6 @@ CLJException* make_exception(const char *type, const char *message, const char *
     
     exc->line = line;
     exc->col = col;
-    exc->data = RETAIN(data);
     
     return exc;
 }

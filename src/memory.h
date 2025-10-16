@@ -150,6 +150,19 @@ int get_retain_count(CljObject *obj);
         } \
     } while(0)
     
+    // Exception-safe autorelease pool macro for TRY/CATCH blocks
+    // This macro is compatible with longjmp by not using block scopes
+    #define WITH_AUTORELEASE_POOL_TRY_CATCH(code) do { \
+        CljObjectPool *_pool = autorelease_pool_push(); \
+        code; \
+        autorelease_pool_pop_specific(_pool); \
+    } while(0)
+    
+    // Simple autorelease pool management for TRY/CATCH
+    // Use this pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
+    #define AUTORELEASE_POOL_BEGIN() CljObjectPool *_pool = autorelease_pool_push()
+    #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
+    
     // CFAutoreleasePool: Exception-safe pool for TRY/CATCH
     #define CFAUTORELEASE_POOL_SCOPE(var, code) do { \
         CljObjectPool *var = autorelease_pool_push(); \
@@ -180,7 +193,13 @@ int get_retain_count(CljObject *obj);
     #define DEALLOC(obj) ((void)0)
     #define RETAIN(obj) ({ CljObject* _tmp = (CljObject*)(obj); retain(_tmp); _tmp; })
     #define RELEASE(obj) ({ CljObject* _tmp = (CljObject*)(obj); release(_tmp); _tmp; })
-    #define AUTORELEASE(obj) (obj)
+    #define AUTORELEASE(obj) ({ \
+        CljObject* _tmp = (CljObject*)(obj); \
+        if (_tmp != NULL) { \
+            autorelease(_tmp); \
+        } \
+        _tmp; \
+    })
     #define ASSIGN(var, new_obj) do { \
         typeof(var) _tmp = (new_obj); \
         if (_tmp != (var)) { \
@@ -190,8 +209,22 @@ int get_retain_count(CljObject *obj);
         } \
     } while(0)
     
-    // No-op test macros for release builds
-    #define WITH_AUTORELEASE_POOL(code) do { code } while(0)
+    // Autorelease pool macros for release builds
+    #define WITH_AUTORELEASE_POOL(code) do { \
+        CljObjectPool *_pool = autorelease_pool_push(); \
+        bool _pool_cleaned_up = false; \
+        do { \
+            code; \
+        } while(0); \
+        if (!_pool_cleaned_up) { \
+            autorelease_pool_pop_specific(_pool); \
+        } \
+    } while(0)
+    
+    // Simple autorelease pool management for TRY/CATCH (release builds)
+    #define AUTORELEASE_POOL_BEGIN() CljObjectPool *_pool = autorelease_pool_push()
+    #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
+    
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
     #define WITH_TIME_PROFILING(code) do { code } while(0)
     #define REFERENCE_COUNT(obj) get_retain_count(obj)

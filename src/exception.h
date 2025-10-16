@@ -6,6 +6,7 @@
 #ifndef EXCEPTION_H
 #define EXCEPTION_H
 #include "object.h"
+#include "memory.h"
 #include <setjmp.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -24,6 +25,7 @@ typedef struct ExceptionHandler {
     jmp_buf jump_state;                  // Jump target for longjmp
     struct ExceptionHandler *next;       // Previous handler (stack)
     CLJException *exception;             // Caught exception
+    CljObjectPool *pool;                 // Autorelease pool for cleanup after longjmp
 } ExceptionHandler;
 
 /**
@@ -62,26 +64,27 @@ extern GlobalExceptionStack global_exception_stack;
     ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
     _h->next = global_exception_stack.top; \
     _h->exception = NULL; \
+    _h->pool = NULL; \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
 #define CATCH(ex) \
-        /* Success path: pop stack and free handler */ \
+        /* Success path: pop stack only */ \
         ExceptionHandler *_success_handler = global_exception_stack.top; \
         global_exception_stack.top = _success_handler->next; \
         free(_success_handler); \
     } else { \
-        /* Exception path: pop stack and get exception */ \
+        /* Exception path: get exception */ \
         ExceptionHandler *_caught_h = global_exception_stack.top; \
         CLJException *ex = _caught_h->exception; \
         global_exception_stack.top = _caught_h->next; \
         free(_caught_h); \
         if (ex) { \
-            (void)AUTORELEASE(RETAIN(ex));  /* Retain then autorelease exception (rc=1→2→pool) */ \
+            /* Exception is autoreleased in umgebenden Pool */ \
 
 #define END_TRY \
         } \
-        /* ExceptionHandler already freed in CATCH, exception autoreleased */ \
+        /* Exception is autoreleased - pool cleanup happens automatically */ \
     } \
 }
 

@@ -94,29 +94,44 @@ static void print_exception(CLJException *ex) {
  *  @return true if successful, false on parse or evaluation error
  */
 static bool eval_string_repl(const char *code, EvalState *st) {
+    AUTORELEASE_POOL_BEGIN();
+    
     const char *p = code;
     CljObject *ast = parse(p, st);
-    if (!ast) return false;
+    if (!ast) {
+        AUTORELEASE_POOL_END();
+        return false;
+    }
     
     CljObject *res = NULL;
+    bool success = false;
     
-    // Simple evaluation without TRY/CATCH to avoid AUTORELEASE issues
-    // The unhandled exception handler will print the exception and exit
-    if (is_type(ast, CLJ_LIST)) {
-        CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        res = eval_list(ast, env, st);
-    } else {
-        res = eval_expr_simple(ast, st);
-    }
+    // Use TRY/CATCH for proper exception handling with autorelease pool compatibility
+    TRY {
+        if (is_type(ast, CLJ_LIST)) {
+            CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+            res = eval_list(ast, env, st);
+        } else {
+            res = eval_expr_simple(ast, st);
+        }
+    } CATCH(ex) {
+        print_exception(ex);
+        // Exception wird automatisch durch Pool freigegeben
+        RELEASE(ast);
+        AUTORELEASE_POOL_END();
+        return false;
+    } END_TRY
     
     if (!res) {
         RELEASE(ast);
+        AUTORELEASE_POOL_END();
         return false;
     }
     
     print_result(res);
     RELEASE(res);
     RELEASE(ast);
+    AUTORELEASE_POOL_END();
     return true;
 }
 
@@ -228,16 +243,19 @@ static bool run_interactive_repl(EvalState *st) {
 
         // Use eval_string_repl for proper exception handling
         bool success = eval_string_repl(acc, st);
-        if (!success) {
-            // Error already printed by eval_string_repl
-        } else if (acc[0] != '\0') {
-            // Add successful command to history
+        
+        // Always add command to history (successful or failed) so user can correct it
+        if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
             LineEditor *editor = get_line_editor();
             if (editor) {
                 line_editor_add_to_history(editor, acc);
             }
 #endif
+        }
+        
+        if (!success) {
+            // Error already printed by eval_string_repl
         }
         
         acc[0] = '\0';
