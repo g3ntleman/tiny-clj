@@ -106,22 +106,13 @@ static bool eval_string_repl(const char *code, EvalState *st) {
     
     CljObject *res = NULL;
     
-    // Use TRY/CATCH only for evaluation, not for autorelease pools
-    TRY {
-        if (is_type(ast, CLJ_LIST)) {
-            CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-            res = eval_list(ast, env, st);
-        } else {
-            res = eval_expr_simple(ast, st);
-        }
-    } CATCH(ex) {
-        // Exception occurred - print it and return false
-        print_exception(ex);
-        // Manual release of exception since no autorelease pool
-        RELEASE(ex);
-        RELEASE(ast);
-        return false;
-    } END_TRY
+    // Simple evaluation without TRY/CATCH for now
+    if (is_type(ast, CLJ_LIST)) {
+        CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        res = eval_list(ast, env, st);
+    } else {
+        res = eval_expr_simple(ast, st);
+    }
     
     if (!res) {
         RELEASE(ast);
@@ -244,13 +235,6 @@ static bool run_interactive_repl(EvalState *st) {
         bool success = eval_string_repl(acc, st);
         if (!success) {
             // Error already printed by eval_string_repl
-            // Reset history index after exception to prevent hanging
-#ifdef ENABLE_LINE_EDITING
-            LineEditor *editor = get_line_editor();
-            if (editor) {
-                line_editor_reset_history_index(editor);
-            }
-#endif
         } else if (acc[0] != '\0') {
             // Add successful command to history
 #ifdef ENABLE_LINE_EDITING
