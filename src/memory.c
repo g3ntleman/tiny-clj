@@ -27,8 +27,8 @@
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
     void *result = malloc(type_size * count);
     
-    // Track object creation if it's a CljObject and NOT a singleton
-    if (result != NULL && type_size == sizeof(CljObject)) {
+    // Track object creation if it's a CljObject subtype and NOT a singleton
+    if (result != NULL && type_size >= sizeof(CljObject)) {
         if (!IS_SINGLETON_TYPE(obj_type)) {
             CljObject *obj = (CljObject*)result;
             obj->type = obj_type;  // Set type before tracking
@@ -48,8 +48,8 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
 void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
     void *result = calloc(count, type_size);
     
-    // Track object creation if it's a CljObject and NOT a singleton
-    if (result != NULL && type_size == sizeof(CljObject)) {
+    // Track object creation if it's a CljObject subtype and NOT a singleton
+    if (result != NULL && type_size >= sizeof(CljObject)) {
         if (!IS_SINGLETON_TYPE(obj_type)) {
             CljObject *obj = (CljObject*)result;
             obj->type = obj_type;  // Set type before tracking
@@ -184,6 +184,13 @@ CljObject *autorelease(CljObject *v) {
  * added via autorelease() will be added to this pool and released when
  * the pool is popped.
  */
+// CFAutoreleasePool: Exception-safe pool management
+// Compatible with setjmp/longjmp by using global stack tracking
+
+// Global stack of active pools for exception safety
+static CljObjectPool *g_exception_safe_pools[64] = {0};
+static int g_exception_safe_count = 0;
+
 CljObjectPool *autorelease_pool_push() {
     CljObjectPool *p = (CljObjectPool*)malloc(sizeof(CljObjectPool));
     if (!p) return NULL;
@@ -191,10 +198,15 @@ CljObjectPool *autorelease_pool_push() {
     p->prev = g_cv_pool_top;
     g_cv_pool_top = p;
     g_pool_push_count++;  // Increment push counter
+    
+    // CFAutoreleasePool: Register for exception safety
+    if (g_exception_safe_count < 64) {
+        g_exception_safe_pools[g_exception_safe_count++] = p;
+    }
+    
     return p;
 }
 
-// Internal implementation
 static void autorelease_pool_pop_internal(CljObjectPool *pool) {
     // Check for push/pop imbalance
     if (g_pool_push_count <= 0) {
@@ -210,6 +222,19 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
         pool = g_cv_pool_top;
     }
     if (!pool || g_cv_pool_top != pool) return;
+    
+    // CFAutoreleasePool: Exception-safe cleanup
+    // Remove from exception-safe stack if present
+    for (int i = 0; i < g_exception_safe_count; i++) {
+        if (g_exception_safe_pools[i] == pool) {
+            // Shift remaining pools down
+            for (int j = i; j < g_exception_safe_count - 1; j++) {
+                g_exception_safe_pools[j] = g_exception_safe_pools[j + 1];
+            }
+            g_exception_safe_count--;
+            break;
+        }
+    }
     
     CljPersistentVector *vec = as_vector(pool->backing);
     if (vec) {
@@ -236,6 +261,41 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
     }
     
     free(pool);
+}
+
+// CFAutoreleasePool: Exception-safe cleanup function
+// Call this from CATCH blocks to clean up pools after exceptions
+void autorelease_pool_cleanup_after_exception() {
+    // Clean up all registered pools
+    for (int i = g_exception_safe_count - 1; i >= 0; i--) {
+        CljObjectPool *pool = g_exception_safe_pools[i];
+        if (pool) {
+            // Clean up pool contents
+            CljPersistentVector *vec = as_vector(pool->backing);
+            if (vec) {
+                for (int j = vec->count - 1; j >= 0; --j) {
+                    CljObject *obj = vec->data[j];
+                    if (obj) {
+                        vec->data[j] = NULL;  // Prevent double-free
+                        RELEASE(obj);         // Release object
+                    }
+                }
+                vec->count = 0;
+            }
+            
+            // Release the weak vector backing
+            if (pool->backing) {
+                RELEASE(pool->backing);
+            }
+            
+            free(pool);
+        }
+    }
+    
+    // Reset exception-safe stack
+    g_exception_safe_count = 0;
+    g_cv_pool_top = NULL;
+    g_pool_push_count = 0;
 }
 
 /** @brief Pop and drain current autorelease pool (most common usage)
@@ -320,12 +380,16 @@ int get_retain_count(CljObject *obj) {
  * releasing vector elements, etc.).
  */
 static void release_object_deep(CljObject *v) {
-    if (!v) return;
+    
+    if (!v) {
+        return;
+    }
     
     // Skip singletons (they don't need cleanup)
     if (!TRACKS_RETAINS(v)) {
         return;
     }
+    
     
     // Type-specific cleanup based on object type
     switch (v->type) {
@@ -360,8 +424,8 @@ static void release_object_deep(CljObject *v) {
                 if (map && map->data) {
                     // Release all key-value pairs
                     for (int i = 0; i < map->count * 2; i += 2) {
-                        if (map->data[i]) RELEASE(map->data[i]);     // key
-                        if (map->data[i+1]) RELEASE(map->data[i+1]); // value
+                        RELEASE(map->data[i]);     // key
+                        RELEASE(map->data[i+1]); // value
                     }
                     free(map->data);
                 }
@@ -372,8 +436,8 @@ static void release_object_deep(CljObject *v) {
             {
                 CljList *list = as_list(v);
                 // Release head and tail elements
-                if (list->first) RELEASE(list->first);
-                if (list->rest) RELEASE(list->rest);
+                RELEASE(list->first);
+                RELEASE(list->rest);
             }
             break;
             
