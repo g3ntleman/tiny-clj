@@ -255,7 +255,7 @@ CljObject* make_exception_wrapper(const char *type, const char *message, const c
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
-    CljFunction *func = (CljFunction*)ALLOC_SIMPLE(CLJ_FUNC);
+    CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_FUNC);
     if (!func) return NULL;
     
     func->base.type = CLJ_FUNC;  // Both CljFunc and CljFunction use CLJ_FUNC type

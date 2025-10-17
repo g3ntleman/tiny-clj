@@ -34,20 +34,22 @@ release(list);
 
 ### 3. When to Use Each Pattern
 
-#### Use `autorelease()` in Tests:
+#### Use `AUTORELEASE()` in Tests:
 - ✅ **Test code**: Less verbose, cleaner syntax
 - ✅ **Debugging**: Automatic cleanup, fewer manual calls
 - ✅ **Prototyping**: Quick iteration without cleanup concerns
 - ✅ **Non-performance-critical code**: Convenience over speed
 - ✅ **Readability**: More readable test code with less cleanup boilerplate
 - ✅ **Maintainability**: Easier to write and maintain test code
+- ✅ **Compatibility**: Funktioniert mit `setjmp`/`longjmp` (wie Foundation pre-ARC)
 
-#### Use `release()` in Production:
+#### Use `RELEASE()` in Production:
 - ✅ **Performance-critical code**: No autorelease pool overhead
 - ✅ **Real-time systems**: Predictable memory timing
 - ✅ **Long-running processes**: Explicit control over object lifetime
 - ✅ **Memory-constrained environments**: Immediate cleanup
-- ✅ **Objects not returned as values**: Use `release()` when result is not used as return value
+- ✅ **Objects not returned as values**: Use `RELEASE()` when result is not used as return value
+- ✅ **Compatibility**: Funktioniert mit `setjmp`/`longjmp` exception handling
 
 ### 4. Object Lifecycle Rules
 
@@ -310,7 +312,7 @@ CljObject* parse_string(const char* expr_str, EvalState *eval_state);
 ```
 - **Returns**: Autoreleased object
 - **Memory**: Automatically managed by autorelease pool
-- **Usage**: No manual `release()` needed
+- **Usage**: No manual `RELEASE()` needed
 
 #### Evaluation Functions
 ```c
@@ -319,7 +321,7 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state);
 ```
 - **Returns**: Autoreleased object
 - **Memory**: Automatically managed by autorelease pool
-- **Usage**: No manual `release()` needed
+- **Usage**: No manual `RELEASE()` needed
 
 #### Object Creation Functions
 ```c
@@ -357,10 +359,10 @@ release(vec);  // Must release manually
 
 1. **API Functions**: Return autoreleased objects (no manual cleanup)
 2. **Object Creation**: Return objects with `rc=1` (manual cleanup required)
-3. **Tests**: Use `autorelease()` for convenience and readability
-4. **Production**: Use `release()` for performance
-5. **Non-return values**: Use `release()` when object is not returned as function result
-6. **Data Structures**: Use `retain()` when storing objects
+3. **Tests**: Use `AUTORELEASE()` for convenience and readability
+4. **Production**: Use `RELEASE()` for performance
+5. **Non-return values**: Use `RELEASE()` when object is not returned as function result
+6. **Data Structures**: Use `RETAIN()` when storing objects
 7. **Profiling**: Always track memory usage in tests
 8. **Debugging**: Use memory profiler to find leaks
 9. **Trust API Design**: Follow documented memory policy
@@ -379,7 +381,7 @@ release(vec);  // Must release manually
 ```c
 // WRONG: Assuming parse_string needs manual release
 CljObject *parsed = parse_string(expr, eval_state);
-release(parsed);  // ❌ UNNECESSARY: parse_string returns autoreleased object
+RELEASE(parsed);  // ❌ UNNECESSARY: parse_string returns autoreleased object
 
 // WRONG: Manual retain/release assignment (error-prone)
 CljObject *obj = NULL;

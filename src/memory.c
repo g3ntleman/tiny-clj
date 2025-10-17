@@ -244,12 +244,9 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
             vec->data[i] = NULL;  // Prevent double-free
             // Foundation-style exception-safe cleanup
             if (obj && TRACKS_RETAINS(obj)) {
-                obj->rc--;
-                if (obj->rc <= 0) {
-                    // Foundation-style: Direct cleanup without setjmp/longjmp
-                    // This is how Foundation pre-ARC made autorelease pools exception-safe
-                    free(obj);
-                }
+                // Use proper release() instead of direct free() to ensure
+                // proper cleanup of object references and prevent use-after-free
+                RELEASE(obj);
             }
         }
         vec->count = 0;

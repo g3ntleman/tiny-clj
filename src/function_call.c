@@ -575,7 +575,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     if (sym_is(op, "fn")) {
-        return eval_fn(list, env);
+        return AUTORELEASE(eval_fn(list, env));
     }
     
     if (sym_is(op, "quote")) {

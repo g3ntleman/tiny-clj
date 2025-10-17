@@ -158,6 +158,7 @@ void memory_profiler_init(void) {
     // Initialize type arrays
     memset(g_memory_stats.allocations_by_type, 0, sizeof(g_memory_stats.allocations_by_type));
     memset(g_memory_stats.deallocations_by_type, 0, sizeof(g_memory_stats.deallocations_by_type));
+    memset(g_memory_stats.autoreleases_by_type, 0, sizeof(g_memory_stats.autoreleases_by_type));
     // Memory profiler initialized
 }
 
@@ -177,6 +178,7 @@ void memory_profiler_reset(void) {
     // Initialize type arrays
     memset(g_memory_stats.allocations_by_type, 0, sizeof(g_memory_stats.allocations_by_type));
     memset(g_memory_stats.deallocations_by_type, 0, sizeof(g_memory_stats.deallocations_by_type));
+    memset(g_memory_stats.autoreleases_by_type, 0, sizeof(g_memory_stats.autoreleases_by_type));
 }
 
 /**
@@ -260,8 +262,8 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     // Object type breakdown
     printf("\n📋 Object Type Breakdown:\n");
     printf("  ┌─────────────────────────────────────────────────────────┐\n");
-    printf("  │ Type                │ Allocations │ Deallocations │ Leaks │\n");
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
+    printf("  │ Type                │ Allocations │ Deallocations │ Autoreleases │ Leaks │\n");
+    printf("  ├─────────────────────────────────────────────────────────────────────────┤\n");
     
     const char* type_names[] = {
         "NIL", "BOOL", "SYMBOL", "INT", "FLOAT", "STRING", "VECTOR", 
@@ -280,23 +282,25 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
         total_type_leaks += leaks;
         
-        if (allocs > 0 || deallocs > 0 || leaks > 0) {
+        size_t autoreleases = stats->autoreleases_by_type[i];
+        
+        if (allocs > 0 || deallocs > 0 || autoreleases > 0 || leaks > 0) {
             // Bounds check to prevent array overflow
             if (i >= 0 && i < (int)(sizeof(type_names)/sizeof(type_names[0]))) {
                 const char* type_name = type_names[i];
-                printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-                       type_name, allocs, deallocs, leaks);
+                printf("  │ %-18s │ %10zu │ %12zu │ %12zu │ %5zu │\n", 
+                       type_name, allocs, deallocs, autoreleases, leaks);
             } else {
-                printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-                       "UNKNOWN", allocs, deallocs, leaks);
+                printf("  │ %-18s │ %10zu │ %12zu │ %12zu │ %5zu │\n", 
+                       "UNKNOWN", allocs, deallocs, autoreleases, leaks);
             }
         }
     }
     
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
-    printf("  │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-           "TOTAL", stats->total_allocations, stats->object_destructions, total_type_leaks);
-    printf("  └─────────────────────────────────────────────────────────┘\n");
+    printf("  ├─────────────────────────────────────────────────────────────────────────┤\n");
+    printf("  │ %-18s │ %10zu │ %12zu │ %12zu │ %5zu │\n", 
+           "TOTAL", stats->total_allocations, stats->object_destructions, stats->autorelease_calls, total_type_leaks);
+    printf("  └─────────────────────────────────────────────────────────────────────────┘\n");
     
     // Calculate efficiency metrics with safety checks
     if (stats->total_allocations > 0) {
@@ -413,6 +417,10 @@ void memory_profiler_track_release(CljObject *obj) {
 void memory_profiler_track_autorelease(CljObject *obj) {
     if (obj) {
         g_memory_stats.autorelease_calls++;
+        // Track autorelease by type
+        if (obj->type < CLJ_TYPE_COUNT) {
+            g_memory_stats.autoreleases_by_type[obj->type]++;
+        }
     }
 }
 
@@ -436,8 +444,8 @@ void memory_profiler_check_leaks(const char *location) {
         // Show detailed leak breakdown by type
         printf("\n🔍 LEAK BREAKDOWN BY OBJECT TYPE:\n");
         printf("   ┌─────────────────────────────────────────────────────────┐\n");
-        printf("   │ Type                │ Allocations │ Deallocations │ Leaks │\n");
-        printf("   ├─────────────────────────────────────────────────────────┤\n");
+        printf("   │ Type                │ Allocations │ Deallocations │ Autoreleases │ Leaks │\n");
+        printf("   ├─────────────────────────────────────────────────────────────────────────┤\n");
         
         const char* type_names[] = {
             "NIL", "BOOL", "SYMBOL", "INT", "FLOAT", "STRING", "VECTOR", 
@@ -452,21 +460,22 @@ void memory_profiler_check_leaks(const char *location) {
         for (int i = 0; i < max_types; i++) {
             size_t allocs = g_memory_stats.allocations_by_type[i];
             size_t deallocs = g_memory_stats.deallocations_by_type[i];
+            size_t autoreleases = g_memory_stats.autoreleases_by_type[i];
             size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
             total_type_leaks += leaks;
             
             if (leaks > 0) {
                 const char* type_name = (i >= 0 && i < (int)(sizeof(type_names)/sizeof(type_names[0]))) 
                                        ? type_names[i] : "UNKNOWN";
-                printf("   │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-                       type_name, allocs, deallocs, leaks);
+                printf("   │ %-18s │ %10zu │ %12zu │ %12zu │ %5zu │\n", 
+                       type_name, allocs, deallocs, autoreleases, leaks);
             }
         }
         
-        printf("   ├─────────────────────────────────────────────────────────┤\n");
-        printf("   │ %-18s │ %10zu │ %12zu │ %5zu │\n", 
-               "TOTAL", g_memory_stats.total_allocations, g_memory_stats.object_destructions, total_type_leaks);
-        printf("   └─────────────────────────────────────────────────────────┘\n");
+        printf("   ├─────────────────────────────────────────────────────────────────────────┤\n");
+        printf("   │ %-18s │ %10zu │ %12zu │ %12zu │ %5zu │\n", 
+               "TOTAL", g_memory_stats.total_allocations, g_memory_stats.object_destructions, g_memory_stats.autorelease_calls, total_type_leaks);
+        printf("   └─────────────────────────────────────────────────────────────────────────┘\n");
         
         printf("\n⚠️  CRITICAL: %zu memory leaks detected! Objects were not properly freed.\n", 
                g_memory_stats.memory_leaks);
@@ -497,6 +506,13 @@ MemoryStats memory_profiler_diff_stats(const MemoryStats *after, const MemorySta
     diff.release_calls = after->release_calls - before->release_calls;
     diff.autorelease_calls = after->autorelease_calls - before->autorelease_calls;
     diff.memory_leaks = after->memory_leaks - before->memory_leaks;
+    
+    // Calculate type-specific deltas
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        diff.allocations_by_type[i] = after->allocations_by_type[i] - before->allocations_by_type[i];
+        diff.deallocations_by_type[i] = after->deallocations_by_type[i] - before->deallocations_by_type[i];
+        diff.autoreleases_by_type[i] = after->autoreleases_by_type[i] - before->autoreleases_by_type[i];
+    }
     
     return diff;
 }

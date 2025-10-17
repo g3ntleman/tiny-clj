@@ -101,6 +101,7 @@ typedef struct {
     // Object type breakdown
     size_t allocations_by_type[CLJ_TYPE_COUNT];  // Allocations per CljType
     size_t deallocations_by_type[CLJ_TYPE_COUNT]; // Deallocations per CljType
+    size_t autoreleases_by_type[CLJ_TYPE_COUNT]; // Autoreleases per CljType
 } MemoryStats;
 
 // Global memory statistics

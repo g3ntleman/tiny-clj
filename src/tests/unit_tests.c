@@ -113,30 +113,38 @@ void test_map_creation(void) {
 }
 
 void test_array_map_builtin(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
+    // Manual memory management - WITH_AUTORELEASE_POOL incompatible with setjmp/longjmp
     {
         EvalState *eval_state = evalstate_new();
         register_builtins();
         
         // Test empty map: (array-map)
-        CljObject *result0 = AUTORELEASE(parse("(array-map)", eval_state));
-        CljObject *eval0 = AUTORELEASE(eval_expr_simple(result0, eval_state));
+        CljObject *result0 = parse("(array-map)", eval_state);
+        CljObject *eval0 = eval_expr_simple(result0, eval_state);
         TEST_ASSERT_EQUAL_INT(0, map_count(eval0));
+        RELEASE(result0);
+        RELEASE(eval0);
 
         // Test single key-value: (array-map "a" 1)
-        CljObject *result1 = AUTORELEASE(parse("(array-map \"a\" 1)", eval_state));
-        CljObject *eval1 = AUTORELEASE(eval_expr_simple(result1, eval_state));
+        CljObject *result1 = parse("(array-map \"a\" 1)", eval_state);
+        CljObject *eval1 = eval_expr_simple(result1, eval_state);
         TEST_ASSERT_EQUAL_INT(1, map_count(eval1));
+        RELEASE(result1);
+        RELEASE(eval1);
 
         // Test multiple pairs: (array-map "a" 1 "b" 2)
-        CljObject *result2 = AUTORELEASE(parse("(array-map \"a\" 1 \"b\" 2)", eval_state));
-        CljObject *eval2 = AUTORELEASE(eval_expr_simple(result2, eval_state));
+        CljObject *result2 = parse("(array-map \"a\" 1 \"b\" 2)", eval_state);
+        CljObject *eval2 = eval_expr_simple(result2, eval_state);
         TEST_ASSERT_EQUAL_INT(2, map_count(eval2));
+        RELEASE(result2);
+        RELEASE(eval2);
 
         // Test with keywords: (array-map :a 1 :b 2)
-        CljObject *result3 = AUTORELEASE(parse("(array-map :a 1 :b 2)", eval_state));
-        CljObject *eval3 = AUTORELEASE(eval_expr_simple(result3, eval_state));
+        CljObject *result3 = parse("(array-map :a 1 :b 2)", eval_state);
+        CljObject *eval3 = eval_expr_simple(result3, eval_state);
         TEST_ASSERT_EQUAL_INT(2, map_count(eval3));
+        RELEASE(result3);
+        RELEASE(eval3);
 
         evalstate_free(eval_state);
     }

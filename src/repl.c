@@ -112,18 +112,17 @@ static bool eval_string_repl(const char *code, EvalState *st) {
         } CATCH(ex) {
             print_exception(ex);
             // Exception wird automatisch durch Pool freigegeben
-            RELEASE(ast);
+            // ast wird automatisch durch Pool freigegeben
             return false;
         } END_TRY
         
         if (!res) {
-            RELEASE(ast);
+            // ast wird automatisch durch Pool freigegeben
             return false;
         }
         
         print_result(res);
-        RELEASE(res);
-        RELEASE(ast);
+        // res and ast are automatically managed by autorelease pool
         return true;
     });
 }
