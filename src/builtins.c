@@ -156,6 +156,45 @@ CljObject* native_get(CljObject **args, int argc) {
     return NULL; // Return nil for unsupported types
 }
 
+CljObject* native_count(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    CljObject *coll = args[0];
+    if (!coll) return NULL;
+    
+    if (coll->type == CLJ_MAP || coll->type == CLJ_TRANSIENT_MAP) {
+        return (CljObject*)make_int(map_count_v((CljValue)coll));
+    } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_TRANSIENT_VECTOR) {
+        CljPersistentVector *vec = as_vector(coll);
+        return (CljObject*)make_int(vec ? vec->count : 0);
+    }
+    
+    return (CljObject*)make_int(0); // Default count for unsupported types
+}
+
+CljObject* native_keys(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    CljObject *map = args[0];
+    if (!map) return NULL;
+    
+    if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
+        return (CljObject*)map_keys_v((CljValue)map);
+    }
+    
+    return NULL; // Return nil for unsupported types
+}
+
+CljObject* native_vals(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    CljObject *map = args[0];
+    if (!map) return NULL;
+    
+    if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
+        return (CljObject*)map_vals_v((CljValue)map);
+    }
+    
+    return NULL; // Return nil for unsupported types
+}
+
 CljObject* native_if(CljObject **args, int argc) {
     if (argc < 2) return clj_nil();
     CljObject *cond = args[0];
@@ -550,6 +589,9 @@ void register_builtins() {
     register_builtin_in_namespace("persistent!", native_persistent);
     register_builtin_in_namespace("conj!", native_conj_bang);
     register_builtin_in_namespace("get", native_get);
+    register_builtin_in_namespace("count", native_count);
+    register_builtin_in_namespace("keys", native_keys);
+    register_builtin_in_namespace("vals", native_vals);
     register_builtin_in_namespace("test-native", native_if);
     register_builtin_in_namespace("println", native_println);
 }

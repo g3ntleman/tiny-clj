@@ -16,6 +16,7 @@
 #include "value.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -50,7 +51,10 @@ void test_memory_deallocation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test object lifecycle with heap-allocated object (not immediate)
-        CljObject *obj = make_symbol("test", NULL);  // Use symbol to ensure heap allocation
+        // Use a unique symbol name to avoid singleton issues
+        char unique_name[64];
+        snprintf(unique_name, sizeof(unique_name), "test_%ld", (long)time(NULL));
+        CljObject *obj = make_symbol(unique_name, NULL);  // Use unique symbol to ensure heap allocation
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting
@@ -63,9 +67,8 @@ void test_memory_deallocation(void) {
         
         RELEASE(retained);
         // After releasing the retained reference, the object should still exist
-        // but the retain count might be 0 if it was the last reference
-        int final_refs = get_retain_count(obj);
-        TEST_ASSERT_TRUE(final_refs >= 0); // Just check it's not negative
+        // The retain count should be 1 (original reference)
+        TEST_ASSERT_EQUAL_INT(1, get_retain_count(obj));
         
         // Final cleanup
         RELEASE(obj);
