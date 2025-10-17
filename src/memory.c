@@ -11,6 +11,7 @@
 #include "memory_profiler.h"
 #include "runtime.h"
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -92,17 +93,20 @@ static void release_object_deep(CljObject *v);
 void retain(CljObject *v) {
     if (!v) return;
     
-    // Check if this is an immediate value (32-bit tagged pointer)
-    // Immediates have low tag values and don't need reference counting
-    if (is_immediate_value(v)) return;
+    // Safety check: ensure the pointer is valid and points to a valid object
+    // Check if the pointer is in a reasonable memory range (not in zero page)
+    if ((uintptr_t)v < 0x1000) {
+        return;
+    }
     
     // Track retain call for profiling
     memory_profiler_track_retain(v);
     
     // Skip singletons (they don't use retain counting)
-    if (!TRACKS_RETAINS(v)) return;
+    if (!TRACKS_RETAINS(v)) {
+        return;
+    }
     
-
     v->rc++;
 }
 
@@ -117,9 +121,11 @@ void retain(CljObject *v) {
 void release(CljObject *v) {
     if (!v) return;
     
-    // Check if this is an immediate value (32-bit tagged pointer)
-    // Immediates don't need reference counting
-    if (is_immediate_value(v)) return;
+    // Safety check: ensure the pointer is valid and points to a valid object
+    // Check if the pointer is in a reasonable memory range (not in zero page)
+    if ((uintptr_t)v < 0x1000) {
+        return;
+    }
     
     // Skip singletons (they don't use retain counting)
     if (!TRACKS_RETAINS(v)) {
@@ -131,7 +137,6 @@ void release(CljObject *v) {
         return;
     }
     
-
     v->rc--;
     
     // Track release operation

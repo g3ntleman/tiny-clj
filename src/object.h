@@ -15,6 +15,7 @@
 #include "common.h"
 #include "types.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -82,6 +83,10 @@ struct CljObject {
 // Check if an object is a singleton (should not be reference counted)
 static inline bool is_singleton(CljObject *obj) {
     if (!obj) return false;
+    
+    // Safety check: ensure the pointer is valid and points to a valid object
+    // Check if the pointer is in a reasonable memory range (not in zero page)
+    if ((uintptr_t)obj < 0x1000) return false;
     
     // Standard singleton types
     if (IS_SINGLETON_TYPE(obj->type)) return true;

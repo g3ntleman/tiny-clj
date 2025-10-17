@@ -51,10 +51,8 @@ void test_memory_deallocation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test object lifecycle with heap-allocated object (not immediate)
-        // Use a unique symbol name to avoid singleton issues
-        char unique_name[64];
-        snprintf(unique_name, sizeof(unique_name), "test_%ld", (long)time(NULL));
-        CljObject *obj = make_symbol(unique_name, NULL);  // Use unique symbol to ensure heap allocation
+        // Use a string object since symbols are singletons and don't use reference counting
+        CljObject *obj = make_string("test_string_for_reference_counting");
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting
