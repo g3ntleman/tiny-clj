@@ -37,7 +37,8 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
         int need = v->count + 1;
         int newcap = v->capacity;
         if (need > newcap) newcap = newcap > 0 ? newcap * 2 : 1;
-        CljObject *copy = make_vector(newcap, 0);
+        CljValue copy_val = make_vector_v(newcap, 0);
+        CljObject *copy = (CljObject*)copy_val;
         if (!copy) return NULL;
         CljPersistentVector *c = as_vector(copy);
         for (int i = 0; i < v->count; ++i) {
@@ -102,7 +103,8 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
         v->data[i] = (RETAIN(val), val);
         return RETAIN(vec);
     } else {
-        CljObject *copy = make_vector(v->capacity, 0);
+        CljValue copy_val = make_vector_v(v->capacity, 0);
+        CljObject *copy = (CljObject*)copy_val;
         if (!copy) return NULL;
         CljPersistentVector *c = as_vector(copy);
         for (int j = 0; j < v->count; ++j) {

@@ -324,7 +324,16 @@ static CljObject *parse_vector(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed vector - missing closing ']'", reader);
     return NULL;
   }
-    return make_vector_from_stack(stack, count);
+    // Create vector using new API
+    CljValue vec = make_vector_v(count, 0);
+    CljPersistentVector *v = as_vector((CljObject*)vec);
+    if (!v) return NULL;
+    for (int i = 0; i < count; i++) {
+        v->data[i] = stack[i];
+        if (stack[i]) RETAIN(stack[i]);
+    }
+    v->count = count;
+    return (CljObject*)vec;
   }
   return NULL;
 }

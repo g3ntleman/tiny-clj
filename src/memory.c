@@ -177,7 +177,11 @@ CljObject *autorelease(CljObject *v) {
     }
     
     // Add to pool (weak reference, no retain)
-    vector_push_inplace(g_cv_pool_top->backing, v);
+    // Use direct manipulation for autorelease pool
+    CljPersistentVector *backing = as_vector(g_cv_pool_top->backing);
+    if (backing && backing->count < backing->capacity) {
+        backing->data[backing->count++] = v;
+    }
     
     // Track for memory profiling
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
@@ -207,7 +211,9 @@ static int g_exception_safe_count = 0;
 CljObjectPool *autorelease_pool_push() {
     CljObjectPool *p = (CljObjectPool*)malloc(sizeof(CljObjectPool));
     if (!p) return NULL;
-    p->backing = make_weak_vector(16);
+    // Create weak vector using new API
+    CljValue backing_val = make_vector_v(16, 1); // mutable
+    p->backing = (CljObject*)backing_val;
     p->prev = g_cv_pool_top;
     g_cv_pool_top = p;
     g_pool_push_count++;  // Increment push counter

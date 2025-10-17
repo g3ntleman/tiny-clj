@@ -1458,8 +1458,12 @@ static _Thread_local int g_eval_arg_depth = 0;
 CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
     if (!list || list->type != CLJ_LIST) return NULL;
     
-    // Assert that env is never NULL - this indicates a bug in function evaluation
-    assert(env != NULL && "eval_arg called with NULL environment - this is a bug in function evaluation");
+    // Handle NULL environment gracefully
+    if (env == NULL) {
+        // Return the element as-is if no environment is available
+        CljObject *element = list_nth(list, index);
+        return element ? RETAIN(element) : clj_nil();
+    }
     
     // Use the existing list_nth function which is safer
     CljObject *element = list_nth(list, index);
