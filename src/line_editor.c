@@ -418,6 +418,16 @@ void line_editor_reset(LineEditor *editor) {
 void line_editor_add_to_history(LineEditor *editor, const char *line) {
     if (!editor || !line || !editor->history) return;
     
+    // Check if this line is identical to the last history entry
+    CljPersistentVector *vec = as_vector(editor->history);
+    if (vec && vec->count > 0) {
+        const char *last_line = line_editor_get_history_line(editor, vec->count - 1);
+        if (last_line && strcmp(line, last_line) == 0) {
+            // Duplicate of last entry - skip adding
+            return;
+        }
+    }
+    
     // Create string object and add to history vector using transient conj
     CljObject *line_obj = make_string(line);
     if (line_obj) {
