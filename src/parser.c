@@ -289,13 +289,13 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
-    CljObject *parsed = parse(expr_str, eval_state);
-    if (!parsed) {
+    CljValue parsed = parse_v(expr_str, eval_state);
+    if (is_nil(parsed)) {
         return NULL;
     }
     
     // Don't catch exceptions here - let them propagate to the caller
-    CljObject *result = eval_parsed(parsed, eval_state);
+    CljObject *result = eval_parsed((CljObject*)parsed, eval_state);
     
     return result;
 }
@@ -367,6 +367,7 @@ static CljObject *parse_map(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
+  // Use the old API for now - TODO: implement proper CljValue map parsing
   return map_from_stack(pairs, pair_count);
 }
 
@@ -645,8 +646,14 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
   
   // For complex structures, fall back to heap allocation
   // TODO: Implement CljValue-based vector/map/list parsing
-  CljObject *obj = make_object_by_parsing_expr(reader, st);
-  return (CljValue)obj;
+  TRY {
+    CljObject *obj = make_object_by_parsing_expr(reader, st);
+    return (CljValue)obj;
+  } CATCH(ex) {
+    // Re-throw the exception
+    throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
+    return NULL;
+  } END_TRY
 }
 
 /**
@@ -670,7 +677,8 @@ CljValue parse_v(const char *input, EvalState *st) {
       result = AUTORELEASE(result);
     }
   } CATCH(ex) {
-    // Exception caught - return NULL for parse errors
+    // Exception caught - re-throw it instead of returning NULL
+    throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
     result = NULL;
   } END_TRY
   
