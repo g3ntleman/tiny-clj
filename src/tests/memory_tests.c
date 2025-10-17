@@ -115,72 +115,17 @@ void test_vector_memory(void) {
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
-
-static void test_group_basic_memory(void) {
-    RUN_TEST(test_memory_allocation);
-    RUN_TEST(test_memory_deallocation);
-}
-
-static void test_group_advanced_memory(void) {
-    RUN_TEST(test_memory_leak_detection);
-    RUN_TEST(test_vector_memory);
-}
+// (Unused test groups removed for cleanup)
 
 // ============================================================================
 // COMMAND LINE INTERFACE
 // ============================================================================
 
-static void __attribute__((unused)) print_usage(const char *program_name) {
-    printf("Unity Memory Tests for Tiny-CLJ\n");
-    printf("Usage: %s [options] [test_name]\n\n", program_name);
-    printf("Options:\n");
-    printf("  -h, --help     Show this help message\n");
-    printf("  -l, --list     List available tests\n");
-    printf("  -v, --verbose  Verbose output\n\n");
-    printf("Available tests:\n");
-    printf("  allocation     Test basic memory allocation\n");
-    printf("  deallocation   Test memory deallocation\n");
-    printf("  leak           Test memory leak detection\n");
-    printf("  vector         Test vector memory management\n");
-    printf("  basic          Run basic memory tests\n");
-    printf("  advanced       Run advanced memory tests\n");
-    printf("  all            Run all tests (default)\n");
-}
+// Unused function removed for cleanup
 
-static void __attribute__((unused)) list_tests(void) {
-    printf("Available Unity Memory Tests:\n");
-    printf("  allocation     - Test basic memory allocation\n");
-    printf("  deallocation   - Test memory deallocation\n");
-    printf("  leak           - Test memory leak detection\n");
-    printf("  vector         - Test vector memory management\n");
-    printf("  basic          - Run basic memory tests\n");
-    printf("  advanced       - Run advanced memory tests\n");
-    printf("  all            - Run all tests\n");
-}
+// Unused function removed for cleanup
 
-static void __attribute__((unused)) run_specific_test(const char *test_name) {
-    if (strcmp(test_name, "allocation") == 0) {
-        RUN_TEST(test_memory_allocation);
-    } else if (strcmp(test_name, "deallocation") == 0) {
-        RUN_TEST(test_memory_deallocation);
-    } else if (strcmp(test_name, "leak") == 0) {
-        RUN_TEST(test_memory_leak_detection);
-    } else if (strcmp(test_name, "vector") == 0) {
-        RUN_TEST(test_vector_memory);
-    } else if (strcmp(test_name, "basic") == 0) {
-        RUN_TEST(test_group_basic_memory);
-    } else if (strcmp(test_name, "advanced") == 0) {
-        RUN_TEST(test_group_advanced_memory);
-    } else if (strcmp(test_name, "all") == 0) {
-        RUN_TEST(test_memory_allocation);
-        RUN_TEST(test_memory_deallocation);
-        RUN_TEST(test_memory_leak_detection);
-        RUN_TEST(test_vector_memory);
-    } else {
-        printf("Unknown test: %s\n", test_name);
-        printf("Use --list to see available tests\n");
-    }
-}
+// Unused function removed for cleanup
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)

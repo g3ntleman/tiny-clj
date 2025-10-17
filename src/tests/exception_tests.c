@@ -207,73 +207,15 @@ void test_map_arity_exception_zero_args(void) {
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
-
-static void test_group_basic_exceptions(void) {
-    RUN_TEST(test_simple_try_catch_exception_caught);
-    RUN_TEST(test_simple_try_catch_no_exception);
-}
-
-static void test_group_nested_exceptions(void) {
-    RUN_TEST(test_nested_try_catch_inner_exception);
-    RUN_TEST(test_nested_try_catch_outer_exception);
-}
-
-static void test_group_advanced_exceptions(void) {
-    RUN_TEST(test_exception_with_autorelease);
-    RUN_TEST(test_repl_crash_scenario);
-    RUN_TEST(test_map_arity_exception_zero_args);
-}
+// (Unused test groups removed for cleanup)
 
 // ============================================================================
 // COMMAND LINE INTERFACE
 // ============================================================================
 
-static void __attribute__((unused)) print_usage(const char *program_name) {
-    printf("Exception Tests for Tiny-CLJ\n");
-    printf("Usage: %s [test_name]\n\n", program_name);
-    printf("Available tests:\n");
-    printf("  simple-caught   Test simple exception caught\n");
-    printf("  simple-no-ex    Test simple try with no exception\n");
-    printf("  nested-inner    Test nested try/catch with inner exception\n");
-    printf("  nested-outer    Test nested try/catch with outer exception\n");
-    printf("  autorelease     Test exception with autorelease cleanup\n");
-    printf("  basic           Run basic exception tests\n");
-    printf("  nested          Run nested exception tests\n");
-    printf("  advanced        Run advanced exception tests\n");
-    printf("  all             Run all tests (default)\n");
-}
+// Unused function removed for cleanup
 
-static void __attribute__((unused)) run_specific_test(const char *test_name) {
-    if (strcmp(test_name, "simple-caught") == 0) {
-        RUN_TEST(test_simple_try_catch_exception_caught);
-    } else if (strcmp(test_name, "simple-no-ex") == 0) {
-        RUN_TEST(test_simple_try_catch_no_exception);
-    } else if (strcmp(test_name, "nested-inner") == 0) {
-        RUN_TEST(test_nested_try_catch_inner_exception);
-    } else if (strcmp(test_name, "nested-outer") == 0) {
-        RUN_TEST(test_nested_try_catch_outer_exception);
-    } else if (strcmp(test_name, "autorelease") == 0) {
-        RUN_TEST(test_exception_with_autorelease);
-    } else if (strcmp(test_name, "map-arity") == 0) {
-        RUN_TEST(test_map_arity_exception_zero_args);
-    } else if (strcmp(test_name, "basic") == 0) {
-        RUN_TEST(test_group_basic_exceptions);
-    } else if (strcmp(test_name, "nested") == 0) {
-        RUN_TEST(test_group_nested_exceptions);
-    } else if (strcmp(test_name, "advanced") == 0) {
-        RUN_TEST(test_group_advanced_exceptions);
-    } else if (strcmp(test_name, "all") == 0) {
-        RUN_TEST(test_simple_try_catch_exception_caught);
-        RUN_TEST(test_simple_try_catch_no_exception);
-        RUN_TEST(test_nested_try_catch_inner_exception);
-        RUN_TEST(test_nested_try_catch_outer_exception);
-        RUN_TEST(test_exception_with_autorelease);
-        RUN_TEST(test_map_arity_exception_zero_args);
-    } else {
-        printf("Unknown test: %s\n", test_name);
-        printf("Use --help to see available tests\n");
-    }
-}
+// Unused function removed for cleanup
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)

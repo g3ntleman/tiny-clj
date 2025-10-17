@@ -176,19 +176,7 @@ void test_keyword_map_access(void) {
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
-
-static void test_group_basic_parsing(void) {
-    RUN_TEST(test_parse_basic_types);
-    RUN_TEST(test_parse_collections);
-}
-
-static void test_group_advanced_parsing(void) {
-    RUN_TEST(test_parse_comments);
-    RUN_TEST(test_parse_metadata);
-    RUN_TEST(test_parse_utf8_symbols);
-    RUN_TEST(test_keyword_evaluation);
-    RUN_TEST(test_keyword_map_access);
-}
+// (Unused test groups removed for cleanup)
 
 // ============================================================================
 // COMMAND LINE INTERFACE
@@ -196,32 +184,7 @@ static void test_group_advanced_parsing(void) {
 
 
 
-static void __attribute__((unused)) run_specific_test(const char *test_name) {
-    if (strcmp(test_name, "basic-types") == 0) {
-        RUN_TEST(test_parse_basic_types);
-    } else if (strcmp(test_name, "collections") == 0) {
-        RUN_TEST(test_parse_collections);
-    } else if (strcmp(test_name, "comments") == 0) {
-        RUN_TEST(test_parse_comments);
-    } else if (strcmp(test_name, "metadata") == 0) {
-        RUN_TEST(test_parse_metadata);
-    } else if (strcmp(test_name, "utf8") == 0) {
-        RUN_TEST(test_parse_utf8_symbols);
-    } else if (strcmp(test_name, "basic") == 0) {
-        RUN_TEST(test_group_basic_parsing);
-    } else if (strcmp(test_name, "advanced") == 0) {
-        RUN_TEST(test_group_advanced_parsing);
-    } else if (strcmp(test_name, "all") == 0) {
-        RUN_TEST(test_parse_basic_types);
-        RUN_TEST(test_parse_collections);
-        RUN_TEST(test_parse_comments);
-        RUN_TEST(test_parse_metadata);
-        RUN_TEST(test_parse_utf8_symbols);
-    } else {
-        printf("Unknown test: %s\n", test_name);
-        printf("Use --help to see available tests\n");
-    }
-}
+// Unused function removed for cleanup
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
