@@ -150,6 +150,7 @@ extern void test_special_form_or(void);
 
 // Performance tests
 extern void test_seq_rest_performance(void);
+extern void test_seq_iterator_verification(void);
 
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
@@ -193,6 +194,7 @@ static void test_group_cljvalue(void) {
     
     // Performance tests
     RUN_TEST(test_seq_rest_performance);
+    RUN_TEST(test_seq_iterator_verification);
 }
 
 // ============================================================================
