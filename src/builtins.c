@@ -71,21 +71,18 @@ CljObject* native_rest(CljObject **args, int argc) {
     if (coll->type == CLJ_VECTOR) {
         CljPersistentVector *v = as_vector(coll);
         if (!v || v->count <= 1) {
-            // Return empty vector for rest of single element or empty vector
-            return make_vector(0, 0);
+            // Return empty list for rest of single element or empty vector
+            return make_list(NULL, NULL);
         }
         
-        // Create new vector with all elements except the first
-        CljObject *rest_vec = make_vector(v->count - 1, 0);
-        if (!rest_vec) return NULL;
-        
-        CljPersistentVector *rest_v = as_vector(rest_vec);
-        for (int i = 1; i < v->count; i++) {
-            rest_v->data[i-1] = RETAIN(v->data[i]);
+        // Create a list with all elements except the first
+        // This is the correct Clojure behavior: rest returns a sequence, not a vector
+        CljObject *rest_list = NULL;
+        for (int i = v->count - 1; i >= 1; i--) {
+            rest_list = make_list(RETAIN(v->data[i]), rest_list);
         }
-        rest_v->count = v->count - 1;
         
-        return rest_vec;
+        return rest_list;
     }
     
     return NULL; // Unsupported collection type

@@ -568,6 +568,44 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return eval_body(branch, env, st);
     }
     
+    if (sym_is(op, "and")) {
+        // (and expr1 expr2 ...) - short circuit evaluation
+        // Returns first falsy value or last value
+        int argc = list_count(list);
+        if (argc <= 1) return clj_true(); // (and) => true
+        
+        CljObject *result = clj_true();
+        for (int i = 1; i < argc; i++) {
+            CljObject *arg = list_get_element(list, i);
+            if (!arg) continue;
+            
+            result = eval_body(arg, env, st);
+            if (!clj_is_truthy(result)) {
+                return result; // Short-circuit on false
+            }
+        }
+        return result; // Return last value
+    }
+    
+    if (sym_is(op, "or")) {
+        // (or expr1 expr2 ...) - short circuit evaluation
+        // Returns first truthy value or last value
+        int argc = list_count(list);
+        if (argc <= 1) return clj_nil(); // (or) => nil
+        
+        CljObject *result = clj_nil();
+        for (int i = 1; i < argc; i++) {
+            CljObject *arg = list_get_element(list, i);
+            if (!arg) continue;
+            
+            result = eval_body(arg, env, st);
+            if (clj_is_truthy(result)) {
+                return result; // Short-circuit on true
+            }
+        }
+        return result; // Return last value
+    }
+    
     if (sym_is(op, "def")) {
         return eval_def(list, env, st);
     }

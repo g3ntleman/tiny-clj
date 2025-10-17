@@ -144,6 +144,10 @@ extern void test_cljvalue_transient_maps_high_level(void);
 extern void test_cljvalue_vectors_high_level(void);
 extern void test_cljvalue_immediates_high_level(void);
 
+// Special forms tests
+extern void test_special_form_and(void);
+extern void test_special_form_or(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -179,6 +183,10 @@ static void test_group_cljvalue(void) {
     RUN_TEST(test_cljvalue_transient_maps_high_level);
     RUN_TEST(test_cljvalue_vectors_high_level);
     RUN_TEST(test_cljvalue_immediates_high_level);
+    
+    // Special forms tests
+    RUN_TEST(test_special_form_and);
+    RUN_TEST(test_special_form_or);
 }
 
 // ============================================================================
