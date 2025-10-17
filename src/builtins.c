@@ -309,10 +309,10 @@ CljObject* native_array_map(CljObject **args, int argc) {
     
     // Handle empty map case specially
     if (pair_count == 0) {
-        return (CljObject*)make_map(0);
+        return (CljObject*)make_map_v(0);
     }
     
-    CljMap *map = make_map(pair_count);
+    CljMap *map = (CljMap*)make_map_v(pair_count);
     if (!map) {
         return NULL;
     }
@@ -321,7 +321,7 @@ CljObject* native_array_map(CljObject **args, int argc) {
     for (int i = 0; i < argc; i += 2) {
         CljObject *key = args[i];
         CljObject *value = args[i + 1];
-        map_assoc((CljObject*)map, key, value);
+        map_assoc_v((CljValue)map, (CljValue)key, (CljValue)value);
     }
     
     return (CljObject*)map;

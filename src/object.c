@@ -631,7 +631,7 @@ bool clj_equal(CljObject *a, CljObject *b) {
             for (int i = 0; i < map_a->count; i++) {
                 CljObject *key_a = KV_KEY(map_a->data, i);
                 CljObject *val_a = KV_VALUE(map_a->data, i);
-                CljObject *val_b = map_get(b, key_a);
+                CljObject *val_b = (CljObject*)map_get_v((CljValue)b, (CljValue)key_a);
                 if (!clj_equal(val_a, val_b)) return false;
             }
             return true;
@@ -768,7 +768,7 @@ CljObject *meta_registry = NULL;
 
 void meta_registry_init() {
     {
-        meta_registry = (CljObject*)make_map(32); // Initial capacity for metadata entries
+        meta_registry = (CljObject*)make_map_v(32); // Initial capacity for metadata entries
     }
 }
 
@@ -787,13 +787,13 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    map_assoc(meta_registry, v, meta);
+    map_assoc_v((CljValue)meta_registry, (CljValue)v, (CljValue)meta);
 }
 
 CljObject* meta_get(CljObject *v) {
     if (!v || !meta_registry) return NULL;
     
-    return map_get(meta_registry, v);
+    return (CljObject*)map_get_v((CljValue)meta_registry, (CljValue)v);
 }
 
 void meta_clear(CljObject *v) {
@@ -891,7 +891,7 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
-    CljObject *new_env = (CljObject*)make_map(4);
+    CljObject *new_env = (CljObject*)make_map_v(4);
     
     return (id)new_env;
 }
@@ -900,13 +900,13 @@ CljObject* env_get_stack(CljObject *env, CljObject *key) {
     if (!env || !key) return NULL;
     
     // Direct map lookup
-    return map_get(env, key);
+    return (CljObject*)map_get_v((CljValue)env, (CljValue)key);
 }
 
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
     if (!env || !key) return;
     
-    map_assoc(env, key, value);
+    map_assoc_v((CljValue)env, (CljValue)key, (CljValue)value);
 }
 
 // Function call implementation using stack allocation
