@@ -48,6 +48,49 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
     }
 }
 
+// Generic conj function that works with BuiltinFn signature
+CljObject* native_conj(CljObject **args, int argc) {
+    if (argc != 2) return NULL;
+    CljObject *coll = args[0];
+    CljObject *val = args[1];
+    if (!coll || !val) return NULL;
+    
+    if (coll->type == CLJ_VECTOR) {
+        return conj2(coll, val);
+    }
+    
+    return NULL; // Unsupported collection type
+}
+
+// Rest function that works with BuiltinFn signature
+CljObject* native_rest(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    CljObject *coll = args[0];
+    if (!coll) return NULL;
+    
+    if (coll->type == CLJ_VECTOR) {
+        CljPersistentVector *v = as_vector(coll);
+        if (!v || v->count <= 1) {
+            // Return empty vector for rest of single element or empty vector
+            return make_vector(0, 0);
+        }
+        
+        // Create new vector with all elements except the first
+        CljObject *rest_vec = make_vector(v->count - 1, 0);
+        if (!rest_vec) return NULL;
+        
+        CljPersistentVector *rest_v = as_vector(rest_vec);
+        for (int i = 1; i < v->count; i++) {
+            rest_v->data[i-1] = RETAIN(v->data[i]);
+        }
+        rest_v->count = v->count - 1;
+        
+        return rest_vec;
+    }
+    
+    return NULL; // Unsupported collection type
+}
+
 CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
     if (!vec || vec->type != CLJ_VECTOR || !idx || idx->type != CLJ_INT) return NULL;
     int i = idx->as.i;
@@ -583,7 +626,8 @@ void register_builtins() {
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
     register_builtin_in_namespace("nth", (BuiltinFn)nth2);
-    register_builtin_in_namespace("conj", (BuiltinFn)conj2);
+    register_builtin_in_namespace("conj", native_conj);
+    register_builtin_in_namespace("rest", native_rest);
     register_builtin_in_namespace("assoc", (BuiltinFn)assoc3);
     register_builtin_in_namespace("transient", native_transient);
     register_builtin_in_namespace("persistent!", native_persistent);

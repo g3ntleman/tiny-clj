@@ -40,6 +40,8 @@ void tearDown(void) {
     // Print memory statistics and check for leaks
     memory_profiler_print_stats("Test Complete");
     memory_profiler_check_leaks("Test Complete");
+    // Reset memory profiler for next test to isolate memory leaks per test
+    memory_profiler_reset();
     // Cleanup memory profiling hooks
     memory_profiling_cleanup_with_hooks();
 }
