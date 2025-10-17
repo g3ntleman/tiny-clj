@@ -4,8 +4,9 @@
 // Forward declaration to avoid circular dependencies
 struct CljObject;
 
+// === Legacy API (deprecated - use CljValue API) ===
 /**
- * @brief Create a string object from C string
+ * @deprecated Use make_string_v() instead. Create a string object from C string
  * @param s C string to copy (can be NULL for empty string)
  * @return New CljObject with RC=1 or empty string singleton
  */

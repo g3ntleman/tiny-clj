@@ -38,6 +38,7 @@
 
 #include "memory_profiler.h"
 #include "object.h"
+#include "value.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -417,8 +418,8 @@ void memory_profiler_track_release(CljObject *obj) {
 void memory_profiler_track_autorelease(CljObject *obj) {
     if (obj) {
         g_memory_stats.autorelease_calls++;
-        // Track autorelease by type
-        if (obj->type < CLJ_TYPE_COUNT) {
+        // Track autorelease by type - only for heap-allocated objects
+        if (!is_immediate_value((CljValue)obj) && obj->type < CLJ_TYPE_COUNT) {
             g_memory_stats.autoreleases_by_type[obj->type]++;
         }
     }

@@ -126,6 +126,22 @@ extern void test_cljvalue_transient_vector(void);
 extern void test_cljvalue_clojure_semantics(void);
 extern void test_cljvalue_wrapper_functions(void);
 
+// New immediate value tests
+extern void test_cljvalue_immediates_fixnum(void);
+extern void test_cljvalue_immediates_char(void);
+extern void test_cljvalue_immediates_special(void);
+extern void test_cljvalue_immediates_float16(void);
+extern void test_cljvalue_parser_immediates(void);
+extern void test_cljvalue_memory_efficiency(void);
+
+// Transient map tests
+extern void test_cljvalue_transient_map_clojure_semantics(void);
+
+// High-level integration tests
+extern void test_cljvalue_transient_maps_high_level(void);
+extern void test_cljvalue_vectors_high_level(void);
+extern void test_cljvalue_immediates_high_level(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -145,6 +161,22 @@ static void test_group_cljvalue(void) {
     RUN_TEST(test_cljvalue_transient_vector);
     RUN_TEST(test_cljvalue_clojure_semantics);
     RUN_TEST(test_cljvalue_wrapper_functions);
+    
+    // New immediate value tests
+    RUN_TEST(test_cljvalue_immediates_fixnum);
+    RUN_TEST(test_cljvalue_immediates_char);
+    RUN_TEST(test_cljvalue_immediates_special);
+    RUN_TEST(test_cljvalue_immediates_float16);
+    RUN_TEST(test_cljvalue_parser_immediates);
+    RUN_TEST(test_cljvalue_memory_efficiency);
+    
+    // Transient map tests
+    RUN_TEST(test_cljvalue_transient_map_clojure_semantics);
+    
+    // High-level integration tests
+    RUN_TEST(test_cljvalue_transient_maps_high_level);
+    RUN_TEST(test_cljvalue_vectors_high_level);
+    RUN_TEST(test_cljvalue_immediates_high_level);
 }
 
 // ============================================================================

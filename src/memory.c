@@ -92,6 +92,10 @@ static void release_object_deep(CljObject *v);
 void retain(CljObject *v) {
     if (!v) return;
     
+    // Check if this is an immediate value (32-bit tagged pointer)
+    // Immediates have low tag values and don't need reference counting
+    if (is_immediate_value(v)) return;
+    
     // Track retain call for profiling
     memory_profiler_track_retain(v);
     
@@ -112,6 +116,10 @@ void retain(CljObject *v) {
  */
 void release(CljObject *v) {
     if (!v) return;
+    
+    // Check if this is an immediate value (32-bit tagged pointer)
+    // Immediates don't need reference counting
+    if (is_immediate_value(v)) return;
     
     // Skip singletons (they don't use retain counting)
     if (!TRACKS_RETAINS(v)) {

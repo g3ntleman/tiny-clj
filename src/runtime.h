@@ -25,7 +25,7 @@
 #define MAX_FUNCTION_PARAMS 32
 
 // Maximum stack depth for function calls
-#define MAX_CALL_STACK_DEPTH 16
+#define MAX_CALL_STACK_DEPTH 20
 
 typedef CljObject* (*BuiltinFn)(CljObject **args, int argc);
 

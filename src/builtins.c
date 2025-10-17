@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "namespace.h"
 #include "clj_string.h"
+#include "value.h"
 
 CljObject* nth2(CljObject *vec, CljObject *idx) {
     if (!vec || !idx || vec->type != CLJ_VECTOR || idx->type != CLJ_INT) return NULL;
@@ -71,6 +72,90 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
     }
 }
 
+// Transient functions
+CljObject* native_transient(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    
+    CljObject *coll = args[0];
+    if (!coll) return NULL;
+    
+    if (coll->type == CLJ_VECTOR) {
+        return (CljObject*)transient((CljValue)coll);
+    } else if (coll->type == CLJ_MAP) {
+        return (CljObject*)transient_map((CljValue)coll);
+    } else if (coll->type == CLJ_TRANSIENT_VECTOR || coll->type == CLJ_TRANSIENT_MAP) {
+        // Clojure-compatible: transient on transient returns the same object
+        return coll;
+    }
+    
+    // Throw exception for unsupported collection type (Clojure-compatible)
+    throw_exception("IllegalArgumentException", 
+                    "transient requires a persistent collection at position 1", 
+                    __FILE__, __LINE__, 0);
+    return NULL;
+}
+
+CljObject* native_persistent(CljObject **args, int argc) {
+    if (argc != 1) return NULL;
+    
+    CljObject *coll = args[0];
+    if (!coll) return NULL;
+    
+    if (coll->type == CLJ_TRANSIENT_VECTOR) {
+        return (CljObject*)persistent_v((CljValue)coll);
+    } else if (coll->type == CLJ_TRANSIENT_MAP) {
+        return (CljObject*)persistent_map_v((CljValue)coll);
+    } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_MAP) {
+        // Clojure-compatible: persistent! on persistent returns the same object
+        return coll;
+    }
+    
+    // Throw exception for unsupported collection type (Clojure-compatible)
+    throw_exception("IllegalArgumentException", 
+                    "persistent! requires a transient collection at position 1", 
+                    __FILE__, __LINE__, 0);
+    return NULL;
+}
+
+CljObject* native_conj_bang(CljObject **args, int argc) {
+    if (argc < 2) return NULL;
+    
+    CljObject *coll = args[0];
+    if (!coll) return NULL;
+    
+    
+    if (coll->type == CLJ_TRANSIENT_VECTOR) {
+        CljValue result = (CljValue)coll;
+        for (int i = 1; i < argc; i++) {
+            result = conj_v(result, (CljValue)args[i]);
+            if (!result) return NULL;
+        }
+        return (CljObject*)result;
+    } else if (coll->type == CLJ_TRANSIENT_MAP) {
+        if (argc != 3) return NULL; // conj! for maps needs key-value pair
+        return (CljObject*)conj_map_v((CljValue)coll, (CljValue)args[1], (CljValue)args[2]);
+    }
+    
+    // Throw exception for unsupported collection type (Clojure-compatible)
+    throw_exception("IllegalArgumentException", 
+                    "conj! requires a transient collection at position 1", 
+                    __FILE__, __LINE__, 0);
+    return NULL;
+}
+
+CljObject* native_get(CljObject **args, int argc) {
+    if (argc != 2) return NULL;
+    CljObject *map = args[0];
+    CljObject *key = args[1];
+    if (!map || !key) return NULL;
+    
+    if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
+        return (CljObject*)map_get_v((CljValue)map, (CljValue)key);
+    }
+    
+    return NULL; // Return nil for unsupported types
+}
+
 CljObject* native_if(CljObject **args, int argc) {
     if (argc < 2) return clj_nil();
     CljObject *cond = args[0];
@@ -112,6 +197,10 @@ CljObject* native_type(CljObject **args, int argc) {
             return (CljObject*)intern_symbol_global("nil");
         case CLJ_VECTOR:
             return (CljObject*)intern_symbol_global("Vector");
+        case CLJ_TRANSIENT_VECTOR:
+            return (CljObject*)intern_symbol_global("TransientVector");
+        case CLJ_TRANSIENT_MAP:
+            return (CljObject*)intern_symbol_global("TransientMap");
         case CLJ_MAP:
             return (CljObject*)intern_symbol_global("Map");
         case CLJ_LIST:
@@ -159,7 +248,6 @@ CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env) {
 }
 
 CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name) {
-    (void)name; // Suppress unused parameter warning
     CljFunc *func = ALLOC(CljFunc, 1);
     if (!func) return NULL;
     
@@ -167,11 +255,17 @@ CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *e
     func->base.rc = 1;
     func->fn = fn;
     func->env = env;
-#ifdef DEBUG
-    func->name = name;  // Direkter Zeiger auf String-Literal in Debug-Builds
-#else
-    func->name = NULL;  // Kein Name in Release-Builds
-#endif
+    
+    // Safely handle name parameter
+    if (name && strlen(name) > 0) {
+        // Allocate memory for the name to avoid issues with string literals
+        func->name = ALLOC(char, strlen(name) + 1);
+        if (func->name) {
+            strcpy((char*)func->name, name);
+        }
+    } else {
+        func->name = NULL;
+    }
     
     return (CljObject*)func;
 }
@@ -181,6 +275,9 @@ static const BuiltinEntry builtins[] = {
     {"conj", FN_ARITY2, .u.fn2 = conj2},
     {"assoc", FN_ARITY3, .u.fn3 = assoc3},
     {"array-map", FN_GENERIC, .u.generic = native_array_map},
+    {"transient", FN_GENERIC, .u.generic = native_transient},
+    {"persistent!", FN_GENERIC, .u.generic = native_persistent},
+    {"conj!", FN_GENERIC, .u.generic = native_conj_bang},
     {"if", FN_GENERIC, .u.generic = native_if},
     {"type", FN_GENERIC, .u.generic = native_type},
     {"+", FN_GENERIC, .u.generic = native_add},
@@ -446,6 +543,13 @@ void register_builtins() {
     register_builtin_in_namespace("str", native_str);
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
+    register_builtin_in_namespace("nth", (BuiltinFn)nth2);
+    register_builtin_in_namespace("conj", (BuiltinFn)conj2);
+    register_builtin_in_namespace("assoc", (BuiltinFn)assoc3);
+    register_builtin_in_namespace("transient", native_transient);
+    register_builtin_in_namespace("persistent!", native_persistent);
+    register_builtin_in_namespace("conj!", native_conj_bang);
+    register_builtin_in_namespace("get", native_get);
     register_builtin_in_namespace("test-native", native_if);
     register_builtin_in_namespace("println", native_println);
 }

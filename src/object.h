@@ -363,7 +363,13 @@ static inline CljPersistentVector* as_vector(CljObject *obj) {
     return (CljPersistentVector*)obj;
 }
 static inline CljMap* as_map(CljObject *obj) {
-    return (CljMap*)assert_type(obj, CLJ_MAP);
+    if (!is_type(obj, CLJ_MAP) && !is_type(obj, CLJ_TRANSIENT_MAP)) {
+        const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
+        fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 
+                actual_type, __FILE__, __LINE__);
+        abort();
+    }
+    return (CljMap*)obj;
 }
 static inline CljList* as_list(CljObject *obj) {
     if (!is_type(obj, CLJ_LIST)) {

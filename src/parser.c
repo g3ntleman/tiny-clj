@@ -548,6 +548,126 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   return make_int(atoi(buf));
 }
 
+/**
+ * @brief Create CljValue by parsing number from Reader (Phase 1: Immediates)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed number CljValue or NULL on error
+ */
+static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
+  (void)st;
+  char buf[MAX_STACK_STRING_SIZE];
+  int pos = 0;
+  if (reader_peek_char(reader) == '-')
+    buf[pos++] = reader_next(reader);
+  if (!isdigit(reader_peek_char(reader)))
+    return NULL;
+  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+    buf[pos++] = reader_next(reader);
+  if (reader_peek_char(reader) == '.' &&
+      isdigit(reader_peek_ahead(reader, 1))) {
+    buf[pos++] = reader_next(reader);
+    while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+      buf[pos++] = reader_next(reader);
+  }
+  buf[pos] = '\0';
+  
+  // Try immediate fixnum first for integers
+  if (!strchr(buf, '.')) {
+    int value = atoi(buf);
+    return make_fixnum(value);  // Uses immediate if possible, heap fallback if not
+  }
+  
+  // For floats, use heap allocation for now
+  return make_float_v(atof(buf));
+}
+
+/**
+ * @brief Create CljValue by parsing expression from Reader (Phase 1: Immediates)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return New CljValue or NULL on error
+ */
+CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
+  reader_skip_all(reader);
+  if (reader_is_eof(reader))
+    return NULL;
+  char c = reader_current(reader);
+  
+  // Handle numbers with immediate fixnum optimization
+  if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
+    return make_number_by_parsing_v(reader, st);
+  if (isdigit(c))
+    return make_number_by_parsing_v(reader, st);
+  
+  // Handle nil, true, false literals with immediate special values
+  if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
+      reader_peek_ahead(reader, 2) == 'l' && 
+      !is_alphanumeric(reader_peek_ahead(reader, 3))) {
+    reader_consume(reader); // 'n'
+    reader_consume(reader); // 'i'
+    reader_consume(reader); // 'l'
+    return make_nil();
+  }
+  
+  if (c == 't' && reader_peek_ahead(reader, 1) == 'r' && 
+      reader_peek_ahead(reader, 2) == 'u' && 
+      reader_peek_ahead(reader, 3) == 'e' && 
+      !is_alphanumeric(reader_peek_ahead(reader, 4))) {
+    reader_consume(reader); // 't'
+    reader_consume(reader); // 'r'
+    reader_consume(reader); // 'u'
+    reader_consume(reader); // 'e'
+    return make_true();
+  }
+  
+  if (c == 'f' && reader_peek_ahead(reader, 1) == 'a' && 
+      reader_peek_ahead(reader, 2) == 'l' && 
+      reader_peek_ahead(reader, 3) == 's' && 
+      reader_peek_ahead(reader, 4) == 'e' && 
+      !is_alphanumeric(reader_peek_ahead(reader, 5))) {
+    reader_consume(reader); // 'f'
+    reader_consume(reader); // 'a'
+    reader_consume(reader); // 'l'
+    reader_consume(reader); // 's'
+    reader_consume(reader); // 'e'
+    return make_false();
+  }
+  
+  // For complex structures, fall back to heap allocation
+  // TODO: Implement CljValue-based vector/map/list parsing
+  CljObject *obj = make_object_by_parsing_expr(reader, st);
+  return (CljValue)obj;
+}
+
+/**
+ * @brief Parse Clojure expression from string input (CljValue API)
+ * @param input Input string to parse
+ * @param st Evaluation state
+ * @return Parsed CljValue or NULL on error
+ */
+CljValue parse_v(const char *input, EvalState *st) {
+  if (!input || !st) return NULL;
+  
+  Reader reader;
+  reader_init(&reader, input);
+  
+  CljValue result = NULL;
+  
+  // Use TRY/CATCH to handle parsing exceptions
+  TRY {
+    result = make_value_by_parsing_expr(&reader, st);
+    if (result) {
+      result = AUTORELEASE(result);
+    }
+  } CATCH(ex) {
+    // Exception caught - return NULL for parse errors
+    result = NULL;
+  } END_TRY
+  
+  return result;
+}
+
 
 /**
  * @brief Parse metadata ^meta using Reader

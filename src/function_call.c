@@ -12,6 +12,7 @@
 #include "object.h"
 #include "function_call.h"
 #include <string.h>
+#include <assert.h>
 #include "clj_string.h"
 #include "seq.h"
 #include "namespace.h"
@@ -19,6 +20,7 @@
 #include "list_operations.h"
 #include "builtins.h"
 #include "map.h"
+#include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -1411,12 +1413,15 @@ CljObject* eval_arg_retained(CljObject *list, int index, CljMap *env) {
     return result;
 }
 
+// Thread-local recursion depth tracking for eval_arg
+static _Thread_local int g_eval_arg_depth = 0;
+
 // Helper function for evaluating arguments
 CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
-    (void)env; // Suppress unused parameter warning
     if (!list || list->type != CLJ_LIST) return NULL;
     
-    // CljList *list_data = as_list(list); // Unused variable
+    // Assert that env is never NULL - this indicates a bug in function evaluation
+    assert(env != NULL && "eval_arg called with NULL environment - this is a bug in function evaluation");
     
     // Use the existing list_nth function which is safer
     CljObject *element = list_nth(list, index);
@@ -1424,26 +1429,40 @@ CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
     
     // For simple types (numbers, strings, booleans), return as-is
     if (is_type(element, CLJ_INT) || is_type(element, CLJ_FLOAT) || 
-        is_type(element, CLJ_STRING) || is_type(element, CLJ_BOOL)) {
+        is_type(element, CLJ_STRING) || is_type(element, CLJ_BOOL) || is_type(element, CLJ_NIL)) {
         return element; // Don't retain - caller will handle retention
     }
     
-    // For symbols, resolve them
+    // For symbols, resolve them from environment
     if (is_type(element, CLJ_SYMBOL)) {
-        // TEMPORARY FIX: Don't resolve symbols in eval_arg to prevent memory issues
-        // This is a simplified version that just returns the element as-is
-        return element; // Don't retain - caller will handle retention
+        if (env) {
+            CljObject *resolved = env_get_stack((CljObject*)env, element);
+            if (resolved) return resolved;
+        }
+        // If not found, return the symbol as-is
+        return element;
     }
     
-    // For lists, don't evaluate them here to prevent infinite loops
-    // The evaluation should happen in the calling context
+    // For lists, evaluate them recursively with depth protection
     if (is_type(element, CLJ_LIST)) {
-        // TEMPORARY FIX: Don't evaluate nested lists to prevent infinite loops
-        // This is a simplified version that just returns the element as-is
-        return element; // Don't retain - caller will handle retention
+        // Check recursion depth
+        if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
+            throw_exception("StackOverflowError", 
+                          "Maximum evaluation depth exceeded in nested function calls", 
+                          __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        
+        // Evaluate nested list with depth tracking
+        g_eval_arg_depth++;
+        EvalState *st = evalstate();
+        CljObject *result = eval_list(element, env, st);
+        g_eval_arg_depth--;
+        
+        return result;
     }
     
-    // For other types, return as-is
+    // For vectors, maps, etc., return as-is
     return element; // Don't retain - caller will handle retention
 }
 

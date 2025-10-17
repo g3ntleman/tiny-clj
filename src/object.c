@@ -341,6 +341,7 @@ char* to_string(CljObject *v) {
             }
 
         case CLJ_VECTOR:
+        case CLJ_TRANSIENT_VECTOR:
             {
                 CljPersistentVector *vec = as_vector(v);
                 if (!vec) return strdup("[]");
@@ -359,6 +360,15 @@ char* to_string(CljObject *v) {
                     free(el);
                 }
                 strcat(s, "]");
+                
+                // Mark transient vectors for debugging
+                if (v->type == CLJ_TRANSIENT_VECTOR) {
+                    char *result = ALLOC(char, strlen(s) + 20);
+                    sprintf(result, "<transient %s>", s);
+                    free(s);
+                    return result;
+                }
+                
                 return s;
             }
 
@@ -407,6 +417,7 @@ char* to_string(CljObject *v) {
             }
 
         case CLJ_MAP:
+        case CLJ_TRANSIENT_MAP:
             {
                 CljMap *map = as_map(v);
                 if (!map) return strdup("{}");
@@ -437,17 +448,27 @@ char* to_string(CljObject *v) {
                     first = false;
                 }
                 strcat(s, "}");
+                
+                // Mark transient maps for debugging
+                if (v->type == CLJ_TRANSIENT_MAP) {
+                    char *result = ALLOC(char, strlen(s) + 20);
+                    sprintf(result, "<transient %s>", s);
+                    free(s);
+                    return result;
+                }
+                
                 return s;
             }
+
 
         case CLJ_FUNC:
             {
                 // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
-                CljFunction *clj_func = (CljFunction*)v;
+                // We need to distinguish them by checking the struct layout
                 CljFunc *native_func = (CljFunc*)v;
                 
-                // First check if it's a native function (has fn pointer and no params/body)
-                if (native_func && native_func->fn && !clj_func->params && !clj_func->body) {
+                // Check if it's a native function by looking at the fn pointer
+                if (native_func && native_func->fn) {
                     // It's a native function (CljFunc)
                     if (native_func->name) {
                         char buf[256];
@@ -455,18 +476,16 @@ char* to_string(CljObject *v) {
                         return strdup(buf);
                     }
                     return strdup("#<native function>");
-                } else if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                } else {
                     // It's a Clojure function (CljFunction)
-                    if (clj_func->name) {
+                    CljFunction *clj_func = (CljFunction*)v;
+                    if (clj_func && clj_func->name) {
                         char buf[256];
                         snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
                         return strdup(buf);
                     } else {
                         return strdup("#<function>");
                     }
-                } else {
-                    // Fallback: unknown function type
-                    return strdup("#<function>");
                 }
             }
 
@@ -1050,13 +1069,10 @@ void free_object(CljObject *obj) {
                 } else {
                     // It's a CljFunc (native function)
                     CljFunc *native_func = (CljFunc*)obj;
-                    (void)native_func; // Suppress unused variable warning
-#ifdef DEBUG
                     if (native_func && native_func->name) {
-                        // In Debug-Builds ist name ein String-Literal, kein malloc'd String
-                        // Daher kein free() nötig
+                        // Free the allocated name string
+                        free((void*)native_func->name);
                     }
-#endif
                 }
                 DEALLOC(obj);
             }

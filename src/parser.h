@@ -15,11 +15,12 @@
 #include "exception.h"
 #include "namespace.h"
 #include "reader.h"
+#include "value.h"
 
 
-// Parser entry points
+// === Legacy API (deprecated - use CljValue API) ===
 /**
- * @brief Parse Clojure expression from string input
+ * @deprecated Use parse_v() instead. Parse Clojure expression from string input
  * @param input Input string to parse
  * @param st Evaluation state
  * @return Parsed CljObject (caller must release) or NULL on error
@@ -43,6 +44,24 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state);
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state);
+
+// === CljValue API (Phase 1: Immediates) ===
+
+/**
+ * @brief Create CljValue by parsing expression from Reader (Phase 1: Immediates)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return New CljValue or NULL on error
+ */
+CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
+
+/**
+ * @brief Parse Clojure expression from string input (CljValue API)
+ * @param input Input string to parse
+ * @param st Evaluation state
+ * @return Parsed CljValue or NULL on error
+ */
+CljValue parse_v(const char *input, EvalState *st);
 
 
 #endif

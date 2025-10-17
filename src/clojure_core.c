@@ -5,6 +5,7 @@
 #include "tiny_clj.h"
 #include "reader.h"
 #include "memory.h"
+#include "value.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,8 +21,8 @@ const char *clojure_core_code =
 
     ;
 
-// Forward declaration for make_object_by_parsing_expr
-extern CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st);
+// Forward declaration for make_value_by_parsing_expr
+extern CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
 
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
@@ -39,16 +40,18 @@ static bool eval_core_source(const char *src, EvalState *st) {
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
     
-    CljObject *form = make_object_by_parsing_expr(&reader, st);
-    if (!form) {
+    CljValue form = make_value_by_parsing_expr(&reader, st);
+    if (is_nil(form)) {
       DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
       break;
     }
     
     // Evaluate with exception handling using TRY/CATCH
     TRY {
-      CljObject *result = eval_expr_simple(form, st);
-      RELEASE(result);
+      CljValue result = eval_expr_simple((CljObject*)form, st);
+      if (!is_nil(result)) {
+        RELEASE((CljObject*)result);
+      }
       success_count++;
     } CATCH(ex) {
       // Exception occurred during evaluation
@@ -60,6 +63,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
       }
     } END_TRY
     
+    RELEASE((CljObject*)form);
     expr_count++;
   }
   

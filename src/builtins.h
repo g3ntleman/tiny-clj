@@ -47,4 +47,9 @@ CljObject* native_sub_variadic(CljObject **args, int argc);
 CljObject* native_mul_variadic(CljObject **args, int argc);
 CljObject* native_div_variadic(CljObject **args, int argc);
 
+// Transient functions
+CljObject* native_transient(CljObject **args, int argc);
+CljObject* native_persistent(CljObject **args, int argc);
+CljObject* native_conj_bang(CljObject **args, int argc);
+
 #endif

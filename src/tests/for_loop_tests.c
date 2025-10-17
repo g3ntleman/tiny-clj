@@ -13,6 +13,7 @@
 #include "seq.h"
 #include "vector.h"
 #include "list_operations.h"
+#include "value.h"
 #include "function_call.h"
 #include "memory.h"
 #include <stdio.h>
@@ -58,8 +59,8 @@ void test_doseq_basic(void) {
         // Test that doseq doesn't crash with a simple body
         
         // Create vector: [1 2 3]
-        CljObject *vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector(vec);
+        CljValue vec = make_vector_v(3, 1);
+        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         vec_data->data[0] = make_int(1);
@@ -94,8 +95,8 @@ void test_for_basic(void) {
         // Test that for doesn't crash with a simple body
         
         // Create vector: [1 2 3]
-        CljObject *vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector(vec);
+        CljValue vec = make_vector_v(3, 1);
+        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         vec_data->data[0] = make_int(1);
@@ -161,8 +162,8 @@ void test_doseq_with_environment(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Create vector: [1 2 3]
-        CljObject *vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector(vec);
+        CljValue vec = make_vector_v(3, 1);
+        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         vec_data->data[0] = make_int(1);

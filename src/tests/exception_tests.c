@@ -13,6 +13,7 @@
 #include "namespace.h"
 #include "symbol.h"
 #include "clj_string.h"
+#include "value.h"
 #include "map.h"
 #include "parser.h"
 #include <string.h>
@@ -128,7 +129,7 @@ void test_exception_with_autorelease(void) {
         TRY {
             // Create some objects that should be cleaned up
             CljObject *obj1 = make_int(42);
-            CljObject *obj2 = make_string("test");
+            CljValue obj2 = make_string_v("test");
             TEST_ASSERT_NOT_NULL(obj1);
             TEST_ASSERT_NOT_NULL(obj2);
             
@@ -152,7 +153,7 @@ void test_repl_crash_scenario(void) {
         TRY {
             // Create some objects that will be in the autorelease pool
             CljObject *obj1 = make_int(42);
-            CljObject *obj2 = make_string("test");
+            CljValue obj2 = make_string_v("test");
             CljObject *obj3 = make_symbol("test", NULL);
             
             // Throw exception - this should cause memory corruption
@@ -175,14 +176,14 @@ void test_map_arity_exception_zero_args(void) {
         
         TRY {
             // Create a map and bind it to 'm'
-            CljObject *map_obj = AUTORELEASE(make_map(2));
+            CljValue map_obj = AUTORELEASE(make_map_v(2));
             CljObject *key = AUTORELEASE(make_symbol(":a", NULL));
             CljObject *val = AUTORELEASE(make_int(1));
-            map_assoc(map_obj, key, val);
+            map_assoc_v(map_obj, key, val);
             
             // Define 'm' in current namespace
             CljObject *m_sym =AUTORELEASE(make_symbol("m", NULL));
-            ns_define(st, m_sym, map_obj);
+            ns_define(st, m_sym, (CljObject*)map_obj);
             
             // Try to call map with 0 arguments: (m)
             CljObject *result = eval_string("(m)", st);

@@ -15,14 +15,18 @@
 #include <errno.h>
 #include <unistd.h>
 
-/** @brief Check if a string has balanced parentheses, brackets, and braces.
- *  @param s String to check for balanced delimiters
- *  @return true if balanced, false otherwise
+/** @brief Check the balance of parentheses, brackets, and braces.
+ *  @param s String to check for delimiter balance
+ *  @param error_pos Output parameter for position of first error (can be NULL)
+ *  @return > 0 if incomplete (need more closing), = 0 if balanced, < 0 if invalid (too many closing)
  */
-static bool is_balanced_form(const char *s) {
+static int form_balance(const char *s, int *error_pos) {
     int p = 0, b = 0, c = 0; // () [] {}
     bool in_str = false; bool esc = false;
-    for (const char *x = s; *x; ++x) {
+    int pos = 0;
+    int first_error_pos = -1;
+    
+    for (const char *x = s; *x; ++x, ++pos) {
         char ch = *x;
         if (in_str) {
             if (esc) { esc = false; continue; }
@@ -34,9 +38,19 @@ static bool is_balanced_form(const char *s) {
         if (ch == '(') p++; else if (ch == ')') p--;
         else if (ch == '[') b++; else if (ch == ']') b--;
         else if (ch == '{') c++; else if (ch == '}') c--;
-        if (p < 0 || b < 0 || c < 0) return false;
+        
+        // Check for negative balance (too many closing)
+        if ((p < 0 || b < 0 || c < 0) && first_error_pos == -1) {
+            first_error_pos = pos;
+        }
     }
-    return (p == 0 && b == 0 && c == 0 && !in_str);
+    
+    if (error_pos) {
+        *error_pos = first_error_pos;
+    }
+    
+    // Return total imbalance (positive = incomplete, negative = too many closing)
+    return p + b + c + (in_str ? 1 : 0);
 }
 
 /** @brief Print REPL prompt with namespace and continuation indicator.
@@ -180,7 +194,7 @@ static bool run_interactive_repl(EvalState *st) {
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
-            print_prompt(st, is_balanced_form(acc));
+            print_prompt(st, form_balance(acc, NULL) == 0);
             prompt_shown = true;
         }
 
@@ -227,11 +241,28 @@ static bool run_interactive_repl(EvalState *st) {
             break;
         }
 
-        if (!is_balanced_form(acc)) {
-            // need more lines
+        int balance = form_balance(acc, NULL);
+        if (balance > 0) {
+            // Incomplete - need more input
             prompt_shown = false; // show continuation prompt once
             continue;
+        } else if (balance < 0) {
+            // Too many closing parens - syntax error
+            printf("Error: Too many closing parentheses\n");
+            // Add to history before clearing
+            if (acc[0] != '\0') {
+#ifdef ENABLE_LINE_EDITING
+                LineEditor *editor = get_line_editor();
+                if (editor) {
+                    line_editor_add_to_history(editor, acc);
+                }
+#endif
+            }
+            acc[0] = '\0';
+            prompt_shown = false;
+            continue;
         }
+        // balance == 0: evaluate form
 
         // Use eval_string_repl for proper exception handling
         bool success = eval_string_repl(acc, st);
@@ -343,7 +374,7 @@ int main(int argc, char **argv) {
         char acc[8192]; acc[0] = '\0';
         while (fgets(line, sizeof(line), fp)) {
             strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
-            if (!is_balanced_form(acc)) continue;
+            if (form_balance(acc, NULL) != 0) continue;
             
             bool success = eval_string_repl(acc, st);
             if (!success) {
