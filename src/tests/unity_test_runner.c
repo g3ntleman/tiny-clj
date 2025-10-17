@@ -148,6 +148,9 @@ extern void test_cljvalue_immediates_high_level(void);
 extern void test_special_form_and(void);
 extern void test_special_form_or(void);
 
+// Performance tests
+extern void test_seq_rest_performance(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -187,6 +190,9 @@ static void test_group_cljvalue(void) {
     // Special forms tests
     RUN_TEST(test_special_form_and);
     RUN_TEST(test_special_form_or);
+    
+    // Performance tests
+    RUN_TEST(test_seq_rest_performance);
 }
 
 // ============================================================================

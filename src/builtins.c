@@ -9,6 +9,7 @@
 #include "namespace.h"
 #include "clj_string.h"
 #include "value.h"
+#include "seq.h"
 
 CljObject* nth2(CljObject *vec, CljObject *idx) {
     if (!vec || !idx || vec->type != CLJ_VECTOR || idx->type != CLJ_INT) return NULL;
@@ -71,18 +72,20 @@ CljObject* native_rest(CljObject **args, int argc) {
     if (coll->type == CLJ_VECTOR) {
         CljPersistentVector *v = as_vector(coll);
         if (!v || v->count <= 1) {
-            // Return empty list for rest of single element or empty vector
             return make_list(NULL, NULL);
         }
         
-        // Create a list with all elements except the first
-        // This is the correct Clojure behavior: rest returns a sequence, not a vector
-        CljObject *rest_list = NULL;
-        for (int i = v->count - 1; i >= 1; i--) {
-            rest_list = make_list(RETAIN(v->data[i]), rest_list);
-        }
+        // Use CljSeqIterator (existing!) instead of copying
+        CljObject *seq = seq_create(coll);
+        if (!seq) return make_list(NULL, NULL);
         
-        return rest_list;
+        // Return rest of sequence (O(1) operation!)
+        return seq_rest(seq);
+    }
+    
+    if (coll->type == CLJ_SEQ) {
+        // Already a sequence - just call seq_rest
+        return seq_rest(coll);
     }
     
     return NULL; // Unsupported collection type

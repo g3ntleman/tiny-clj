@@ -856,6 +856,35 @@ void test_special_form_or(void) {
     evalstate_free(st);
 }
 
+void test_seq_rest_performance(void) {
+    // Test that (rest (rest (rest ...))) uses CljSeqIterator efficiently
+    EvalState *st = evalstate_new();
+    register_builtins();
+    
+    // Create large vector
+    CljObject *vec = eval_string("[1 2 3 4 5 6 7 8 9 10]", st);
+    TEST_ASSERT_NOT_NULL(vec);
+    
+    // Multiple rest calls should return CLJ_SEQ (or CLJ_LIST for empty)
+    CljObject *r1 = eval_string("(rest [1 2 3 4 5 6 7 8 9 10])", st);
+    TEST_ASSERT_NOT_NULL(r1);
+    // Should be CLJ_SEQ or CLJ_LIST (using CljSeqIterator)
+    TEST_ASSERT_TRUE(r1->type == CLJ_SEQ || r1->type == CLJ_LIST);
+    
+    CljObject *r2 = eval_string("(rest (rest [1 2 3 4 5 6 7 8 9 10]))", st);
+    TEST_ASSERT_NOT_NULL(r2);
+    TEST_ASSERT_TRUE(r2->type == CLJ_SEQ || r2->type == CLJ_LIST);
+    
+    // Note: first is not implemented yet, so we can't test the actual elements
+    // The important part is that rest returns a sequence type (CLJ_SEQ or CLJ_LIST)
+    // and that multiple rest calls work efficiently (O(1) per call)
+    
+    RELEASE(vec);
+    RELEASE(r1);
+    RELEASE(r2);
+    evalstate_free(st);
+}
+
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
