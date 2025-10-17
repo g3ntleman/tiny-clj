@@ -18,6 +18,7 @@
 #include <stdarg.h>
 #include "object.h"
 #include "memory.h"
+#include "memory_profiler.h"
 #include "seq.h"
 #include "runtime.h"
 #include "map.h"
@@ -94,8 +95,8 @@ void throw_exception(const char *type, const char *message, const char *file, in
         exit(1);
     }
     
-    // Exception in den AKTUELLEN Pool autoreleasen (nicht TRY-Pool!)
-    global_exception_stack.top->exception = (CLJException*)AUTORELEASE((CljObject*)exception);
+    // Store exception in thread-local variable
+    g_current_exception = exception;
     longjmp(global_exception_stack.top->jump_state, 1);
 }
 
@@ -108,7 +109,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
 CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
     
-    CLJException *exc = (CLJException*)ALLOC_OBJECT(CLJ_EXCEPTION);
+    CLJException *exc = ALLOC(CLJException, 1);
     if (!exc) return NULL;
     
     // Initialize base object
@@ -140,7 +141,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
 /** @brief Create integer object */
 CljObject* make_int(int x) {
-    CljObject *v = ALLOC(CljObject, 1);
+    CljObject *v = ALLOC_SIMPLE(CLJ_INT);
     if (!v) return NULL;
     v->type = CLJ_INT;
     v->rc = 1;
@@ -151,7 +152,7 @@ CljObject* make_int(int x) {
 }
 
 CljObject* make_float(double x) {
-    CljObject *v = ALLOC_OBJECT(CLJ_FLOAT);
+    CljObject *v = ALLOC_SIMPLE(CLJ_FLOAT);
     if (!v) return NULL;
     v->type = CLJ_FLOAT;
     v->rc = 1;
@@ -254,7 +255,7 @@ CljObject* make_exception_wrapper(const char *type, const char *message, const c
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
-    CljFunction *func = ALLOC(CljFunction, 1);
+    CljFunction *func = (CljFunction*)ALLOC_SIMPLE(CLJ_FUNC);
     if (!func) return NULL;
     
     func->base.type = CLJ_FUNC;  // Both CljFunc and CljFunction use CLJ_FUNC type
@@ -268,7 +269,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     if (param_count > 0 && params) {
         func->params = (CljObject**)malloc(sizeof(CljObject*) * param_count);
         if (!func->params) {
-            free(func);
+            DEALLOC(func);
             return NULL;
         }
         for (int i = 0; i < param_count; i++) {
@@ -911,7 +912,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     // Extend environment with parameters
     CljObject *call_env = env_extend_stack(func->closure_env, func->params, heap_params, argc);
     if (!call_env) {
-        free(heap_params);
+        DEALLOC(heap_params);
         return make_error("Failed to create function environment", NULL, 0, 0);
     }
     
@@ -920,7 +921,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     
     // Release environment and parameter array
     RELEASE(call_env);
-    free(heap_params);
+    DEALLOC(heap_params);
     
     return result;
 }
@@ -940,7 +941,7 @@ CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObje
 
 // Polymorphe Funktionen für Subtyping
 CljObject* create_object(CljType type) {
-    CljObject *obj = ALLOC_OBJECT(type);
+    CljObject *obj = ALLOC_SIMPLE(type);
     if (!obj) return NULL;
     
     obj->type = type;
@@ -988,15 +989,15 @@ void free_object(CljObject *obj) {
     switch (obj->type) {
         case CLJ_STRING:
             if (obj->as.data) free(obj->as.data);
-            free(obj);
+            DEALLOC(obj);
             break;
         case CLJ_SYMBOL:
             {
                 CljSymbol *sym = (CljSymbol*)obj;
                 // Note: CljNamespace doesn't have reference counting yet
                 // TODO: Implement reference counting for CljNamespace
-                // CljSymbol is a CljObject subtype, use standard free() for final cleanup
-                free(sym);
+                // CljSymbol is a CljObject subtype, use DEALLOC for final cleanup
+                DEALLOC(sym);
             }
             break;
         case CLJ_VECTOR:
@@ -1008,7 +1009,7 @@ void free_object(CljObject *obj) {
                     }
                     free(vec->data);
                 }
-                free(vec);
+                DEALLOC(vec);
             }
             break;
         case CLJ_MAP:
@@ -1020,7 +1021,7 @@ void free_object(CljObject *obj) {
                     }
                     free(map->data);
                 }
-                free(map);
+                DEALLOC(map);
             }
             break;
         case CLJ_LIST:
@@ -1028,7 +1029,7 @@ void free_object(CljObject *obj) {
                 CljList *list = (CljList*)obj;
                 if (list->first) release_object(list->first);
                 if (list->rest) release_object(list->rest);
-                free(list);
+                DEALLOC(list);
             }
             break;
         case CLJ_FUNC:
@@ -1057,7 +1058,7 @@ void free_object(CljObject *obj) {
                     }
 #endif
                 }
-                free(obj);
+                DEALLOC(obj);
             }
             break;
         case CLJ_EXCEPTION:
@@ -1065,12 +1066,12 @@ void free_object(CljObject *obj) {
                 CLJException *exc = (CLJException*)obj;
                 // Strings are now embedded, no need to free them
                 RELEASE(exc->data);
-                free(exc);
+                DEALLOC(exc);
             }
             break;
         default:
             // Primitive Typen brauchen keine Freigabe
-            free(obj);
+            DEALLOC(obj);
             break;
     }
 }

@@ -43,7 +43,8 @@ typedef struct CljObjectPool CljObjectPool;
 CljObjectPool *autorelease_pool_push();
 
 /** Pop and drain current autorelease pool (most common usage). */
-void autorelease_pool_pop(void);
+// Removed: autorelease_pool_pop() - use autorelease_pool_pop_specific() instead
+
 
 // CFAutoreleasePool: Exception-safe cleanup
 void autorelease_pool_cleanup_after_exception();
@@ -86,9 +87,9 @@ int get_retain_count(CljObject *obj);
 
 // Special allocation for CljObject with dynamic type
 #ifdef DEBUG
-    #define ALLOC_OBJECT(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
+    #define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
 #else
-    #define ALLOC_OBJECT(obj_type) ((CljObject*) malloc(sizeof(CljObject)))
+    #define ALLOC_SIMPLE(obj_type) ((CljObject*) malloc(sizeof(CljObject)))
 #endif
 
 
@@ -100,7 +101,9 @@ int get_retain_count(CljObject *obj);
 #ifdef DEBUG
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
-        memory_profiler_track_object_destruction(_tmp); \
+        if (_tmp && (void*)_tmp != (void*)0x1) { \
+            memory_profiler_track_object_destruction((CljObject*)_tmp); \
+        } \
     } while(0)
     #define RETAIN(obj) ({ \
         CljObject* _tmp = (CljObject*)(obj); \
@@ -137,17 +140,12 @@ int get_retain_count(CljObject *obj);
         } \
     } while(0)
     
-    // CFAutoreleasePool: Exception-safe autorelease pool macro
-    // Compatible with setjmp/longjmp by using stack-based management
+    // Foundation-style autorelease pool - compatible with setjmp/longjmp
+    // Like NSAutoreleasePool in pre-ARC Objective-C
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
-        bool _pool_cleaned_up = false; \
-        do { \
-            code; \
-        } while(0); \
-        if (!_pool_cleaned_up) { \
-            autorelease_pool_pop_specific(_pool); \
-        } \
+        code; \
+        autorelease_pool_pop_specific(_pool); \
     } while(0)
     
     // Exception-safe autorelease pool macro for TRY/CATCH blocks
@@ -189,8 +187,10 @@ int get_retain_count(CljObject *obj);
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
 #else
-    // No-op macros for release builds
-    #define DEALLOC(obj) ((void)0)
+    // Release builds: DEALLOC calls free() but no memory profiling
+    #define DEALLOC(obj) do { \
+        free((obj)); \
+    } while(0)
     #define RETAIN(obj) ({ CljObject* _tmp = (CljObject*)(obj); retain(_tmp); _tmp; })
     #define RELEASE(obj) ({ CljObject* _tmp = (CljObject*)(obj); release(_tmp); _tmp; })
     #define AUTORELEASE(obj) ({ \
@@ -209,16 +209,11 @@ int get_retain_count(CljObject *obj);
         } \
     } while(0)
     
-    // Autorelease pool macros for release builds
+    // Foundation-style autorelease pool for release builds
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
-        bool _pool_cleaned_up = false; \
-        do { \
-            code; \
-        } while(0); \
-        if (!_pool_cleaned_up) { \
-            autorelease_pool_pop_specific(_pool); \
-        } \
+        code; \
+        autorelease_pool_pop_specific(_pool); \
     } while(0)
     
     // Simple autorelease pool management for TRY/CATCH (release builds)

@@ -27,7 +27,8 @@
 // ============================================================================
 
 void test_parse_basic_types(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test integer parsing
@@ -52,11 +53,12 @@ void test_parse_basic_types(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym_result->type);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_parse_collections(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test vector parsing
@@ -75,11 +77,12 @@ void test_parse_collections(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->type);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_parse_comments(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test line comment parsing
@@ -88,11 +91,12 @@ void test_parse_comments(void) {
         TEST_ASSERT_EQUAL_INT(42, result->as.i);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_parse_metadata(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test metadata parsing with keywords
@@ -101,11 +105,12 @@ void test_parse_metadata(void) {
         TEST_ASSERT_EQUAL_INT(42, result->as.i);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_parse_utf8_symbols(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test UTF-8 symbol parsing
@@ -115,11 +120,12 @@ void test_parse_utf8_symbols(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_keyword_evaluation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test keyword parsing - use simple approach
@@ -139,11 +145,12 @@ void test_keyword_evaluation(void) {
         }
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_keyword_map_access(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         
         // Test keyword as map key access: (:key map)
@@ -163,7 +170,7 @@ void test_keyword_map_access(void) {
         }
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 // ============================================================================

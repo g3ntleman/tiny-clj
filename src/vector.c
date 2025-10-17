@@ -51,11 +51,24 @@ CljObject *make_vector(int capacity, int is_mutable) {
 /** @brief Create a new weak vector for temporary storage */
 CljObject *make_weak_vector(int capacity) {
   // Weak vector: same layout as CljVector, aber Push ohne retain
-  CljObject *o = make_vector(capacity, 1);
-  if (!o)
+  if (capacity <= 0) {
+    init_empty_vector_singleton_once();
+    return (CljObject *)&clj_empty_vector_singleton;
+  }
+  CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
+  if (!vec)
     return NULL;
-  o->type = CLJ_WEAK_VECTOR;
-  return o;
+
+  vec->base.type = CLJ_WEAK_VECTOR;
+  vec->base.rc = 1;
+  vec->count = 0;
+  vec->capacity = capacity;
+  vec->mutable_flag = 1; // Weak vectors are always mutable
+  vec->data = capacity > 0
+                  ? (CljObject **)calloc((size_t)capacity, sizeof(CljObject *))
+                  : NULL;
+
+  return (CljObject *)vec;
 }
 
 static inline int is_weak_vec(CljObject *o) {

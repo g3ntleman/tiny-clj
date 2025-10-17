@@ -9,6 +9,9 @@
 #include "exception.h"
 #include "runtime.h"
 
+// Global storage for current exception
+CLJException *g_current_exception = NULL;
+
 // ============================================================================
 // STANDARD ERROR MESSAGES
 // ============================================================================

@@ -17,6 +17,9 @@
 // GLOBAL EXCEPTION STACK (independent of EvalState)
 // ============================================================================
 
+// Global storage for current exception (defined in exception.c)
+extern CLJException *g_current_exception;
+
 /**
  * @brief Exception handler for TRY/CATCH blocks.
  * Contains jump state and linked list structure for exception handling.
@@ -24,7 +27,6 @@
 typedef struct ExceptionHandler {
     jmp_buf jump_state;                  // Jump target for longjmp
     struct ExceptionHandler *next;       // Previous handler (stack)
-    CLJException *exception;             // Caught exception
     CljObjectPool *pool;                 // Autorelease pool for cleanup after longjmp
 } ExceptionHandler;
 
@@ -63,8 +65,6 @@ extern GlobalExceptionStack global_exception_stack;
 #define TRY { \
     ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
     _h->next = global_exception_stack.top; \
-    _h->exception = NULL; \
-    _h->pool = NULL; \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
@@ -74,17 +74,18 @@ extern GlobalExceptionStack global_exception_stack;
         global_exception_stack.top = _success_handler->next; \
         free(_success_handler); \
     } else { \
-        /* Exception path: get exception */ \
+        /* Exception path: get exception from global */ \
+        extern CLJException *g_current_exception; \
         ExceptionHandler *_caught_h = global_exception_stack.top; \
-        CLJException *ex = _caught_h->exception; \
+        CLJException *ex = g_current_exception; \
         global_exception_stack.top = _caught_h->next; \
         free(_caught_h); \
         if (ex) { \
-            /* Exception is autoreleased in umgebenden Pool */ \
+            /* Exception will be manually released in END_TRY */ \
 
 #define END_TRY \
         } \
-        /* Exception is autoreleased - pool cleanup happens automatically */ \
+        /* Exception manually released */ \
     } \
 }
 

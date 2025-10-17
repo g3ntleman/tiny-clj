@@ -29,7 +29,8 @@
 // ============================================================================
 
 void test_list_count(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test null pointer
         TEST_ASSERT_EQUAL_INT(0, list_count(NULL));
 
@@ -41,11 +42,12 @@ void test_list_count(void) {
         // Test empty list (clj_nil is not a list)
         CljObject *empty_list = clj_nil();
         TEST_ASSERT_EQUAL_INT(0, list_count(empty_list));
-    });
+    }
 }
 
 void test_list_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test list creation
         CljObject *list = (CljObject*)make_list(NULL, NULL);
         TEST_ASSERT_NOT_NULL(list);
@@ -55,33 +57,36 @@ void test_list_creation(void) {
         TEST_ASSERT_EQUAL_INT(1, count);
         
         RELEASE(list);
-    });
+    }
 }
 
 void test_symbol_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test symbol creation
         CljObject *sym = make_symbol("test-symbol", "user");
         TEST_ASSERT_NOT_NULL(sym);
         TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
         
         RELEASE(sym);
-    });
+    }
 }
 
 void test_string_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test string creation
         CljObject *str = make_string("hello world");
         TEST_ASSERT_NOT_NULL(str);
         TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
         
         RELEASE(str);
-    });
+    }
 }
 
 void test_vector_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test vector creation
         CljObject *vec = make_vector(5, 1);
         TEST_ASSERT_NOT_NULL(vec);
@@ -92,22 +97,24 @@ void test_vector_creation(void) {
         TEST_ASSERT_EQUAL_INT(5, vec_data->capacity);
         
         RELEASE(vec);
-    });
+    }
 }
 
 void test_map_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test map creation
         CljMap *map = make_map(16);
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
         
         RELEASE(map);
-    });
+    }
 }
 
 void test_array_map_builtin(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         register_builtins();
         
@@ -132,11 +139,12 @@ void test_array_map_builtin(void) {
         TEST_ASSERT_EQUAL_INT(2, map_count(eval3));
 
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_integer_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test integer creation
         CljObject *int_obj = make_int(42);
         TEST_ASSERT_NOT_NULL(int_obj);
@@ -144,11 +152,12 @@ void test_integer_creation(void) {
         TEST_ASSERT_EQUAL_INT(42, int_obj->as.i);
         
         RELEASE(int_obj);
-    });
+    }
 }
 
 void test_float_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test float creation
         CljObject *float_obj = make_float(3.14);
         TEST_ASSERT_NOT_NULL(float_obj);
@@ -156,16 +165,17 @@ void test_float_creation(void) {
         TEST_ASSERT_EQUAL_FLOAT(3.14, float_obj->as.f);
         
         RELEASE(float_obj);
-    });
+    }
 }
 
 void test_nil_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test nil creation
         CljObject *nil_obj = clj_nil();
         TEST_ASSERT_NOT_NULL(nil_obj);
         TEST_ASSERT_EQUAL_INT(CLJ_NIL, nil_obj->type);
-    });
+    }
 }
 
 // ============================================================================
@@ -191,7 +201,8 @@ void test_nil_creation(void) {
 // ============================================================================
 
 void test_cljvalue_immediate_helpers(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test immediate value creation
         CljValue nil_val = make_nil();
         CljValue true_val = make_true();
@@ -208,11 +219,12 @@ void test_cljvalue_immediate_helpers(void) {
         TEST_ASSERT_FALSE(is_true(false_val));
         TEST_ASSERT_FALSE(is_false(true_val));
         TEST_ASSERT_FALSE(is_nil(true_val));
-    });
+    }
 }
 
 void test_cljvalue_vector_api(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test vector creation with CljValue API
         CljValue vec = make_vector_v(3, 0);  // capacity=3, immutable
         TEST_ASSERT_NOT_NULL(vec);
@@ -226,11 +238,12 @@ void test_cljvalue_vector_api(void) {
         
         RELEASE(item);
         RELEASE(result);
-    });
+    }
 }
 
 void test_cljvalue_transient_vector(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test transient conversion
         CljValue vec = make_vector_v(3, 0);
         CljValue tvec = transient(vec);
@@ -258,11 +271,12 @@ void test_cljvalue_transient_vector(void) {
         RELEASE(item1);
         RELEASE(item2);
         RELEASE(pvec);
-    });
+    }
 }
 
 void test_cljvalue_clojure_semantics(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test Clojure-like usage pattern
         CljValue v1 = make_vector_v(3, 0);
         CljValue tv = transient(v1);
@@ -286,11 +300,12 @@ void test_cljvalue_clojure_semantics(void) {
         TEST_ASSERT_TRUE(tv != v2);
         
         RELEASE(v2);
-    });
+    }
 }
 
 void test_cljvalue_wrapper_functions(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test wrapper functions for existing APIs
         CljValue int_val = make_int_v(42);
         CljValue float_val = make_float_v(3.14);
@@ -312,7 +327,7 @@ void test_cljvalue_wrapper_functions(void) {
         RELEASE(float_val);
         RELEASE(str_val);
         RELEASE(sym_val);
-    });
+    }
 }
 
 // ============================================================================

@@ -26,15 +26,17 @@
 // ============================================================================
 
 void test_seq_create_list(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test with nil first
         CljObject *seq_nil = seq_create(NULL);
         TEST_ASSERT_EQUAL_PTR(clj_nil(), seq_nil);
-    });
+    }
 }
 
 void test_seq_create_vector(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create a test vector
         CljObject *vec = make_vector(TEST_VECTOR_SIZE, 1);
         CljPersistentVector *vec_data = as_vector(vec);
@@ -54,11 +56,12 @@ void test_seq_create_vector(void) {
         // Test sequence properties
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->type);
         // Note: seq_iter->count may not be available in current implementation
-    });
+    }
 }
 
 void test_seq_create_string(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create a test string
         CljObject *str = make_string("hello");
         TEST_ASSERT_NOT_NULL(str);
@@ -72,11 +75,12 @@ void test_seq_create_string(void) {
         // Test sequence properties
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->type);
         // Note: seq_iter->count may not be available in current implementation
-    });
+    }
 }
 
 void test_seq_create_map(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create a test map
         CljMap *map = make_map(16);
         TEST_ASSERT_NOT_NULL(map);
@@ -86,7 +90,7 @@ void test_seq_create_map(void) {
         (void)seq; // Suppress unused variable warning
         // Note: seq_create may return NULL for empty maps - this is expected behavior
         // TEST_ASSERT_NOT_NULL(seq); // Commented out - NULL is valid for empty maps
-    });
+    }
 }
 
 // ============================================================================
@@ -94,7 +98,8 @@ void test_seq_create_map(void) {
 // ============================================================================
 
 void test_seq_first(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create a test vector
         CljObject *vec = make_vector(3, 1);
         CljPersistentVector *vec_data = as_vector(vec);
@@ -111,11 +116,12 @@ void test_seq_first(void) {
         TEST_ASSERT_NOT_NULL(first_elem);
         TEST_ASSERT_EQUAL_INT(CLJ_INT, first_elem->type);
         TEST_ASSERT_EQUAL_INT(42, first_elem->as.i);
-    });
+    }
 }
 
 void test_seq_rest(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create a test vector
         CljObject *vec = make_vector(3, 1);
         CljPersistentVector *vec_data = as_vector(vec);
@@ -131,11 +137,12 @@ void test_seq_rest(void) {
         CljObject *rest_seq = seq_rest(seq);
         TEST_ASSERT_NOT_NULL(rest_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
-    });
+    }
 }
 
 void test_seq_next(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create a test vector
         CljObject *vec = make_vector(3, 1);
         CljPersistentVector *vec_data = as_vector(vec);
@@ -151,7 +158,7 @@ void test_seq_next(void) {
         CljObject *next_seq = seq_next(seq);
         TEST_ASSERT_NOT_NULL(next_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, next_seq->type);
-    });
+    }
 }
 
 // ============================================================================
@@ -159,7 +166,8 @@ void test_seq_next(void) {
 // ============================================================================
 
 void test_seq_equality(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Create two identical vectors
         CljObject *vec1 = make_vector(2, 1);
         CljObject *vec2 = make_vector(2, 1);
@@ -187,7 +195,7 @@ void test_seq_equality(void) {
         
         // Test equality (simplified - actual implementation may vary)
         TEST_ASSERT_TRUE(seq1 != seq2); // Different objects
-    });
+    }
 }
 
 // ============================================================================

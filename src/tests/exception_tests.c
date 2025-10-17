@@ -46,6 +46,7 @@ void test_simple_try_catch_exception_caught(void) {
 }
 
 void test_simple_try_catch_no_exception(void) {
+    // Foundation pre-ARC style: Isolate autorelease pool per test
     WITH_AUTORELEASE_POOL({
         bool try_executed = false;
         bool catch_executed = false;
@@ -55,6 +56,7 @@ void test_simple_try_catch_no_exception(void) {
         } CATCH(ex) {
             catch_executed = true;
             TEST_ASSERT_TRUE_MESSAGE(false, "CATCH should not run when no exception");
+            RELEASE(ex);
         } END_TRY
         
         TEST_ASSERT_TRUE_MESSAGE(try_executed, "TRY block should have executed");
@@ -66,21 +68,24 @@ void test_nested_try_catch_inner_exception(void) {
     bool outer_try = false, inner_try = false, inner_catch = false;
     bool outer_catch = false, after_inner = false;
     
-    TRY {
-        outer_try = true;
+    // Foundation pre-ARC style: Isolate autorelease pool per test
+    WITH_AUTORELEASE_POOL({
         TRY {
-            inner_try = true;
-            throw_exception("InnerException", "Inner error", __FILE__, __LINE__, 0);
-            TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here");
+            outer_try = true;
+            TRY {
+                inner_try = true;
+                throw_exception("InnerException", "Inner error", __FILE__, __LINE__, 0);
+                TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here");
+            } CATCH(ex) {
+                inner_catch = true;
+                TEST_ASSERT_EQUAL_STRING("InnerException", ex->type);
+            } END_TRY
+            after_inner = true;
         } CATCH(ex) {
-            inner_catch = true;
-            TEST_ASSERT_EQUAL_STRING("InnerException", ex->type);
+            outer_catch = true;
+            TEST_ASSERT_TRUE_MESSAGE(false, "Outer CATCH should not run");
         } END_TRY
-        after_inner = true;
-    } CATCH(ex) {
-        outer_catch = true;
-        TEST_ASSERT_TRUE_MESSAGE(false, "Outer CATCH should not run");
-    } END_TRY
+    });
     
     TEST_ASSERT_TRUE_MESSAGE(outer_try, "Outer TRY should have executed");
     TEST_ASSERT_TRUE_MESSAGE(inner_try, "Inner TRY should have executed");
@@ -141,7 +146,7 @@ void test_exception_with_autorelease(void) {
 
 void test_repl_crash_scenario(void) {
     // This test reproduces the exact crash scenario from the REPL
-    // The problem is in the autorelease pool cleanup after exceptions
+    // Test manual memory management with exceptions - Foundation-style
     
     WITH_AUTORELEASE_POOL({
         TRY {
@@ -170,13 +175,13 @@ void test_map_arity_exception_zero_args(void) {
         
         TRY {
             // Create a map and bind it to 'm'
-            CljObject *map_obj = (CljObject*)make_map(2);
-            CljObject *key = (CljObject*)make_symbol(":a", NULL);
-            CljObject *val = make_int(1);
+            CljObject *map_obj = AUTORELEASE(make_map(2));
+            CljObject *key = AUTORELEASE(make_symbol(":a", NULL));
+            CljObject *val = AUTORELEASE(make_int(1));
             map_assoc(map_obj, key, val);
             
             // Define 'm' in current namespace
-            CljObject *m_sym = (CljObject*)make_symbol("m", NULL);
+            CljObject *m_sym =AUTORELEASE(make_symbol("m", NULL));
             ns_define(st, m_sym, map_obj);
             
             // Try to call map with 0 arguments: (m)

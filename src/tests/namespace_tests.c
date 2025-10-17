@@ -28,7 +28,8 @@ int load_clojure_core(EvalState *st);
 // ============================================================================
 
 void test_evalstate_creation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
         
@@ -36,11 +37,12 @@ void test_evalstate_creation(void) {
         TEST_ASSERT_NOT_NULL(eval_state->current_ns);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_namespace_switching(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
         
@@ -53,11 +55,12 @@ void test_namespace_switching(void) {
         TEST_ASSERT_NOT_NULL(new_ns);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_namespace_isolation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
         
@@ -70,11 +73,12 @@ void test_namespace_isolation(void) {
         
         evalstate_free(eval_state);
         evalstate_free(eval_state2);
-    });
+    }
 }
 
 void test_special_ns_variable(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
         
@@ -83,11 +87,12 @@ void test_special_ns_variable(void) {
         TEST_ASSERT_NOT_NULL(ns_var);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_namespace_lookup(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
         
@@ -97,11 +102,12 @@ void test_namespace_lookup(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 void test_namespace_binding(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
         
@@ -114,7 +120,7 @@ void test_namespace_binding(void) {
         TEST_ASSERT_TRUE(sym1 != sym2);
         
         evalstate_free(eval_state);
-    });
+    }
 }
 
 // ============================================================================

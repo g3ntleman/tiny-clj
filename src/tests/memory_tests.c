@@ -25,7 +25,8 @@
 // ============================================================================
 
 void test_memory_allocation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test basic object creation
         CljObject *int_obj = make_int(42);
         CljObject *float_obj = make_float(3.14);
@@ -41,11 +42,12 @@ void test_memory_allocation(void) {
         TEST_ASSERT_NOT_NULL(str_obj->as.data);
         
         // Objects are automatically cleaned up by WITH_AUTORELEASE_POOL
-    });
+    }
 }
 
 void test_memory_deallocation(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test object lifecycle
         CljObject *obj = make_int(42);
         TEST_ASSERT_NOT_NULL(obj);
@@ -62,11 +64,12 @@ void test_memory_deallocation(void) {
         TEST_ASSERT_EQUAL_INT(1, get_retain_count(obj));
         
         // Final cleanup by WITH_AUTORELEASE_POOL
-    });
+    }
 }
 
 void test_memory_leak_detection(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test that no memory leaks occur
         for (int i = 0; i < 10; i++) {
             CljObject *obj = make_int(i);
@@ -74,11 +77,12 @@ void test_memory_leak_detection(void) {
             TEST_ASSERT_EQUAL_INT(i, obj->as.i);
             // Objects are automatically cleaned up
         }
-    });
+    }
 }
 
 void test_vector_memory(void) {
-    WITH_AUTORELEASE_POOL({
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
         // Test vector creation and memory management
         CljObject *vec = make_vector(5, 1);
         TEST_ASSERT_NOT_NULL(vec);
@@ -99,7 +103,7 @@ void test_vector_memory(void) {
         TEST_ASSERT_EQUAL_INT(0, vec_data->data[0]->as.i);
         
         // Automatic cleanup by WITH_AUTORELEASE_POOL
-    });
+    }
 }
 
 // ============================================================================

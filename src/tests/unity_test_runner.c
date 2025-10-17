@@ -19,15 +19,12 @@
 
 void setUp(void) {
     // Global setup for each test
-    // Ensure clean state by clearing any remaining autorelease pools
-    while (is_autorelease_pool_active()) {
-        autorelease_pool_pop();
-    }
-    autorelease_pool_cleanup_all();
+    // NO autorelease pools in setUp/tearDown - incompatible with setjmp/longjmp
+    // Tests must use manual memory management or WITH_AUTORELEASE_POOL
     
     init_special_symbols();
     meta_registry_init();
-    autorelease_pool_push();
+    
     MEMORY_PROFILER_INIT();
     // Initialize memory profiling with hooks for automatic tracking
     memory_profiling_init_with_hooks();
@@ -35,11 +32,9 @@ void setUp(void) {
 
 void tearDown(void) {
     // Global teardown for each test
-    // Force cleanup of all autorelease pools to prevent cross-test contamination
-    while (is_autorelease_pool_active()) {
-        autorelease_pool_pop();
-    }
-    autorelease_pool_cleanup_all();
+    // NO autorelease pools in setUp/tearDown - incompatible with setjmp/longjmp
+    // Tests must use manual memory management or WITH_AUTORELEASE_POOL
+    
     symbol_table_cleanup();
     meta_registry_cleanup();
     // Print memory statistics and check for leaks

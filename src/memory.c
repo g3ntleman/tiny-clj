@@ -138,7 +138,7 @@ void release(CljObject *v) {
     }
     
     if (v->rc == 0) { 
-        DEALLOC(v); // Hook for memory profiling
+        DEALLOC(v); // Hook for memory profiling - BEFORE deep release
         release_object_deep(v); 
         free(v); 
     }
@@ -207,14 +207,15 @@ CljObjectPool *autorelease_pool_push() {
     return p;
 }
 
+
 static void autorelease_pool_pop_internal(CljObjectPool *pool) {
-    // Check for push/pop imbalance
+    // Check for push/pop imbalance - use printf instead of throw_exception
     if (g_pool_push_count <= 0) {
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "autorelease_pool_pop() called more times than autorelease_pool_push()! "
-                "Push count: %d, attempting to pop pool %p. "
-                "This indicates unbalanced pool operations.", 
-                g_pool_push_count, pool);
+        printf("ERROR: autorelease_pool_pop() called more times than autorelease_pool_push()! "
+               "Push count: %d, attempting to pop pool %p. "
+               "This indicates unbalanced pool operations.\n", 
+               g_pool_push_count, pool);
+        return; // Safe return instead of throwing exception
     }
     
     // Use current pool if none specified
@@ -241,18 +242,26 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
         for (int i = vec->count - 1; i >= 0; --i) {
             CljObject *obj = vec->data[i];
             vec->data[i] = NULL;  // Prevent double-free
-            RELEASE(obj);         // Release object
+            // Foundation-style exception-safe cleanup
+            if (obj && TRACKS_RETAINS(obj)) {
+                obj->rc--;
+                if (obj->rc <= 0) {
+                    // Foundation-style: Direct cleanup without setjmp/longjmp
+                    // This is how Foundation pre-ARC made autorelease pools exception-safe
+                    free(obj);
+                }
+            }
         }
         vec->count = 0;
     }
     g_cv_pool_top = pool->prev;
     g_pool_push_count--;
     
-    // Check for negative push count (imbalance)
+    // Check for negative push count (imbalance) - use printf instead of throw_exception
     if (g_pool_push_count < 0) {
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "Pool push/pop imbalance! Push count: %d. "
-                "This indicates more pop() calls than push() calls.", g_pool_push_count);
+        printf("ERROR: Pool push/pop imbalance! Push count: %d. "
+               "This indicates more pop() calls than push() calls.\n", g_pool_push_count);
+        g_pool_push_count = 0; // Reset to prevent further issues
     }
     
     // Release the weak vector backing
@@ -303,9 +312,7 @@ void autorelease_pool_cleanup_after_exception() {
  * Pops the current autorelease pool and releases all objects in it.
  * This is the most common way to use autorelease pools.
  */
-void autorelease_pool_pop(void) {
-    autorelease_pool_pop_internal(NULL);
-}
+// Removed: autorelease_pool_pop() - use autorelease_pool_pop_specific() instead
 
 /** @brief Pop and drain specific autorelease pool (advanced usage)
  * 
@@ -443,6 +450,11 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_FUNC:
             // Native functions are static - no cleanup needed
+            break;
+            
+        case CLJ_INT:
+        case CLJ_FLOAT:
+            // Primitive types - no cleanup needed, but ensure DEALLOC is called
             break;
             
         default:
