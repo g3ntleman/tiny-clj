@@ -463,8 +463,7 @@ void test_cljvalue_parser_immediates(void) {
         // Test direct fixnum creation first
         CljValue direct_fixnum = make_fixnum(42);
         if (!direct_fixnum) {
-            printf("DEBUG: make_fixnum(42) returned NULL\n");
-            printf("DEBUG: FIXNUM_MIN = %d, FIXNUM_MAX = %d\n", FIXNUM_MIN, FIXNUM_MAX);
+            // make_fixnum returned NULL - this is expected for out-of-range values
         }
         TEST_ASSERT_NOT_NULL(direct_fixnum);
         TEST_ASSERT_TRUE(is_fixnum(direct_fixnum));
@@ -477,7 +476,6 @@ void test_cljvalue_parser_immediates(void) {
             TEST_ASSERT_EQUAL_INT(42, as_fixnum(parsed_int));
         } else {
             // Parse failed due to exception - this is OK
-            printf("DEBUG: parse_v(\"42\") failed due to exception\n");
         }
         
         // Test parsing negative integers
@@ -487,7 +485,6 @@ void test_cljvalue_parser_immediates(void) {
             TEST_ASSERT_EQUAL_INT(-100, as_fixnum(parsed_neg));
         } else {
             // Parse failed due to exception - this is OK
-            printf("DEBUG: parse_v(\"-100\") failed due to exception\n");
         }
         
         // Test parsing nil, true, false
@@ -501,13 +498,13 @@ void test_cljvalue_parser_immediates(void) {
         if (parsed_true) {
             TEST_ASSERT_TRUE(is_true(parsed_true));
         } else {
-            printf("DEBUG: parse_v(\"true\") failed due to exception\n");
+            // Parse failed due to exception - this is OK
         }
         
         if (parsed_false) {
             TEST_ASSERT_TRUE(is_false(parsed_false));
         } else {
-            printf("DEBUG: parse_v(\"false\") failed due to exception\n");
+            // Parse failed due to exception - this is OK
         }
         
         // Test parsing floats (should use heap allocation)
@@ -599,7 +596,6 @@ void test_cljvalue_immediates_high_level(void) {
             TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_val));
         } else {
             // Parse failed due to exception - this is OK
-            printf("DEBUG: eval_string(\"42\") failed due to exception\n");
         }
         
         // Test negative integers
@@ -609,7 +605,6 @@ void test_cljvalue_immediates_high_level(void) {
             TEST_ASSERT_EQUAL_INT(-100, as_fixnum((CljValue)neg_int));
         } else {
             // Parse failed due to exception - this is OK
-            printf("DEBUG: eval_string(\"-100\") failed due to exception\n");
         }
         
         // Test nil literal - nil should be NULL in our system
@@ -762,7 +757,6 @@ void test_special_form_or(void) {
         TEST_ASSERT_FALSE(clj_is_truthy(result1));
     } else {
         // nil is NULL in our system - this is correct!
-        printf("DEBUG: eval_string(\"(or)\") returned NULL (nil) - this is correct!\n");
     }
     
     // (or false false) => false
