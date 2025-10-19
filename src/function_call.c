@@ -839,32 +839,10 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return RETAIN(quoted_expr), quoted_expr;
     }
     
+    // recur is only valid inside function bodies, not in top-level lists
     if (op == SYM_RECUR) {
-        // Store arguments in global state
-        int argc = list_count(list) - 1;
-        if (argc < 0) argc = 0;
-        if (argc > 16) {
-            throw_exception("ArityError", "Too many recur arguments (max 16)", NULL, 0, 0);
-            return NULL;
-        }
-        
-        // Evaluate and store arguments
-        for (int i = 0; i < argc; i++) {
-            g_recur_args[i] = eval_arg_retained(list, i + 1, env);
-            if (!g_recur_args[i]) {
-                // Cleanup on error
-                for (int j = 0; j < i; j++) {
-                    RELEASE(g_recur_args[j]);
-                }
-                return NULL;
-            }
-        }
-        
-        g_recur_arg_count = argc;
-        g_recur_detected = true;
-        
-        // Return special marker symbol
-        return (CljObject*)intern_symbol_global("__RECUR__");
+        throw_exception("SyntaxError", "recur can only be used inside function bodies", NULL, 0, 0);
+        return NULL;
     }
     
     // Arithmetic operations

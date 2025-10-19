@@ -1040,14 +1040,10 @@ void test_recur_arity_error(void) {
     if (factorial_def) {
         TEST_ASSERT_NOT_NULL(factorial_def);
         
-        // This should fail because recur has wrong arity
+        // This should fail because recur has wrong arity (1 arg instead of 2)
         CljObject *result = eval_string("(def bad-factorial (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
-        // The function definition should succeed, but calling it should fail
-        if (result) {
-            CljObject *call_result = eval_string("(bad-factorial 5 1)", st);
-            // This should either return NULL or throw an exception
-            TEST_ASSERT_TRUE(call_result == NULL || (call_result && call_result->type == CLJ_EXCEPTION));
-        }
+        // The function definition should fail due to arity mismatch
+        TEST_ASSERT_TRUE(result == NULL || (result && result->type == CLJ_EXCEPTION));
     }
     
     evalstate_free(st);
