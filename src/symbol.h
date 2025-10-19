@@ -42,6 +42,17 @@ extern CljObject *SYM_FIRST;
 extern CljObject *SYM_REST;
 extern CljObject *SYM_COUNT;
 
+// Additional symbols for optimization
+extern CljObject *SYM_CONS;
+extern CljObject *SYM_SEQ;
+extern CljObject *SYM_NEXT;
+extern CljObject *SYM_LIST;
+extern CljObject *SYM_AND;
+extern CljObject *SYM_OR;
+extern CljObject *SYM_FOR;
+extern CljObject *SYM_DOSEQ;
+extern CljObject *SYM_DOTIMES;
+
 // Globale Symbol-Pointer für Keywords
 extern CljObject *SYM_KW_LINE;
 extern CljObject *SYM_KW_FILE;

@@ -39,6 +39,17 @@ CljObject *SYM_FIRST = NULL;
 CljObject *SYM_REST = NULL;
 CljObject *SYM_COUNT = NULL;
 
+// Additional symbols for optimization
+CljObject *SYM_CONS = NULL;
+CljObject *SYM_SEQ = NULL;
+CljObject *SYM_NEXT = NULL;
+CljObject *SYM_LIST = NULL;
+CljObject *SYM_AND = NULL;
+CljObject *SYM_OR = NULL;
+CljObject *SYM_FOR = NULL;
+CljObject *SYM_DOSEQ = NULL;
+CljObject *SYM_DOTIMES = NULL;
+
 // Keywords
 CljObject *SYM_KW_LINE = NULL;
 CljObject *SYM_KW_FILE = NULL;
@@ -85,6 +96,17 @@ void init_special_symbols() {
     SYM_FIRST = intern_symbol_global("first");
     SYM_REST = intern_symbol_global("rest");
     SYM_COUNT = intern_symbol_global("count");
+    
+    // Additional symbols for optimization
+    SYM_CONS = intern_symbol_global("cons");
+    SYM_SEQ = intern_symbol_global("seq");
+    SYM_NEXT = intern_symbol_global("next");
+    SYM_LIST = intern_symbol_global("list");
+    SYM_AND = intern_symbol_global("and");
+    SYM_OR = intern_symbol_global("or");
+    SYM_FOR = intern_symbol_global("for");
+    SYM_DOSEQ = intern_symbol_global("doseq");
+    SYM_DOTIMES = intern_symbol_global("dotimes");
     
     // Keywords
     SYM_KW_LINE = intern_symbol_global(":line");
