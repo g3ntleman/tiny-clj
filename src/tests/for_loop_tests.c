@@ -53,8 +53,8 @@ void test_dotimes_basic(void) {
 }
 
 void test_doseq_basic(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
+    // Use WITH_AUTORELEASE_POOL for eval_doseq which uses autorelease()
+    WITH_AUTORELEASE_POOL({
         // Create a simple test: (doseq [x [1 2 3]] (println x))
         // Test that doseq doesn't crash with a simple body
         
@@ -85,12 +85,12 @@ void test_doseq_basic(void) {
         RELEASE((CljObject*)binding_list);
         RELEASE(body);
         RELEASE((CljObject*)doseq_call);
-    }
+    });
 }
 
 void test_for_basic(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
+    // Use WITH_AUTORELEASE_POOL for eval_for which uses autorelease()
+    WITH_AUTORELEASE_POOL({
         // Create a simple test: (for [x [1 2 3]] x)
         // Test that for doesn't crash with a simple body
         
@@ -123,12 +123,12 @@ void test_for_basic(void) {
         RELEASE((CljObject*)binding_list);
         RELEASE(body);
         RELEASE((CljObject*)for_call);
-    }
+    });
 }
 
 void test_dotimes_with_environment(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
+    // Use WITH_AUTORELEASE_POOL for eval_dotimes which uses autorelease()
+    WITH_AUTORELEASE_POOL({
         // Test dotimes with environment binding
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
@@ -151,12 +151,12 @@ void test_dotimes_with_environment(void) {
         RELEASE((CljObject*)binding_list);
         RELEASE(body);
         RELEASE((CljObject*)dotimes_call);
-    }
+    });
 }
 
 void test_doseq_with_environment(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
+    // Use WITH_AUTORELEASE_POOL for eval_doseq which uses autorelease()
+    WITH_AUTORELEASE_POOL({
         // Test doseq with environment binding
         EvalState *eval_state = evalstate_new();
         TEST_ASSERT_NOT_NULL(eval_state);
@@ -189,7 +189,7 @@ void test_doseq_with_environment(void) {
         RELEASE((CljObject*)binding_list);
         RELEASE(body);
         RELEASE((CljObject*)doseq_call);
-    }
+    });
 }
 
 // ============================================================================

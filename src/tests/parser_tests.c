@@ -14,6 +14,7 @@
 #include "namespace.h"
 #include "memory.h"
 #include "memory_profiler.h"
+#include "vector.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -171,6 +172,54 @@ void test_keyword_map_access(void) {
             // If parsing fails, that's also a valid test result
             TEST_ASSERT_TRUE(true); // Pass the test anyway
         }
+        
+        evalstate_free(eval_state);
+    }
+}
+
+void test_parse_multiline_expressions(void) {
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
+        EvalState *eval_state = evalstate_new();
+        
+        // Test 1: Simple multiline list
+        CljObject *list_result = parse("(+ 1\n   2\n   3)", eval_state);
+        TEST_ASSERT_NOT_NULL(list_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_result->type);
+        
+        // Test 2: Multiline vector with comments
+        CljObject *vec_result = parse("[1 ; first element\n 2\n 3]", eval_state);
+        TEST_ASSERT_NOT_NULL(vec_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec_result->type);
+        CljPersistentVector *vec = as_vector(vec_result);
+        TEST_ASSERT_EQUAL_INT(3, vec->count);
+        
+        // Test 3: Multiline map
+        CljObject *map_result = parse("{:a 1\n :b 2\n :c 3}", eval_state);
+        TEST_ASSERT_NOT_NULL(map_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->type);
+        
+        // Test 4: Multiline function definition
+        CljObject *fn_result = parse("(def foo\n  (fn [x]\n    (* x 2)))", eval_state);
+        TEST_ASSERT_NOT_NULL(fn_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, fn_result->type);
+        
+        // Test 5: Nested multiline structures with various whitespace
+        CljObject *nested_result = parse("[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]", eval_state);
+        TEST_ASSERT_NOT_NULL(nested_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, nested_result->type);
+        CljPersistentVector *nested_vec = as_vector(nested_result);
+        TEST_ASSERT_EQUAL_INT(3, nested_vec->count);
+        
+        // Test 6: Multiline with tabs and mixed whitespace
+        CljObject *mixed_ws_result = parse("(+\t1\n\t\t2\r\n   3)", eval_state);
+        TEST_ASSERT_NOT_NULL(mixed_ws_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, mixed_ws_result->type);
+        
+        // Test 7: Multiline with commas (Clojure treats commas as whitespace)
+        CljObject *comma_result = parse("[1,\n 2,\n 3]", eval_state);
+        TEST_ASSERT_NOT_NULL(comma_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, comma_result->type);
         
         evalstate_free(eval_state);
     }

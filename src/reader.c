@@ -128,6 +128,58 @@ bool reader_skip_ignorable(Reader *reader) {
     return any;
 }
 
+// Skip whitespace including newlines for multi-line expressions
+bool reader_skip_whitespace_including_newlines(Reader *reader) {
+    bool skipped = false;
+    while (!reader_eof(reader)) {
+        int cp = reader_peek_codepoint(reader);
+        if (cp < 0) break;
+        
+        // Check if codepoint is whitespace (including newlines)
+        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == ',');
+        
+        if (!is_whitespace) break;
+        
+        reader_next_codepoint(reader);
+        skipped = true;
+    }
+    return skipped;
+}
+
+// Skip all ignorable content including newlines for multi-line expressions
+bool reader_skip_all_including_newlines(Reader *reader) {
+    bool any = false;
+    while (!reader_eof(reader)) {
+        if (reader_skip_whitespace_including_newlines(reader)) {
+            any = true;
+            continue;
+        }
+        if (reader_skip_line_comment(reader)) {
+            any = true;
+            continue;
+        }
+        if (reader_skip_block_comment(reader)) {
+            any = true;
+            continue;
+        }
+        break;
+    }
+    return any;
+}
+
+// Helper function to update line/column tracking for UTF-8 bytes
+static void update_position_tracking(Reader *reader, size_t bytes_consumed) {
+    for (size_t i = 0; i < bytes_consumed; i++) {
+        char c = reader->src[reader->index + i];
+        if (c == '\n') {
+            reader->line++;
+            reader->column = 1;
+        } else {
+            reader->column++;
+        }
+    }
+}
+
 // UTF-8 codepoint functions
 int reader_peek_codepoint(const Reader *reader) {
     if (reader_eof(reader)) return -1;
@@ -144,27 +196,23 @@ int reader_next_codepoint(Reader *reader) {
     
     // Update line and column tracking
     size_t bytes_consumed = next - (reader->src + reader->index);
-    for (size_t i = 0; i < bytes_consumed; i++) {
-        char c = reader->src[reader->index + i];
-        if (c == '\n') {
-            reader->line++;
-            reader->column = 1;
-        } else {
-            reader->column++;
-        }
-    }
+    update_position_tracking(reader, bytes_consumed);
     
     reader->index += bytes_consumed;
     return cp;
 }
 
-bool reader_is_delimiter(const Reader *reader) {
+// Generic function to check codepoint properties
+static bool reader_check_codepoint_property(const Reader *reader, bool (*check_func)(int)) {
     int cp = reader_peek_codepoint(reader);
-    return cp >= 0 && utf8_is_delimiter(cp);
+    return cp >= 0 && check_func(cp);
+}
+
+bool reader_is_delimiter(const Reader *reader) {
+    return reader_check_codepoint_property(reader, utf8_is_delimiter);
 }
 
 bool reader_is_symbol_char(const Reader *reader) {
-    int cp = reader_peek_codepoint(reader);
-    return cp >= 0 && utf8_is_symbol_char(cp);
+    return reader_check_codepoint_property(reader, utf8_is_symbol_char);
 }
 

@@ -28,6 +28,7 @@ bool reader_skip_whitespace(Reader *reader);
 bool reader_skip_line_comment(Reader *reader);
 bool reader_skip_block_comment(Reader *reader);
 bool reader_skip_ignorable(Reader *reader);
+bool reader_skip_all_including_newlines(Reader *reader);
 
 // UTF-8 codepoint functions
 int reader_peek_codepoint(const Reader *reader);

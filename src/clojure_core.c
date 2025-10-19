@@ -42,8 +42,10 @@ static bool eval_core_source(const char *src, EvalState *st) {
     
     CljValue form = make_value_by_parsing_expr(&reader, st);
     if (is_nil(form)) {
-      DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
-      break;
+      DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d (returned nil)\n", expr_count + 1);
+      // Continue to next expression instead of breaking
+      expr_count++;
+      continue;
     }
     
     // Evaluate with exception handling using TRY/CATCH

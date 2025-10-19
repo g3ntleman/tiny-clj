@@ -77,6 +77,7 @@ extern void test_parse_metadata(void);
 extern void test_parse_utf8_symbols(void);
 extern void test_keyword_evaluation(void);
 extern void test_keyword_map_access(void);
+extern void test_parse_multiline_expressions(void);
 
 static void test_group_parser(void) {
     RUN_TEST(test_parse_basic_types);
@@ -86,6 +87,7 @@ static void test_group_parser(void) {
     RUN_TEST(test_parse_utf8_symbols);
     RUN_TEST(test_keyword_evaluation);
     RUN_TEST(test_keyword_map_access);
+    RUN_TEST(test_parse_multiline_expressions);
 }
 
 // ============================================================================
@@ -154,6 +156,9 @@ extern void test_special_form_or(void);
 extern void test_seq_rest_performance(void);
 extern void test_seq_iterator_verification(void);
 
+// Multiline file loading test
+extern void test_load_multiline_file(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -165,6 +170,9 @@ static void test_group_unit(void) {
     RUN_TEST(test_integer_creation);
     RUN_TEST(test_float_creation);
     RUN_TEST(test_nil_creation);
+    
+    // Multiline file loading test
+    RUN_TEST(test_load_multiline_file);
 }
 
 static void test_group_cljvalue(void) {
