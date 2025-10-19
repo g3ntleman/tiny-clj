@@ -2,11 +2,42 @@
 
 ## Overview
 
-Tiny-CLJ uses manual reference counting for memory management, following Objective-C's pre-ARC pattern with `retain()`, `release()`, and `autorelease()`.
+Tiny-CLJ uses manual reference counting for memory management, following Objective-C's pre-ARC pattern with `retain()`, `release()`, and `autorelease()`. Additionally, Tiny-CLJ uses **immediate values** (32-bit tagged pointers) for small data types that don't require heap allocation or reference counting.
 
 ## Core Principles
 
-### 1. Reference Counting Rules
+### 1. Immediate Values (No Memory Management Required)
+
+Tiny-CLJ uses **32-bit tagged pointers** for immediate values that don't require heap allocation or reference counting:
+
+#### Supported Immediate Types:
+- **Fixnums**: 29-bit signed integers (range: -536,870,912 to 536,870,911)
+- **Characters**: 21-bit Unicode characters (range: 0 to 2,097,151)
+- **Booleans**: `true` and `false` values
+- **Nil**: Represented as `NULL` pointer
+- **Float16**: 16-bit half-precision floating point numbers
+
+#### Memory Management for Immediates:
+```c
+// ✅ CORRECT: No memory management needed for immediates
+CljValue num = make_fixnum(42);        // No RELEASE() needed
+CljValue ch = make_char('A');          // No RELEASE() needed  
+CljValue flag = make_special(SPECIAL_TRUE); // No RELEASE() needed
+CljValue nil_val = NULL;               // No RELEASE() needed
+
+// ✅ CORRECT: Check if value is immediate before releasing
+if (!is_immediate(value)) {
+    RELEASE((CljObject*)value);  // Only release heap objects
+}
+```
+
+#### Benefits of Immediate Values:
+- **Zero allocation overhead** - No heap allocation required
+- **No reference counting** - No retain/release calls needed
+- **Better performance** - Direct value access without pointer dereferencing
+- **Memory efficiency** - Small values stored directly in pointers
+
+### 2. Reference Counting Rules
 - **Every `make_*()` call** creates an object with `rc=1`
 - **`retain(obj)`** increments reference count
 - **`release(obj)`** decrements reference count and frees when `rc=0`
@@ -333,6 +364,17 @@ CljObject* make_string(const char* str);
 - **Memory**: Manual management required
 - **Usage**: Must call `release()` when done
 
+#### Immediate Value Functions
+```c
+CljValue make_fixnum(int32_t value);
+CljValue make_char(uint32_t codepoint);
+CljValue make_special(uint8_t special);
+CljValue make_float16(float value);
+```
+- **Returns**: Immediate value (no memory management needed)
+- **Memory**: No heap allocation, no reference counting
+- **Usage**: No `release()` needed - values are stored directly in pointers
+
 ### API Usage Patterns
 
 #### Correct API Usage:
@@ -355,17 +397,33 @@ CljObject *vec = make_vector(10, 1);
 release(vec);  // Must release manually
 ```
 
+#### Immediate Values (no memory management):
+```c
+// Immediate values - no memory management needed
+CljValue num = make_fixnum(42);        // No RELEASE() needed
+CljValue ch = make_char('A');          // No RELEASE() needed
+CljValue flag = make_special(SPECIAL_TRUE); // No RELEASE() needed
+
+// Mixed usage - check type before releasing
+CljValue value = get_some_value();
+if (!is_immediate(value)) {
+    RELEASE((CljObject*)value);  // Only release heap objects
+}
+```
+
 ## Best Practices Summary
 
 1. **API Functions**: Return autoreleased objects (no manual cleanup)
 2. **Object Creation**: Return objects with `rc=1` (manual cleanup required)
-3. **Tests**: Use `AUTORELEASE()` for convenience and readability
-4. **Production**: Use `RELEASE()` for performance
-5. **Non-return values**: Use `RELEASE()` when object is not returned as function result
-6. **Data Structures**: Use `RETAIN()` when storing objects
-7. **Profiling**: Always track memory usage in tests
-8. **Debugging**: Use memory profiler to find leaks
-9. **Trust API Design**: Follow documented memory policy
+3. **Immediate Values**: No memory management needed - stored directly in pointers
+4. **Tests**: Use `AUTORELEASE()` for convenience and readability
+5. **Production**: Use `RELEASE()` for performance
+6. **Non-return values**: Use `RELEASE()` when object is not returned as function result
+7. **Data Structures**: Use `RETAIN()` when storing objects
+8. **Type Checking**: Always check `is_immediate()` before releasing values
+9. **Profiling**: Always track memory usage in tests
+10. **Debugging**: Use memory profiler to find leaks
+11. **Trust API Design**: Follow documented memory policy
 
 ## Implementation Notes
 
@@ -373,7 +431,9 @@ release(vec);  // Must release manually
 - Hook-based system allows clean separation of profiling from business logic
 - Vector elements are automatically freed by `release_object_deep()`
 - Singletons (empty vectors/lists) skip reference counting
-- Primitive types (int, float) are not reference counted
+- **Immediate values** (fixnums, chars, booleans, nil, float16) are not reference counted
+- **32-bit tagged pointers** store immediate values directly without heap allocation
+- **Type checking** via `is_immediate()` determines if value needs memory management
 
 ## Common Mistakes and Solutions
 
@@ -389,6 +449,14 @@ CljObject *new_obj = make_int(42);
 if (obj) release(obj);  // ❌ ERROR-PRONE: Easy to forget or get order wrong
 if (new_obj) retain(new_obj);
 obj = new_obj;
+
+// WRONG: Trying to release immediate values
+CljValue num = make_fixnum(42);
+RELEASE((CljObject*)num);  // ❌ CRASH: Immediate values are not heap objects
+
+// WRONG: Not checking if value is immediate before releasing
+CljValue value = get_some_value();
+RELEASE((CljObject*)value);  // ❌ CRASH: May be immediate value
 ```
 
 ### ✅ Correct Usage
@@ -402,10 +470,22 @@ CljObject *result = eval_parsed(parsed, eval_state);
 CljObject *obj = NULL;
 CljObject *new_obj = make_int(42);
 ASSIGN(obj, new_obj);  // ✅ SAFE: Handles retain/release automatically
+
+// CORRECT: Immediate values need no memory management
+CljValue num = make_fixnum(42);        // ✅ SAFE: No RELEASE() needed
+CljValue ch = make_char('A');          // ✅ SAFE: No RELEASE() needed
+CljValue flag = make_special(SPECIAL_TRUE); // ✅ SAFE: No RELEASE() needed
+
+// CORRECT: Check if value is immediate before releasing
+CljValue value = get_some_value();
+if (!is_immediate(value)) {
+    RELEASE((CljObject*)value);  // ✅ SAFE: Only release heap objects
+}
 ```
 
 ### Memory Policy Verification
 - **Always check Doxygen documentation** for memory policy
 - **Use memory profiling** to validate assumptions
 - **Test-First development** prevents incorrect implementations
+- **Check `is_immediate()`** before releasing any value
 - **Trust existing API design** unless proven otherwise

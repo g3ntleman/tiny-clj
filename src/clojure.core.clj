@@ -31,13 +31,8 @@ R"CLOJURE(
 ; ============================================================================
 ; Collection Functions
 ; ============================================================================
-(def second
-  (fn [coll]
-    (first (rest coll))))
-
-(def empty?
-  (fn [coll]
-    (= (count coll) 0)))
+(def second (fn [coll] (first (rest coll))))
+(def empty? (fn [coll] (= (count coll) 0)))
 
 ; ============================================================================
 ; Functional Programming Core

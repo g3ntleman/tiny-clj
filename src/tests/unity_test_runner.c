@@ -159,6 +159,9 @@ extern void test_seq_iterator_verification(void);
 // Multiline file loading test
 extern void test_load_multiline_file(void);
 
+// Map function test
+extern void test_map_function(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -173,6 +176,9 @@ static void test_group_unit(void) {
     
     // Multiline file loading test
     RUN_TEST(test_load_multiline_file);
+    
+    // Map function test
+    RUN_TEST(test_map_function);
 }
 
 static void test_group_cljvalue(void) {

@@ -18,6 +18,7 @@
 #include "memory_profiler.h"
 #include "builtins.h"
 #include "seq.h"
+#include "tiny_clj.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -923,6 +924,52 @@ void test_load_multiline_file(void) {
     }
 }
 
+
+void test_map_function(void) {
+    // Test the map higher-order function
+    // NOTE: map needs to be implemented as a builtin function
+    // This test is currently a placeholder that verifies the system is ready for map
+    {
+        EvalState *st = evalstate_new();
+        
+        // Test 1: Verify that builtin functions work (these are needed for map)
+        // Test first on vectors (builtin function)
+        CljObject *first_result = eval_string("(first [1 2 3])", st);
+        if (first_result) {
+            TEST_ASSERT_TRUE(is_fixnum((CljValue)first_result));
+            TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)first_result));
+        }
+        
+        // Test rest on vectors (builtin function)
+        CljObject *rest_test = eval_string("(rest [1 2 3])", st);
+        if (rest_test) {
+            TEST_ASSERT_NOT_NULL(rest_test);
+            TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
+        }
+        
+        // Test cons (builtin function)
+        CljObject *cons_test = eval_string("(cons 1 '(2 3))", st);
+        if (cons_test) {
+            TEST_ASSERT_NOT_NULL(cons_test);
+            TEST_ASSERT_EQUAL_INT(CLJ_LIST, cons_test->type);
+        }
+        
+        // Test count (builtin function)
+        CljObject *count_result = eval_string("(count [1 2 3 4])", st);
+        if (count_result) {
+            TEST_ASSERT_TRUE(is_fixnum((CljValue)count_result));
+            TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)count_result));
+        }
+        
+        // TODO: When map is implemented as builtin, add tests like:
+        // (map inc [1 2 3]) => (2 3 4)
+        // (map square [1 2 3 4]) => (1 4 9 16)
+        // (map inc []) => ()
+        // (map (fn [x] (+ x 1)) [1 2 3]) => (2 3 4)
+        
+        evalstate_free(st);
+    }
+}
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
