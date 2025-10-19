@@ -14,7 +14,8 @@ typedef enum : uint16_t {
     CLJ_MAP,
     CLJ_LIST,
     CLJ_SEQ,         // Sequence iterator (embedded CljSeqIterator)
-    CLJ_FUNC,
+    CLJ_FUNC,        // Native C functions (CljFunc)
+    CLJ_CLOSURE,     // Interpreted Clojure functions (CljFunction)
     CLJ_EXCEPTION,
     // Transient types (Clojure-kompatibel: nur Vector und Map)
     CLJ_TRANSIENT_VECTOR,

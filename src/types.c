@@ -15,6 +15,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_MAP: return "Map";
         case CLJ_LIST: return "List";
         case CLJ_FUNC: return "Function";
+        case CLJ_CLOSURE: return "Closure";
         case CLJ_EXCEPTION: return "Exception";
         case CLJ_SEQ: return "Sequence";
         case CLJ_UNKNOWN: return "Unknown";

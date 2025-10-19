@@ -242,7 +242,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 /** @brief Main function call evaluator */
 CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap *env) {
     (void)env;
-    if (!is_type(fn, CLJ_FUNC)) {
+    if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }

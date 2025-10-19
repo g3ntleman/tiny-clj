@@ -42,7 +42,7 @@ struct CljNamespace;
 #define TYPE_OF_CljObject CLJ_UNKNOWN
 #define TYPE_OF_CljList CLJ_LIST
 #define TYPE_OF_CljSymbol CLJ_SYMBOL
-#define TYPE_OF_CljFunction CLJ_FUNC
+#define TYPE_OF_CljFunction CLJ_CLOSURE
 #define TYPE_OF_CljFunc CLJ_FUNC
 #define TYPE_OF_CljPersistentVector CLJ_VECTOR
 #define TYPE_OF_CljPersistentMap CLJ_MAP
@@ -379,7 +379,7 @@ static inline CljList* as_list(CljObject *obj) {
     return (CljList*)obj;
 }
 static inline CljFunction* as_function(CljObject *obj) {
-    return (CljFunction*)assert_type(obj, CLJ_FUNC);
+    return (CljFunction*)assert_type(obj, CLJ_CLOSURE);
 }
 static inline CLJException* as_exception(CljObject *obj) {
     return (CLJException*)assert_type(obj, CLJ_EXCEPTION);
@@ -388,7 +388,11 @@ static inline CLJException* as_exception(CljObject *obj) {
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)
 static inline int is_native_fn(CljObject *fn) {
     // Native builtins are represented as CljFunc; interpreted functions as CljFunction
-    return TYPE(fn) == CLJ_FUNC;
+    if (TYPE(fn) != CLJ_FUNC) return 0;
+    
+    // Additional check: native functions have a function pointer
+    CljFunc *native_func = (CljFunc*)fn;
+    return native_func->fn != NULL;
 }
 
 // is_autorelease_pool_active() function moved to memory.h

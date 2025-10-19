@@ -235,10 +235,10 @@ CljObject* make_exception_wrapper(const char *type, const char *message, const c
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
-    CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_FUNC);
+    CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
     if (!func) return NULL;
     
-    func->base.type = CLJ_FUNC;  // Both CljFunc and CljFunction use CLJ_FUNC type
+    func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
     func->base.rc = 1;
     func->param_count = param_count;
     func->body = RETAIN(body);
@@ -463,29 +463,26 @@ char* to_string(CljObject *v) {
 
         case CLJ_FUNC:
             {
-                // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
-                // We need to distinguish them by checking the struct layout
+                // Native C function (CljFunc)
                 CljFunc *native_func = (CljFunc*)v;
-                
-                // Check if it's a native function by looking at the fn pointer
-                if (native_func && native_func->fn) {
-                    // It's a native function (CljFunc)
-                    if (native_func->name) {
-                        char buf[256];
-                        snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);
-                        return strdup(buf);
-                    }
-                    return strdup("#<native function>");
+                if (native_func->name) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);
+                    return strdup(buf);
+                }
+                return strdup("#<native function>");
+            }
+        
+        case CLJ_CLOSURE:
+            {
+                // Interpreted Clojure function (CljFunction)
+                CljFunction *clj_func = (CljFunction*)v;
+                if (clj_func && clj_func->name) {
+                    char buf[256];
+                    snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
+                    return strdup(buf);
                 } else {
-                    // It's a Clojure function (CljFunction)
-                    CljFunction *clj_func = (CljFunction*)v;
-                    if (clj_func && clj_func->name) {
-                        char buf[256];
-                        snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
-                        return strdup(buf);
-                    } else {
-                        return strdup("#<function>");
-                    }
+                    return strdup("#<function>");
                 }
             }
 
@@ -654,8 +651,8 @@ bool clj_equal(CljObject *a, CljObject *b) {
         // Referenz-Typen - nur Pointer-Vergleich (bereits durch a == b abgefangen)
         case CLJ_LIST:
         case CLJ_FUNC:
-            // Diese Cases sollten nie erreicht werden, da sie bereits durch Pointer-Vergleich abgefangen werden
-            // Aber falls doch, sind sie nur bei gleicher Instanz gleich
+        case CLJ_CLOSURE:
+            // Functions are only equal if they're the same instance
             return a == b;
         
         // Unbekannte oder nicht unterstützte Typen
@@ -1020,27 +1017,28 @@ void free_object(CljObject *obj) {
             break;
         case CLJ_FUNC:
             {
-                // Check if it's a CljFunction or CljFunc
-                CljFunction *clj_func = (CljFunction*)obj;
-                if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
-                    // It's a CljFunction
-                    if (clj_func->params) {
-                        for (int i = 0; i < clj_func->param_count; i++) {
-                            if (clj_func->params[i]) release_object(clj_func->params[i]);
-                        }
-                        free(clj_func->params);
-                    }
-                    if (clj_func->body) release_object(clj_func->body);
-                    if (clj_func->closure_env) release_object(clj_func->closure_env);
-                    if (clj_func->name) free((void*)clj_func->name);
-                } else {
-                    // It's a CljFunc (native function)
-                    CljFunc *native_func = (CljFunc*)obj;
-                    if (native_func && native_func->name) {
-                        // Free the allocated name string
-                        free((void*)native_func->name);
-                    }
+                // Native C function (CljFunc)
+                CljFunc *native_func = (CljFunc*)obj;
+                if (native_func && native_func->name) {
+                    free((void*)native_func->name);
                 }
+                DEALLOC(obj);
+            }
+            break;
+        
+        case CLJ_CLOSURE:
+            {
+                // Interpreted Clojure function (CljFunction)
+                CljFunction *clj_func = (CljFunction*)obj;
+                if (clj_func->params) {
+                    for (int i = 0; i < clj_func->param_count; i++) {
+                        if (clj_func->params[i]) release_object(clj_func->params[i]);
+                    }
+                    free(clj_func->params);
+                }
+                if (clj_func->body) release_object(clj_func->body);
+                if (clj_func->closure_env) release_object(clj_func->closure_env);
+                if (clj_func->name) free((void*)clj_func->name);
                 DEALLOC(obj);
             }
             break;
