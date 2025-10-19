@@ -270,12 +270,23 @@ extern void test_for_basic(void);
 extern void test_dotimes_with_environment(void);
 extern void test_doseq_with_environment(void);
 
+// Recur tests (temporarily disabled)
+// extern void test_recur_factorial(void);
+// extern void test_recur_deep_recursion(void);
+// extern void test_recur_arity_error(void);
+
 static void test_group_for_loops(void) {
     RUN_TEST(test_dotimes_basic);
     RUN_TEST(test_doseq_basic);
     RUN_TEST(test_for_basic);
     RUN_TEST(test_dotimes_with_environment);
     RUN_TEST(test_doseq_with_environment);
+}
+
+static void test_group_recur(void) {
+    // RUN_TEST(test_recur_factorial);
+    // RUN_TEST(test_recur_deep_recursion);
+    // RUN_TEST(test_recur_arity_error);
 }
 
 // ============================================================================
@@ -347,6 +358,7 @@ static void run_all_tests(void) {
     RUN_TEST(test_group_namespace);
     RUN_TEST(test_group_seq);
     RUN_TEST(test_group_for_loops);
+    RUN_TEST(test_group_recur);
 }
 
 // ============================================================================

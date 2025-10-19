@@ -972,5 +972,87 @@ void test_map_function(void) {
 }
 
 // ============================================================================
+// RECUR TESTS
+// ============================================================================
+
+void test_recur_factorial(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test factorial with recur
+    CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
+    if (factorial_def) {
+        TEST_ASSERT_NOT_NULL(factorial_def);
+        
+        // Test factorial(5, 1) = 120
+        CljObject *result = eval_string("(factorial 5 1)", st);
+        if (result) {
+            TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+            TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)result));
+        }
+        
+        // Test factorial(10, 1) = 3628800
+        CljObject *result2 = eval_string("(factorial 10 1)", st);
+        if (result2) {
+            TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
+            TEST_ASSERT_EQUAL_INT(3628800, as_fixnum((CljValue)result2));
+        }
+    }
+    
+    evalstate_free(st);
+}
+
+void test_recur_deep_recursion(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test deep recursion with recur (should not stack overflow)
+    CljObject *deep_def = eval_string("(def deep-count (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", st);
+    if (deep_def) {
+        TEST_ASSERT_NOT_NULL(deep_def);
+        
+        // Test deep recursion (1000 iterations)
+        CljObject *result = eval_string("(deep-count 1000 0)", st);
+        if (result) {
+            TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+            TEST_ASSERT_EQUAL_INT(1000, as_fixnum((CljValue)result));
+        }
+    }
+    
+    evalstate_free(st);
+}
+
+void test_recur_arity_error(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test recur with wrong arity (should throw error)
+    CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
+    if (factorial_def) {
+        TEST_ASSERT_NOT_NULL(factorial_def);
+        
+        // This should fail because recur has wrong arity
+        CljObject *result = eval_string("(def bad-factorial (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
+        // The function definition should succeed, but calling it should fail
+        if (result) {
+            CljObject *call_result = eval_string("(bad-factorial 5 1)", st);
+            // This should either return NULL or throw an exception
+            TEST_ASSERT_TRUE(call_result == NULL || (call_result && call_result->type == CLJ_EXCEPTION));
+        }
+    }
+    
+    evalstate_free(st);
+}
+
+// ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================

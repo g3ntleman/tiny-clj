@@ -19,6 +19,12 @@
 #include "memory.h"
 #include "list_operations.h"
 #include "builtins.h"
+
+// Global state for stack-based recur implementation
+static _Thread_local CljObject* g_recur_args[16];  // Max 16 arguments
+static _Thread_local int g_recur_arg_count = 0;
+static _Thread_local bool g_recur_detected = false;
+
 #include "map.h"
 #include "runtime.h"
 #include <stdio.h>
@@ -268,11 +274,71 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
     
     // Clojure functions with parameters are now supported
     
-    // Simplified parameter binding
-    // Replace parameter symbols with their values in the body
-    CljObject *result = eval_body_with_params(func->body, func->params, args, argc, func->closure_env);
+    // TCO Loop for tail-call optimization with recur
+    CljObject *current_args[16];
+    int current_argc = argc;
     
-    return result;
+    // Copy initial arguments
+    for (int i = 0; i < argc && i < 16; i++) {
+        current_args[i] = RETAIN(args[i]);
+    }
+    
+    while (true) {
+        // Reset recur detection before each iteration
+        g_recur_detected = false;
+        
+        // Evaluate function body with current arguments
+        CljObject *result = eval_body_with_params(func->body, func->params, current_args, current_argc, func->closure_env);
+        
+        if (!result) {
+            // Cleanup on error
+            for (int i = 0; i < current_argc; i++) {
+                RELEASE(current_args[i]);
+            }
+            return NULL;
+        }
+        
+        // Check if recur was called (detected by global flag - no symbol lookup needed)
+        if (g_recur_detected) {
+            // Recur detected - check arity
+            if (g_recur_arg_count != current_argc) {
+                // Arity mismatch
+                for (int i = 0; i < current_argc; i++) {
+                    RELEASE(current_args[i]);
+                }
+                // Clean up recur args
+                for (int i = 0; i < g_recur_arg_count; i++) {
+                    RELEASE(g_recur_args[i]);
+                }
+                throw_exception("ArityError", "recur arity mismatch", NULL, 0, 0);
+                return NULL;
+            }
+            
+            // Release old arguments
+            for (int i = 0; i < current_argc; i++) {
+                RELEASE(current_args[i]);
+            }
+            
+            // Copy new arguments from global state (already retained in eval_list)
+            for (int i = 0; i < g_recur_arg_count; i++) {
+                current_args[i] = g_recur_args[i]; // Transfer ownership
+            }
+            current_argc = g_recur_arg_count;
+            
+            // Reset recur state
+            g_recur_detected = false;
+            g_recur_arg_count = 0;
+            
+            // Continue loop with new arguments
+            continue;
+        }
+        
+        // No recur - cleanup and return result
+        for (int i = 0; i < current_argc; i++) {
+            RELEASE(current_args[i]);
+        }
+        return result;
+    }
 }
 
 
@@ -368,8 +434,8 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
             }
         }
         // If not found in parameters or closure_env, try to resolve from global namespace
-        // This is a fallback for global symbols
-        // For now, just return the symbol itself to avoid complex resolution
+        // This is the "Lazy Binding" fallback for global symbols
+        // For now, return the symbol itself - it will be resolved in eval_list_with_param_substitution
         return body ? (RETAIN(body), body) : NULL;
     }
     
@@ -416,6 +482,55 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     
     if (sym_is(op, "/")) {
         return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_DIV, closure_env);
+    }
+    
+    if (sym_is(op, "=")) {
+        CljObject *a = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
+        CljObject *b = eval_arg_with_substitution(list, 2, params, values, param_count, closure_env);
+        
+        if (!a || !b) return NULL;
+        
+        // Simple equality check for numbers (immediate values)
+        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+            bool equal = (as_fixnum((CljValue)a) == as_fixnum((CljValue)b));
+            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        }
+        
+        // For other types, use clj_equal
+        bool equal = clj_equal(a, b);
+        return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    }
+    
+    if (sym_is(op, "recur")) {
+        // Store arguments in global state
+        int argc = list_count(list) - 1;
+        if (argc < 0) argc = 0;
+        if (argc > 16) {
+            throw_exception("ArityError", "Too many recur arguments (max 16)", NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Evaluate and store arguments with parameter substitution
+        for (int i = 0; i < argc; i++) {
+            g_recur_args[i] = eval_arg_with_substitution(list, i + 1, params, values, param_count, closure_env);
+            if (!g_recur_args[i]) {
+                // Cleanup on error
+                for (int j = 0; j < i; j++) {
+                    RELEASE(g_recur_args[j]);
+                }
+                return NULL;
+            }
+        }
+        
+        g_recur_arg_count = argc;
+        g_recur_detected = true;
+        
+        // Return special marker symbol (cached for performance)
+        static CljObject* __RECUR__MARKER = NULL;
+        if (!__RECUR__MARKER) {
+            __RECUR__MARKER = (CljObject*)intern_symbol_global("__RECUR__");
+        }
+        return __RECUR__MARKER;
     }
     
     if (sym_is(op, "println")) {
@@ -625,6 +740,34 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return RETAIN(quoted_expr), quoted_expr;
     }
     
+    if (sym_is(op, "recur")) {
+        // Store arguments in global state
+        int argc = list_count(list) - 1;
+        if (argc < 0) argc = 0;
+        if (argc > 16) {
+            throw_exception("ArityError", "Too many recur arguments (max 16)", NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Evaluate and store arguments
+        for (int i = 0; i < argc; i++) {
+            g_recur_args[i] = eval_arg_retained(list, i + 1, env);
+            if (!g_recur_args[i]) {
+                // Cleanup on error
+                for (int j = 0; j < i; j++) {
+                    RELEASE(g_recur_args[j]);
+                }
+                return NULL;
+            }
+        }
+        
+        g_recur_arg_count = argc;
+        g_recur_detected = true;
+        
+        // Return special marker symbol
+        return (CljObject*)intern_symbol_global("__RECUR__");
+    }
+    
     // Arithmetic operations
     if (sym_is(op, "+")) {
         return eval_arithmetic_generic(list, env, ARITH_ADD, st);
@@ -768,8 +911,8 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
             return result ? RETAIN(result) : NULL;
         }
         
-        // Check if it's a function
-        if (is_type(fn, CLJ_FUNC)) {
+        // Check if it's a function (native or interpreted)
+        if (is_type(fn, CLJ_FUNC) || is_type(fn, CLJ_CLOSURE)) {
             // Count arguments
             int total_count = list_count(list);
             int argc = total_count - 1; // -1 for the function symbol itself
