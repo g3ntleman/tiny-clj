@@ -1,23 +1,24 @@
 #include "list_operations.h"
 #include "memory.h"
+#include "value.h"
 #include <stdarg.h>
 
 // List-Operationen für try/catch
 CljObject* list_first(CljObject *list) {
-    if (!list || list->type != CLJ_LIST) return clj_nil();
+    if (!list || list->type != CLJ_LIST) return NULL;
     CljList *list_data = as_list(list);
-    if (!list_data) return clj_nil();
+    if (!list_data) return NULL;
     
-    // For empty lists, LIST_FIRST returns NULL, but we should return clj_nil() singleton
+    // For empty lists, LIST_FIRST returns NULL, but we should return NULL singleton
     CljObject *first = LIST_FIRST(list_data);
-    return first ? first : clj_nil();
+    return first ? first : NULL;
 }
 
 CljObject* list_nth(CljObject *list, int n) {
-    if (!list || list->type != CLJ_LIST || n < 0) return clj_nil();
+    if (!list || list->type != CLJ_LIST || n < 0) return NULL;
     
     CljList *ld = as_list(list);
-    if (!ld) return clj_nil();
+    if (!ld) return NULL;
     
     CljObject *current = (CljObject*)ld;
     
@@ -34,18 +35,29 @@ CljObject* list_nth(CljObject *list, int n) {
         }
     }
     
-    return clj_nil();
+    return NULL;
 }
 
 int list_count(CljObject *list) {
-    if (!list || list->type != CLJ_LIST) return 0;
+    if (!list) return 0;
+    
+    // Check if it's an immediate value (not a heap object)
+    if (is_fixnum((CljValue)list) || is_float16((CljValue)list) || 
+        is_char((CljValue)list) || is_special((CljValue)list)) {
+        return 0;  // Immediates are not lists
+    }
+    
+    if (list->type != CLJ_LIST) return 0;
     
     int count = 0;
     // Don't use as_list here since we already checked the type
     CljObject *current = list;
     while (current && is_type(current, CLJ_LIST)) {
-        count++;
         CljList *current_list = as_list(current);
+        // Only count if the list has a first element (not empty)
+        if (LIST_FIRST(current_list)) {
+            count++;
+        }
         current = LIST_REST(current_list);
         if (current && !is_type(current, CLJ_LIST)) {
             current = NULL; // Stop if rest is not a list
@@ -56,7 +68,7 @@ int list_count(CljObject *list) {
 
 /** Create a list from stack items. Returns new object with RC=1. */
 CljObject* make_list_from_stack(CljObject **stack, int count) {
-    if (count == 0) return clj_nil();
+    if (count == 0) return NULL;
     
     // Build list from end to start using make_list
     CljObject *result = NULL;
@@ -88,7 +100,7 @@ bool is_symbol(CljObject *v, const char *name) {
 // ============================================================================
 
 CljObject* list_from_ints(int count, ...) {
-    if (count <= 0) return clj_nil();
+    if (count <= 0) return NULL;
     
     va_list args;
     va_start(args, count);
@@ -97,10 +109,10 @@ CljObject* list_from_ints(int count, ...) {
     CljObject *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
-        CljList *new_node = make_list(make_int(value), result);
+        CljList *new_node = make_list((CljObject*)make_fixnum(value), result);
         result = (CljObject*)new_node;
     }
     
     va_end(args);
-    return result ? (CljObject*)result : clj_nil();
+    return result ? (CljObject*)result : NULL;
 }

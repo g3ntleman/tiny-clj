@@ -33,10 +33,10 @@ void test_dotimes_basic(void) {
         // Test that dotimes doesn't crash with a simple body
         
         // Create binding list: [i 3]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("i"), (CljObject*)make_list(make_int(3), NULL));
+        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("i"), (CljObject*)make_list((CljObject*)make_fixnum(3), NULL));
         
         // Create body: 42 - simple literal without symbol resolution
-        CljObject *body = make_int(42);
+        CljObject *body = (CljObject*)make_fixnum(42);
         
         // Create function call: (dotimes [i 3] 42)
         CljObject *dotimes_call = (CljObject*)make_list(intern_symbol_global("dotimes"), (CljObject*)make_list((CljObject*)binding_list, (CljObject*)make_list(body, NULL)));
@@ -63,9 +63,9 @@ void test_doseq_basic(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(1);
-        vec_data->data[1] = make_int(2);
-        vec_data->data[2] = make_int(3);
+        vec_data->data[0] = (CljObject*)make_fixnum(1);
+        vec_data->data[1] = (CljObject*)make_fixnum(2);
+        vec_data->data[2] = (CljObject*)make_fixnum(3);
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]
@@ -99,9 +99,9 @@ void test_for_basic(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(1);
-        vec_data->data[1] = make_int(2);
-        vec_data->data[2] = make_int(3);
+        vec_data->data[0] = (CljObject*)make_fixnum(1);
+        vec_data->data[1] = (CljObject*)make_fixnum(2);
+        vec_data->data[2] = (CljObject*)make_fixnum(3);
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]
@@ -134,7 +134,7 @@ void test_dotimes_with_environment(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Create binding list: [i 3]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("i"), (CljObject*)make_list(make_int(3), NULL));
+        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("i"), (CljObject*)make_list((CljObject*)make_fixnum(3), NULL));
         
         // Create body: i - symbol reference
         CljObject *body = intern_symbol_global("i");
@@ -166,9 +166,9 @@ void test_doseq_with_environment(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(1);
-        vec_data->data[1] = make_int(2);
-        vec_data->data[2] = make_int(3);
+        vec_data->data[0] = (CljObject*)make_fixnum(1);
+        vec_data->data[1] = (CljObject*)make_fixnum(2);
+        vec_data->data[2] = (CljObject*)make_fixnum(3);
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]

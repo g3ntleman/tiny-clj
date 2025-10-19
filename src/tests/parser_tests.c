@@ -34,13 +34,14 @@ void test_parse_basic_types(void) {
         // Test integer parsing
         CljObject *int_result = parse("42", eval_state);
         TEST_ASSERT_NOT_NULL(int_result);
-        TEST_ASSERT_EQUAL_INT(42, int_result->as.i);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)int_result));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_result));
         
         // Test float parsing
         CljObject *float_result = parse("3.14", eval_state);
         TEST_ASSERT_NOT_NULL(float_result);
-        TEST_ASSERT_EQUAL_INT(CLJ_FLOAT, float_result->type);
-        TEST_ASSERT_EQUAL_FLOAT(3.14, float_result->as.f);
+        TEST_ASSERT_TRUE(is_float16((CljValue)float_result));
+        TEST_ASSERT_TRUE(as_float16((CljValue)float_result) > 3.1f && as_float16((CljValue)float_result) < 3.2f);
         
         // Test string parsing
         CljObject *str_result = parse("\"hello\"", eval_state);
@@ -88,7 +89,8 @@ void test_parse_comments(void) {
         // Test line comment parsing
         CljObject *result = parse("; This is a comment\n42", eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_INT(42, result->as.i);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
         
         evalstate_free(eval_state);
     }
@@ -102,7 +104,8 @@ void test_parse_metadata(void) {
         // Test metadata parsing with keywords
         CljObject *result = parse("^{:key :value} 42", eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_INT(42, result->as.i);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
         
         evalstate_free(eval_state);
     }

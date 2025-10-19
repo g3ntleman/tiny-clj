@@ -30,18 +30,22 @@ void test_memory_allocation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test basic object creation
-        CljObject *int_obj = make_int(42);
-        CljObject *float_obj = make_float(3.14);
+        CljObject *int_obj = (CljObject*)make_fixnum(42);
+        CljObject *float_obj = (CljObject*)make_float16(3.14f);
         CljValue str_obj = make_string_v("hello");
         
         TEST_ASSERT_NOT_NULL(int_obj);
         TEST_ASSERT_NOT_NULL(float_obj);
         TEST_ASSERT_NOT_NULL(str_obj);
         
-        TEST_ASSERT_EQUAL_INT(42, int_obj->as.i);
-        TEST_ASSERT_EQUAL_FLOAT(3.14, float_obj->as.f);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)int_obj));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_obj));
+        TEST_ASSERT_TRUE(is_float16((CljValue)float_obj));
+        TEST_ASSERT_TRUE(as_float16((CljValue)float_obj) > 3.1f && as_float16((CljValue)float_obj) < 3.2f);
         // String objects store data in the data pointer, not directly in the union
-        TEST_ASSERT_NOT_NULL(((CljObject*)str_obj)->as.data);
+        // String data is stored directly after CljObject header
+        char **str_ptr = (char**)((char*)str_obj + sizeof(CljObject));
+        TEST_ASSERT_NOT_NULL(*str_ptr);
         
         // Objects are automatically cleaned up by WITH_AUTORELEASE_POOL
     }
@@ -78,10 +82,10 @@ void test_memory_leak_detection(void) {
     {
         // Test that no memory leaks occur
         for (int i = 0; i < 10; i++) {
-            CljObject *obj = make_int(i);
-            TEST_ASSERT_NOT_NULL(obj);
-            TEST_ASSERT_EQUAL_INT(i, obj->as.i);
-            // Objects are automatically cleaned up
+            CljValue val = make_fixnum(i);
+            TEST_ASSERT_TRUE(is_fixnum(val));
+            TEST_ASSERT_EQUAL_INT(i, as_fixnum(val));
+            // No need to release - immediate value
         }
     }
 }
@@ -91,24 +95,33 @@ void test_vector_memory(void) {
     {
         // Test vector creation and memory management
         CljValue vec = make_vector_v(5, 1);
+        if (!vec) {
+            printf("ERROR: make_vector_v(5, 1) returned NULL!\n");
+        }
         TEST_ASSERT_NOT_NULL(vec);
         
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         TEST_ASSERT_EQUAL_INT(5, vec_data->capacity);
+        if (!vec_data->data) {
+            printf("ERROR: vec_data->data is NULL! capacity=%d\n", vec_data->capacity);
+        }
+        TEST_ASSERT_NOT_NULL(vec_data->data);
         
         // Add elements
         for (int i = 0; i < 5; i++) {
-            CljObject *elem = make_int(i);
-            vec_data->data[i] = elem;
+            CljValue elem = make_fixnum(i);
+            vec_data->data[i] = (CljObject*)elem;
         }
         vec_data->count = 5;
         
         // Test vector operations
         TEST_ASSERT_NOT_NULL(vec_data->data[0]);
-        TEST_ASSERT_EQUAL_INT(0, vec_data->data[0]->as.i);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)vec_data->data[0]));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vec_data->data[0]));
         
-        // Automatic cleanup by WITH_AUTORELEASE_POOL
+        // Clean up
+        RELEASE((CljObject*)vec);
     }
 }
 

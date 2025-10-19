@@ -115,7 +115,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
     // Initialize base object
     exc->base.type = CLJ_EXCEPTION;
     exc->base.rc = 1;  // Start with reference count 1
-    exc->base.as.data = NULL;  // Not used for exceptions
+    // exc->base.as.data = NULL;  // Not used for exceptions - Union removed
     
     // Copy strings directly into the structure (no strdup needed)
     strncpy(exc->type, type, sizeof(exc->type) - 1);
@@ -140,27 +140,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
 
 /** @brief Create integer object */
-CljObject* make_int(int x) {
-    CljObject *v = ALLOC_SIMPLE(CLJ_INT);
-    if (!v) return NULL;
-    v->type = CLJ_INT;
-    v->rc = 1;
-    v->as.i = x;
-    
-    
-    return v;
-}
-
-CljObject* make_float(double x) {
-    CljObject *v = ALLOC_SIMPLE(CLJ_FLOAT);
-    if (!v) return NULL;
-    v->type = CLJ_FLOAT;
-    v->rc = 1;
-    v->as.f = x;
-    
-    
-    return v;
-}
+// make_int() and make_float() removed - use make_fixnum() and make_float16() instead
 
 // retain() function moved to memory.c
 
@@ -185,7 +165,7 @@ CljObject* make_float(double x) {
 
 // moved to string.c
 
-// make_nil() and make_bool() functions removed - use clj_nil(), clj_true(), clj_false() instead
+// make_nil() and make_bool() functions removed - use NULL, make_special() instead
 
 // vector functions moved to vector.c
 
@@ -300,26 +280,46 @@ char* to_string(CljObject *v) {
         return strdup("");
     }
 
+    // Handle immediates (CljValue tagged pointers)
+    if (is_immediate((CljValue)v)) {
+        if (is_fixnum((CljValue)v)) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d", as_fixnum((CljValue)v));
+            return strdup(buf);
+        }
+        if (is_float16((CljValue)v)) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%g", as_float16((CljValue)v));
+            return strdup(buf);
+        }
+        if (is_special((CljValue)v)) {
+            uint8_t special = as_special((CljValue)v);
+            switch (special) {
+                case SPECIAL_TRUE: return strdup("true");
+                case SPECIAL_FALSE: return strdup("false");
+                default: return strdup("unknown");
+            }
+        }
+        if (is_char((CljValue)v)) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%c", (char)as_char((CljValue)v));
+            return strdup(buf);
+        }
+    }
+
     char buf[64];
     switch(v->type) {
         case CLJ_NIL:
             return strdup("");  // Empty string for str function
 
-        case CLJ_INT:
-            snprintf(buf, sizeof(buf), "%d", v->as.i);
-            return strdup(buf);
-
-        case CLJ_FLOAT:
-            snprintf(buf, sizeof(buf), "%g", v->as.f);
-            return strdup(buf);
-
-        case CLJ_BOOL:
-            return strdup(v->as.b ? "true" : "false");
+        // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
 
         case CLJ_STRING:
             {
                 // Return raw string WITHOUT quotes (for str function)
-                char *str = (char*)v->as.data;
+                // String data is stored directly after CljObject header
+                char **str_ptr = (char**)((char*)v + sizeof(CljObject));
+                char *str = *str_ptr;
                 return strdup(str);
             }
 
@@ -597,24 +597,21 @@ bool clj_equal(CljObject *a, CljObject *b) {
     // Inhalt-Vergleich basierend auf Typ
     // Hinweis: CLJ_NIL, CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
     switch (a->type) {
-        // Primitive Typen - direkter Vergleich
-        case CLJ_INT:
-            return a->as.i == b->as.i;
-            
-        case CLJ_FLOAT:
-            return a->as.f == b->as.f;
+        // CLJ_INT, CLJ_FLOAT removed - handled as immediates
             
         // Komplexe Typen - Inhalt-Vergleich
         case CLJ_STRING: {
-            char *str_a = (char*)a->as.data;
-            char *str_b = (char*)b->as.data;
+            char **str_a_ptr = (char**)((char*)a + sizeof(CljObject));
+            char **str_b_ptr = (char**)((char*)b + sizeof(CljObject));
+            char *str_a = *str_a_ptr;
+            char *str_b = *str_b_ptr;
             if (!str_a || !str_b) return false;
             return strcmp(str_a, str_b) == 0;
         }
         
         case CLJ_VECTOR: {
-            CljPersistentVector *vec_a = (CljPersistentVector*)a->as.data;
-            CljPersistentVector *vec_b = (CljPersistentVector*)b->as.data;
+            CljPersistentVector *vec_a = (CljPersistentVector*)a;
+            CljPersistentVector *vec_b = (CljPersistentVector*)b;
             if (!vec_a || !vec_b) return false;
             if (vec_a->count != vec_b->count) return false;
             for (int i = 0; i < vec_a->count; i++) {
@@ -800,20 +797,21 @@ void meta_clear(CljObject *v) {
     if (!v || !meta_registry) return;
     
     // Find the entry and remove it using KV macros
-    int index = KV_FIND_INDEX(((CljMap*)meta_registry->as.data)->data, ((CljMap*)meta_registry->as.data)->count, v);
+    CljMap *map = (CljMap*)meta_registry;
+    int index = KV_FIND_INDEX(map->data, map->count, v);
     if (index >= 0) {
         // Entry found; remove it
-        CljObject *old_value = KV_VALUE(((CljMap*)meta_registry->as.data)->data, index);
+        CljObject *old_value = KV_VALUE(map->data, index);
         RELEASE(old_value);
         
         // Shift following elements to the left
-        for (int j = index; j < ((CljMap*)meta_registry->as.data)->count - 1; j++) {
-            KV_SET_PAIR(((CljMap*)meta_registry->as.data)->data, j,
-                       KV_KEY(((CljMap*)meta_registry->as.data)->data, j + 1),
-                       KV_VALUE(((CljMap*)meta_registry->as.data)->data, j + 1));
+        for (int j = index; j < map->count - 1; j++) {
+            KV_SET_PAIR(map->data, j,
+                       KV_KEY(map->data, j + 1),
+                       KV_VALUE(map->data, j + 1));
         }
         
-        ((CljMap*)meta_registry->as.data)->count--;
+        map->count--;
     }
 }
 
@@ -831,52 +829,27 @@ static void init_static_singletons() {
     // Initialize NIL singleton
     clj_nil_singleton.type = CLJ_NIL;
     clj_nil_singleton.rc = 0; // Singletons do not use reference counting
-    clj_nil_singleton.as.i = 0;
     
-    // Initialize TRUE singleton
-    clj_true_singleton.type = CLJ_BOOL;
+    // Initialize TRUE singleton (now handled as immediate)
+    clj_true_singleton.type = CLJ_NIL; // Will be replaced by immediate
     clj_true_singleton.rc = 0; // Singletons do not use reference counting
-    clj_true_singleton.as.b = true;
     
-    // Initialize FALSE singleton
-    clj_false_singleton.type = CLJ_BOOL;
+    // Initialize FALSE singleton (now handled as immediate)
+    clj_false_singleton.type = CLJ_NIL; // Will be replaced by immediate
     clj_false_singleton.rc = 0; // Singletons do not use reference counting
-    clj_false_singleton.as.b = false;
+    // clj_false_singleton.as.b = false; // Union removed
     
 
     // Initialize empty map singleton
     clj_empty_map_singleton.type = CLJ_MAP;
     clj_empty_map_singleton.rc = 0; // Singletons do not use reference counting
-    clj_empty_map_singleton.as.data = NULL; // No pairs = empty map
+    // clj_empty_map_singleton.as.data = NULL; // No pairs = empty map - Union removed
 }
 
 // Singleton access functions
-CljObject* clj_nil() {
-    static bool initialized = false;
-    if (!initialized) {
-        init_static_singletons();
-        initialized = true;
-    }
-    return &clj_nil_singleton;
-}
+// Function wrappers moved to object.h as macros
 
-CljObject* clj_true() {
-    static bool initialized = false;
-    if (!initialized) {
-        init_static_singletons();
-        initialized = true;
-    }
-    return &clj_true_singleton;
-}
-
-CljObject* clj_false() {
-    static bool initialized = false;
-    if (!initialized) {
-        init_static_singletons();
-        initialized = true;
-    }
-    return &clj_false_singleton;
-}
+// clj_false() removed - use make_special(SPECIAL_FALSE) instead
 
 // clj_empty_vector moved to vector.c
 
@@ -936,7 +909,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     }
     
     // Evaluate function body (simplified; would normally call eval())
-    CljObject *result = func->body ? RETAIN(func->body) : clj_nil();
+    CljObject *result = func->body ? RETAIN(func->body) : NULL;
     
     // Release environment and parameter array
     RELEASE(call_env);
@@ -968,20 +941,11 @@ CljObject* create_object(CljType type) {
     
     // Initialisiere je nach Typ
     switch (type) {
-        case CLJ_INT:
-            obj->as.i = 0;
-            break;
-        case CLJ_FLOAT:
-            obj->as.f = 0.0;
-            break;
-        case CLJ_BOOL:
-            obj->as.b = 0;
-            break;
         case CLJ_NIL:
-            obj->as.i = 0;
+            // NIL is handled as immediate
             break;
         default:
-            obj->as.data = NULL;
+            // obj->as.data = NULL; // Union removed
             break;
     }
     
@@ -1007,7 +971,10 @@ void free_object(CljObject *obj) {
     // Type-spezifische Freigabe
     switch (obj->type) {
         case CLJ_STRING:
-            if (obj->as.data) free(obj->as.data);
+            {
+                char **str_ptr = (char**)((char*)obj + sizeof(CljObject));
+                if (*str_ptr) free(*str_ptr);
+            }
             DEALLOC(obj);
             break;
         case CLJ_SYMBOL:

@@ -55,9 +55,15 @@ CljValue make_vector_v(int capacity, int is_mutable) {
     vec->count = 0;
     vec->capacity = capacity;
     vec->mutable_flag = is_mutable ? 1 : 0;
-    vec->data = capacity > 0
-                    ? (CljObject **)calloc((size_t)capacity, sizeof(CljObject *))
-                    : NULL;
+    if (capacity > 0) {
+        vec->data = (CljObject **)calloc((size_t)capacity, sizeof(CljObject *));
+        if (!vec->data) {
+            free(vec);
+            return NULL;
+        }
+    } else {
+        vec->data = NULL;
+    }
 
     return (CljValue)vec;
 }

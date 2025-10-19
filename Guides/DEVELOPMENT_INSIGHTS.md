@@ -615,7 +615,7 @@ While `char*` seems like it should be `bool*`, it's actually a clever design tha
 ```c
 // ❌ Before: Just return the symbol
 if (op->type == CLJ_SYMBOL) {
-    return head ? (RETAIN(head), head) : clj_nil();
+    return head ? (RETAIN(head), head) : NULL;
 }
 
 // ✅ After: Resolve and call as function
@@ -642,13 +642,13 @@ if (op->type == CLJ_SYMBOL) {
 ```c
 // ❌ Before: Only accepts lists
 if (!params_list || params_list->type != CLJ_LIST) {
-    return clj_nil();
+    return NULL;
 }
 
 // ✅ After: Accept both vectors and lists
 if (!params_list || 
     (params_list->type != CLJ_LIST && params_list->type != CLJ_VECTOR)) {
-    return clj_nil();
+    return NULL;
 }
 
 // Handle both types when extracting parameters

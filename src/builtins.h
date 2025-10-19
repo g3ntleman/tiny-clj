@@ -2,8 +2,9 @@
 #define TINY_CLJ_BUILTINS_H
 
 #include "object.h"
+#include "runtime.h"
 
-typedef CljObject* (*CljNativeFn)(CljObject **args, int argc);
+typedef ID (*CljNativeFn)(ID *args, int argc);
 
 typedef enum { FN_GENERIC, FN_ARITY1, FN_ARITY2, FN_ARITY3 } FnKind;
 
@@ -19,37 +20,37 @@ typedef struct BuiltinEntry {
 } BuiltinEntry;
 
 // Example implementations
-CljObject* nth2(CljObject *vec, CljObject *idx);
+ID nth2(ID *args, int argc);
 CljObject* conj2(CljObject *vec, CljObject *val);
-CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val);
-CljObject* native_if(CljObject **args, int argc);
-CljObject* native_type(CljObject **args, int argc);
-CljObject* native_array_map(CljObject **args, int argc);
+ID assoc3(ID *args, int argc);
+ID native_if(ID *args, int argc);
+ID native_type(ID *args, int argc);
+ID native_array_map(ID *args, int argc);
 
 // Function value constructors
-CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env);
-CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name);
+CljObject* make_func(BuiltinFn fn, void *env);
+CljObject* make_named_func(BuiltinFn fn, void *env, const char *name);
 
 // Eval helpers
-CljObject* apply_builtin(const BuiltinEntry *entry, CljObject **args, int argc);
+ID apply_builtin(const BuiltinEntry *entry, ID *args, int argc);
 
 // Builtins registration
 void register_builtins();
 
 // Variadic functions (Phase 1)
-CljObject* native_str(CljObject **args, int argc);
-CljObject* native_add(CljObject **args, int argc);
-CljObject* native_sub(CljObject **args, int argc);
-CljObject* native_mul(CljObject **args, int argc);
-CljObject* native_div(CljObject **args, int argc);
-CljObject* native_add_variadic(CljObject **args, int argc);
-CljObject* native_sub_variadic(CljObject **args, int argc);
-CljObject* native_mul_variadic(CljObject **args, int argc);
-CljObject* native_div_variadic(CljObject **args, int argc);
+ID native_str(ID *args, int argc);
+ID native_add(ID *args, int argc);
+ID native_sub(ID *args, int argc);
+ID native_mul(ID *args, int argc);
+ID native_div(ID *args, int argc);
+ID native_add_variadic(ID *args, int argc);
+ID native_sub_variadic(ID *args, int argc);
+ID native_mul_variadic(ID *args, int argc);
+ID native_div_variadic(ID *args, int argc);
 
 // Transient functions
-CljObject* native_transient(CljObject **args, int argc);
-CljObject* native_persistent(CljObject **args, int argc);
-CljObject* native_conj_bang(CljObject **args, int argc);
+ID native_transient(ID *args, int argc);
+ID native_persistent(ID *args, int argc);
+ID native_conj_bang(ID *args, int argc);
 
 #endif

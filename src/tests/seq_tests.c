@@ -32,7 +32,7 @@ void test_seq_create_list(void) {
     {
         // Test with nil first
         CljObject *seq_nil = seq_create(NULL);
-        TEST_ASSERT_EQUAL_PTR(clj_nil(), seq_nil);
+        TEST_ASSERT_EQUAL_PTR(NULL, seq_nil);
     }
 }
 
@@ -44,9 +44,9 @@ void test_seq_create_vector(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(1);
-        vec_data->data[1] = make_int(2);
-        vec_data->data[2] = make_int(3);
+        vec_data->data[0] = (CljObject*)make_fixnum(1);
+        vec_data->data[1] = (CljObject*)make_fixnum(2);
+        vec_data->data[2] = (CljObject*)make_fixnum(3);
         vec_data->count = TEST_VECTOR_SIZE;
         
         // Create sequence iterator
@@ -107,17 +107,17 @@ void test_seq_first(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(42);
-        vec_data->data[1] = make_int(43);
-        vec_data->data[2] = make_int(44);
+        vec_data->data[0] = (CljObject*)make_fixnum(42);
+        vec_data->data[1] = (CljObject*)make_fixnum(43);
+        vec_data->data[2] = (CljObject*)make_fixnum(44);
         vec_data->count = 3;
         
         // Create sequence and test first
         CljObject *seq = seq_create((CljObject*)vec);
         CljObject *first_elem = seq_first(seq);
         TEST_ASSERT_NOT_NULL(first_elem);
-        TEST_ASSERT_EQUAL_INT(CLJ_INT, first_elem->type);
-        TEST_ASSERT_EQUAL_INT(42, first_elem->as.i);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)first_elem));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)first_elem));
     }
 }
 
@@ -129,9 +129,9 @@ void test_seq_rest(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(42);
-        vec_data->data[1] = make_int(43);
-        vec_data->data[2] = make_int(44);
+        vec_data->data[0] = (CljObject*)make_fixnum(42);
+        vec_data->data[1] = (CljObject*)make_fixnum(43);
+        vec_data->data[2] = (CljObject*)make_fixnum(44);
         vec_data->count = 3;
         
         // Create sequence and test rest
@@ -150,9 +150,9 @@ void test_seq_next(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_int(42);
-        vec_data->data[1] = make_int(43);
-        vec_data->data[2] = make_int(44);
+        vec_data->data[0] = (CljObject*)make_fixnum(42);
+        vec_data->data[1] = (CljObject*)make_fixnum(43);
+        vec_data->data[2] = (CljObject*)make_fixnum(44);
         vec_data->count = 3;
         
         // Create sequence and test next
@@ -180,12 +180,12 @@ void test_seq_equality(void) {
         TEST_ASSERT_NOT_NULL(vec1_data);
         TEST_ASSERT_NOT_NULL(vec2_data);
         
-        vec1_data->data[0] = make_int(1);
-        vec1_data->data[1] = make_int(2);
+        vec1_data->data[0] = (CljObject*)make_fixnum(1);
+        vec1_data->data[1] = (CljObject*)make_fixnum(2);
         vec1_data->count = 2;
         
-        vec2_data->data[0] = make_int(1);
-        vec2_data->data[1] = make_int(2);
+        vec2_data->data[0] = (CljObject*)make_fixnum(1);
+        vec2_data->data[1] = (CljObject*)make_fixnum(2);
         vec2_data->count = 2;
         
         // Create sequences

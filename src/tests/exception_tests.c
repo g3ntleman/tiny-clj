@@ -128,7 +128,7 @@ void test_exception_with_autorelease(void) {
         
         TRY {
             // Create some objects that should be cleaned up
-            CljObject *obj1 = make_int(42);
+            CljObject *obj1 = (CljObject*)make_fixnum(42);
             CljValue obj2 = make_string_v("test");
             TEST_ASSERT_NOT_NULL(obj1);
             TEST_ASSERT_NOT_NULL(obj2);
@@ -152,7 +152,7 @@ void test_repl_crash_scenario(void) {
     WITH_AUTORELEASE_POOL({
         TRY {
             // Create some objects that will be in the autorelease pool
-            CljObject *obj1 = make_int(42);
+            CljObject *obj1 = (CljObject*)make_fixnum(42);
             CljValue obj2 = make_string_v("test");
             CljObject *obj3 = make_symbol("test", NULL);
             
@@ -178,7 +178,7 @@ void test_map_arity_exception_zero_args(void) {
             // Create a map and bind it to 'm'
             CljValue map_obj = AUTORELEASE(make_map_v(2));
             CljObject *key = AUTORELEASE(make_symbol(":a", NULL));
-            CljObject *val = AUTORELEASE(make_int(1));
+            CljObject *val = AUTORELEASE((CljObject*)make_fixnum(1));
             map_assoc_v(map_obj, key, val);
             
             // Define 'm' in current namespace

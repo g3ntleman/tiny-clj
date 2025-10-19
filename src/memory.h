@@ -9,6 +9,7 @@
 #define TINY_CLJ_MEMORY_H
 
 #include "object.h"
+#include "value.h"
 #include <stdbool.h>
 
 
@@ -106,21 +107,28 @@ int get_retain_count(CljObject *obj);
         } \
     } while(0)
     #define RETAIN(obj) ({ \
-        CljObject* _tmp = (CljObject*)(obj); \
-        retain(_tmp); \
-        _tmp; \
+        ID _id = (obj); \
+        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+            CljObject* _tmp = (CljObject*)_id; \
+            retain(_tmp); \
+        } \
+        (CljObject*)_id; \
     })
     #define RELEASE(obj) ({ \
-        CljObject* _tmp = (CljObject*)(obj); \
-        release(_tmp); \
-        _tmp; \
+        ID _id = (obj); \
+        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+            CljObject* _tmp = (CljObject*)_id; \
+            release(_tmp); \
+        } \
+        (CljObject*)_id; \
     })
     #define AUTORELEASE(obj) ({ \
-        CljObject* _tmp = (CljObject*)(obj); \
-        if (_tmp != NULL) { \
+        ID _id = (obj); \
+        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+            CljObject* _tmp = (CljObject*)_id; \
             autorelease(_tmp); \
         } \
-        _tmp; \
+        (CljObject*)_id; \
     })
     /** @brief Safe object assignment with automatic retain/release management.
      *  @param var Variable to assign to
@@ -191,14 +199,29 @@ int get_retain_count(CljObject *obj);
     #define DEALLOC(obj) do { \
         free((obj)); \
     } while(0)
-    #define RETAIN(obj) ({ CljObject* _tmp = (CljObject*)(obj); retain(_tmp); _tmp; })
-    #define RELEASE(obj) ({ CljObject* _tmp = (CljObject*)(obj); release(_tmp); _tmp; })
+    #define RETAIN(obj) ({ \
+        ID _id = (obj); \
+        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+            CljObject* _tmp = (CljObject*)_id; \
+            retain(_tmp); \
+        } \
+        (CljObject*)_id; \
+    })
+    #define RELEASE(obj) ({ \
+        ID _id = (obj); \
+        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+            CljObject* _tmp = (CljObject*)_id; \
+            release(_tmp); \
+        } \
+        (CljObject*)_id; \
+    })
     #define AUTORELEASE(obj) ({ \
-        CljObject* _tmp = (CljObject*)(obj); \
-        if (_tmp != NULL) { \
+        ID _id = (obj); \
+        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+            CljObject* _tmp = (CljObject*)_id; \
             autorelease(_tmp); \
         } \
-        _tmp; \
+        (CljObject*)_id; \
     })
     #define ASSIGN(var, new_obj) do { \
         typeof(var) _tmp = (new_obj); \

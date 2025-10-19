@@ -6,6 +6,7 @@
  */
 
 #include "seq.h"
+#include "value.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -57,7 +58,9 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         }
         
         case CLJ_STRING: {
-            const char *str_data = (const char*)obj->as.data;
+            // String data is stored directly after CljObject header
+            char **str_ptr = (char**)((char*)obj + sizeof(CljObject));
+            const char *str_data = (const char*)*str_ptr;
             if (!str_data || str_data[0] == '\0') {
                 iter->seq_type = CLJ_NIL;
                 return true;  // Empty string
@@ -81,7 +84,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
 
 CljObject* seq_iter_first(const SeqIterator *iter) {
     if (!iter || seq_iter_empty(iter)) {
-        return clj_nil();
+        return NULL;
     }
     
     switch (iter->seq_type) {
@@ -90,27 +93,27 @@ CljObject* seq_iter_first(const SeqIterator *iter) {
                 CljList *node = as_list(iter->state.list.current);
                 return LIST_FIRST(node);
             }
-            return clj_nil();
+            return NULL;
         }
         
         case CLJ_VECTOR: {
             if (iter->state.vec.index < iter->state.vec.count) {
                 return iter->state.vec.data[iter->state.vec.index];
             }
-            return clj_nil();
+            return NULL;
         }
         
         case CLJ_STRING: {
             if (iter->state.str.index < iter->state.str.length) {
                 // Return character as integer
                 char c = iter->state.str.data[iter->state.str.index];
-                return make_int((int)c);
+                return (CljObject*)make_fixnum((int)c);
             }
-            return clj_nil();
+            return NULL;
         }
         
         default:
-            return clj_nil();
+            return NULL;
     }
 }
 
@@ -201,15 +204,15 @@ int seq_iter_position(const SeqIterator *iter) {
 
 CljObject* seq_create(CljObject *obj) {
     // Handle nil and empty collections - return nil singleton
-    if (!obj) return clj_nil();
+    if (!obj) return NULL;
     
     // Check if collection is empty
     if (is_type(obj, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(obj);
-        if (vec && vec->count == 0) return clj_nil();
+        if (vec && vec->count == 0) return NULL;
     } else if (is_type(obj, CLJ_LIST)) {
         CljList *list = as_list(obj);
-        if (!LIST_FIRST(list)) return clj_nil();
+        if (!LIST_FIRST(list)) return NULL;
     }
     
     // Allocate heap wrapper
@@ -222,13 +225,13 @@ CljObject* seq_create(CljObject *obj) {
     // Initialize embedded stack iterator
     if (!seq_iter_init(&heap_seq->iter, obj)) {
         free(heap_seq);
-        return clj_nil();  // Empty or not seqable
+        return NULL;  // Empty or not seqable
     }
     
     // If iterator is empty (seq_type == CLJ_NIL), return nil singleton
     if (heap_seq->iter.seq_type == CLJ_NIL) {
         free(heap_seq);
-        return clj_nil();
+        return NULL;
     }
     
     return (CljObject*)heap_seq;
@@ -244,9 +247,9 @@ void seq_release(CljObject *seq_obj) {
 }
 
 CljObject* seq_first(CljObject *seq_obj) {
-    if (!seq_obj) return clj_nil();
+    if (!seq_obj) return NULL;
     CljSeqIterator *seq = as_seq(seq_obj);
-    if (!seq) return clj_nil();
+    if (!seq) return NULL;
     
     return seq_iter_first(&seq->iter);
 }

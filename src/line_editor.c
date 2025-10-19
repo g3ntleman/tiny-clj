@@ -446,7 +446,9 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     CljObject *line_obj = vec->data[index];
     if (!line_obj || !is_type(line_obj, CLJ_STRING)) return NULL;
     
-    return (const char*)line_obj->as.data;
+    // String data is stored directly after CljObject header
+    char **str_ptr = (char**)((char*)line_obj + sizeof(CljObject));
+    return (const char*)*str_ptr;
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {

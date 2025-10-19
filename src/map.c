@@ -4,6 +4,7 @@
 #include "runtime.h"
 #include "vector.h"
 #include "memory.h"
+#include "value.h"
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -16,7 +17,7 @@ static void init_empty_map_singleton_once(void) {
     return;
   clj_empty_map_singleton.base.type = CLJ_MAP;
   clj_empty_map_singleton.base.rc = 0;
-  clj_empty_map_singleton.base.as.data = NULL;
+  // clj_empty_map_singleton.base.as.data = NULL; // Union removed
   clj_empty_map_singleton.count = 0;
   clj_empty_map_singleton.capacity = 0;
   clj_empty_map_singleton.data = NULL;
@@ -141,7 +142,14 @@ CljObject *map_vals(CljObject *map) {
 }
 
 int map_count(CljObject *map) {
-  if (!map || map->type != CLJ_MAP)
+  if (!map) return 0;
+  
+  // Check if it's a heap object
+  if (!is_heap_object((CljValue)map)) {
+    return 0;  // Immediates are not maps
+  }
+  
+  if (map->type != CLJ_MAP)
     return 0;
   CljMap *map_data = as_map(map);
   return map_data ? map_data->count : 0;

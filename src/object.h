@@ -9,6 +9,8 @@
  * - Memory management with reference counting
  */
 
+// value.h included later to avoid circular dependency
+
 #ifndef TINY_CLJ_OBJECT_H
 #define TINY_CLJ_OBJECT_H
 
@@ -65,19 +67,12 @@ typedef struct CljObject CljObject;
 #define TYPE(object) ((object) ? (object)->type : CLJ_UNKNOWN)
 
 
-// Optimized CljObject structure (tight union-based layout)
+// Optimized CljObject structure (no union - primitives are immediates)
+// 4-byte header for 32-bit architectures: 2 bytes type + 2 bytes rc
 struct CljObject {
-    CljType type;
-    int rc;
-    union {
-        // Primitive values stored directly
-        int i;
-        double f;
-        bool b;  // boolean
-        
-        // Complex objects referenced via pointer
-        void* data;
-    } as;
+    uint16_t type;  // Typ-Tag für Heap-Objekte (reduced from CljType)
+    uint16_t rc;    // Reference Count (reduced from int)
+    // Keine Union! Daten in Substrukturen (CljString, CljVector, etc.)
 };
 
 // Check if an object is a singleton (should not be reference counted)
@@ -139,9 +134,11 @@ typedef struct CljList {
 #define LIST_FIRST(list) ((list) ? (list)->first : NULL)
 #define LIST_REST(list) ((list) ? (list)->rest : NULL)  // Returns CljObject* (can be CljList, CljSeq, or other)
 
+// ID typedef is defined in value.h
+
 typedef struct {
     CljObject base;         // Embedded base object
-    CljObject* (*fn)(CljObject **args, int argc);
+    CljObject* (*fn)(CljObject **args, int argc);  // Keep old signature for now
     void *env;
     const char *name;       // Optional function name (for debugging/printing)
 } CljFunc;
@@ -177,12 +174,9 @@ typedef struct {
     CljObject *data;        // Additional data (map)
 } CLJException;
 
-/** Create an int object (rc=1). */
-CljObject* make_int(int x);
-/** Create a float object (rc=1). */
-CljObject* make_float(double x);
+// make_int() and make_float() removed - use make_fixnum() and make_float16() instead
 /** Create a string object (rc=1), copies input with strdup. */
-// make_nil() and make_bool() removed - use clj_nil(), clj_true(), clj_false() instead
+// Function wrappers moved to value.h to avoid circular dependency
 // moved to vector.h
 /** Create/intern a symbol with optional namespace; rc=1. */
 CljObject* make_symbol(const char *name, const char *ns);
@@ -204,12 +198,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
 CljList* make_list(CljObject *first, CljObject *rest);
 
 // Singleton access functions
-/** Return global nil singleton (rc=0). */
-CljObject* clj_nil();
-/** Return global true singleton (rc=0). */
-CljObject* clj_true();
-/** Return global false singleton (rc=0). */
-CljObject* clj_false();
+// clj_nil(), clj_true(), clj_false() are now macros defined above
 
 
 // Memory management functions moved to memory.h
@@ -221,6 +210,10 @@ char* to_string(CljObject *v);
 
 // Type checking helper
 static inline bool is_type(CljObject *obj, CljType expected_type) {
+    if (!obj) return false;
+    // Check if it's an immediate value (CljValue) being passed as CljObject*
+    // Immediate values have odd addresses (tagged pointers)
+    if ((uintptr_t)obj & 0x1) return false;
     return TYPE(obj) == expected_type;
 }
 
@@ -228,9 +221,8 @@ static inline bool is_type(CljObject *obj, CljType expected_type) {
 /** Structural equality for collections; pointer equality fast path. */
 bool clj_equal(CljObject *a, CljObject *b);
 static inline bool clj_is_truthy(CljObject *v) {
-    if (!v || v == clj_nil()) return false;
-    if (is_type(v, CLJ_BOOL)) return v->as.b;
-    return true;
+    // Ultra-schneller Bit-Trick: nil(0) und false(5) haben Byte < 8
+    return ((uintptr_t)v & 0xFF) >= 8;
 }
 
 // Map operations (optimized with pointer fast paths)
@@ -400,5 +392,7 @@ static inline int is_native_fn(CljObject *fn) {
 }
 
 // is_autorelease_pool_active() function moved to memory.h
+
+#include "value.h"  // Include after all declarations to get clj_* macros
 
 #endif

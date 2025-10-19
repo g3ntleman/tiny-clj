@@ -417,8 +417,11 @@ static void release_object_deep(CljObject *v) {
     // Type-specific cleanup based on object type
     switch (v->type) {
         case CLJ_STRING:
-            // Free string data
-            if (v->as.data) free(v->as.data);
+            {
+                // Free string data stored directly after CljObject header
+                char **str_ptr = (char**)((char*)v + sizeof(CljObject));
+                if (*str_ptr) free(*str_ptr);
+            }
             break;
             
         case CLJ_SYMBOL:
@@ -468,10 +471,7 @@ static void release_object_deep(CljObject *v) {
             // Native functions are static - no cleanup needed
             break;
             
-        case CLJ_INT:
-        case CLJ_FLOAT:
-            // Primitive types - no cleanup needed, but ensure DEALLOC is called
-            break;
+        // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
             
         default:
             // Unknown type - no specific finalizer needed

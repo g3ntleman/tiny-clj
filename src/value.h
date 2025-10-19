@@ -4,31 +4,48 @@
 #include "object.h"
 #include "clj_string.h"
 #include <stdint.h>
+#include <math.h>
 
 // CljValue als Alias für CljObject* (Phase 0: Kein Refactoring!)
 typedef CljObject* CljValue;
+
+// Generic object type for argument arrays in variadic functions
+// This eliminates the need for explicit casts when passing values to functions.
+// Similar to Objective-C's 'id' type.
+//
+// Usage:
+//   ID generic_func(ID *args, int argc) {
+//       for (int i = 0; i < argc; i++) {
+//           CljObject* obj = ID_TO_OBJ(args[i]);
+//           // ... work with obj
+//       }
+//   }
+//
+//   ID args[] = {make_fixnum(42), make_string("hello")};
+//   generic_func(args, 2);  // No casts needed!
+typedef void* ID;
+
 
 // Tag-Definitionen für zukünftige Immediates (32-bit Tagged Pointer)
 #define TAG_BITS 3
 #define TAG_MASK 0x7
 
-// === Immediate Types ===
-#define TAG_FIXNUM   0   // 29-bit signed integer
-#define TAG_CHAR     1   // 21-bit Unicode character  
-#define TAG_SPECIAL  2   // nil, true, false
-#define TAG_FLOAT16  3   // 16-bit half-precision float
+// 29-bit signed integer range
+#define FIXNUM_BITS 29
+#define FIXNUM_MAX ((1 << (FIXNUM_BITS - 1)) - 1)    // 536870911
+#define FIXNUM_MIN (-(1 << (FIXNUM_BITS - 1)))       // -536870912
 
-// === Heap Types - Persistent (Pointer mit Tag) ===
-#define TAG_STRING   4   // Pointer to CljString
-#define TAG_VECTOR   5   // Pointer to CljPersistentVector
-#define TAG_SYMBOL   6   // Pointer to CljSymbol
-#define TAG_MAP      7   // Pointer to CljMap
-#define TAG_LIST     8   // Pointer to CljList
-#define TAG_SEQ      9   // Pointer to CljSeq
+// === Immediate Types (ungerade Tags 1, 3, 5, 7) ===
+#define TAG_FIXNUM   1   // 29-bit signed integer
+#define TAG_CHAR     3   // 21-bit Unicode character
+#define TAG_SPECIAL  5   // true, false (nil ist NULL)
+#define TAG_FLOAT16  7   // 16-bit half-precision float
 
-// === Heap Types - Transient (Pointer mit Tag) ===
-#define TAG_TRANSIENT_VECTOR 10 // Pointer to CljPersistentVector (with transient flag)
-#define TAG_TRANSIENT_MAP    11 // Pointer to CljMap (with transient flag)
+// === Heap Types (gerade Tags 0, 2, 4, 6) ===
+#define TAG_POINTER  0   // Normaler Heap-Pointer (alle Standard-Objekte)
+#define TAG_STRING   2   // Reserved für zukünftige Optimierung
+#define TAG_VECTOR   4   // Reserved für zukünftige Optimierung
+#define TAG_MAP      6   // Reserved für zukünftige Optimierung
 
 // Pointer encoding/decoding macros (32-bit Tagged Pointer Implementation)
 static inline CljValue make_pointer(void *ptr, uint8_t tag) {
@@ -45,18 +62,29 @@ static inline uint8_t get_tag(CljValue val) {
 
 // === 32-bit Tagged Pointer Immediates ===
 
-// Fixnum: 29-bit signed integer (Tag 0)
-#define FIXNUM_BITS 29
-#define FIXNUM_MAX ((1 << (FIXNUM_BITS - 1)) - 1)
-#define FIXNUM_MIN (-(1 << (FIXNUM_BITS - 1)))
+// SPECIAL sub-types: false nutzt 0 für Bit-Trick
+#define SPECIAL_FALSE 0   // encoded: (0 << 3) | 5 = 5
+#define SPECIAL_TRUE  8   // encoded: (8 << 3) | 5 = 69
+
+// Falsy-Werte: nil(0) und false(5) haben niedrigstes Byte < 8
+// nil   = 0x00000000
+// false = 0x00000005
+// true  = 0x00000045 (69 decimal)
+
+// Immediate-Helpers (Phase 1: 32-bit Tagged Pointer)
+static inline CljValue make_special(uint8_t special) {
+    return (CljValue)(((uintptr_t)special << TAG_BITS) | TAG_SPECIAL);
+}
+
+// make_nil() removed - nil ist NULL
+
+// Direct access to constants (Phase 8: use immediates directly)
+// nil ist NULL, true/false sind make_special(SPECIAL_TRUE/FALSE)
+
 
 static inline CljValue make_fixnum(int32_t value) {
-    // Check if value fits in 29 bits
-    if (value < FIXNUM_MIN || value > FIXNUM_MAX) {
-        // Fallback to heap allocation for large integers
-        return make_int(value);
-    }
-    // Encode as tagged pointer: value << 3 | TAG_FIXNUM
+    // Simplified implementation for debugging
+    // Just return a non-NULL pointer with the tag
     return (CljValue)(((uintptr_t)value << TAG_BITS) | TAG_FIXNUM);
 }
 
@@ -92,29 +120,23 @@ static inline uint32_t as_char(CljValue val) {
     return (uint32_t)((uintptr_t)val >> TAG_BITS);
 }
 
-// Special values: nil, true, false (Tag 2)
-#define SPECIAL_NIL    0
-#define SPECIAL_TRUE    1
-#define SPECIAL_FALSE   2
-
-static inline CljValue make_special(uint8_t special) {
-    return (CljValue)(((uintptr_t)special << TAG_BITS) | TAG_SPECIAL);
-}
-
 static inline bool is_special(CljValue val) {
     return get_tag(val) == TAG_SPECIAL;
 }
 
 static inline uint8_t as_special(CljValue val) {
-    if (!is_special(val)) return SPECIAL_NIL;
+    if (!is_special(val)) return 0;  // Default value for non-special
     return (uint8_t)((uintptr_t)val >> TAG_BITS);
 }
 
 // Float16: 16-bit half-precision float (Tag 3)
 // Note: This is a simplified implementation - real Float16 would need proper conversion
 static inline CljValue make_float16(float value) {
-    // Simplified: store as 16-bit integer representation
-    // In a real implementation, you'd need proper float16 conversion
+    // Simplified: clamp to Float16 range
+    if (value > 65504.0f) value = INFINITY;
+    if (value < -65504.0f) value = -INFINITY;
+    
+    // Encode as 16-bit float (vereinfacht, ohne IEEE 754 Details)
     uint16_t bits = (uint16_t)(value * 1000.0f); // Simple scaling
     return (CljValue)(((uintptr_t)bits << TAG_BITS) | TAG_FLOAT16);
 }
@@ -136,34 +158,20 @@ static inline float as_float16(CljValue val) {
  * @param val The value to check
  * @return true if immediate, false if heap object
  */
-static inline bool is_immediate_value(CljValue val) {
-    if (!val) return false;
-    
-    // Check if the value is a tagged pointer (low tag values)
-    uint8_t tag = get_tag(val);
-    return tag <= TAG_FLOAT16;  // Tags 0-3 are immediates
+static inline bool is_immediate(CljValue val) {
+    if (!val) return false;  // NULL ist kein Immediate
+    return ((uintptr_t)val & 0x1);  // Ungerade = Immediate
 }
 
-// Immediate-Helpers (Phase 1: 32-bit Tagged Pointer)
-static inline CljValue make_nil() {
-    return make_special(SPECIAL_NIL);
+static inline bool is_heap_object(CljValue val) {
+    if (!val) return false;  // NULL ist kein Heap-Objekt
+    return !((uintptr_t)val & 0x1);  // Gerade = Heap-Objekt
 }
 
-static inline CljValue make_bool(bool value) {
-    return make_special(value ? SPECIAL_TRUE : SPECIAL_FALSE);
-}
-
-static inline CljValue make_true() {
-    return make_special(SPECIAL_TRUE);
-}
-
-static inline CljValue make_false() {
-    return make_special(SPECIAL_FALSE);
-}
 
 // Type checking helpers
 static inline bool is_nil(CljValue val) {
-    return is_special(val) && as_special(val) == SPECIAL_NIL;
+    return val == NULL;  // nil ist NULL
 }
 
 static inline bool is_bool(CljValue val) {
@@ -180,6 +188,50 @@ static inline bool is_false(CljValue val) {
     return is_special(val) && as_special(val) == SPECIAL_FALSE;
 }
 
+// Ultra-schneller Bit-Trick für Truthy/Falsy
+// clj_is_truthy() ist in object.h definiert
+
+// Falsy: nil oder false (nicht clj_ Präfix für Konsistenz mit is_fixnum etc.)
+static inline bool is_falsy(CljValue val) {
+    return ((uintptr_t)val & 0xFF) < 8;
+}
+
+// Safe cast from ID to CljObject* with debug checks
+#ifdef DEBUG
+static inline CljObject* ID_TO_OBJ(ID id) {
+    if (!id) return NULL;
+    CljValue val = (CljValue)id;
+    // Check if it's an immediate or heap object
+    if (is_fixnum(val) || is_float16(val) || is_char(val) || is_special(val)) {
+        // It's an immediate - return as-is (will be treated as CljObject*)
+        return (CljObject*)val;
+    }
+    // It's a heap object - verify it has a valid type
+    CljObject* obj = (CljObject*)val;
+    if (obj->type < CLJ_TYPE_COUNT) {
+        return obj;
+    }
+    fprintf(stderr, "ID_TO_OBJ: Invalid object type %d at %p\n", obj->type, obj);
+    abort();
+}
+#else
+#define ID_TO_OBJ(id) ((CljObject*)(id))
+#endif
+
+// Safe cast from CljObject* to ID (always safe, no check needed)
+#define OBJ_TO_ID(obj) ((ID)(obj))
+
+// Convenience macros for type checking with ID or any pointer type
+// These eliminate the need to cast to CljValue before checking
+#define IS_FIXNUM(val) is_fixnum((CljValue)(val))
+#define AS_FIXNUM(val) as_fixnum((CljValue)(val))
+#define IS_FLOAT16(val) is_float16((CljValue)(val))
+#define AS_FLOAT16(val) as_float16((CljValue)(val))
+#define IS_CHAR(val) is_char((CljValue)(val))
+#define AS_CHAR(val) as_char((CljValue)(val))
+#define IS_SPECIAL(val) is_special((CljValue)(val))
+#define AS_SPECIAL(val) as_special((CljValue)(val))
+
 // Wrapper für existierende Funktionen (Phase 1: Immediates + Heap Fallback)
 static inline CljValue make_int_v(int x) {
     // Try immediate first, fallback to heap for large numbers
@@ -189,7 +241,7 @@ static inline CljValue make_int_v(int x) {
 static inline CljValue make_float_v(double x) {
     // For now, use heap allocation for all floats
     // TODO: Implement proper Float16 conversion
-    return make_float(x);
+    return (CljValue)make_float16((float)x);
 }
 
 static inline CljValue make_string_v(const char *str) {

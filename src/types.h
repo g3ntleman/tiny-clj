@@ -1,15 +1,13 @@
 #ifndef TINY_CLJ_TYPES_H
 #define TINY_CLJ_TYPES_H
 
-typedef enum {
-    // Singletons (0-2) - no reference counting needed, can use simple range check
+#include <stdint.h>
+
+typedef enum : uint16_t {
+    // Singletons (0-1) - no reference counting needed, can use simple range check
     CLJ_NIL,
-    CLJ_BOOL,
     CLJ_SYMBOL,  // Interned symbols - no reference counting needed
-    // Other primitive types (3-4) - have reference counting
-    CLJ_INT,
-    CLJ_FLOAT,
-    // Complex types (5+) - require individual checks, have reference counting
+    // Complex types (2+) - require individual checks, have reference counting
     CLJ_STRING,
     CLJ_VECTOR,
     CLJ_WEAK_VECTOR,

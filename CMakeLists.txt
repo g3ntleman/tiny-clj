@@ -12,13 +12,21 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNITY_EXCLUDE_SETJMP")
 # Production/Release: platform-specific optimization policy
 if(APPLE)
-  # macOS: favor speed with dead code elimination
+  # macOS: favor size for benchmarks, speed for general release
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG -ffunction-sections -fdata-sections")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,-dead_strip")
 else()
   # Embedded/other: favor size
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Os -DNDEBUG -ffunction-sections -fdata-sections")
   set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections")
+endif()
+
+# Benchmark-specific optimization (size-optimized)
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -Os -DNDEBUG -ffunction-sections -fdata-sections")
+if(APPLE)
+  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,-dead_strip")
+else()
+  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections")
 endif()
 
 # Enable LTO if the toolchain supports it (Release only)
@@ -123,7 +131,10 @@ add_executable(unity-tests
     src/memory.c
     src/runtime.c
 )
-target_compile_definitions(unity-tests PRIVATE ENABLE_META DEBUG ENABLE_MEMORY_PROFILING)
+target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(unity-tests PRIVATE DEBUG)
+endif()
 target_include_directories(unity-tests PRIVATE external/unity/src)
 
 # Utility tests removed - no main function available

@@ -28,6 +28,8 @@ void setUp(void) {
     MEMORY_PROFILER_INIT();
     // Initialize memory profiling with hooks for automatic tracking
     memory_profiling_init_with_hooks();
+    // Enable memory profiling for tests
+    enable_memory_profiling(true);
 }
 
 void tearDown(void) {
@@ -323,7 +325,7 @@ static void run_for_loop_tests(void) {
 }
 
 static void run_all_tests(void) {
-    RUN_TEST(test_group_memory);
+    // Note: test_group_memory is already run in run_memory_tests()
     RUN_TEST(test_group_parser);
     RUN_TEST(test_group_exception);
     RUN_TEST(test_group_unit);

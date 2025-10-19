@@ -235,3 +235,254 @@ typedef struct {
   - [x] Füge test_seq_iterator_verification hinzu - verifiziere CljSeqIterator O(1) Performance
   - [x] Finale Überprüfung - alle Tests PASS, 0 IGNORE
 - [ ] Finale Code-Review und Performance-Tests
+
+---
+
+# ID Macro Implementation Plan
+
+## Overview
+
+Introduce `ID` typedef as `typedef void*` to provide a generic type for function argument arrays that accept any value type. This eliminates explicit casts when passing mixed types to variadic functions.
+
+**Important**:
+
+- Keep specific type signatures (CljList*, CljMap*, CljValue, etc.) unchanged
+- Use `ID` only for generic argument arrays: `ID *args` instead of `CljObject **args`
+- Functions like `list_count` that work specifically with `CljList*` should keep their specific type
+
+## Changes
+
+### 1. Define ID typedef and helpers in `src/value.h` ✅
+
+After the `CljValue` typedef (around line 10), add:
+
+```c
+// Generic object type for argument arrays in variadic functions
+// This eliminates the need for explicit casts when passing values to functions.
+// Similar to Objective-C's 'id' type.
+//
+// Usage:
+//   ID generic_func(ID *args, int argc) {
+//       for (int i = 0; i < argc; i++) {
+//           CljObject* obj = ID_TO_OBJ(args[i]);
+//           // ... work with obj
+//       }
+//   }
+//
+//   ID args[] = {make_fixnum(42), make_string("hello")};
+//   generic_func(args, 2);  // No casts needed!
+typedef void* ID;
+
+// Safe cast from ID to CljObject* with debug checks
+#ifdef DEBUG
+static inline CljObject* ID_TO_OBJ(ID id) {
+    if (!id) return NULL;
+    CljValue val = (CljValue)id;
+    // Check if it's an immediate or heap object
+    if (is_fixnum(val) || is_float16(val) || is_char(val) || is_special(val)) {
+        // It's an immediate - return as-is (will be treated as CljObject*)
+        return (CljObject*)val;
+    }
+    // It's a heap object - verify it has a valid type
+    CljObject* obj = (CljObject*)val;
+    if (obj->type >= CLJ_UNKNOWN && obj->type < CLJ_TYPE_COUNT) {
+        return obj;
+    }
+    fprintf(stderr, "ID_TO_OBJ: Invalid object type %d at %p\n", obj->type, obj);
+    abort();
+}
+#else
+#define ID_TO_OBJ(id) ((CljObject*)(id))
+#endif
+
+// Safe cast from CljObject* to ID (always safe, no check needed)
+#define OBJ_TO_ID(obj) ((ID)(obj))
+```
+
+### 2. Add convenience macros in `src/value.h` ✅
+
+After the immediate helper functions (around line 160), add:
+
+```c
+// Convenience macros for type checking with ID or any pointer type
+// These eliminate the need to cast to CljValue before checking
+#define IS_FIXNUM(val) is_fixnum((CljValue)(val))
+#define AS_FIXNUM(val) as_fixnum((CljValue)(val))
+#define IS_FLOAT16(val) is_float16((CljValue)(val))
+#define AS_FLOAT16(val) as_float16((CljValue)(val))
+#define IS_CHAR(val) is_char((CljValue)(val))
+#define AS_CHAR(val) as_char((CljValue)(val))
+#define IS_SPECIAL(val) is_special((CljValue)(val))
+#define AS_SPECIAL(val) as_special((CljValue)(val))
+```
+
+### 3. Update native function signatures to use ID arrays
+
+#### `src/builtins.h` - Update all native function signatures:
+
+```c
+// Change from CljObject **args to ID *args for all native functions
+ID native_add(ID *args, int argc);
+ID native_sub(ID *args, int argc);
+ID native_mul(ID *args, int argc);
+ID native_div(ID *args, int argc);
+ID native_str(ID *args, int argc);
+ID native_type(ID *args, int argc);
+ID native_array_map(ID *args, int argc);
+ID native_conj(ID *args, int argc);
+ID native_rest(ID *args, int argc);
+ID native_transient(ID *args, int argc);
+ID native_persistent(ID *args, int argc);
+ID native_conj_bang(ID *args, int argc);
+ID native_get(ID *args, int argc);
+ID native_count(ID *args, int argc);
+ID native_keys(ID *args, int argc);
+ID native_vals(ID *args, int argc);
+ID native_if(ID *args, int argc);
+ID native_println(ID *args, int argc);
+```
+
+#### `src/builtins.c` - Update all native function implementations:
+
+```c
+// Example: native_add function
+ID native_add(ID *args, int argc) {
+    if (argc < 2) return OBJ_TO_ID(NULL);
+    
+    int sum = 0;
+    for (int i = 0; i < argc; i++) {
+        if (IS_FIXNUM(args[i])) {
+            sum += AS_FIXNUM(args[i]);
+        } else {
+            return OBJ_TO_ID(NULL); // Error case
+        }
+    }
+    return OBJ_TO_ID(make_fixnum(sum));
+}
+```
+
+#### `src/runtime.h` - Update BuiltinFn typedef:
+
+```c
+typedef ID (*BuiltinFn)(ID *args, int argc);
+```
+
+### 4. Update CljFunc typedef (optional - keep old for compatibility)
+
+#### `src/object.h` (line 138 and 284):
+
+```c
+typedef struct {
+    CljObject base;
+    ID (*fn)(ID *args, int argc);  // Changed from CljObject **args
+    void *env;
+    const char *name;
+} CljFunc;
+
+// Note: Keep env as CljObject* since it's specifically a CljMap*
+// fn parameter stays CljObject* as it's specifically a function
+ID clj_apply_function(CljObject *fn, ID *args, int argc, CljObject *env);
+```
+
+### 5. Update implementations in .c files
+
+#### `src/object.c` (line 922):
+
+```c
+ID clj_apply_function(CljObject *fn, ID *args, int argc, CljObject *env) {
+    if (!is_type(fn, CLJ_FUNC)) return NULL;
+    (void)env;
+    
+    // Evaluate arguments (simplified; would normally call eval())
+    ID *eval_args = STACK_ALLOC(ID, argc);
+    for (int i = 0; i < argc; i++) {
+        eval_args[i] = OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[i])));
+    }
+    
+    return clj_call_function(fn, argc, eval_args);
+}
+```
+
+#### `src/function_call.c` (line 243):
+
+```c
+ID eval_function_call(CljObject *fn, ID *args, int argc, CljMap *env) {
+    (void)env;
+    if (!is_type(fn, CLJ_FUNC)) {
+        throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Check if it's a native function (CljFunc) or Clojure function (CljFunction)
+    if (is_native_fn(fn)) {
+        // It's a native function (CljFunc)
+        CljFunc *native_func = (CljFunc*)fn;
+        return native_func->fn(args, argc);  // args is already ID*
+    }
+    // ... rest unchanged
+}
+```
+
+### 6. Keep specific type signatures unchanged
+
+These functions should **NOT** be changed:
+
+- `int list_count(CljList *list)` - works specifically with lists
+- `int map_count(CljMap *map)` - works specifically with maps  
+- `CljObject* list_first(CljList *list)` - returns specific list element
+- Any function with specific type requirements
+
+### 7. Add usage examples in comments
+
+Add to `src/value.h` after the macros:
+
+```c
+// Example usage of ID for variadic functions:
+//
+//   ID my_add(ID *args, int argc) {
+//       int sum = 0;
+//       for (int i = 0; i < argc; i++) {
+//           if (IS_FIXNUM(args[i])) {
+//               sum += AS_FIXNUM(args[i]);
+//           }
+//       }
+//       return OBJ_TO_ID(make_fixnum(sum));
+//   }
+//
+//   ID values[] = {make_fixnum(1), make_fixnum(2), make_fixnum(3)};
+//   ID result = my_add(values, 3);  // No casts needed!
+```
+
+## Testing Strategy
+
+After **each step**, run tests to ensure nothing breaks:
+
+```bash
+make && ./unity-tests 2>&1 | grep -E "FAIL|PASS" | tail -5
+```
+
+Steps:
+
+1. Add ID typedef and helpers → compile and test ✅
+2. Add convenience macros → compile and test ✅
+3. Update native function signatures → compile and test
+4. Update function signatures in headers → compile and test
+5. Update implementations in .c files → compile and test
+6. Final verification with debug and release builds
+
+## Benefits
+
+- Eliminates casts when creating argument arrays
+- Debug-safe with type checking via ID_TO_OBJ
+- Convenience macros (IS_FIXNUM, etc.) reduce verbosity
+- Zero runtime overhead in release builds
+- Keeps specific type safety where it matters
+
+## Guidelines
+
+- Use `ID` for generic parameters (single or array) that accept any value type
+- Use specific types (CljList*, CljMap*, CljFunction*, etc.) when function works with specific type
+- Example: `eval_function_call(CljObject *fn, ID *args, int argc, CljMap *env)`
+  - `fn` is generic (could be any function type) → could be `ID` but we keep `CljObject*` for clarity
+  - `args` is generic array → `ID*`
+  - `env` is specifically a map → `CljMap*`

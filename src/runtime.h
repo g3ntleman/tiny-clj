@@ -27,7 +27,7 @@
 // Maximum stack depth for function calls
 #define MAX_CALL_STACK_DEPTH 20
 
-typedef CljObject* (*BuiltinFn)(CljObject **args, int argc);
+typedef ID (*BuiltinFn)(ID *args, int argc);
 
 void register_builtin(const char *name, BuiltinFn fn);
 BuiltinFn find_builtin(const char *name);

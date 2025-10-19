@@ -159,7 +159,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'n'
     reader_consume(reader); // 'i'
     reader_consume(reader); // 'l'
-    return clj_nil();
+    return NULL;
   }
   
   // Handle true literal
@@ -171,7 +171,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'r'
     reader_consume(reader); // 'u'
     reader_consume(reader); // 'e'
-    return clj_true();
+    return (CljObject*)make_special(SPECIAL_TRUE);
   }
   
   // Handle false literal
@@ -185,7 +185,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'l'
     reader_consume(reader); // 's'
     reader_consume(reader); // 'e'
-    return clj_false();
+    return (CljObject*)make_special(SPECIAL_FALSE);
   }
   
   // Handle quote 'x => (quote x)
@@ -198,7 +198,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     // Build list using the same pattern as parse_list
     CljObject *quote_sym = (CljObject*)intern_symbol_global("quote");
     CljObject *elements[2] = {quote_sym, quoted};
-    CljObject *result = (CljObject*)clj_nil();
+    CljObject *result = NULL;
     for (int i = 1; i >= 0; i--) {
         result = (CljObject*)make_list(elements[i], result);
     }
@@ -269,7 +269,12 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     CljObject *result = NULL;
     
     // Don't catch exceptions here - let them propagate to the caller
-    if (is_type(parsed_expr, CLJ_LIST)) {
+    // Check if parsed_expr is an immediate value first
+    if (is_fixnum((CljValue)parsed_expr) || is_float16((CljValue)parsed_expr) || 
+        is_char((CljValue)parsed_expr) || is_special((CljValue)parsed_expr)) {
+        // For immediate values, return them as CljObject* (they're already evaluated)
+        result = (CljObject*)parsed_expr;
+    } else if (is_type(parsed_expr, CLJ_LIST)) {
         CljObject *env = (eval_state && eval_state->current_ns) ? (CljObject*)eval_state->current_ns->mappings : NULL;
         result = eval_list(parsed_expr, (CljMap*)env, eval_state);
         // Don't autorelease here - eval_list already does it
@@ -290,11 +295,17 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
     CljValue parsed = parse_v(expr_str, eval_state);
-    if (is_nil(parsed)) {
+    if (parsed == NULL) {
         return NULL;
     }
     
-    // Don't catch exceptions here - let them propagate to the caller
+    // Check if parsed is an immediate value
+    if (is_fixnum(parsed) || is_float16(parsed) || is_char(parsed) || is_special(parsed)) {
+        // For immediate values, return them as CljObject* (they're already evaluated)
+        return (CljObject*)parsed;
+    }
+    
+    // For heap objects, evaluate them
     CljObject *result = eval_parsed((CljObject*)parsed, eval_state);
     
     return result;
@@ -385,7 +396,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   // Handle empty list
   if (reader_peek_char(reader) == ')') {
     reader_next(reader);
-    return clj_nil();
+    return NULL;
   }
   
   // Parse elements iteratively and build list from start to end
@@ -416,7 +427,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   }
   
   // Build list from array in correct order
-  CljObject *result = clj_nil();
+  CljObject *result = NULL;
   for (int i = count - 1; i >= 0; i--) {
     result = (CljObject*)make_list(elements[i], result);
   }
@@ -554,8 +565,8 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   }
   buf[pos] = '\0';
   if (strchr(buf, '.'))
-    return make_float(atof(buf));
-  return make_int(atoi(buf));
+    return (CljObject*)make_float16((float)atof(buf));
+  return (CljObject*)make_fixnum(atoi(buf));
 }
 
 /**
@@ -617,7 +628,7 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'n'
     reader_consume(reader); // 'i'
     reader_consume(reader); // 'l'
-    return make_nil();
+    return NULL;
   }
   
   if (c == 't' && reader_peek_ahead(reader, 1) == 'r' && 
@@ -628,7 +639,7 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'r'
     reader_consume(reader); // 'u'
     reader_consume(reader); // 'e'
-    return make_true();
+    return make_special(SPECIAL_TRUE);
   }
   
   if (c == 'f' && reader_peek_ahead(reader, 1) == 'a' && 
@@ -641,19 +652,17 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'l'
     reader_consume(reader); // 's'
     reader_consume(reader); // 'e'
-    return make_false();
+    return make_special(SPECIAL_FALSE);
   }
   
   // For complex structures, fall back to heap allocation
   // TODO: Implement CljValue-based vector/map/list parsing
-  TRY {
-    CljObject *obj = make_object_by_parsing_expr(reader, st);
-    return (CljValue)obj;
-  } CATCH(ex) {
-    // Re-throw the exception
-    throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
+  CljObject *obj = make_object_by_parsing_expr(reader, st);
+  if (!obj) {
+    // Reader is EOF or parsing failed - return NULL
     return NULL;
-  } END_TRY
+  }
+  return (CljValue)obj;
 }
 
 /**
@@ -670,17 +679,14 @@ CljValue parse_v(const char *input, EvalState *st) {
   
   CljValue result = NULL;
   
-  // Use TRY/CATCH to handle parsing exceptions
-  TRY {
-    result = make_value_by_parsing_expr(&reader, st);
-    if (result) {
+  // Don't catch exceptions - let them propagate
+  result = make_value_by_parsing_expr(&reader, st);
+  if (result) {
+    // Only autorelease heap objects, not immediate values
+    if (!is_fixnum(result) && !is_float16(result) && !is_char(result) && !is_special(result)) {
       result = AUTORELEASE(result);
     }
-  } CATCH(ex) {
-    // Exception caught - re-throw it instead of returning NULL
-    throw_exception(ex->type, ex->message, ex->file, ex->line, ex->col);
-    result = NULL;
-  } END_TRY
+  }
   
   return result;
 }
