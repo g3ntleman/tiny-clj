@@ -110,14 +110,20 @@ static void print_exception(CLJException *ex) {
  */
 static bool eval_string_repl(const char *code, EvalState *st) {
     WITH_AUTORELEASE_POOL({
-        // Simple approach: use eval_string which handles a single expression
-        // For multiple expressions, the user should separate them with newlines
-        CljObject *res = eval_string(code, st);
-        if (!res) return false;
-        
-        print_result(res);
-        return true;
+        // Use TRY/CATCH to handle exceptions in REPL
+        TRY {
+            CljObject *res = eval_string(code, st);
+            if (!res) return false;
+            
+            print_result(res);
+            return true;
+        } CATCH(ex) {
+            // Print exception and continue REPL
+            print_exception((CLJException*)ex);
+            return false; // Return false to indicate error, but don't exit REPL
+        } END_TRY
     });
+    return false; // Fallback return (should never be reached)
 }
 
 /** @brief Print command-line usage information.
