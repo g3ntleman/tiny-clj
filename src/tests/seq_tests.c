@@ -65,7 +65,7 @@ void test_seq_create_string(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test string
-        CljValue str = make_string_old("hello");
+        CljValue str = make_string("hello");
         TEST_ASSERT_NOT_NULL(str);
         
         // Create sequence iterator

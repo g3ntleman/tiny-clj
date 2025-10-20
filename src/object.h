@@ -181,8 +181,7 @@ typedef struct {
 /** Create a string object (rc=1), copies input with strdup. */
 // Function wrappers moved to value.h to avoid circular dependency
 // moved to vector.h
-/** Create/intern a symbol with optional namespace; rc=1. */
-CljObject* make_symbol_old(const char *name, const char *ns);
+// make_symbol_old declaration removed - use make_symbol from value.h instead
 /** Convenience: create generic error exception object. */
 CljObject* make_error(const char *message, const char *file, int line, int col);
 /** Create a CLJException object (rc=1) with optional data. */
@@ -198,7 +197,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 /** Create interpreted function with params/body/closure; rc=1. */
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
 /** Create empty list node (rc=1). */
-CljList* make_list(CljObject *first, CljObject *rest);
+CljObject* make_list(CljObject *first, CljObject *rest);
 
 // Singleton access functions
 // clj_nil(), clj_true(), clj_false() are now macros defined above

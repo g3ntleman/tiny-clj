@@ -8,27 +8,23 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-// Empty-map singleton: CLJ_MAP object with rc=0 and no backing store
-// (data=NULL)
-static CljMap clj_empty_map_singleton;
-static void init_empty_map_singleton_once(void) {
-  static bool initialized = false;
-  if (initialized)
-    return;
-  clj_empty_map_singleton.base.type = CLJ_MAP;
-  clj_empty_map_singleton.base.rc = 0;
-  // clj_empty_map_singleton.base.as.data = NULL; // Union removed
-  clj_empty_map_singleton.count = 0;
-  clj_empty_map_singleton.capacity = 0;
-  clj_empty_map_singleton.data = NULL;
-    initialized = true;
-}
+// Empty-map singleton: CLJ_MAP with rc=0, statically initialized
+static struct {
+    CljMap map;
+} clj_empty_map_singleton_data = {
+    .map = {
+        .base = { .type = CLJ_MAP, .rc = 0 },
+        .count = 0,
+        .capacity = 0,
+        .data = NULL
+    }
+};
+static CljMap *clj_empty_map_singleton = &clj_empty_map_singleton_data.map;
 
 /** @brief Create a new map with specified capacity */
 CljMap *make_map_old(int capacity) {
   if (capacity <= 0) {
-    init_empty_map_singleton_once();
-    return &clj_empty_map_singleton;
+    return clj_empty_map_singleton;
   }
   CljMap *map = ALLOC(CljMap, 1);
   if (!map)
@@ -223,9 +219,9 @@ void map_remove_old(CljObject *map, CljObject *key) {
 
 CljObject* map_from_stack_old(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
-        return make_map_old(0);
+        return (CljObject*)make_map(0);
     }
-    CljMap *map = make_map_old(pair_count * 2);
+    CljMap *map = (CljMap*)make_map(pair_count * 2);
     CljMap *map_data = as_map((CljObject*)map);
     if (!map_data) return NULL;
       for (int i = 0; i < pair_count; i++) {
@@ -241,8 +237,8 @@ CljObject* map_from_stack_old(CljObject **pairs, int pair_count) {
 // === CljValue API (Phase 1: Parallel) ===
 
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
-CljValue make_map(int capacity) {
-    return (CljValue)make_map_old(capacity);
+CljObject* make_map(int capacity) {
+    return (CljObject*)make_map_old(capacity);
 }
 
 /** Get value for key or NULL if absent (structural key equality). */
@@ -389,7 +385,7 @@ CljValue persistent_map(CljValue tmap) {
     if (!m) return NULL;
     
     // Clojure semantics: Create NEW persistent collection
-    CljValue new_map = make_map(m->capacity);  // New instance
+    CljObject *new_map = make_map(m->capacity);  // New instance
     CljMap *new_m = as_map((CljObject*)new_map);
     if (!new_m) return NULL;
     

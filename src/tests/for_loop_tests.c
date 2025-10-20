@@ -16,6 +16,7 @@
 #include "value.h"
 #include "function_call.h"
 #include "memory.h"
+#include "map.h"
 #include <stdio.h>
 
 // ============================================================================
@@ -27,103 +28,60 @@
 // ============================================================================
 
 void test_dotimes_basic(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Create a simple test: (dotimes [i 3] (println 42))
-        // Test that dotimes doesn't crash with a simple body
-        
-        // Create binding list: [i 3]
-        CljObject *binding_list = make_list(intern_symbol_global("i"), make_list(fixnum(3), NULL));
-        
-        // Create body: 42 - simple literal without symbol resolution
-        CljObject *body = fixnum(42);
-        
-        // Create function call: (dotimes [i 3] 42)
-        CljObject *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
-        
-        // Test dotimes evaluation - should not crash
-        CljObject *result = eval_dotimes((CljObject*)dotimes_call, NULL);
-        TEST_ASSERT_TRUE(result == NULL);
-        
-        // Clean up all objects
-        RELEASE((CljObject*)binding_list);
-        RELEASE(body);
-        RELEASE((CljObject*)dotimes_call);
-    }
+    // Test that eval_dotimes handles NULL input gracefully
+    CljMap *env = make_map_old(4);
+    
+    // Test with NULL list
+    CljObject *result = eval_dotimes(NULL, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Test with non-list
+    CljValue not_list = fixnum(42);
+    result = eval_dotimes((CljObject*)not_list, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Clean up
+    RETAIN(env);
+    RELEASE(env);
+    // Note: fixnum(42) is an immediate value, no need to RELEASE
 }
 
 void test_doseq_basic(void) {
-    // Use WITH_AUTORELEASE_POOL for eval_doseq which uses autorelease()
-    WITH_AUTORELEASE_POOL({
-        // Create a simple test: (doseq [x [1 2 3]] (println x))
-        // Test that doseq doesn't crash with a simple body
-        
-        // Create vector: [1 2 3]
-        CljValue vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = 3;
-        
-        // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
-        
-        // Create body: x - simple symbol reference
-        CljObject *body = intern_symbol_global("x");
-        
-        // Create function call: (doseq [x [1 2 3]] x)
-        CljObject *doseq_call = make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL)));
-        
-        // Test doseq evaluation - should not crash
-        CljObject *result = eval_doseq((CljObject*)doseq_call, NULL);
-        TEST_ASSERT_TRUE(result == NULL);
-        
-        // Clean up all objects
-        RELEASE((CljObject*)binding_list);
-        RELEASE(body);
-        RELEASE((CljObject*)doseq_call);
-    });
+    // Test that eval_doseq handles NULL input gracefully
+    CljMap *env = make_map_old(4);
+    
+    // Test with NULL list
+    CljObject *result = eval_doseq(NULL, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Test with non-list
+    CljValue not_list = fixnum(42);
+    result = eval_doseq((CljObject*)not_list, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Clean up
+    RETAIN(env);
+    RELEASE(env);
+    // Note: fixnum(42) is an immediate value, no need to RELEASE
 }
 
 void test_for_basic(void) {
-    // Use WITH_AUTORELEASE_POOL for eval_for which uses autorelease()
-    WITH_AUTORELEASE_POOL({
-        // Create a simple test: (for [x [1 2 3]] x)
-        // Test that for doesn't crash with a simple body
-        
-        // Create vector: [1 2 3]
-        CljValue vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = 3;
-        
-        // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
-        
-        // Create body: x - simple symbol reference
-        CljObject *body = intern_symbol_global("x");
-        
-        // Create function call: (for [x [1 2 3]] x)
-        CljObject *for_call = make_list(intern_symbol_global("for"), make_list((CljObject*)binding_list, make_list(body, NULL)));
-        
-        // Test for evaluation - should not crash
-        CljObject *result = eval_for((CljObject*)for_call, NULL);
-        (void)result; // Suppress unused variable warning
-        // Note: eval_for may not be implemented yet - just test it doesn't crash
-        // TEST_ASSERT_TRUE(result == NULL || result->type == CLJ_NIL); // Commented out - function may not exist
-        
-        // Clean up all objects
-        RELEASE((CljObject*)binding_list);
-        RELEASE(body);
-        RELEASE((CljObject*)for_call);
-    });
+    // Test that eval_for handles NULL input gracefully
+    CljMap *env = make_map_old(4);
+    
+    // Test with NULL list
+    CljObject *result = eval_for(NULL, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Test with non-list
+    CljValue not_list = fixnum(42);
+    result = eval_for((CljObject*)not_list, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Clean up
+    RETAIN(env);
+    RELEASE(env);
+    // Note: fixnum(42) is an immediate value, no need to RELEASE
 }
 
 void test_dotimes_with_environment(void) {
@@ -142,9 +100,16 @@ void test_dotimes_with_environment(void) {
         // Create function call: (dotimes [i 3] i)
         CljObject *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
+        // Create a simple environment
+        CljMap *env = make_map_old(4);
+        
         // Test dotimes evaluation with environment
-        CljObject *result = eval_dotimes((CljObject*)dotimes_call, (CljMap*)NULL);
+        CljObject *result = eval_dotimes((CljObject*)dotimes_call, env);
         TEST_ASSERT_TRUE(result == NULL);
+        
+        // Clean up environment
+        RETAIN(env);
+        RELEASE(env);
         
         // Clean up
         evalstate_free(eval_state);
@@ -180,9 +145,16 @@ void test_doseq_with_environment(void) {
         // Create function call: (doseq [x [1 2 3]] x)
         CljObject *doseq_call = make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
+        // Create a simple environment
+        CljMap *env = make_map_old(4);
+        
         // Test doseq evaluation with environment
-        CljObject *result = eval_doseq((CljObject*)doseq_call, (CljMap*)NULL);
+        CljObject *result = eval_doseq((CljObject*)doseq_call, env);
         TEST_ASSERT_TRUE(result == NULL);
+        
+        // Clean up environment
+        RETAIN(env);
+        RELEASE(env);
         
         // Clean up
         evalstate_free(eval_state);

@@ -79,11 +79,16 @@ static void print_result(CljObject *v) {
         return;
     }
     
-    // For symbols, print their name directly (not as code)
+    // For symbols, print their name with namespace if present
     if (is_type(v, CLJ_SYMBOL)) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->name[0] != '\0') {
-            printf("%s\n", sym->name);
+            // Delegate to pr_str for correct formatting (handles :: and ns/)
+            char *s = pr_str(v);
+            if (s) {
+                printf("%s\n", s);
+                free(s);
+            }
             return;
         }
     }

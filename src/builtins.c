@@ -303,7 +303,7 @@ ID native_array_map(ID *args, int argc) {
     // Must have even number of arguments (key-value pairs)
     if (argc % 2 != 0) {
         // Return empty map instead of nil for odd number of args
-        return OBJ_TO_ID(make_map_old(0));
+        return OBJ_TO_ID(make_map(0));
     }
     
     // Create map with appropriate capacity
@@ -311,13 +311,13 @@ ID native_array_map(ID *args, int argc) {
     
     // Handle empty map case specially
     if (pair_count == 0) {
-        return OBJ_TO_ID(make_map_old(0));
+        return OBJ_TO_ID(make_map(0));
     }
     
-    CljMap *map = (CljMap*)make_map_old(pair_count);
+    CljMap *map = (CljMap*)make_map(pair_count);
     if (!map) {
         // Return empty map instead of nil on allocation failure
-        return OBJ_TO_ID(make_map_old(0));
+        return OBJ_TO_ID(make_map(0));
     }
     
     // Add all key-value pairs
@@ -460,7 +460,7 @@ static int32_t fixnum_to_fixed(int fixnum) {
 // String concatenation (variadic)
 ID native_str(ID *args, int argc) {
     if (argc == 0) {
-        return OBJ_TO_ID(make_string_old(""));
+        return OBJ_TO_ID(make_string(""));
     }
     
     // Calculate total length
@@ -475,7 +475,7 @@ ID native_str(ID *args, int argc) {
     
     // Allocate buffer
     char *buffer = ALLOC(char, total_len + 1);
-    if (!buffer) return make_string_old("");
+    if (!buffer) return make_string("");
     buffer[0] = '\0';
     
     // Concatenate all strings
@@ -487,7 +487,7 @@ ID native_str(ID *args, int argc) {
         }
     }
     
-    CljObject *result = make_string_old(buffer);
+    CljObject *result = make_string(buffer);
     free(buffer);
     return result;
 }

@@ -51,7 +51,7 @@ void test_namespace_switching(void) {
         TEST_ASSERT_NOT_NULL(initial_ns);
         
         // Test namespace switching (simplified)
-        CljObject *new_ns = make_symbol_old("test-ns", "user");
+        CljObject *new_ns = make_symbol("test-ns", "user");
         TEST_ASSERT_NOT_NULL(new_ns);
         
         evalstate_free(eval_state);
@@ -97,7 +97,7 @@ void test_namespace_lookup(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Test symbol creation in namespace
-        CljObject *sym = make_symbol_old("test-symbol", "user");
+        CljObject *sym = make_symbol("test-symbol", "user");
         TEST_ASSERT_NOT_NULL(sym);
         TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
         
@@ -112,8 +112,8 @@ void test_namespace_binding(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Test that we can create symbols in the namespace
-        CljObject *sym1 = make_symbol_old("var1", "user");
-        CljObject *sym2 = make_symbol_old("var2", "user");
+        CljObject *sym1 = make_symbol("var1", "user");
+        CljObject *sym2 = make_symbol("var2", "user");
         
         TEST_ASSERT_NOT_NULL(sym1);
         TEST_ASSERT_NOT_NULL(sym2);

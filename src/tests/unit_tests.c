@@ -45,7 +45,7 @@ void test_list_count(void) {
 
         // Test non-list object (this should not crash)
         // Create a proper CljObject for testing
-        CljObject *int_obj = AUTORELEASE(make_string_old("42")); // Use string as non-list object
+        CljObject *int_obj = AUTORELEASE(make_string("42")); // Use string as non-list object
         TEST_ASSERT_EQUAL_INT(0, list_count(int_obj));
 
         // Test empty list (clj_nil is not a list)
@@ -149,9 +149,9 @@ void test_map_creation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test map creation using CljValue API
-        CljValue map = AUTORELEASE(make_map_old(16));
-        TEST_ASSERT_NOT_NULL((CljObject*)map);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, ((CljObject*)map)->type);
+        CljObject *map = AUTORELEASE(make_map(16));
+        TEST_ASSERT_NOT_NULL(map);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->type);
     }
 }
 
@@ -171,7 +171,7 @@ void test_array_map_builtin(void) {
         CljObject *eval1 = eval_expr_simple(result1, eval_state);
         
         // Debug: Check what native_array_map actually receives
-        CljObject *key = AUTORELEASE(make_string_old("a")); // Use AUTORELEASE for test convenience
+        CljObject *key = AUTORELEASE(make_string("a")); // Use AUTORELEASE for test convenience
         CljObject *value = fixnum(1); // Immediate value, no management needed
         ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)};
         
@@ -401,8 +401,8 @@ void test_cljvalue_wrapper_functions(void) {
         // Test wrapper functions for existing APIs
         CljValue int_val = integer(42);
         CljValue float_val = make_float(3.14);
-        CljValue str_val = make_string_old("hello");
-        CljValue sym_val = make_symbol_old("test", NULL);
+        CljValue str_val = make_string("hello");
+        CljValue sym_val = make_symbol("test", NULL);
         
         TEST_ASSERT_NOT_NULL(int_val);
         TEST_ASSERT_NOT_NULL(float_val);
@@ -1533,6 +1533,8 @@ void test_fixed_comparison_operators(void) {
         
     evalstate_free(st);
 }
+
+// Symbol output tests removed - integrated into existing test structure
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)

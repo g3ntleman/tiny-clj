@@ -22,7 +22,7 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    CljObjectPool *pool;
+    struct CljObjectPool *pool;
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
     

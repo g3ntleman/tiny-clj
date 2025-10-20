@@ -125,7 +125,8 @@ static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
-static ID make_number_by_parsing_old(Reader *reader, EvalState *st);
+static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
+static CljObject* make_number_by_parsing_old(Reader *reader, EvalState *st);
 
 /**
  * @brief Create CljObject by parsing expression from Reader
@@ -151,9 +152,9 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   if (c == '"')
     return parse_string_internal(reader, st);
   if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing_old(reader, st);
+    return make_number_by_parsing(reader, st);
   if (isdigit(c))
-    return make_number_by_parsing_old(reader, st);
+    return make_number_by_parsing(reader, st);
   // Handle nil literal
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
       reader_peek_ahead(reader, 2) == 'l' && 
@@ -507,7 +508,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
   buf[pos] = '\0';
   if (!utf8valid(buf))
     return NULL;
-  return AUTORELEASE(make_string_old(buf));
+  return AUTORELEASE(make_string(buf));
 }
 
 /**
@@ -516,7 +517,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljObject or NULL on error
  */
-static ID make_number_by_parsing_old(Reader *reader, EvalState *st) {
+static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
@@ -586,9 +587,9 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
   
   // Handle numbers with immediate fixnum optimization
   if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing_old(reader, st);
+    return make_number_by_parsing(reader, st);
   if (isdigit(c))
-    return make_number_by_parsing_old(reader, st);
+    return make_number_by_parsing(reader, st);
   
   // Handle nil, true, false literals with immediate special values
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 

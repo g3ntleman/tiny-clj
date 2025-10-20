@@ -81,7 +81,7 @@ void benchmark_persistent_map() {
         CljValue map = make_map_old(0); // Start with empty map
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue key = make_string_old("key");
+            CljValue key = make_string("key");
             CljValue value = fixnum(i);
             map_assoc(map, key, value);
         }
@@ -108,7 +108,7 @@ void benchmark_transient_map() {
         CljValue tmap = transient_map(map);
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue key = make_string_old("key");
+            CljValue key = make_string("key");
             CljValue value = fixnum(i);
             conj_map(tmap, key, value);
         }

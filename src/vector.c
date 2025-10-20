@@ -3,22 +3,19 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-// Empty-vector singleton: actual CljVector instance with rc=0
-static CljPersistentVector clj_empty_vector_singleton;
-/** @brief Initialize empty vector singleton once */
-static void init_empty_vector_singleton_once(void) {
-  static bool initialized = false;
-  if (initialized)
-    return;
-  clj_empty_vector_singleton.base.type = CLJ_VECTOR;
-  clj_empty_vector_singleton.base.rc =
-      0; // Singletons have no reference counting
-  clj_empty_vector_singleton.count = 0;
-  clj_empty_vector_singleton.capacity = 0;
-  clj_empty_vector_singleton.mutable_flag = 0;
-  clj_empty_vector_singleton.data = NULL;
-    initialized = true;
-}
+// Empty-vector singleton: CLJ_VECTOR with rc=0, statically initialized
+static struct {
+    CljPersistentVector vec;
+} clj_empty_vector_singleton_data = {
+    .vec = {
+        .base = { .type = CLJ_VECTOR, .rc = 0 },
+        .count = 0,
+        .capacity = 0,
+        .mutable_flag = 0,
+        .data = NULL
+    }
+};
+static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singleton_data.vec;
 
 // Creates a CljVector.
 // Notes:
@@ -43,8 +40,7 @@ static void init_empty_vector_singleton_once(void) {
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
 CljValue make_vector(int capacity, int is_mutable) {
     if (capacity <= 0) {
-        init_empty_vector_singleton_once();
-        return (CljValue)&clj_empty_vector_singleton;
+        return (CljValue)clj_empty_vector_singleton;
     }
     CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
     if (!vec)

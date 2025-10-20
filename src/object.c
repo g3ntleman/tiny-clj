@@ -170,55 +170,11 @@ CLJException* make_exception(const char *type, const char *message, const char *
 // vector functions moved to vector.c
 
 // Forward declarations for early use
-static void init_static_singletons(void);
 // empty map singleton moved to map.c
-
-// Forward declaration to allow early use
-static void init_static_singletons(void);
 
 // map functions moved to map.c
 
-CljObject* make_symbol_old(const char *name, const char *ns) {
-    if (!name) {
-        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
-                "make_symbol: name cannot be NULL");
-    }
-    
-    // Range check for name length
-    if (strlen(name) >= SYMBOL_NAME_MAX_LEN) {
-        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
-                "Symbol name '%s' exceeds maximum length of %d characters", 
-                name, SYMBOL_NAME_MAX_LEN - 1);
-    }
-    
-    CljSymbol *sym = ALLOC(CljSymbol, 1);
-    if (!sym) {
-        throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
-                "Failed to allocate memory for symbol '%s'", name);
-    }
-    
-    sym->base.type = CLJ_SYMBOL;
-    sym->base.rc = 1;
-    
-    // Copy name to fixed buffer
-    strncpy(sym->name, name, SYMBOL_NAME_MAX_LEN - 1);
-    sym->name[SYMBOL_NAME_MAX_LEN - 1] = '\0';  // Ensure null termination
-    
-    // Get or create namespace object
-    if (ns) {
-        sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
-        if (!sym->ns) {
-            RELEASE((CljObject*)sym);
-            throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
-                    "Failed to create namespace '%s' for symbol '%s'", ns, name);
-        }
-        // Namespace is already retained by ns_get_or_create
-    } else {
-        sym->ns = NULL;  // No namespace
-    }
-    
-    return (CljObject*)sym;
-}
+// make_symbol_old function removed - use make_symbol from value.h instead
 
 CljObject* make_error(const char *message, const char *file, int line, int col) {
     return make_exception_wrapper("Error", message, file, line, col, NULL);
@@ -262,7 +218,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     return (CljObject*)func;
 }
 
-CljList* make_list(CljObject *first, CljObject *rest) {
+CljObject* make_list(CljObject *first, CljObject *rest) {
     CljList *list = ALLOC(CljList, 1);
     if (!list) return NULL;
     
@@ -271,7 +227,7 @@ CljList* make_list(CljObject *first, CljObject *rest) {
     list->first = RETAIN(first);
     list->rest = RETAIN(rest);
     
-    return list;
+    return (CljObject*)list;
 }
 
 char* to_string(CljObject *v) {
@@ -325,6 +281,8 @@ char* to_string(CljObject *v) {
             {
                 CljSymbol *sym = as_symbol(v);
                 if (!sym) return strdup("nil");
+                
+                // Handle namespace-qualified symbols
                 if (sym->ns) {  // Check if namespace exists
                     // Get namespace name from the namespace object
                     CljSymbol *ns_sym = as_symbol(sym->ns->name);
@@ -758,7 +716,7 @@ CljObject* intern_symbol(const char *ns, const char *name) {
     }
     
     // Symbol nicht gefunden, erstelle neues
-    CljObject *symbol = make_symbol_old(name, ns);
+    CljObject *symbol = make_symbol(name, ns);
     if (!symbol) return NULL;
     
     // Füge zur Symbol-Table hinzu
@@ -808,7 +766,7 @@ CljObject *meta_registry = NULL;
 
 void meta_registry_init() {
     {
-        meta_registry = make_map_old(32); // Initial capacity for metadata entries
+        meta_registry = (CljMap*)make_map(32); // Initial capacity for metadata entries
     }
 }
 
@@ -863,20 +821,8 @@ void meta_clear(CljObject *v) {
 
 // Static singletons - these live forever and are never freed
 // Note: nil is now represented as NULL, true/false as immediate values
-// No singletons needed for these types
-static CljObject clj_empty_map_singleton;
-
-// Initialize static singletons
-static void init_static_singletons() {
-    // Note: nil is now represented as NULL, true/false as immediate values
-    // No singletons needed for these types
-    
-
-    // Initialize empty map singleton
-    clj_empty_map_singleton.type = CLJ_MAP;
-    clj_empty_map_singleton.rc = 0; // Singletons do not use reference counting
-    // clj_empty_map_singleton.as.data = NULL; // No pairs = empty map - Union removed
-}
+// empty_map, empty_vector, and empty_string singletons are now statically initialized
+// in their respective source files (map.c, vector.c, string.c)
 
 // Singleton access functions
 // Function wrappers moved to object.h as macros
@@ -896,7 +842,7 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
-    CljObject *new_env = make_map_old(4);
+    CljObject *new_env = make_map(4);
     
     return (id)new_env;
 }

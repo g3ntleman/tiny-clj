@@ -3,9 +3,20 @@
 
 #include "object.h"
 #include "clj_string.h"
+#include "memory.h"
+#include "namespace.h"
+#include "symbol.h"
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
+
+// CljNamespace is already defined in namespace.h
+
+// Forward declarations for string functions
+extern CljObject* empty_string_singleton;
+
+// Forward declarations for namespace functions
+extern struct CljNamespace* ns_get_or_create(const char *name, const char *file);
 
 // CljValue als Alias für CljObject* (Phase 0: Kein Refactoring!)
 typedef CljObject* CljValue;
@@ -93,7 +104,15 @@ static inline int32_t as_fixnum(CljValue val) {
 static inline CljValue make_char(uint32_t codepoint) {
     if (codepoint > CLJ_CHAR_MAX) {
         // Fallback to heap allocation for invalid characters
-        return make_string_old("?");
+        CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
+        if (!v) return NULL;
+        v->type = CLJ_STRING;
+        v->rc = 1;
+        // Store string pointer after CljObject header
+        char **str_ptr = (char**)((char*)v + sizeof(CljObject));
+        *str_ptr = strdup("?");
+        
+        return (CljValue)v;
     }
     // Encode as tagged pointer: codepoint << 3 | TAG_CHAR
     return (CljValue)(((uintptr_t)codepoint << TAG_BITS) | TAG_CHAR);
@@ -231,11 +250,66 @@ static inline CljValue make_float(double x) {
 }
 
 static inline CljValue make_string(const char *str) {
-    return (CljValue)make_string_old(str);
+    if (!str || str[0] == '\0') {
+        return (CljValue)empty_string_singleton;
+    }
+    // Allocate CljObject + space for char* pointer
+    CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
+    if (!v) return NULL;
+    v->type = CLJ_STRING;
+    v->rc = 1;
+    // Store string pointer after CljObject header
+    char **str_ptr = (char**)((char*)v + sizeof(CljObject));
+    *str_ptr = strdup(str);
+    
+    return (CljValue)v;
 }
 
 static inline CljValue make_symbol(const char *name, const char *ns) {
-    return (CljValue)make_symbol_old(name, ns);
+    if (!name) {
+        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
+                "make_symbol: name cannot be NULL");
+        return NULL;
+    }
+    
+    // Range check for name length
+    if (strlen(name) >= SYMBOL_NAME_MAX_LEN) {
+        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
+                "Symbol name '%s' exceeds maximum length of %d characters", 
+                name, SYMBOL_NAME_MAX_LEN - 1);
+        return NULL;
+    }
+    
+    // Use malloc directly instead of ALLOC macro
+    CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
+    if (!sym) {
+        throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
+                "Failed to allocate memory for symbol '%s'", name);
+        return NULL;
+    }
+    
+    sym->base.type = CLJ_SYMBOL;
+    sym->base.rc = 1;
+    
+    // Copy name to fixed buffer
+    strncpy(sym->name, name, SYMBOL_NAME_MAX_LEN - 1);
+    sym->name[SYMBOL_NAME_MAX_LEN - 1] = '\0';  // Ensure null termination
+    
+    // Get or create namespace object
+    if (ns) {
+        sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
+        if (!sym->ns) {
+            free(sym);
+            throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
+                    "Failed to create namespace '%s' for symbol '%s'", ns, name);
+            return NULL;
+        }
+        // Namespace is already retained by ns_get_or_create
+    } else {
+        sym->ns = NULL;  // No namespace
+    }
+    
+    return (CljValue)sym;
 }
 
 #endif

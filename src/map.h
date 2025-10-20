@@ -30,7 +30,7 @@ CljObject* map_from_stack(CljObject **pairs, int pair_count);
 
 // === CljValue API (Phase 1: Parallel) ===
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
-CljValue make_map(int capacity);
+CljObject* make_map(int capacity);
 /** Get value for key or NULL if absent (structural key equality). */
 CljValue map_get(CljValue map, CljValue key);
 /** Associate key->value (replace if key exists; retains value). */

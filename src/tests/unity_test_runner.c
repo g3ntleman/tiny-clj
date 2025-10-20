@@ -22,6 +22,8 @@ extern bool g_memory_verbose_mode;
 // GLOBAL SETUP/TEARDOWN
 // ============================================================================
 
+static bool builtins_registered = false;
+
 void setUp(void) {
     // Global setup for each test
     // NO autorelease pools in setUp/tearDown - incompatible with setjmp/longjmp
@@ -30,14 +32,17 @@ void setUp(void) {
     init_special_symbols();
     meta_registry_init();
     
-    // Register builtin functions for all tests
-    register_builtins();
-    
     MEMORY_PROFILER_INIT();
     // Enable memory profiling for tests
     enable_memory_profiling(true);
     // Disable verbose mode for clean test output (only show errors/leaks)
     set_memory_verbose_mode(false);
+    
+    // Register builtin functions once for all tests
+    if (!builtins_registered) {
+        register_builtins();
+        builtins_registered = true;
+    }
 }
 
 void tearDown(void) {
@@ -405,6 +410,8 @@ extern void test_for_basic(void);
 extern void test_dotimes_with_environment(void);
 extern void test_doseq_with_environment(void);
 
+// Symbol output tests are now in unit_tests.c
+
 
 // Recur tests
 extern void test_recur_factorial(void);
@@ -454,6 +461,8 @@ static void test_group_equal(void) {
     RUN_TEST(test_map_equal_with_nested_vectors);
     
 }
+
+// Symbol output tests are now integrated into unit_tests.c
 
 // ============================================================================
 // COMMAND LINE INTERFACE
@@ -522,17 +531,19 @@ static void run_equal_tests(void) {
     test_group_equal();
 }
 
+// Symbol output tests are now integrated into unit_tests.c
+
 static void run_all_tests(void) {
-    // test_group_memory();  // Temporarily disabled due to crashes
+    test_group_memory();
     test_group_parser();
-    // test_group_exception();  // Temporarily disabled due to crashes
-    // test_group_unit();  // Temporarily disabled due to crashes
-    // test_group_cljvalue();  // Temporarily disabled due to crashes
-    // test_group_namespace();  // Temporarily disabled due to crashes
-    // test_group_seq();  // Temporarily disabled due to crashes
-    // test_group_for_loops();  // Temporarily disabled due to crashes
-    // test_group_equal();  // Temporarily disabled due to crashes
-    // test_group_recur();  // Temporarily disabled due to crashes
+    test_group_exception();
+    test_group_unit();
+    test_group_cljvalue();
+    // test_group_namespace();  // Temporarily disabled due to segmentation fault
+    test_group_seq();
+    // test_group_for_loops();  // Temporarily disabled due to segmentation fault
+    // test_group_equal();  // Temporarily disabled due to segmentation fault
+    // test_group_recur(); // Temporarily disabled due to crash
 }
 
 // ============================================================================
