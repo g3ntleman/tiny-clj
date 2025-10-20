@@ -79,6 +79,21 @@ CljObject* make_list_from_stack(CljObject **stack, int count) {
     return (CljObject*)result;
 }
 
+/** Create a list from CljValue stack items. Returns new CljValue. */
+CljValue make_list_from_stack_v(CljValue *stack, int count) {
+    if (count == 0) return NULL;
+    
+    // Build list from end to start using make_list
+    CljObject *result = NULL;
+    for (int i = count - 1; i >= 0; i--) {
+        CljObject *element = ID_TO_OBJ(stack[i]);
+        CljList *new_node = make_list(element, result);
+        if (element) RETAIN(element);
+        result = (CljObject*)new_node;
+    }
+    return (CljValue)result;
+}
+
 bool is_list(CljObject *v) {
     return v && is_type(v, CLJ_LIST);
 }

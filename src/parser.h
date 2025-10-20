@@ -56,6 +56,14 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state);
 CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
 
 /**
+ * @brief Create CljValue by parsing expression from Reader
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return New CljValue or NULL on error
+ */
+ID make_object_by_parsing_expr(Reader *reader, EvalState *st);
+
+/**
  * @brief Parse Clojure expression from string input (CljValue API)
  * @param input Input string to parse
  * @param st Evaluation state

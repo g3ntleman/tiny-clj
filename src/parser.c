@@ -12,6 +12,8 @@
 
 #include "parser.h"
 #include "function_call.h"
+#include "list_operations.h"
+#include "vector.h"
 #include <string.h>
 #include "clj_string.h"
 #include "map.h"
@@ -116,14 +118,14 @@ static char reader_consume(Reader *reader) {
 }
 
 // Forward declarations for Reader-based parser functions
-static CljObject *parse_meta(Reader *reader, EvalState *st);
-static CljObject *parse_meta_map(Reader *reader, EvalState *st);
-static CljObject *parse_vector(Reader *reader, EvalState *st);
-static CljObject *parse_map(Reader *reader, EvalState *st);
-static CljObject *parse_list(Reader *reader, EvalState *st);
-static CljObject *parse_string_internal(Reader *reader, EvalState *st);
-static CljObject *parse_symbol(Reader *reader, EvalState *st);
-static CljObject *make_number_by_parsing(Reader *reader, EvalState *st);
+static ID parse_meta(Reader *reader, EvalState *st);
+static ID parse_meta_map(Reader *reader, EvalState *st);
+static ID parse_vector(Reader *reader, EvalState *st);
+static ID parse_map(Reader *reader, EvalState *st);
+static ID parse_list(Reader *reader, EvalState *st);
+static ID parse_string_internal(Reader *reader, EvalState *st);
+static ID parse_symbol(Reader *reader, EvalState *st);
+static ID make_number_by_parsing(Reader *reader, EvalState *st);
 
 /**
  * @brief Create CljObject by parsing expression from Reader
@@ -131,7 +133,7 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st);
  * @param st Evaluation state
  * @return New CljObject with RC=1 or NULL on error (caller must release)
  */
-CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
+ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   if (reader_is_eof(reader))
     return NULL;
@@ -192,17 +194,13 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   if (c == '\'') {
     reader_consume(reader); // consume '
     reader_skip_all(reader);
-    CljObject *quoted = make_object_by_parsing_expr(reader, st);
+    ID quoted = make_object_by_parsing_expr(reader, st);
     if (!quoted) return NULL;
     // Create (quote <expr>) list: (quote expr)
     // Build list using the same pattern as parse_list
     CljObject *quote_sym = (CljObject*)intern_symbol_global("quote");
-    CljObject *elements[2] = {quote_sym, quoted};
-    CljObject *result = NULL;
-    for (int i = 1; i >= 0; i--) {
-        result = make_list(elements[i], result);
-    }
-    return result;
+    ID elements[2] = {(CljValue)quote_sym, quoted};
+    return make_list_from_stack_v(elements, 2);
   }
   
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
@@ -240,14 +238,12 @@ CljObject *parse(const char *input, EvalState *st) {
   Reader reader;
   reader_init(&reader, input);
   
-  CljObject *result = NULL;
+  CljValue result = NULL;
   
   // Use TRY/CATCH to handle parsing exceptions
   TRY {
     result = make_object_by_parsing_expr(&reader, st);
-    if (result) {
-      result = AUTORELEASE(result);
-    }
+    // result is already a CljValue, no need for AUTORELEASE
   } CATCH(ex) {
     // Exception caught - return NULL for parse errors
     result = NULL;
@@ -316,15 +312,15 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
  * @param st Evaluation state
  * @return Parsed vector CljObject or NULL on error
  */
-static CljObject *parse_vector(Reader *reader, EvalState *st) {
+static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
-    CljObject *stack[MAX_STACK_VECTOR_SIZE];
+    ID stack[MAX_STACK_VECTOR_SIZE];
     int count = 0;
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       if (count >= MAX_STACK_VECTOR_SIZE)
         return NULL;
-      CljObject *value = make_object_by_parsing_expr(reader, st);
+      ID value = make_object_by_parsing_expr(reader, st);
       if (!value)
         return NULL;
       stack[count++] = value;
@@ -336,14 +332,10 @@ static CljObject *parse_vector(Reader *reader, EvalState *st) {
   }
     // Create vector using new API
     CljValue vec = make_vector_v(count, 0);
-    CljPersistentVector *v = as_vector((CljObject*)vec);
-    if (!v) return NULL;
     for (int i = 0; i < count; i++) {
-        v->data[i] = stack[i];
-        if (stack[i]) RETAIN(stack[i]);
+      vec = vector_conj_v(vec, stack[i]);
     }
-    v->count = count;
-    return (CljObject*)vec;
+    return vec;
   }
   return NULL;
 }
@@ -354,18 +346,18 @@ static CljObject *parse_vector(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed map CljObject or NULL on error
  */
-static CljObject *parse_map(Reader *reader, EvalState *st) {
+static ID parse_map(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '{'))
     return NULL;
   reader_skip_all(reader);
-  CljObject *pairs[MAX_STACK_MAP_PAIRS * 2];
+  ID pairs[MAX_STACK_MAP_PAIRS * 2];
   int pair_count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
-    CljObject *key = make_object_by_parsing_expr(reader, st);
+    ID key = make_object_by_parsing_expr(reader, st);
     if (!key)
       return NULL;
     reader_skip_all(reader);
-    CljObject *value = make_object_by_parsing_expr(reader, st);
+    ID value = make_object_by_parsing_expr(reader, st);
     if (!value)
       return NULL;
     reader_skip_all(reader);
@@ -377,8 +369,8 @@ static CljObject *parse_map(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
-  // Use the old API for now - TODO: implement proper CljValue map parsing
-  return map_from_stack(pairs, pair_count);
+  // Use the new API for CljValue map parsing
+  return map_from_stack_v(pairs, pair_count);
 }
 
 /**
@@ -387,7 +379,7 @@ static CljObject *parse_map(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed list CljObject or NULL on error
  */
-static CljObject *parse_list(Reader *reader, EvalState *st) {
+static ID parse_list(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '('))
     return NULL;
   reader_skip_all(reader);
@@ -399,11 +391,11 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   }
   
   // Parse elements iteratively and build list from start to end
-  CljObject *elements[MAX_STACK_LIST_SIZE];
+  ID elements[MAX_STACK_LIST_SIZE];
   int count = 0;
   
   while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
-    CljObject *element = make_object_by_parsing_expr(reader, st);
+    ID element = make_object_by_parsing_expr(reader, st);
     if (!element) {
       // Clean up already parsed elements
       for (int i = 0; i < count; i++) {
@@ -426,10 +418,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
   }
   
   // Build list from array in correct order
-  CljObject *result = NULL;
-  for (int i = count - 1; i >= 0; i--) {
-    result = (CljObject*)make_list(elements[i], result);
-  }
+  CljValue result = make_list_from_stack_v(elements, count);
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
@@ -446,7 +435,7 @@ static CljObject *parse_list(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed symbol CljObject or NULL on error
  */
-static CljObject *parse_symbol(Reader *reader, EvalState *st) {
+static ID parse_symbol(Reader *reader, EvalState *st) {
   (void)st;
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
@@ -495,7 +484,7 @@ static CljObject *parse_symbol(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed string CljObject or NULL on error
  */
-static CljObject *parse_string_internal(Reader *reader, EvalState *st) {
+static ID parse_string_internal(Reader *reader, EvalState *st) {
   (void)st;
   if (reader_next(reader) != '"')
     return NULL;
@@ -546,7 +535,7 @@ static CljObject *parse_string_internal(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljObject or NULL on error
  */
-static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
+static ID make_number_by_parsing(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
@@ -656,12 +645,12 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
   
   // For complex structures, fall back to heap allocation
   // TODO: Implement CljValue-based vector/map/list parsing
-  CljObject *obj = make_object_by_parsing_expr(reader, st);
+  CljValue obj = make_object_by_parsing_expr(reader, st);
   if (!obj) {
     // Reader is EOF or parsing failed - return NULL
     return NULL;
   }
-  return (CljValue)obj;
+  return obj;
 }
 
 /**
@@ -697,20 +686,20 @@ CljValue parse_v(const char *input, EvalState *st) {
  * @param st Evaluation state
  * @return Object with applied metadata or NULL on error
  */
-static CljObject *parse_meta(Reader *reader, EvalState *st) {
+static ID parse_meta(Reader *reader, EvalState *st) {
   if (!reader_eof(reader) && reader_next(reader) != '^')
     return NULL;
   reader_skip_all(reader);
-  CljObject *meta = make_object_by_parsing_expr(reader, st);
+  ID meta = make_object_by_parsing_expr(reader, st);
   if (!meta)
     return NULL;
   reader_skip_all(reader);
-  CljObject *obj = make_object_by_parsing_expr(reader, st);
+  ID obj = make_object_by_parsing_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
     return NULL;
   }
-  meta_set(obj, meta);
+  meta_set(ID_TO_OBJ(obj), ID_TO_OBJ(meta));
   RELEASE(meta);
   return obj;
 }
@@ -721,22 +710,22 @@ static CljObject *parse_meta(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Object with applied metadata map or NULL on error
  */
-static CljObject *parse_meta_map(Reader *reader,
+static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
   if (reader_next(reader) != '#')
     return NULL;
   if (reader_next(reader) != '^')
     return NULL;
-  CljObject *meta = parse_map(reader, st);
+  ID meta = parse_map(reader, st);
   if (!meta)
     return NULL;
   reader_skip_all(reader);
-  CljObject *obj = make_object_by_parsing_expr(reader, st);
+  ID obj = make_object_by_parsing_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
     return NULL;
   }
-  meta_set(obj, meta);
+  meta_set(ID_TO_OBJ(obj), ID_TO_OBJ(meta));
   RELEASE(meta);
   return obj;
 }
