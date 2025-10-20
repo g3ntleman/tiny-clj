@@ -57,21 +57,44 @@ list(APPEND SOURCES
     src/map.c
     src/string.c
     src/seq.c
-    src/memory_profiler.c
     src/memory.c
     src/error_messages.c
+    src/memory_profiler.c
 )
 
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL ${SOURCES})
 
-# STM32-optimized main (no test code)
+# STM32-optimized sources (no memory profiling for embedded)
+set(STM32_SOURCES
+    src/clojure_core.c
+    src/types.c
+    src/object.c
+    src/builtins.c
+    src/runtime.c
+    src/namespace.c
+    src/symbol.c
+    src/exception.c
+    src/parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/seq.c
+    src/memory.c
+    src/error_messages.c
+    src/memory_profiler.c
+)
+
+# STM32-optimized main (no test code, no memory profiling)
 add_executable(tiny-clj-stm32-main
     src/main_stm32.c
     src/platform_stm32.c
-    ${SOURCES}
+    ${STM32_SOURCES}
 )
-target_compile_definitions(tiny-clj-stm32-main PRIVATE ENABLE_META STM32_BUILD)
+target_compile_definitions(tiny-clj-stm32-main PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING)
 set_target_properties(tiny-clj-stm32-main PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
@@ -86,13 +109,13 @@ add_executable(tiny-clj-repl
 )
 target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
 
-# STM32-optimized REPL (no test code, minimal size)
+# STM32-optimized REPL (no test code, no memory profiling, minimal size)
 add_executable(tiny-clj-stm32
     src/repl.c
     src/platform_stm32.c
-    ${SOURCES}
+    ${STM32_SOURCES}
 )
-target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD)
+target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING)
 set_target_properties(tiny-clj-stm32 PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
