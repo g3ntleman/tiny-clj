@@ -188,12 +188,18 @@ int get_retain_count(CljObject *obj);
         evalstate_free(eval_state); \
     } while(0)
     
-    // Fluent time profiling macro (for benchmarks)
-    #define WITH_TIME_PROFILING(code) do { \
+    // Memory test wrapper macro (recommended)
+    #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
         code; \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
+    
+    // New name for time/memory test wrapper (alias)
+    #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
+    
+    // Legacy alias maintained for compatibility
+    #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
 #else
     // Release builds: DEALLOC calls free() but no memory profiling
     #define DEALLOC(obj) do { \
@@ -244,7 +250,9 @@ int get_retain_count(CljObject *obj);
     #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
     
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
-    #define WITH_TIME_PROFILING(code) do { code } while(0)
+    #define WITH_MEMORY_PROFILING(code) do { code } while(0)
+    #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
+    #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
     #define REFERENCE_COUNT(obj) get_retain_count(obj)
     
 #endif

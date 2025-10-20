@@ -337,8 +337,8 @@ int main(int argc, char **argv) {
         load_clojure_core(st);
         // Enable memory profiling after clojure.core is loaded
         MEMORY_PROFILER_INIT();
-        // Initialize memory profiling hooks for detailed tracking
-        memory_profiling_init_with_hooks();
+        enable_memory_profiling(true);
+        // Hooks no longer required; direct profiling is sufficient
     }
     
     // Register builtin functions

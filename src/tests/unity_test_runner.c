@@ -30,8 +30,6 @@ void setUp(void) {
     meta_registry_init();
     
     MEMORY_PROFILER_INIT();
-    // Initialize memory profiling with hooks for automatic tracking
-    memory_profiling_init_with_hooks();
     // Enable memory profiling for tests
     enable_memory_profiling(true);
     // Disable verbose mode for clean test output (only show errors/leaks)
@@ -52,8 +50,8 @@ void tearDown(void) {
     memory_profiler_check_leaks("Test Complete");
     // Reset memory profiler for next test to isolate memory leaks per test
     memory_profiler_reset();
-    // Cleanup memory profiling hooks
-    memory_profiling_cleanup_with_hooks();
+    // Cleanup memory profiler
+    memory_profiler_cleanup();
 }
 
 // ============================================================================

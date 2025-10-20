@@ -31,35 +31,31 @@ make test-memory-simple
 ### Grundlegende Memory-Profiling-Makros
 
 ```c
-#include "memory_profiler.h"
+#include "memory.h"
 
-// Memory-Profiling für einen Test starten
-MEMORY_TEST_START("My Test Name");
-
-// Test-Code hier...
-CljObject *obj = make_int(42);
-retain(obj);
-release(obj);
-
-// Memory-Profiling beenden und Statistiken anzeigen
-MEMORY_TEST_END("My Test Name");
+// Empfohlen: Wrapper um einen Testabschnitt
+WITH_MEMORY_PROFILING({
+    CljObject *obj = make_int(42);
+    retain(obj);
+    release(obj);
+});
 ```
 
 ### Benchmark-Vergleiche
 
 ```c
-// Vor dem Benchmark
-MemoryStats before = memory_profiler_get_stats();
+WITH_MEMORY_PROFILING({
+    MemoryStats before = memory_profiler_get_stats();
 
-// Benchmark-Code hier...
-for (int i = 0; i < 1000; i++) {
-    CljObject *obj = make_int(i);
-    release(obj);
-}
+    // Benchmark-Code hier...
+    for (int i = 0; i < 1000; i++) {
+        CljObject *obj = make_int(i);
+        release(obj);
+    }
 
-// Nach dem Benchmark
-MemoryStats after = memory_profiler_get_stats();
-MEMORY_PROFILER_COMPARE_STATS(before, after, "Benchmark Name");
+    MemoryStats after = memory_profiler_get_stats();
+    MEMORY_PROFILER_COMPARE_STATS(before, after, "Benchmark Name");
+});
 ```
 
 ### Manuelle Statistiken
@@ -124,17 +120,14 @@ MEMORY_PROFILER_CHECK_LEAKS("After Operation");
 ```c
 static char *test_my_function_with_memory_profiling(void) {
     printf("\n=== Testing My Function with Memory Profiling ===\n");
-    
-    MEMORY_TEST_START("My Function Test");
-    
-    // Bestehender Test-Code...
-    CljObject *result = my_function();
-    mu_assert("function works", result != NULL);
-    
-    release(result);
-    
-    MEMORY_TEST_END("My Function Test");
-    
+
+    WITH_MEMORY_PROFILING({
+        // Bestehender Test-Code...
+        CljObject *result = my_function();
+        mu_assert("function works", result != NULL);
+        release(result);
+    });
+
     printf("✓ My function test passed\n");
     return 0;
 }

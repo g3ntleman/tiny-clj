@@ -25,7 +25,8 @@ The Memory Profiler is a comprehensive debugging tool for Tiny-CLJ that tracks o
 - **Retention Ratios** - Reference counting efficiency metrics
 
 ### 🧪 **Test Integration**
-- **Test Memory Profiling** - `WITH_AUTORELEASE_POOL` macro
+- **Test Memory Profiling** - `WITH_MEMORY_PROFILING({ ... })` Makro (empfohlen)
+- **Autorelease-Scopes** - `WITH_AUTORELEASE_POOL({ ... })` für Code, der `AUTORELEASE()` nutzt
 - **Benchmark Support** - Memory usage comparison between tests
 - **Leak Detection** - Automatic leak detection in tests
 
@@ -145,17 +146,17 @@ void my_function(void) {
 }
 ```
 
-### Test Memory Profiling
+### Test Memory Profiling (empfohlen)
 
 ```c
-#include "memory.h"  // Includes WITH_AUTORELEASE_POOL
+#include "memory.h"  // Includes WITH_MEMORY_PROFILING and WITH_AUTORELEASE_POOL
 
 static char *test_my_function(void) {
-    WITH_AUTORELEASE_POOL({
+    WITH_MEMORY_PROFILING({
         // Test code here
-        CljObject *obj = AUTORELEASE(make_int(42));
+        CljObject *obj = make_int(42);
         mu_assert("object created", obj != NULL);
-        // Objects automatically released when pool pops
+        RELEASE(obj);
     });
     return 0;
 }
@@ -243,15 +244,14 @@ This is **NOT a real memory leak**! It's the **Autorelease Pool itself** that ge
 
 ### 🧪 **Test Integration**
 
-The Memory Profiler integrates seamlessly with the test framework:
+Der Memory Profiler integriert sich nahtlos in das Test-Framework:
 
 ```c
-// In test files
-WITH_AUTORELEASE_POOL({
-    // Test code
-    CljObject *obj = AUTORELEASE(make_int(42));
+// In test files (empfohlen)
+WITH_MEMORY_PROFILING({
+    CljObject *obj = make_int(42);
     mu_assert("test passed", obj != NULL);
-    // Automatic cleanup
+    RELEASE(obj);
 });
 ```
 
@@ -262,21 +262,15 @@ The profiler automatically detects potential memory leaks:
 - **Object Creations > Object Destructions** = Potential leak
 - **Peak Memory > 0** after cleanup = Potential leak
 
-## Integration with Memory Hooks
+## Integration
 
-The Memory Profiler works in conjunction with `memory_hooks.c` to automatically track memory operations:
+Für die meisten Tests genügt:
 
 ```c
-// Automatic tracking via hooks
-void memory_profiling_init_with_hooks(void) {
-    memory_profiler_init();
-    memory_hooks_register(memory_profiler_hook);
-}
-
-void memory_profiling_cleanup_with_hooks(void) {
-    memory_hooks_unregister();
-    memory_profiler_cleanup();
-}
+MEMORY_PROFILER_INIT();
+enable_memory_profiling(true);
+// ... run tests ...
+memory_profiler_cleanup();
 ```
 
 ## Performance Impact

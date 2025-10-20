@@ -163,8 +163,9 @@ int main() {
     printf("Tiny-CLJ Transient Performance Benchmark\n");
     printf("========================================\n\n");
     
-    // Initialize memory system
-    memory_profiling_init_with_hooks();
+    // Initialize memory profiling (debug only)
+    MEMORY_PROFILER_INIT();
+    enable_memory_profiling(true);
     
     // Run benchmarks
     benchmark_immediates();
@@ -176,6 +177,7 @@ int main() {
     // Print memory statistics
     memory_profiler_print_stats("Benchmark Complete");
     memory_profiler_check_leaks("Benchmark Complete");
+    memory_profiler_cleanup();
     
     return 0;
 }

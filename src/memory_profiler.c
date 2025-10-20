@@ -605,9 +605,6 @@ void memory_profiler_print_stats(const char *test_name) {
     (void)test_name; /* no-op */ 
 }
 
-void memory_profiler_track_allocation(size_t size) { 
-    (void)size; /* no-op */ 
-}
 void memory_profiler_track_deallocation(size_t size) { 
     (void)size; /* no-op */ 
 }
