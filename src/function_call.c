@@ -18,6 +18,7 @@
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
+#include "error_messages.h"
 #include "list_operations.h"
 #include "builtins.h"
 
@@ -709,11 +710,170 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
             return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
         }
         
+        // Handle Float16 comparisons
+        if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
+            bool equal = (as_float16((CljValue)a) == as_float16((CljValue)b));
+            RELEASE(a);
+            RELEASE(b);
+            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        }
+        
+        // Handle mixed int/float comparisons
+        if ((is_fixnum((CljValue)a) && is_float16((CljValue)b)) || 
+            (is_float16((CljValue)a) && is_fixnum((CljValue)b))) {
+            float val_a = is_fixnum((CljValue)a) ? (float)as_fixnum((CljValue)a) : as_float16((CljValue)a);
+            float val_b = is_fixnum((CljValue)b) ? (float)as_fixnum((CljValue)b) : as_float16((CljValue)b);
+            bool equal = (val_a == val_b);
+            RELEASE(a);
+            RELEASE(b);
+            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        }
+        
         // For other types, use clj_equal
         bool equal = clj_equal(a, b);
         RELEASE(a);
         RELEASE(b);
         return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    }
+    
+    if (op == SYM_LT) {
+        // Handle < operator with Float16 support
+        CljObject *a = eval_arg_retained(list, 1, env);
+        CljObject *b = eval_arg_retained(list, 2, env);
+        
+        if (!a || !b) {
+            if (a) RELEASE(a);
+            if (b) RELEASE(b);
+            return NULL;
+        }
+        
+        bool result = false;
+        
+        // Handle different number type combinations
+        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_fixnum((CljValue)a) < as_fixnum((CljValue)b));
+        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
+            result = ((float)as_fixnum((CljValue)a) < as_float16((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_float16((CljValue)a) < (float)as_fixnum((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
+            result = (as_float16((CljValue)a) < as_float16((CljValue)b));
+        } else {
+            // Type error
+            RELEASE(a);
+            RELEASE(b);
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return NULL;
+        }
+        
+        RELEASE(a);
+        RELEASE(b);
+        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    }
+    
+    if (op == SYM_GT) {
+        // Handle > operator with Float16 support
+        CljObject *a = eval_arg_retained(list, 1, env);
+        CljObject *b = eval_arg_retained(list, 2, env);
+        
+        if (!a || !b) {
+            if (a) RELEASE(a);
+            if (b) RELEASE(b);
+            return NULL;
+        }
+        
+        bool result = false;
+        
+        // Handle different number type combinations
+        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_fixnum((CljValue)a) > as_fixnum((CljValue)b));
+        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
+            result = ((float)as_fixnum((CljValue)a) > as_float16((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_float16((CljValue)a) > (float)as_fixnum((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
+            result = (as_float16((CljValue)a) > as_float16((CljValue)b));
+        } else {
+            // Type error
+            RELEASE(a);
+            RELEASE(b);
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return NULL;
+        }
+        
+        RELEASE(a);
+        RELEASE(b);
+        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    }
+    
+    if (op == SYM_LE) {
+        // Handle <= operator with Float16 support
+        CljObject *a = eval_arg_retained(list, 1, env);
+        CljObject *b = eval_arg_retained(list, 2, env);
+        
+        if (!a || !b) {
+            if (a) RELEASE(a);
+            if (b) RELEASE(b);
+            return NULL;
+        }
+        
+        bool result = false;
+        
+        // Handle different number type combinations
+        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_fixnum((CljValue)a) <= as_fixnum((CljValue)b));
+        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
+            result = ((float)as_fixnum((CljValue)a) <= as_float16((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_float16((CljValue)a) <= (float)as_fixnum((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
+            result = (as_float16((CljValue)a) <= as_float16((CljValue)b));
+        } else {
+            // Type error
+            RELEASE(a);
+            RELEASE(b);
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return NULL;
+        }
+        
+        RELEASE(a);
+        RELEASE(b);
+        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    }
+    
+    if (op == SYM_GE) {
+        // Handle >= operator with Float16 support
+        CljObject *a = eval_arg_retained(list, 1, env);
+        CljObject *b = eval_arg_retained(list, 2, env);
+        
+        if (!a || !b) {
+            if (a) RELEASE(a);
+            if (b) RELEASE(b);
+            return NULL;
+        }
+        
+        bool result = false;
+        
+        // Handle different number type combinations
+        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_fixnum((CljValue)a) >= as_fixnum((CljValue)b));
+        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
+            result = ((float)as_fixnum((CljValue)a) >= as_float16((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
+            result = (as_float16((CljValue)a) >= (float)as_fixnum((CljValue)b));
+        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
+            result = (as_float16((CljValue)a) >= as_float16((CljValue)b));
+        } else {
+            // Type error
+            RELEASE(a);
+            RELEASE(b);
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return NULL;
+        }
+        
+        RELEASE(a);
+        RELEASE(b);
+        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
     }
     
     if (op == SYM_IF) {

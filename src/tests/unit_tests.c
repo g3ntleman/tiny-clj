@@ -1289,15 +1289,14 @@ void test_float16_variadic_operations(void) {
 }
 
 void test_float16_error_handling(void) {
-    WITH_AUTORELEASE_POOL({
-            EvalState *st = evalstate_new();
-            if (!st) {
-                TEST_FAIL_MESSAGE("Failed to create EvalState");
-                return;
-            }
-            
-            // Initialize namespace first
-            register_builtins();
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize namespace first
+    register_builtins();
         
         // Test division by zero
         CljObject *result = eval_string("(/ 1.0 0.0)", st);
@@ -1315,8 +1314,72 @@ void test_float16_error_handling(void) {
         TEST_ASSERT_TRUE(result == NULL || (result && result->type == CLJ_EXCEPTION));
         if (result) RELEASE(result);
         
-            evalstate_free(st);
-    });
+    evalstate_free(st);
+}
+
+void test_float16_comparison_operators(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize namespace first
+    register_builtins();
+        
+        // Test < operator
+        CljObject *result = eval_string("(< 1.5 2.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        // Test > operator
+        result = eval_string("(> 2.0 1.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        // Test <= operator
+        result = eval_string("(<= 1.5 1.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        // Test >= operator
+        result = eval_string("(>= 2.0 2.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        // Test = operator
+        result = eval_string("(= 1.5 1.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        // Test mixed int/float comparisons
+        result = eval_string("(< 1 1.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        result = eval_string("(> 1.5 1)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        // Test false cases
+        result = eval_string("(< 2.0 1.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_FALSE(clj_is_truthy(result));
+        RELEASE(result);
+        
+        result = eval_string("(> 1.5 2.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_FALSE(clj_is_truthy(result));
+        RELEASE(result);
+        
+    evalstate_free(st);
 }
 
 // ============================================================================
