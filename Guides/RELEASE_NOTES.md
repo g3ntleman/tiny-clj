@@ -1,10 +1,31 @@
-# Tiny-CLJ Release Notes (2025-10-05)
+# Tiny-CLJ Release Notes (2025-10-20)
 
 ## Highlights
-- UTF-8 parsing: validation & iteration for symbols/strings (no normalization).
-- New UTF-8 tests incl. checkmark character (✓) for symbol and string roundtrip.
-- Autorelease pool now backed by CljWeakVector for better locality and fewer allocations.
-- README: Documented ObjC pre-ARC style memory model (retain/release/autorelease); exceptions are not autoreleased; singletons skip RC.
+- **Float16 Support**: Complete half-precision floating-point implementation for embedded systems
+- **Arithmetic Operations**: Full support for +, -, *, / with mixed int/float operations
+- **Comparison Operators**: Complete set of comparison operators (=, <, >, <=, >=) with type promotion
+- **DRY Refactoring**: Eliminated code duplication in comparison operators (~200 lines reduced)
+- **Memory Safety**: Fixed immediate value handling in memory management
+- **Release Target Optimization**: Separate STM32 builds optimized for embedded deployment
+
+## Float16 Implementation
+- **Type System**: Float16 stored as immediate values (no heap allocation)
+- **Type Promotion**: Automatic promotion to float32 for internal calculations
+- **Mixed Operations**: Seamless int/float arithmetic with single-pass processing
+- **Precision**: ~3-4 decimal digits following IEEE-754 binary16 standard
+- **Compiler Support**: Uses `_Float16`/`__fp16` when available, portable fallback otherwise
+
+## Code Quality Improvements
+- **DRY Principles**: Generic comparison functions eliminate code duplication
+- **Memory Management**: Safe handling of immediate values vs heap objects
+- **Error Handling**: Centralized error message constants
+- **Type Safety**: Proper immediate value checks in memory operations
+
+## Release Target Optimization
+- **tiny-clj-repl**: 569KB (development with memory profiling)
+- **tiny-clj-stm32-main**: 84KB (minimal embedded build)
+- **tiny-clj-stm32**: 327KB (embedded REPL)
+- **Optimizations**: -Os -DNDEBUG -ffunction-sections with dead code elimination
 
 ## Changes
 - Parser: Non-ASCII defaults to `parse_symbol`; UTF-8 validation via `external/utf8.h`.
