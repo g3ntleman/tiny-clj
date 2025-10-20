@@ -28,6 +28,10 @@ static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
     return false;
   
+  // Switch to clojure.core namespace for loading core functions
+  const char *original_ns = st->current_ns ? st->current_ns->name ? as_symbol(st->current_ns->name)->name : NULL : NULL;
+  evalstate_set_ns(st, "clojure.core");
+  
   // Use Reader to parse multiple expressions
   Reader reader;
   reader_init(&reader, src);
@@ -41,7 +45,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     if (reader_is_eof(&reader)) break;
     
     CljValue form = make_value_by_parsing_expr(&reader, st);
-    if (is_nil(form)) {
+    if (!form) {
       DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d (returned nil)\n", expr_count + 1);
       // Continue to next expression instead of breaking
       expr_count++;
@@ -51,7 +55,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     // Evaluate with exception handling using TRY/CATCH
     TRY {
       CljValue result = eval_expr_simple((CljObject*)form, st);
-      if (!is_nil(result)) {
+      if (result) {
         RELEASE((CljObject*)result);
       }
       success_count++;
@@ -67,6 +71,11 @@ static bool eval_core_source(const char *src, EvalState *st) {
     
     RELEASE((CljObject*)form);
     expr_count++;
+  }
+  
+  // Switch back to original namespace
+  if (original_ns) {
+    evalstate_set_ns(st, original_ns);
   }
   
   if (!g_core_quiet) {

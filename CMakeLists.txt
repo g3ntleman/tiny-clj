@@ -109,6 +109,8 @@ add_executable(unity-tests
     src/tests/exception_tests.c
     src/tests/unit_tests.c
     src/tests/namespace_tests.c
+    src/tests/test_namespace.c
+    src/tests/test_equal.c
     src/tests/seq_tests.c
     src/tests/for_loop_tests.c
     external/unity/src/unity.c

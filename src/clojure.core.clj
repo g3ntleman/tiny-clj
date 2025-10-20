@@ -42,7 +42,16 @@ R"CLOJURE(
 ; ============================================================================
 (def identity (fn [x] x))
 
-; Note: map and constantly commented out until recur is implemented
-; (def map (fn [f coll] ...))  ; Requires recur for proper implementation
-; (def constantly (fn [x] (fn [y] x)))  ; Nested functions not yet supported
+; ============================================================================
+; Higher-Order Functions
+; ============================================================================
+(def map (fn [f coll]
+  (if (empty? coll)
+    (list)
+    (cons (f (first coll)) (recur f (rest coll))))))
+
+; ============================================================================
+; Utility Functions
+; ============================================================================
+(def constantly (fn [x] (fn [y] x)))
 )CLOJURE"

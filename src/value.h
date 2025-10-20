@@ -170,9 +170,6 @@ static inline bool is_heap_object(CljValue val) {
 
 
 // Type checking helpers
-static inline bool is_nil(CljValue val) {
-    return val == NULL;  // nil ist NULL
-}
 
 static inline bool is_bool(CljValue val) {
     if (!is_special(val)) return false;

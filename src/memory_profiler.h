@@ -108,6 +108,7 @@ typedef struct {
 
 // Global memory statistics
 extern MemoryStats g_memory_stats;
+extern bool g_memory_verbose_mode;
 
 /**
  * @brief Initialize the memory profiler system
@@ -167,6 +168,12 @@ void enable_memory_profiling(bool enabled);
  * @return true if enabled, false otherwise
  */
 bool is_memory_profiling_enabled(void);
+
+/**
+ * @brief Set memory verbose mode for test output
+ * @param verbose true to show detailed stats for all tests, false to show only errors/leaks
+ */
+void set_memory_verbose_mode(bool verbose);
 
 /**
  * @brief Track a memory allocation

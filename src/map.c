@@ -53,7 +53,13 @@ CljObject *map_get(CljObject *map, CljObject *key) {
   if (!map_data)
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
-    if (clj_equal(KV_KEY(map_data->data, i), key)) {
+    CljObject *stored_key = KV_KEY(map_data->data, i);
+    // Fast path: pointer comparison first (for interned symbols)
+    if (stored_key == key) {
+      return KV_VALUE(map_data->data, i);
+    }
+    // Fallback: structural comparison for non-interned objects
+    if (clj_equal(stored_key, key)) {
       return KV_VALUE(map_data->data, i);
     }
   }

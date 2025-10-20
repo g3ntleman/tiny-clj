@@ -29,64 +29,59 @@
 // ============================================================================
 
 void test_simple_try_catch_exception_caught(void) {
-    WITH_AUTORELEASE_POOL({
-        bool exception_caught = false;
-        
-        TRY {
-            throw_exception("TestException", "Test error", __FILE__, __LINE__, 0);
-            TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");
-        } CATCH(ex) {
-            exception_caught = true;
-            TEST_ASSERT_NOT_NULL(ex);
-            TEST_ASSERT_EQUAL_STRING("TestException", ex->type);
-            TEST_ASSERT_EQUAL_STRING("Test error", ex->message);
-        } END_TRY
-        
-        TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been caught");
-    });
+    bool exception_caught = false;
+    
+    TRY {
+        throw_exception("TestException", "Test error", __FILE__, __LINE__, 0);
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("TestException", ex->type);
+        TEST_ASSERT_EQUAL_STRING("Test error", ex->message);
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been caught");
 }
 
 void test_simple_try_catch_no_exception(void) {
-    // Foundation pre-ARC style: Isolate autorelease pool per test
-    WITH_AUTORELEASE_POOL({
-        bool try_executed = false;
-        bool catch_executed = false;
-        
-        TRY {
-            try_executed = true;
-        } CATCH(ex) {
-            catch_executed = true;
-            TEST_ASSERT_TRUE_MESSAGE(false, "CATCH should not run when no exception");
-            RELEASE(ex);
-        } END_TRY
-        
-        TEST_ASSERT_TRUE_MESSAGE(try_executed, "TRY block should have executed");
-        TEST_ASSERT_FALSE_MESSAGE(catch_executed, "CATCH block should not have executed");
-    });
+    bool try_executed = false;
+    bool catch_executed = false;
+    
+    TRY {
+        try_executed = true;
+    } CATCH(ex) {
+        catch_executed = true;
+        TEST_ASSERT_TRUE_MESSAGE(false, "CATCH should not run when no exception");
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(try_executed, "TRY block should have executed");
+    TEST_ASSERT_FALSE_MESSAGE(catch_executed, "CATCH block should not have executed");
 }
 
 void test_nested_try_catch_inner_exception(void) {
     bool outer_try = false, inner_try = false, inner_catch = false;
     bool outer_catch = false, after_inner = false;
     
-    // Foundation pre-ARC style: Isolate autorelease pool per test
-    WITH_AUTORELEASE_POOL({
+    TRY {
+        outer_try = true;
         TRY {
-            outer_try = true;
-            TRY {
-                inner_try = true;
-                throw_exception("InnerException", "Inner error", __FILE__, __LINE__, 0);
-                TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here");
-            } CATCH(ex) {
-                inner_catch = true;
-                TEST_ASSERT_EQUAL_STRING("InnerException", ex->type);
-            } END_TRY
-            after_inner = true;
+            inner_try = true;
+            throw_exception("InnerException", "Inner error", __FILE__, __LINE__, 0);
+            TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here");
         } CATCH(ex) {
-            outer_catch = true;
-            TEST_ASSERT_TRUE_MESSAGE(false, "Outer CATCH should not run");
+            inner_catch = true;
+            TEST_ASSERT_EQUAL_STRING("InnerException", ex->type);
+            // Exception is automatically managed by CATCH macro
         } END_TRY
-    });
+        after_inner = true;
+    } CATCH(ex) {
+        outer_catch = true;
+        TEST_ASSERT_TRUE_MESSAGE(false, "Outer CATCH should not run");
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
     
     TEST_ASSERT_TRUE_MESSAGE(outer_try, "Outer TRY should have executed");
     TEST_ASSERT_TRUE_MESSAGE(inner_try, "Inner TRY should have executed");
@@ -123,85 +118,82 @@ void test_nested_try_catch_outer_exception(void) {
 }
 
 void test_exception_with_autorelease(void) {
-    WITH_AUTORELEASE_POOL({
-        bool exception_caught = false;
+    bool exception_caught = false;
+    
+    TRY {
+        // Create some objects that should be cleaned up
+        CljObject *obj1 = AUTORELEASE((CljObject*)make_fixnum(42));
+        CljValue obj2 = make_string_v("test");
+        TEST_ASSERT_NOT_NULL(obj1);
+        TEST_ASSERT_NOT_NULL(obj2);
         
-        TRY {
-            // Create some objects that should be cleaned up
-            CljObject *obj1 = (CljObject*)make_fixnum(42);
-            CljValue obj2 = make_string_v("test");
-            TEST_ASSERT_NOT_NULL(obj1);
-            TEST_ASSERT_NOT_NULL(obj2);
-            
-            throw_exception("AutoreleaseException", "Test with autorelease", __FILE__, __LINE__, 0);
-            TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here");
-        } CATCH(ex) {
-            exception_caught = true;
-            TEST_ASSERT_EQUAL_STRING("AutoreleaseException", ex->type);
-        } END_TRY
-        
-        TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been caught");
-        // Objects should be automatically cleaned up by WITH_AUTORELEASE_POOL
-    });
+        throw_exception("AutoreleaseException", "Test with autorelease", __FILE__, __LINE__, 0);
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_EQUAL_STRING("AutoreleaseException", ex->type);
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been caught");
+    // Objects are automatically cleaned up by AUTORELEASE
 }
 
 void test_repl_crash_scenario(void) {
     // This test reproduces the exact crash scenario from the REPL
     // Test manual memory management with exceptions - Foundation-style
     
-    WITH_AUTORELEASE_POOL({
-        TRY {
-            // Create some objects that will be in the autorelease pool
-            CljObject *obj1 = (CljObject*)make_fixnum(42);
-            CljValue obj2 = make_string_v("test");
-            CljObject *obj3 = make_symbol("test", NULL);
-            
-            // Throw exception - this should cause memory corruption
-            // when the autorelease pool is cleaned up
-            throw_exception("WrongArgumentException", "String cannot be used as a Number", 
-                          "src/function_call.c", 144, 0);
-            
-        } CATCH(ex) {
-            // This should catch the exception but may crash during cleanup
-            TEST_ASSERT_NOT_NULL(ex);
-            TEST_ASSERT_EQUAL_STRING("WrongArgumentException", ex->type);
-        } END_TRY
-    });
+    TRY {
+        // Create some objects that will be in the autorelease pool
+        CljObject *obj1 = AUTORELEASE((CljObject*)make_fixnum(42));
+        CljValue obj2 = make_string_v("test");
+        CljObject *obj3 = AUTORELEASE(make_symbol("test", NULL));
+        
+        // Throw exception - this should cause memory corruption
+        // when the autorelease pool is cleaned up
+        throw_exception("WrongArgumentException", "String cannot be used as a Number", 
+                      "src/function_call.c", 144, 0);
+        
+    } CATCH(ex) {
+        // This should catch the exception but may crash during cleanup
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("WrongArgumentException", ex->type);
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
 }
 
 void test_map_arity_exception_zero_args(void) {
-    WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        bool exception_caught = false;
+    EvalState *st = evalstate_new();
+    bool exception_caught = false;
+    
+    TRY {
+        // Create a map and bind it to 'm'
+        CljValue map_obj = AUTORELEASE(make_map_v(2));
+        CljObject *key = AUTORELEASE(make_symbol(":a", NULL));
+        CljObject *val = AUTORELEASE((CljObject*)make_fixnum(1));
+        map_assoc_v(map_obj, key, val);
         
-        TRY {
-            // Create a map and bind it to 'm'
-            CljValue map_obj = AUTORELEASE(make_map_v(2));
-            CljObject *key = AUTORELEASE(make_symbol(":a", NULL));
-            CljObject *val = AUTORELEASE((CljObject*)make_fixnum(1));
-            map_assoc_v(map_obj, key, val);
-            
-            // Define 'm' in current namespace
-            CljObject *m_sym =AUTORELEASE(make_symbol("m", NULL));
-            ns_define(st, m_sym, (CljObject*)map_obj);
-            
-            // Try to call map with 0 arguments: (m)
-            CljObject *result = eval_string("(m)", st);
-            
-            // Should not reach here
-            TEST_ASSERT_TRUE_MESSAGE(false, "Should throw ArityException when calling map with 0 args");
-        } CATCH(ex) {
-            exception_caught = true;
-            TEST_ASSERT_NOT_NULL(ex);
-            // Check exception type (might be ArityException or RuntimeException)
-            // Accept both as valid error indicators
-        } END_TRY
+        // Define 'm' in current namespace
+        CljObject *m_sym = AUTORELEASE(make_symbol("m", NULL));
+        ns_define(st, m_sym, (CljObject*)map_obj);
         
-        TEST_ASSERT_TRUE_MESSAGE(exception_caught, 
-            "Exception should be thrown when calling map with wrong arity");
+        // Try to call map with 0 arguments: (m)
+        CljObject *result = eval_string("(m)", st);
         
-        evalstate_free(st);
-    });
+        // Should not reach here
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should throw ArityException when calling map with 0 args");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        // Check exception type (might be ArityException or RuntimeException)
+        // Accept both as valid error indicators
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, 
+        "Exception should be thrown when calling map with wrong arity");
+    
+    evalstate_free(st);
 }
 
 // ============================================================================

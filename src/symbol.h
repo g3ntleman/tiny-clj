@@ -29,6 +29,7 @@ extern CljObject *SYM_MINUS;
 extern CljObject *SYM_MULTIPLY;
 extern CljObject *SYM_DIVIDE;
 extern CljObject *SYM_EQUALS;
+extern CljObject *SYM_EQUAL;
 extern CljObject *SYM_LT;
 extern CljObject *SYM_GT;
 extern CljObject *SYM_LE;

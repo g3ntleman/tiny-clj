@@ -13,6 +13,10 @@
 #include <stdio.h>
 #include <string.h>
 
+// Access to global memory stats for leak checking
+extern MemoryStats g_memory_stats;
+extern bool g_memory_verbose_mode;
+
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
 // ============================================================================
@@ -30,6 +34,8 @@ void setUp(void) {
     memory_profiling_init_with_hooks();
     // Enable memory profiling for tests
     enable_memory_profiling(true);
+    // Disable verbose mode for clean test output (only show errors/leaks)
+    set_memory_verbose_mode(false);
 }
 
 void tearDown(void) {
@@ -39,8 +45,10 @@ void tearDown(void) {
     
     symbol_table_cleanup();
     meta_registry_cleanup();
-    // Print memory statistics and check for leaks
-    memory_profiler_print_stats("Test Complete");
+    // Only print memory statistics if there are leaks or in verbose mode
+    if (g_memory_stats.memory_leaks > 0 || g_memory_verbose_mode) {
+        memory_profiler_print_stats("Test Complete");
+    }
     memory_profiler_check_leaks("Test Complete");
     // Reset memory profiler for next test to isolate memory leaks per test
     memory_profiler_reset();
@@ -162,6 +170,25 @@ extern void test_load_multiline_file(void);
 // Map function test
 extern void test_map_function(void);
 
+// Equal function tests
+extern void test_equal_null_pointers(void);
+extern void test_equal_same_objects(void);
+extern void test_equal_different_strings(void);
+extern void test_equal_different_types(void);
+extern void test_equal_immediate_values(void);
+extern void test_vector_equal_same_vectors(void);
+extern void test_vector_equal_different_lengths(void);
+extern void test_vector_equal_different_values(void);
+extern void test_vector_equal_with_strings(void);
+extern void test_list_equal_same_lists(void);
+extern void test_list_equal_same_instance(void);
+extern void test_list_equal_empty_lists(void);
+extern void test_map_equal_same_maps(void);
+extern void test_map_equal_different_keys(void);
+extern void test_map_equal_different_values(void);
+extern void test_map_equal_different_sizes(void);
+extern void test_map_equal_with_nested_vectors(void);
+
 static void test_group_unit(void) {
     RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
@@ -225,6 +252,22 @@ extern void test_special_ns_variable(void);
 extern void test_namespace_lookup(void);
 extern void test_namespace_binding(void);
 
+// Namespace tests (from test_namespace.c)
+extern void test_namespace_lookup_core_functions(void);
+extern void test_namespace_lookup_user_namespace(void);
+extern void test_namespace_lookup_cross_namespace(void);
+extern void test_symbol_interning_consistency(void);
+extern void test_symbol_interning_with_namespace(void);
+extern void test_symbol_interning_global(void);
+extern void test_symbol_table_operations(void);
+extern void test_namespace_creation_and_switching(void);
+extern void test_namespace_variable_storage(void);
+extern void test_namespace_multiple_variables(void);
+extern void test_symbol_resolution_fallback(void);
+extern void test_namespace_special_characters(void);
+extern void test_namespace_error_handling(void);
+extern void test_namespace_memory_management(void);
+
 static void test_group_namespace(void) {
     RUN_TEST(test_evalstate_creation);
     RUN_TEST(test_namespace_switching);
@@ -232,6 +275,26 @@ static void test_group_namespace(void) {
     RUN_TEST(test_special_ns_variable);
     RUN_TEST(test_namespace_lookup);
     RUN_TEST(test_namespace_binding);
+    
+    // Namespace lookup tests
+    RUN_TEST(test_namespace_lookup_core_functions);
+    RUN_TEST(test_namespace_lookup_user_namespace);
+    RUN_TEST(test_namespace_lookup_cross_namespace);
+    
+    // Symbol interning tests
+    RUN_TEST(test_symbol_interning_consistency);
+    RUN_TEST(test_symbol_interning_with_namespace);
+    RUN_TEST(test_symbol_interning_global);
+    RUN_TEST(test_symbol_table_operations);
+    
+    // Namespace management tests
+    RUN_TEST(test_namespace_creation_and_switching);
+    RUN_TEST(test_namespace_variable_storage);
+    RUN_TEST(test_namespace_multiple_variables);
+    RUN_TEST(test_symbol_resolution_fallback);
+    RUN_TEST(test_namespace_special_characters);
+    RUN_TEST(test_namespace_error_handling);
+    RUN_TEST(test_namespace_memory_management);
 }
 
 // ============================================================================
@@ -289,6 +352,34 @@ static void test_group_recur(void) {
     RUN_TEST(test_recur_arity_error);
 }
 
+static void test_group_equal(void) {
+    // Basic equality tests
+    RUN_TEST(test_equal_null_pointers);
+    RUN_TEST(test_equal_same_objects);
+    RUN_TEST(test_equal_different_strings);
+    RUN_TEST(test_equal_different_types);
+    RUN_TEST(test_equal_immediate_values);
+    
+    // Vector equality tests
+    RUN_TEST(test_vector_equal_same_vectors);
+    RUN_TEST(test_vector_equal_different_lengths);
+    RUN_TEST(test_vector_equal_different_values);
+    RUN_TEST(test_vector_equal_with_strings);
+    
+    // List equality tests
+    RUN_TEST(test_list_equal_same_lists);
+    RUN_TEST(test_list_equal_same_instance);
+    RUN_TEST(test_list_equal_empty_lists);
+    
+    // Map equality tests
+    RUN_TEST(test_map_equal_same_maps);
+    RUN_TEST(test_map_equal_different_keys);
+    RUN_TEST(test_map_equal_different_values);
+    RUN_TEST(test_map_equal_different_sizes);
+    RUN_TEST(test_map_equal_with_nested_vectors);
+    
+}
+
 // ============================================================================
 // COMMAND LINE INTERFACE
 // ============================================================================
@@ -305,6 +396,7 @@ static void print_usage(const char *program_name) {
     printf("  namespace     Namespace management tests\n");
     printf("  seq           Sequence semantics tests\n");
     printf("  for-loops      For-loop implementation tests\n");
+    printf("  equal         Equality function tests\n");
     printf("  all           All test suites (default)\n\n");
     printf("Examples:\n");
     printf("  %s                    # Run all tests\n", program_name);
@@ -315,50 +407,56 @@ static void print_usage(const char *program_name) {
     printf("  %s namespace         # Run namespace tests\n", program_name);
     printf("  %s seq               # Run sequence tests\n", program_name);
     printf("  %s for-loops         # Run for-loop tests\n", program_name);
+    printf("  %s equal             # Run equality tests\n", program_name);
 }
 
 static void run_memory_tests(void) {
-    RUN_TEST(test_group_memory);
+    test_group_memory();
 }
 
 static void run_parser_tests(void) {
-    RUN_TEST(test_group_parser);
+    test_group_parser();
 }
 
 static void run_exception_tests(void) {
-    RUN_TEST(test_group_exception);
+    test_group_exception();
 }
 
 static void run_unit_tests(void) {
-    RUN_TEST(test_group_unit);
+    test_group_unit();
 }
 
 static void run_cljvalue_tests(void) {
-    RUN_TEST(test_group_cljvalue);
+    test_group_cljvalue();
 }
 
 static void run_namespace_tests(void) {
-    RUN_TEST(test_group_namespace);
+    test_group_namespace();
 }
 
 static void run_seq_tests(void) {
-    RUN_TEST(test_group_seq);
+    test_group_seq();
 }
 
 static void run_for_loop_tests(void) {
-    RUN_TEST(test_group_for_loops);
+    test_group_for_loops();
+}
+
+static void run_equal_tests(void) {
+    test_group_equal();
 }
 
 static void run_all_tests(void) {
     // Note: test_group_memory is already run in run_memory_tests()
-    RUN_TEST(test_group_parser);
-    RUN_TEST(test_group_exception);
-    RUN_TEST(test_group_unit);
-    RUN_TEST(test_group_cljvalue);
-    RUN_TEST(test_group_namespace);
-    RUN_TEST(test_group_seq);
-    RUN_TEST(test_group_for_loops);
-    RUN_TEST(test_group_recur);
+    test_group_parser();
+    test_group_exception();
+    test_group_unit();
+    test_group_cljvalue();
+    test_group_namespace();
+    test_group_seq();
+    test_group_for_loops();
+    test_group_equal();
+    test_group_recur();
 }
 
 // ============================================================================
@@ -388,6 +486,8 @@ int main(int argc, char **argv) {
             run_seq_tests();
         } else if (strcmp(argv[1], "for-loops") == 0) {
             run_for_loop_tests();
+        } else if (strcmp(argv[1], "equal") == 0) {
+            run_equal_tests();
         } else if (strcmp(argv[1], "all") == 0) {
             run_all_tests();
         } else {

@@ -64,6 +64,14 @@ MemoryStats g_memory_stats = {0};
  */
 bool g_memory_profiling_enabled = false;
 
+/**
+ * @brief Global memory verbose mode flag
+ * 
+ * Controls whether detailed memory statistics are printed for successful tests.
+ * When false, only errors and leaks are printed.
+ */
+bool g_memory_verbose_mode = false;
+
 // ============================================================================
 // MEMORY HOOKS IMPLEMENTATION
 // ============================================================================
@@ -131,11 +139,17 @@ void memory_profiling_cleanup_with_hooks(void) {
 void memory_test_start(const char *test_name) {
     // Reset memory statistics for this test to get isolated results
     memory_profiler_reset();
-    printf("🔍 Memory Test Start: %s\n", test_name);
+    // Only print start message in verbose mode
+    if (g_memory_verbose_mode) {
+        printf("🔍 Memory Test Start: %s\n", test_name);
+    }
 }
 
 void memory_test_end(const char *test_name) {
-    memory_profiler_print_stats(test_name);
+    // Only print detailed stats if there are leaks or in verbose mode
+    if (g_memory_stats.memory_leaks > 0 || g_memory_verbose_mode) {
+        memory_profiler_print_stats(test_name);
+    }
     memory_profiler_check_leaks(test_name);
 }
 
@@ -655,6 +669,14 @@ bool is_memory_profiling_enabled(void) {
     return g_memory_profiling_enabled;
 #else
     return false;
+#endif
+}
+
+void set_memory_verbose_mode(bool verbose) {
+#ifdef DEBUG
+    g_memory_verbose_mode = verbose;
+#else
+    (void)verbose; // Suppress unused parameter warning
 #endif
 }
 

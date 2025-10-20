@@ -589,6 +589,14 @@ char* pr_str(CljObject *v) {
 bool clj_equal(CljObject *a, CljObject *b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
     if (!a || !b) return false;
+    
+    // Check if pointers are valid CljObject* (not immediate values)
+    // Immediate values (CljValue) have different memory layout
+    // We can't easily distinguish between CljObject* and CljValue* at runtime
+    // So we rely on the type field being valid for CljObject*
+    // Note: This validation is removed as it was causing segmentation faults
+    // The function should be called with valid CljObject* pointers
+    
     if (!is_type(a, b->type)) return false;
     
     // Inhalt-Vergleich basierend auf Typ

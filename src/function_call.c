@@ -360,7 +360,7 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
     }
     
     // Literal value
-    return body ? (RETAIN(body), body) : NULL;
+    return RETAIN(body);
 }
 
 // Evaluate list with environment (for loops)
@@ -402,12 +402,12 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
                 return result;
             }
             // Otherwise, return the resolved value
-            return resolved ? (RETAIN(resolved), resolved) : NULL;
+            return RETAIN(resolved);
         }
     }
     
     // Fallback: return first element
-    return head ? (RETAIN(head), head) : NULL;
+    return RETAIN(head);
 }
 
 // Simplified body evaluation with parameter binding
@@ -418,14 +418,14 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         // Resolve symbol - check parameters first
         for (int i = 0; i < param_count; i++) {
             if (params[i] && body == params[i]) {
-                return values[i] ? (RETAIN(values[i]), values[i]) : NULL;
+                return RETAIN(values[i]);
             }
             // Also try name comparison for non-interned symbols
             if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
                 CljSymbol *param_sym = as_symbol(params[i]);
                 CljSymbol *body_sym = as_symbol(body);
                 if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
-                    return values[i] ? (RETAIN(values[i]), values[i]) : NULL;
+                    return RETAIN(values[i]);
                 }
             }
         }
@@ -433,13 +433,13 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         if (closure_env && is_type(closure_env, CLJ_MAP)) {
             CljObject *resolved = map_get(closure_env, body);
             if (resolved) {
-                return resolved ? (RETAIN(resolved), resolved) : NULL;
+                return RETAIN(resolved);
             }
         }
         // If not found in parameters or closure_env, try to resolve from global namespace
         // This is the "Lazy Binding" fallback for global symbols
         // For now, return the symbol itself - it will be resolved in eval_list_with_param_substitution
-        return body ? (RETAIN(body), body) : NULL;
+        return RETAIN(body);
     }
     
     // For lists, evaluate them with parameter substitution
@@ -448,7 +448,7 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
     }
     
     // Literal value
-    return body ? (RETAIN(body), body) : NULL;
+    return RETAIN(body);
 }
 
 // Evaluate list with parameter substitution
@@ -472,7 +472,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_SUB, closure_env);
     }
     
-    if (op == SYM_EQUALS) {
+    if (op == SYM_EQUALS || op == SYM_EQUAL) {
         CljObject *a = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
         CljObject *b = eval_arg_with_substitution(list, 2, params, values, param_count, closure_env);
         
@@ -608,7 +608,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     // Fallback: return first element
-    return head ? (RETAIN(head), head) : NULL;
+    return RETAIN(head);
 }
 
 // Simplified body evaluation (basic implementation)
@@ -628,7 +628,7 @@ CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
     }
     
     // Literal value
-    return body ? (RETAIN(body), body) : NULL;
+    return RETAIN(body);
 }
 
 // Simplified list evaluation
@@ -646,6 +646,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     // First element is the operator
     CljObject *op = head;
+    
     
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     if (is_type(op, CLJ_LIST)) {
@@ -689,8 +690,8 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return eval_arithmetic_generic(list, env, ARITH_SUB, st);
     }
     
-    if (op == SYM_EQUALS) {
-        // Handle = operator with immediate value support
+    if (op == SYM_EQUALS || op == SYM_EQUAL) {
+        // Handle = and equal operators with immediate value support
         CljObject *a = eval_arg_retained(list, 1, env);
         CljObject *b = eval_arg_retained(list, 2, env);
         
@@ -1015,7 +1016,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         }
         
         // Not a function, just return the resolved value
-        return fn ? (RETAIN(fn), fn) : NULL;
+        return RETAIN(fn);
     }
     
     // Error: first element is not a function
@@ -1026,7 +1027,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     // Fallback: return first element (for other types)
-    return head ? (RETAIN(head), head) : NULL;
+    return RETAIN(head);
 }
 
 // Small wrapper functions for arithmetic operations
@@ -1210,11 +1211,11 @@ CljObject* eval_fn(CljObject *list, CljMap *env) {
     // Cleanup heap-allocated params if any
     free_obj_array(params, params_stack);
     
-    return fn ? (RETAIN(fn), fn) : NULL;
+    return RETAIN(fn);
 }
 
 CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
-    if (!symbol || symbol->type != CLJ_SYMBOL) {
+    if (!symbol) {
         return NULL;
     }
     
@@ -1236,7 +1237,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
     // Lookup im aktuellen Namespace
     CljObject *value = ns_resolve(st, symbol);
     if (value) {
-        return value;  // Gefunden
+        return RETAIN(value);  // Gefunden - retain the value
     }
     
     // Fallback: Try global namespace lookup for special forms and builtins
@@ -1468,7 +1469,7 @@ CljObject* eval_seq(CljObject *list, CljMap *env) {
     
     // For lists, return as-is (lists are already sequences)
     if (is_type(arg, CLJ_LIST)) {
-        return arg ? (RETAIN(arg), arg) : NULL;
+        return RETAIN(arg);
     }
     
     // For other seqable types, return SeqIterator directly

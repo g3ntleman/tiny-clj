@@ -26,6 +26,7 @@ CljObject *SYM_MINUS = NULL;
 CljObject *SYM_MULTIPLY = NULL;
 CljObject *SYM_DIVIDE = NULL;
 CljObject *SYM_EQUALS = NULL;
+CljObject *SYM_EQUAL = NULL;
 CljObject *SYM_LT = NULL;
 CljObject *SYM_GT = NULL;
 CljObject *SYM_LE = NULL;
@@ -84,6 +85,7 @@ void init_special_symbols() {
     SYM_MULTIPLY = intern_symbol_global("*");
     SYM_DIVIDE = intern_symbol_global("/");
     SYM_EQUALS = intern_symbol_global("=");
+    SYM_EQUAL = intern_symbol_global("equal");
     SYM_LT = intern_symbol_global("<");
     SYM_GT = intern_symbol_global(">");
     SYM_LE = intern_symbol_global("<=");

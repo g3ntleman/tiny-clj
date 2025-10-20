@@ -8,6 +8,7 @@
 #include "builtins.h"
 #include "memory_profiler.h"
 #include "line_editor.h"
+#include "symbol.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -109,34 +110,12 @@ static void print_exception(CLJException *ex) {
  */
 static bool eval_string_repl(const char *code, EvalState *st) {
     WITH_AUTORELEASE_POOL({
-        const char *p = code;
-        CljObject *ast = parse(p, st);
-        if (!ast) return false;
-        
-        CljObject *res = NULL;
-        
-        // Use TRY/CATCH for proper exception handling with autorelease pool compatibility
-        TRY {
-            if (is_type(ast, CLJ_LIST)) {
-                CljMap *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-                res = eval_list(ast, env, st);
-            } else {
-                res = eval_expr_simple(ast, st);
-            }
-        } CATCH(ex) {
-            print_exception(ex);
-            // Exception wird automatisch durch Pool freigegeben
-            // ast wird automatisch durch Pool freigegeben
-            return false;
-        } END_TRY
-        
-        if (!res) {
-            // ast wird automatisch durch Pool freigegeben
-            return false;
-        }
+        // Simple approach: use eval_string which handles a single expression
+        // For multiple expressions, the user should separate them with newlines
+        CljObject *res = eval_string(code, st);
+        if (!res) return false;
         
         print_result(res);
-        // res and ast are automatically managed by autorelease pool
         return true;
     });
 }
@@ -297,6 +276,7 @@ static bool run_interactive_repl(EvalState *st) {
 
 int main(int argc, char **argv) {
     platform_init();
+    init_special_symbols();  // Initialize special symbols like SYM_DEF
     EvalState *st = evalstate_new();
     if (!st) return 1;
     // Note: set_global_eval_state() removed - Exception handling now independent
