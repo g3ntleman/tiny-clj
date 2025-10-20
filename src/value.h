@@ -221,7 +221,7 @@ static inline CljObject* ID_TO_OBJ(ID id) {
 #define AS_SPECIAL(val) as_special((CljValue)(val))
 
 // Wrapper für existierende Funktionen (Phase 1: Immediates + Heap Fallback)
-static inline CljValue make_int_v(int x) {
+static inline CljValue integer(int x) {
     // Try immediate first, fallback to heap for large numbers
     return fixnum(x);
 }

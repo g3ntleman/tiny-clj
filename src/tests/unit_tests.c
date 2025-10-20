@@ -323,7 +323,7 @@ void test_cljvalue_vector_api(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
         
         // Test vector conj with CljValue API
-        CljValue item = make_int_v(42);
+        CljValue item = integer(42);
         CljValue result = vector_conj_v(vec, item);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(vec != result);  // Should be new vector
@@ -346,8 +346,8 @@ void test_cljvalue_transient_vector(void) {
         TEST_ASSERT_TRUE(vec != tvec);  // Should be copy
         
         // Test transient conj! (in-place mutation)
-        CljValue item1 = make_int_v(1);
-        CljValue item2 = make_int_v(2);
+        CljValue item1 = integer(1);
+        CljValue item2 = integer(2);
         
         CljValue result1 = conj_v(tvec, item1);
         TEST_ASSERT_EQUAL_PTR(tvec, result1);  // Same instance (in-place)
@@ -374,9 +374,9 @@ void test_cljvalue_clojure_semantics(void) {
         CljValue tv = transient(v1);
         
         // Add elements to transient
-        conj_v(tv, make_int_v(1));
-        conj_v(tv, make_int_v(2));
-        conj_v(tv, make_int_v(3));
+        conj_v(tv, integer(1));
+        conj_v(tv, integer(2));
+        conj_v(tv, integer(3));
         
         // Convert back to persistent
         CljValue v2 = persistent_v(tv);
@@ -399,7 +399,7 @@ void test_cljvalue_wrapper_functions(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test wrapper functions for existing APIs
-        CljValue int_val = make_int_v(42);
+        CljValue int_val = integer(42);
         CljValue float_val = make_float_v(3.14);
         CljValue str_val = make_string_v("hello");
         CljValue sym_val = make_symbol_v("test", NULL);
