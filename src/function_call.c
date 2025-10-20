@@ -864,6 +864,8 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     // Check if op is a symbol and resolve it
+    // BUT: Keep the original symbol for comparison before resolving
+    CljObject *original_op = op;
     if (is_type(op, CLJ_SYMBOL)) {
         CljObject *resolved = eval_symbol(op, st);
         if (resolved) {
@@ -873,15 +875,16 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     // OPTIMIZED: Ordered by frequency (Tier 1: Most common operations first)
     // Tier 1: Very frequent (90%+ of calls)
-    if (op == SYM_PLUS) {
+    // Compare against original_op (before resolution), not op (after resolution)
+    if (original_op == SYM_PLUS) {
         return eval_arithmetic_generic(list, env, ARITH_ADD, st);
     }
     
-    if (op == SYM_MINUS) {
+    if (original_op == SYM_MINUS) {
         return eval_arithmetic_generic(list, env, ARITH_SUB, st);
     }
     
-    if (op == SYM_EQUALS || op == SYM_EQUAL) {
+    if (original_op == SYM_EQUALS || original_op == SYM_EQUAL) {
         // Handle = and equal operators with immediate value support
         CljObject *a, *b;
         EVAL_TWO_ARGS(list, env, a, b);
@@ -906,23 +909,23 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
     }
     
-    if (op == SYM_LT) {
+    if (original_op == SYM_LT) {
         return eval_numeric_comparison(list, env, COMP_LT);
     }
     
-    if (op == SYM_GT) {
+    if (original_op == SYM_GT) {
         return eval_numeric_comparison(list, env, COMP_GT);
     }
     
-    if (op == SYM_LE) {
+    if (original_op == SYM_LE) {
         return eval_numeric_comparison(list, env, COMP_LE);
     }
     
-    if (op == SYM_GE) {
+    if (original_op == SYM_GE) {
         return eval_numeric_comparison(list, env, COMP_GE);
     }
     
-    if (op == SYM_IF) {
+    if (original_op == SYM_IF) {
         // (if cond then else?)
         CljObject *cond_val = eval_arg_retained(list, 1, env);
         bool truthy = clj_is_truthy(cond_val);
@@ -932,36 +935,36 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     // Tier 2: Frequent (70-90% of calls)
-    if (op == SYM_MULTIPLY) {
+    if (original_op == SYM_MULTIPLY) {
         return eval_arithmetic_generic(list, env, ARITH_MUL, st);
     }
     
-    if (op == SYM_DIVIDE) {
+    if (original_op == SYM_DIVIDE) {
         return eval_arithmetic_generic(list, env, ARITH_DIV, st);
     }
     
-    if (op == SYM_DEF) {
+    if (original_op == SYM_DEF) {
         return eval_def(list, env, st);
     }
     
-    if (op == SYM_FN) {
+    if (original_op == SYM_FN) {
         return AUTORELEASE(eval_fn(list, env));
     }
     
     // Tier 3: Medium frequency (30-70% of calls)
-    if (op == SYM_FIRST) {
+    if (original_op == SYM_FIRST) {
         return eval_first(list, env);
     }
     
-    if (op == SYM_REST) {
+    if (original_op == SYM_REST) {
         return eval_rest(list, env);
     }
     
-    if (op == SYM_CONS) {
+    if (original_op == SYM_CONS) {
         return eval_cons(list, env);
     }
     
-    if (op == SYM_STR) {
+    if (original_op == SYM_STR) {
         // Call native_str with evaluated arguments
         int total_count = list_count(list);
         int argc = total_count - 1;
@@ -984,12 +987,12 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return result;
     }
     
-    if (op == SYM_PRINTLN) {
+    if (original_op == SYM_PRINTLN) {
         return eval_println(list, env);
     }
     
     // Tier 4: Less frequent (10-30% of calls)
-    if (op == SYM_AND) {
+    if (original_op == SYM_AND) {
         // (and expr1 expr2 ...) - short circuit evaluation
         // Returns first falsy value or last value
         int argc = list_count(list);
@@ -1008,7 +1011,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return result; // Return last value
     }
     
-    if (op == SYM_OR) {
+    if (original_op == SYM_OR) {
         // (or expr1 expr2 ...) - short circuit evaluation
         // Returns first truthy value or last value
         int argc = list_count(list);
@@ -1027,19 +1030,19 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return result; // Return last value
     }
     
-    if (op == SYM_DEF) {
+    if (original_op == SYM_DEF) {
         return eval_def(list, env, st);
     }
     
-    if (op == SYM_NS) {
+    if (original_op == SYM_NS) {
         return eval_ns(list, env, st);
     }
     
-    if (op == SYM_FN) {
+    if (original_op == SYM_FN) {
         return AUTORELEASE(eval_fn(list, env));
     }
     
-    if (op == SYM_QUOTE) {
+    if (original_op == SYM_QUOTE) {
         // (quote expr) - return expr without evaluating
         CljObject *quoted_expr = list_get_element(list, 1);
         if (!quoted_expr) return NULL;
@@ -1047,29 +1050,29 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     // recur is only valid inside function bodies, not in top-level lists
-    if (op == SYM_RECUR) {
+    if (original_op == SYM_RECUR) {
         throw_exception("SyntaxError", "recur can only be used inside function bodies", NULL, 0, 0);
         return NULL;
     }
     
     // Arithmetic operations
-    if (op == SYM_PLUS) {
+    if (original_op == SYM_PLUS) {
         return eval_arithmetic_generic(list, env, ARITH_ADD, st);
     }
     
-    if (op == SYM_MINUS) {
+    if (original_op == SYM_MINUS) {
         return eval_arithmetic_generic(list, env, ARITH_SUB, st);
     }
     
-    if (op == SYM_MULTIPLY) {
+    if (original_op == SYM_MULTIPLY) {
         return eval_arithmetic_generic(list, env, ARITH_MUL, st);
     }
     
-    if (op == SYM_DIVIDE) {
+    if (original_op == SYM_DIVIDE) {
         return eval_arithmetic_generic(list, env, ARITH_DIV, st);
     }
     
-    if (op == SYM_STR) {
+    if (original_op == SYM_STR) {
         // Call native_str with evaluated arguments
         int total_count = list_count(list);
         int argc = total_count - 1;

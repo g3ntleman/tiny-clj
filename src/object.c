@@ -246,7 +246,7 @@ char* to_string(CljObject *v) {
         if (is_fixed((CljValue)v)) {
             char buf[32];
             double val = as_fixed((CljValue)v);
-            snprintf(buf, sizeof(buf), "%.1f", val);
+            snprintf(buf, sizeof(buf), "%.4g", val);
             return strdup(buf);
         }
         if (is_special((CljValue)v)) {
