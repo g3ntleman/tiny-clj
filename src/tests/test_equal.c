@@ -179,9 +179,31 @@ void test_vector_equal_different_lengths(void) {
 }
 
 void test_vector_equal_different_values(void) {
-    // Test removed - was causing segmentation faults due to undefined behavior
-    // This test was trying to cast CljValue to CljObject* which is undefined
-    TEST_IGNORE_MESSAGE("Test removed - was causing segmentation faults");
+    MEMORY_TEST_START("test_vector_equal_different_values");
+    
+    // Create vectors with different values using conj
+    CljValue vec1_val = make_vector_v(0, 1); // Start with empty vector
+    CljValue vec2_val = make_vector_v(0, 1); // Start with empty vector
+    
+    // Create different integer values
+    CljValue int1 = make_fixnum(1);
+    CljValue int2 = make_fixnum(2);
+    CljValue int3 = make_fixnum(3);
+    CljValue int4 = make_fixnum(4);
+    
+    // Build vectors with different values using conj
+    vec1_val = vector_conj_v(vec1_val, int1);
+    vec1_val = vector_conj_v(vec1_val, int2);
+    vec2_val = vector_conj_v(vec2_val, int3);
+    vec2_val = vector_conj_v(vec2_val, int4);
+    
+    CljObject *vec1 = (CljObject*)vec1_val;
+    CljObject *vec2 = (CljObject*)vec2_val;
+    
+    // Test that vectors with different values are not equal
+    TEST_ASSERT_FALSE(clj_equal(vec1, vec2));
+    
+    MEMORY_TEST_END("test_vector_equal_different_values");
 }
 
 void test_vector_equal_with_strings(void) {
