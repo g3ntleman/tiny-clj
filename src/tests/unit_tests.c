@@ -1008,17 +1008,28 @@ void test_recur_arity_error(void) {
         TEST_ASSERT_NOT_NULL(factorial_def);
         
         // This should fail because recur has wrong arity (1 arg instead of 2)
-        CljObject *result = eval_string("(def bad-factorial (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
-        // The function definition should fail due to arity mismatch
-        // Note: The function definition might succeed, but calling it should fail
-        if (result && result->type != CLJ_EXCEPTION) {
-            // Try to call the function - this should fail
-            CljObject *call_result = eval_string("(bad-factorial 5 1)", st);
-            TEST_ASSERT_TRUE(call_result == NULL || (call_result && call_result->type == CLJ_EXCEPTION));
-            if (call_result) RELEASE(call_result);
-        } else {
-            TEST_ASSERT_TRUE(result == NULL || (result && result->type == CLJ_EXCEPTION));
-        }
+        // Use TRY/CATCH to handle the exception properly
+        TRY {
+            CljObject *result = eval_string("(def bad-factorial (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
+            // The function definition should fail due to arity mismatch
+            if (result && result->type != CLJ_EXCEPTION) {
+                // Try to call the function - this should fail
+                CljObject *call_result = eval_string("(bad-factorial 5 1)", st);
+                TEST_ASSERT_TRUE(call_result == NULL || (call_result && call_result->type == CLJ_EXCEPTION));
+                if (call_result) RELEASE(call_result);
+            } else {
+                TEST_ASSERT_TRUE(result == NULL || (result && result->type == CLJ_EXCEPTION));
+            }
+            RELEASE(result);
+        } CATCH(ex) {
+            // Expected exception - test passes
+            TEST_ASSERT_TRUE(ex != NULL);
+            char *err_str = pr_str((CljObject*)ex);
+            if (err_str) {
+                printf("Caught expected exception: %s\n", err_str);
+                free(err_str);
+            }
+        } END_TRY
     }
     
     evalstate_free(st);
