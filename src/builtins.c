@@ -9,6 +9,7 @@
 #include "namespace.h"
 #include "clj_string.h"
 #include "value.h"
+#include "error_messages.h"
 #include "seq.h"
 
 ID nth2(ID *args, int argc) {
@@ -392,72 +393,14 @@ ID apply_builtin(const BuiltinEntry *entry, ID *args, int argc) {
     return NULL;
 }
 
-// Wrapper functions for arithmetic operations
-ID native_add(ID *args, int argc) {
-    if (argc == 0) return OBJ_TO_ID((CljObject*)make_fixnum(0));  // (+) → 0
-    if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));  // (+ x) → x
-    
-    int sum = 0;
-    for (int i = 0; i < argc; i++) {
-        if (!args[i] || !IS_FIXNUM(args[i])) {
-            return OBJ_TO_ID(NULL);
-        }
-        sum += AS_FIXNUM(args[i]);
-    }
-    return OBJ_TO_ID((CljObject*)make_fixnum(sum));
-}
+// Wrapper functions for arithmetic operations (delegate to variadic versions)
+ID native_add(ID *args, int argc) { return native_add_variadic(args, argc); }
 
-ID native_sub(ID *args, int argc) {
-    if (argc == 0) {
-        throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, "Wrong number of args: 0");
-        return OBJ_TO_ID(NULL);
-    }
-    if (argc == 1) return OBJ_TO_ID((CljObject*)make_fixnum(-AS_FIXNUM(args[0])));  // (- x) → -x
-    
-    int result = AS_FIXNUM(args[0]);
-    for (int i = 1; i < argc; i++) {
-        if (!args[i] || !IS_FIXNUM(args[i])) {
-            return OBJ_TO_ID(NULL);
-        }
-        result -= AS_FIXNUM(args[i]);
-    }
-    return OBJ_TO_ID((CljObject*)make_fixnum(result));
-}
+ID native_sub(ID *args, int argc) { return native_sub_variadic(args, argc); }
 
-ID native_mul(ID *args, int argc) {
-    if (argc == 0) return OBJ_TO_ID((CljObject*)make_fixnum(1));  // (*) → 1
-    if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));  // (* x) → x
-    
-    int product = 1;
-    for (int i = 0; i < argc; i++) {
-        if (!args[i] || !IS_FIXNUM(args[i])) {
-            return OBJ_TO_ID(NULL);
-        }
-        product *= AS_FIXNUM(args[i]);
-    }
-    return OBJ_TO_ID((CljObject*)make_fixnum(product));
-}
+ID native_mul(ID *args, int argc) { return native_mul_variadic(args, argc); }
 
-ID native_div(ID *args, int argc) {
-    if (argc == 0) {
-        throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, "Wrong number of args: 0");
-        return OBJ_TO_ID(NULL);
-    }
-    if (argc == 1) return OBJ_TO_ID((CljObject*)make_fixnum(1 / AS_FIXNUM(args[0])));  // (/ x) → 1/x
-    
-    int result = AS_FIXNUM(args[0]);
-    for (int i = 1; i < argc; i++) {
-        if (!args[i] || !IS_FIXNUM(args[i])) {
-            return OBJ_TO_ID(NULL);
-        }
-        if (AS_FIXNUM(args[i]) == 0) {
-            throw_exception_formatted("ArithmeticError", __FILE__, __LINE__, 0, "Division by zero");
-            return OBJ_TO_ID(NULL);
-        }
-        result /= AS_FIXNUM(args[i]);
-    }
-    return OBJ_TO_ID((CljObject*)make_fixnum(result));
-}
+ID native_div(ID *args, int argc) { return native_div_variadic(args, argc); }
 
 ID native_println(ID *args, int argc) {
     if (argc < 1) return OBJ_TO_ID(NULL);
@@ -509,92 +452,90 @@ ID native_str(ID *args, int argc) {
 }
 
 // Binary operations (inline for performance)
-static inline int add_op(int a, int b) { return a + b; }
-static inline int sub_op(int a, int b) { return a - b; }
-static inline int mul_op(int a, int b) { return a * b; }
-static inline int div_op(int a, int b) { return a / b; }
-
-// Generic reducer with Mutable Result Pattern
-static CljObject* variadic_reduce_int(ID *args, int argc, 
-                                      int identity_val,
-                                      int (*op)(int, int),
-                                      bool needs_at_least_one,
-                                      bool is_division) {
-    // argc == 0: return identity or Exception
-    if (argc == 0) {
-        if (needs_at_least_one) {
-            throw_exception_formatted("ArityError", __FILE__, __LINE__, 0,
-                "Wrong number of args: 0");
-            return NULL;
+// Variadische Number-Reducer mit Single-Pass und Float-Promotion
+static ID reduce_add(ID *args, int argc) {
+    if (argc == 0) return OBJ_TO_ID((CljObject*)make_fixnum(0));
+    if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
+    bool sawFloat = false; int acc_i = 0; float acc_f = 0.0f;
+    for (int i = 0; i < argc; i++) {
+        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) {
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return OBJ_TO_ID(NULL);
         }
-        return (CljObject*)make_fixnum(identity_val);
+        if (!sawFloat) {
+            if (IS_FIXNUM(args[i])) acc_i += AS_FIXNUM(args[i]);
+            else { sawFloat = true; acc_f = (float)acc_i + AS_FLOAT16(args[i]); }
+        } else {
+            acc_f += IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]);
+        }
     }
-    
-    // argc == 1: return arg or unary operation (- or /)
+    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
+                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+}
+
+static ID reduce_mul(ID *args, int argc) {
+    if (argc == 0) return OBJ_TO_ID((CljObject*)make_fixnum(1));
+    if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
+    bool sawFloat = false; int acc_i = 1; float acc_f = 1.0f;
+    for (int i = 0; i < argc; i++) {
+        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) {
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return OBJ_TO_ID(NULL);
+        }
+        if (!sawFloat) {
+            if (IS_FIXNUM(args[i])) acc_i *= AS_FIXNUM(args[i]);
+            else { sawFloat = true; acc_f = (float)acc_i * AS_FLOAT16(args[i]); }
+        } else {
+            acc_f *= IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]);
+        }
+    }
+    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
+                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+}
+
+static ID reduce_sub(ID *args, int argc) {
+    if (argc == 0) { throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); return OBJ_TO_ID(NULL); }
     if (argc == 1) {
-        // Validation
-        if (!args[0] || !IS_FIXNUM(args[0])) {
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
-                "Expected integer");
-            return NULL;
-        }
-        if (needs_at_least_one) {
-            // (- 5) → -5,  (/ 8) → 0 (integer division 1/8)
-            return (CljObject*)make_fixnum(op(identity_val, AS_FIXNUM(args[0])));
-        }
-        // For addition and multiplication: (+ 5) → 5, (* 5) → 5
-        return (CljObject*)RETAIN(args[0]);
+        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
+        return IS_FIXNUM(args[0]) ? OBJ_TO_ID((CljObject*)make_fixnum(-AS_FIXNUM(args[0])))
+                                  : OBJ_TO_ID((CljObject*)make_float16(-AS_FLOAT16(args[0])));
     }
-    
-    // Validation: first argument
-    if (!args[0] || !IS_FIXNUM(args[0])) {
-        throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
-            "Expected integer");
-        return NULL;
-    }
-    
-    // Compute result (Fixnums are immediates, so no in-place mutation)
-    int result_val = AS_FIXNUM(args[0]);
-    
-    // Apply operation to all arguments
+    bool sawFloat = false; float acc_f = 0.0f; int acc_i = 0;
+    if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
+    if (IS_FIXNUM(args[0])) acc_i = AS_FIXNUM(args[0]); else { sawFloat = true; acc_f = AS_FLOAT16(args[0]); }
     for (int i = 1; i < argc; i++) {
-        // Type validation
-        if (!args[i] || !IS_FIXNUM(args[i])) {
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
-                "Expected integer");
-            return NULL;
-        }
-        
-        // Division-by-zero pre-check
-        if (is_division && AS_FIXNUM(args[i]) == 0) {
-            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                "Divide by zero");
-            return NULL;
-        }
-        
-        // Operation
-        result_val = op(result_val, AS_FIXNUM(args[i]));
+        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
+        if (!sawFloat && IS_FIXNUM(args[i])) acc_i -= AS_FIXNUM(args[i]);
+        else { if (!sawFloat) { acc_f = (float)acc_i; sawFloat = true; } acc_f -= IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]); }
     }
-    
-    return (CljObject*)make_fixnum(result_val);
+    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
+                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
 }
 
-// Public API
-ID native_add_variadic(ID *args, int argc) {
-    return OBJ_TO_ID(variadic_reduce_int(args, argc, 0, add_op, false, false));
+static ID reduce_div(ID *args, int argc) {
+    if (argc == 0) { throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); return OBJ_TO_ID(NULL); }
+    if (argc == 1) {
+        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
+        if (IS_FIXNUM(args[0])) { int x = AS_FIXNUM(args[0]); if (x == 0) return OBJ_TO_ID((CljObject*)make_float16(1.0f/0.0f)); if (1 % x == 0) return OBJ_TO_ID((CljObject*)make_fixnum(1/x)); return OBJ_TO_ID((CljObject*)make_float16(1.0f/(float)x)); }
+        else { return OBJ_TO_ID((CljObject*)make_float16(1.0f/AS_FLOAT16(args[0]))); }
+    }
+    if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
+    bool sawFloat = false; int acc_i = 0; float acc_f = 0.0f;
+    if (IS_FIXNUM(args[0])) acc_i = AS_FIXNUM(args[0]); else { sawFloat = true; acc_f = AS_FLOAT16(args[0]); }
+    for (int i = 1; i < argc; i++) {
+        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
+        if (!sawFloat && IS_FIXNUM(args[i])) { int d = AS_FIXNUM(args[i]); if (d == 0) { sawFloat = true; acc_f = (float)acc_i/0.0f; continue; } if (acc_i % d == 0) acc_i /= d; else { sawFloat = true; acc_f = (float)acc_i/(float)d; } }
+        else { if (!sawFloat) { acc_f = (float)acc_i; sawFloat = true; } float d = IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]); acc_f /= d; }
+    }
+    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
+                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
 }
 
-ID native_mul_variadic(ID *args, int argc) {
-    return OBJ_TO_ID(variadic_reduce_int(args, argc, 1, mul_op, false, false));
-}
-
-ID native_sub_variadic(ID *args, int argc) {
-    return OBJ_TO_ID(variadic_reduce_int(args, argc, 0, sub_op, true, false));
-}
-
-ID native_div_variadic(ID *args, int argc) {
-    return OBJ_TO_ID(variadic_reduce_int(args, argc, 1, div_op, true, true));
-}
+// Public API (variadisch)
+ID native_add_variadic(ID *args, int argc) { return reduce_add(args, argc); }
+ID native_mul_variadic(ID *args, int argc) { return reduce_mul(args, argc); }
+ID native_sub_variadic(ID *args, int argc) { return reduce_sub(args, argc); }
+ID native_div_variadic(ID *args, int argc) { return reduce_div(args, argc); }
 
 // Helper function to register a builtin in current namespace (DRY principle)
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {

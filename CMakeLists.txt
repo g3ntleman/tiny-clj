@@ -59,6 +59,7 @@ list(APPEND SOURCES
     src/seq.c
     src/memory_profiler.c
     src/memory.c
+    src/error_messages.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -132,6 +133,7 @@ add_executable(unity-tests
     src/memory_profiler.c
     src/memory.c
     src/runtime.c
+    src/error_messages.c
 )
 target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

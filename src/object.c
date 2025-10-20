@@ -289,7 +289,7 @@ char* to_string(CljObject *v) {
         }
         if (is_float16((CljValue)v)) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "%g", as_float16((CljValue)v));
+            snprintf(buf, sizeof(buf), "%.4g", as_float16((CljValue)v));
             return strdup(buf);
         }
         if (is_special((CljValue)v)) {
