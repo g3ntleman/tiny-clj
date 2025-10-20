@@ -40,7 +40,7 @@ void test_seq_create_vector(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector_v(TEST_VECTOR_SIZE, 1);
+        CljValue vec = make_vector(TEST_VECTOR_SIZE, 1);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -65,7 +65,7 @@ void test_seq_create_string(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test string
-        CljValue str = make_string_v("hello");
+        CljValue str = make_string_old("hello");
         TEST_ASSERT_NOT_NULL(str);
         
         // Create sequence iterator
@@ -84,7 +84,7 @@ void test_seq_create_map(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test map
-        CljValue map = make_map_v(16);
+        CljValue map = make_map_old(16);
         TEST_ASSERT_NOT_NULL(map);
         
         // Create sequence iterator - may return NULL for empty map
@@ -103,7 +103,7 @@ void test_seq_first(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector_v(3, 1);
+        CljValue vec = make_vector(3, 1);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -125,7 +125,7 @@ void test_seq_rest(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector_v(3, 1);
+        CljValue vec = make_vector(3, 1);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -146,7 +146,7 @@ void test_seq_next(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector_v(3, 1);
+        CljValue vec = make_vector(3, 1);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -171,8 +171,8 @@ void test_seq_equality(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create two identical vectors
-        CljValue vec1 = make_vector_v(2, 1);
-        CljValue vec2 = make_vector_v(2, 1);
+        CljValue vec1 = make_vector(2, 1);
+        CljValue vec2 = make_vector(2, 1);
         
         CljPersistentVector *vec1_data = as_vector((CljObject*)vec1);
         CljPersistentVector *vec2_data = as_vector((CljObject*)vec2);

@@ -69,7 +69,7 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st);
  * @param st Evaluation state
  * @return Parsed CljValue or NULL on error
  */
-CljValue parse_v(const char *input, EvalState *st);
+CljValue parse(const char *input, EvalState *st);
 
 
 #endif

@@ -125,7 +125,7 @@ static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
-static ID make_number_by_parsing(Reader *reader, EvalState *st);
+static ID make_number_by_parsing_old(Reader *reader, EvalState *st);
 
 /**
  * @brief Create CljObject by parsing expression from Reader
@@ -151,9 +151,9 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   if (c == '"')
     return parse_string_internal(reader, st);
   if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing(reader, st);
+    return make_number_by_parsing_old(reader, st);
   if (isdigit(c))
-    return make_number_by_parsing(reader, st);
+    return make_number_by_parsing_old(reader, st);
   // Handle nil literal
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
       reader_peek_ahead(reader, 2) == 'l' && 
@@ -200,7 +200,7 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     // Build list using the same pattern as parse_list
     CljObject *quote_sym = (CljObject*)intern_symbol_global("quote");
     ID elements[2] = {(CljValue)quote_sym, quoted};
-    return make_list_from_stack_v(elements, 2);
+    return make_list_from_stack(elements, 2);
   }
   
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
@@ -232,7 +232,7 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed CljObject (caller must release) or NULL on error
  */
-CljObject *parse(const char *input, EvalState *st) {
+CljObject *parse_old(const char *input, EvalState *st) {
   if (!input)
     return NULL;
   Reader reader;
@@ -289,7 +289,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
-    CljValue parsed = parse_v(expr_str, eval_state);
+    CljValue parsed = parse(expr_str, eval_state);
     if (parsed == NULL) {
         return NULL;
     }
@@ -331,9 +331,9 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     return NULL;
   }
     // Create vector using new API
-    CljValue vec = make_vector_v(count, 0);
+    CljValue vec = make_vector(count, 0);
     for (int i = 0; i < count; i++) {
-      vec = vector_conj_v(vec, stack[i]);
+      vec = vector_conj(vec, stack[i]);
     }
     return vec;
   }
@@ -370,7 +370,7 @@ static ID parse_map(Reader *reader, EvalState *st) {
     return NULL;
   }
   // Use the new API for CljValue map parsing
-  return map_from_stack_v(pairs, pair_count);
+  return map_from_stack(pairs, pair_count);
 }
 
 /**
@@ -418,7 +418,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   }
   
   // Build list from array in correct order
-  CljValue result = make_list_from_stack_v(elements, count);
+  CljValue result = make_list_from_stack(elements, count);
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
@@ -526,7 +526,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
   buf[pos] = '\0';
   if (!utf8valid(buf))
     return NULL;
-  return AUTORELEASE(make_string(buf));
+  return AUTORELEASE(make_string_old(buf));
 }
 
 /**
@@ -535,7 +535,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljObject or NULL on error
  */
-static ID make_number_by_parsing(Reader *reader, EvalState *st) {
+static ID make_number_by_parsing_old(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
@@ -588,7 +588,7 @@ static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
   }
   
   // For floats, use heap allocation for now
-  return make_float_v(atof(buf));
+  return make_float(atof(buf));
 }
 
 /**
@@ -605,9 +605,9 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
   
   // Handle numbers with immediate fixnum optimization
   if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing_v(reader, st);
+    return make_number_by_parsing_old(reader, st);
   if (isdigit(c))
-    return make_number_by_parsing_v(reader, st);
+    return make_number_by_parsing_old(reader, st);
   
   // Handle nil, true, false literals with immediate special values
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
@@ -659,7 +659,7 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed CljValue or NULL on error
  */
-CljValue parse_v(const char *input, EvalState *st) {
+CljValue parse(const char *input, EvalState *st) {
   if (!input || !st) return NULL;
   
   Reader reader;

@@ -178,7 +178,7 @@ static void init_static_singletons(void);
 
 // map functions moved to map.c
 
-CljObject* make_symbol(const char *name, const char *ns) {
+CljObject* make_symbol_old(const char *name, const char *ns) {
     if (!name) {
         throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
@@ -670,7 +670,7 @@ bool clj_equal(CljObject *a, CljObject *b) {
             for (int i = 0; i < map_a->count; i++) {
                 CljValue key_a = KV_KEY(map_a->data, i);
                 CljValue val_a = KV_VALUE(map_a->data, i);
-                CljValue val_b = map_get_v((CljValue)b, key_a);
+                CljValue val_b = map_get((CljValue)b, key_a);
                 // Map-Werte können CljValue (immediate values) oder CljObject* sein
                 if (!clj_equal_value(val_a, val_b)) return false;
             }
@@ -758,7 +758,7 @@ CljObject* intern_symbol(const char *ns, const char *name) {
     }
     
     // Symbol nicht gefunden, erstelle neues
-    CljObject *symbol = make_symbol(name, ns);
+    CljObject *symbol = make_symbol_old(name, ns);
     if (!symbol) return NULL;
     
     // Füge zur Symbol-Table hinzu
@@ -808,7 +808,7 @@ CljObject *meta_registry = NULL;
 
 void meta_registry_init() {
     {
-        meta_registry = make_map_v(32); // Initial capacity for metadata entries
+        meta_registry = make_map_old(32); // Initial capacity for metadata entries
     }
 }
 
@@ -827,13 +827,13 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    map_assoc_v((CljValue)meta_registry, (CljValue)v, (CljValue)meta);
+    map_assoc((CljValue)meta_registry, (CljValue)v, (CljValue)meta);
 }
 
 CljObject* meta_get(CljObject *v) {
     if (!v || !meta_registry) return NULL;
     
-    return (CljObject*)map_get_v((CljValue)meta_registry, (CljValue)v);
+    return (CljObject*)map_get((CljValue)meta_registry, (CljValue)v);
 }
 
 void meta_clear(CljObject *v) {
@@ -885,7 +885,7 @@ static void init_static_singletons() {
 
 // clj_empty_vector moved to vector.c
 
-// clj_empty_map() no longer part of public API; make_map(0) returns singleton
+// clj_empty_map() no longer part of public API; make_map_old(0) returns singleton
 
 #define id CljObject*
 
@@ -896,7 +896,7 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
-    CljObject *new_env = make_map_v(4);
+    CljObject *new_env = make_map_old(4);
     
     return (id)new_env;
 }
@@ -905,13 +905,13 @@ CljObject* env_get_stack(CljObject *env, CljObject *key) {
     if (!env || !key) return NULL;
     
     // Direct map lookup
-    return (CljObject*)map_get_v((CljValue)env, (CljValue)key);
+    return (CljObject*)map_get((CljValue)env, (CljValue)key);
 }
 
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
     if (!env || !key) return;
     
-    map_assoc_v((CljValue)env, (CljValue)key, (CljValue)value);
+    map_assoc((CljValue)env, (CljValue)key, (CljValue)value);
 }
 
 // Function call implementation using stack allocation

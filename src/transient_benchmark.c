@@ -27,7 +27,7 @@ void benchmark_persistent_vector() {
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue item = fixnum(i);
-            vec = vector_conj_v(vec, item);
+            vec = vector_conj(vec, item);
         }
         
         RELEASE(vec);
@@ -53,10 +53,10 @@ void benchmark_transient_vector() {
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue item = fixnum(i);
-            conj_v(tvec, item);
+            conj(tvec, item);
         }
         
-        CljValue final_vec = persistent_v(tvec);
+        CljValue final_vec = persistent(tvec);
         
         RELEASE(vec);
         RELEASE(tvec);
@@ -78,12 +78,12 @@ void benchmark_persistent_map() {
     clock_t start = clock();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        CljValue map = make_map_v(0); // Start with empty map
+        CljValue map = make_map_old(0); // Start with empty map
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue key = make_string_v("key");
+            CljValue key = make_string_old("key");
             CljValue value = fixnum(i);
-            map_assoc_v(map, key, value);
+            map_assoc(map, key, value);
         }
         
         RELEASE(map);
@@ -104,16 +104,16 @@ void benchmark_transient_map() {
     clock_t start = clock();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        CljValue map = make_map_v(0); // Start with empty map
+        CljValue map = make_map_old(0); // Start with empty map
         CljValue tmap = transient_map(map);
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue key = make_string_v("key");
+            CljValue key = make_string_old("key");
             CljValue value = fixnum(i);
-            conj_map_v(tmap, key, value);
+            conj_map(tmap, key, value);
         }
         
-        CljValue final_map = persistent_map_v(tmap);
+        CljValue final_map = persistent_map(tmap);
         
         RELEASE(map);
         RELEASE(tmap);

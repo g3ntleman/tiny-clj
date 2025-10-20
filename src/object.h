@@ -182,7 +182,7 @@ typedef struct {
 // Function wrappers moved to value.h to avoid circular dependency
 // moved to vector.h
 /** Create/intern a symbol with optional namespace; rc=1. */
-CljObject* make_symbol(const char *name, const char *ns);
+CljObject* make_symbol_old(const char *name, const char *ns);
 /** Convenience: create generic error exception object. */
 CljObject* make_error(const char *message, const char *file, int line, int col);
 /** Create a CLJException object (rc=1) with optional data. */

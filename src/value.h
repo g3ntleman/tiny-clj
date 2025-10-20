@@ -93,7 +93,7 @@ static inline int32_t as_fixnum(CljValue val) {
 static inline CljValue make_char(uint32_t codepoint) {
     if (codepoint > CLJ_CHAR_MAX) {
         // Fallback to heap allocation for invalid characters
-        return make_string("?");
+        return make_string_old("?");
     }
     // Encode as tagged pointer: codepoint << 3 | TAG_CHAR
     return (CljValue)(((uintptr_t)codepoint << TAG_BITS) | TAG_CHAR);
@@ -226,16 +226,16 @@ static inline CljValue integer(int x) {
     return fixnum(x);
 }
 
-static inline CljValue make_float_v(double x) {
+static inline CljValue make_float(double x) {
     return (CljValue)make_fixed((float)x);
 }
 
-static inline CljValue make_string_v(const char *str) {
-    return make_string(str);
+static inline CljValue make_string(const char *str) {
+    return (CljValue)make_string_old(str);
 }
 
-static inline CljValue make_symbol_v(const char *name, const char *ns) {
-    return make_symbol(name, ns);
+static inline CljValue make_symbol(const char *name, const char *ns) {
+    return (CljValue)make_symbol_old(name, ns);
 }
 
 #endif

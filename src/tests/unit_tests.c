@@ -45,7 +45,7 @@ void test_list_count(void) {
 
         // Test non-list object (this should not crash)
         // Create a proper CljObject for testing
-        CljObject *int_obj = AUTORELEASE(make_string("42")); // Use string as non-list object
+        CljObject *int_obj = AUTORELEASE(make_string_old("42")); // Use string as non-list object
         TEST_ASSERT_EQUAL_INT(0, list_count(int_obj));
 
         // Test empty list (clj_nil is not a list)
@@ -149,7 +149,7 @@ void test_map_creation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test map creation using CljValue API
-        CljValue map = AUTORELEASE(make_map_v(16));
+        CljValue map = AUTORELEASE(make_map_old(16));
         TEST_ASSERT_NOT_NULL((CljObject*)map);
         TEST_ASSERT_EQUAL_INT(CLJ_MAP, ((CljObject*)map)->type);
     }
@@ -171,7 +171,7 @@ void test_array_map_builtin(void) {
         CljObject *eval1 = eval_expr_simple(result1, eval_state);
         
         // Debug: Check what native_array_map actually receives
-        CljObject *key = AUTORELEASE(make_string("a")); // Use AUTORELEASE for test convenience
+        CljObject *key = AUTORELEASE(make_string_old("a")); // Use AUTORELEASE for test convenience
         CljObject *value = fixnum(1); // Immediate value, no management needed
         ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)};
         
@@ -318,19 +318,19 @@ void test_cljvalue_vector_api(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test vector creation with CljValue API
-        CljValue vec = make_vector_v(3, 0);  // capacity=3, immutable
+        CljValue vec = make_vector(3, 0);  // capacity=3, immutable
         TEST_ASSERT_NOT_NULL(vec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
         
         // Test vector conj with CljValue API
         CljValue item = integer(42);
-        CljValue result = vector_conj_v(vec, item);
+        CljValue result = vector_conj(vec, item);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(vec != result);  // Should be new vector
         
         // item is a CljValue (immediate), no release needed
-        // result is automatically managed by vector_conj_v (autoreleased)
-        // vec is automatically managed by make_vector_v (autoreleased)
+        // result is automatically managed by vector_conj (autoreleased)
+        // vec is automatically managed by make_vector (autoreleased)
     }
 }
 
@@ -338,7 +338,7 @@ void test_cljvalue_transient_vector(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test transient conversion
-        CljValue vec = make_vector_v(3, 0);
+        CljValue vec = make_vector(3, 0);
         CljValue tvec = transient(vec);
         
         TEST_ASSERT_NOT_NULL(tvec);
@@ -349,14 +349,14 @@ void test_cljvalue_transient_vector(void) {
         CljValue item1 = integer(1);
         CljValue item2 = integer(2);
         
-        CljValue result1 = conj_v(tvec, item1);
+        CljValue result1 = conj(tvec, item1);
         TEST_ASSERT_EQUAL_PTR(tvec, result1);  // Same instance (in-place)
         
-        CljValue result2 = conj_v(tvec, item2);
+        CljValue result2 = conj(tvec, item2);
         TEST_ASSERT_EQUAL_PTR(tvec, result2);  // Same instance (in-place)
         
         // Test persistent! conversion (new instance)
-        CljValue pvec = persistent_v(tvec);
+        CljValue pvec = persistent(tvec);
         TEST_ASSERT_NOT_NULL(pvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, pvec->type);
         TEST_ASSERT_TRUE(tvec != pvec);  // Different instance
@@ -370,16 +370,16 @@ void test_cljvalue_clojure_semantics(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test Clojure-like usage pattern
-        CljValue v1 = make_vector_v(3, 0);
+        CljValue v1 = make_vector(3, 0);
         CljValue tv = transient(v1);
         
         // Add elements to transient
-        conj_v(tv, integer(1));
-        conj_v(tv, integer(2));
-        conj_v(tv, integer(3));
+        conj(tv, integer(1));
+        conj(tv, integer(2));
+        conj(tv, integer(3));
         
         // Convert back to persistent
-        CljValue v2 = persistent_v(tv);
+        CljValue v2 = persistent(tv);
         
         // v1 should be unchanged (original vector)
         TEST_ASSERT_NOT_NULL(v1);
@@ -400,9 +400,9 @@ void test_cljvalue_wrapper_functions(void) {
     {
         // Test wrapper functions for existing APIs
         CljValue int_val = integer(42);
-        CljValue float_val = make_float_v(3.14);
-        CljValue str_val = make_string_v("hello");
-        CljValue sym_val = make_symbol_v("test", NULL);
+        CljValue float_val = make_float(3.14);
+        CljValue str_val = make_string_old("hello");
+        CljValue sym_val = make_symbol_old("test", NULL);
         
         TEST_ASSERT_NOT_NULL(int_val);
         TEST_ASSERT_NOT_NULL(float_val);
@@ -417,7 +417,7 @@ void test_cljvalue_wrapper_functions(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ((CljObject*)sym_val)->type);
         
         // int_val and float_val are immediates - no need to release
-        // str_val and sym_val are automatically managed by make_string_v and make_symbol_v
+        // str_val and sym_val are automatically managed by make_string and make_symbol
     }
 }
 
@@ -538,7 +538,7 @@ void test_cljvalue_parser_immediates(void) {
         TEST_ASSERT_EQUAL_INT(42, as_fixnum(direct_fixnum));
         
         // Test parsing integers (should use fixnum immediates)
-        CljValue parsed_int = parse_v("42", st);
+        CljValue parsed_int = parse("42", st);
         if (parsed_int) {
             TEST_ASSERT_TRUE(is_fixnum(parsed_int));
             TEST_ASSERT_EQUAL_INT(42, as_fixnum(parsed_int));
@@ -547,7 +547,7 @@ void test_cljvalue_parser_immediates(void) {
         }
         
         // Test parsing negative integers
-        CljValue parsed_neg = parse_v("-100", st);
+        CljValue parsed_neg = parse("-100", st);
         if (parsed_neg) {
             TEST_ASSERT_TRUE(is_fixnum(parsed_neg));
             TEST_ASSERT_EQUAL_INT(-100, as_fixnum(parsed_neg));
@@ -556,9 +556,9 @@ void test_cljvalue_parser_immediates(void) {
         }
         
         // Test parsing nil, true, false
-        CljValue parsed_nil = parse_v("nil", st);
-        CljValue parsed_true = parse_v("true", st);
-        CljValue parsed_false = parse_v("false", st);
+        CljValue parsed_nil = parse("nil", st);
+        CljValue parsed_true = parse("true", st);
+        CljValue parsed_false = parse("false", st);
         
         // nil should be NULL in our system - this is correct!
         TEST_ASSERT_NULL(parsed_nil);
@@ -576,7 +576,7 @@ void test_cljvalue_parser_immediates(void) {
         }
         
         // Test parsing floats (should use heap allocation)
-        CljValue parsed_float = parse_v("3.14", st);
+        CljValue parsed_float = parse("3.14", st);
         TEST_ASSERT_NOT_NULL(parsed_float);
         TEST_ASSERT_TRUE(is_fixed(parsed_float));
         // No need to release - immediate value
@@ -842,7 +842,7 @@ void test_seq_rest_performance(void) {
     EvalState *st = evalstate_new();
     
     // Test direct vector creation first
-    CljValue vec_val = make_vector_v(10, 0);
+    CljValue vec_val = make_vector(10, 0);
     TEST_ASSERT_NOT_NULL(vec_val);
     
     // Create large vector
@@ -879,7 +879,7 @@ void test_seq_iterator_verification(void) {
     EvalState *st = evalstate_new();
     
     // Test direct vector creation first
-    CljValue vec_val = make_vector_v(5, 0);
+    CljValue vec_val = make_vector(5, 0);
     TEST_ASSERT_NOT_NULL(vec_val);
     
     // Test 1: (rest vector) sollte CLJ_SEQ zurückgeben

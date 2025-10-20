@@ -1424,10 +1424,10 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
 
 CljObject* eval_str(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
-    if (!arg) return AUTORELEASE(make_string(""));
+    if (!arg) return AUTORELEASE(make_string_old(""));
     
     char *str = pr_str(arg);
-    CljObject *result = AUTORELEASE(make_string(str));
+    CljObject *result = AUTORELEASE(make_string_old(str));
     free(str);
     return result;
 }
@@ -1654,7 +1654,7 @@ CljObject* eval_for(CljObject *list, CljMap *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding using map_assoc
-            CljMap *new_env = make_map(4); // Small capacity for loop environment
+            CljMap *new_env = make_map_old(4); // Small capacity for loop environment
             if (new_env) {
                 // Copy existing environment bindings
                 if (env) {
@@ -1725,7 +1725,7 @@ CljObject* eval_doseq(CljObject *list, CljMap *env) {
             CljObject *element = seq_first(seq);
             
             // Create new environment with binding using map_assoc
-            CljMap *new_env = make_map(4); // Small capacity for loop environment
+            CljMap *new_env = make_map_old(4); // Small capacity for loop environment
             if (new_env) {
                 // Copy existing environment bindings
                 if (env) {
@@ -1819,7 +1819,7 @@ CljObject* eval_dotimes(CljObject *list, CljMap *env) {
     // Execute body n times
     for (int i = 0; i < n; i++) {
         // Create new environment with binding using map_assoc
-        CljMap *new_env = make_map(4); // Small capacity for loop environment
+        CljMap *new_env = make_map_old(4); // Small capacity for loop environment
         if (new_env) {
             // Copy existing environment bindings
             if (env) {

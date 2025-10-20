@@ -26,22 +26,22 @@ static void init_empty_vector_singleton_once(void) {
 // not retain/release.
 // - When capacity > 0, returns heap vector (rc=1) with zero-initialized backing
 // store.
-// Legacy make_vector removed - use make_vector_v instead
+// Legacy make_vector removed - use make_vector instead
 
-// Legacy make_weak_vector removed - use make_vector_v instead
+// Legacy make_weak_vector removed - use make_vector instead
 
-// Legacy vector_push_inplace removed - use conj_v for transient vectors instead
+// Legacy vector_push_inplace removed - use conj for transient vectors instead
 
-// Legacy vector_conj removed - use vector_conj_v instead
+// Legacy vector_conj removed - use vector_conj instead
 
-// Legacy vector_from_items removed - use make_vector_v instead
+// Legacy vector_from_items removed - use make_vector instead
 
-// Legacy make_vector_from_stack removed - use make_vector_v instead
+// Legacy make_vector_from_stack removed - use make_vector instead
 
 // === Neue CljValue API (Phase 1: Parallel) ===
 
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
-CljValue make_vector_v(int capacity, int is_mutable) {
+CljValue make_vector(int capacity, int is_mutable) {
     if (capacity <= 0) {
         init_empty_vector_singleton_once();
         return (CljValue)&clj_empty_vector_singleton;
@@ -69,7 +69,7 @@ CljValue make_vector_v(int capacity, int is_mutable) {
 }
 
 /** Return a new vector with item appended; original vector remains unchanged. */
-CljValue vector_conj_v(CljValue vec, CljValue item) {
+CljValue vector_conj(CljValue vec, CljValue item) {
     if (!vec || ((CljObject*)vec)->type != CLJ_VECTOR || !item)
         return NULL;
 
@@ -81,7 +81,7 @@ CljValue vector_conj_v(CljValue vec, CljValue item) {
     if (new_capacity < 4)
         new_capacity = 4;
 
-    CljValue new_vec_obj = make_vector_v(new_capacity, 0);
+    CljValue new_vec_obj = make_vector(new_capacity, 0);
     CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
     if (!new_vec)
         return NULL;
@@ -143,7 +143,7 @@ CljValue transient(CljValue vec) {
 }
 
 /** Append to transient vector (guaranteed in-place). */
-CljValue conj_v(CljValue tvec, CljValue item) {
+CljValue conj(CljValue tvec, CljValue item) {
     if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR || !item) {
         return NULL;
     }
@@ -169,7 +169,7 @@ CljValue conj_v(CljValue tvec, CljValue item) {
 }
 
 /** Convert transient vector back to persistent. */
-CljValue persistent_v(CljValue tvec) {
+CljValue persistent(CljValue tvec) {
     if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR) {
         return NULL;
     }
@@ -178,7 +178,7 @@ CljValue persistent_v(CljValue tvec) {
     if (!v) return NULL;
     
     // Clojure-Semantik: Erstelle NEUE persistent collection
-    CljValue new_vec = make_vector_v(v->capacity, 0);  // Neue Instanz
+    CljValue new_vec = make_vector(v->capacity, 0);  // Neue Instanz
     CljPersistentVector *new_v = as_vector(new_vec);
     if (!new_v) return NULL;
     

@@ -25,7 +25,7 @@ static void init_empty_map_singleton_once(void) {
 }
 
 /** @brief Create a new map with specified capacity */
-CljMap *make_map(int capacity) {
+CljMap *make_map_old(int capacity) {
   if (capacity <= 0) {
     init_empty_map_singleton_once();
     return &clj_empty_map_singleton;
@@ -46,7 +46,7 @@ CljMap *make_map(int capacity) {
 }
 
 /** @brief Get value from map by key */
-CljObject *map_get(CljObject *map, CljObject *key) {
+CljObject *map_get_old(CljObject *map, CljObject *key) {
   if (!map || map->type != CLJ_MAP || !key)
     return NULL;
   CljMap *map_data = as_map(map);
@@ -67,7 +67,7 @@ CljObject *map_get(CljObject *map, CljObject *key) {
 }
 
 /** @brief Associate key-value pair in map */
-void map_assoc(CljObject *map, CljObject *key, CljObject *value) {
+void map_assoc_old(CljObject *map, CljObject *key, CljObject *value) {
   if (!map || map->type != CLJ_MAP || !key) {
     return;
   }
@@ -107,13 +107,13 @@ void map_assoc(CljObject *map, CljObject *key, CljObject *value) {
   map_data->count++;
 }
 
-CljObject *map_keys(CljObject *map) {
+CljObject *map_keys_old(CljObject *map) {
   if (!map || map->type != CLJ_MAP)
     return NULL;
   CljMap *map_data = as_map(map);
   if (!map_data)
     return NULL;
-  CljValue keys_val = make_vector_v(map_data->count, 0);
+  CljValue keys_val = make_vector(map_data->count, 0);
   CljObject *keys = (CljObject*)keys_val;
   CljPersistentVector *keys_vec = as_vector(keys);
   if (!keys_vec)
@@ -127,13 +127,13 @@ CljObject *map_keys(CljObject *map) {
   return keys;
 }
 
-CljObject *map_vals(CljObject *map) {
+CljObject *map_vals_old(CljObject *map) {
   if (!map || map->type != CLJ_MAP)
     return NULL;
   CljMap *map_data = as_map(map);
   if (!map_data)
     return NULL;
-  CljValue vals_val = make_vector_v(map_data->count, 0);
+  CljValue vals_val = make_vector(map_data->count, 0);
   CljObject *vals = (CljObject*)vals_val;
   CljPersistentVector *vals_vec = as_vector(vals);
   if (!vals_vec)
@@ -147,7 +147,7 @@ CljObject *map_vals(CljObject *map) {
   return vals;
 }
 
-int map_count(CljObject *map) {
+int map_count_old(CljObject *map) {
   if (!map) return 0;
   
   // Check if it's a heap object
@@ -161,7 +161,7 @@ int map_count(CljObject *map) {
   return map_data ? map_data->count : 0;
 }
 
-void map_put(CljObject *map, CljObject *key, CljObject *value) {
+void map_put_old(CljObject *map, CljObject *key, CljObject *value) {
   if (!map || map->type != CLJ_MAP || !key)
     return;
   CljMap *map_data = as_map(map);
@@ -180,7 +180,7 @@ void map_put(CljObject *map, CljObject *key, CljObject *value) {
   RETAIN(value);
 }
 
-void map_foreach(CljObject *map, void (*func)(CljObject *, CljObject *)) {
+void map_foreach_old(CljObject *map, void (*func)(CljObject *, CljObject *)) {
   if (!map || map->type != CLJ_MAP || !func)
     return;
   CljMap *map_data = as_map(map);
@@ -190,7 +190,7 @@ void map_foreach(CljObject *map, void (*func)(CljObject *, CljObject *)) {
              { func(key, value); });
 }
 
-int map_contains(CljObject *map, CljObject *key) {
+int map_contains_old(CljObject *map, CljObject *key) {
   if (!map || map->type != CLJ_MAP || !key)
     return 0;
   CljMap *map_data = as_map(map);
@@ -199,7 +199,7 @@ int map_contains(CljObject *map, CljObject *key) {
   return KV_CONTAINS(map_data->data, map_data->count, key);
 }
 
-void map_remove(CljObject *map, CljObject *key) {
+void map_remove_old(CljObject *map, CljObject *key) {
   if (!map || map->type != CLJ_MAP || !key)
     return;
   CljMap *map_data = as_map(map);
@@ -221,11 +221,11 @@ void map_remove(CljObject *map, CljObject *key) {
   }
 }
 
-CljObject* map_from_stack(CljObject **pairs, int pair_count) {
+CljObject* map_from_stack_old(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
-        return make_map(0);
+        return make_map_old(0);
     }
-    CljMap *map = make_map(pair_count * 2);
+    CljMap *map = make_map_old(pair_count * 2);
     CljMap *map_data = as_map((CljObject*)map);
     if (!map_data) return NULL;
       for (int i = 0; i < pair_count; i++) {
@@ -241,42 +241,42 @@ CljObject* map_from_stack(CljObject **pairs, int pair_count) {
 // === CljValue API (Phase 1: Parallel) ===
 
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
-CljValue make_map_v(int capacity) {
-    return (CljValue)make_map(capacity);
+CljValue make_map(int capacity) {
+    return (CljValue)make_map_old(capacity);
 }
 
 /** Get value for key or NULL if absent (structural key equality). */
-CljValue map_get_v(CljValue map, CljValue key) {
-    return (CljValue)map_get((CljObject*)map, (CljObject*)key);
+CljValue map_get(CljValue map, CljValue key) {
+    return (CljValue)map_get_old((CljObject*)map, (CljObject*)key);
 }
 
 /** Associate key->value (replace if key exists; retains value). */
-void map_assoc_v(CljValue map, CljValue key, CljValue value) {
-    map_assoc((CljObject*)map, (CljObject*)key, (CljObject*)value);
+void map_assoc(CljValue map, CljValue key, CljValue value) {
+    map_assoc_old((CljObject*)map, (CljObject*)key, (CljObject*)value);
 }
 
 /** Return a vector of keys (retained). */
-CljValue map_keys_v(CljValue map) {
-    return (CljValue)map_keys((CljObject*)map);
+CljValue map_keys(CljValue map) {
+    return (CljValue)map_keys_old((CljObject*)map);
 }
 
 /** Return a vector of values (retained). */
-CljValue map_vals_v(CljValue map) {
-    return (CljValue)map_vals((CljObject*)map);
+CljValue map_vals(CljValue map) {
+    return (CljValue)map_vals_old((CljObject*)map);
 }
 
 /** Return number of key/value pairs. */
-int map_count_v(CljValue map) {
-    return map_count((CljObject*)map);
+int map_count(CljValue map) {
+    return map_count_old((CljObject*)map);
 }
 
 /** Append key/value without structural duplicate check (retains both). */
-void map_put_v(CljValue map, CljValue key, CljValue value) {
-    map_put((CljObject*)map, (CljObject*)key, (CljObject*)value);
+void map_put(CljValue map, CljValue key, CljValue value) {
+    map_put_old((CljObject*)map, (CljObject*)key, (CljObject*)value);
 }
 
 /** Iterate over all key/value pairs calling func(key,value). */
-void map_foreach_v(CljValue map, void (*func)(CljValue, CljValue)) {
+void map_foreach(CljValue map, void (*func)(CljValue, CljValue)) {
     // For now, we'll implement a simple version that doesn't use the wrapper
     // TODO: Implement proper iteration for CljValue maps
     (void)map;
@@ -284,19 +284,19 @@ void map_foreach_v(CljValue map, void (*func)(CljValue, CljValue)) {
 }
 
 /** Return 1 if key exists (pointer equality fast-path). */
-int map_contains_v(CljValue map, CljValue key) {
-    return map_contains((CljObject*)map, (CljObject*)key);
+int map_contains(CljValue map, CljValue key) {
+    return map_contains_old((CljObject*)map, (CljObject*)key);
 }
 
 /** Remove key if present (releases removed references). */
-void map_remove_v(CljValue map, CljValue key) {
-    map_remove((CljObject*)map, (CljObject*)key);
+void map_remove(CljValue map, CljValue key) {
+    map_remove_old((CljObject*)map, (CljObject*)key);
 }
 
-CljValue map_from_stack_v(CljValue *pairs, int pair_count) {
+CljValue map_from_stack(CljValue *pairs, int pair_count) {
     // Convert CljValue* to CljObject** for compatibility
     CljObject **obj_pairs = (CljObject**)pairs;
-    return (CljValue)map_from_stack(obj_pairs, pair_count);
+    return (CljValue)map_from_stack_old(obj_pairs, pair_count);
 }
 
 // === Transient API (Phase 2) ===
@@ -339,7 +339,7 @@ CljValue transient_map(CljValue map) {
 }
 
 /** Associate key->value in transient map (guaranteed in-place). */
-CljValue conj_map_v(CljValue tmap, CljValue key, CljValue value) {
+CljValue conj_map(CljValue tmap, CljValue key, CljValue value) {
     if (!tmap || tmap->type != CLJ_TRANSIENT_MAP || !key || !value) {
         return NULL;
     }
@@ -380,7 +380,7 @@ CljValue conj_map_v(CljValue tmap, CljValue key, CljValue value) {
 }
 
 /** Convert transient map back to persistent. */
-CljValue persistent_map_v(CljValue tmap) {
+CljValue persistent_map(CljValue tmap) {
     if (!tmap || tmap->type != CLJ_TRANSIENT_MAP) {
         return NULL;
     }
@@ -389,7 +389,7 @@ CljValue persistent_map_v(CljValue tmap) {
     if (!m) return NULL;
     
     // Clojure semantics: Create NEW persistent collection
-    CljValue new_map = make_map_v(m->capacity);  // New instance
+    CljValue new_map = make_map(m->capacity);  // New instance
     CljMap *new_m = as_map((CljObject*)new_map);
     if (!new_m) return NULL;
     

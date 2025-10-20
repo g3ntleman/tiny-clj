@@ -41,7 +41,7 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
         int need = v->count + 1;
         int newcap = v->capacity;
         if (need > newcap) newcap = newcap > 0 ? newcap * 2 : 1;
-        CljValue copy_val = make_vector_v(newcap, 0);
+        CljValue copy_val = make_vector(newcap, 0);
         CljObject *copy = (CljObject*)copy_val;
         if (!copy) return NULL;
         CljPersistentVector *c = as_vector(copy);
@@ -111,7 +111,7 @@ ID assoc3(ID *args, int argc) {
         v->data[i] = (RETAIN(val), val);
         return OBJ_TO_ID(RETAIN(vec));
     } else {
-        CljValue copy_val = make_vector_v(v->capacity, 0);
+        CljValue copy_val = make_vector(v->capacity, 0);
         CljObject *copy = (CljObject*)copy_val;
         if (!copy) return OBJ_TO_ID(NULL);
         CljPersistentVector *c = as_vector(copy);
@@ -155,9 +155,9 @@ ID native_persistent(ID *args, int argc) {
     if (!coll) return OBJ_TO_ID(NULL);
     
     if (coll->type == CLJ_TRANSIENT_VECTOR) {
-        return OBJ_TO_ID((CljObject*)persistent_v((CljValue)coll));
+        return OBJ_TO_ID((CljObject*)persistent((CljValue)coll));
     } else if (coll->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)persistent_map_v((CljValue)coll));
+        return OBJ_TO_ID((CljObject*)persistent_map((CljValue)coll));
     } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_MAP) {
         // Clojure-compatible: persistent! on persistent returns the same object
         return OBJ_TO_ID(coll);
@@ -180,13 +180,13 @@ ID native_conj_bang(ID *args, int argc) {
     if (coll->type == CLJ_TRANSIENT_VECTOR) {
         CljValue result = (CljValue)coll;
         for (int i = 1; i < argc; i++) {
-            result = conj_v(result, (CljValue)args[i]);
+            result = conj(result, (CljValue)args[i]);
             if (!result) return NULL;
         }
         return (CljObject*)result;
     } else if (coll->type == CLJ_TRANSIENT_MAP) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
-        return (CljObject*)conj_map_v((CljValue)coll, (CljValue)args[1], (CljValue)args[2]);
+        return (CljObject*)conj_map((CljValue)coll, (CljValue)args[1], (CljValue)args[2]);
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
@@ -203,7 +203,7 @@ ID native_get(ID *args, int argc) {
     if (!map || !key) return OBJ_TO_ID(NULL);
     
     if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)map_get_v((CljValue)map, (CljValue)key));
+        return OBJ_TO_ID((CljObject*)map_get((CljValue)map, (CljValue)key));
     }
     
     return OBJ_TO_ID(NULL); // Return nil for unsupported types
@@ -215,7 +215,7 @@ ID native_count(ID *args, int argc) {
     if (!coll) return OBJ_TO_ID(NULL);
     
     if (coll->type == CLJ_MAP || coll->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID(fixnum(map_count_v((CljValue)coll)));
+        return OBJ_TO_ID(fixnum(map_count((CljValue)coll)));
     } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_TRANSIENT_VECTOR) {
         CljPersistentVector *vec = as_vector(coll);
         return OBJ_TO_ID(fixnum(vec ? vec->count : 0));
@@ -230,7 +230,7 @@ ID native_keys(ID *args, int argc) {
     if (!map) return OBJ_TO_ID(NULL);
     
     if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)map_keys_v((CljValue)map));
+        return OBJ_TO_ID((CljObject*)map_keys((CljValue)map));
     }
     
     return OBJ_TO_ID(NULL); // Return nil for unsupported types
@@ -242,7 +242,7 @@ ID native_vals(ID *args, int argc) {
     if (!map) return OBJ_TO_ID(NULL);
     
     if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)map_vals_v((CljValue)map));
+        return OBJ_TO_ID((CljObject*)map_vals((CljValue)map));
     }
     
     return OBJ_TO_ID(NULL); // Return nil for unsupported types
@@ -303,7 +303,7 @@ ID native_array_map(ID *args, int argc) {
     // Must have even number of arguments (key-value pairs)
     if (argc % 2 != 0) {
         // Return empty map instead of nil for odd number of args
-        return OBJ_TO_ID(make_map_v(0));
+        return OBJ_TO_ID(make_map_old(0));
     }
     
     // Create map with appropriate capacity
@@ -311,20 +311,20 @@ ID native_array_map(ID *args, int argc) {
     
     // Handle empty map case specially
     if (pair_count == 0) {
-        return OBJ_TO_ID(make_map_v(0));
+        return OBJ_TO_ID(make_map_old(0));
     }
     
-    CljMap *map = (CljMap*)make_map_v(pair_count);
+    CljMap *map = (CljMap*)make_map_old(pair_count);
     if (!map) {
         // Return empty map instead of nil on allocation failure
-        return OBJ_TO_ID(make_map_v(0));
+        return OBJ_TO_ID(make_map_old(0));
     }
     
     // Add all key-value pairs
     for (int i = 0; i < argc; i += 2) {
         CljObject *key = ID_TO_OBJ(args[i]);
         CljObject *value = ID_TO_OBJ(args[i + 1]);
-        map_assoc_v((CljValue)map, (CljValue)key, (CljValue)value);
+        map_assoc((CljValue)map, (CljValue)key, (CljValue)value);
     }
     
     return OBJ_TO_ID((CljObject*)map);
@@ -460,7 +460,7 @@ static int32_t fixnum_to_fixed(int fixnum) {
 // String concatenation (variadic)
 ID native_str(ID *args, int argc) {
     if (argc == 0) {
-        return OBJ_TO_ID(make_string(""));
+        return OBJ_TO_ID(make_string_old(""));
     }
     
     // Calculate total length
@@ -475,7 +475,7 @@ ID native_str(ID *args, int argc) {
     
     // Allocate buffer
     char *buffer = ALLOC(char, total_len + 1);
-    if (!buffer) return make_string("");
+    if (!buffer) return make_string_old("");
     buffer[0] = '\0';
     
     // Concatenate all strings
@@ -487,7 +487,7 @@ ID native_str(ID *args, int argc) {
         }
     }
     
-    CljObject *result = make_string(buffer);
+    CljObject *result = make_string_old(buffer);
     free(buffer);
     return result;
 }

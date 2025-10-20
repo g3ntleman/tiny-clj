@@ -40,7 +40,7 @@ void test_equal_same_objects(void) {
     WITH_MEMORY_PROFILING({
     
     // Test same object reference
-    CljObject *obj = make_string("test");
+    CljObject *obj = make_string_old("test");
     TEST_ASSERT_TRUE(clj_equal(obj, obj));
     
     RELEASE(obj);
@@ -52,9 +52,9 @@ void test_equal_different_strings(void) {
     WITH_MEMORY_PROFILING({
     
     // Test different strings
-    CljObject *str1 = make_string("hello");
-    CljObject *str2 = make_string("world");
-    CljObject *str3 = make_string("hello");
+    CljObject *str1 = make_string_old("hello");
+    CljObject *str2 = make_string_old("world");
+    CljObject *str3 = make_string_old("hello");
     
     TEST_ASSERT_FALSE(clj_equal(str1, str2));
     TEST_ASSERT_TRUE(clj_equal(str1, str3));
@@ -70,8 +70,8 @@ void test_equal_different_types(void) {
     WITH_MEMORY_PROFILING({
     
     // Test different types
-    CljValue vec_val = make_vector_v(1, 1);
-    CljMap *map = make_map(16);
+    CljValue vec_val = make_vector(1, 1);
+    CljMap *map = make_map_old(16);
     CljList *list = make_list(NULL, NULL);
     
     CljObject *vec = (CljObject*)vec_val;
@@ -114,24 +114,24 @@ void test_vector_equal_same_vectors(void) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical vectors using CljValue API
-    CljValue vec1_val = make_vector_v(3, 1);
-    CljValue vec2_val = make_vector_v(3, 1);
+    CljValue vec1_val = make_vector(3, 1);
+    CljValue vec2_val = make_vector(3, 1);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
     
-    // Fill with same values using vector_conj_v
+    // Fill with same values using vector_conj
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = vector_conj_v(vec1_val, val1);
-    vec1_val = vector_conj_v(vec1_val, val2);
-    vec1_val = vector_conj_v(vec1_val, val3);
+    vec1_val = vector_conj(vec1_val, val1);
+    vec1_val = vector_conj(vec1_val, val2);
+    vec1_val = vector_conj(vec1_val, val3);
     
-    vec2_val = vector_conj_v(vec2_val, val1);
-    vec2_val = vector_conj_v(vec2_val, val2);
-    vec2_val = vector_conj_v(vec2_val, val3);
+    vec2_val = vector_conj(vec2_val, val1);
+    vec2_val = vector_conj(vec2_val, val2);
+    vec2_val = vector_conj(vec2_val, val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -150,8 +150,8 @@ void test_vector_equal_different_lengths(void) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different lengths
-    CljValue vec1_val = make_vector_v(2, 1);
-    CljValue vec2_val = make_vector_v(3, 1);
+    CljValue vec1_val = make_vector(2, 1);
+    CljValue vec2_val = make_vector(3, 1);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -161,12 +161,12 @@ void test_vector_equal_different_lengths(void) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = vector_conj_v(vec1_val, val1);
-    vec1_val = vector_conj_v(vec1_val, val2);
+    vec1_val = vector_conj(vec1_val, val1);
+    vec1_val = vector_conj(vec1_val, val2);
     
-    vec2_val = vector_conj_v(vec2_val, val1);
-    vec2_val = vector_conj_v(vec2_val, val2);
-    vec2_val = vector_conj_v(vec2_val, val3);
+    vec2_val = vector_conj(vec2_val, val1);
+    vec2_val = vector_conj(vec2_val, val2);
+    vec2_val = vector_conj(vec2_val, val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -185,8 +185,8 @@ void test_vector_equal_different_values(void) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different values using CljValue API
-    CljValue vec1_val = make_vector_v(0, 1); // Start with empty vector
-    CljValue vec2_val = make_vector_v(0, 1); // Start with empty vector
+    CljValue vec1_val = make_vector(0, 1); // Start with empty vector
+    CljValue vec2_val = make_vector(0, 1); // Start with empty vector
     
     // Create different integer values (immediate values)
     CljValue int1 = fixnum(1);
@@ -195,10 +195,10 @@ void test_vector_equal_different_values(void) {
     CljValue int4 = fixnum(4);
     
     // Build vectors with different values using conj
-    vec1_val = vector_conj_v(vec1_val, int1);
-    vec1_val = vector_conj_v(vec1_val, int2);
-    vec2_val = vector_conj_v(vec2_val, int3);
-    vec2_val = vector_conj_v(vec2_val, int4);
+    vec1_val = vector_conj(vec1_val, int1);
+    vec1_val = vector_conj(vec1_val, int2);
+    vec2_val = vector_conj(vec2_val, int3);
+    vec2_val = vector_conj(vec2_val, int4);
     
     // Verify vectors were created successfully
     TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
@@ -226,9 +226,9 @@ void test_clj_equal_id_function(void) {
     TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)fix3));
     
     // Test heap objects (CljObject*)
-    CljObject *str1 = make_string("hello");
-    CljObject *str2 = make_string("hello");
-    CljObject *str3 = make_string("world");
+    CljObject *str1 = make_string_old("hello");
+    CljObject *str2 = make_string_old("hello");
+    CljObject *str3 = make_string_old("world");
     
     // Test same heap objects (pointer equality)
     TEST_ASSERT_TRUE(clj_equal_id((ID)str1, (ID)str1));
@@ -257,24 +257,24 @@ void test_vector_equal_with_strings(void) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with strings
-    CljValue vec1_val = make_vector_v(2, 1);
-    CljValue vec2_val = make_vector_v(2, 1);
+    CljValue vec1_val = make_vector(2, 1);
+    CljValue vec2_val = make_vector(2, 1);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
     
     // Create string objects
-    CljObject *str1 = make_string("hello");
-    CljObject *str2 = make_string("world");
-    CljObject *str3 = make_string("hello");
-    CljObject *str4 = make_string("world");
+    CljObject *str1 = make_string_old("hello");
+    CljObject *str2 = make_string_old("world");
+    CljObject *str3 = make_string_old("hello");
+    CljObject *str4 = make_string_old("world");
     
     // Fill vectors with strings
-    vec1_val = vector_conj_v(vec1_val, (CljValue)str1);
-    vec1_val = vector_conj_v(vec1_val, (CljValue)str2);
+    vec1_val = vector_conj(vec1_val, (CljValue)str1);
+    vec1_val = vector_conj(vec1_val, (CljValue)str2);
     
-    vec2_val = vector_conj_v(vec2_val, (CljValue)str3);
-    vec2_val = vector_conj_v(vec2_val, (CljValue)str4);
+    vec2_val = vector_conj(vec2_val, (CljValue)str3);
+    vec2_val = vector_conj(vec2_val, (CljValue)str4);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -301,14 +301,14 @@ void test_map_equal_same_maps(void) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical maps using old API
-    CljMap *map1 = make_map(16);
-    CljMap *map2 = make_map(16);
+    CljMap *map1 = make_map_old(16);
+    CljMap *map2 = make_map_old(16);
     
     // Create keys and values
-    CljObject *key1 = make_string("key1");
-    CljObject *key2 = make_string("key2");
-    CljObject *val1 = make_string("value1");
-    CljObject *val2 = make_string("value2");
+    CljObject *key1 = make_string_old("key1");
+    CljObject *key2 = make_string_old("key2");
+    CljObject *val1 = make_string_old("value1");
+    CljObject *val2 = make_string_old("value2");
     
     // Add same key-value pairs to both maps
     map_assoc((CljObject*)map1, key1, val1);
@@ -334,15 +334,15 @@ void test_map_equal_same_maps(void) {
 void test_map_equal_different_keys(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map(16);
-    CljMap *map2 = make_map(16);
+    CljMap *map1 = make_map_old(16);
+    CljMap *map2 = make_map_old(16);
     
     // Create different keys
-    CljObject *key1 = make_string("key1");
-    CljObject *key2 = make_string("key2");
-    CljObject *key3 = make_string("key3");
-    CljObject *val1 = make_string("value1");
-    CljObject *val2 = make_string("value2");
+    CljObject *key1 = make_string_old("key1");
+    CljObject *key2 = make_string_old("key2");
+    CljObject *key3 = make_string_old("key3");
+    CljObject *val1 = make_string_old("value1");
+    CljObject *val2 = make_string_old("value2");
     
     // Add different key-value pairs
     map_assoc((CljObject*)map1, key1, val1);
@@ -369,15 +369,15 @@ void test_map_equal_different_keys(void) {
 void test_map_equal_different_values(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map(16);
-    CljMap *map2 = make_map(16);
+    CljMap *map1 = make_map_old(16);
+    CljMap *map2 = make_map_old(16);
     
     // Create keys and different values
-    CljObject *key1 = make_string("key1");
-    CljObject *key2 = make_string("key2");
-    CljObject *val1 = make_string("value1");
-    CljObject *val2 = make_string("value2");
-    CljObject *val3 = make_string("value3");
+    CljObject *key1 = make_string_old("key1");
+    CljObject *key2 = make_string_old("key2");
+    CljObject *val1 = make_string_old("value1");
+    CljObject *val2 = make_string_old("value2");
+    CljObject *val3 = make_string_old("value3");
     
     // Add same keys but different values
     map_assoc((CljObject*)map1, key1, val1);
@@ -404,14 +404,14 @@ void test_map_equal_different_values(void) {
 void test_map_equal_different_sizes(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map(16);
-    CljMap *map2 = make_map(16);
+    CljMap *map1 = make_map_old(16);
+    CljMap *map2 = make_map_old(16);
     
     // Create keys and values
-    CljObject *key1 = make_string("key1");
-    CljObject *key2 = make_string("key2");
-    CljObject *val1 = make_string("value1");
-    CljObject *val2 = make_string("value2");
+    CljObject *key1 = make_string_old("key1");
+    CljObject *key2 = make_string_old("key2");
+    CljObject *val1 = make_string_old("value1");
+    CljObject *val2 = make_string_old("value2");
     
     // Add different number of entries
     map_assoc((CljObject*)map1, key1, val1);
@@ -437,28 +437,28 @@ void test_map_equal_different_sizes(void) {
 void test_map_equal_with_nested_vectors(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map(16);
-    CljMap *map2 = make_map(16);
+    CljMap *map1 = make_map_old(16);
+    CljMap *map2 = make_map_old(16);
     
     // Create nested vectors
-    CljValue vec1_val = make_vector_v(2, 1);
-    CljValue vec2_val = make_vector_v(2, 1);
+    CljValue vec1_val = make_vector(2, 1);
+    CljValue vec2_val = make_vector(2, 1);
     
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);
     
-    vec1_val = vector_conj_v(vec1_val, val1);
-    vec1_val = vector_conj_v(vec1_val, val2);
+    vec1_val = vector_conj(vec1_val, val1);
+    vec1_val = vector_conj(vec1_val, val2);
     
-    vec2_val = vector_conj_v(vec2_val, val1);
-    vec2_val = vector_conj_v(vec2_val, val2);
+    vec2_val = vector_conj(vec2_val, val1);
+    vec2_val = vector_conj(vec2_val, val2);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
     
     // Create keys
-    CljObject *key1 = make_string("nested");
-    CljObject *val_str = make_string("value");
+    CljObject *key1 = make_string_old("nested");
+    CljObject *val_str = make_string_old("value");
     
     // Add to maps
     map_assoc((CljObject*)map1, key1, vec1);

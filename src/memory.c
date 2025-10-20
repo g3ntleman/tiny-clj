@@ -212,7 +212,7 @@ CljObjectPool *autorelease_pool_push() {
     CljObjectPool *p = (CljObjectPool*)malloc(sizeof(CljObjectPool));
     if (!p) return NULL;
     // Create weak vector using new API
-    CljValue backing_val = make_vector_v(16, 1); // mutable
+    CljValue backing_val = make_vector(16, 1); // mutable
     p->backing = (CljObject*)backing_val;
     p->prev = g_cv_pool_top;
     g_cv_pool_top = p;

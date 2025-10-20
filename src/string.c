@@ -22,7 +22,7 @@ static void init_empty_string_once(void) {
     initialized = true;
 }
 
-CljObject* make_string(const char *s) {
+CljObject* make_string_old(const char *s) {
     if (!s || s[0] == '\0') {
         init_empty_string_once(); // TODO: do not call every time. Create an initialze_* funtction.
         return empty_string_singleton;
