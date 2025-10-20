@@ -585,6 +585,44 @@ char* pr_str(CljObject *v) {
     return to_string(v);
 }
 
+// Konsolidierte Gleichheitsprüfung mit ID-Parametern
+// Unterstützt sowohl CljObject* (heap objects) als auch CljValue (immediate values)
+bool clj_equal_id(ID a, ID b) {
+    // Schneller == Check funktioniert für beide Typen
+    if (a == b) return true;
+    if (!a || !b) return false;
+    
+    // Beide sind immediate values (CljValue)
+    if (is_immediate((CljValue)a) && is_immediate((CljValue)b)) {
+        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+            return as_fixnum((CljValue)a) == as_fixnum((CljValue)b);
+        }
+        if (is_char((CljValue)a) && is_char((CljValue)b)) {
+            return as_char((CljValue)a) == as_char((CljValue)b);
+        }
+        if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
+            return as_float16((CljValue)a) == as_float16((CljValue)b);
+        }
+        if (is_special((CljValue)a) && is_special((CljValue)b)) {
+            return as_special((CljValue)a) == as_special((CljValue)b);
+        }
+        return false; // Verschiedene immediate value Typen
+    }
+    
+    // Beide sind CljObject* (heap objects)
+    if (!is_immediate((CljValue)a) && !is_immediate((CljValue)b)) {
+        return clj_equal((CljObject*)a, (CljObject*)b);
+    }
+    
+    // Gemischte Typen (ein immediate, ein heap object)
+    return false;
+}
+
+// Legacy-Wrapper für CljValue-Parameter
+static bool clj_equal_value(CljValue a, CljValue b) {
+    return clj_equal_id((ID)a, (ID)b);
+}
+
 // Korrekte Gleichheitsprüfung mit Inhalt-Vergleich
 bool clj_equal(CljObject *a, CljObject *b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
@@ -620,7 +658,8 @@ bool clj_equal(CljObject *a, CljObject *b) {
             if (!vec_a || !vec_b) return false;
             if (vec_a->count != vec_b->count) return false;
             for (int i = 0; i < vec_a->count; i++) {
-                if (!clj_equal(vec_a->data[i], vec_b->data[i])) return false;
+                // Vektorelemente können CljValue (immediate values) oder CljObject* sein
+                if (!clj_equal_value(vec_a->data[i], vec_b->data[i])) return false;
             }
             return true;
         }
@@ -631,10 +670,11 @@ bool clj_equal(CljObject *a, CljObject *b) {
             if (!map_a || !map_b) return false;
             if (map_a->count != map_b->count) return false;
             for (int i = 0; i < map_a->count; i++) {
-                CljObject *key_a = KV_KEY(map_a->data, i);
-                CljObject *val_a = KV_VALUE(map_a->data, i);
-                CljObject *val_b = (CljObject*)map_get_v((CljValue)b, (CljValue)key_a);
-                if (!clj_equal(val_a, val_b)) return false;
+                CljValue key_a = KV_KEY(map_a->data, i);
+                CljValue val_a = KV_VALUE(map_a->data, i);
+                CljValue val_b = map_get_v((CljValue)b, key_a);
+                // Map-Werte können CljValue (immediate values) oder CljObject* sein
+                if (!clj_equal_value(val_a, val_b)) return false;
             }
             return true;
         }

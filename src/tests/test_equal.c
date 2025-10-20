@@ -13,6 +13,9 @@
 #include "list_operations.h"
 #include "clj_string.h"
 #include "value.h"
+#include "namespace.h"
+#include "parser.h"
+#include "function_call.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -181,11 +184,11 @@ void test_vector_equal_different_lengths(void) {
 void test_vector_equal_different_values(void) {
     MEMORY_TEST_START("test_vector_equal_different_values");
     
-    // Create vectors with different values using conj
+    // Create vectors with different values using CljValue API
     CljValue vec1_val = make_vector_v(0, 1); // Start with empty vector
     CljValue vec2_val = make_vector_v(0, 1); // Start with empty vector
     
-    // Create different integer values
+    // Create different integer values (immediate values)
     CljValue int1 = make_fixnum(1);
     CljValue int2 = make_fixnum(2);
     CljValue int3 = make_fixnum(3);
@@ -197,13 +200,57 @@ void test_vector_equal_different_values(void) {
     vec2_val = vector_conj_v(vec2_val, int3);
     vec2_val = vector_conj_v(vec2_val, int4);
     
-    CljObject *vec1 = (CljObject*)vec1_val;
-    CljObject *vec2 = (CljObject*)vec2_val;
+    // Verify vectors were created successfully
+    TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
+    TEST_ASSERT_NOT_NULL((CljObject*)vec2_val);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec1_val)->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec2_val)->type);
     
-    // Test that vectors with different values are not equal
-    TEST_ASSERT_FALSE(clj_equal(vec1, vec2));
+    // Test vector equality with clj_equal - now supports immediate values in vectors
+    TEST_ASSERT_FALSE(clj_equal((CljObject*)vec1_val, (CljObject*)vec2_val));
     
     MEMORY_TEST_END("test_vector_equal_different_values");
+}
+
+void test_clj_equal_id_function(void) {
+    MEMORY_TEST_START("test_clj_equal_id_function");
+    
+    // Test immediate values (CljValue)
+    CljValue fix1 = make_fixnum(42);
+    CljValue fix2 = make_fixnum(42);
+    CljValue fix3 = make_fixnum(43);
+    
+    // Test same immediate values
+    TEST_ASSERT_TRUE(clj_equal_id((ID)fix1, (ID)fix2));
+    // Test different immediate values
+    TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)fix3));
+    
+    // Test heap objects (CljObject*)
+    CljObject *str1 = make_string("hello");
+    CljObject *str2 = make_string("hello");
+    CljObject *str3 = make_string("world");
+    
+    // Test same heap objects (pointer equality)
+    TEST_ASSERT_TRUE(clj_equal_id((ID)str1, (ID)str1));
+    // Test different heap objects with same content
+    TEST_ASSERT_TRUE(clj_equal_id((ID)str1, (ID)str2));
+    // Test different heap objects with different content
+    TEST_ASSERT_FALSE(clj_equal_id((ID)str1, (ID)str3));
+    
+    // Test mixed types (immediate vs heap)
+    TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)str1));
+    
+    // Test NULL values
+    TEST_ASSERT_TRUE(clj_equal_id((ID)NULL, (ID)NULL));
+    TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)NULL));
+    TEST_ASSERT_FALSE(clj_equal_id((ID)NULL, (ID)str1));
+    
+    // Cleanup
+    RELEASE(str1);
+    RELEASE(str2);
+    RELEASE(str3);
+    
+    MEMORY_TEST_END("test_clj_equal_id_function");
 }
 
 void test_vector_equal_with_strings(void) {

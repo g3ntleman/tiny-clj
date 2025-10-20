@@ -179,6 +179,7 @@ extern void test_equal_immediate_values(void);
 extern void test_vector_equal_same_vectors(void);
 extern void test_vector_equal_different_lengths(void);
 extern void test_vector_equal_different_values(void);
+extern void test_clj_equal_id_function(void);
 extern void test_vector_equal_with_strings(void);
 extern void test_list_equal_same_lists(void);
 extern void test_list_equal_same_instance(void);
@@ -364,6 +365,7 @@ static void test_group_equal(void) {
     RUN_TEST(test_vector_equal_same_vectors);
     RUN_TEST(test_vector_equal_different_lengths);
     RUN_TEST(test_vector_equal_different_values);
+    RUN_TEST(test_clj_equal_id_function);
     RUN_TEST(test_vector_equal_with_strings);
     
     // List equality tests
