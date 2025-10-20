@@ -58,16 +58,19 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env);
     (a) = eval_arg_retained((list), 1, (env)); \
     (b) = eval_arg_retained((list), 2, (env)); \
     if (!(a) || !(b)) { \
-        if (a) RELEASE(a); \
-        if (b) RELEASE(b); \
+        if (a && !is_immediate((CljValue)(a))) RELEASE(a); \
+        if (b && !is_immediate((CljValue)(b))) RELEASE(b); \
         return NULL; \
     } \
 } while(0)
 
-#define RELEASE_TWO_ARGS(a, b) do { \
-    RELEASE(a); \
-    RELEASE(b); \
+#define RELEASE_TWO_ARGS_SAFE(a, b) do { \
+    if (!is_immediate((CljValue)(a))) RELEASE(a); \
+    if (!is_immediate((CljValue)(b))) RELEASE(b); \
 } while(0)
+
+// Legacy macro for backward compatibility (use RELEASE_TWO_ARGS_SAFE instead)
+#define RELEASE_TWO_ARGS(a, b) RELEASE_TWO_ARGS_SAFE(a, b)
 
 #define EVAL_AND_CHECK_TWO_ARGS(list, env, a, b) do { \
     EVAL_TWO_ARGS(list, env, a, b); \
