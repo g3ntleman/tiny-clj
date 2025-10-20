@@ -131,6 +131,15 @@ extern void test_integer_creation(void);
 extern void test_float_creation(void);
 extern void test_nil_creation(void);
 
+// Float16 arithmetic tests
+extern void test_float16_creation_and_conversion(void);
+extern void test_float16_arithmetic_operations(void);
+extern void test_float16_mixed_type_operations(void);
+extern void test_float16_division_with_remainder(void);
+extern void test_float16_precision_limits(void);
+extern void test_float16_variadic_operations(void);
+extern void test_float16_error_handling(void);
+
 // CljValue API tests
 extern void test_cljvalue_immediate_helpers(void);
 extern void test_cljvalue_vector_api(void);
@@ -205,6 +214,15 @@ static void test_group_unit(void) {
     
     // Map function test
     RUN_TEST(test_map_function);
+    
+    // Float16 arithmetic tests
+    RUN_TEST(test_float16_creation_and_conversion);
+    RUN_TEST(test_float16_arithmetic_operations);
+    RUN_TEST(test_float16_mixed_type_operations);
+    RUN_TEST(test_float16_division_with_remainder);
+    RUN_TEST(test_float16_precision_limits);
+    RUN_TEST(test_float16_variadic_operations);
+    RUN_TEST(test_float16_error_handling);
 }
 
 static void test_group_cljvalue(void) {

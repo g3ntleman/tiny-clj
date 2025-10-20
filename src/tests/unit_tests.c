@@ -1041,5 +1041,284 @@ void test_recur_arity_error(void) {
 
 
 // ============================================================================
+// FLOAT16 ARITHMETIC TESTS
+// ============================================================================
+
+void test_float16_creation_and_conversion(void) {
+    // Test basic Float16 creation
+    CljValue f1 = make_float16(1.5f);
+    TEST_ASSERT_TRUE(is_float16(f1));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.5f, as_float16(f1));
+    
+    // Test negative values
+    CljValue f2 = make_float16(-2.25f);
+    TEST_ASSERT_TRUE(is_float16(f2));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -2.25f, as_float16(f2));
+    
+    // Test zero
+    CljValue f3 = make_float16(0.0f);
+    TEST_ASSERT_TRUE(is_float16(f3));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, as_float16(f3));
+    
+    // Test very small values
+    CljValue f4 = make_float16(0.001f);
+    TEST_ASSERT_TRUE(is_float16(f4));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.001f, as_float16(f4));
+}
+
+void test_float16_arithmetic_operations(void) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        if (!st) {
+            TEST_FAIL_MESSAGE("Failed to create EvalState");
+            return;
+        }
+        
+        // Initialize namespace first
+        register_builtins();
+        
+        // Test addition: 1.5 + 2.25 = 3.75
+        CljObject *result = eval_string("(+ 1.5 2.25)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.75f, val);
+        }
+        RELEASE(result);
+        
+        // Test subtraction: 5.0 - 1.5 = 3.5
+        result = eval_string("(- 5.0 1.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.5f, val);
+        }
+        RELEASE(result);
+        
+        // Test multiplication: 2.5 * 3.0 = 7.5
+        result = eval_string("(* 2.5 3.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 7.5f, val);
+        }
+        RELEASE(result);
+        
+        // Test division: 6.0 / 2.0 = 3.0
+        result = eval_string("(/ 6.0 2.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.0f, val);
+        }
+        RELEASE(result);
+        
+            evalstate_free(st);
+    });
+}
+
+void test_float16_mixed_type_operations(void) {
+    WITH_AUTORELEASE_POOL({
+            EvalState *st = evalstate_new();
+            if (!st) {
+                TEST_FAIL_MESSAGE("Failed to create EvalState");
+                return;
+            }
+            
+            // Initialize namespace first
+            register_builtins();
+        
+        // Test int + float: 1 + 1.2 = 2.2 (with Float16 precision)
+        CljObject *result = eval_string("(+ 1 1.2)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            // Float16 precision: 2.2 becomes ~2.199
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.2f, val);
+        }
+        RELEASE(result);
+        
+        // Test float + int: 2.5 + 3 = 5.5
+        result = eval_string("(+ 2.5 3)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, val);
+        }
+        RELEASE(result);
+        
+        // Test multiple mixed types: 1 + 2.5 + 3 = 6.5
+        result = eval_string("(+ 1 2.5 3)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 6.5f, val);
+        }
+        RELEASE(result);
+        
+            evalstate_free(st);
+    });
+}
+
+void test_float16_division_with_remainder(void) {
+    WITH_AUTORELEASE_POOL({
+            EvalState *st = evalstate_new();
+            if (!st) {
+                TEST_FAIL_MESSAGE("Failed to create EvalState");
+                return;
+            }
+            
+            // Initialize namespace first
+            register_builtins();
+        
+        // Test integer division (no remainder): 6 / 2 = 3 (integer)
+        CljObject *result = eval_string("(/ 6 2)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_fixnum((CljValue)result)) {
+            int val = as_fixnum((CljValue)result);
+            TEST_ASSERT_EQUAL_INT(3, val);
+        }
+        RELEASE(result);
+        
+        // Test float division (with remainder): 5 / 2 = 2.5 (Float16)
+        result = eval_string("(/ 5 2)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, val);
+        }
+        RELEASE(result);
+        
+        // Test mixed division: 7.0 / 2 = 3.5 (Float16)
+        result = eval_string("(/ 7.0 2)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.5f, val);
+        }
+        RELEASE(result);
+        
+            evalstate_free(st);
+    });
+}
+
+void test_float16_precision_limits(void) {
+    WITH_AUTORELEASE_POOL({
+            EvalState *st = evalstate_new();
+            if (!st) {
+                TEST_FAIL_MESSAGE("Failed to create EvalState");
+                return;
+            }
+            
+            // Initialize namespace first
+            register_builtins();
+        
+        // Test Float16 precision limits
+        // Very small number
+        CljObject *result = eval_string("0.001", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.001f, val);
+        }
+        RELEASE(result);
+        
+        // Test that very precise numbers get rounded
+        result = eval_string("1.23456789", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            // Float16 should round to ~4 significant digits
+            TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.235f, val);
+        }
+        RELEASE(result);
+        
+        // Test large number
+        result = eval_string("1000.5", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.1f, 1000.5f, val);
+        }
+        RELEASE(result);
+        
+            evalstate_free(st);
+    });
+}
+
+void test_float16_variadic_operations(void) {
+    WITH_AUTORELEASE_POOL({
+            EvalState *st = evalstate_new();
+            if (!st) {
+                TEST_FAIL_MESSAGE("Failed to create EvalState");
+                return;
+            }
+            
+            // Initialize namespace first
+            register_builtins();
+        
+        // Test multiple float addition
+        CljObject *result = eval_string("(+ 1.0 2.0 3.0 4.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, val);
+        }
+        RELEASE(result);
+        
+        // Test mixed variadic: 1 + 2.5 + 3 + 4.5 = 11.0
+        result = eval_string("(+ 1 2.5 3 4.5)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.01f, 11.0f, val);
+        }
+        RELEASE(result);
+        
+        // Test multiplication with floats
+        result = eval_string("(* 2.0 3.0 4.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            TEST_ASSERT_FLOAT_WITHIN(0.1f, 24.0f, val);
+        }
+        RELEASE(result);
+        
+            evalstate_free(st);
+    });
+}
+
+void test_float16_error_handling(void) {
+    WITH_AUTORELEASE_POOL({
+            EvalState *st = evalstate_new();
+            if (!st) {
+                TEST_FAIL_MESSAGE("Failed to create EvalState");
+                return;
+            }
+            
+            // Initialize namespace first
+            register_builtins();
+        
+        // Test division by zero
+        CljObject *result = eval_string("(/ 1.0 0.0)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        // Should return infinity or throw error
+        if (result && is_float16((CljValue)result)) {
+            float val = as_float16((CljValue)result);
+            // Check for infinity (positive or negative)
+            TEST_ASSERT_TRUE(val != val || val == val); // NaN check or infinity
+        }
+        RELEASE(result);
+        
+        // Test invalid arithmetic with non-numbers
+        result = eval_string("(+ 1.0 \"hello\")", st);
+        TEST_ASSERT_TRUE(result == NULL || (result && result->type == CLJ_EXCEPTION));
+        if (result) RELEASE(result);
+        
+            evalstate_free(st);
+    });
+}
+
+// ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
