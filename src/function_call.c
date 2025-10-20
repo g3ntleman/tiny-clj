@@ -1445,35 +1445,35 @@ CljObject* eval_prn(CljObject *list, CljMap *env) {
 CljObject* eval_count(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     // Handle nil (represented as NULL) - return 0
-    if (!arg) return AUTORELEASE(make_fixnum(0));
+    if (!arg) return make_fixnum(0);
     
     // Note: nil is now represented as NULL, so no special nil check needed
     
     switch (arg->type) {
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(arg);
-            return AUTORELEASE(vec ? make_fixnum(vec->count) : make_fixnum(0));
+            return vec ? make_fixnum(vec->count) : make_fixnum(0);
         }
         
         case CLJ_LIST: {
             int count = list_count(arg);
-            return AUTORELEASE(make_fixnum(count));
+            return make_fixnum(count);
         }
         
         case CLJ_MAP: {
             CljMap *map = as_map(arg);
-            return AUTORELEASE(map ? make_fixnum(map->count) : make_fixnum(0));
+            return map ? make_fixnum(map->count) : make_fixnum(0);
         }
         
         case CLJ_STRING: {
             // String data is stored directly after CljObject header
             char **str_ptr = (char**)((char*)arg + sizeof(CljObject));
-            return AUTORELEASE(make_fixnum(strlen(*str_ptr)));
+            return make_fixnum(strlen(*str_ptr));
         }
         
         default:
             // For other types (int, bool, symbol, etc.), return 1
-            return AUTORELEASE(make_fixnum(1));
+            return make_fixnum(1);
     }
 }
 
