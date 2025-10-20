@@ -10,6 +10,7 @@
 #include "memory_profiler.h"
 #include "symbol.h"
 #include "namespace.h"
+#include "builtins.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -28,6 +29,9 @@ void setUp(void) {
     
     init_special_symbols();
     meta_registry_init();
+    
+    // Register builtin functions for all tests
+    register_builtins();
     
     MEMORY_PROFILER_INIT();
     // Enable memory profiling for tests

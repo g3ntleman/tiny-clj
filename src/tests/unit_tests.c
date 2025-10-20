@@ -59,8 +59,6 @@ void test_list_creation(void) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
-    // Initialize builtins first
-    register_builtins();
     
     // Test empty list creation - (list) returns nil in Clojure
     CljObject *list = eval_string("(list)", st);
@@ -161,7 +159,6 @@ void test_array_map_builtin(void) {
     // Manual memory management - WITH_AUTORELEASE_POOL incompatible with setjmp/longjmp
     {
         EvalState *eval_state = evalstate_new();
-        register_builtins();
         
         // Test empty map: (array-map)
         CljObject *result0 = parse("(array-map)", eval_state);
@@ -259,8 +256,6 @@ void test_nil_creation(void) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
-    // Initialize builtins first
-    register_builtins();
     
     // Test nil literal - nil is represented as NULL in our system
     CljObject *nil_obj = eval_string("nil", st);
@@ -624,7 +619,6 @@ void test_cljvalue_vectors_high_level(void) {
         TEST_ASSERT_NOT_NULL(st);
         
         // Initialize namespace first
-        register_builtins();
         
         // Test basic vector creation
         CljObject *vec = eval_string("[1 2 3 4 5]", st);
@@ -727,7 +721,6 @@ void test_cljvalue_transient_map_clojure_semantics(void) {
         TEST_ASSERT_NOT_NULL(st);
         
         // Initialize namespace first
-        register_builtins();
         
         // Test that maps are persistent by default
         CljObject *map1 = eval_string("{:name \"Alice\" :age 30}", st);
@@ -780,7 +773,6 @@ void test_special_form_and(void) {
     TEST_ASSERT_NOT_NULL(st);
     
     // Initialize namespace first
-    register_builtins();
     
     // (and) => true
     CljObject *result1 = eval_string("(and)", st);
@@ -811,7 +803,6 @@ void test_special_form_or(void) {
     TEST_ASSERT_NOT_NULL(st);
     
     // Initialize namespace first
-    register_builtins();
     
     // Test direct nil check first
     CljValue nil_val = NULL;
@@ -849,7 +840,6 @@ void test_special_form_or(void) {
 void test_seq_rest_performance(void) {
     // Test that (rest (rest (rest ...))) uses CljSeqIterator efficiently
     EvalState *st = evalstate_new();
-    register_builtins();
     
     // Test direct vector creation first
     CljValue vec_val = make_vector_v(10, 0);
@@ -887,7 +877,6 @@ void test_seq_rest_performance(void) {
 void test_seq_iterator_verification(void) {
     // Verifiziere, dass (rest vector) tatsächlich CljSeqIterator verwendet
     EvalState *st = evalstate_new();
-    register_builtins();
     
     // Test direct vector creation first
     CljValue vec_val = make_vector_v(5, 0);
@@ -1245,7 +1234,6 @@ void test_fixed_arithmetic_operations(void) {
         }
         
         // Initialize namespace first
-        register_builtins();
         
         // Test addition: 1.5 + 2.25 = 3.75
         CljObject *result = eval_string("(+ 1.5 2.25)", st);
@@ -1296,7 +1284,6 @@ void test_fixed_mixed_type_operations(void) {
             }
             
             // Initialize namespace first
-            register_builtins();
         
         // Test int + float: 1 + 1.2 = 2.2 (with Fixed-Point precision)
         CljObject *result = eval_string("(+ 1 1.2)", st);
@@ -1339,7 +1326,6 @@ void test_fixed_division_with_remainder(void) {
             }
             
             // Initialize namespace first
-            register_builtins();
         
         // Test integer division (no remainder): 6 / 2 = 3 (integer)
         CljObject *result = eval_string("(/ 6 2)", st);
@@ -1381,7 +1367,6 @@ void test_fixed_precision_limits(void) {
             }
             
             // Initialize namespace first
-            register_builtins();
         
         // Test Fixed-Point precision limits
         // Very small number
@@ -1425,7 +1410,6 @@ void test_fixed_variadic_operations(void) {
             }
             
             // Initialize namespace first
-            register_builtins();
         
         // Test multiple float addition
         CljObject *result = eval_string("(+ 1.0 2.0 3.0 4.0)", st);
@@ -1466,7 +1450,6 @@ void test_fixed_error_handling(void) {
     }
     
     // Initialize namespace first
-    register_builtins();
         
         // Test division by zero
         CljObject *result = eval_string("(/ 1.0 0.0)", st);
@@ -1495,7 +1478,6 @@ void test_fixed_comparison_operators(void) {
     }
     
     // Initialize namespace first
-    register_builtins();
         
         // Test < operator
         CljObject *result = eval_string("(< 1.5 2.0)", st);
