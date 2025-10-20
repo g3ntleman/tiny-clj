@@ -17,8 +17,8 @@
 CljObject* create_test_vector(int size) {
     CljObject *result = NULL;
     for (int i = size; i > 0; i--) {
-        CljObject *num = (CljObject*)make_fixnum(i);
-        result = (CljObject*)make_list(num, result);
+        CljObject *num = make_fixnum(i);
+        result = make_list(num, result);
     }
     return result;
 }

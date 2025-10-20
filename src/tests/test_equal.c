@@ -29,8 +29,8 @@ void test_equal_null_pointers(void) {
     WITH_MEMORY_PROFILING({
     
     // Test null pointer cases
-    TEST_ASSERT_FALSE(clj_equal(NULL, (CljObject*)make_fixnum(1)));
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)make_fixnum(1), NULL));
+    TEST_ASSERT_FALSE(clj_equal(NULL, make_fixnum(1)));
+    TEST_ASSERT_FALSE(clj_equal(make_fixnum(1), NULL));
     TEST_ASSERT_TRUE(clj_equal(NULL, NULL));
     
     });

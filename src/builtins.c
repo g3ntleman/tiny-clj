@@ -215,13 +215,13 @@ ID native_count(ID *args, int argc) {
     if (!coll) return OBJ_TO_ID(NULL);
     
     if (coll->type == CLJ_MAP || coll->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)make_fixnum(map_count_v((CljValue)coll)));
+        return OBJ_TO_ID(make_fixnum(map_count_v((CljValue)coll)));
     } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_TRANSIENT_VECTOR) {
         CljPersistentVector *vec = as_vector(coll);
-        return OBJ_TO_ID((CljObject*)make_fixnum(vec ? vec->count : 0));
+        return OBJ_TO_ID(make_fixnum(vec ? vec->count : 0));
     }
     
-    return OBJ_TO_ID((CljObject*)make_fixnum(0)); // Default count for unsupported types
+    return OBJ_TO_ID(make_fixnum(0)); // Default count for unsupported types
 }
 
 ID native_keys(ID *args, int argc) {
@@ -303,7 +303,7 @@ ID native_array_map(ID *args, int argc) {
     // Must have even number of arguments (key-value pairs)
     if (argc % 2 != 0) {
         // Return empty map instead of nil for odd number of args
-        return OBJ_TO_ID((CljObject*)make_map_v(0));
+        return OBJ_TO_ID(make_map_v(0));
     }
     
     // Create map with appropriate capacity
@@ -311,13 +311,13 @@ ID native_array_map(ID *args, int argc) {
     
     // Handle empty map case specially
     if (pair_count == 0) {
-        return OBJ_TO_ID((CljObject*)make_map_v(0));
+        return OBJ_TO_ID(make_map_v(0));
     }
     
     CljMap *map = (CljMap*)make_map_v(pair_count);
     if (!map) {
         // Return empty map instead of nil on allocation failure
-        return OBJ_TO_ID((CljObject*)make_map_v(0));
+        return OBJ_TO_ID(make_map_v(0));
     }
     
     // Add all key-value pairs
@@ -440,7 +440,7 @@ static ID create_fixed_result(int32_t acc_fixed) {
 
 // Helper function to create fixnum result
 static ID create_fixnum_result(int acc_i) {
-    return OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+    return OBJ_TO_ID(make_fixnum(acc_i));
 }
 
 // Helper function to extract raw fixed-point value

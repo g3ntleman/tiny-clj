@@ -160,7 +160,7 @@ static CljObject* eval_numeric_comparison(CljObject *list, CljMap *env, Comparis
     }
     
     RELEASE_TWO_ARGS(a, b);
-    return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    return result ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
 /** @brief Compare symbol name directly (works for non-interned symbols) */
@@ -223,9 +223,9 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, Eva
         // Handle zero arguments case
         switch (op) {
             case ARITH_ADD:
-                return (CljObject*)make_fixnum(0);  // (+) → 0
+                return make_fixnum(0);  // (+) → 0
             case ARITH_MUL:
-                return (CljObject*)make_fixnum(1);  // (*) → 1
+                return make_fixnum(1);  // (*) → 1
             case ARITH_SUB:
             case ARITH_DIV:
                 throw_exception_formatted("ArityError", __FILE__, __LINE__, 0,
@@ -350,7 +350,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
             return NULL;
     }
     
-    return (CljObject*)make_fixnum(result);
+    return make_fixnum(result);
 }
 
 // Extended function call implementation with complete evaluation
@@ -593,12 +593,12 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         // Simple equality check for numbers (immediate values)
         if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
             bool equal = (as_fixnum((CljValue)a) == as_fixnum((CljValue)b));
-            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+            return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
         }
         
         // For other types, use clj_equal
         bool equal = clj_equal(a, b);
-        return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
     }
     
     if (op == SYM_IF) {
@@ -813,7 +813,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         // Try numeric comparison first
         if (compare_numeric_values(a, b, COMP_EQ)) {
             RELEASE_TWO_ARGS(a, b);
-            return (CljObject*)make_special(SPECIAL_TRUE);
+            return make_special(SPECIAL_TRUE);
         }
         
         // Check if it's a valid numeric comparison that returned false
@@ -821,13 +821,13 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         if (extract_numeric_values(a, b, &val_a, &val_b)) {
             // Valid numeric comparison that returned false
             RELEASE_TWO_ARGS(a, b);
-            return (CljObject*)make_special(SPECIAL_FALSE);
+            return make_special(SPECIAL_FALSE);
         }
         
         // For other types, use clj_equal
         bool equal = clj_equal(a, b);
         RELEASE_TWO_ARGS(a, b);
-        return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
     }
     
     if (op == SYM_LT) {
@@ -917,9 +917,9 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         // (and expr1 expr2 ...) - short circuit evaluation
         // Returns first falsy value or last value
         int argc = list_count(list);
-        if (argc <= 1) return (CljObject*)make_special(SPECIAL_TRUE); // (and) => true
+        if (argc <= 1) return make_special(SPECIAL_TRUE); // (and) => true
         
-        CljObject *result = (CljObject*)make_special(SPECIAL_TRUE);
+        CljObject *result = make_special(SPECIAL_TRUE);
         for (int i = 1; i < argc; i++) {
             CljObject *arg = list_get_element(list, i);
             if (!arg) continue;
@@ -1184,7 +1184,7 @@ CljObject* eval_equal(CljObject *list, CljMap *env) {
     if (!a || !b) return NULL;
     
     bool equal = clj_equal(a, b);
-    return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+    return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
 CljObject* eval_add_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
@@ -1445,35 +1445,35 @@ CljObject* eval_prn(CljObject *list, CljMap *env) {
 CljObject* eval_count(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     // Handle nil (represented as NULL) - return 0
-    if (!arg) return AUTORELEASE((CljObject*)make_fixnum(0));
+    if (!arg) return AUTORELEASE(make_fixnum(0));
     
     // Note: nil is now represented as NULL, so no special nil check needed
     
     switch (arg->type) {
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(arg);
-            return AUTORELEASE(vec ? (CljObject*)make_fixnum(vec->count) : (CljObject*)make_fixnum(0));
+            return AUTORELEASE(vec ? make_fixnum(vec->count) : make_fixnum(0));
         }
         
         case CLJ_LIST: {
             int count = list_count(arg);
-            return AUTORELEASE((CljObject*)make_fixnum(count));
+            return AUTORELEASE(make_fixnum(count));
         }
         
         case CLJ_MAP: {
             CljMap *map = as_map(arg);
-            return AUTORELEASE(map ? (CljObject*)make_fixnum(map->count) : (CljObject*)make_fixnum(0));
+            return AUTORELEASE(map ? make_fixnum(map->count) : make_fixnum(0));
         }
         
         case CLJ_STRING: {
             // String data is stored directly after CljObject header
             char **str_ptr = (char**)((char*)arg + sizeof(CljObject));
-            return AUTORELEASE((CljObject*)make_fixnum(strlen(*str_ptr)));
+            return AUTORELEASE(make_fixnum(strlen(*str_ptr)));
         }
         
         default:
             // For other types (int, bool, symbol, etc.), return 1
-            return AUTORELEASE((CljObject*)make_fixnum(1));
+            return AUTORELEASE(make_fixnum(1));
     }
 }
 
@@ -1508,13 +1508,13 @@ CljObject* eval_rest(CljObject *list, CljMap *env) {
     
     // Handle NULL argument case - return empty list
     if (!arg) {
-        result = (CljObject*)make_list(NULL, NULL);  // Create empty list for nil/empty case
+        result = make_list(NULL, NULL);  // Create empty list for nil/empty case
     } else {
         // Use new seq implementation for unified behavior across all sequence types
         CljObject *seq = seq_create(arg);  // Create sequence iterator
         if (!seq) {
             // Seq creation failed - return empty list as fallback
-            result = (CljObject*)make_list(NULL, NULL);
+            result = make_list(NULL, NULL);
         } else {
             // Get the rest of the sequence (everything except first element)
             CljObject *rest_seq = seq_rest(seq);
@@ -1522,7 +1522,7 @@ CljObject* eval_rest(CljObject *list, CljMap *env) {
             
             if (!rest_seq) {
                 // No rest elements - return empty list
-                result = (CljObject*)make_list(NULL, NULL);
+                result = make_list(NULL, NULL);
             } else {
                 // Return SeqIterator directly (no conversion needed)
                 // SeqIterator is already a CljObject, so we can cast it
@@ -1555,7 +1555,7 @@ CljObject* eval_cons(CljObject *list, CljMap *env) {
         case CLJ_LIST:
         case CLJ_SEQ: {
             // Bereits CLJ_LIST oder CLJ_SEQ → direkt als rest verwenden
-            result = (CljObject*)make_list(elem, coll);
+                result = make_list(elem, coll);
             RELEASE(elem);   // Balance: make_list macht RETAIN
             RELEASE(coll);   // Balance: make_list macht RETAIN
             return AUTORELEASE(result);
@@ -1568,10 +1568,10 @@ CljObject* eval_cons(CljObject *list, CljMap *env) {
             
             if (!seq) {
                 // Leere Seq → nur Element
-                result = (CljObject*)make_list(elem, NULL);
+                result = make_list(elem, NULL);
             } else {
                 // Seq als rest → make_list macht RETAIN auf seq
-                result = (CljObject*)make_list(elem, seq);  // Heap-Objekt 2
+                result = make_list(elem, seq);  // Heap-Objekt 2
                 RELEASE(seq);  // Balance: make_list macht RETAIN
             }
             
@@ -1827,7 +1827,7 @@ CljObject* eval_dotimes(CljObject *list, CljMap *env) {
                 // TODO: Implement proper environment copying
             }
             // Add new binding
-            map_assoc((CljObject*)new_env, var, (CljObject*)make_fixnum(i));
+            map_assoc((CljObject*)new_env, var, make_fixnum(i));
             
             // Evaluate body with new binding
             CljObject *body_result = eval_body_with_env(body, new_env);

@@ -30,8 +30,8 @@ void test_memory_allocation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test basic object creation
-        CljObject *int_obj = (CljObject*)make_fixnum(42);
-        CljObject *float_obj = (CljObject*)make_fixed(3.14f);
+        CljObject *int_obj = make_fixnum(42);
+        CljObject *float_obj = make_fixed(3.14f);
         CljValue str_obj = make_string_v("hello");
         
         TEST_ASSERT_NOT_NULL(int_obj);

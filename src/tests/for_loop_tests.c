@@ -33,13 +33,13 @@ void test_dotimes_basic(void) {
         // Test that dotimes doesn't crash with a simple body
         
         // Create binding list: [i 3]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("i"), (CljObject*)make_list((CljObject*)make_fixnum(3), NULL));
+        CljObject *binding_list = make_list(intern_symbol_global("i"), make_list(make_fixnum(3), NULL));
         
         // Create body: 42 - simple literal without symbol resolution
-        CljObject *body = (CljObject*)make_fixnum(42);
+        CljObject *body = make_fixnum(42);
         
         // Create function call: (dotimes [i 3] 42)
-        CljObject *dotimes_call = (CljObject*)make_list(intern_symbol_global("dotimes"), (CljObject*)make_list((CljObject*)binding_list, (CljObject*)make_list(body, NULL)));
+        CljObject *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Test dotimes evaluation - should not crash
         CljObject *result = eval_dotimes((CljObject*)dotimes_call, NULL);
@@ -63,19 +63,19 @@ void test_doseq_basic(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = (CljObject*)make_fixnum(1);
-        vec_data->data[1] = (CljObject*)make_fixnum(2);
-        vec_data->data[2] = (CljObject*)make_fixnum(3);
+        vec_data->data[0] = make_fixnum(1);
+        vec_data->data[1] = make_fixnum(2);
+        vec_data->data[2] = make_fixnum(3);
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("x"), (CljObject*)make_list(vec, NULL));
+        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
         
         // Create body: x - simple symbol reference
         CljObject *body = intern_symbol_global("x");
         
         // Create function call: (doseq [x [1 2 3]] x)
-        CljObject *doseq_call = (CljObject*)make_list(intern_symbol_global("doseq"), (CljObject*)make_list((CljObject*)binding_list, (CljObject*)make_list(body, NULL)));
+        CljObject *doseq_call = make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Test doseq evaluation - should not crash
         CljObject *result = eval_doseq((CljObject*)doseq_call, NULL);
@@ -99,19 +99,19 @@ void test_for_basic(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = (CljObject*)make_fixnum(1);
-        vec_data->data[1] = (CljObject*)make_fixnum(2);
-        vec_data->data[2] = (CljObject*)make_fixnum(3);
+        vec_data->data[0] = make_fixnum(1);
+        vec_data->data[1] = make_fixnum(2);
+        vec_data->data[2] = make_fixnum(3);
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("x"), (CljObject*)make_list(vec, NULL));
+        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
         
         // Create body: x - simple symbol reference
         CljObject *body = intern_symbol_global("x");
         
         // Create function call: (for [x [1 2 3]] x)
-        CljObject *for_call = (CljObject*)make_list(intern_symbol_global("for"), (CljObject*)make_list((CljObject*)binding_list, (CljObject*)make_list(body, NULL)));
+        CljObject *for_call = make_list(intern_symbol_global("for"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Test for evaluation - should not crash
         CljObject *result = eval_for((CljObject*)for_call, NULL);
@@ -134,13 +134,13 @@ void test_dotimes_with_environment(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Create binding list: [i 3]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("i"), (CljObject*)make_list((CljObject*)make_fixnum(3), NULL));
+        CljObject *binding_list = make_list(intern_symbol_global("i"), make_list(make_fixnum(3), NULL));
         
         // Create body: i - symbol reference
         CljObject *body = intern_symbol_global("i");
         
         // Create function call: (dotimes [i 3] i)
-        CljObject *dotimes_call = (CljObject*)make_list(intern_symbol_global("dotimes"), (CljObject*)make_list((CljObject*)binding_list, (CljObject*)make_list(body, NULL)));
+        CljObject *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Test dotimes evaluation with environment
         CljObject *result = eval_dotimes((CljObject*)dotimes_call, (CljMap*)NULL);
@@ -166,19 +166,19 @@ void test_doseq_with_environment(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = (CljObject*)make_fixnum(1);
-        vec_data->data[1] = (CljObject*)make_fixnum(2);
-        vec_data->data[2] = (CljObject*)make_fixnum(3);
+        vec_data->data[0] = make_fixnum(1);
+        vec_data->data[1] = make_fixnum(2);
+        vec_data->data[2] = make_fixnum(3);
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = (CljObject*)make_list(intern_symbol_global("x"), (CljObject*)make_list(vec, NULL));
+        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
         
         // Create body: x - symbol reference
         CljObject *body = intern_symbol_global("x");
         
         // Create function call: (doseq [x [1 2 3]] x)
-        CljObject *doseq_call = (CljObject*)make_list(intern_symbol_global("doseq"), (CljObject*)make_list((CljObject*)binding_list, (CljObject*)make_list(body, NULL)));
+        CljObject *doseq_call = make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Test doseq evaluation with environment
         CljObject *result = eval_doseq((CljObject*)doseq_call, (CljMap*)NULL);

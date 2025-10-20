@@ -106,7 +106,7 @@ CljObject* seq_iter_first(const SeqIterator *iter) {
             if (iter->state.str.index < iter->state.str.length) {
                 // Return character as integer
                 char c = iter->state.str.data[iter->state.str.index];
-                return (CljObject*)make_fixnum((int)c);
+                return make_fixnum((int)c);
             }
             return NULL;
         }

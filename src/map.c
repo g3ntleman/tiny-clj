@@ -223,7 +223,7 @@ void map_remove(CljObject *map, CljObject *key) {
 
 CljObject* map_from_stack(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
-        return (CljObject*)make_map(0);
+        return make_map(0);
     }
     CljMap *map = make_map(pair_count * 2);
     CljMap *map_data = as_map((CljObject*)map);

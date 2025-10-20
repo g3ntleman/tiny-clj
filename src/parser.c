@@ -171,7 +171,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'r'
     reader_consume(reader); // 'u'
     reader_consume(reader); // 'e'
-    return (CljObject*)make_special(SPECIAL_TRUE);
+    return make_special(SPECIAL_TRUE);
   }
   
   // Handle false literal
@@ -185,7 +185,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'l'
     reader_consume(reader); // 's'
     reader_consume(reader); // 'e'
-    return (CljObject*)make_special(SPECIAL_FALSE);
+    return make_special(SPECIAL_FALSE);
   }
   
   // Handle quote 'x => (quote x)
@@ -200,7 +200,7 @@ CljObject *make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     CljObject *elements[2] = {quote_sym, quoted};
     CljObject *result = NULL;
     for (int i = 1; i >= 0; i--) {
-        result = (CljObject*)make_list(elements[i], result);
+        result = make_list(elements[i], result);
     }
     return result;
   }
@@ -564,8 +564,8 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   }
   buf[pos] = '\0';
   if (strchr(buf, '.'))
-    return (CljObject*)make_fixed((float)atof(buf));
-  return (CljObject*)make_fixnum(atoi(buf));
+    return make_fixed((float)atof(buf));
+  return make_fixnum(atoi(buf));
 }
 
 /**

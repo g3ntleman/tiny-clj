@@ -175,7 +175,7 @@ void test_array_map_builtin(void) {
         
         // Debug: Check what native_array_map actually receives
         CljObject *key = AUTORELEASE(make_string("a")); // Use AUTORELEASE for test convenience
-        CljObject *value = (CljObject*)make_fixnum(1); // Immediate value, no management needed
+        CljObject *value = make_fixnum(1); // Immediate value, no management needed
         ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)};
         
         

@@ -421,7 +421,54 @@ static char *test_function_call(void) {
 ./tiny-clj-repl -e "(def test-func (fn [x] (+ x 1)))" -e "(test-func 5)"
 ```
 
-### 13. Architecture Summary
+### 13. Testing with Clojure Command Line Tool
+
+#### 13.1 Using `clj` for Behavior Testing
+
+Das `clj` Commandline-Tool kann verwendet werden, um Clojure-Verhalten zu testen und als Referenz für die Implementierung zu dienen:
+
+```bash
+# Starte eine REPL
+clj
+
+# Führe spezifische Ausdrücke aus
+clj -e "(+ 1 2 3)"
+clj -e "(def test-fn (fn [x] (* x 2)))" -e "(test-fn 5)"
+
+# Lade eine Datei
+clj -i script.clj
+
+# Kombiniere mehrere Optionen
+clj -e "(def x 42)" -e "(println x)" -e "(+ x 1)"
+```
+
+#### 13.2 Wichtige `clj` Optionen
+
+- `-e, --eval string`: Führe Ausdrücke aus
+- `-i, --init path`: Lade eine Datei oder Resource
+- `-m, --main ns-name`: Rufe die -main Funktion auf
+- `-r, --repl`: Starte eine REPL
+- `-Jopt`: JVM-Optionen übergeben (z.B. `-J-Xmx512m`)
+
+#### 13.3 Verwendung für tiny-clj Entwicklung
+
+Das `clj` Tool ist nützlich für:
+- **Verhaltenstests**: Vergleiche tiny-clj Ausgabe mit Standard Clojure
+- **Syntax-Validierung**: Teste Clojure-Syntax vor der Implementierung
+- **Performance-Vergleiche**: Benchmark gegen Standard Clojure
+- **Feature-Referenz**: Verstehe erwartetes Verhalten von Clojure-Funktionen
+
+Beispiel für Verhaltenstest:
+```bash
+# Standard Clojure
+clj -e "(map inc [1 2 3 4])"
+# Erwartete Ausgabe: (2 3 4 5)
+
+# tiny-clj sollte dasselbe Verhalten zeigen
+./tiny-clj-repl -e "(map inc [1 2 3 4])"
+```
+
+### 14. Architecture Summary
 
 The evaluation system follows a clean separation of concerns:
 
