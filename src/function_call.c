@@ -49,6 +49,116 @@ CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, C
 CljObject* eval_body_with_env(CljObject *body, CljMap *env);
 CljObject* eval_list_with_env(CljObject *list, CljMap *env);
 
+// ============================================================================
+// COMPARISON OPERATORS REFACTORING - Type Promotion and Generic Functions
+// ============================================================================
+
+// Macros for common argument evaluation patterns
+#define EVAL_TWO_ARGS(list, env, a, b) do { \
+    (a) = eval_arg_retained((list), 1, (env)); \
+    (b) = eval_arg_retained((list), 2, (env)); \
+    if (!(a) || !(b)) { \
+        if (a) RELEASE(a); \
+        if (b) RELEASE(b); \
+        return NULL; \
+    } \
+} while(0)
+
+#define RELEASE_TWO_ARGS(a, b) do { \
+    RELEASE(a); \
+    RELEASE(b); \
+} while(0)
+
+#define EVAL_AND_CHECK_TWO_ARGS(list, env, a, b) do { \
+    EVAL_TWO_ARGS(list, env, a, b); \
+} while(0)
+
+typedef enum { COMP_LT, COMP_GT, COMP_LE, COMP_GE, COMP_EQ } ComparisonOp;
+
+/**
+ * @brief Extract numeric values from CljObjects with type promotion to float
+ * @param a First object
+ * @param b Second object  
+ * @param val_a Output: promoted value of a
+ * @param val_b Output: promoted value of b
+ * @return true if both objects are numeric, false otherwise
+ */
+static bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, float *val_b) {
+    // Extract value from first object
+    if (is_fixnum((CljValue)a)) {
+        *val_a = (float)as_fixnum((CljValue)a);
+    } else if (is_float16((CljValue)a)) {
+        *val_a = as_float16((CljValue)a);
+    } else {
+        return false; // Invalid type
+    }
+    
+    // Extract value from second object
+    if (is_fixnum((CljValue)b)) {
+        *val_b = (float)as_fixnum((CljValue)b);
+    } else if (is_float16((CljValue)b)) {
+        *val_b = as_float16((CljValue)b);
+    } else {
+        return false; // Invalid type
+    }
+    
+    return true;
+}
+
+/**
+ * @brief Perform numeric comparison with type promotion
+ * @param a First object
+ * @param b Second object
+ * @param op Comparison operation
+ * @return true if comparison is true, false otherwise
+ */
+static bool compare_numeric_values(CljObject *a, CljObject *b, ComparisonOp op) {
+    float val_a, val_b;
+    
+    if (!extract_numeric_values(a, b, &val_a, &val_b)) {
+        return false; // Invalid types
+    }
+    
+    // Single comparison logic
+    switch (op) {
+        case COMP_LT: return val_a < val_b;
+        case COMP_GT: return val_a > val_b;
+        case COMP_LE: return val_a <= val_b;
+        case COMP_GE: return val_a >= val_b;
+        case COMP_EQ: return val_a == val_b;
+        default: return false;
+    }
+}
+
+/**
+ * @brief Generic numeric comparison function for all comparison operators
+ * @param list The list containing the comparison expression
+ * @param env The environment
+ * @param op The comparison operation to perform
+ * @return CljObject* The result (true/false) or NULL on error
+ */
+static CljObject* eval_numeric_comparison(CljObject *list, CljMap *env, ComparisonOp op) {
+    CljObject *a, *b;
+    EVAL_TWO_ARGS(list, env, a, b);
+    
+    bool result = compare_numeric_values(a, b, op);
+    
+    if (!result && op != COMP_EQ) {
+        // Check if it's a type error (not just a false comparison)
+        float val_a, val_b;
+        if (!extract_numeric_values(a, b, &val_a, &val_b)) {
+            RELEASE_TWO_ARGS(a, b);
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return NULL;
+        }
+        // It's a valid comparison that returned false
+        result = false;
+    }
+    
+    RELEASE_TWO_ARGS(a, b);
+    return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+}
+
 /** @brief Compare symbol name directly (works for non-interned symbols) */
 // DEPRECATED: Use pointer comparison (op == SYM_*) instead for O(1) performance
 // This function is kept for backward compatibility but should not be used in new code
@@ -693,187 +803,43 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     if (op == SYM_EQUALS || op == SYM_EQUAL) {
         // Handle = and equal operators with immediate value support
-        CljObject *a = eval_arg_retained(list, 1, env);
-        CljObject *b = eval_arg_retained(list, 2, env);
+        CljObject *a, *b;
+        EVAL_TWO_ARGS(list, env, a, b);
         
-        if (!a || !b) {
-            if (a) RELEASE(a);
-            if (b) RELEASE(b);
-            return NULL;
+        // Try numeric comparison first
+        if (compare_numeric_values(a, b, COMP_EQ)) {
+            RELEASE_TWO_ARGS(a, b);
+            return (CljObject*)make_special(SPECIAL_TRUE);
         }
         
-        // Simple equality check for numbers (immediate values)
-        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
-            bool equal = (as_fixnum((CljValue)a) == as_fixnum((CljValue)b));
-            RELEASE(a);
-            RELEASE(b);
-            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
-        }
-        
-        // Handle Float16 comparisons
-        if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
-            bool equal = (as_float16((CljValue)a) == as_float16((CljValue)b));
-            RELEASE(a);
-            RELEASE(b);
-            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
-        }
-        
-        // Handle mixed int/float comparisons
-        if ((is_fixnum((CljValue)a) && is_float16((CljValue)b)) || 
-            (is_float16((CljValue)a) && is_fixnum((CljValue)b))) {
-            float val_a = is_fixnum((CljValue)a) ? (float)as_fixnum((CljValue)a) : as_float16((CljValue)a);
-            float val_b = is_fixnum((CljValue)b) ? (float)as_fixnum((CljValue)b) : as_float16((CljValue)b);
-            bool equal = (val_a == val_b);
-            RELEASE(a);
-            RELEASE(b);
-            return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        // Check if it's a valid numeric comparison that returned false
+        float val_a, val_b;
+        if (extract_numeric_values(a, b, &val_a, &val_b)) {
+            // Valid numeric comparison that returned false
+            RELEASE_TWO_ARGS(a, b);
+            return (CljObject*)make_special(SPECIAL_FALSE);
         }
         
         // For other types, use clj_equal
         bool equal = clj_equal(a, b);
-        RELEASE(a);
-        RELEASE(b);
+        RELEASE_TWO_ARGS(a, b);
         return equal ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
     }
     
     if (op == SYM_LT) {
-        // Handle < operator with Float16 support
-        CljObject *a = eval_arg_retained(list, 1, env);
-        CljObject *b = eval_arg_retained(list, 2, env);
-        
-        if (!a || !b) {
-            if (a) RELEASE(a);
-            if (b) RELEASE(b);
-            return NULL;
-        }
-        
-        bool result = false;
-        
-        // Handle different number type combinations
-        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_fixnum((CljValue)a) < as_fixnum((CljValue)b));
-        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
-            result = ((float)as_fixnum((CljValue)a) < as_float16((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_float16((CljValue)a) < (float)as_fixnum((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
-            result = (as_float16((CljValue)a) < as_float16((CljValue)b));
-        } else {
-            // Type error
-            RELEASE(a);
-            RELEASE(b);
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
-        }
-        
-        RELEASE(a);
-        RELEASE(b);
-        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        return eval_numeric_comparison(list, env, COMP_LT);
     }
     
     if (op == SYM_GT) {
-        // Handle > operator with Float16 support
-        CljObject *a = eval_arg_retained(list, 1, env);
-        CljObject *b = eval_arg_retained(list, 2, env);
-        
-        if (!a || !b) {
-            if (a) RELEASE(a);
-            if (b) RELEASE(b);
-            return NULL;
-        }
-        
-        bool result = false;
-        
-        // Handle different number type combinations
-        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_fixnum((CljValue)a) > as_fixnum((CljValue)b));
-        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
-            result = ((float)as_fixnum((CljValue)a) > as_float16((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_float16((CljValue)a) > (float)as_fixnum((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
-            result = (as_float16((CljValue)a) > as_float16((CljValue)b));
-        } else {
-            // Type error
-            RELEASE(a);
-            RELEASE(b);
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
-        }
-        
-        RELEASE(a);
-        RELEASE(b);
-        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        return eval_numeric_comparison(list, env, COMP_GT);
     }
     
     if (op == SYM_LE) {
-        // Handle <= operator with Float16 support
-        CljObject *a = eval_arg_retained(list, 1, env);
-        CljObject *b = eval_arg_retained(list, 2, env);
-        
-        if (!a || !b) {
-            if (a) RELEASE(a);
-            if (b) RELEASE(b);
-            return NULL;
-        }
-        
-        bool result = false;
-        
-        // Handle different number type combinations
-        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_fixnum((CljValue)a) <= as_fixnum((CljValue)b));
-        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
-            result = ((float)as_fixnum((CljValue)a) <= as_float16((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_float16((CljValue)a) <= (float)as_fixnum((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
-            result = (as_float16((CljValue)a) <= as_float16((CljValue)b));
-        } else {
-            // Type error
-            RELEASE(a);
-            RELEASE(b);
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
-        }
-        
-        RELEASE(a);
-        RELEASE(b);
-        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        return eval_numeric_comparison(list, env, COMP_LE);
     }
     
     if (op == SYM_GE) {
-        // Handle >= operator with Float16 support
-        CljObject *a = eval_arg_retained(list, 1, env);
-        CljObject *b = eval_arg_retained(list, 2, env);
-        
-        if (!a || !b) {
-            if (a) RELEASE(a);
-            if (b) RELEASE(b);
-            return NULL;
-        }
-        
-        bool result = false;
-        
-        // Handle different number type combinations
-        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_fixnum((CljValue)a) >= as_fixnum((CljValue)b));
-        } else if (is_fixnum((CljValue)a) && is_float16((CljValue)b)) {
-            result = ((float)as_fixnum((CljValue)a) >= as_float16((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_fixnum((CljValue)b)) {
-            result = (as_float16((CljValue)a) >= (float)as_fixnum((CljValue)b));
-        } else if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
-            result = (as_float16((CljValue)a) >= as_float16((CljValue)b));
-        } else {
-            // Type error
-            RELEASE(a);
-            RELEASE(b);
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
-        }
-        
-        RELEASE(a);
-        RELEASE(b);
-        return result ? (CljObject*)make_special(SPECIAL_TRUE) : (CljObject*)make_special(SPECIAL_FALSE);
+        return eval_numeric_comparison(list, env, COMP_GE);
     }
     
     if (op == SYM_IF) {
