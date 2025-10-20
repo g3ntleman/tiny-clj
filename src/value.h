@@ -26,7 +26,7 @@ typedef CljObject* CljValue;
 #define TAG_FIXNUM   1   // 29-bit signed integer
 #define TAG_CHAR     3   // 21-bit Unicode character
 #define TAG_SPECIAL  5   // true, false (nil ist NULL)
-#define TAG_FLOAT16  7   // 16-bit half-precision float
+#define TAG_FIXED    7   // 29-bit Q16.13 fixed-point
 
 // === Heap Types (gerade Tags 0, 2, 4, 6) ===
 #define TAG_POINTER  0   // Normaler Heap-Pointer (alle Standard-Objekte)
@@ -117,131 +117,26 @@ static inline uint8_t as_special(CljValue val) {
     return (uint8_t)((uintptr_t)val >> TAG_BITS);
 }
 
-// Float16: 16-bit half-precision float (Tag 3)
-// Prefer compiler half types if available; fallback to portable IEEE-754 pack/unpack
+// Fixed-Point: 29-bit Q16.13 fixed-point (Tag 7)
+// 1 bit sign + 16 bits integer + 13 bits fraction
+// Range: ±32767.9998, Precision: 1/8192 ≈ 0.00012
 
-#if defined(__FLT16_MANT_DIG__) || defined(__FP16_FORMAT_IEEE) || (defined(__clang__) && __has_extension(half_precision))
-// Cast-based path using _Float16/__fp16 with round-to-nearest-even
-static inline uint16_t float_to_half_bits(float f) {
-    uint16_t hbits;
-#if defined(__FLT16_MANT_DIG__)
-    _Float16 hf = (_Float16)f;
-#else
-    __fp16 hf = (__fp16)f;
-#endif
-    // Bit-pack via memcpy to avoid aliasing UB
-    memcpy(&hbits, &hf, sizeof(hbits));
-    return hbits;
+static inline CljValue make_fixed(float value) {
+    int32_t fixed = (int32_t)(value * 8192.0f);
+    // Saturierung zu ±32767.9998 (±268435455 in Fixed-Point)
+    if (fixed > 268435455) fixed = 268435455;
+    if (fixed < -268435456) fixed = -268435456;
+    return (CljValue)(((uintptr_t)fixed << TAG_BITS) | TAG_FIXED);
 }
 
-static inline float half_bits_to_float(uint16_t h) {
-    float out;
-#if defined(__FLT16_MANT_DIG__)
-    _Float16 hf;
-#else
-    __fp16 hf;
-#endif
-    memcpy(&hf, &h, sizeof(h));
-    out = (float)hf;
-    return out;
+static inline bool is_fixed(CljValue val) {
+    return get_tag(val) == TAG_FIXED;
 }
 
-#else
-// Portable IEEE-754 binary16 pack/unpack with round-to-nearest-even; internal math uses float32
-static inline uint16_t float_to_half_bits(float f) {
-    union { float f; uint32_t u; } v = { f };
-    uint32_t sign = (v.u >> 31) & 0x1;
-    uint32_t exp  = (v.u >> 23) & 0xFF;
-    uint32_t mant =  v.u & 0x7FFFFF;
-
-    uint16_t h;
-    if (exp == 0xFF) {
-        // Inf / NaN
-        uint16_t h_mant = (mant ? 0x200 : 0x000); // preserve quiet NaN
-        h = (uint16_t)((sign << 15) | (0x1F << 10) | h_mant);
-    } else if (exp > 0x70 + 0x1E) {
-        // Overflow to Inf (>|max_half|)
-        h = (uint16_t)((sign << 15) | (0x1F << 10));
-    } else if (exp < 0x70 - 14) {
-        // Subnormal or zero in half
-        if (exp < 0x70 - 24) {
-            // Underflow to zero
-            h = (uint16_t)(sign << 15);
-        } else {
-            // Subnormal: renormalize mantissa with implicit leading 1
-            uint32_t shift = (uint32_t)( (0x70 - 15) - exp );
-            uint32_t mantissa = (mant | 0x800000) >> (shift + 13);
-            // Round-to-nearest-even using remaining bits
-            uint32_t round_bit = (mant >> (shift + 12)) & 1;
-            uint32_t sticky = (mant & ((1u << (shift + 12)) - 1)) != 0;
-            mantissa += (round_bit && (sticky || (mantissa & 1))); 
-            h = (uint16_t)((sign << 15) | mantissa);
-        }
-    } else {
-        // Normalized
-        uint16_t h_exp = (uint16_t)(exp - (0x70 - 15));
-        uint32_t mant_round = mant + 0x1000; // add 0.5 ulp at half precision (13th bit)
-        if (mant_round & 0x800000) {
-            // Mantissa overflow rounds into exponent
-            h_exp += 1;
-            mant_round = 0;
-            if (h_exp >= 0x1F) {
-                // Overflow to infinity
-                h = (uint16_t)((sign << 15) | (0x1F << 10));
-                return h;
-            }
-        }
-        uint16_t h_mant = (uint16_t)((mant_round >> 13) & 0x3FF);
-        h = (uint16_t)((sign << 15) | (h_exp << 10) | h_mant);
-    }
-    return h;
-}
-
-static inline float half_bits_to_float(uint16_t h) {
-    uint32_t sign = (h >> 15) & 0x1;
-    uint32_t exp  = (h >> 10) & 0x1F;
-    uint32_t mant =  h & 0x3FF;
-    uint32_t out_sign = sign << 31;
-    uint32_t out_exp;
-    uint32_t out_mant;
-    if (exp == 0) {
-        if (mant == 0) {
-            out_exp = 0; out_mant = 0; // zero
-        } else {
-            // subnormal: normalize
-            int e = -14; // half bias
-            while ((mant & 0x400) == 0) { mant <<= 1; e--; }
-            mant &= 0x3FF;
-            out_exp = (uint32_t)(e + 127) << 23;
-            out_mant = mant << 13;
-        }
-    } else if (exp == 0x1F) {
-        // Inf/NaN
-        out_exp = 0xFF << 23;
-        out_mant = mant ? (mant << 13) : 0;
-    } else {
-        // normalized
-        out_exp = (uint32_t)(exp - 15 + 127) << 23;
-        out_mant = mant << 13;
-    }
-    union { uint32_t u; float f; } v = { out_sign | out_exp | out_mant };
-    return v.f;
-}
-#endif
-
-static inline CljValue make_float16(float value) {
-    uint16_t bits = float_to_half_bits(value);
-    return (CljValue)(((uintptr_t)bits << TAG_BITS) | TAG_FLOAT16);
-}
-
-static inline bool is_float16(CljValue val) {
-    return get_tag(val) == TAG_FLOAT16;
-}
-
-static inline float as_float16(CljValue val) {
-    if (!is_float16(val)) return 0.0f;
-    uint16_t bits = (uint16_t)((uintptr_t)val >> TAG_BITS);
-    return half_bits_to_float(bits);
+static inline float as_fixed(CljValue val) {
+    if (!is_fixed(val)) return 0.0f;
+    int32_t fixed = (int32_t)((intptr_t)val >> TAG_BITS);
+    return (float)fixed / 8192.0f;
 }
 
 // === Immediate Detection ===
@@ -286,13 +181,16 @@ static inline bool is_falsy(CljValue val) {
     return ((uintptr_t)val & 0xFF) < 8;
 }
 
+// Helper macro to check if a value is an immediate (not a heap object)
+#define IS_IMMEDIATE(val) (is_fixnum((CljValue)(val)) || is_fixed((CljValue)(val)) || is_char((CljValue)(val)) || is_special((CljValue)(val)))
+
 // Safe cast from ID to CljObject* with debug checks
 #ifdef DEBUG
 static inline CljObject* ID_TO_OBJ(ID id) {
     if (!id) return NULL;
     CljValue val = (CljValue)id;
     // Check if it's an immediate or heap object
-    if (is_fixnum(val) || is_float16(val) || is_char(val) || is_special(val)) {
+    if (IS_IMMEDIATE(val)) {
         // It's an immediate - return as-is (will be treated as CljObject*)
         return (CljObject*)val;
     }
@@ -315,8 +213,8 @@ static inline CljObject* ID_TO_OBJ(ID id) {
 // These eliminate the need to cast to CljValue before checking
 #define IS_FIXNUM(val) is_fixnum((CljValue)(val))
 #define AS_FIXNUM(val) as_fixnum((CljValue)(val))
-#define IS_FLOAT16(val) is_float16((CljValue)(val))
-#define AS_FLOAT16(val) as_float16((CljValue)(val))
+#define IS_FIXED(val) is_fixed((CljValue)(val))
+#define AS_FIXED(val) as_fixed((CljValue)(val))
 #define IS_CHAR(val) is_char((CljValue)(val))
 #define AS_CHAR(val) as_char((CljValue)(val))
 #define IS_SPECIAL(val) is_special((CljValue)(val))
@@ -329,9 +227,7 @@ static inline CljValue make_int_v(int x) {
 }
 
 static inline CljValue make_float_v(double x) {
-    // For now, use heap allocation for all floats
-    // TODO: Implement proper Float16 conversion
-    return (CljValue)make_float16((float)x);
+    return (CljValue)make_fixed((float)x);
 }
 
 static inline CljValue make_string_v(const char *str) {

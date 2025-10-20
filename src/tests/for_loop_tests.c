@@ -43,7 +43,7 @@ void test_dotimes_basic(void) {
         
         // Test dotimes evaluation - should not crash
         CljObject *result = eval_dotimes((CljObject*)dotimes_call, NULL);
-        TEST_ASSERT_TRUE(result == NULL || result->type == CLJ_NIL);
+        TEST_ASSERT_TRUE(result == NULL);
         
         // Clean up all objects
         RELEASE((CljObject*)binding_list);
@@ -79,7 +79,7 @@ void test_doseq_basic(void) {
         
         // Test doseq evaluation - should not crash
         CljObject *result = eval_doseq((CljObject*)doseq_call, NULL);
-        TEST_ASSERT_TRUE(result == NULL || result->type == CLJ_NIL);
+        TEST_ASSERT_TRUE(result == NULL);
         
         // Clean up all objects
         RELEASE((CljObject*)binding_list);
@@ -144,7 +144,7 @@ void test_dotimes_with_environment(void) {
         
         // Test dotimes evaluation with environment
         CljObject *result = eval_dotimes((CljObject*)dotimes_call, (CljMap*)NULL);
-        TEST_ASSERT_TRUE(result == NULL || result->type == CLJ_NIL);
+        TEST_ASSERT_TRUE(result == NULL);
         
         // Clean up
         evalstate_free(eval_state);
@@ -182,7 +182,7 @@ void test_doseq_with_environment(void) {
         
         // Test doseq evaluation with environment
         CljObject *result = eval_doseq((CljObject*)doseq_call, (CljMap*)NULL);
-        TEST_ASSERT_TRUE(result == NULL || result->type == CLJ_NIL);
+        TEST_ASSERT_TRUE(result == NULL);
         
         // Clean up
         evalstate_free(eval_state);

@@ -397,7 +397,7 @@ void memory_profiler_track_object_creation(CljObject *obj) {
     if (obj) {
         // Only track heap objects, not immediate values
         if (is_immediate((CljValue)obj)) {
-            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FLOAT16)
+            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
         g_memory_stats.total_allocations++;
@@ -421,7 +421,7 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
     if (obj) {
         // Only track heap objects, not immediate values
         if (is_immediate((CljValue)obj)) {
-            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FLOAT16)
+            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
         g_memory_stats.object_destructions++;
@@ -440,7 +440,7 @@ void memory_profiler_track_retain(CljObject *obj) {
     if (obj) {
         // Only track heap objects, not immediate values
         if (is_immediate((CljValue)obj)) {
-            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FLOAT16)
+            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
         g_memory_stats.retain_calls++;
@@ -458,7 +458,7 @@ void memory_profiler_track_release(CljObject *obj) {
     if (obj) {
         // Only track heap objects, not immediate values
         if (is_immediate((CljValue)obj)) {
-            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FLOAT16)
+            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
         g_memory_stats.release_calls++;

@@ -17,7 +17,7 @@ Successfully implemented the **3-Bit Tagged Pointer System** for Tiny-CLJ with t
    - Fixnum: 29-bit signed integers (tag=1)
    - Char: 21-bit Unicode characters (tag=3)
    - Special: true/false values (tag=5)
-   - Float16: 16-bit half-precision floats (tag=7)
+   - Fixed-Point: Q16.13 fixed-point numbers (tag=7)
    - Heap objects: TAG_POINTER (tag=0)
 
 2. **Memory Optimization** - Reduced CljObject header from 8 to 4 bytes
@@ -74,7 +74,7 @@ Successfully implemented the **3-Bit Tagged Pointer System** for Tiny-CLJ with t
 #define TAG_FIXNUM   1   // 29-bit signed integer
 #define TAG_CHAR     3   // 21-bit Unicode character
 #define TAG_SPECIAL  5   // true, false (nil is NULL)
-#define TAG_FLOAT16  7   // 16-bit half-precision float
+#define TAG_FIXED    7   // Q16.13 fixed-point number
 
 // Heap objects: even tags (Bit 0 = 0)
 #define TAG_POINTER  0   // All heap objects

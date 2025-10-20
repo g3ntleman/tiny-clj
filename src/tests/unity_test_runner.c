@@ -131,15 +131,15 @@ extern void test_integer_creation(void);
 extern void test_float_creation(void);
 extern void test_nil_creation(void);
 
-// Float16 arithmetic tests
-extern void test_float16_creation_and_conversion(void);
-extern void test_float16_arithmetic_operations(void);
-extern void test_float16_mixed_type_operations(void);
-extern void test_float16_division_with_remainder(void);
-extern void test_float16_precision_limits(void);
-extern void test_float16_variadic_operations(void);
-extern void test_float16_error_handling(void);
-extern void test_float16_comparison_operators(void);
+// Fixed-Point arithmetic tests
+extern void test_fixed_creation_and_conversion(void);
+extern void test_fixed_arithmetic_operations(void);
+extern void test_fixed_mixed_type_operations(void);
+extern void test_fixed_division_with_remainder(void);
+extern void test_fixed_precision_limits(void);
+extern void test_fixed_variadic_operations(void);
+extern void test_fixed_error_handling(void);
+extern void test_fixed_comparison_operators(void);
 
 // CljValue API tests
 extern void test_cljvalue_immediate_helpers(void);
@@ -152,7 +152,7 @@ extern void test_cljvalue_wrapper_functions(void);
 extern void test_cljvalue_immediates_fixnum(void);
 extern void test_cljvalue_immediates_char(void);
 extern void test_cljvalue_immediates_special(void);
-extern void test_cljvalue_immediates_float16(void);
+extern void test_cljvalue_immediates_fixed(void);
 extern void test_cljvalue_parser_immediates(void);
 extern void test_cljvalue_memory_efficiency(void);
 
@@ -199,32 +199,34 @@ extern void test_map_equal_different_sizes(void);
 extern void test_map_equal_with_nested_vectors(void);
 
 static void test_group_unit(void) {
-    RUN_TEST(test_list_count);
-    RUN_TEST(test_list_creation);
-    RUN_TEST(test_symbol_creation);
-    RUN_TEST(test_string_creation);
-    RUN_TEST(test_vector_creation);
-    RUN_TEST(test_map_creation);
-    RUN_TEST(test_array_map_builtin);
-    RUN_TEST(test_integer_creation);
-    RUN_TEST(test_float_creation);
-    RUN_TEST(test_nil_creation);
-    
-    // Multiline file loading test
-    RUN_TEST(test_load_multiline_file);
-    
-    // Map function test
-    RUN_TEST(test_map_function);
-    
-    // Float16 arithmetic tests
-    RUN_TEST(test_float16_creation_and_conversion);
-    RUN_TEST(test_float16_arithmetic_operations);
-    RUN_TEST(test_float16_mixed_type_operations);
-    RUN_TEST(test_float16_division_with_remainder);
-    RUN_TEST(test_float16_precision_limits);
-    RUN_TEST(test_float16_variadic_operations);
-    // RUN_TEST(test_float16_error_handling); // Temporarily disabled due to Autorelease Pool issue
-    RUN_TEST(test_float16_comparison_operators);
+    WITH_AUTORELEASE_POOL({
+        RUN_TEST(test_list_count);
+        RUN_TEST(test_list_creation);
+        RUN_TEST(test_symbol_creation);
+        RUN_TEST(test_string_creation);
+        RUN_TEST(test_vector_creation);
+        RUN_TEST(test_map_creation);
+        RUN_TEST(test_array_map_builtin);
+        RUN_TEST(test_integer_creation);
+        RUN_TEST(test_float_creation);
+        RUN_TEST(test_nil_creation);
+        
+        // Multiline file loading test
+        RUN_TEST(test_load_multiline_file);
+        
+        // Map function test
+        RUN_TEST(test_map_function);
+        
+        // Fixed-Point arithmetic tests
+        RUN_TEST(test_fixed_creation_and_conversion);
+        RUN_TEST(test_fixed_arithmetic_operations);
+        RUN_TEST(test_fixed_mixed_type_operations);
+        RUN_TEST(test_fixed_division_with_remainder);
+        RUN_TEST(test_fixed_precision_limits);
+        RUN_TEST(test_fixed_variadic_operations);
+        // RUN_TEST(test_fixed_error_handling); // Temporarily disabled due to Autorelease Pool issue
+        RUN_TEST(test_fixed_comparison_operators);
+    });
 }
 
 static void test_group_cljvalue(void) {
@@ -238,7 +240,7 @@ static void test_group_cljvalue(void) {
     RUN_TEST(test_cljvalue_immediates_fixnum);
     RUN_TEST(test_cljvalue_immediates_char);
     RUN_TEST(test_cljvalue_immediates_special);
-    RUN_TEST(test_cljvalue_immediates_float16);
+    RUN_TEST(test_cljvalue_immediates_fixed);
     RUN_TEST(test_cljvalue_parser_immediates);
     RUN_TEST(test_cljvalue_memory_efficiency);
     
@@ -352,6 +354,27 @@ extern void test_for_basic(void);
 extern void test_dotimes_with_environment(void);
 extern void test_doseq_with_environment(void);
 
+// Forward declarations for fixed-point tests
+extern void test_fixed_basic_creation(void);
+extern void test_fixed_negative_values(void);
+extern void test_fixed_precision(void);
+extern void test_fixed_multiplication_raw(void);
+extern void test_fixed_mixed_type_promotion(void);
+extern void test_fixed_saturation_max(void);
+extern void test_fixed_saturation_min(void);
+extern void test_fixed_division_raw(void);
+extern void test_fixed_edge_cases(void);
+extern void test_fixed_tag_consistency(void);
+extern void test_fixed_addition_builtin(void);
+extern void test_fixed_subtraction_builtin(void);
+extern void test_fixed_mixed_addition(void);
+extern void test_fixed_negative_addition(void);
+extern void test_fixed_multiplication_builtin(void);
+extern void test_fixed_division_builtin(void);
+extern void test_fixed_mixed_multiplication(void);
+extern void test_fixed_division_by_zero(void);
+extern void test_fixed_complex_arithmetic(void);
+
 // Recur tests
 extern void test_recur_factorial(void);
 extern void test_recur_deep_recursion(void);
@@ -369,6 +392,33 @@ static void test_group_recur(void) {
     RUN_TEST(test_recur_factorial);
     RUN_TEST(test_recur_deep_recursion);
     RUN_TEST(test_recur_arity_error);
+}
+
+static void test_group_fixed_point(void) {
+    // Basic fixed-point tests
+    RUN_TEST(test_fixed_basic_creation);
+    RUN_TEST(test_fixed_negative_values);
+    RUN_TEST(test_fixed_precision);
+    RUN_TEST(test_fixed_multiplication_raw);
+    RUN_TEST(test_fixed_mixed_type_promotion);
+    RUN_TEST(test_fixed_saturation_max);
+    RUN_TEST(test_fixed_saturation_min);
+    RUN_TEST(test_fixed_division_raw);
+    RUN_TEST(test_fixed_edge_cases);
+    RUN_TEST(test_fixed_tag_consistency);
+    
+    // Addition and subtraction tests
+    RUN_TEST(test_fixed_addition_builtin);
+    RUN_TEST(test_fixed_subtraction_builtin);
+    RUN_TEST(test_fixed_mixed_addition);
+    RUN_TEST(test_fixed_negative_addition);
+    
+    // Multiplication and division tests
+    RUN_TEST(test_fixed_multiplication_builtin);
+    RUN_TEST(test_fixed_division_builtin);
+    RUN_TEST(test_fixed_mixed_multiplication);
+    RUN_TEST(test_fixed_division_by_zero);
+    RUN_TEST(test_fixed_complex_arithmetic);
 }
 
 static void test_group_equal(void) {
@@ -416,6 +466,7 @@ static void print_usage(const char *program_name) {
     printf("  namespace     Namespace management tests\n");
     printf("  seq           Sequence semantics tests\n");
     printf("  for-loops      For-loop implementation tests\n");
+    printf("  fixed-point   Q16.13 Fixed-Point arithmetic tests\n");
     printf("  equal         Equality function tests\n");
     printf("  all           All test suites (default)\n\n");
     printf("Examples:\n");
@@ -462,6 +513,10 @@ static void run_for_loop_tests(void) {
     test_group_for_loops();
 }
 
+static void run_fixed_point_tests(void) {
+    test_group_fixed_point();
+}
+
 static void run_equal_tests(void) {
     test_group_equal();
 }
@@ -475,6 +530,7 @@ static void run_all_tests(void) {
     test_group_namespace();
     test_group_seq();
     test_group_for_loops();
+    test_group_fixed_point();
     test_group_equal();
     test_group_recur();
 }
@@ -506,6 +562,8 @@ int main(int argc, char **argv) {
             run_seq_tests();
         } else if (strcmp(argv[1], "for-loops") == 0) {
             run_for_loop_tests();
+        } else if (strcmp(argv[1], "fixed-point") == 0) {
+            run_fixed_point_tests();
         } else if (strcmp(argv[1], "equal") == 0) {
             run_equal_tests();
         } else if (strcmp(argv[1], "all") == 0) {

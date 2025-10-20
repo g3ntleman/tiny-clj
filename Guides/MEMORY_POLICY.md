@@ -15,7 +15,7 @@ Tiny-CLJ uses **32-bit tagged pointers** for immediate values that don't require
 - **Characters**: 21-bit Unicode characters (range: 0 to 2,097,151)
 - **Booleans**: `true` and `false` values
 - **Nil**: Represented as `NULL` pointer
-- **Float16**: 16-bit half-precision floating point numbers
+- **Fixed-Point**: Q16.13 fixed-point numbers (29-bit immediate values)
 
 #### Memory Management for Immediates:
 ```c
@@ -369,7 +369,7 @@ CljObject* make_string(const char* str);
 CljValue make_fixnum(int32_t value);
 CljValue make_char(uint32_t codepoint);
 CljValue make_special(uint8_t special);
-CljValue make_float16(float value);
+CljValue make_fixed(float value);
 ```
 - **Returns**: Immediate value (no memory management needed)
 - **Memory**: No heap allocation, no reference counting
@@ -431,7 +431,7 @@ if (!is_immediate(value)) {
 - Hook-based system allows clean separation of profiling from business logic
 - Vector elements are automatically freed by `release_object_deep()`
 - Singletons (empty vectors/lists) skip reference counting
-- **Immediate values** (fixnums, chars, booleans, nil, float16) are not reference counted
+- **Immediate values** (fixnums, chars, booleans, nil, fixed-point) are not reference counted
 - **32-bit tagged pointers** store immediate values directly without heap allocation
 - **Type checking** via `is_immediate()` determines if value needs memory management
 

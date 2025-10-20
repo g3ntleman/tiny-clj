@@ -5,7 +5,6 @@
 
 typedef enum : uint16_t {
     // Singletons (0-1) - no reference counting needed, can use simple range check
-    CLJ_NIL,
     CLJ_SYMBOL,  // Interned symbols - no reference counting needed
     // Complex types (2+) - require individual checks, have reference counting
     CLJ_STRING,

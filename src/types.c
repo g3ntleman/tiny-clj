@@ -7,7 +7,6 @@ const char* clj_type_name(CljType type) {
     }
     
     switch (type) {
-        case CLJ_NIL: return "Nil";
         case CLJ_STRING: return "String";
         case CLJ_SYMBOL: return "Symbol";
         case CLJ_VECTOR: return "Vector";

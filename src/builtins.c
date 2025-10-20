@@ -280,8 +280,6 @@ ID native_type(ID *args, int argc) {
         // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
         case CLJ_STRING:
             return (CljObject*)intern_symbol_global("String");
-        case CLJ_NIL:
-            return (CljObject*)intern_symbol_global("nil");
         case CLJ_VECTOR:
             return (CljObject*)intern_symbol_global("Vector");
         case CLJ_TRANSIENT_VECTOR:
@@ -413,6 +411,49 @@ ID native_println(ID *args, int argc) {
 }
 
 // ============================================================================
+// HELPER FUNCTIONS (DRY Principle)
+// ============================================================================
+
+// Helper function to validate numeric arguments
+static bool validate_numeric_args(ID *args, int argc) {
+    for (int i = 0; i < argc; i++) {
+        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Helper function to apply saturation to fixed-point values
+static int32_t apply_saturation(int32_t acc_fixed) {
+    if (acc_fixed > 268435455) acc_fixed = 268435455;
+    if (acc_fixed < -268435456) acc_fixed = -268435456;
+    return acc_fixed;
+}
+
+// Helper function to create fixed-point result
+static ID create_fixed_result(int32_t acc_fixed) {
+    acc_fixed = apply_saturation(acc_fixed);
+    return OBJ_TO_ID((CljObject*)((acc_fixed << TAG_BITS) | TAG_FIXED));
+}
+
+// Helper function to create fixnum result
+static ID create_fixnum_result(int acc_i) {
+    return OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+}
+
+// Helper function to extract raw fixed-point value
+static int32_t extract_fixed_value(ID arg) {
+    return (int32_t)((intptr_t)arg >> TAG_BITS);
+}
+
+// Helper function to convert fixnum to fixed-point
+static int32_t fixnum_to_fixed(int fixnum) {
+    return fixnum << 13;
+}
+
+// ============================================================================
 // VARIADIC FUNCTIONS (Phase 1)
 // ============================================================================
 
@@ -454,81 +495,168 @@ ID native_str(ID *args, int argc) {
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
 static ID reduce_add(ID *args, int argc) {
-    if (argc == 0) return OBJ_TO_ID((CljObject*)make_fixnum(0));
+    if (argc == 0) return create_fixnum_result(0);
     if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
-    bool sawFloat = false; int acc_i = 0; float acc_f = 0.0f;
+    
+    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    
+    bool sawFixed = false; 
+    int acc_i = 0; 
+    int32_t acc_fixed = 0;
+    
     for (int i = 0; i < argc; i++) {
-        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) {
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return OBJ_TO_ID(NULL);
-        }
-        if (!sawFloat) {
-            if (IS_FIXNUM(args[i])) acc_i += AS_FIXNUM(args[i]);
-            else { sawFloat = true; acc_f = (float)acc_i + AS_FLOAT16(args[i]); }
+        if (!sawFixed) {
+            if (IS_FIXNUM(args[i])) {
+                acc_i += AS_FIXNUM(args[i]);
+            } else {
+                sawFixed = true;
+                acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
+            }
         } else {
-            acc_f += IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]);
+            int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
+                                              : extract_fixed_value(args[i]);
+            acc_fixed += val;
         }
     }
-    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
-                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+    
+    return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
 static ID reduce_mul(ID *args, int argc) {
-    if (argc == 0) return OBJ_TO_ID((CljObject*)make_fixnum(1));
+    if (argc == 0) return create_fixnum_result(1);
     if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
-    bool sawFloat = false; int acc_i = 1; float acc_f = 1.0f;
+    
+    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    
+    bool sawFixed = false; 
+    int acc_i = 1; 
+    int32_t acc_fixed = 0;
+    
     for (int i = 0; i < argc; i++) {
-        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) {
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return OBJ_TO_ID(NULL);
-        }
-        if (!sawFloat) {
-            if (IS_FIXNUM(args[i])) acc_i *= AS_FIXNUM(args[i]);
-            else { sawFloat = true; acc_f = (float)acc_i * AS_FLOAT16(args[i]); }
+        if (!sawFixed) {
+            if (IS_FIXNUM(args[i])) {
+                acc_i *= AS_FIXNUM(args[i]);
+            } else {
+                sawFixed = true;
+                acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
+            }
         } else {
-            acc_f *= IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]);
+            int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
+                                              : extract_fixed_value(args[i]);
+            acc_fixed = (acc_fixed * val) >> 13; // Fixed-Point Multiplikation mit Shift
         }
     }
-    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
-                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+    
+    return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
 static ID reduce_sub(ID *args, int argc) {
-    if (argc == 0) { throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); return OBJ_TO_ID(NULL); }
+    if (argc == 0) { 
+        throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
+        return OBJ_TO_ID(NULL); 
+    }
     if (argc == 1) {
-        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
-        return IS_FIXNUM(args[0]) ? OBJ_TO_ID((CljObject*)make_fixnum(-AS_FIXNUM(args[0])))
-                                  : OBJ_TO_ID((CljObject*)make_float16(-AS_FLOAT16(args[0])));
+        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
+            return OBJ_TO_ID(NULL);
+        } 
+        return IS_FIXNUM(args[0]) ? create_fixnum_result(-AS_FIXNUM(args[0]))
+                                  : create_fixed_result(-extract_fixed_value(args[0]));
     }
-    bool sawFloat = false; float acc_f = 0.0f; int acc_i = 0;
-    if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
-    if (IS_FIXNUM(args[0])) acc_i = AS_FIXNUM(args[0]); else { sawFloat = true; acc_f = AS_FLOAT16(args[0]); }
+    
+    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    
+    bool sawFixed = false; 
+    int32_t acc_fixed = 0; 
+    int acc_i = 0;
+    
+    if (IS_FIXNUM(args[0])) {
+        acc_i = AS_FIXNUM(args[0]);
+    } else {
+        sawFixed = true;
+        acc_fixed = extract_fixed_value(args[0]);
+    }
+    
     for (int i = 1; i < argc; i++) {
-        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
-        if (!sawFloat && IS_FIXNUM(args[i])) acc_i -= AS_FIXNUM(args[i]);
-        else { if (!sawFloat) { acc_f = (float)acc_i; sawFloat = true; } acc_f -= IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]); }
+        if (!sawFixed && IS_FIXNUM(args[i])) {
+            acc_i -= AS_FIXNUM(args[i]);
+        } else {
+            if (!sawFixed) {
+                acc_fixed = fixnum_to_fixed(acc_i);
+                sawFixed = true;
+            }
+            int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
+                                              : extract_fixed_value(args[i]);
+            acc_fixed -= val;
+        }
     }
-    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
-                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+    
+    return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
 static ID reduce_div(ID *args, int argc) {
-    if (argc == 0) { throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); return OBJ_TO_ID(NULL); }
+    if (argc == 0) { 
+        throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
+        return OBJ_TO_ID(NULL); 
+    }
     if (argc == 1) {
-        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
-        if (IS_FIXNUM(args[0])) { int x = AS_FIXNUM(args[0]); if (x == 0) return OBJ_TO_ID((CljObject*)make_float16(1.0f/0.0f)); if (1 % x == 0) return OBJ_TO_ID((CljObject*)make_fixnum(1/x)); return OBJ_TO_ID((CljObject*)make_float16(1.0f/(float)x)); }
-        else { return OBJ_TO_ID((CljObject*)make_float16(1.0f/AS_FLOAT16(args[0]))); }
+        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
+            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
+            return OBJ_TO_ID(NULL);
+        } 
+        if (IS_FIXNUM(args[0])) { 
+            int x = AS_FIXNUM(args[0]); 
+            if (x == 0) return create_fixed_result(INT32_MAX); // Infinity equivalent
+            if (1 % x == 0) return create_fixnum_result(1/x); 
+            return create_fixed_result(fixnum_to_fixed(1) / x); 
+        } else { 
+            return create_fixed_result(fixnum_to_fixed(1) / extract_fixed_value(args[0])); 
+        }
     }
-    if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FLOAT16(args[0]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
-    bool sawFloat = false; int acc_i = 0; float acc_f = 0.0f;
-    if (IS_FIXNUM(args[0])) acc_i = AS_FIXNUM(args[0]); else { sawFloat = true; acc_f = AS_FLOAT16(args[0]); }
+    
+    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    
+    bool sawFixed = false; 
+    int32_t acc_fixed = 0; 
+    int acc_i = 0;
+    
+    if (IS_FIXNUM(args[0])) {
+        acc_i = AS_FIXNUM(args[0]);
+    } else {
+        sawFixed = true;
+        acc_fixed = extract_fixed_value(args[0]);
+    }
+    
     for (int i = 1; i < argc; i++) {
-        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FLOAT16(args[i]))) { throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); return OBJ_TO_ID(NULL);} 
-        if (!sawFloat && IS_FIXNUM(args[i])) { int d = AS_FIXNUM(args[i]); if (d == 0) { sawFloat = true; acc_f = (float)acc_i/0.0f; continue; } if (acc_i % d == 0) acc_i /= d; else { sawFloat = true; acc_f = (float)acc_i/(float)d; } }
-        else { if (!sawFloat) { acc_f = (float)acc_i; sawFloat = true; } float d = IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : AS_FLOAT16(args[i]); acc_f /= d; }
+        if (!sawFixed && IS_FIXNUM(args[i])) {
+            int d = AS_FIXNUM(args[i]);
+            if (d == 0) {
+                sawFixed = true;
+                acc_fixed = fixnum_to_fixed(acc_i) / 0; // Division durch Null → Infinity
+                continue;
+            }
+            if (acc_i % d == 0) {
+                acc_i /= d;
+            } else {
+                sawFixed = true;
+                acc_fixed = fixnum_to_fixed(acc_i) / d; // Fixnum zu Fixed promoten
+            }
+        } else {
+            if (!sawFixed) {
+                acc_fixed = fixnum_to_fixed(acc_i);
+                sawFixed = true;
+            }
+            int32_t d = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
+                                            : extract_fixed_value(args[i]);
+            if (d == 0) {
+                acc_fixed = acc_fixed / 0; // Division durch Null → Infinity
+            } else {
+                acc_fixed = (acc_fixed << 13) / d; // Fixed-Point Division mit Shift
+            }
+        }
     }
-    return sawFloat ? OBJ_TO_ID((CljObject*)make_float16(acc_f))
-                    : OBJ_TO_ID((CljObject*)make_fixnum(acc_i));
+    
+    return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
 // Public API (variadisch)

@@ -108,7 +108,7 @@ int get_retain_count(CljObject *obj);
     } while(0)
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
-        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             retain(_tmp); \
         } \
@@ -116,7 +116,7 @@ int get_retain_count(CljObject *obj);
     })
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             release(_tmp); \
         } \
@@ -124,7 +124,7 @@ int get_retain_count(CljObject *obj);
     })
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             autorelease(_tmp); \
         } \
@@ -207,7 +207,7 @@ int get_retain_count(CljObject *obj);
     } while(0)
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
-        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             retain(_tmp); \
         } \
@@ -215,7 +215,7 @@ int get_retain_count(CljObject *obj);
     })
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             release(_tmp); \
         } \
@@ -223,7 +223,7 @@ int get_retain_count(CljObject *obj);
     })
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !is_fixnum((CljValue)_id) && !is_float16((CljValue)_id) && !is_char((CljValue)_id) && !is_special((CljValue)_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             autorelease(_tmp); \
         } \

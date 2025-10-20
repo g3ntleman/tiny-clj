@@ -74,7 +74,10 @@ static void print_prompt(EvalState *st, bool balanced) {
  *  @param v Object to print (can be NULL)
  */
 static void print_result(CljObject *v) {
-    if (!v) return;
+    if (!v) {
+        printf("nil\n");
+        return;
+    }
     
     // For symbols, print their name directly (not as code)
     if (is_type(v, CLJ_SYMBOL)) {
@@ -113,8 +116,7 @@ static bool eval_string_repl(const char *code, EvalState *st) {
         // Use TRY/CATCH to handle exceptions in REPL
         TRY {
             CljObject *res = eval_string(code, st);
-            if (!res) return false;
-            
+            // Note: res can be NULL for nil, which is valid
             print_result(res);
             return true;
         } CATCH(ex) {

@@ -137,6 +137,7 @@ add_executable(unity-tests
     src/tests/test_equal.c
     src/tests/seq_tests.c
     src/tests/for_loop_tests.c
+    src/tests/fixed_point_tests.c
     external/unity/src/unity.c
     src/builtins.c
     src/object.c

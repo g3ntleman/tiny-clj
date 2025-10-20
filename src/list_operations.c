@@ -42,8 +42,7 @@ int list_count(CljObject *list) {
     if (!list) return 0;
     
     // Check if it's an immediate value (not a heap object)
-    if (is_fixnum((CljValue)list) || is_float16((CljValue)list) || 
-        is_char((CljValue)list) || is_special((CljValue)list)) {
+    if (IS_IMMEDIATE(list)) {
         return 0;  // Immediates are not lists
     }
     

@@ -1,19 +1,20 @@
 # Tiny-CLJ Release Notes (2025-10-20)
 
 ## Highlights
-- **Float16 Support**: Complete half-precision floating-point implementation for embedded systems
+- **Q16.13 Fixed-Point Support**: Complete fixed-point arithmetic implementation for embedded systems
 - **Arithmetic Operations**: Full support for +, -, *, / with mixed int/float operations
 - **Comparison Operators**: Complete set of comparison operators (=, <, >, <=, >=) with type promotion
 - **DRY Refactoring**: Eliminated code duplication in comparison operators (~200 lines reduced)
 - **Memory Safety**: Fixed immediate value handling in memory management
 - **Release Target Optimization**: Separate STM32 builds optimized for embedded deployment
 
-## Float16 Implementation
-- **Type System**: Float16 stored as immediate values (no heap allocation)
-- **Type Promotion**: Automatic promotion to float32 for internal calculations
-- **Mixed Operations**: Seamless int/float arithmetic with single-pass processing
-- **Precision**: ~3-4 decimal digits following IEEE-754 binary16 standard
-- **Compiler Support**: Uses `_Float16`/`__fp16` when available, portable fallback otherwise
+## Q16.13 Fixed-Point Implementation
+- **Type System**: Q16.13 Fixed-Point stored as immediate values (no heap allocation)
+- **Type Promotion**: Automatic promotion from Fixnum to Fixed-Point for mixed operations
+- **Mixed Operations**: Seamless int/fixed arithmetic with single-pass processing
+- **Precision**: ~0.00012 precision (4x better than Float16)
+- **Saturation**: Overflow/underflow handled with saturation to ±32767.9998
+- **Numerical Promotion**: See implementation details in `src/builtins.c` and `src/function_call.c`
 
 ## Code Quality Improvements
 - **DRY Principles**: Generic comparison functions eliminate code duplication

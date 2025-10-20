@@ -3,15 +3,16 @@ Tiny-CLJ Roadmap
 
 Active/Next
 -----------
-- Float16 Support: ✅ COMPLETED
-  - Complete half-precision floating-point implementation
-  - Arithmetic operations (+, -, *, /) with mixed int/float support
-  - Comparison operators (=, <, >, <=, >=) with type promotion
-  - IEEE-754 binary16 compliance with ~3-4 decimal digits precision
-  - Immediate value storage (no heap allocation)
+- Q16.13 Fixed-Point Arithmetic: ✅ COMPLETED
+  - Complete Q16.13 fixed-point implementation replacing Float16
+  - 29-bit immediate values with 16 integer + 13 fractional bits
+  - Arithmetic operations (+, -, *, /) with mixed int/fixed support
+  - Type promotion from Fixnum to Fixed-Point for mixed operations
+  - Saturation handling for overflow/underflow (±32767.9998 range)
+  - Immediate value storage (no heap allocation) with TAG_FIXED=7
   - Single-pass processing for efficient variadic operations
-  - Compiler support for _Float16/__fp16 with portable fallback
-  - 8 comprehensive test suites with 105 total tests passing
+  - ~0.00012 precision (4x better than Float16)
+  - 19 comprehensive test suites with 124 total tests passing
   - Binary size: 569KB (repl), 84KB (STM32-main), 327KB (STM32-repl)
 
 - Code Quality & DRY Refactoring: ✅ COMPLETED

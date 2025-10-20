@@ -31,7 +31,7 @@ void test_memory_allocation(void) {
     {
         // Test basic object creation
         CljObject *int_obj = (CljObject*)make_fixnum(42);
-        CljObject *float_obj = (CljObject*)make_float16(3.14f);
+        CljObject *float_obj = (CljObject*)make_fixed(3.14f);
         CljValue str_obj = make_string_v("hello");
         
         TEST_ASSERT_NOT_NULL(int_obj);
@@ -40,8 +40,8 @@ void test_memory_allocation(void) {
         
         TEST_ASSERT_TRUE(is_fixnum((CljValue)int_obj));
         TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_obj));
-        TEST_ASSERT_TRUE(is_float16((CljValue)float_obj));
-        TEST_ASSERT_TRUE(as_float16((CljValue)float_obj) > 3.1f && as_float16((CljValue)float_obj) < 3.2f);
+        TEST_ASSERT_TRUE(is_fixed((CljValue)float_obj));
+        TEST_ASSERT_TRUE(as_fixed((CljValue)float_obj) > 3.1f && as_fixed((CljValue)float_obj) < 3.2f);
         // String objects store data in the data pointer, not directly in the union
         // String data is stored directly after CljObject header
         char **str_ptr = (char**)((char*)str_obj + sizeof(CljObject));

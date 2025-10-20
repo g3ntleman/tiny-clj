@@ -21,7 +21,7 @@ Die Kernfunktionalität ist implementiert:
 
 Einführung einer klaren Unterscheidung zwischen:
 
-- **`CljValue`**: 32-bit Tagged Pointer für Immediate-Werte (Fixnum, Char, Bool, Nil, Float16)
+- **`CljValue`**: 32-bit Tagged Pointer für Immediate-Werte (Fixnum, Char, Bool, Nil, Fixed-Point)
 - **`CljObject`**: Vereinfachter Header (type, rc) + Pointer für Heap-allokierte Objekte
 
 ## Architektur
@@ -32,7 +32,7 @@ Einführung einer klaren Unterscheidung zwischen:
   - Fixnum: 29-bit signed integer (Tag 0)
   - Char: 21-bit Unicode character (Tag 1)
   - Special: nil, true, false (Tag 2, kodiert als Tagged Values)
-  - Float16: 16-bit half-precision float (Tag 3)
+  - Fixed-Point: Q16.13 fixed-point (Tag 7)
 
 **Hinweis**: Collection-Singletons (leere Liste, leerer Vector, leere Map) bleiben als Heap-Objekte mit `rc=0` erhalten!
 
@@ -279,7 +279,7 @@ static inline CljObject* ID_TO_OBJ(ID id) {
     if (!id) return NULL;
     CljValue val = (CljValue)id;
     // Check if it's an immediate or heap object
-    if (is_fixnum(val) || is_float16(val) || is_char(val) || is_special(val)) {
+    if (is_fixnum(val) || is_fixed(val) || is_char(val) || is_special(val)) {
         // It's an immediate - return as-is (will be treated as CljObject*)
         return (CljObject*)val;
     }
@@ -308,8 +308,8 @@ After the immediate helper functions (around line 160), add:
 // These eliminate the need to cast to CljValue before checking
 #define IS_FIXNUM(val) is_fixnum((CljValue)(val))
 #define AS_FIXNUM(val) as_fixnum((CljValue)(val))
-#define IS_FLOAT16(val) is_float16((CljValue)(val))
-#define AS_FLOAT16(val) as_float16((CljValue)(val))
+#define IS_FIXED(val) is_fixed((CljValue)(val))
+#define AS_FIXED(val) as_fixed((CljValue)(val))
 #define IS_CHAR(val) is_char((CljValue)(val))
 #define AS_CHAR(val) as_char((CljValue)(val))
 #define IS_SPECIAL(val) is_special((CljValue)(val))

@@ -20,9 +20,9 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     // Initialize to empty
     memset(iter, 0, sizeof(SeqIterator));
     
-    // Handle nil
+    // Handle nil (now represented as NULL)
     if (!obj) {
-        iter->seq_type = CLJ_NIL;
+        iter->seq_type = CLJ_UNKNOWN; // Use UNKNOWN for empty sequence
         return true;  // Empty sequence, but valid
     }
     
@@ -32,7 +32,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         case CLJ_LIST: {
             CljList *list_data = as_list(obj);
             if (!LIST_FIRST(list_data)) {
-                iter->seq_type = CLJ_NIL;
+                iter->seq_type = CLJ_UNKNOWN;
                 return true;  // Empty list
             }
             
@@ -45,7 +45,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(obj);
             if (!vec || vec->count == 0) {
-                iter->seq_type = CLJ_NIL;
+                iter->seq_type = CLJ_UNKNOWN;
                 return true;  // Empty vector
             }
             
@@ -62,7 +62,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             char **str_ptr = (char**)((char*)obj + sizeof(CljObject));
             const char *str_data = (const char*)*str_ptr;
             if (!str_data || str_data[0] == '\0') {
-                iter->seq_type = CLJ_NIL;
+                iter->seq_type = CLJ_UNKNOWN;
                 return true;  // Empty string
             }
             
@@ -73,9 +73,8 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             return true;
         }
         
-        case CLJ_NIL:
-            iter->seq_type = CLJ_NIL;
-            return true;
+        // Note: nil is now represented as NULL, handled above
+        return true;
         
         default:
             return false;  // Not seqable
@@ -175,7 +174,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
         case CLJ_STRING:
             return iter->state.str.index >= iter->state.str.length;
         
-        case CLJ_NIL:
+        // Note: nil is now represented as NULL
             return true;
         
         default:
@@ -228,8 +227,8 @@ CljObject* seq_create(CljObject *obj) {
         return NULL;  // Empty or not seqable
     }
     
-    // If iterator is empty (seq_type == CLJ_NIL), return nil singleton
-    if (heap_seq->iter.seq_type == CLJ_NIL) {
+    // If iterator is empty (seq_type == CLJ_UNKNOWN), return nil (NULL)
+    if (heap_seq->iter.seq_type == CLJ_UNKNOWN) {
         free(heap_seq);
         return NULL;
     }
@@ -337,7 +336,7 @@ bool is_seqable(CljObject *obj) {
         case CLJ_VECTOR:
         case CLJ_MAP:
         case CLJ_STRING:
-        case CLJ_NIL:
+        // Note: nil is now represented as NULL
             return true;
         default:
             return false;

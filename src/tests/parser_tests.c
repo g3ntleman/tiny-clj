@@ -41,8 +41,8 @@ void test_parse_basic_types(void) {
         // Test float parsing
         CljObject *float_result = parse("3.14", eval_state);
         TEST_ASSERT_NOT_NULL(float_result);
-        TEST_ASSERT_TRUE(is_float16((CljValue)float_result));
-        TEST_ASSERT_TRUE(as_float16((CljValue)float_result) > 3.1f && as_float16((CljValue)float_result) < 3.2f);
+        TEST_ASSERT_TRUE(is_fixed((CljValue)float_result));
+        TEST_ASSERT_TRUE(as_fixed((CljValue)float_result) > 3.1f && as_fixed((CljValue)float_result) < 3.2f);
         
         // Test string parsing
         CljObject *str_result = parse("\"hello\"", eval_state);

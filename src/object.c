@@ -140,7 +140,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
 
 /** @brief Create integer object */
-// make_int() and make_float() removed - use make_fixnum() and make_float16() instead
+// make_int() and make_float() removed - use make_fixnum() and make_fixed() instead
 
 // retain() function moved to memory.c
 
@@ -275,9 +275,9 @@ CljList* make_list(CljObject *first, CljObject *rest) {
 }
 
 char* to_string(CljObject *v) {
-    // For nil: return empty string (Clojure str behavior)
-    if (is_type(v, CLJ_NIL)) {
-        return strdup("");
+    // Handle nil (represented as NULL)
+    if (!v) {
+        return strdup("nil");
     }
 
     // Handle immediates (CljValue tagged pointers)
@@ -287,9 +287,10 @@ char* to_string(CljObject *v) {
             snprintf(buf, sizeof(buf), "%d", as_fixnum((CljValue)v));
             return strdup(buf);
         }
-        if (is_float16((CljValue)v)) {
+        if (is_fixed((CljValue)v)) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "%.4g", as_float16((CljValue)v));
+            double val = as_fixed((CljValue)v);
+            snprintf(buf, sizeof(buf), "%g", val);
             return strdup(buf);
         }
         if (is_special((CljValue)v)) {
@@ -309,9 +310,6 @@ char* to_string(CljObject *v) {
 
     char buf[64];
     switch(v->type) {
-        case CLJ_NIL:
-            return strdup("");  // Empty string for str function
-
         // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
 
         case CLJ_STRING:
@@ -564,8 +562,8 @@ char* to_string(CljObject *v) {
 }
 
 char* pr_str(CljObject *v) {
-    // pr_str shows nil as "nil" (not empty string)
-    if (is_type(v, CLJ_NIL)) {
+    // Handle nil (represented as NULL)
+    if (!v) {
         return strdup("nil");
     }
     
@@ -600,8 +598,8 @@ bool clj_equal_id(ID a, ID b) {
         if (is_char((CljValue)a) && is_char((CljValue)b)) {
             return as_char((CljValue)a) == as_char((CljValue)b);
         }
-        if (is_float16((CljValue)a) && is_float16((CljValue)b)) {
-            return as_float16((CljValue)a) == as_float16((CljValue)b);
+        if (is_fixed((CljValue)a) && is_fixed((CljValue)b)) {
+            return as_fixed((CljValue)a) == as_fixed((CljValue)b);
         }
         if (is_special((CljValue)a) && is_special((CljValue)b)) {
             return as_special((CljValue)a) == as_special((CljValue)b);
@@ -638,7 +636,7 @@ bool clj_equal(CljObject *a, CljObject *b) {
     if (!is_type(a, b->type)) return false;
     
     // Inhalt-Vergleich basierend auf Typ
-    // Hinweis: CLJ_NIL, CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
+    // Hinweis: CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
     switch (a->type) {
         // CLJ_INT, CLJ_FLOAT removed - handled as immediates
             
@@ -864,25 +862,14 @@ void meta_clear(CljObject *v) {
 #endif
 
 // Static singletons - these live forever and are never freed
-static CljObject clj_nil_singleton;
-static CljObject clj_true_singleton;
-static CljObject clj_false_singleton;
+// Note: nil is now represented as NULL, true/false as immediate values
+// No singletons needed for these types
 static CljObject clj_empty_map_singleton;
 
 // Initialize static singletons
 static void init_static_singletons() {
-    // Initialize NIL singleton
-    clj_nil_singleton.type = CLJ_NIL;
-    clj_nil_singleton.rc = 0; // Singletons do not use reference counting
-    
-    // Initialize TRUE singleton (now handled as immediate)
-    clj_true_singleton.type = CLJ_NIL; // Will be replaced by immediate
-    clj_true_singleton.rc = 0; // Singletons do not use reference counting
-    
-    // Initialize FALSE singleton (now handled as immediate)
-    clj_false_singleton.type = CLJ_NIL; // Will be replaced by immediate
-    clj_false_singleton.rc = 0; // Singletons do not use reference counting
-    // clj_false_singleton.as.b = false; // Union removed
+    // Note: nil is now represented as NULL, true/false as immediate values
+    // No singletons needed for these types
     
 
     // Initialize empty map singleton
@@ -985,14 +972,7 @@ CljObject* create_object(CljType type) {
     obj->rc = 1;
     
     // Initialisiere je nach Typ
-    switch (type) {
-        case CLJ_NIL:
-            // NIL is handled as immediate
-            break;
-        default:
-            // obj->as.data = NULL; // Union removed
-            break;
-    }
+    // Note: nil is now represented as NULL, no special handling needed
     
     return obj;
 }

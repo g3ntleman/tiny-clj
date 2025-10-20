@@ -270,8 +270,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     
     // Don't catch exceptions here - let them propagate to the caller
     // Check if parsed_expr is an immediate value first
-    if (is_fixnum((CljValue)parsed_expr) || is_float16((CljValue)parsed_expr) || 
-        is_char((CljValue)parsed_expr) || is_special((CljValue)parsed_expr)) {
+    if (IS_IMMEDIATE(parsed_expr)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
         result = (CljObject*)parsed_expr;
     } else if (is_type(parsed_expr, CLJ_LIST)) {
@@ -300,7 +299,7 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
     }
     
     // Check if parsed is an immediate value
-    if (is_fixnum(parsed) || is_float16(parsed) || is_char(parsed) || is_special(parsed)) {
+    if (IS_IMMEDIATE(parsed)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
         return (CljObject*)parsed;
     }
@@ -565,7 +564,7 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   }
   buf[pos] = '\0';
   if (strchr(buf, '.'))
-    return (CljObject*)make_float16((float)atof(buf));
+    return (CljObject*)make_fixed((float)atof(buf));
   return (CljObject*)make_fixnum(atoi(buf));
 }
 
@@ -683,7 +682,7 @@ CljValue parse_v(const char *input, EvalState *st) {
   result = make_value_by_parsing_expr(&reader, st);
   if (result) {
     // Only autorelease heap objects, not immediate values
-    if (!is_fixnum(result) && !is_float16(result) && !is_char(result) && !is_special(result)) {
+    if (!IS_IMMEDIATE(result)) {
       result = AUTORELEASE(result);
     }
   }

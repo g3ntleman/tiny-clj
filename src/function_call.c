@@ -91,8 +91,8 @@ static bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, flo
     // Extract value from first object
     if (is_fixnum((CljValue)a)) {
         *val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_float16((CljValue)a)) {
-        *val_a = as_float16((CljValue)a);
+    } else if (is_fixed((CljValue)a)) {
+        *val_a = as_fixed((CljValue)a);
     } else {
         return false; // Invalid type
     }
@@ -100,8 +100,8 @@ static bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, flo
     // Extract value from second object
     if (is_fixnum((CljValue)b)) {
         *val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_float16((CljValue)b)) {
-        *val_b = as_float16((CljValue)b);
+    } else if (is_fixed((CljValue)b)) {
+        *val_b = as_fixed((CljValue)b);
     } else {
         return false; // Invalid type
     }
@@ -210,7 +210,7 @@ typedef enum {
 // Helper function to check if a type is numeric
 static bool is_numeric_type(CljObject *obj) {
     if (!obj) return false;
-    return is_fixnum((CljValue)obj) || is_float16((CljValue)obj);
+    return IS_IMMEDIATE(obj);
 }
 
 /** @brief Generic arithmetic function (variadic version) */
@@ -250,16 +250,7 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, Eva
         }
         
         // Check for nil arguments
-        if (is_type(args[i], CLJ_NIL)) {
-            // Clean up already evaluated arguments
-            for (int j = 0; j <= i; j++) {
-                RELEASE(args[j]);
-            }
-            free(args);
-            throw_exception_formatted("NumberFormatException", __FILE__, __LINE__, 0,
-                "Cannot convert nil to Number");
-            return NULL;
-        }
+        // Note: nil is now represented as NULL, so no special nil check needed
         
         // Check for non-numeric types
         if (!is_numeric_type(args[i])) {
@@ -326,9 +317,9 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
                     "Division by zero: %d / %d", as_fixnum((CljValue)a), as_fixnum((CljValue)b));
             return NULL;
         }
-        if (is_float16((CljValue)b) && as_float16((CljValue)b) == 0.0) {
+        if (is_fixed((CljValue)b) && as_fixed((CljValue)b) == 0.0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %f / %f", as_float16((CljValue)a), as_float16((CljValue)b));
+                    "Division by zero: %f / %f", as_fixed((CljValue)a), as_fixed((CljValue)b));
             return NULL;
         }
     }
@@ -464,18 +455,21 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
 CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
     if (!body) return NULL;
     
-    if (is_type(body, CLJ_SYMBOL)) {
-        // Look up symbol in environment
-        return env_get_stack((CljObject*)env, body);
+    switch (body->type) {
+        case CLJ_SYMBOL: {
+            // Look up symbol in environment
+            return env_get_stack((CljObject*)env, body);
+        }
+        
+        case CLJ_LIST: {
+            // For lists, evaluate them with environment
+            return eval_list_with_env(body, env);
+        }
+        
+        default:
+            // Literal value
+            return RETAIN(body);
     }
-    
-    // For lists, evaluate them with environment
-    if (is_type(body, CLJ_LIST)) {
-        return eval_list_with_env(body, env);
-    }
-    
-    // Literal value
-    return RETAIN(body);
 }
 
 // Evaluate list with environment (for loops)
@@ -558,12 +552,15 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
     }
     
     // For lists, evaluate them with parameter substitution
-    if (is_type(body, CLJ_LIST)) {
-        return eval_list_with_param_substitution(body, params, values, param_count, closure_env);
+    switch (body->type) {
+        case CLJ_LIST: {
+            return eval_list_with_param_substitution(body, params, values, param_count, closure_env);
+        }
+        
+        default:
+            // Literal value
+            return RETAIN(body);
     }
-    
-    // Literal value
-    return RETAIN(body);
 }
 
 // Evaluate list with parameter substitution
@@ -732,18 +729,21 @@ CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
     if (!body) return NULL;
     
     // Simplified implementation - would normally evaluate the AST
-    if (is_type(body, CLJ_LIST)) {
-        // Evaluate list
-        return eval_list(body, env, st);
+    switch (body->type) {
+        case CLJ_LIST: {
+            // Evaluate list
+            return eval_list(body, env, st);
+        }
+        
+        case CLJ_SYMBOL: {
+            // Resolve symbol
+            return env_get_stack((CljObject*)env, body);
+        }
+        
+        default:
+            // Literal value
+            return RETAIN(body);
     }
-    
-    if (is_type(body, CLJ_SYMBOL)) {
-        // Resolve symbol
-        return env_get_stack((CljObject*)env, body);
-    }
-    
-    // Literal value
-    return RETAIN(body);
 }
 
 // Simplified list evaluation
@@ -1150,7 +1150,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     // Error: first element is not a function
-    if (is_fixnum((CljValue)op) || is_float16((CljValue)op) || is_type(op, CLJ_STRING) || is_special((CljValue)op)) {
+    if (IS_IMMEDIATE(op) || is_type(op, CLJ_STRING)) {
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
                 "Cannot call %s as a function", clj_type_name(op->type));
         return NULL;
@@ -1444,45 +1444,37 @@ CljObject* eval_prn(CljObject *list, CljMap *env) {
 
 CljObject* eval_count(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
+    // Handle nil (represented as NULL) - return 0
     if (!arg) return AUTORELEASE((CljObject*)make_fixnum(0));
     
-    if (is_type(arg, CLJ_NIL)) {
-        return AUTORELEASE((CljObject*)make_fixnum(0)); // nil has count 0
-    }
+    // Note: nil is now represented as NULL, so no special nil check needed
     
-    if (is_type(arg, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector(arg);
-        return AUTORELEASE(vec ? (CljObject*)make_fixnum(vec->count) : (CljObject*)make_fixnum(0));
-    }
-    
-    if (is_type(arg, CLJ_LIST)) {
-        CljList *list_data = as_list(arg);
-        int count = 0;
-        CljObject *current = list_data->first;
-        while (current) {
-            count++;
-            if (is_type(current, CLJ_LIST)) {
-                CljList *current_list = as_list(current);
-                current = current_list ? current_list->rest : NULL;
-            } else {
-                current = NULL;
-            }
+    switch (arg->type) {
+        case CLJ_VECTOR: {
+            CljPersistentVector *vec = as_vector(arg);
+            return AUTORELEASE(vec ? (CljObject*)make_fixnum(vec->count) : (CljObject*)make_fixnum(0));
         }
-        return AUTORELEASE((CljObject*)make_fixnum(count));
+        
+        case CLJ_LIST: {
+            int count = list_count(arg);
+            return AUTORELEASE((CljObject*)make_fixnum(count));
+        }
+        
+        case CLJ_MAP: {
+            CljMap *map = as_map(arg);
+            return AUTORELEASE(map ? (CljObject*)make_fixnum(map->count) : (CljObject*)make_fixnum(0));
+        }
+        
+        case CLJ_STRING: {
+            // String data is stored directly after CljObject header
+            char **str_ptr = (char**)((char*)arg + sizeof(CljObject));
+            return AUTORELEASE((CljObject*)make_fixnum(strlen(*str_ptr)));
+        }
+        
+        default:
+            // For other types (int, bool, symbol, etc.), return 1
+            return AUTORELEASE((CljObject*)make_fixnum(1));
     }
-    
-    if (is_type(arg, CLJ_MAP)) {
-        CljMap *map = as_map(arg);
-        return AUTORELEASE(map ? (CljObject*)make_fixnum(map->count) : (CljObject*)make_fixnum(0));
-    }
-    
-    if (is_type(arg, CLJ_STRING)) {
-        // String data is stored directly after CljObject header
-        char **str_ptr = (char**)((char*)arg + sizeof(CljObject));
-        return AUTORELEASE((CljObject*)make_fixnum(strlen(*str_ptr)));
-    }
-    
-    return AUTORELEASE((CljObject*)make_fixnum(1)); // Single value (int, bool, symbol, etc.)
 }
 
 CljObject* eval_first(CljObject *list, CljMap *env) {
@@ -1552,35 +1544,41 @@ CljObject* eval_cons(CljObject *list, CljMap *env) {
     CljObject *result = NULL;
     
     // Fall 1: nil oder leer
-    if (!coll || is_type(coll, CLJ_NIL)) {
+    if (!coll) {
         result = (CljObject*)make_list(elem, NULL);
         RELEASE(elem);
         return AUTORELEASE(result);
     }
     
-    // Fall 2: Bereits CLJ_LIST oder CLJ_SEQ → direkt als rest verwenden
-    if (is_type(coll, CLJ_LIST) || is_type(coll, CLJ_SEQ)) {
-        result = (CljObject*)make_list(elem, coll);
-        RELEASE(elem);   // Balance: make_list macht RETAIN
-        RELEASE(coll);   // Balance: make_list macht RETAIN
-        return AUTORELEASE(result);
+    // Fall 2 & 3: Typ-basierte Behandlung
+    switch (coll->type) {
+        case CLJ_LIST:
+        case CLJ_SEQ: {
+            // Bereits CLJ_LIST oder CLJ_SEQ → direkt als rest verwenden
+            result = (CljObject*)make_list(elem, coll);
+            RELEASE(elem);   // Balance: make_list macht RETAIN
+            RELEASE(coll);   // Balance: make_list macht RETAIN
+            return AUTORELEASE(result);
+        }
+        
+        default: {
+            // Fall 3: Vektor oder andere → zu Seq konvertieren
+            CljObject *seq = seq_create(coll);  // Heap-Objekt 1
+            RELEASE(coll);  // Balance aus eval_arg_retained
+            
+            if (!seq) {
+                // Leere Seq → nur Element
+                result = (CljObject*)make_list(elem, NULL);
+            } else {
+                // Seq als rest → make_list macht RETAIN auf seq
+                result = (CljObject*)make_list(elem, seq);  // Heap-Objekt 2
+                RELEASE(seq);  // Balance: make_list macht RETAIN
+            }
+            
+            RELEASE(elem);
+            return AUTORELEASE(result);
+        }
     }
-    
-    // Fall 3: Vektor oder andere → zu Seq konvertieren
-    CljObject *seq = seq_create(coll);  // Heap-Objekt 1
-    RELEASE(coll);  // Balance aus eval_arg_retained
-    
-    if (!seq || is_type(seq, CLJ_NIL)) {
-        // Leere Seq → nur Element
-        result = (CljObject*)make_list(elem, NULL);
-    } else {
-        // Seq als rest → make_list macht RETAIN auf seq
-        result = (CljObject*)make_list(elem, seq);  // Heap-Objekt 2
-        RELEASE(seq);  // Balance: make_list macht RETAIN
-    }
-    
-    RELEASE(elem);
-    return AUTORELEASE(result);
 }
 
 CljObject* eval_seq(CljObject *list, CljMap *env) {
@@ -1588,9 +1586,7 @@ CljObject* eval_seq(CljObject *list, CljMap *env) {
     if (!arg) return NULL;
     
     // If argument is already nil, return nil
-    if (is_type(arg, CLJ_NIL)) {
-        return NULL;
-    }
+    // Note: nil is now represented as NULL, so no special nil check needed
     
     // Check if argument is seqable
     if (!is_seqable(arg)) {
@@ -1598,15 +1594,19 @@ CljObject* eval_seq(CljObject *list, CljMap *env) {
     }
     
     // For lists, return as-is (lists are already sequences)
-    if (is_type(arg, CLJ_LIST)) {
-        return RETAIN(arg);
+    switch (arg->type) {
+        case CLJ_LIST: {
+            return RETAIN(arg);
+        }
+        
+        default: {
+            // For other seqable types, return SeqIterator directly
+            CljObject *seq = seq_create(arg);
+            if (!seq) return NULL;
+            
+            return (CljObject*)seq;
+        }
     }
-    
-    // For other seqable types, return SeqIterator directly
-    CljObject *seq = seq_create(arg);
-    if (!seq) return NULL;
-    
-    return (CljObject*)seq;
 }
 
 // ============================================================================
@@ -1869,8 +1869,7 @@ CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
     if (!element) return NULL;
     
     // For simple types (numbers, strings, booleans), return as-is
-    if (is_fixnum((CljValue)element) || is_float16((CljValue)element) || 
-        is_type(element, CLJ_STRING) || is_special((CljValue)element) || is_type(element, CLJ_NIL)) {
+    if (IS_IMMEDIATE(element) || is_type(element, CLJ_STRING)) {
         return element; // Don't retain - caller will handle retention
     }
     
