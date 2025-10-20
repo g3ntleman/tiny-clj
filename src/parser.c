@@ -215,7 +215,7 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     // Single character operator
     reader_consume(reader);
     char buf[2] = {c, '\0'};
-    return (CljObject *)intern_symbol_global(buf);
+    return intern_symbol_global(buf);
   }
   
   // Unknown character - throw exception with helpful message
@@ -232,25 +232,6 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed CljObject (caller must release) or NULL on error
  */
-CljObject *parse_old(const char *input, EvalState *st) {
-  if (!input)
-    return NULL;
-  Reader reader;
-  reader_init(&reader, input);
-  
-  CljValue result = NULL;
-  
-  // Use TRY/CATCH to handle parsing exceptions
-  TRY {
-    result = make_object_by_parsing_expr(&reader, st);
-    // result is already a CljValue, no need for AUTORELEASE
-  } CATCH(ex) {
-    // Exception caught - return NULL for parse errors
-    result = NULL;
-  } END_TRY
-  
-  return result;
-}
 
 
 /**

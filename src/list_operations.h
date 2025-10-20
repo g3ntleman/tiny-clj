@@ -8,7 +8,6 @@
 CljObject* list_first(CljObject *list);
 CljObject* list_nth(CljObject *list, int n);
 int list_count(CljObject *list);
-CljObject* make_list_from_stack(CljObject **stack, int count);
 CljValue make_list_from_stack(CljValue *stack, int count);
 bool is_list(CljObject *v);
 bool is_symbol(CljObject *v, const char *name);
