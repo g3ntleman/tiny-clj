@@ -215,13 +215,13 @@ ID native_count(ID *args, int argc) {
     if (!coll) return OBJ_TO_ID(NULL);
     
     if (coll->type == CLJ_MAP || coll->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID(make_fixnum(map_count_v((CljValue)coll)));
+        return OBJ_TO_ID(fixnum(map_count_v((CljValue)coll)));
     } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_TRANSIENT_VECTOR) {
         CljPersistentVector *vec = as_vector(coll);
-        return OBJ_TO_ID(make_fixnum(vec ? vec->count : 0));
+        return OBJ_TO_ID(fixnum(vec ? vec->count : 0));
     }
     
-    return OBJ_TO_ID(make_fixnum(0)); // Default count for unsupported types
+    return OBJ_TO_ID(fixnum(0)); // Default count for unsupported types
 }
 
 ID native_keys(ID *args, int argc) {
@@ -440,7 +440,7 @@ static ID create_fixed_result(int32_t acc_fixed) {
 
 // Helper function to create fixnum result
 static ID create_fixnum_result(int acc_i) {
-    return OBJ_TO_ID(make_fixnum(acc_i));
+    return OBJ_TO_ID(fixnum(acc_i));
 }
 
 // Helper function to extract raw fixed-point value

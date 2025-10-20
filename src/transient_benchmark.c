@@ -26,7 +26,7 @@ void benchmark_persistent_vector() {
         CljValue vec = make_vector_v(0, 0); // Start with empty vector
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue item = make_fixnum(i);
+            CljValue item = fixnum(i);
             vec = vector_conj_v(vec, item);
         }
         
@@ -52,7 +52,7 @@ void benchmark_transient_vector() {
         CljValue tvec = transient(vec);
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue item = make_fixnum(i);
+            CljValue item = fixnum(i);
             conj_v(tvec, item);
         }
         
@@ -82,7 +82,7 @@ void benchmark_persistent_map() {
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue key = make_string_v("key");
-            CljValue value = make_fixnum(i);
+            CljValue value = fixnum(i);
             map_assoc_v(map, key, value);
         }
         
@@ -109,7 +109,7 @@ void benchmark_transient_map() {
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue key = make_string_v("key");
-            CljValue value = make_fixnum(i);
+            CljValue value = fixnum(i);
             conj_map_v(tmap, key, value);
         }
         
@@ -137,7 +137,7 @@ void benchmark_immediates() {
     for (int iter = 0; iter < BENCHMARK_ITERATIONS * 10; iter++) {
         // Test fixnum immediates
         for (int i = 0; i < 100; i++) {
-            CljValue val = make_fixnum(i);
+            CljValue val = fixnum(i);
             int extracted = as_fixnum(val);
             (void)extracted; // Prevent optimization
         }

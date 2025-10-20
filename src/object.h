@@ -177,7 +177,7 @@ typedef struct {
     CljObject *data;        // Additional data (map)
 } CLJException;
 
-// make_int() and make_float() removed - use make_fixnum() and make_fixed() instead
+// make_int() and make_float() removed - use fixnum() and make_fixed() instead
 /** Create a string object (rc=1), copies input with strdup. */
 // Function wrappers moved to value.h to avoid circular dependency
 // moved to vector.h

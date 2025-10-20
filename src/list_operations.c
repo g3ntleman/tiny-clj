@@ -108,7 +108,7 @@ CljObject* list_from_ints(int count, ...) {
     CljObject *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
-        CljList *new_node = make_list(make_fixnum(value), result);
+        CljList *new_node = make_list(fixnum(value), result);
         result = (CljObject*)new_node;
     }
     

@@ -43,7 +43,7 @@ void test_namespace_lookup_user_namespace(void) {
     
     // Test direct namespace storage and retrieval
     CljObject *test_sym = intern_symbol_global("test-var");
-    CljObject *value = make_fixnum(42);
+    CljObject *value = fixnum(42);
     
     // Store variable directly in namespace
     ns_define(st, test_sym, value);
@@ -194,7 +194,7 @@ void test_namespace_variable_storage(void) {
     
     // Create symbols
     CljObject *var_sym = intern_symbol_global("test-variable");
-    CljObject *value = make_fixnum(123);
+    CljObject *value = fixnum(123);
     
     // Store variable in namespace
     ns_define(st, var_sym, value);
@@ -220,8 +220,8 @@ void test_namespace_multiple_variables(void) {
     // Create multiple variables
     CljObject *var1_sym = intern_symbol_global("var1");
     CljObject *var2_sym = intern_symbol_global("var2");
-    CljObject *value1 = make_fixnum(100);
-    CljObject *value2 = make_fixnum(200);
+    CljObject *value1 = fixnum(100);
+    CljObject *value2 = fixnum(200);
     
     // Store variables
     ns_define(st, var1_sym, value1);
@@ -271,7 +271,7 @@ void test_namespace_special_characters(void) {
     
     // Test symbols with special characters
     CljObject *special_sym = intern_symbol_global("test-var?");
-    CljObject *value = make_fixnum(42);
+    CljObject *value = fixnum(42);
     
     // Store and retrieve
     ns_define(st, special_sym, value);
@@ -321,7 +321,7 @@ void test_namespace_memory_management(void) {
         snprintf(name, sizeof(name), "var%d", i);
         
         CljObject *sym = intern_symbol_global(name);
-        CljObject *value = make_fixnum(i * 10);
+        CljObject *value = fixnum(i * 10);
         
         ns_define(st, sym, value);
         

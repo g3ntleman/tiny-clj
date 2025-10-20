@@ -60,7 +60,7 @@ static void benchmark_setup(void) {
         // Add common clojure.core symbols
         for (int i = 0; i < NUM_TEST_SYMBOLS; i++) {
             CljObject *sym = make_symbol(test_symbols[i], NULL);
-            CljValue val = make_fixnum(i * 1000); // High priority values
+            CljValue val = fixnum(i * 1000); // High priority values
             map_assoc((CljObject*)clojure_core->mappings, sym, (CljObject*)val);
         }
     }
@@ -75,7 +75,7 @@ static void benchmark_setup(void) {
             char sym_name[64];
             snprintf(sym_name, sizeof(sym_name), "var%d", j);
             CljObject *sym = make_symbol(sym_name, NULL);
-            CljValue val = make_fixnum(j * 100 + i);
+            CljValue val = fixnum(j * 100 + i);
             map_assoc((CljObject*)test_namespaces[i]->mappings, sym, (CljObject*)val);
         }
     }
@@ -111,7 +111,7 @@ static void benchmark_current_namespace_lookup(void) {
     // Add test symbols to current namespace
     for (int i = 0; i < NUM_TEST_SYMBOLS; i++) {
         CljObject *sym = make_symbol(test_symbols[i], NULL);
-        CljValue val = make_fixnum(i);
+        CljValue val = fixnum(i);
         map_assoc((CljObject*)benchmark_eval_state->current_ns->mappings, sym, (CljObject*)val);
     }
     
@@ -133,7 +133,7 @@ static void benchmark_global_namespace_search(void) {
     for (int ns_idx = 0; ns_idx < num_test_namespaces; ns_idx++) {
         for (int i = 0; i < NUM_TEST_SYMBOLS; i++) {
             CljObject *sym = make_symbol(test_symbols[i], NULL);
-            CljValue val = make_fixnum(i * 1000 + ns_idx);
+            CljValue val = fixnum(i * 1000 + ns_idx);
             map_assoc((CljObject*)test_namespaces[ns_idx]->mappings, sym, (CljObject*)val);
         }
     }
@@ -230,8 +230,8 @@ static void benchmark_namespace_isolation(void) {
     
     // Add same symbol to both namespaces
     CljObject *shared_sym = make_symbol("shared-symbol", NULL);
-    CljValue val1 = make_fixnum(100);
-    CljValue val2 = make_fixnum(200);
+    CljValue val1 = fixnum(100);
+    CljValue val2 = fixnum(200);
     
     map_assoc((CljObject*)ns1->mappings, shared_sym, (CljObject*)val1);
     map_assoc((CljObject*)ns2->mappings, shared_sym, (CljObject*)val2);

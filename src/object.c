@@ -140,7 +140,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
 
 /** @brief Create integer object */
-// make_int() and make_float() removed - use make_fixnum() and make_fixed() instead
+// make_int() and make_float() removed - use fixnum() and make_fixed() instead
 
 // retain() function moved to memory.c
 

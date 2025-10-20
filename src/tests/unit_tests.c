@@ -172,7 +172,7 @@ void test_array_map_builtin(void) {
         
         // Debug: Check what native_array_map actually receives
         CljObject *key = AUTORELEASE(make_string("a")); // Use AUTORELEASE for test convenience
-        CljObject *value = make_fixnum(1); // Immediate value, no management needed
+        CljObject *value = fixnum(1); // Immediate value, no management needed
         ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)};
         
         
@@ -425,9 +425,9 @@ void test_cljvalue_immediates_fixnum(void) {
     // Test fixnum immediates (32-bit tagged pointers)
     {
         // Test small integers (should be immediates)
-        CljValue val1 = make_fixnum(42);
-        CljValue val2 = make_fixnum(-100);
-        CljValue val3 = make_fixnum(0);
+        CljValue val1 = fixnum(42);
+        CljValue val2 = fixnum(-100);
+        CljValue val3 = fixnum(0);
         
         TEST_ASSERT_TRUE(is_fixnum(val1));
         TEST_ASSERT_TRUE(is_fixnum(val2));
@@ -438,8 +438,8 @@ void test_cljvalue_immediates_fixnum(void) {
         TEST_ASSERT_EQUAL_INT(0, as_fixnum(val3));
         
         // Test edge cases
-        CljValue max_val = make_fixnum(FIXNUM_MAX);
-        CljValue min_val = make_fixnum(FIXNUM_MIN);
+        CljValue max_val = fixnum(FIXNUM_MAX);
+        CljValue min_val = fixnum(FIXNUM_MIN);
         
         TEST_ASSERT_TRUE(is_fixnum(max_val));
         TEST_ASSERT_TRUE(is_fixnum(min_val));
@@ -448,7 +448,7 @@ void test_cljvalue_immediates_fixnum(void) {
         
         // Test large integers (should fallback to heap)
         // Temporarily disable this test due to implementation issues
-        // CljValue large_val = make_fixnum(FIXNUM_MAX + 1);
+        // CljValue large_val = fixnum(FIXNUM_MAX + 1);
         // TEST_ASSERT_FALSE(is_fixnum(large_val));
         // TEST_ASSERT_NOT_NULL(large_val);
         // TEST_ASSERT_EQUAL_INT(CLJ_INT, ((CljObject*)large_val)->type);
@@ -529,9 +529,9 @@ void test_cljvalue_parser_immediates(void) {
         TEST_ASSERT_NOT_NULL(st);
         
         // Test direct fixnum creation first
-        CljValue direct_fixnum = make_fixnum(42);
+        CljValue direct_fixnum = fixnum(42);
         if (!direct_fixnum) {
-            // make_fixnum returned NULL - this is expected for out-of-range values
+            // fixnum returned NULL - this is expected for out-of-range values
         }
         TEST_ASSERT_NOT_NULL(direct_fixnum);
         TEST_ASSERT_TRUE(is_fixnum(direct_fixnum));
@@ -591,7 +591,7 @@ void test_cljvalue_memory_efficiency(void) {
         // Create many immediate values (should not allocate heap memory)
         CljValue immediates[1000];
         for (int i = 0; i < 1000; i++) {
-            immediates[i] = make_fixnum(i);
+            immediates[i] = fixnum(i);
             TEST_ASSERT_TRUE(is_fixnum(immediates[i]));
             TEST_ASSERT_EQUAL_INT(i, as_fixnum(immediates[i]));
         }
@@ -649,7 +649,7 @@ void test_cljvalue_immediates_high_level(void) {
         TEST_ASSERT_NOT_NULL(st);
         
         // Test direct fixnum creation first
-        CljValue direct_fixnum = make_fixnum(42);
+        CljValue direct_fixnum = fixnum(42);
         TEST_ASSERT_NOT_NULL(direct_fixnum);
         TEST_ASSERT_TRUE(is_fixnum(direct_fixnum));
         TEST_ASSERT_EQUAL_INT(42, as_fixnum(direct_fixnum));

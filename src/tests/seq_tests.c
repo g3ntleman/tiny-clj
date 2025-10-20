@@ -44,9 +44,9 @@ void test_seq_create_vector(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_fixnum(1);
-        vec_data->data[1] = make_fixnum(2);
-        vec_data->data[2] = make_fixnum(3);
+        vec_data->data[0] = fixnum(1);
+        vec_data->data[1] = fixnum(2);
+        vec_data->data[2] = fixnum(3);
         vec_data->count = TEST_VECTOR_SIZE;
         
         // Create sequence iterator
@@ -107,9 +107,9 @@ void test_seq_first(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_fixnum(42);
-        vec_data->data[1] = make_fixnum(43);
-        vec_data->data[2] = make_fixnum(44);
+        vec_data->data[0] = fixnum(42);
+        vec_data->data[1] = fixnum(43);
+        vec_data->data[2] = fixnum(44);
         vec_data->count = 3;
         
         // Create sequence and test first
@@ -129,9 +129,9 @@ void test_seq_rest(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_fixnum(42);
-        vec_data->data[1] = make_fixnum(43);
-        vec_data->data[2] = make_fixnum(44);
+        vec_data->data[0] = fixnum(42);
+        vec_data->data[1] = fixnum(43);
+        vec_data->data[2] = fixnum(44);
         vec_data->count = 3;
         
         // Create sequence and test rest
@@ -150,9 +150,9 @@ void test_seq_next(void) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = make_fixnum(42);
-        vec_data->data[1] = make_fixnum(43);
-        vec_data->data[2] = make_fixnum(44);
+        vec_data->data[0] = fixnum(42);
+        vec_data->data[1] = fixnum(43);
+        vec_data->data[2] = fixnum(44);
         vec_data->count = 3;
         
         // Create sequence and test next
@@ -180,12 +180,12 @@ void test_seq_equality(void) {
         TEST_ASSERT_NOT_NULL(vec1_data);
         TEST_ASSERT_NOT_NULL(vec2_data);
         
-        vec1_data->data[0] = make_fixnum(1);
-        vec1_data->data[1] = make_fixnum(2);
+        vec1_data->data[0] = fixnum(1);
+        vec1_data->data[1] = fixnum(2);
         vec1_data->count = 2;
         
-        vec2_data->data[0] = make_fixnum(1);
-        vec2_data->data[1] = make_fixnum(2);
+        vec2_data->data[0] = fixnum(1);
+        vec2_data->data[1] = fixnum(2);
         vec2_data->count = 2;
         
         // Create sequences

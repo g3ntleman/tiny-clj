@@ -70,7 +70,7 @@ static inline CljValue make_special(uint8_t special) {
 // nil ist NULL, true/false sind make_special(SPECIAL_TRUE/FALSE)
 
 
-static inline CljValue make_fixnum(int32_t value) {
+static inline CljValue fixnum(int32_t value) {
     // Simplified implementation for debugging
     // Just return a non-NULL pointer with the tag
     return (CljValue)(((uintptr_t)value << TAG_BITS) | TAG_FIXNUM);
@@ -223,7 +223,7 @@ static inline CljObject* ID_TO_OBJ(ID id) {
 // Wrapper für existierende Funktionen (Phase 1: Immediates + Heap Fallback)
 static inline CljValue make_int_v(int x) {
     // Try immediate first, fallback to heap for large numbers
-    return make_fixnum(x);
+    return fixnum(x);
 }
 
 static inline CljValue make_float_v(double x) {

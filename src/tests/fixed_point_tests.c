@@ -38,9 +38,9 @@ void test_fixed_multiplication_raw(void) {
 void test_fixed_mixed_type_promotion(void) {
     // Test mixed type: Fixnum + Fixed
     // 1 (Fixnum) + 0.5 (Fixed) = 1.5
-    CljValue fixnum = make_fixnum(1);
+    CljValue fixnum_val = fixnum(1);
     CljValue fixed = make_fixed(0.5f);
-    int32_t promoted = AS_FIXNUM(fixnum) << 13;
+    int32_t promoted = AS_FIXNUM(fixnum_val) << 13;
     int32_t fixed_raw = (int32_t)((intptr_t)fixed >> 3);
     int32_t sum = promoted + fixed_raw;
     float result = (float)sum / 8192.0f;
@@ -133,11 +133,11 @@ void test_fixed_subtraction_builtin(void) {
 
 void test_fixed_mixed_addition(void) {
     // Test mixed type addition: Fixnum + Fixed
-    CljValue fixnum = make_fixnum(10);
+    CljValue fixnum_val = fixnum(10);
     CljValue fixed = make_fixed(0.5f);
     
     // Simulate mixed addition: fixnum + fixed
-    int32_t fixnum_promoted = AS_FIXNUM(fixnum) << 13;
+    int32_t fixnum_promoted = AS_FIXNUM(fixnum_val) << 13;
     int32_t fixed_raw = (int32_t)((intptr_t)fixed >> 3);
     int32_t sum = fixnum_promoted + fixed_raw;
     
@@ -196,11 +196,11 @@ void test_fixed_division_builtin(void) {
 
 void test_fixed_mixed_multiplication(void) {
     // Test mixed type multiplication: Fixnum * Fixed
-    CljValue fixnum = make_fixnum(4);
+    CljValue fixnum_val = fixnum(4);
     CljValue fixed = make_fixed(0.5f);
     
     // Simulate mixed multiplication: fixnum * fixed
-    int32_t fixnum_promoted = AS_FIXNUM(fixnum) << 13;
+    int32_t fixnum_promoted = AS_FIXNUM(fixnum_val) << 13;
     int32_t fixed_raw = (int32_t)((intptr_t)fixed >> 3);
     int32_t product = (fixnum_promoted * fixed_raw) >> 13;
     

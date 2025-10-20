@@ -30,7 +30,7 @@ void test_memory_allocation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test basic object creation
-        CljObject *int_obj = make_fixnum(42);
+        CljObject *int_obj = fixnum(42);
         CljObject *float_obj = make_fixed(3.14f);
         CljValue str_obj = make_string_v("hello");
         
@@ -82,7 +82,7 @@ void test_memory_leak_detection(void) {
     {
         // Test that no memory leaks occur
         for (int i = 0; i < 10; i++) {
-            CljValue val = make_fixnum(i);
+            CljValue val = fixnum(i);
             TEST_ASSERT_TRUE(is_fixnum(val));
             TEST_ASSERT_EQUAL_INT(i, as_fixnum(val));
             // No need to release - immediate value
@@ -110,7 +110,7 @@ void test_vector_memory(void) {
         
         // Add elements
         for (int i = 0; i < 5; i++) {
-            CljValue elem = make_fixnum(i);
+            CljValue elem = fixnum(i);
             vec_data->data[i] = (CljObject*)elem;
         }
         vec_data->count = 5;

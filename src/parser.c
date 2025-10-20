@@ -565,7 +565,7 @@ static CljObject *make_number_by_parsing(Reader *reader, EvalState *st) {
   buf[pos] = '\0';
   if (strchr(buf, '.'))
     return make_fixed((float)atof(buf));
-  return make_fixnum(atoi(buf));
+  return fixnum(atoi(buf));
 }
 
 /**
@@ -595,7 +595,7 @@ static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
   // Try immediate fixnum first for integers
   if (!strchr(buf, '.')) {
     int value = atoi(buf);
-    return make_fixnum(value);  // Uses immediate if possible, heap fallback if not
+    return fixnum(value);  // Uses immediate if possible, heap fallback if not
   }
   
   // For floats, use heap allocation for now

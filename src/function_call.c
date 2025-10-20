@@ -223,9 +223,9 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, Eva
         // Handle zero arguments case
         switch (op) {
             case ARITH_ADD:
-                return make_fixnum(0);  // (+) → 0
+                return fixnum(0);  // (+) → 0
             case ARITH_MUL:
-                return make_fixnum(1);  // (*) → 1
+                return fixnum(1);  // (*) → 1
             case ARITH_SUB:
             case ARITH_DIV:
                 throw_exception_formatted("ArityError", __FILE__, __LINE__, 0,
@@ -350,7 +350,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
             return NULL;
     }
     
-    return make_fixnum(result);
+    return fixnum(result);
 }
 
 // Extended function call implementation with complete evaluation
@@ -1445,35 +1445,35 @@ CljObject* eval_prn(CljObject *list, CljMap *env) {
 ID eval_count(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     // Handle nil (represented as NULL) - return 0
-    if (!arg) return make_fixnum(0);
+    if (!arg) return fixnum(0);
     
     // Note: nil is now represented as NULL, so no special nil check needed
     
     switch (arg->type) {
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(arg);
-            return vec ? make_fixnum(vec->count) : make_fixnum(0);
+            return vec ? fixnum(vec->count) : fixnum(0);
         }
         
         case CLJ_LIST: {
             int count = list_count(arg);
-            return make_fixnum(count);
+            return fixnum(count);
         }
         
         case CLJ_MAP: {
             CljMap *map = as_map(arg);
-            return map ? make_fixnum(map->count) : make_fixnum(0);
+            return map ? fixnum(map->count) : fixnum(0);
         }
         
         case CLJ_STRING: {
             // String data is stored directly after CljObject header
             char **str_ptr = (char**)((char*)arg + sizeof(CljObject));
-            return make_fixnum(strlen(*str_ptr));
+            return fixnum(strlen(*str_ptr));
         }
         
         default:
             // For other types (int, bool, symbol, etc.), return 1
-            return make_fixnum(1);
+            return fixnum(1);
     }
 }
 
@@ -1827,7 +1827,7 @@ CljObject* eval_dotimes(CljObject *list, CljMap *env) {
                 // TODO: Implement proper environment copying
             }
             // Add new binding
-            map_assoc((CljObject*)new_env, var, make_fixnum(i));
+            map_assoc((CljObject*)new_env, var, fixnum(i));
             
             // Evaluate body with new binding
             CljObject *body_result = eval_body_with_env(body, new_env);

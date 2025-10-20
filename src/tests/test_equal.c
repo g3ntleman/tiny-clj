@@ -29,8 +29,8 @@ void test_equal_null_pointers(void) {
     WITH_MEMORY_PROFILING({
     
     // Test null pointer cases
-    TEST_ASSERT_FALSE(clj_equal(NULL, make_fixnum(1)));
-    TEST_ASSERT_FALSE(clj_equal(make_fixnum(1), NULL));
+    TEST_ASSERT_FALSE(clj_equal(NULL, fixnum(1)));
+    TEST_ASSERT_FALSE(clj_equal(fixnum(1), NULL));
     TEST_ASSERT_TRUE(clj_equal(NULL, NULL));
     
     });
@@ -92,9 +92,9 @@ void test_equal_immediate_values(void) {
     
     // Test immediate values - these should not be passed to clj_equal
     // as they are handled by the caller before calling clj_equal
-    CljValue num1 = make_fixnum(42);
-    CljValue num2 = make_fixnum(42);
-    CljValue num3 = make_fixnum(43);
+    CljValue num1 = fixnum(42);
+    CljValue num2 = fixnum(42);
+    CljValue num3 = fixnum(43);
     
     // These are immediate values, so clj_equal should not be called on them
     // But if it is, it should return false since they're not CljObject*
@@ -121,9 +121,9 @@ void test_vector_equal_same_vectors(void) {
     CljObject *vec2 = (CljObject*)vec2_val;
     
     // Fill with same values using vector_conj_v
-    CljValue val1 = make_fixnum(1);
-    CljValue val2 = make_fixnum(2);
-    CljValue val3 = make_fixnum(3);
+    CljValue val1 = fixnum(1);
+    CljValue val2 = fixnum(2);
+    CljValue val3 = fixnum(3);
     
     vec1_val = vector_conj_v(vec1_val, val1);
     vec1_val = vector_conj_v(vec1_val, val2);
@@ -157,9 +157,9 @@ void test_vector_equal_different_lengths(void) {
     CljObject *vec2 = (CljObject*)vec2_val;
     
     // Fill with same values but different lengths
-    CljValue val1 = make_fixnum(1);
-    CljValue val2 = make_fixnum(2);
-    CljValue val3 = make_fixnum(3);
+    CljValue val1 = fixnum(1);
+    CljValue val2 = fixnum(2);
+    CljValue val3 = fixnum(3);
     
     vec1_val = vector_conj_v(vec1_val, val1);
     vec1_val = vector_conj_v(vec1_val, val2);
@@ -189,10 +189,10 @@ void test_vector_equal_different_values(void) {
     CljValue vec2_val = make_vector_v(0, 1); // Start with empty vector
     
     // Create different integer values (immediate values)
-    CljValue int1 = make_fixnum(1);
-    CljValue int2 = make_fixnum(2);
-    CljValue int3 = make_fixnum(3);
-    CljValue int4 = make_fixnum(4);
+    CljValue int1 = fixnum(1);
+    CljValue int2 = fixnum(2);
+    CljValue int3 = fixnum(3);
+    CljValue int4 = fixnum(4);
     
     // Build vectors with different values using conj
     vec1_val = vector_conj_v(vec1_val, int1);
@@ -216,9 +216,9 @@ void test_clj_equal_id_function(void) {
     WITH_MEMORY_PROFILING({
     
     // Test immediate values (CljValue)
-    CljValue fix1 = make_fixnum(42);
-    CljValue fix2 = make_fixnum(42);
-    CljValue fix3 = make_fixnum(43);
+    CljValue fix1 = fixnum(42);
+    CljValue fix2 = fixnum(42);
+    CljValue fix3 = fixnum(43);
     
     // Test same immediate values
     TEST_ASSERT_TRUE(clj_equal_id((ID)fix1, (ID)fix2));
@@ -444,8 +444,8 @@ void test_map_equal_with_nested_vectors(void) {
     CljValue vec1_val = make_vector_v(2, 1);
     CljValue vec2_val = make_vector_v(2, 1);
     
-    CljValue val1 = make_fixnum(1);
-    CljValue val2 = make_fixnum(2);
+    CljValue val1 = fixnum(1);
+    CljValue val2 = fixnum(2);
     
     vec1_val = vector_conj_v(vec1_val, val1);
     vec1_val = vector_conj_v(vec1_val, val2);
