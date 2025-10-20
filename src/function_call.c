@@ -1442,7 +1442,7 @@ CljObject* eval_prn(CljObject *list, CljMap *env) {
     return NULL;
 }
 
-CljObject* eval_count(CljObject *list, CljMap *env) {
+ID eval_count(CljObject *list, CljMap *env) {
     CljObject *arg = eval_arg_retained(list, 1, env);
     // Handle nil (represented as NULL) - return 0
     if (!arg) return make_fixnum(0);

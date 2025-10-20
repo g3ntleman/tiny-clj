@@ -28,7 +28,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st);
 // Weitere Built-in Funktionen
 CljObject* eval_str(CljObject *list, CljMap *env);
 CljObject* eval_prn(CljObject *list, CljMap *env);
-CljObject* eval_count(CljObject *list, CljMap *env);
+ID eval_count(CljObject *list, CljMap *env);
 CljObject* eval_first(CljObject *list, CljMap *env);
 CljObject* eval_rest(CljObject *list, CljMap *env);
 CljObject* eval_cons(CljObject *list, CljMap *env);
