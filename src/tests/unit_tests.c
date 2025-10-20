@@ -1098,101 +1098,8 @@ void test_map_function(void) {
 }
 
 // ============================================================================
-// RECUR TESTS
+// RECUR TESTS - MOVED TO test_recur.c
 // ============================================================================
-
-void test_recur_factorial(void) {
-    EvalState *st = evalstate_new();
-    if (!st) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
-    // Test factorial with recur
-    CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
-    if (factorial_def) {
-        TEST_ASSERT_NOT_NULL(factorial_def);
-        
-        // Test factorial(5, 1) = 120
-        CljObject *result = eval_string("(factorial 5 1)", st);
-        if (result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-            TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)result));
-        }
-        
-        // Test factorial(10, 1) = 3628800
-        CljObject *result2 = eval_string("(factorial 10 1)", st);
-        if (result2) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
-            TEST_ASSERT_EQUAL_INT(3628800, as_fixnum((CljValue)result2));
-        }
-    }
-    
-    evalstate_free(st);
-}
-
-void test_recur_deep_recursion(void) {
-    EvalState *st = evalstate_new();
-    if (!st) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
-    // Test deep recursion with recur (should not stack overflow)
-    CljObject *deep_def = eval_string("(def deep-count (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", st);
-    if (deep_def) {
-        TEST_ASSERT_NOT_NULL(deep_def);
-        
-        // Test deep recursion (1000 iterations)
-        CljObject *result = eval_string("(deep-count 1000 0)", st);
-        if (result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-            TEST_ASSERT_EQUAL_INT(1000, as_fixnum((CljValue)result));
-        }
-    }
-    
-    evalstate_free(st);
-}
-
-void test_recur_arity_error(void) {
-    EvalState *st = evalstate_new();
-    if (!st) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
-    // Test recur with wrong arity (should throw error)
-    CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
-    if (factorial_def) {
-        TEST_ASSERT_NOT_NULL(factorial_def);
-        
-        // This should fail because recur has wrong arity (1 arg instead of 2)
-        // Use TRY/CATCH to handle the exception properly
-        TRY {
-            CljObject *result = eval_string("(def bad-factorial (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
-            // The function definition should fail due to arity mismatch
-            if (result && result->type != CLJ_EXCEPTION) {
-                // Try to call the function - this should fail
-                CljObject *call_result = eval_string("(bad-factorial 5 1)", st);
-                TEST_ASSERT_TRUE(call_result == NULL || (call_result && call_result->type == CLJ_EXCEPTION));
-                if (call_result) RELEASE(call_result);
-            } else {
-                TEST_ASSERT_TRUE(result == NULL || (result && result->type == CLJ_EXCEPTION));
-            }
-            RELEASE(result);
-        } CATCH(ex) {
-            // Expected exception - test passes
-            TEST_ASSERT_TRUE(ex != NULL);
-            char *err_str = pr_str((CljObject*)ex);
-            if (err_str) {
-                printf("Caught expected exception: %s\n", err_str);
-                free(err_str);
-            }
-        } END_TRY
-    }
-    
-    evalstate_free(st);
-}
 
 // ============================================================================
 // Namespace Lookup Tests
@@ -1535,6 +1442,166 @@ void test_fixed_comparison_operators(void) {
 }
 
 // Symbol output tests removed - integrated into existing test structure
+
+// ============================================================================
+// DEBUGGING TESTS FOR RECUR IMPLEMENTATION
+// ============================================================================
+
+// Test as_list function with valid list
+void test_as_list_valid(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Create a simple list: (1 2 3)
+    CljObject *list = eval_string("(1 2 3)", st);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
+    
+    // Test as_list conversion
+    CljList *list_data = as_list(list);
+    TEST_ASSERT_NOT_NULL(list_data);
+    
+    // Test LIST_FIRST
+    CljObject *first = LIST_FIRST(list_data);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
+    
+    RELEASE(list);
+    evalstate_free(st);
+}
+
+// Test as_list function with invalid input
+void test_as_list_invalid(void) {
+    // Test with NULL
+    CljList *result = as_list(NULL);
+    TEST_ASSERT_NULL(result);
+    
+    // Test with non-list type
+    CljObject *symbol = make_symbol("test", "user");
+    TEST_ASSERT_NOT_NULL(symbol);
+    
+    // This should abort due to assert_type
+    // We can't test this directly as it calls abort()
+    RELEASE(symbol);
+}
+
+// Test LIST_FIRST with valid list
+void test_list_first_valid(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Create a simple list: (42)
+    CljObject *list = eval_string("(42)", st);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
+    
+    CljList *list_data = as_list(list);
+    TEST_ASSERT_NOT_NULL(list_data);
+    
+    CljObject *first = LIST_FIRST(list_data);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
+    
+    RELEASE(list);
+    evalstate_free(st);
+}
+
+// Test is_type function with various types
+void test_is_type_function(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test with list
+    CljObject *list = eval_string("(1 2 3)", st);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
+    TEST_ASSERT_FALSE(is_type(list, CLJ_SYMBOL));
+    
+    // Test with symbol
+    CljObject *symbol = eval_string("test-symbol", st);
+    TEST_ASSERT_NOT_NULL(symbol);
+    TEST_ASSERT_TRUE(is_type(symbol, CLJ_SYMBOL));
+    TEST_ASSERT_FALSE(is_type(symbol, CLJ_LIST));
+    
+    // Test with number
+    CljObject *number = eval_string("42", st);
+    TEST_ASSERT_NOT_NULL(number);
+    TEST_ASSERT_TRUE(IS_IMMEDIATE(number));
+    TEST_ASSERT_FALSE(is_type(number, CLJ_SYMBOL));
+    
+    RELEASE(list);
+    RELEASE(symbol);
+    RELEASE(number);
+    evalstate_free(st);
+}
+
+// Test eval_list with simple arithmetic
+void test_eval_list_simple_arithmetic(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test simple addition
+    CljObject *result = eval_string("(+ 1 2)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+// Test eval_list with function call
+void test_eval_list_function_call(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Define a simple function
+    CljObject *def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
+    TEST_ASSERT_NOT_NULL(def_result);
+    RELEASE(def_result);
+    
+    // Call the function
+    CljObject *result = eval_string("(test-fn 5)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+// Test group for debugging functions
+void test_group_debugging(void) {
+    RUN_TEST(test_as_list_valid);
+    RUN_TEST(test_as_list_invalid);
+    RUN_TEST(test_list_first_valid);
+    RUN_TEST(test_is_type_function);
+    RUN_TEST(test_eval_list_simple_arithmetic);
+    RUN_TEST(test_eval_list_function_call);
+}
 
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)

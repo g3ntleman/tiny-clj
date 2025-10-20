@@ -242,7 +242,9 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
  * @return The evaluated result (autoreleased) or NULL on error
  */
 CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
-    if (!parsed_expr) return NULL;
+    if (!parsed_expr) {
+        return NULL;
+    }
     
     CljObject *result = NULL;
     

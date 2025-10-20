@@ -468,7 +468,184 @@ clj -e "(map inc [1 2 3 4])"
 ./tiny-clj-repl -e "(map inc [1 2 3 4])"
 ```
 
-### 14. Architecture Summary
+### 14. Error Handling and Validation Patterns
+
+#### 14.1 Assert vs NULL Checks - Best Practices
+
+Tiny-Clj follows a strict pattern for error handling that distinguishes between **API misuse** (programming errors) and **legitimate NULL values** (runtime conditions):
+
+##### **Use `assert()` for API Misuse (Programming Errors)**
+
+`assert()` should be used when a condition should **never** be true in correct code:
+
+```c
+// Environment should never be NULL when expected
+assert(env != NULL);
+
+// Function pointer should never be NULL for valid native functions
+assert(native_func != NULL);
+assert(native_func->fn != NULL);
+
+// Type assertions - these should never fail if types are checked first
+CljSymbol *sym = as_symbol(obj);  // as_symbol() is a type assertion
+// No assert() needed - as_symbol() handles type validation internally
+```
+
+**When to use `assert()`:**
+- Parameter validation for API misuse
+- Type assertions (after type checking)
+- Internal consistency checks
+- Conditions that indicate programming errors
+
+##### **Use NULL Checks for Legitimate Runtime Conditions**
+
+Normal NULL checks should be used when NULL is a **valid runtime condition**:
+
+```c
+// Parameters can legitimately be NULL when param_count == 0
+if (param_count > 0) {
+    if (!params || !values) return NULL;
+}
+
+// Function results can be NULL
+CljObject *result = eval_symbol(symbol, st);
+if (!result) return NULL;
+
+// Array elements can be NULL
+for (int i = 0; i < count; i++) {
+    if (args[i]) {
+        // Process non-NULL argument
+    }
+}
+```
+
+**When to use NULL checks:**
+- Function return values
+- Array elements that can be NULL
+- Optional parameters
+- Runtime conditions that can legitimately be NULL
+
+##### **Anti-Patterns to Avoid**
+
+```c
+// WRONG: Using assert() for legitimate NULL values
+assert(params != NULL);        // params can be NULL when param_count == 0
+assert(values != NULL);       // values can be NULL when param_count == 0
+assert(result != NULL);       // result can legitimately be NULL
+
+// WRONG: Using assert() after type assertions
+CljSymbol *sym = as_symbol(obj);
+assert(sym != NULL);          // as_symbol() handles type validation internally
+
+// CORRECT: Use normal NULL checks for legitimate conditions
+if (param_count > 0 && (!params || !values)) return NULL;
+CljObject *result = eval_symbol(symbol, st);
+if (!result) return NULL;
+```
+
+##### **Type Assertion Functions**
+
+Functions like `as_symbol()`, `as_list()`, `as_map()` are **type assertions** and should never return NULL if called with correct types:
+
+```c
+// These functions validate types internally and abort on type mismatch
+static inline CljSymbol* as_symbol(CljObject *obj) {
+    return (CljSymbol*)assert_type(obj, CLJ_SYMBOL);
+}
+
+// Usage - no additional NULL checks needed
+if (is_type(obj, CLJ_SYMBOL)) {
+    CljSymbol *sym = as_symbol(obj);  // Type already verified
+    // sym is guaranteed to be non-NULL
+    printf("Symbol name: %s\n", sym->name);
+}
+```
+
+##### **Environment Parameter Pattern**
+
+Environment parameters should never be NULL when expected (API misuse):
+
+```c
+CljObject* eval_function(CljObject *list, CljMap *env, EvalState *st) {
+    // Environment is required - this is API misuse if NULL
+    assert(env != NULL);
+    
+    // Rest of function implementation
+}
+```
+
+##### **Parameter Array Pattern**
+
+Parameter arrays can legitimately be NULL when count is 0:
+
+```c
+CljObject* eval_body_with_params(CljObject *body, CljObject **params, 
+                                 CljObject **values, int param_count, 
+                                 CljObject *closure_env) {
+    if (!body) return NULL;
+    
+    // Check arrays only when they should exist
+    if (param_count > 0) {
+        if (!params || !values) return NULL;
+    }
+    
+    // Process parameters...
+}
+```
+
+#### 14.2 Memory Management Patterns
+
+##### **Reference Counting**
+
+```c
+// Always retain objects that will be stored
+CljObject *result = eval_list(ast, env, st);
+if (result) {
+    RETAIN(result);  // Increment reference count
+    // Store result somewhere
+}
+
+// Always release objects when done
+RELEASE(result);  // Decrement reference count
+```
+
+##### **Autorelease Pools**
+
+```c
+// Use autorelease for temporary objects
+CljObject *temp = AUTORELEASE(make_string("temporary"));
+// Object will be automatically released when pool is popped
+```
+
+#### 14.3 Exception Handling Patterns
+
+##### **TRY/CATCH Blocks**
+
+```c
+TRY {
+    CljObject *result = eval_list(ast, env, st);
+    if (result) {
+        print_result(result);
+        RELEASE(result);
+    }
+} CATCH(ex) {
+    print_exception(ex);
+    // Exception is automatically cleaned up
+} END_TRY
+```
+
+##### **Exception Propagation**
+
+```c
+// Throw exceptions for error conditions
+if (!symbol) {
+    throw_exception_formatted("NameError", __FILE__, __LINE__, 0,
+                             "Symbol cannot be NULL");
+    return NULL;  // Unreachable, but prevents fallthrough
+}
+```
+
+### 15. Architecture Summary
 
 The evaluation system follows a clean separation of concerns:
 
@@ -477,6 +654,7 @@ The evaluation system follows a clean separation of concerns:
 3. **Namespace**: Symbol resolution and definition
 4. **Memory**: Reference counting and cleanup
 5. **REPL**: User interaction and exception handling
+6. **Error Handling**: Proper distinction between API misuse and runtime conditions
 
 This design allows for:
 - Easy extension with new special forms
@@ -484,3 +662,4 @@ This design allows for:
 - Proper memory management
 - Robust exception handling
 - Interactive development experience
+- Clear error handling patterns that distinguish programming errors from runtime conditions

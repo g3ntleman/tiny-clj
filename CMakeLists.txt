@@ -137,6 +137,7 @@ add_executable(unity-tests
     src/tests/test_equal.c
     src/tests/seq_tests.c
     src/tests/for_loop_tests.c
+    src/tests/test_recur.c
     src/tests/fixed_point_tests.c
     external/unity/src/unity.c
     src/builtins.c
@@ -157,6 +158,29 @@ add_executable(unity-tests
     src/memory_profiler.c
     src/memory.c
     src/runtime.c
+    src/error_messages.c
+)
+
+add_executable(debug_parser
+    debug_parser.c
+    src/function_call.c
+    src/object.c
+    src/namespace.c
+    src/memory.c
+    src/symbol.c
+    src/runtime.c
+    src/parser.c
+    src/reader.c
+    src/types.c
+    src/string.c
+    src/map.c
+    src/vector.c
+    src/list_operations.c
+    src/seq.c
+    src/builtins.c
+    src/clojure_core.c
+    src/exception.c
+    src/memory_profiler.c
     src/error_messages.c
 )
 target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING)

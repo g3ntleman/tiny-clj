@@ -160,21 +160,18 @@ void ns_cleanup() {
 EvalState* evalstate() {
     EvalState *st = (EvalState*)malloc(sizeof(EvalState));
     if (!st) {
-        printf("FAILED: EvalState allocation failed at %s:%d\n", __FILE__, __LINE__);
         return NULL;
     }
     
     memset(st, 0, sizeof(EvalState));
     st->pool = autorelease_pool_push();
     if (!st->pool) {
-        printf("FAILED: Autorelease pool creation failed at %s:%d\n", __FILE__, __LINE__);
         free(st);
         return NULL;
     }
     
     st->current_ns = ns_get_or_create("user", NULL); // Default namespace
     if (!st->current_ns) {
-        printf("FAILED: Namespace creation failed at %s:%d\n", __FILE__, __LINE__);
         autorelease_pool_pop_specific(st->pool);
         free(st);
         return NULL;

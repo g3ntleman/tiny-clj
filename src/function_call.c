@@ -23,8 +23,8 @@
 #include "list_operations.h"
 #include "builtins.h"
 
-// Global state for stack-based recur implementation
-static _Thread_local CljObject* g_recur_args[16];  // Max 16 arguments
+// Global state for stack-based recur implementation - statically initialized
+static _Thread_local CljObject* g_recur_args[16] = {0};  // Max 16 arguments, initialized to NULL
 static _Thread_local int g_recur_arg_count = 0;
 static _Thread_local bool g_recur_detected = false;
 
@@ -363,8 +363,10 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
+    printf("DEBUG: eval_function_call called, fn=%p, argc=%d\n", fn, argc);
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
+        printf("DEBUG: eval_function_call - fn is not a function\n");
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
@@ -373,6 +375,10 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
     if (is_native_fn(fn)) {
         // It's a native function (CljFunc)
         CljFunc *native_func = (CljFunc*)fn;
+        if (!native_func || !native_func->fn) {
+            throw_exception("TypeError", "Invalid native function", NULL, 0, 0);
+            return NULL;
+        }
         return native_func->fn(args, argc);
     }
     
@@ -416,6 +422,15 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
         
         // Check if recur was called (detected by global flag - no symbol lookup needed)
         if (g_recur_detected) {
+            printf("DEBUG: TCO loop - recur detected, g_recur_arg_count=%d, current_argc=%d\n", g_recur_arg_count, current_argc);
+            if (g_recur_arg_count <= 0) {
+                printf("DEBUG: TCO loop - g_recur_arg_count %d <= 0\n", g_recur_arg_count);
+                return NULL;
+            }
+            if (g_recur_arg_count > 16) {
+                printf("DEBUG: TCO loop - g_recur_arg_count %d > 16\n", g_recur_arg_count);
+                return NULL;
+            }
             // Recur detected - check arity
             if (g_recur_arg_count != current_argc) {
                 // Arity mismatch
@@ -485,7 +500,9 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
 CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
-    if (!list || list->type != CLJ_LIST) return NULL;
+    // Assertion: List must not be NULL when expected
+    assert(list != NULL);
+    if (list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
     
@@ -532,7 +549,17 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
 
 // Simplified body evaluation with parameter binding
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    if (!body) return NULL;
+    printf("DEBUG: eval_body_with_params called, body=%p, param_count=%d\n", body, param_count);
+    if (!body) {
+        printf("DEBUG: eval_body_with_params - body is NULL\n");
+        return NULL;
+    }
+    
+    // Assertion: Parameters and values must not be NULL when param_count > 0
+    if (param_count > 0) {
+        assert(params != NULL);
+        assert(values != NULL);
+    }
     
     if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol - check parameters first
@@ -576,11 +603,16 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
 
 // Evaluate list with parameter substitution
 CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    if (!list || list->type != CLJ_LIST) return NULL;
+    // Assertion: List must not be NULL when expected
+    assert(list != NULL);
+    assert(param_count >= 0); // param_count should be non-negative
+    if (list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
+    if (!list_data) return NULL;
     
     CljObject *head = list_data->first;
+    if (!head) return NULL;
     
     // First element is the operator
     CljObject *op = head;
@@ -634,19 +666,37 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         // Store arguments in global state
         int argc = list_count(list) - 1;
         if (argc < 0) argc = 0;
+        
         if (argc > 16) {
             throw_exception("ArityError", "Too many recur arguments (max 16)", NULL, 0, 0);
             return NULL;
         }
         
         // Evaluate and store arguments with parameter substitution
+        printf("DEBUG: recur argc=%d\n", argc);
+        if (argc <= 0) {
+            printf("DEBUG: recur has no arguments, this is unexpected\n");
+            return NULL;
+        }
         for (int i = 0; i < argc; i++) {
+            printf("DEBUG: evaluating recur arg %d\n", i);
+            if (i >= 16) {
+                printf("DEBUG: recur arg index %d >= 16, bounds error\n", i);
+                return NULL;
+            }
+            printf("DEBUG: calling eval_arg_with_substitution for arg %d\n", i);
             g_recur_args[i] = eval_arg_with_substitution(list, i + 1, params, values, param_count, closure_env);
+            printf("DEBUG: g_recur_args[%d] = %p\n", i, g_recur_args[i]);
             if (!g_recur_args[i]) {
+                printf("DEBUG: recur arg %d evaluation failed\n", i);
                 // Cleanup on error
                 for (int j = 0; j < i; j++) {
                     RELEASE(g_recur_args[j]);
                 }
+                // Reset recur state
+                g_recur_detected = false;
+                g_recur_arg_count = 0;
+                throw_exception("EvaluationError", "Failed to evaluate recur argument", NULL, 0, 0);
                 return NULL;
             }
         }
@@ -764,7 +814,6 @@ CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
 CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
-    
     if (!list || list->type != CLJ_LIST) {
         return NULL;
     }
@@ -783,7 +832,9 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     if (is_type(op, CLJ_LIST)) {
         op = eval_list(op, env, st);
-        if (!op) return NULL;
+        if (!op) {
+            return NULL;
+        }
         // Now op is the result of evaluating the inner list - continue with it
     }
     
@@ -810,6 +861,14 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         RELEASE(key);
         
         return result ? RETAIN(result) : NULL;
+    }
+    
+    // Check if op is a symbol and resolve it
+    if (is_type(op, CLJ_SYMBOL)) {
+        CljObject *resolved = eval_symbol(op, st);
+        if (resolved) {
+            op = resolved;
+        }
     }
     
     // OPTIMIZED: Ordered by frequency (Tier 1: Most common operations first)
@@ -1305,7 +1364,9 @@ CljObject* eval_ns(CljObject *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
     (void)env;  // Not used
-    if (!list || !st) return NULL;
+    // Assertion: List and EvalState must not be NULL when expected
+    assert(list != NULL);
+    assert(st != NULL);
     
     // Get namespace name (first argument) - use list_get_element like eval_def
     CljObject *ns_name_obj = list_get_element(list, 1);
@@ -1835,7 +1896,9 @@ CljObject* eval_list_function(CljObject *list, CljMap *env) {
     assert(env != NULL);
     (void)env; // Suppress unused parameter warning
     // (list arg1 arg2 ...) - creates a list from the arguments
-    if (!list || list->type != CLJ_LIST) return NULL;
+    // Assertion: List must not be NULL when expected
+    assert(list != NULL);
+    if (list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
     
@@ -1936,7 +1999,9 @@ static _Thread_local int g_eval_arg_depth = 0;
 
 // Helper function for evaluating arguments
 CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
-    if (!list || list->type != CLJ_LIST) return NULL;
+    // Assertion: List must not be NULL when expected
+    assert(list != NULL);
+    if (list->type != CLJ_LIST) return NULL;
     
     // Handle NULL environment gracefully
     if (env == NULL) {
@@ -1989,7 +2054,21 @@ CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
 
 // Evaluate argument with parameter substitution
 CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    if (!list || list->type != CLJ_LIST) return NULL;
+    // Assertion: List must not be NULL when expected
+    assert(list != NULL);
+    printf("DEBUG: eval_arg_with_substitution called, index=%d, param_count=%d\n", index, param_count);
+    if (index < 0) {
+        printf("DEBUG: index %d < 0\n", index);
+        return NULL;
+    }
+    if (param_count < 0) {
+        printf("DEBUG: param_count %d < 0\n", param_count);
+        return NULL;
+    }
+    if (list->type != CLJ_LIST) {
+        printf("DEBUG: list type is not CLJ_LIST\n");
+        return NULL;
+    }
     
     // Use the existing list_nth function which is safer
     CljObject *element = list_nth(list, index);
