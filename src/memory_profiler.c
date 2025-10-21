@@ -234,107 +234,39 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     (void)test_name; // Suppress unused parameter warning
     if (!stats) return;
     
-    const char *title = is_delta ? "Memory Delta" : "Memory Statistics";
-    const char *operations_title = is_delta ? "Memory Operations (Delta)" : "Memory Operations";
-    const char *clj_title = is_delta ? "CljObject Operations (Delta)" : "CljObject Operations";
-    
-    printf("\n📊 %s:\n", title);
-    printf("  ┌─────────────────────────────────────────────────────────┐\n");
-    printf("  │ %-55s │\n", operations_title);
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
-    
+    // Compact output - only show essential information
     if (is_delta) {
-        printf("  │ Allocations:      %+10ld                                │\n", (long)stats->total_allocations);
-        printf("  │ Deallocations:    %+10ld                                │\n", (long)stats->total_deallocations);
-        printf("  │ Peak Memory:      %+10ld bytes                          │\n", (long)stats->peak_memory_usage);
-        printf("  │ Current Memory:   %+10ld bytes                          │\n", (long)stats->current_memory_usage);
-        printf("  │ Memory Leaks:     %+10ld                                │\n", (long)stats->memory_leaks);
+        printf("📊 Memory Delta: Alloc:%+ld Dealloc:%+ld Peak:%+ld Current:%+ld Leaks:%+ld\n", 
+               (long)stats->total_allocations, (long)stats->total_deallocations, 
+               (long)stats->peak_memory_usage, (long)stats->current_memory_usage, 
+               (long)stats->memory_leaks);
     } else {
-        printf("  │ Allocations:      %10zu                                │\n", stats->total_allocations);
-        printf("  │ Deallocations:    %10zu                                │\n", stats->total_deallocations);
-        printf("  │ Peak Memory:      %10zu bytes                          │\n", stats->peak_memory_usage);
-        printf("  │ Current Memory:   %10zu bytes                          │\n", stats->current_memory_usage);
-        printf("  │ Memory Leaks:     %10zu                                │\n", stats->memory_leaks);
+        printf("📊 Memory: Alloc:%zu Dealloc:%zu Peak:%zu Current:%zu Leaks:%zu\n", 
+               stats->total_allocations, stats->total_deallocations, 
+               stats->peak_memory_usage, stats->current_memory_usage, stats->memory_leaks);
     }
     
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
-    printf("  │ %-55s │\n", clj_title);
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
-    
-    if (is_delta) {
-        printf("  │ Object Creations: %+10ld                                │\n", (long)stats->total_allocations);
-        printf("  │ Object Destructions: %+8ld                              │\n", (long)stats->object_destructions);
-        printf("  │ retain() calls:   %+10ld                                │\n", (long)stats->retain_calls);
-        printf("  │ release() calls:  %+10ld                                │\n", (long)stats->release_calls);
-        printf("  │ autorelease() calls: %+7ld                              │\n", (long)stats->autorelease_calls);
-    } else {
-        printf("  │ Object Creations: %10zu                                │\n", stats->total_allocations);
-        printf("  │ Object Destructions: %8zu                              │\n", stats->object_destructions);
-        printf("  │ retain() calls:   %10zu                                │\n", stats->retain_calls);
-        printf("  │ release() calls:  %10zu                                │\n", stats->release_calls);
-        printf("  │ autorelease() calls: %7zu                              │\n", stats->autorelease_calls);
-    }
-    
-    printf("  └─────────────────────────────────────────────────────────┘\n");
-    
-    // Object type breakdown
-    printf("\n📋 Object Type Breakdown:\n");
-    printf("  ┌─────────────────────────────────────────────────────────┐\n");
-    printf("  │ Type      │ Alloc │ Dealloc │ Ret │ Rel │ Auto │ Leak │\n");
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
-    
-    size_t total_type_leaks = 0;
-    
+    // Compact object type breakdown - only show types with activity
+    bool has_activity = false;
     for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
         size_t allocs = stats->allocations_by_type[i];
         size_t deallocs = stats->deallocations_by_type[i];
-        size_t retains = stats->retains_by_type[i];
-        size_t releases = stats->releases_by_type[i];
-        size_t autoreleases = stats->autoreleases_by_type[i];
-        size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
-        total_type_leaks += leaks;
-        
-        if (allocs > 0 || deallocs > 0 || retains > 0 || releases > 0 || autoreleases > 0 || leaks > 0) {
+        if (allocs > 0 || deallocs > 0) {
+            if (!has_activity) {
+                printf("📋 Types: ");
+                has_activity = true;
+            }
             const char* type_name = clj_type_name((CljType)i);
-            printf("  │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
-                   type_name, allocs, deallocs, retains, releases, autoreleases, leaks);
+            printf("%s:%zu/%zu ", type_name, allocs, deallocs);
         }
     }
+    if (has_activity) printf("\n");
     
-    printf("  ├─────────────────────────────────────────────────────────┤\n");
-    printf("  │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
-           "TOTAL", stats->total_allocations, stats->object_destructions, stats->retain_calls, stats->release_calls, stats->autorelease_calls, total_type_leaks);
-    printf("  └─────────────────────────────────────────────────────────┘\n");
-    
-    // Calculate efficiency metrics with safety checks
-    if (stats->total_allocations > 0) {
-        double retention_ratio = (double)stats->retain_calls / stats->total_allocations;
-        const char *ratio_label = is_delta ? "Delta Retention Ratio" : "Retention Ratio";
-        const char *ratio_suffix = is_delta ? "" : " (retain calls per allocation)";
-        printf("  📈 %s: %.2f%s\n", ratio_label, retention_ratio, ratio_suffix);
-    }
-    
-    if (stats->total_allocations > 0) {
-        double deallocation_ratio = (double)stats->total_deallocations / stats->total_allocations;
-        const char *ratio_label = is_delta ? "Delta Deallocation Ratio" : "Deallocation Ratio";
-        const char *ratio_suffix = is_delta ? "" : " (deallocations per allocation)";
-        printf("  📈 %s: %.2f%s\n", ratio_label, deallocation_ratio, ratio_suffix);
-    }
-    
-    // Memory efficiency assessment with enhanced warnings
+    // Compact leak detection
     if (stats->memory_leaks > 0) {
-        printf("\n🚨 CRITICAL MEMORY LEAK DETECTED!\n");
-        printf("   ┌─────────────────────────────────────────────────────────┐\n");
-        printf("   │ LEAK ALERT: %zu allocations not freed!                    │\n", stats->memory_leaks);
-        printf("   │ Current Memory Usage: %zu bytes                         │\n", stats->current_memory_usage);
-        printf("   │ Peak Memory Usage: %zu bytes                             │\n", stats->peak_memory_usage);
-        printf("   └─────────────────────────────────────────────────────────┘\n");
-        printf("   ⚠️  This indicates potential memory management issues!\n");
-        printf("   ⚠️  Check for missing RELEASE() calls or incorrect lifecycle management.\n");
-    } else if (stats->total_allocations == stats->total_deallocations && stats->total_allocations > 0) {
-        printf("\n✅ PERFECT MEMORY MANAGEMENT: All allocations properly freed\n");
-    } else if (stats->total_allocations == 0) {
-        printf("\n📊 No memory operations detected in this test\n");
+        printf("🚨 LEAK: %zu objects, %zu bytes\n", stats->memory_leaks, stats->current_memory_usage);
+    } else if (stats->total_allocations > 0) {
+        printf("✅ Clean: All %zu objects freed\n", stats->total_allocations);
     }
 }
 
@@ -485,39 +417,22 @@ void memory_profiler_check_leaks(const char *location) {
         printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
         printf("   └─────────────────────────────────────────────────────────┘\n");
         
-        // Show detailed leak breakdown by type
-        printf("\n🔍 LEAK BREAKDOWN BY OBJECT TYPE:\n");
-        printf("   ┌─────────────────────────────────────────────────────────┐\n");
-        printf("   │ Type      │ Alloc │ Dealloc │ Ret │ Rel │ Auto │ Leak │\n");
-        printf("   ├─────────────────────────────────────────────────────────┤\n");
-        
-        size_t total_type_leaks = 0;
-        
+        // Compact leak breakdown
+        printf("🔍 Leak breakdown: ");
+        bool first = true;
         for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
             size_t allocs = g_memory_stats.allocations_by_type[i];
             size_t deallocs = g_memory_stats.deallocations_by_type[i];
-            size_t retains = g_memory_stats.retains_by_type[i];
-            size_t releases = g_memory_stats.releases_by_type[i];
-            size_t autoreleases = g_memory_stats.autoreleases_by_type[i];
             size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
-            total_type_leaks += leaks;
             
             if (leaks > 0) {
+                if (!first) printf(", ");
                 const char* type_name = clj_type_name((CljType)i);
-                printf("   │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
-                       type_name, allocs, deallocs, retains, releases, autoreleases, leaks);
+                printf("%s:%zu", type_name, leaks);
+                first = false;
             }
         }
-        
-        printf("   ├─────────────────────────────────────────────────────────┤\n");
-        printf("   │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
-               "TOTAL", g_memory_stats.total_allocations, g_memory_stats.object_destructions, g_memory_stats.retain_calls, g_memory_stats.release_calls, g_memory_stats.autorelease_calls, total_type_leaks);
-        printf("   └─────────────────────────────────────────────────────────┘\n");
-        
-        printf("\n⚠️  CRITICAL: %zu memory leaks detected! Objects were not properly freed.\n", 
-               g_memory_stats.memory_leaks);
-        printf("   This indicates potential memory management issues in the code.\n");
-        printf("   Check for missing RELEASE() calls or incorrect object lifecycle management.\n\n");
+        printf("\n");
     } else {
         printf("\n✅ MEMORY CLEAN: All allocations properly freed at %s\n", location ? location : "Unknown");
     }
