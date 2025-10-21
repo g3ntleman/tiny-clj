@@ -84,7 +84,7 @@ void test_seq_create_map(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test map
-        CljObject *map = (CljObject*)make_map_old(16);
+        CljObject *map = (CljObject*)make_map(16);
         TEST_ASSERT_NOT_NULL(map);
         
         // Create sequence iterator - may return NULL for empty map

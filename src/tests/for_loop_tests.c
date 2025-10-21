@@ -23,7 +23,7 @@
 
 void test_dotimes_basic(void) {
     // Test that eval_dotimes handles NULL input gracefully
-    CljMap *env = make_map_old(4);
+    CljMap *env = (CljMap*)make_map(4);
     
     // Test with NULL list
     CljObject *result = eval_dotimes(NULL, env);
@@ -42,7 +42,7 @@ void test_dotimes_basic(void) {
 
 void test_doseq_basic(void) {
     // Test that eval_doseq handles NULL input gracefully
-    CljMap *env = make_map_old(4);
+    CljMap *env = (CljMap*)make_map(4);
     
     // Test with NULL list
     CljObject *result = eval_doseq(NULL, env);
@@ -61,7 +61,7 @@ void test_doseq_basic(void) {
 
 void test_for_basic(void) {
     // Test that eval_for handles NULL input gracefully
-    CljMap *env = make_map_old(4);
+    CljMap *env = (CljMap*)make_map(4);
     
     // Test with NULL list
     CljObject *result = eval_for(NULL, env);
@@ -95,7 +95,7 @@ void test_dotimes_with_environment(void) {
         CljObject *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Create a simple environment
-        CljMap *env = make_map_old(4);
+        CljMap *env = (CljMap*)make_map(4);
         
         // Test dotimes evaluation with environment
         CljObject *result = eval_dotimes((CljObject*)dotimes_call, env);
@@ -140,7 +140,7 @@ void test_doseq_with_environment(void) {
         CljObject *doseq_call = make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL)));
         
         // Create a simple environment
-        CljMap *env = make_map_old(4);
+        CljMap *env = (CljMap*)make_map(4);
         
         // Test doseq evaluation with environment
         CljObject *result = eval_doseq((CljObject*)doseq_call, env);

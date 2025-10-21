@@ -288,8 +288,8 @@ void test_map_equal_same_maps(void) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical maps using old API
-    CljMap *map1 = make_map_old(16);
-    CljMap *map2 = make_map_old(16);
+    CljMap *map1 = (CljMap*)make_map(16);
+    CljMap *map2 = (CljMap*)make_map(16);
     
     // Create keys and values
     CljObject *key1 = make_string("key1");
@@ -321,8 +321,8 @@ void test_map_equal_same_maps(void) {
 void test_map_equal_different_keys(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map_old(16);
-    CljMap *map2 = make_map_old(16);
+    CljMap *map1 = (CljMap*)make_map(16);
+    CljMap *map2 = (CljMap*)make_map(16);
     
     // Create different keys
     CljObject *key1 = make_string("key1");
@@ -356,8 +356,8 @@ void test_map_equal_different_keys(void) {
 void test_map_equal_different_values(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map_old(16);
-    CljMap *map2 = make_map_old(16);
+    CljMap *map1 = (CljMap*)make_map(16);
+    CljMap *map2 = (CljMap*)make_map(16);
     
     // Create keys and different values
     CljObject *key1 = make_string("key1");
@@ -391,8 +391,8 @@ void test_map_equal_different_values(void) {
 void test_map_equal_different_sizes(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map_old(16);
-    CljMap *map2 = make_map_old(16);
+    CljMap *map1 = (CljMap*)make_map(16);
+    CljMap *map2 = (CljMap*)make_map(16);
     
     // Create keys and values
     CljObject *key1 = make_string("key1");
@@ -424,8 +424,8 @@ void test_map_equal_different_sizes(void) {
 void test_map_equal_with_nested_vectors(void) {
     WITH_MEMORY_PROFILING({
     
-    CljMap *map1 = make_map_old(16);
-    CljMap *map2 = make_map_old(16);
+    CljMap *map1 = (CljMap*)make_map(16);
+    CljMap *map2 = (CljMap*)make_map(16);
     
     // Create nested vectors
     CljValue vec1_val = make_vector(2, 1);

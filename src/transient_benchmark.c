@@ -78,7 +78,7 @@ void benchmark_persistent_map() {
     clock_t start = clock();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        CljValue map = make_map_old(0); // Start with empty map
+        CljValue map = (CljValue)make_map(0); // Start with empty map
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue key = make_string("key");
@@ -104,7 +104,7 @@ void benchmark_transient_map() {
     clock_t start = clock();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        CljValue map = make_map_old(0); // Start with empty map
+        CljValue map = (CljValue)make_map(0); // Start with empty map
         CljValue tmap = transient_map(map);
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {

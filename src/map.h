@@ -5,8 +5,6 @@
 #include "value.h"
 
 // === Legacy API (deprecated - use CljValue API) ===
-/** @deprecated Use make_map() instead. Create a map with capacity; capacity<=0 returns empty-map singleton. */
-CljMap* make_map_old(int capacity);
 /** @deprecated Use map_get() instead. Get value for key or NULL if absent (structural key equality). */
 CljObject* map_get(CljObject *map, CljObject *key);
 /** @deprecated Use map_assoc() instead. Associate key->value (replace if key exists; retains value). */
