@@ -39,6 +39,7 @@
 #include "memory_profiler.h"
 #include "object.h"
 #include "value.h"
+#include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -282,18 +283,9 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     printf("  │ Type      │ Alloc │ Dealloc │ Ret │ Rel │ Auto │ Leak │\n");
     printf("  ├─────────────────────────────────────────────────────────┤\n");
     
-    const char* type_names[] = {
-        "SYMBOL", "STRING", "VECTOR", "WEAK_VECTOR", 
-        "MAP", "LIST", "SEQ", "FUNC", "CLOSURE", 
-        "EXCEPTION", "TRANSIENT_VECTOR", "TRANSIENT_MAP", "UNKNOWN"
-    };
-    
     size_t total_type_leaks = 0;
-    // Safety check: ensure CLJ_TYPE_COUNT doesn't exceed array bounds
-    int max_types = (CLJ_TYPE_COUNT < (int)(sizeof(type_names)/sizeof(type_names[0]))) ? 
-                    CLJ_TYPE_COUNT : (int)(sizeof(type_names)/sizeof(type_names[0]));
     
-    for (int i = 0; i < max_types; i++) {
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
         size_t allocs = stats->allocations_by_type[i];
         size_t deallocs = stats->deallocations_by_type[i];
         size_t retains = stats->retains_by_type[i];
@@ -303,15 +295,9 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         total_type_leaks += leaks;
         
         if (allocs > 0 || deallocs > 0 || retains > 0 || releases > 0 || autoreleases > 0 || leaks > 0) {
-            // Bounds check to prevent array overflow
-            if (i >= 0 && i < (int)(sizeof(type_names)/sizeof(type_names[0]))) {
-                const char* type_name = type_names[i];
-                printf("  │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
-                       type_name, allocs, deallocs, retains, releases, autoreleases, leaks);
-            } else {
-                printf("  │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
-                       "UNKNOWN", allocs, deallocs, retains, releases, autoreleases, leaks);
-            }
+            const char* type_name = clj_type_name((CljType)i);
+            printf("  │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
+                   type_name, allocs, deallocs, retains, releases, autoreleases, leaks);
         }
     }
     
@@ -505,17 +491,9 @@ void memory_profiler_check_leaks(const char *location) {
         printf("   │ Type      │ Alloc │ Dealloc │ Ret │ Rel │ Auto │ Leak │\n");
         printf("   ├─────────────────────────────────────────────────────────┤\n");
         
-        const char* type_names[] = {
-            "SYMBOL", "STRING", "VECTOR", "WEAK_VECTOR", 
-            "MAP", "LIST", "SEQ", "FUNC", "CLOSURE", 
-            "EXCEPTION", "TRANSIENT_VECTOR", "TRANSIENT_MAP", "UNKNOWN"
-        };
-        
         size_t total_type_leaks = 0;
-        int max_types = (CLJ_TYPE_COUNT < (int)(sizeof(type_names)/sizeof(type_names[0]))) ? 
-                        CLJ_TYPE_COUNT : (int)(sizeof(type_names)/sizeof(type_names[0]));
         
-        for (int i = 0; i < max_types; i++) {
+        for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
             size_t allocs = g_memory_stats.allocations_by_type[i];
             size_t deallocs = g_memory_stats.deallocations_by_type[i];
             size_t retains = g_memory_stats.retains_by_type[i];
@@ -525,8 +503,7 @@ void memory_profiler_check_leaks(const char *location) {
             total_type_leaks += leaks;
             
             if (leaks > 0) {
-                const char* type_name = (i >= 0 && i < (int)(sizeof(type_names)/sizeof(type_names[0]))) 
-                                       ? type_names[i] : "UNKNOWN";
+                const char* type_name = clj_type_name((CljType)i);
                 printf("   │ %-9s │ %5zu │ %7zu │ %3zu │ %3zu │ %4zu │ %4zu │\n", 
                        type_name, allocs, deallocs, retains, releases, autoreleases, leaks);
             }
