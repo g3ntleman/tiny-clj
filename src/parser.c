@@ -155,6 +155,11 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     return make_number_by_parsing(reader, st);
   if (isdigit(c))
     return make_number_by_parsing(reader, st);
+  // Check for invalid decimal syntax like .01 (should be 0.01)
+  if (c == '.' && isdigit(reader_peek_ahead(reader, 1))) {
+    throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
+    return NULL;
+  }
   // Handle nil literal
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
       reader_peek_ahead(reader, 2) == 'l' && 
@@ -523,12 +528,22 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
+  bool has_digit_before_dot = false;
+  
   if (reader_peek_char(reader) == '-')
     buf[pos++] = reader_next(reader);
-  if (!isdigit(reader_peek_char(reader)))
+  if (!isdigit(reader_peek_char(reader))) {
+    // Check if this is a decimal starting with '.' (invalid in Clojure)
+    if (reader_peek_char(reader) == '.') {
+      throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
+      return NULL;
+    }
     return NULL;
-  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+  }
+  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
     buf[pos++] = reader_next(reader);
+    has_digit_before_dot = true;
+  }
   if (reader_peek_char(reader) == '.' &&
       isdigit(reader_peek_ahead(reader, 1))) {
     buf[pos++] = reader_next(reader);
@@ -536,6 +551,13 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
       buf[pos++] = reader_next(reader);
   }
   buf[pos] = '\0';
+  
+  // Validate: decimal numbers must have at least one digit before the dot
+  if (strchr(buf, '.') && !has_digit_before_dot) {
+    throw_parser_exception("Unable to resolve symbol: .01 in this context", reader);
+    return NULL;
+  }
+  
   if (strchr(buf, '.'))
     return make_fixed((float)atof(buf));
   return fixnum(atoi(buf));
@@ -551,12 +573,22 @@ static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
+  bool has_digit_before_dot = false;
+  
   if (reader_peek_char(reader) == '-')
     buf[pos++] = reader_next(reader);
-  if (!isdigit(reader_peek_char(reader)))
+  if (!isdigit(reader_peek_char(reader))) {
+    // Check if this is a decimal starting with '.' (invalid in Clojure)
+    if (reader_peek_char(reader) == '.') {
+      throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
+      return NULL;
+    }
     return NULL;
-  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
+  }
+  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
     buf[pos++] = reader_next(reader);
+    has_digit_before_dot = true;
+  }
   if (reader_peek_char(reader) == '.' &&
       isdigit(reader_peek_ahead(reader, 1))) {
     buf[pos++] = reader_next(reader);
@@ -564,6 +596,12 @@ static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
       buf[pos++] = reader_next(reader);
   }
   buf[pos] = '\0';
+  
+  // Validate: decimal numbers must have at least one digit before the dot
+  if (strchr(buf, '.') && !has_digit_before_dot) {
+    throw_parser_exception("Unable to resolve symbol: .01 in this context", reader);
+    return NULL;
+  }
   
   // Try immediate fixnum first for integers
   if (!strchr(buf, '.')) {

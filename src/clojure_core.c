@@ -55,18 +55,15 @@ static bool eval_core_source(const char *src, EvalState *st) {
     // Evaluate with exception handling using TRY/CATCH
     TRY {
       CljValue result = eval_expr_simple((CljObject*)form, st);
+      // Don't RELEASE result - eval_expr_simple already returns AUTORELEASE
       if (result) {
-        RELEASE((CljObject*)result);
+        success_count++;
       }
-      success_count++;
     } CATCH(ex) {
       // Exception occurred during evaluation
       DEBUG_PRINTF("[clojure.core] Exception in expression #%d\n", expr_count + 1);
-      char *err_str = pr_str((CljObject*)ex);
-      if (err_str) {
-        DEBUG_PRINTF("[clojure.core] Error: %s\n", err_str);
-        free(err_str);
-      }
+      // Don't call pr_str on exception to avoid potential double free
+      DEBUG_PRINTF("[clojure.core] Error occurred during evaluation\n");
     } END_TRY
     
     RELEASE((CljObject*)form);
