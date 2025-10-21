@@ -283,9 +283,9 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     printf("  ├─────────────────────────────────────────────────────────┤\n");
     
     const char* type_names[] = {
-        "NIL", "SYMBOL", "STRING", "VECTOR", 
-        "WEAK_VECTOR", "MAP", "LIST", "SEQ", 
-        "FUNC", "EXCEPTION", "TRANSIENT_VECTOR", "TRANSIENT_MAP", "UNKNOWN"
+        "SYMBOL", "STRING", "VECTOR", "WEAK_VECTOR", 
+        "MAP", "LIST", "SEQ", "FUNC", "CLOSURE", 
+        "EXCEPTION", "TRANSIENT_VECTOR", "TRANSIENT_MAP", "UNKNOWN"
     };
     
     size_t total_type_leaks = 0;
@@ -506,9 +506,9 @@ void memory_profiler_check_leaks(const char *location) {
         printf("   ├─────────────────────────────────────────────────────────┤\n");
         
         const char* type_names[] = {
-            "NIL", "SYMBOL", "STRING", "VECTOR", 
-            "WEAK_VECTOR", "MAP", "LIST", "SEQ", 
-            "FUNC", "EXCEPTION", "TRANSIENT_VECTOR", "TRANSIENT_MAP", "UNKNOWN"
+            "SYMBOL", "STRING", "VECTOR", "WEAK_VECTOR", 
+            "MAP", "LIST", "SEQ", "FUNC", "CLOSURE", 
+            "EXCEPTION", "TRANSIENT_VECTOR", "TRANSIENT_MAP", "UNKNOWN"
         };
         
         size_t total_type_leaks = 0;
