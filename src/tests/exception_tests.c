@@ -5,17 +5,14 @@
  * exception handling, auto-release, and exception stack.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "exception.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "namespace.h"
-#include "symbol.h"
-#include "clj_string.h"
-#include "value.h"
-#include "map.h"
-#include "parser.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../exception.h"
+#include "../memory.h"
+#include "../namespace.h"
+#include "../value.h"
+#include "../map.h"
+#include "../parser.h"
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -145,9 +142,9 @@ void test_repl_crash_scenario(void) {
     
     TRY {
         // Create some objects that will be in the autorelease pool
-        CljObject *obj1 = fixnum(42);
-        CljValue obj2 = make_string("test");
-        CljObject *obj3 = AUTORELEASE(make_symbol("test", NULL));
+        // CljObject *obj1 = fixnum(42); // Unused variable removed
+        // CljValue obj2 = make_string("test"); // Unused variable removed
+        // CljObject *obj3 = AUTORELEASE(make_symbol("test", NULL)); // Unused variable removed
         
         // Throw exception - this should cause memory corruption
         // when the autorelease pool is cleaned up
@@ -178,7 +175,7 @@ void test_map_arity_exception_zero_args(void) {
         ns_define(st, m_sym, (CljObject*)map_obj);
         
         // Try to call map with 0 arguments: (m)
-        CljObject *result = eval_string("(m)", st);
+        // CljObject *result = eval_string("(m)", st); // Unused variable removed
         
         // Should not reach here
         TEST_ASSERT_TRUE_MESSAGE(false, "Should throw ArityException when calling map with 0 args");

@@ -16,7 +16,7 @@ CljValue vector_conj(CljValue vec, CljValue item);
 /** Convert persistent vector to transient. */
 CljValue transient(CljValue vec);
 /** Append to transient vector (guaranteed in-place). */
-CljValue conj(CljValue tvec, CljValue item);
+CljValue clj_conj(CljValue tvec, CljValue item);
 /** Convert transient vector back to persistent. */
 CljValue persistent(CljValue tvec);
 

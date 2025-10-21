@@ -179,7 +179,7 @@ ID native_conj_bang(ID *args, int argc) {
     if (coll->type == CLJ_TRANSIENT_VECTOR) {
         CljValue result = (CljValue)coll;
         for (int i = 1; i < argc; i++) {
-            result = conj(result, (CljValue)args[i]);
+            result = clj_conj(result, (CljValue)args[i]);
             if (!result) return NULL;
         }
         return (CljObject*)result;
@@ -630,9 +630,8 @@ static ID reduce_div(ID *args, int argc) {
         if (!sawFixed && IS_FIXNUM(args[i])) {
             int d = AS_FIXNUM(args[i]);
             if (d == 0) {
-                sawFixed = true;
-                acc_fixed = fixnum_to_fixed(acc_i) / 1; // Avoid division by zero
-                continue;
+                // Division by zero - return nil
+                return OBJ_TO_ID(NULL);
             }
             if (acc_i % d == 0) {
                 acc_i /= d;
@@ -648,7 +647,8 @@ static ID reduce_div(ID *args, int argc) {
             int32_t d = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
                                             : extract_fixed_value(args[i]);
             if (d == 0) {
-                acc_fixed = acc_fixed / 1; // Avoid division by zero
+                // Division by zero - return nil
+                return OBJ_TO_ID(NULL);
             } else {
                 acc_fixed = (acc_fixed << 13) / d; // Fixed-Point Division mit Shift
             }

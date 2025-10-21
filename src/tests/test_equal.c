@@ -4,18 +4,12 @@
  * Simple tests for clj_equal function using basic objects.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "vector.h"
-#include "map.h"
-#include "list_operations.h"
-#include "clj_string.h"
-#include "value.h"
-#include "namespace.h"
-#include "parser.h"
-#include "function_call.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../memory.h"
+#include "../vector.h"
+#include "../map.h"
+#include "../value.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,7 +59,7 @@ void test_equal_different_types(void) {
     // Test different types
     CljValue vec_val = make_vector(1, 1);
     CljMap *map = (CljMap*)make_map(16);
-    CljList *list = make_list(NULL, NULL);
+    CljObject *list = make_list(NULL, NULL);
     
     CljObject *vec = (CljObject*)vec_val;
     
@@ -482,8 +476,8 @@ void test_list_equal_same_lists(void) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical lists
-    CljList *list1 = make_list(NULL, NULL);
-    CljList *list2 = make_list(NULL, NULL);
+    CljObject *list1 = make_list(NULL, NULL);
+    CljObject *list2 = make_list(NULL, NULL);
     
     // Test equality (lists use pointer comparison, so this should be false)
     // Lists are only equal if they are the same instance
@@ -499,7 +493,7 @@ void test_list_equal_same_lists(void) {
 void test_list_equal_same_instance(void) {
     WITH_MEMORY_PROFILING({
     
-    CljList *list1 = make_list(NULL, NULL);
+    CljObject *list1 = make_list(NULL, NULL);
     CljObject *list2 = (CljObject*)list1; // Same instance
     
     // Test equality of same instance
@@ -514,8 +508,8 @@ void test_list_equal_same_instance(void) {
 void test_list_equal_empty_lists(void) {
     WITH_MEMORY_PROFILING({
     
-    CljList *list1 = make_list(NULL, NULL);
-    CljList *list2 = make_list(NULL, NULL);
+    CljObject *list1 = make_list(NULL, NULL);
+    CljObject *list2 = make_list(NULL, NULL);
     
     // Test equality of different empty lists (should be false due to pointer comparison)
     TEST_ASSERT_FALSE(clj_equal((CljObject*)list1, (CljObject*)list2));

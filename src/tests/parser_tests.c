@@ -5,16 +5,10 @@
  * collections, comments, and metadata parsing.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "parser.h"
-#include "symbol.h"
-#include "function_call.h"
-#include "map.h"
-#include "namespace.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "vector.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../parser.h"
+#include "../namespace.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

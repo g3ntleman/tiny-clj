@@ -4,19 +4,13 @@
  * Tests for for, doseq, and dotimes implementations.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "symbol.h"
-#include "memory_profiler.h"
-#include "tiny_clj.h"
-#include "parser.h"
-#include "seq.h"
-#include "vector.h"
-#include "list_operations.h"
-#include "value.h"
-#include "function_call.h"
-#include "memory.h"
-#include "map.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../vector.h"
+#include "../value.h"
+#include "../function_call.h"
+#include "../memory.h"
+#include "../map.h"
 #include <stdio.h>
 
 // ============================================================================

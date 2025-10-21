@@ -139,7 +139,7 @@ CljValue transient(CljValue vec) {
 }
 
 /** Append to transient vector (guaranteed in-place). */
-CljValue conj(CljValue tvec, CljValue item) {
+CljValue clj_conj(CljValue tvec, CljValue item) {
     if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR || !item) {
         return NULL;
     }

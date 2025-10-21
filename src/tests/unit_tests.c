@@ -4,23 +4,18 @@
  * Basic unit tests for Tiny-Clj core functionality migrated from MinUnit.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "parser.h"
-#include "symbol.h"
-#include "clj_string.h"
-#include "exception.h"
-#include "map.h"
-#include "namespace.h"
-#include "vector.h"
-#include "value.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "builtins.h"
-#include "seq.h"
-#include "function_call.h"
-#include "reader.h"
-#include "tiny_clj.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../parser.h"
+#include "../symbol.h"
+#include "../map.h"
+#include "../namespace.h"
+#include "../vector.h"
+#include "../value.h"
+#include "../memory.h"
+#include "../builtins.h"
+#include "../tiny_clj.h"
+#include "../seq.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -173,12 +168,12 @@ void test_array_map_builtin(void) {
         // Debug: Check what native_array_map actually receives
         CljObject *key = AUTORELEASE(make_string("a")); // Use AUTORELEASE for test convenience
         CljObject *value = fixnum(1); // Immediate value, no management needed
-        ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)};
+        // ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)}; // Unused variable removed
         
         
         
-        ID result = native_array_map(args, 2);
-        CljObject *result_obj = ID_TO_OBJ(result);
+        // ID result = native_array_map(args, 2); // Unused variable removed
+        // CljObject *result_obj = ID_TO_OBJ(result); // Unused variable removed
         // key and value are automatically managed by AUTORELEASE
         TEST_ASSERT_EQUAL_INT(1, map_count(eval1));
         // result1 and eval1 are automatically managed by parse() and eval_expr_simple()
@@ -349,10 +344,10 @@ void test_cljvalue_transient_vector(void) {
         CljValue item1 = integer(1);
         CljValue item2 = integer(2);
         
-        CljValue result1 = conj(tvec, item1);
+        CljValue result1 = clj_conj(tvec, item1);
         TEST_ASSERT_EQUAL_PTR(tvec, result1);  // Same instance (in-place)
         
-        CljValue result2 = conj(tvec, item2);
+        CljValue result2 = clj_conj(tvec, item2);
         TEST_ASSERT_EQUAL_PTR(tvec, result2);  // Same instance (in-place)
         
         // Test persistent! conversion (new instance)
@@ -374,9 +369,9 @@ void test_cljvalue_clojure_semantics(void) {
         CljValue tv = transient(v1);
         
         // Add elements to transient
-        conj(tv, integer(1));
-        conj(tv, integer(2));
-        conj(tv, integer(3));
+        clj_conj(tv, integer(1));
+        clj_conj(tv, integer(2));
+        clj_conj(tv, integer(3));
         
         // Convert back to persistent
         CljValue v2 = persistent(tv);

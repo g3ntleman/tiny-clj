@@ -125,7 +125,7 @@ static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
-static CljObject* make_number_by_parsing_old(Reader *reader, EvalState *st);
+// static CljObject* make_number_by_parsing_old(Reader *reader, EvalState *st); // Removed unused function
 
 /**
  * @brief Create CljObject by parsing expression from Reader
@@ -271,7 +271,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     } else if (is_type(parsed_expr, CLJ_LIST)) {
         CljObject *env = (eval_state && eval_state->current_ns) ? (CljObject*)eval_state->current_ns->mappings : NULL;
         result = eval_list(parsed_expr, (CljMap*)env, eval_state);
-commit        // eval_list already returns autoreleased object
+        // eval_list already returns autoreleased object
     } else {
         // Handle other types with eval_expr_simple
         result = eval_expr_simple(parsed_expr, eval_state);
@@ -369,7 +369,7 @@ static ID parse_map(Reader *reader, EvalState *st) {
     return NULL;
   }
   // Use the new API for CljValue map parsing
-  return map_from_stack(pairs, pair_count);
+  return map_from_stack((CljObject**)pairs, pair_count);
 }
 
 /**
@@ -579,49 +579,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljValue or NULL on error
  */
-static CljValue make_number_by_parsing_v(Reader *reader, EvalState *st) {
-  (void)st;
-  char buf[MAX_STACK_STRING_SIZE];
-  int pos = 0;
-  bool has_digit_before_dot = false;
-  
-  if (reader_peek_char(reader) == '-')
-    buf[pos++] = reader_next(reader);
-  if (!isdigit(reader_peek_char(reader))) {
-    // Check if this is a decimal starting with '.' (invalid in Clojure)
-    if (reader_peek_char(reader) == '.') {
-      throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
-      return NULL;
-    }
-    return NULL;
-  }
-  while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
-    buf[pos++] = reader_next(reader);
-    has_digit_before_dot = true;
-  }
-  if (reader_peek_char(reader) == '.' &&
-      isdigit(reader_peek_ahead(reader, 1))) {
-    buf[pos++] = reader_next(reader);
-    while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1)
-      buf[pos++] = reader_next(reader);
-  }
-  buf[pos] = '\0';
-  
-  // Validate: decimal numbers must have at least one digit before the dot
-  if (strchr(buf, '.') && !has_digit_before_dot) {
-    throw_parser_exception("Unable to resolve symbol: .01 in this context", reader);
-    return NULL;
-  }
-  
-  // Try immediate fixnum first for integers
-  if (!strchr(buf, '.')) {
-    int value = atoi(buf);
-    return fixnum(value);  // Uses immediate if possible, heap fallback if not
-  }
-  
-  // For floats, use heap allocation for now
-  return make_float(atof(buf));
-}
+// Removed unused function make_number_by_parsing_v
 
 /**
  * @brief Create CljValue by parsing expression from Reader (Phase 1: Immediates)

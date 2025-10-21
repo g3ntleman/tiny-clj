@@ -431,7 +431,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     // Create string object and add to history vector using transient conj
     CljObject *line_obj = make_string(line);
     if (line_obj) {
-        editor->history = conj(editor->history, line_obj);
+        editor->history = clj_conj(editor->history, line_obj);
         // line_obj is now retained by the vector, we can release our reference
         RELEASE(line_obj);
     }

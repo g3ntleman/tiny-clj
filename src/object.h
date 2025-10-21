@@ -174,7 +174,6 @@ typedef struct {
     char file[128];          // Source file - embedded string
     int line;               // Source line
     int col;                // Source column
-    CljObject *data;        // Additional data (map)
 } CLJException;
 
 // make_int() and make_float() removed - use fixnum() and make_fixed() instead
@@ -185,9 +184,9 @@ typedef struct {
 /** Convenience: create generic error exception object. */
 CljObject* make_error(const char *message, const char *file, int line, int col);
 /** Create a CLJException object (rc=1) with optional data. */
-CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data);
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col);
 /** Create a CljObject wrapper for CLJException (rc=1) with optional data. */
-CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col, CljObject *data);
+CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col);
 
 // Exception throwing
 /** Throw exception via longjmp; transfers ownership to runtime. */

@@ -4,13 +4,12 @@
  * Central test runner that includes all test suites with command-line parameter support.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "symbol.h"
-#include "namespace.h"
-#include "builtins.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../memory.h"
+#include "../memory_profiler.h"
+#include "../symbol.h"
+#include "../builtins.h"
 #include <stdio.h>
 #include <string.h>
 

@@ -1,11 +1,10 @@
-#include "unity.h"
-#include "tiny_clj.h"
-#include "function_call.h"
-#include "reader.h"
-#include "object.h"
-#include "namespace.h"
-#include "memory.h"
-#include "value.h"
+#include "../../external/unity/src/unity.h"
+#include "../tiny_clj.h"
+#include "../function_call.h"
+#include "../object.h"
+#include "../namespace.h"
+#include "../memory.h"
+#include "../value.h"
 
 // Forward declaration for load_clojure_core
 int load_clojure_core(EvalState *st);

@@ -169,11 +169,7 @@ static CljObject* eval_numeric_comparison(CljObject *list, CljMap *env, Comparis
 /** @brief Compare symbol name directly (works for non-interned symbols) */
 // DEPRECATED: Use pointer comparison (op == SYM_*) instead for O(1) performance
 // This function is kept for backward compatibility but should not be used in new code
-static inline int sym_is(CljObject *value, const char *name) {
-    if (!value || value->type != CLJ_SYMBOL) return 0;
-    CljSymbol *sym = as_symbol(value);
-    return sym && strcmp(sym->name, name) == 0;
-}
+// Function removed - use pointer comparison (op == SYM_*) instead
 
 /** @brief Allocate array with stack optimization (size <= 16 on stack, else heap) */
 static inline CljObject** alloc_obj_array(int size, CljObject **stack_buffer) {
@@ -361,6 +357,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 // Extended function call implementation with complete evaluation
 /** @brief Main function call evaluator */
 CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap *env) {
+    (void)env; // Suppress unused parameter warning
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
     printf("DEBUG: eval_function_call called, fn=%p, argc=%d\n", fn, argc);

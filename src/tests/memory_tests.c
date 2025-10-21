@@ -5,15 +5,11 @@
  * Demonstrates single test execution and test isolation.
  */
 
-#include "unity.h"
-#include "object.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "symbol.h"
-#include "namespace.h"
-#include "clj_string.h"
-#include "vector.h"
-#include "value.h"
+#include "../../external/unity/src/unity.h"
+#include "../object.h"
+#include "../memory.h"
+#include "../vector.h"
+#include "../value.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>

@@ -87,7 +87,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
         exit(1);
     }
     
-    CLJException *exception = make_exception(type, message, file, line, col, NULL);
+    CLJException *exception = make_exception(type, message, file, line, col);
     if (!exception) {
         printf("FAILED TO CREATE EXCEPTION: %s: %s at %s:%d:%d\n", 
                type, message, file ? file : "<unknown>", line, col);
@@ -105,7 +105,7 @@ void throw_exception(const char *type, const char *message, const char *file, in
 
 // Exception management with reference counting (analogous to CljVector)
 /** @brief Create exception with reference counting */
-CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col) {
     if (!type || !message) return NULL;
     
     CLJException *exc = ALLOC(CLJException, 1);
@@ -176,13 +176,13 @@ CLJException* make_exception(const char *type, const char *message, const char *
 // make_symbol_old function removed - use make_symbol from value.h instead
 
 CljObject* make_error(const char *message, const char *file, int line, int col) {
-    return make_exception_wrapper("Error", message, file, line, col, NULL);
+    return make_exception_wrapper("Error", message, file, line, col);
 }
 
-CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
+CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col) {
     if (!type || !message) return NULL;
     
-    CLJException *exc = make_exception(type, message, file, line, col, data);
+    CLJException *exc = make_exception(type, message, file, line, col);
     
     return (CljObject*)exc;
 }
@@ -263,7 +263,7 @@ char* to_string(CljObject *v) {
         }
     }
 
-    char buf[64];
+    // char buf[64]; // Unused variable removed
     switch(v->type) {
         // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
 
@@ -765,7 +765,7 @@ CljObject *meta_registry = NULL;
 
 void meta_registry_init() {
     {
-        meta_registry = (CljMap*)make_map(32); // Initial capacity for metadata entries
+        meta_registry = (CljObject*)make_map(32); // Initial capacity for metadata entries
     }
 }
 
@@ -1019,7 +1019,7 @@ void free_object(CljObject *obj) {
             {
                 CLJException *exc = (CLJException*)obj;
                 // Strings are now embedded, no need to free them
-                RELEASE(exc->data);
+                // data field removed
                 DEALLOC(exc);
             }
             break;
