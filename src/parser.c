@@ -157,7 +157,19 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     return make_number_by_parsing(reader, st);
   // Check for invalid decimal syntax like .01 (should be 0.01)
   if (c == '.' && isdigit(reader_peek_ahead(reader, 1))) {
-    throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
+    // Read the full invalid decimal to include in error message
+    char invalid_decimal[64];
+    int pos = 0;
+    invalid_decimal[pos++] = c; // include the '.'
+    reader_next(reader); // consume '.'
+    while (isdigit(reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
+      invalid_decimal[pos++] = reader_next(reader);
+    }
+    invalid_decimal[pos] = '\0';
+    
+    char error_msg[256];
+    snprintf(error_msg, sizeof(error_msg), "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
+    throw_parser_exception(error_msg, reader);
     return NULL;
   }
   // Handle nil literal

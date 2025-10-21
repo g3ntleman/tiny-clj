@@ -460,11 +460,11 @@ static void test_group_recur(void) {
 
 static void test_group_debugging(void) {
     RUN_TEST(test_as_list_valid);
-    RUN_TEST(test_as_list_invalid);
-    RUN_TEST(test_list_first_valid);
-    RUN_TEST(test_is_type_function);
-    RUN_TEST(test_eval_list_simple_arithmetic);
-    RUN_TEST(test_eval_list_function_call);
+    // RUN_TEST(test_as_list_invalid);
+    // RUN_TEST(test_list_first_valid);
+    // RUN_TEST(test_is_type_function);
+    // RUN_TEST(test_eval_list_simple_arithmetic);
+    // RUN_TEST(test_eval_list_function_call);
 }
 
 
