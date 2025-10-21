@@ -167,9 +167,8 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     }
     invalid_decimal[pos] = '\0';
     
-    char error_msg[256];
-    snprintf(error_msg, sizeof(error_msg), "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
-    throw_parser_exception(error_msg, reader);
+    throw_exception_formatted("ParseError", __FILE__, __LINE__, 0, 
+        "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
     return NULL;
   }
   // Handle nil literal
