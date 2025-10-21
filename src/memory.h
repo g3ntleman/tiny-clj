@@ -9,7 +9,7 @@
 #define TINY_CLJ_MEMORY_H
 
 #include "object.h"
-#include "value.h"
+#include "memory_profiler.h"
 #include <stdbool.h>
 
 
@@ -102,13 +102,13 @@ int get_retain_count(CljObject *obj);
 #ifdef DEBUG
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
-        if (_tmp && (void*)_tmp != (void*)0x1) { \
+        if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
             memory_profiler_track_object_destruction((CljObject*)_tmp); \
         } \
     } while(0)
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        if (!IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             retain(_tmp); \
         } \
@@ -116,7 +116,7 @@ int get_retain_count(CljObject *obj);
     })
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        if (!IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             release(_tmp); \
         } \
@@ -124,7 +124,7 @@ int get_retain_count(CljObject *obj);
     })
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        if (!IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             autorelease(_tmp); \
         } \
@@ -203,11 +203,13 @@ int get_retain_count(CljObject *obj);
 #else
     // Release builds: DEALLOC calls free() but no memory profiling
     #define DEALLOC(obj) do { \
-        free((obj)); \
+        if ((obj) && !IS_IMMEDIATE(obj)) { \
+            free((obj)); \
+        } \
     } while(0)
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        if (!IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             retain(_tmp); \
         } \
@@ -215,7 +217,7 @@ int get_retain_count(CljObject *obj);
     })
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        if (!IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             release(_tmp); \
         } \
@@ -223,7 +225,7 @@ int get_retain_count(CljObject *obj);
     })
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (_id && !IS_IMMEDIATE(_id)) { \
+        if (!IS_IMMEDIATE(_id)) { \
             CljObject* _tmp = (CljObject*)_id; \
             autorelease(_tmp); \
         } \

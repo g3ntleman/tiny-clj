@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "namespace.h"
-#include "runtime.h"
 #include "object.h"
 #include "map.h"
 #include "list_operations.h"

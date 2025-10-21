@@ -15,7 +15,6 @@
 #include "list_operations.h"
 #include "vector.h"
 #include <string.h>
-#include "clj_string.h"
 #include "map.h"
 #include <stdbool.h>
 #include "memory.h"
@@ -217,7 +216,7 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     // Build list using the same pattern as parse_list
     CljObject *quote_sym = (CljObject*)intern_symbol_global("quote");
     ID elements[2] = {(CljValue)quote_sym, quoted};
-    return make_list_from_stack(elements, 2);
+    return make_list_from_stack((CljValue*)elements, 2);
   }
   
   if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
@@ -272,11 +271,11 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     } else if (is_type(parsed_expr, CLJ_LIST)) {
         CljObject *env = (eval_state && eval_state->current_ns) ? (CljObject*)eval_state->current_ns->mappings : NULL;
         result = eval_list(parsed_expr, (CljMap*)env, eval_state);
-        // Don't autorelease here - eval_list already does it
+commit        // eval_list already returns autoreleased object
     } else {
         // Handle other types with eval_expr_simple
         result = eval_expr_simple(parsed_expr, eval_state);
-        // Don't autorelease here - eval_expr_simple already does it
+        // eval_expr_simple already returns autoreleased object
     }
     
     return result;
@@ -331,7 +330,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     return NULL;
   }
     // Create vector using new API
-    CljValue vec = make_vector(count, 0);
+    CljValue vec = AUTORELEASE(make_vector(count, 0));
     for (int i = 0; i < count; i++) {
       vec = vector_conj(vec, stack[i]);
     }
@@ -418,7 +417,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   }
   
   // Build list from array in correct order
-  CljValue result = make_list_from_stack(elements, count);
+  CljValue result = AUTORELEASE(make_list_from_stack((CljValue*)elements, count));
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
@@ -734,7 +733,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   }
   meta_set(ID_TO_OBJ(obj), ID_TO_OBJ(meta));
   RELEASE(meta);
-  return obj;
+  return AUTORELEASE(obj);
 }
 
 /**
@@ -760,6 +759,6 @@ static ID parse_meta_map(Reader *reader,
   }
   meta_set(ID_TO_OBJ(obj), ID_TO_OBJ(meta));
   RELEASE(meta);
-  return obj;
+  return AUTORELEASE(obj);
 }
 

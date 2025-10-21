@@ -14,7 +14,6 @@
 #include "symbol.h"
 #include <string.h>
 #include <assert.h>
-#include "clj_string.h"
 #include "string.h"
 #include "seq.h"
 #include "namespace.h"
@@ -22,6 +21,7 @@
 #include "error_messages.h"
 #include "list_operations.h"
 #include "builtins.h"
+#include "value.h"
 
 // Global state for stack-based recur implementation - statically initialized
 static _Thread_local CljObject* g_recur_args[16] = {0};  // Max 16 arguments, initialized to NULL
@@ -274,16 +274,16 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, Eva
     CljObject *result = NULL;
     switch (op) {
         case ARITH_ADD:
-            result = native_add_variadic(args, argc);
+            result = (CljObject*)native_add_variadic((ID*)args, argc);
             break;
         case ARITH_SUB:
-            result = native_sub_variadic(args, argc);
+            result = (CljObject*)native_sub_variadic((ID*)args, argc);
             break;
         case ARITH_MUL:
-            result = native_mul_variadic(args, argc);
+            result = (CljObject*)native_mul_variadic((ID*)args, argc);
             break;
         case ARITH_DIV:
-            result = native_div_variadic(args, argc);
+            result = (CljObject*)native_div_variadic((ID*)args, argc);
             break;
     }
     
@@ -293,7 +293,7 @@ CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, Eva
     }
     free(args);
     
-    return result;
+    return result ? AUTORELEASE(result) : NULL;
 }
 
 // Generic arithmetic function (with parameter substitution)
@@ -492,7 +492,7 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
         
         default:
             // Literal value
-            return RETAIN(body);
+            return AUTORELEASE(RETAIN(body));
     }
 }
 
@@ -544,7 +544,7 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
     }
     
     // Fallback: return first element
-    return RETAIN(head);
+    return AUTORELEASE(RETAIN(head));
 }
 
 // Simplified body evaluation with parameter binding
@@ -565,14 +565,14 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         // Resolve symbol - check parameters first
         for (int i = 0; i < param_count; i++) {
             if (params[i] && body == params[i]) {
-                return RETAIN(values[i]);
+                return AUTORELEASE(RETAIN(values[i]));
             }
             // Also try name comparison for non-interned symbols
             if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
                 CljSymbol *param_sym = as_symbol(params[i]);
                 CljSymbol *body_sym = as_symbol(body);
                 if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
-                    return RETAIN(values[i]);
+                    return AUTORELEASE(RETAIN(values[i]));
                 }
             }
         }
@@ -580,13 +580,13 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         if (closure_env && is_type(closure_env, CLJ_MAP)) {
             CljObject *resolved = map_get(closure_env, body);
             if (resolved) {
-                return RETAIN(resolved);
+                return AUTORELEASE(RETAIN(resolved));
             }
         }
         // If not found in parameters or closure_env, try to resolve from global namespace
         // This is the "Lazy Binding" fallback for global symbols
         // For now, return the symbol itself - it will be resolved in eval_list_with_param_substitution
-        return RETAIN(body);
+        return AUTORELEASE(RETAIN(body));
     }
     
     // For lists, evaluate them with parameter substitution
@@ -597,7 +597,7 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         
         default:
             // Literal value
-            return RETAIN(body);
+            return AUTORELEASE(RETAIN(body));
     }
 }
 
@@ -781,7 +781,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     // Fallback: return first element
-    return RETAIN(head);
+    return AUTORELEASE(RETAIN(head));
 }
 
 // Simplified body evaluation (basic implementation)
@@ -806,7 +806,7 @@ CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
         
         default:
             // Literal value
-            return RETAIN(body);
+            return AUTORELEASE(RETAIN(body));
     }
 }
 
@@ -860,7 +860,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         CljObject *result = map_get(op, key);
         RELEASE(key);
         
-        return result ? RETAIN(result) : NULL;
+        return result ? AUTORELEASE(RETAIN(result)) : NULL;
     }
     
     // Check if op is a symbol and resolve it
@@ -982,7 +982,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
             }
         }
         
-        CljObject *result = native_str(args, argc);
+        CljObject *result = (CljObject*)native_str((ID*)args, argc);
         free_obj_array(args, args_stack);
         return result;
     }
@@ -1085,7 +1085,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
             if (!args[i]) args[i] = NULL;
         }
         
-        CljObject *result = native_str(args, argc);
+        CljObject *result = (CljObject*)native_str((ID*)args, argc);
         free_obj_array(args, args_stack);
         return result;
     }
@@ -1225,7 +1225,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         }
         
         // Not a function, just return the resolved value
-        return RETAIN(fn);
+        return AUTORELEASE(RETAIN(fn));
     }
     
     // Error: first element is not a function
@@ -1236,7 +1236,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     }
     
     // Fallback: return first element (for other types)
-    return RETAIN(head);
+    return AUTORELEASE(RETAIN(head));
 }
 
 // Small wrapper functions for arithmetic operations
@@ -1435,12 +1435,12 @@ CljObject* eval_fn(CljObject *list, CljMap *env) {
     }
     
     // Create function object
-    CljObject *fn = make_function(params, param_count, body, (CljObject*)env, NULL);
+    CljObject *fn = AUTORELEASE(make_function(params, param_count, body, (CljObject*)env, NULL));
     
     // Cleanup heap-allocated params if any
     free_obj_array(params, params_stack);
     
-    return RETAIN(fn);
+    return fn;
 }
 
 CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
@@ -1452,7 +1452,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
     
     // Keywords evaluate to themselves
     if (sym && sym->name[0] == ':') {
-        return RETAIN(symbol);
+        return AUTORELEASE(RETAIN(symbol));
     }
     
     // Special handling for *ns* - return current namespace name as symbol
@@ -1466,7 +1466,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
     // Lookup im aktuellen Namespace
     CljObject *value = ns_resolve(st, symbol);
     if (value) {
-        return RETAIN(value);  // Gefunden - retain the value
+        return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
     }
     
     // Fallback: Try global namespace lookup for special forms and builtins
@@ -1494,7 +1494,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
             (SYM_NEXT && symbol == SYM_NEXT) || (SYM_LIST && symbol == SYM_LIST) ||
             (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
             (SYM_DOTIMES && symbol == SYM_DOTIMES)) {
-            return RETAIN(symbol);  // Return the symbol itself for special forms
+            return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
         
         // Fallback: String-based lookup for special forms (slower but works)
@@ -1511,7 +1511,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
             strcmp(name, "rest") == 0 || strcmp(name, "count") == 0 || strcmp(name, "cons") == 0 ||
             strcmp(name, "seq") == 0 || strcmp(name, "next") == 0 || strcmp(name, "list") == 0 ||
             strcmp(name, "for") == 0 || strcmp(name, "doseq") == 0 || strcmp(name, "dotimes") == 0) {
-            return RETAIN(symbol);  // Return the symbol itself for special forms
+            return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
     }
     
@@ -1605,7 +1605,7 @@ CljObject* eval_first(CljObject *list, CljMap *env) {
     CljObject *result = seq_first(seq);
     seq_release(seq);
     
-    return result ? result : NULL;
+    return result ? AUTORELEASE(result) : NULL;
 }
 
 /**
@@ -1719,15 +1719,15 @@ CljObject* eval_seq(CljObject *list, CljMap *env) {
     // For lists, return as-is (lists are already sequences)
     switch (arg->type) {
         case CLJ_LIST: {
-            return RETAIN(arg);
+            return AUTORELEASE(RETAIN(arg));
         }
         
         default: {
             // For other seqable types, return SeqIterator directly
-            CljObject *seq = seq_create(arg);
+            CljObject *seq = AUTORELEASE(seq_create(arg));
             if (!seq) return NULL;
             
-            return (CljObject*)seq;
+            return seq;
         }
     }
 }

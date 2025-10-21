@@ -2,6 +2,7 @@
 #define LIST_OPERATIONS_H
 
 #include "object.h"
+#include "value.h"
 #include <stdbool.h>
 
 // List operation functions

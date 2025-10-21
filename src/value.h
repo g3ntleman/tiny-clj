@@ -3,7 +3,6 @@
 
 #include "object.h"
 #include "clj_string.h"
-#include "memory.h"
 #include "namespace.h"
 #include "symbol.h"
 #include <stdint.h>
@@ -201,7 +200,8 @@ static inline bool is_falsy(CljValue val) {
 }
 
 // Helper macro to check if a value is an immediate (not a heap object)
-#define IS_IMMEDIATE(val) (is_fixnum((CljValue)(val)) || is_fixed((CljValue)(val)) || is_char((CljValue)(val)) || is_special((CljValue)(val)))
+// Optimized: immediate values have odd tags (1,3,5,7), heap objects have even tags (0,2,4,6)
+#define IS_IMMEDIATE(val) (((uintptr_t)(val) & TAG_MASK) & 1)
 
 // Safe cast from ID to CljObject* with debug checks
 #ifdef DEBUG

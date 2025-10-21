@@ -9,7 +9,6 @@
 #include "object.h"
 #include "vector.h"
 #include "memory_profiler.h"
-#include "runtime.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>

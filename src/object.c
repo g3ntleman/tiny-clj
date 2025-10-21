@@ -18,7 +18,6 @@
 #include <stdarg.h>
 #include "object.h"
 #include "memory.h"
-#include "memory_profiler.h"
 #include "seq.h"
 #include "runtime.h"
 #include "map.h"

@@ -340,8 +340,8 @@ void free_object(CljObject *obj);
 static inline void* assert_type(CljObject *obj, CljType expected_type) {
     if (!is_type(obj, expected_type)) {
         // Direct error output with expected and actual types
-        const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
-        const char *expected_type_name = clj_type_name(expected_type);
+        const char *actual_type = obj ? "Object" : "NULL";
+        const char *expected_type_name = "Expected";
         fprintf(stderr, "Assertion failed: Expected %s, got %s at %s:%d\n", 
                 expected_type_name, actual_type, __FILE__, __LINE__);
         abort();
@@ -355,7 +355,7 @@ static inline CljSymbol* as_symbol(CljObject *obj) {
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
     if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR) && !is_type(obj, CLJ_TRANSIENT_VECTOR)) {
-        const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
+        const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
                 actual_type, __FILE__, __LINE__);
         abort();
@@ -364,7 +364,7 @@ static inline CljPersistentVector* as_vector(CljObject *obj) {
 }
 static inline CljMap* as_map(CljObject *obj) {
     if (!is_type(obj, CLJ_MAP) && !is_type(obj, CLJ_TRANSIENT_MAP)) {
-        const char *actual_type = obj ? clj_type_name(obj->type) : "NULL";
+        const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 
                 actual_type, __FILE__, __LINE__);
         abort();
@@ -376,7 +376,7 @@ static inline CljList* as_list(CljObject *obj) {
         char error_msg[128];
         snprintf(error_msg, sizeof(error_msg), 
                 "Type mismatch: expected List, got %s", 
-                clj_type_name(TYPE(obj)));
+                "List");
         throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
     }
     return (CljList*)obj;
@@ -400,6 +400,6 @@ static inline int is_native_fn(CljObject *fn) {
 
 // is_autorelease_pool_active() function moved to memory.h
 
-#include "value.h"  // Include after all declarations to get clj_* macros
+// value.h included separately to avoid circular dependency
 
 #endif

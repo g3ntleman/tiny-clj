@@ -1449,8 +1449,30 @@ void test_fixed_comparison_operators(void) {
 
 // Test as_list function with valid list
 void test_as_list_valid(void) {
-    // Simplified test - just test that the test framework works
-    TEST_ASSERT_TRUE(1 == 1); // Just test that the test framework works
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Create a simple list: (1 2 3)
+    CljObject *list = eval_string("(1 2 3)", st);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
+    
+    // Test as_list conversion
+    CljList *list_data = as_list(list);
+    TEST_ASSERT_NOT_NULL(list_data);
+    
+    // Test LIST_FIRST
+    CljObject *first = LIST_FIRST(list_data);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
+    
+    RELEASE(list);
+    evalstate_free(st);
 }
 
 // Test as_list function with invalid input

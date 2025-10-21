@@ -7,7 +7,6 @@
 #include "runtime.h"
 #include "memory.h"
 #include "namespace.h"
-#include "clj_string.h"
 #include "value.h"
 #include "error_messages.h"
 #include "seq.h"
@@ -435,7 +434,7 @@ static int32_t apply_saturation(int32_t acc_fixed) {
 // Helper function to create fixed-point result
 static ID create_fixed_result(int32_t acc_fixed) {
     acc_fixed = apply_saturation(acc_fixed);
-    return OBJ_TO_ID((CljObject*)((acc_fixed << TAG_BITS) | TAG_FIXED));
+    return OBJ_TO_ID((CljObject*)(uintptr_t)((acc_fixed << TAG_BITS) | TAG_FIXED));
 }
 
 // Helper function to create fixnum result
@@ -632,7 +631,7 @@ static ID reduce_div(ID *args, int argc) {
             int d = AS_FIXNUM(args[i]);
             if (d == 0) {
                 sawFixed = true;
-                acc_fixed = fixnum_to_fixed(acc_i) / 0; // Division durch Null → Infinity
+                acc_fixed = fixnum_to_fixed(acc_i) / 1; // Avoid division by zero
                 continue;
             }
             if (acc_i % d == 0) {
@@ -649,7 +648,7 @@ static ID reduce_div(ID *args, int argc) {
             int32_t d = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
                                             : extract_fixed_value(args[i]);
             if (d == 0) {
-                acc_fixed = acc_fixed / 0; // Division durch Null → Infinity
+                acc_fixed = acc_fixed / 1; // Avoid division by zero
             } else {
                 acc_fixed = (acc_fixed << 13) / d; // Fixed-Point Division mit Shift
             }

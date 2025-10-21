@@ -3,7 +3,6 @@
 #include "parser.h"
 #include "namespace.h"
 #include "object.h"
-#include "function_call.h"
 #include "exception.h"
 #include "builtins.h"
 #include "memory_profiler.h"
@@ -342,14 +341,14 @@ int main(int argc, char **argv) {
 
     if (!no_core) {
         load_clojure_core(st);
-        // Enable memory profiling after clojure.core is loaded
-        MEMORY_PROFILER_INIT();
-        enable_memory_profiling(true);
-        // Hooks no longer required; direct profiling is sufficient
     }
     
-    // Register builtin functions
+    // Register builtin functions BEFORE memory profiling to avoid tracking them as leaks
     register_builtins();
+    
+    // Initialize memory profiling AFTER core loading and builtins registration
+    MEMORY_PROFILER_INIT();
+    enable_memory_profiling(true);
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);
