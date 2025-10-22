@@ -35,9 +35,17 @@ CTestTestfile.cmake
 tiny-clj-repl
 tiny-clj-stm32
 tiny-clj-stm32-main
+tiny-clj-stm32-repl
 build-release/
 *.exe
 *.bin
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
 # System files
 .DS_Store
@@ -49,3 +57,16 @@ test_stack_simple
 test_unit.i
 .DS_Store
 run-tests
+
+# Debug and test binaries
+debug_parser
+unity-tests
+unity-memory-tests
+test_debug
+test_release
+test_autorelease
+test_full2.txt
+test_output.txt
+test_output_full.txt
+test_simple.c
+test_assert.c
