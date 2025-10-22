@@ -360,10 +360,14 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
     (void)env; // Suppress unused parameter warning
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
+#ifdef DEBUG
     printf("DEBUG: eval_function_call called, fn=%p, argc=%d\n", fn, argc);
+#endif
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
+#ifdef DEBUG
         printf("DEBUG: eval_function_call - fn is not a function\n");
+#endif
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
@@ -419,13 +423,19 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
         
         // Check if recur was called (detected by global flag - no symbol lookup needed)
         if (g_recur_detected) {
+#ifdef DEBUG
             printf("DEBUG: TCO loop - recur detected, g_recur_arg_count=%d, current_argc=%d\n", g_recur_arg_count, current_argc);
+#endif
             if (g_recur_arg_count <= 0) {
+#ifdef DEBUG
                 printf("DEBUG: TCO loop - g_recur_arg_count %d <= 0\n", g_recur_arg_count);
+#endif
                 return NULL;
             }
             if (g_recur_arg_count > 16) {
+#ifdef DEBUG
                 printf("DEBUG: TCO loop - g_recur_arg_count %d > 16\n", g_recur_arg_count);
+#endif
                 return NULL;
             }
             // Recur detected - check arity
@@ -546,11 +556,7 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
 
 // Simplified body evaluation with parameter binding
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    printf("DEBUG: eval_body_with_params called, body=%p, param_count=%d\n", body, param_count);
-    if (!body) {
-        printf("DEBUG: eval_body_with_params - body is NULL\n");
-        return NULL;
-    }
+    if (!body) return NULL;
     
     // Assertion: Parameters and values must not be NULL when param_count > 0
     if (param_count > 0) {
@@ -670,22 +676,36 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         }
         
         // Evaluate and store arguments with parameter substitution
+#ifdef DEBUG
         printf("DEBUG: recur argc=%d\n", argc);
+#endif
         if (argc <= 0) {
+#ifdef DEBUG
             printf("DEBUG: recur has no arguments, this is unexpected\n");
+#endif
             return NULL;
         }
         for (int i = 0; i < argc; i++) {
+#ifdef DEBUG
             printf("DEBUG: evaluating recur arg %d\n", i);
+#endif
             if (i >= 16) {
+#ifdef DEBUG
                 printf("DEBUG: recur arg index %d >= 16, bounds error\n", i);
+#endif
                 return NULL;
             }
+#ifdef DEBUG
             printf("DEBUG: calling eval_arg_with_substitution for arg %d\n", i);
+#endif
             g_recur_args[i] = eval_arg_with_substitution(list, i + 1, params, values, param_count, closure_env);
+#ifdef DEBUG
             printf("DEBUG: g_recur_args[%d] = %p\n", i, g_recur_args[i]);
+#endif
             if (!g_recur_args[i]) {
+#ifdef DEBUG
                 printf("DEBUG: recur arg %d evaluation failed\n", i);
+#endif
                 // Cleanup on error
                 for (int j = 0; j < i; j++) {
                     RELEASE(g_recur_args[j]);
@@ -807,6 +827,77 @@ CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
     }
 }
 
+// Helper functions for eval_list optimization
+static CljObject* eval_map_lookup(CljObject *list, CljMap *env, CljObject *map) {
+    int total_count = list_count(list);
+    int argc = total_count - 1;
+    
+    if (argc != 1) {
+        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+            "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
+        return NULL;
+    }
+    
+    CljObject *key = eval_arg_retained(list, 1, env);
+    if (!key) return NULL;
+    
+    CljObject *result = map_get(map, key);
+    RELEASE(key);
+    return result ? AUTORELEASE(RETAIN(result)) : NULL;
+}
+
+static CljObject* eval_arithmetic_dispatch(CljObject *list, CljMap *env, EvalState *st, CljObject *op) {
+    if (op == SYM_PLUS) return eval_arithmetic_generic(list, env, ARITH_ADD, st);
+    if (op == SYM_MINUS) return eval_arithmetic_generic(list, env, ARITH_SUB, st);
+    if (op == SYM_MULTIPLY) return eval_arithmetic_generic(list, env, ARITH_MUL, st);
+    if (op == SYM_DIVIDE) return eval_arithmetic_generic(list, env, ARITH_DIV, st);
+    return NULL;
+}
+
+static CljObject* eval_comparison_dispatch(CljObject *list, CljMap *env, CljObject *op) {
+    if (op == SYM_EQUALS || op == SYM_EQUAL) {
+        CljObject *a, *b;
+        EVAL_TWO_ARGS(list, env, a, b);
+        
+        if (compare_numeric_values(a, b, COMP_EQ)) {
+            RELEASE_TWO_ARGS(a, b);
+            return make_special(SPECIAL_TRUE);
+        }
+        
+        float val_a, val_b;
+        if (extract_numeric_values(a, b, &val_a, &val_b)) {
+            RELEASE_TWO_ARGS(a, b);
+            return make_special(SPECIAL_FALSE);
+        }
+        
+        bool equal = clj_equal(a, b);
+        RELEASE_TWO_ARGS(a, b);
+        return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    }
+    if (op == SYM_LT) return eval_numeric_comparison(list, env, COMP_LT);
+    if (op == SYM_GT) return eval_numeric_comparison(list, env, COMP_GT);
+    if (op == SYM_LE) return eval_numeric_comparison(list, env, COMP_LE);
+    if (op == SYM_GE) return eval_numeric_comparison(list, env, COMP_GE);
+    return NULL;
+}
+
+static CljObject* eval_sequence_dispatch(CljObject *list, CljMap *env, CljObject *op) {
+    if (op == SYM_FIRST) return eval_first(list, env);
+    if (op == SYM_REST) return eval_rest(list, env);
+    if (op == SYM_CONS) return eval_cons(list, env);
+    if (op == SYM_SEQ) return eval_seq(list, env);
+    if (op == SYM_NEXT) return eval_rest(list, env); // next is alias for rest
+    if (op == SYM_COUNT) return eval_count(list, env);
+    return NULL;
+}
+
+static CljObject* eval_loop_dispatch(CljObject *list, CljMap *env, CljObject *op) {
+    if (op == SYM_FOR) return AUTORELEASE(eval_for(list, env));
+    if (op == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
+    if (op == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(list, env));
+    return NULL;
+}
+
 // Simplified list evaluation
 CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
@@ -837,27 +928,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     
     // Handle maps as functions (for key lookup) - must be first
     if (is_type(op, CLJ_MAP)) {
-        int total_count = list_count(list);
-        int argc = total_count - 1;
-        
-        // Maps require exactly 1 argument (the key)
-        if (argc != 1) {
-            throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
-                "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
-            return NULL;
-        }
-        
-        // Get the key argument
-        CljObject *key = eval_arg_retained(list, 1, env);
-        if (!key) {
-            return NULL;
-        }
-        
-        // Perform map lookup
-        CljObject *result = map_get(op, key);
-        RELEASE(key);
-        
-        return result ? AUTORELEASE(RETAIN(result)) : NULL;
+        return eval_map_lookup(list, env, op);
     }
     
     // Check if op is a symbol and resolve it
@@ -870,57 +941,14 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         }
     }
     
-    // OPTIMIZED: Ordered by frequency (Tier 1: Most common operations first)
-    // Tier 1: Very frequent (90%+ of calls)
-    // Compare against original_op (before resolution), not op (after resolution)
-    if (original_op == SYM_PLUS) {
-        return eval_arithmetic_generic(list, env, ARITH_ADD, st);
-    }
+    // OPTIMIZED: Dispatch to helper functions for common patterns
+    // Tier 1: Arithmetic operations (most frequent)
+    CljObject *result = eval_arithmetic_dispatch(list, env, st, original_op);
+    if (result) return result;
     
-    if (original_op == SYM_MINUS) {
-        return eval_arithmetic_generic(list, env, ARITH_SUB, st);
-    }
-    
-    if (original_op == SYM_EQUALS || original_op == SYM_EQUAL) {
-        // Handle = and equal operators with immediate value support
-        CljObject *a, *b;
-        EVAL_TWO_ARGS(list, env, a, b);
-        
-        // Try numeric comparison first
-        if (compare_numeric_values(a, b, COMP_EQ)) {
-            RELEASE_TWO_ARGS(a, b);
-            return make_special(SPECIAL_TRUE);
-        }
-        
-        // Check if it's a valid numeric comparison that returned false
-        float val_a, val_b;
-        if (extract_numeric_values(a, b, &val_a, &val_b)) {
-            // Valid numeric comparison that returned false
-            RELEASE_TWO_ARGS(a, b);
-            return make_special(SPECIAL_FALSE);
-        }
-        
-        // For other types, use clj_equal
-        bool equal = clj_equal(a, b);
-        RELEASE_TWO_ARGS(a, b);
-        return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
-    }
-    
-    if (original_op == SYM_LT) {
-        return eval_numeric_comparison(list, env, COMP_LT);
-    }
-    
-    if (original_op == SYM_GT) {
-        return eval_numeric_comparison(list, env, COMP_GT);
-    }
-    
-    if (original_op == SYM_LE) {
-        return eval_numeric_comparison(list, env, COMP_LE);
-    }
-    
-    if (original_op == SYM_GE) {
-        return eval_numeric_comparison(list, env, COMP_GE);
-    }
+    // Tier 2: Comparison operations
+    result = eval_comparison_dispatch(list, env, original_op);
+    if (result) return result;
     
     if (original_op == SYM_IF) {
         // (if cond then else?)
@@ -931,38 +959,12 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return eval_body(branch, env, st);
     }
     
-    // Tier 2: Frequent (70-90% of calls)
-    if (original_op == SYM_MULTIPLY) {
-        return eval_arithmetic_generic(list, env, ARITH_MUL, st);
-    }
+    // Tier 3: Sequence operations
+    result = eval_sequence_dispatch(list, env, original_op);
+    if (result) return result;
     
-    if (original_op == SYM_DIVIDE) {
-        return eval_arithmetic_generic(list, env, ARITH_DIV, st);
-    }
-    
-    if (original_op == SYM_DEF) {
-        return eval_def(list, env, st);
-    }
-    
-    if (original_op == SYM_FN) {
-        return AUTORELEASE(eval_fn(list, env));
-    }
-    
-    // Tier 3: Medium frequency (30-70% of calls)
-    if (original_op == SYM_FIRST) {
-        return eval_first(list, env);
-    }
-    
-    if (original_op == SYM_REST) {
-        return eval_rest(list, env);
-    }
-    
-    if (original_op == SYM_CONS) {
-        return eval_cons(list, env);
-    }
-    
+    // Tier 4: String and I/O operations
     if (original_op == SYM_STR) {
-        // Call native_str with evaluated arguments
         int total_count = list_count(list);
         int argc = total_count - 1;
         if (argc < 0) argc = 0;
@@ -1027,6 +1029,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return result; // Return last value
     }
     
+    // Tier 5: Special forms and definitions
     if (original_op == SYM_DEF) {
         return eval_def(list, env, st);
     }
@@ -1052,87 +1055,12 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    // Arithmetic operations
-    if (original_op == SYM_PLUS) {
-        return eval_arithmetic_generic(list, env, ARITH_ADD, st);
-    }
+    // Tier 6: Loop operations
+    result = eval_loop_dispatch(list, env, original_op);
+    if (result) return result;
     
-    if (original_op == SYM_MINUS) {
-        return eval_arithmetic_generic(list, env, ARITH_SUB, st);
-    }
-    
-    if (original_op == SYM_MULTIPLY) {
-        return eval_arithmetic_generic(list, env, ARITH_MUL, st);
-    }
-    
-    if (original_op == SYM_DIVIDE) {
-        return eval_arithmetic_generic(list, env, ARITH_DIV, st);
-    }
-    
-    if (original_op == SYM_STR) {
-        // Call native_str with evaluated arguments
-        int total_count = list_count(list);
-        int argc = total_count - 1;
-        if (argc < 0) argc = 0;
-        
-        CljObject *args_stack[16];
-        CljObject **args = alloc_obj_array(argc, args_stack);
-        for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg_retained(list, i + 1, env);
-            if (!args[i]) args[i] = NULL;
-        }
-        
-        CljObject *result = (CljObject*)native_str((ID*)args, argc);
-        free_obj_array(args, args_stack);
-        return result;
-    }
-    
-    if (op == SYM_COUNT) {
-        return eval_count(list, env);
-    }
-    
-    if (op == SYM_PRINTLN) {
-        return eval_println(list, env);
-    }
-    
-    if (op == SYM_FIRST) {
-        return eval_first(list, env);
-    }
-    
-    if (op == SYM_REST) {
-        return eval_rest(list, env);
-    }
-    
-    if (op == SYM_CONS) {
-        return eval_cons(list, env);
-    }
-    
-    if (op == SYM_SEQ) {
-        return eval_seq(list, env);
-    }
-    
-    if (op == SYM_NEXT) {
-        return eval_rest(list, env); // next is alias for rest
-    }
-    
-    if (op == SYM_FOR) {
-        CljObject *result = eval_for(list, env);
-        return AUTORELEASE(result);
-    }
-    
-    if (op == SYM_DOSEQ) {
-        CljObject *result = eval_doseq(list, env);
-        return AUTORELEASE(result);
-    }
-    
-    if (op == SYM_DOTIMES) {
-        CljObject *result = eval_dotimes(list, env);
-        return AUTORELEASE(result);
-    }
-    
-    if (op == SYM_LIST) {
-        CljObject *result = eval_list_function(list, env);
-        return AUTORELEASE(result);
+    if (original_op == SYM_LIST) {
+        return AUTORELEASE(eval_list_function(list, env));
     }
     
     // Fallback: try to resolve symbol and call as function
@@ -1172,27 +1100,7 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
         
         // Check if it's a map (for map lookup)
         if (is_type(fn, CLJ_MAP)) {
-            int total_count = list_count(list);
-            int argc = total_count - 1;
-            
-            // Maps require exactly 1 argument (the key)
-            if (argc != 1) {
-                throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
-                    "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
-                return NULL;
-            }
-            
-            // Get the key argument
-            CljObject *key = eval_arg_retained(list, 1, env);
-            if (!key) {
-                return NULL;
-            }
-            
-            // Perform map lookup
-            CljObject *result = map_get(fn, key);
-            RELEASE(key);
-            
-            return result ? RETAIN(result) : NULL;
+            return eval_map_lookup(list, env, fn);
         }
         
         // Check if it's a function (native or interpreted)
@@ -2054,19 +1962,7 @@ CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
 
 // Evaluate argument with parameter substitution
 CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    // Assertion: List must not be NULL when expected
-    assert(list != NULL);
-    printf("DEBUG: eval_arg_with_substitution called, index=%d, param_count=%d\n", index, param_count);
-    if (index < 0) {
-        printf("DEBUG: index %d < 0\n", index);
-        return NULL;
-    }
-    if (param_count < 0) {
-        printf("DEBUG: param_count %d < 0\n", param_count);
-        return NULL;
-    }
-    if (list->type != CLJ_LIST) {
-        printf("DEBUG: list type is not CLJ_LIST\n");
+    if (!list || index < 0 || param_count < 0 || list->type != CLJ_LIST) {
         return NULL;
     }
     
