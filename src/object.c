@@ -25,6 +25,13 @@
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
 
+// Safe string copy helper (from string.c)
+static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
+    if (!dest || !src || dest_size == 0) return;
+    strncpy(dest, src, dest_size - 1);
+    dest[dest_size - 1] = '\0';
+}
+
 // release_object_deep() function moved to memory.c
 
 
@@ -82,15 +89,20 @@ GlobalExceptionStack global_exception_stack = {0};
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
     if (!global_exception_stack.top) {
         // No handler - unhandled exception
-        printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
-               type, message, file ? file : "<unknown>", line, col);
-        exit(1);
+        CLJException *temp = make_exception(type, message, file, line, col);
+#ifdef DEBUG
+        char *str = to_string((CljObject*)temp); 
+        fprintf(stderr, "UNHANDLED: %s\n", str ? str : "<null>");
+        free(str);
+#endif
+        free(temp); exit(1);
     }
     
     CLJException *exception = make_exception(type, message, file, line, col);
     if (!exception) {
-        printf("FAILED TO CREATE EXCEPTION: %s: %s at %s:%d:%d\n", 
-               type, message, file ? file : "<unknown>", line, col);
+#ifdef DEBUG
+        fprintf(stderr, "FAILED TO ALLOCATE EXCEPTION\n");
+#endif
         exit(1);
     }
     
@@ -117,18 +129,9 @@ CLJException* make_exception(const char *type, const char *message, const char *
     // exc->base.as.data = NULL;  // Not used for exceptions - Union removed
     
     // Copy strings directly into the structure (no strdup needed)
-    strncpy(exc->type, type, sizeof(exc->type) - 1);
-    exc->type[sizeof(exc->type) - 1] = '\0';  // Ensure null termination
-    
-    strncpy(exc->message, message, sizeof(exc->message) - 1);
-    exc->message[sizeof(exc->message) - 1] = '\0';  // Ensure null termination
-    
-    if (file) {
-        strncpy(exc->file, file, sizeof(exc->file) - 1);
-        exc->file[sizeof(exc->file) - 1] = '\0';  // Ensure null termination
-    } else {
-        exc->file[0] = '\0';  // Empty string
-    }
+    safe_strncpy(exc->type, type, sizeof(exc->type));
+    safe_strncpy(exc->message, message, sizeof(exc->message));
+    safe_strncpy(exc->file, file ? file : "", sizeof(exc->file));
     
     exc->line = line;
     exc->col = col;
@@ -691,7 +694,7 @@ static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
 }
 
 // Add symbol to the table
-static SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
+SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
     SymbolEntry *entry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
     if (!entry) return NULL;
     
@@ -922,112 +925,6 @@ CljObject* create_object(CljType type) {
     return obj;
 }
 
-void retain_object(CljObject *obj) {
-    if (!obj) return;
-    obj->rc++;
-}
-
-void release_object(CljObject *obj) {
-    if (!obj) return;
-    obj->rc--;
-    if (obj->rc == 0) {
-        free_object(obj);
-    }
-}
-
-void free_object(CljObject *obj) {
-    if (!obj) return;
-
-    // Type-spezifische Freigabe
-    switch (obj->type) {
-        case CLJ_STRING:
-            {
-                char **str_ptr = (char**)((char*)obj + sizeof(CljObject));
-                if (*str_ptr) free(*str_ptr);
-            }
-            DEALLOC(obj);
-            break;
-        case CLJ_SYMBOL:
-            {
-                CljSymbol *sym = (CljSymbol*)obj;
-                // Note: CljNamespace doesn't have reference counting yet
-                // TODO: Implement reference counting for CljNamespace
-                // CljSymbol is a CljObject subtype, use DEALLOC for final cleanup
-                DEALLOC(sym);
-            }
-            break;
-        case CLJ_VECTOR:
-            {
-                CljPersistentVector *vec = (CljPersistentVector*)obj;
-                if (vec->data) {
-                    for (int i = 0; i < vec->count; i++) {
-                        if (vec->data[i]) release_object(vec->data[i]);
-                    }
-                    free(vec->data);
-                }
-                DEALLOC(vec);
-            }
-            break;
-        case CLJ_MAP:
-            {
-                CljMap *map = (CljMap*)obj;
-                if (map->data) {
-                    for (int i = 0; i < map->count * 2; i++) {
-                        if (map->data[i]) release_object(map->data[i]);
-                    }
-                    free(map->data);
-                }
-                DEALLOC(map);
-            }
-            break;
-        case CLJ_LIST:
-            {
-                CljList *list = (CljList*)obj;
-                if (list->first) release_object(list->first);
-                if (list->rest) release_object(list->rest);
-                DEALLOC(list);
-            }
-            break;
-        case CLJ_FUNC:
-            {
-                // Native C function (CljFunc)
-                CljFunc *native_func = (CljFunc*)obj;
-                if (native_func && native_func->name) {
-                    free((void*)native_func->name);
-                }
-                DEALLOC(obj);
-            }
-            break;
-        
-        case CLJ_CLOSURE:
-            {
-                // Interpreted Clojure function (CljFunction)
-                CljFunction *clj_func = (CljFunction*)obj;
-                if (clj_func->params) {
-                    for (int i = 0; i < clj_func->param_count; i++) {
-                        if (clj_func->params[i]) release_object(clj_func->params[i]);
-                    }
-                    free(clj_func->params);
-                }
-                if (clj_func->body) release_object(clj_func->body);
-                if (clj_func->closure_env) release_object(clj_func->closure_env);
-                if (clj_func->name) free((void*)clj_func->name);
-                DEALLOC(obj);
-            }
-            break;
-        case CLJ_EXCEPTION:
-            {
-                CLJException *exc = (CLJException*)obj;
-                // Strings are now embedded, no need to free them
-                // data field removed
-                DEALLOC(exc);
-            }
-            break;
-        default:
-            // Primitive Typen brauchen keine Freigabe
-            DEALLOC(obj);
-            break;
-    }
-}
+// Old memory management functions removed - use RETAIN/RELEASE macros instead
 
 // Type-safe Casting now provided as static inline in header

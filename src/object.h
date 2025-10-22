@@ -102,7 +102,7 @@ static inline bool is_singleton(CljObject *obj) {
 typedef struct {
     CljObject base;         // Embedded base object
     struct CljNamespace *ns; // Direct reference to CLJNamespace (with reference counting)
-    char name[SYMBOL_NAME_MAX_LEN]; // Fixed buffer for name
+    const char *name;       // Pointer to string literal in .rodata segment
 } CljSymbol;
 
 typedef struct {
@@ -261,6 +261,7 @@ extern SymbolEntry *symbol_table;
 
 CljObject* intern_symbol(const char *ns, const char *name);
 CljObject* intern_symbol_global(const char *name);  // Without namespace
+SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol);
 void symbol_table_cleanup();
 int symbol_count();
 
@@ -310,12 +311,7 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value);
 // Polymorphic helpers for subtyping
 /** Allocate CljObject shell with given type (no data). */
 CljObject* create_object(CljType type);
-/** Retain object (alias of retain). */
-void retain_object(CljObject *obj);
-/** Release object (alias of release). */
-void release_object(CljObject *obj);
-/** Free object memory immediately (no rc checks). */
-void free_object(CljObject *obj);
+// Old memory management functions removed - use RETAIN/RELEASE macros instead
 
 // Debug macros - only include debug code in debug builds
 #ifdef DEBUG
@@ -338,11 +334,13 @@ void free_object(CljObject *obj);
 // Type-safe casting with exception throwing (DRY principle)
 static inline void* assert_type(CljObject *obj, CljType expected_type) {
     if (!is_type(obj, expected_type)) {
+#ifdef DEBUG
         // Direct error output with expected and actual types
         const char *actual_type = obj ? "Object" : "NULL";
         const char *expected_type_name = "Expected";
         fprintf(stderr, "Assertion failed: Expected %s, got %s at %s:%d\n", 
                 expected_type_name, actual_type, __FILE__, __LINE__);
+#endif
         abort();
     }
     return obj;
@@ -354,18 +352,22 @@ static inline CljSymbol* as_symbol(CljObject *obj) {
 }
 static inline CljPersistentVector* as_vector(CljObject *obj) {
     if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR) && !is_type(obj, CLJ_TRANSIENT_VECTOR)) {
+#ifdef DEBUG
         const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
                 actual_type, __FILE__, __LINE__);
+#endif
         abort();
     }
     return (CljPersistentVector*)obj;
 }
 static inline CljMap* as_map(CljObject *obj) {
     if (!is_type(obj, CLJ_MAP) && !is_type(obj, CLJ_TRANSIENT_MAP)) {
+#ifdef DEBUG
         const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 
                 actual_type, __FILE__, __LINE__);
+#endif
         abort();
     }
     return (CljMap*)obj;
