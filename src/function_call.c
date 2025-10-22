@@ -9,11 +9,11 @@
  * - Stack-allocated argument handling
  */
 
+#include "common.h"
 #include "object.h"
 #include "function_call.h"
 #include "symbol.h"
 #include <string.h>
-#include <assert.h>
 #include "string.h"
 #include "seq.h"
 #include "namespace.h"
@@ -144,7 +144,7 @@ static bool compare_numeric_values(CljObject *a, CljObject *b, ComparisonOp op) 
  */
 static CljObject* eval_numeric_comparison(CljObject *list, CljMap *env, ComparisonOp op) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *a, *b;
     EVAL_TWO_ARGS(list, env, a, b);
     
@@ -215,7 +215,7 @@ static bool is_numeric_type(CljObject *obj) {
 /** @brief Generic arithmetic function (variadic version) */
 CljObject* eval_arithmetic_generic(CljObject *list, CljMap *env, ArithOp op, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     (void)st; // Suppress unused parameter warning
     int total_count = list_count(list);
     int argc = total_count - 1;  // Subtract 1 for the operator
@@ -359,7 +359,7 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
@@ -468,8 +468,8 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
 // Evaluate body with environment lookup (for loops)
 CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
-    if (!body) return NULL;
+    CLJ_ASSERT(env != NULL);
+    CLJ_ASSERT(body != NULL);
     
     switch (body->type) {
         case CLJ_SYMBOL: {
@@ -491,9 +491,9 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
 // Evaluate list with environment (for loops)
 CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     // Assertion: List must not be NULL when expected
-    assert(list != NULL);
+    CLJ_ASSERT(list != NULL);
     if (list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
@@ -541,7 +541,7 @@ CljObject* eval_list_with_env(CljObject *list, CljMap *env) {
 
 // Simplified body evaluation with parameter binding
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    if (!body) return NULL;
+    CLJ_ASSERT(body != NULL);
     
     // Assertion: Parameters and values must not be NULL when param_count > 0
     if (param_count > 0) {
@@ -592,7 +592,7 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
 // Evaluate list with parameter substitution
 CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
     // Assertion: List must not be NULL when expected
-    assert(list != NULL);
+    CLJ_ASSERT(list != NULL);
     assert(param_count >= 0); // param_count should be non-negative
     if (list->type != CLJ_LIST) return NULL;
     
@@ -769,9 +769,8 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
 /** @brief Evaluate function body expressions */
 CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
-    
-    if (!body) return NULL;
+    CLJ_ASSERT(env != NULL);
+    CLJ_ASSERT(body != NULL);
     
     // Simplified implementation - would normally evaluate the AST
     switch (body->type) {
@@ -865,7 +864,7 @@ static CljObject* eval_loop_dispatch(CljObject *list, CljMap *env, CljObject *op
 // Simplified list evaluation
 CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     if (!list || list->type != CLJ_LIST) {
         return NULL;
     }
@@ -1111,31 +1110,31 @@ CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st) {
 // Small wrapper functions for arithmetic operations
 CljObject* eval_add(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     return eval_arithmetic_generic(list, env, ARITH_ADD, NULL);
 }
 
 CljObject* eval_sub(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     return eval_arithmetic_generic(list, env, ARITH_SUB, NULL);
 }
 
 CljObject* eval_mul(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     return eval_arithmetic_generic(list, env, ARITH_MUL, NULL);
 }
 
 CljObject* eval_div(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     return eval_arithmetic_generic(list, env, ARITH_DIV, NULL);
 }
 
 CljObject* eval_equal(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *a = eval_arg_retained(list, 1, env);
     CljObject *b = eval_arg_retained(list, 2, env);
     
@@ -1174,7 +1173,7 @@ CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, C
 
 CljObject* eval_println(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (arg) {
         char *str = pr_str(arg);
@@ -1187,8 +1186,8 @@ CljObject* eval_println(CljObject *list, CljMap *env) {
 
 CljObject* eval_def(CljObject *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
-    if (!is_list(list)) return NULL;
+    CLJ_ASSERT(env != NULL);
+    CLJ_ASSERT(is_list(list));
     
     // Get the symbol name (second argument) - don't evaluate it, just get the symbol
     CljObject *symbol = list_get_element(list, 1);
@@ -1234,10 +1233,10 @@ CljObject* eval_def(CljObject *list, CljMap *env, EvalState *st) {
 
 CljObject* eval_ns(CljObject *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     (void)env;  // Not used
     // Assertion: List and EvalState must not be NULL when expected
-    assert(list != NULL);
+    CLJ_ASSERT(list != NULL);
     assert(st != NULL);
     
     // Get namespace name (first argument) - use list_get_element like eval_def
@@ -1261,8 +1260,8 @@ CljObject* eval_ns(CljObject *list, CljMap *env, EvalState *st) {
 
 CljObject* eval_fn(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
-    if (!is_list(list)) return NULL;
+    CLJ_ASSERT(env != NULL);
+    CLJ_ASSERT(is_list(list));
     
     // Get the parameter list (second argument) - don't evaluate it
     CljObject *params_list = list_get_element(list, 1);
@@ -1392,7 +1391,7 @@ CljObject* eval_symbol(CljObject *symbol, EvalState *st) {
 
 CljObject* eval_str(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return AUTORELEASE(make_string(""));
     
@@ -1404,7 +1403,7 @@ CljObject* eval_str(CljObject *list, CljMap *env) {
 
 CljObject* eval_prn(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (arg) {
         char *str = pr_str(arg);
@@ -1416,7 +1415,7 @@ CljObject* eval_prn(CljObject *list, CljMap *env) {
 
 ID eval_count(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
     // Handle nil (represented as NULL) - return 0
     if (!arg) return fixnum(0);
@@ -1463,7 +1462,7 @@ ID eval_count(CljObject *list, CljMap *env) {
 
 CljObject* eval_first(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return NULL;
     
@@ -1490,7 +1489,7 @@ CljObject* eval_first(CljObject *list, CljMap *env) {
  */
 CljObject* eval_rest(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *result = NULL;  // Single result variable for clean return pattern
     CljObject *arg = eval_arg_retained(list, 1, env);  // Get the sequence argument
     
@@ -1525,7 +1524,7 @@ CljObject* eval_rest(CljObject *list, CljMap *env) {
 
 CljObject* eval_cons(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *elem = eval_arg_retained(list, 1, env);
     CljObject *coll = eval_arg_retained(list, 2, env);
     
@@ -1573,7 +1572,7 @@ CljObject* eval_cons(CljObject *list, CljMap *env) {
 
 CljObject* eval_seq(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
     if (!arg) return NULL;
     
@@ -1607,7 +1606,7 @@ CljObject* eval_seq(CljObject *list, CljMap *env) {
 
 CljObject* eval_for(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     // (for [binding coll] expr)
     // Returns a lazy sequence of results
     
@@ -1687,7 +1686,7 @@ CljObject* eval_for(CljObject *list, CljMap *env) {
 
 CljObject* eval_doseq(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
     
@@ -1765,11 +1764,11 @@ CljObject* eval_doseq(CljObject *list, CljMap *env) {
 
 CljObject* eval_list_function(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     (void)env; // Suppress unused parameter warning
     // (list arg1 arg2 ...) - creates a list from the arguments
     // Assertion: List must not be NULL when expected
-    assert(list != NULL);
+    CLJ_ASSERT(list != NULL);
     if (list->type != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list(list);
@@ -1785,7 +1784,7 @@ CljObject* eval_list_function(CljObject *list, CljMap *env) {
 
 CljObject* eval_dotimes(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
     
@@ -1860,7 +1859,7 @@ CljObject* eval_dotimes(CljObject *list, CljMap *env) {
 // Helper function for evaluating arguments with automatic retention
 CljObject* eval_arg_retained(CljObject *list, int index, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
-    assert(env != NULL);
+    CLJ_ASSERT(env != NULL);
     CljObject *result = eval_arg(list, index, env);
     if (result) RETAIN(result);
     return result;
@@ -1872,7 +1871,7 @@ static _Thread_local int g_eval_arg_depth = 0;
 // Helper function for evaluating arguments
 CljObject* eval_arg(CljObject *list, int index, CljMap *env) {
     // Assertion: List must not be NULL when expected
-    assert(list != NULL);
+    CLJ_ASSERT(list != NULL);
     if (list->type != CLJ_LIST) return NULL;
     
     // Handle NULL environment gracefully
