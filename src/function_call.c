@@ -360,14 +360,8 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
     (void)env; // Suppress unused parameter warning
     // Assertion: Environment must not be NULL when expected
     assert(env != NULL);
-#ifdef DEBUG
-    printf("DEBUG: eval_function_call called, fn=%p, argc=%d\n", fn, argc);
-#endif
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
-#ifdef DEBUG
-        printf("DEBUG: eval_function_call - fn is not a function\n");
-#endif
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
@@ -423,19 +417,10 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
         
         // Check if recur was called (detected by global flag - no symbol lookup needed)
         if (g_recur_detected) {
-#ifdef DEBUG
-            printf("DEBUG: TCO loop - recur detected, g_recur_arg_count=%d, current_argc=%d\n", g_recur_arg_count, current_argc);
-#endif
             if (g_recur_arg_count <= 0) {
-#ifdef DEBUG
-                printf("DEBUG: TCO loop - g_recur_arg_count %d <= 0\n", g_recur_arg_count);
-#endif
                 return NULL;
             }
             if (g_recur_arg_count > 16) {
-#ifdef DEBUG
-                printf("DEBUG: TCO loop - g_recur_arg_count %d > 16\n", g_recur_arg_count);
-#endif
                 return NULL;
             }
             // Recur detected - check arity
@@ -676,36 +661,15 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         }
         
         // Evaluate and store arguments with parameter substitution
-#ifdef DEBUG
-        printf("DEBUG: recur argc=%d\n", argc);
-#endif
         if (argc <= 0) {
-#ifdef DEBUG
-            printf("DEBUG: recur has no arguments, this is unexpected\n");
-#endif
             return NULL;
         }
         for (int i = 0; i < argc; i++) {
-#ifdef DEBUG
-            printf("DEBUG: evaluating recur arg %d\n", i);
-#endif
             if (i >= 16) {
-#ifdef DEBUG
-                printf("DEBUG: recur arg index %d >= 16, bounds error\n", i);
-#endif
                 return NULL;
             }
-#ifdef DEBUG
-            printf("DEBUG: calling eval_arg_with_substitution for arg %d\n", i);
-#endif
             g_recur_args[i] = eval_arg_with_substitution(list, i + 1, params, values, param_count, closure_env);
-#ifdef DEBUG
-            printf("DEBUG: g_recur_args[%d] = %p\n", i, g_recur_args[i]);
-#endif
             if (!g_recur_args[i]) {
-#ifdef DEBUG
-                printf("DEBUG: recur arg %d evaluation failed\n", i);
-#endif
                 // Cleanup on error
                 for (int j = 0; j < i; j++) {
                     RELEASE(g_recur_args[j]);

@@ -313,14 +313,7 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value);
 CljObject* create_object(CljType type);
 // Old memory management functions removed - use RETAIN/RELEASE macros instead
 
-// Debug macros - only include debug code in debug builds
-#ifdef DEBUG
-    #define DEBUG_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
-    #define DEBUG_FPRINTF(stream, fmt, ...) fprintf(stream, fmt, ##__VA_ARGS__)
-#else
-    #define DEBUG_PRINTF(fmt, ...) ((void)0)
-    #define DEBUG_FPRINTF(stream, fmt, ...) ((void)0)
-#endif
+// Debug macros removed - no debug output in any builds
 
 // STM32-optimized: Remove test code in STM32 builds
 #ifdef STM32_BUILD
