@@ -741,10 +741,10 @@ void meta_set(CljObject *v, CljObject *meta) {
     map_assoc(meta_registry, v, meta);
 }
 
-CljObject* meta_get(CljObject *v) {
+ID meta_get(CljObject *v) {
     if (!v || !meta_registry) return NULL;
     
-    return (CljObject*)map_get(meta_registry, v);
+    return map_get(meta_registry, v);
 }
 
 void meta_clear(CljObject *v) {
