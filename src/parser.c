@@ -287,7 +287,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @param eval_state The evaluation state
  * @return The evaluated result (autoreleased) or NULL on error
  */
-CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
+ID eval_string(const char* expr_str, EvalState *eval_state) {
     CljValue parsed = parse(expr_str, eval_state);
     if (parsed == NULL) {
         return NULL;
@@ -296,13 +296,13 @@ CljObject* eval_string(const char* expr_str, EvalState *eval_state) {
     // Check if parsed is an immediate value
     if (IS_IMMEDIATE(parsed)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
-        return (CljObject*)parsed;
+        return (ID)(CljObject*)parsed;
     }
     
     // For heap objects, evaluate them
     CljObject *result = eval_parsed((CljObject*)parsed, eval_state);
     
-    return result;
+    return (ID)result;
 }
 
 /**

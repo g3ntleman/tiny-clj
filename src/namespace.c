@@ -47,15 +47,15 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     return ns;
 }
 
-CljObject* ns_resolve(EvalState *st, CljObject *sym) {
+ID ns_resolve(EvalState *st, CljObject *sym) {
     if (!st || !sym || !st->current_ns) {
         return NULL;
     }
     
     // First search in the current namespace
-    CljObject *v = map_get((CljObject*)st->current_ns->mappings, sym);
+    CljObject *v = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)sym);
     if (v) {
-        return v;
+        return (ID)v;
     }
 
     // OPTIMIZATION: Priority-based namespace search
@@ -77,16 +77,16 @@ CljObject* ns_resolve(EvalState *st, CljObject *sym) {
     
     // Search clojure.core first if cached
     if (clojure_core_cache && clojure_core_cache->mappings) {
-        v = map_get((CljObject*)clojure_core_cache->mappings, sym);
-        if (v) return v;
+        v = (CljObject*)map_get((CljValue)clojure_core_cache->mappings, (CljValue)sym);
+        if (v) return (ID)v;
     }
     
     // 2. Search other namespaces (excluding clojure.core to avoid double search)
     CljNamespace *cur = ns_registry;
     while (cur) {
         if (cur != clojure_core_cache && cur->mappings) {
-            v = map_get((CljObject*)cur->mappings, sym);
-            if (v) return v;
+            v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
+            if (v) return (ID)v;
         }
         cur = cur->next;
     }
@@ -234,16 +234,16 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
     
     TRY {
         // normaler Body (zweites Element)
-        CljObject *body = list_nth(form, 1);
+        CljObject *body = (CljObject*)list_nth(as_list(form), 1);
         result = eval_expr_simple(body, st);
     } CATCH(ex) {
         // We arrived here via eval_error
         // Search for catch clauses
-        for (int i = 2; i < list_count(form); i++) {
-            CljObject *clause = list_nth(form, i);
-            if (is_list(clause) && is_symbol(list_first(clause), "catch")) {
-                CljObject *sym = list_nth(clause, 1);
-                CljObject *body = list_nth(clause, 2);
+        for (int i = 2; i < list_count(as_list(form)); i++) {
+            CljObject *clause = (CljObject*)list_nth(as_list(form), i);
+            if (is_list(clause) && is_symbol((CljObject*)list_first(as_list(clause)), "catch")) {
+                CljObject *sym = (CljObject*)list_nth(as_list(clause), 1);
+                CljObject *body = (CljObject*)list_nth(as_list(clause), 2);
                 
                 // Bind variable (sym = err) - simplified
                 map_assoc((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);

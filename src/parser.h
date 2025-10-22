@@ -43,7 +43,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state);
  * @param eval_state The evaluation state
  * @return The evaluated result (autoreleased) or NULL on error
  */
-CljObject* eval_string(const char* expr_str, EvalState *eval_state);
+ID eval_string(const char* expr_str, EvalState *eval_state);
 
 // === CljValue API (Phase 1: Immediates) ===
 

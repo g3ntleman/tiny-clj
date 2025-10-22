@@ -225,7 +225,6 @@ static inline bool clj_is_truthy(CljObject *v) {
 
 // Map operations (optimized with pointer fast paths)
 /** Get value for key or NULL (structural key equality). */
-CljObject* map_get(CljObject *map, CljObject *key);
 /** Associate key->value (replaces existing; retains value). */
 void map_assoc(CljObject *map, CljObject *key, CljObject *value);
 /** Vector of keys (retained elements). */
@@ -292,7 +291,7 @@ CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObje
 /** Create child env extended with param/value bindings (stack impl.). */
 CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject **values, int count);
 /** Lookup key in env and return value or NULL. */
-CljObject* env_get_stack(CljObject *env, CljObject *key);
+ID env_get_stack(CljObject *env, CljObject *key);
 /** Set key->value in env (mutating env). */
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value);
 

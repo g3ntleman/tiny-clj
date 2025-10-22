@@ -114,7 +114,7 @@ void test_seq_first(void) {
         
         // Create sequence and test first
         CljObject *seq = seq_create((CljObject*)vec);
-        CljObject *first_elem = seq_first(seq);
+        CljObject *first_elem = (CljObject*)seq_first(seq);
         TEST_ASSERT_NOT_NULL(first_elem);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)first_elem));
         TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)first_elem));
@@ -136,7 +136,7 @@ void test_seq_rest(void) {
         
         // Create sequence and test rest
         CljObject *seq = seq_create((CljObject*)vec);
-        CljObject *rest_seq = seq_rest(seq);
+        CljObject *rest_seq = (CljObject*)seq_rest(seq);
         TEST_ASSERT_NOT_NULL(rest_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
     }
@@ -157,7 +157,7 @@ void test_seq_next(void) {
         
         // Create sequence and test next
         CljObject *seq = seq_create((CljObject*)vec);
-        CljObject *next_seq = seq_next(seq);
+        CljObject *next_seq = (CljObject*)seq_next(seq);
         TEST_ASSERT_NOT_NULL(next_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, next_seq->type);
     }

@@ -117,7 +117,7 @@ static void benchmark_current_namespace_lookup(void) {
     
     for (int i = 0; i < iterations; i++) {
         CljObject *sym = make_symbol_impl(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
-        CljObject *result = map_get((CljObject*)benchmark_eval_state->current_ns->mappings, sym);
+        CljObject *result = (CljObject*)map_get((CljValue)benchmark_eval_state->current_ns->mappings, (CljValue)sym);
         (void)result; // Prevent optimization
     }
     
@@ -200,7 +200,7 @@ static void benchmark_mixed_lookup_scenarios(void) {
     for (int i = 0; i < iterations; i++) {
         // Scenario 1: Current namespace lookup (fast)
         CljObject *sym1 = make_symbol_impl("current-symbol", NULL);
-        CljObject *result1 = map_get((CljObject*)benchmark_eval_state->current_ns->mappings, sym1);
+        CljObject *result1 = (CljObject*)map_get((CljValue)benchmark_eval_state->current_ns->mappings, (CljValue)sym1);
         (void)result1;
         
         // Scenario 2: Global namespace search (slow)
@@ -238,8 +238,8 @@ static void benchmark_namespace_isolation(void) {
     
     for (int i = 0; i < iterations; i++) {
         // Test namespace isolation
-        CljObject *result1 = map_get((CljObject*)ns1->mappings, shared_sym);
-        CljObject *result2 = map_get((CljObject*)ns2->mappings, shared_sym);
+        CljObject *result1 = (CljObject*)map_get((CljValue)ns1->mappings, (CljValue)shared_sym);
+        CljObject *result2 = (CljObject*)map_get((CljValue)ns2->mappings, (CljValue)shared_sym);
         (void)result1;
         (void)result2;
         

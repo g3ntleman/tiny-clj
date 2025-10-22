@@ -37,7 +37,7 @@ extern CljNamespace *ns_registry;
 
 // Namespace functions
 CljNamespace* ns_get_or_create(const char *name, const char *file);
-CljObject* ns_resolve(EvalState *st, CljObject *sym);
+ID ns_resolve(EvalState *st, CljObject *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
@@ -61,10 +61,10 @@ CljObject* eval_catch(CljObject *form, EvalState *st);
 CljObject* eval_expr_simple(CljObject *expr, EvalState *st);
 
 // List helpers for try/catch
-CljObject* list_first(CljObject *list);
-CljObject* list_nth(CljObject *list, int n);
-int list_count(CljObject *list);
-bool is_list(CljObject *v);
-bool is_symbol(CljObject *v, const char *name);
+ID list_first(CljList *list);
+ID list_nth(CljList *list, int n);
+int list_count(CljList *list);
+bool is_list(ID v);
+bool is_symbol(ID v, const char *name);
 
 #endif

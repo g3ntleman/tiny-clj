@@ -59,7 +59,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj);
  * @param iter Iterator
  * @return First element, or nil if empty
  */
-CljObject* seq_iter_first(const SeqIterator *iter);
+ID seq_iter_first(const SeqIterator *iter);
 
 /**
  * @brief Advance iterator to next element (in-place mutation)
@@ -104,7 +104,7 @@ int seq_iter_position(const SeqIterator *iter);
 /**
  * @brief Count elements in a seqable collection (optimized)
  */
-int seq_count(CljObject *obj);
+int seq_count(ID obj);
 
 // ============================================================================
 // COMPATIBILITY LAYER (Heap-based API using stack implementation)
@@ -122,23 +122,23 @@ typedef struct {
 /**
  * @brief Create heap-allocated seq (legacy compatibility)
  */
-CljObject* seq_create(CljObject *obj);
+CljObject* seq_create(ID obj);
 
 /**
  * @brief Heap-based seq API (legacy compatibility, uses stack implementation internally)
  */
-CljObject* seq_first(CljObject *seq);
-CljObject* seq_rest(CljObject *seq);
-CljObject* seq_next(CljObject *seq);
-bool seq_empty(CljObject *seq);
-int seq_count(CljObject *obj);
-void seq_release(CljObject *seq);
+ID seq_first(ID seq);
+ID seq_rest(ID seq);
+ID seq_next(ID seq);
+bool seq_empty(ID seq);
+int seq_count(ID obj);
+void seq_release(ID seq);
 
 /**
  * @brief Seqable predicates
  */
-bool is_seqable(CljObject *obj);
-bool is_seq(CljObject *obj);
+bool is_seqable(ID obj);
+bool is_seq(ID obj);
 
 /**
  * @brief Cast to CljSeqIterator (legacy compatibility)

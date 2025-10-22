@@ -371,3 +371,4 @@ CljValue persistent_map(CljValue tmap) {
     
     return new_map; // NEW persistent collection
 }
+

@@ -6,42 +6,42 @@
 
 
 // Erweiterte Funktionsaufruf-Funktionen
-CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap *env);
-CljObject* eval_body(CljObject *body, CljMap *env, EvalState *st);
-CljObject* eval_list(CljObject *list, CljMap *env, EvalState *st);
+ID eval_function_call(ID fn, ID *args, int argc, CljMap *env);
+ID eval_body(ID body, CljMap *env, EvalState *st);
+ID eval_list(CljList *list, CljMap *env, EvalState *st);
 
 // Arithmetische Operationen
-CljObject* eval_add(CljObject *list, CljMap *env);
-CljObject* eval_sub(CljObject *list, CljMap *env);
-CljObject* eval_mul(CljObject *list, CljMap *env);
-CljObject* eval_div(CljObject *list, CljMap *env);
-CljObject* eval_equal(CljObject *list, CljMap *env);
-CljObject* eval_println(CljObject *list, CljMap *env);
+ID eval_add(CljList *list, CljMap *env);
+ID eval_sub(CljList *list, CljMap *env);
+ID eval_mul(CljList *list, CljMap *env);
+ID eval_div(CljList *list, CljMap *env);
+ID eval_equal(CljList *list, CljMap *env);
+ID eval_println(CljList *list, CljMap *env);
 
 // Definition und Funktionen
-CljObject* eval_def(CljObject *list, CljMap *env, EvalState *st);
-CljObject* eval_ns(CljObject *list, CljMap *env, EvalState *st);
-CljObject* eval_list_function(CljObject *list, CljMap *env);
-CljObject* eval_fn(CljObject *list, CljMap *env);
-CljObject* eval_symbol(CljObject *symbol, EvalState *st);
+ID eval_def(CljList *list, CljMap *env, EvalState *st);
+ID eval_ns(CljList *list, CljMap *env, EvalState *st);
+ID eval_list_function(CljList *list, CljMap *env);
+ID eval_fn(CljList *list, CljMap *env);
+ID eval_symbol(ID symbol, EvalState *st);
 
 // Weitere Built-in Funktionen
-CljObject* eval_str(CljObject *list, CljMap *env);
-CljObject* eval_prn(CljObject *list, CljMap *env);
-ID eval_count(CljObject *list, CljMap *env);
-CljObject* eval_first(CljObject *list, CljMap *env);
-CljObject* eval_rest(CljObject *list, CljMap *env);
-CljObject* eval_cons(CljObject *list, CljMap *env);
-CljObject* eval_seq(CljObject *list, CljMap *env);
+ID eval_str(CljList *list, CljMap *env);
+ID eval_prn(CljList *list, CljMap *env);
+ID eval_count(CljList *list, CljMap *env);
+ID eval_first(CljList *list, CljMap *env);
+ID eval_rest(CljList *list, CljMap *env);
+ID eval_cons(CljList *list, CljMap *env);
+ID eval_seq(CljList *list, CljMap *env);
 
 // For-loop functions
-CljObject* eval_for(CljObject *list, CljMap *env);
-CljObject* eval_doseq(CljObject *list, CljMap *env);
-CljObject* eval_dotimes(CljObject *list, CljMap *env);
+ID eval_for(CljList *list, CljMap *env);
+ID eval_doseq(CljList *list, CljMap *env);
+ID eval_dotimes(CljList *list, CljMap *env);
 
 // Hilfsfunktionen
-CljObject* eval_arg(CljObject *list, int index, CljMap *env);
-CljObject* eval_arg_retained(CljObject *list, int index, CljMap *env);
-bool is_symbol(CljObject *v, const char *name);
+ID eval_arg(CljList *list, int index, CljMap *env);
+ID eval_arg_retained(CljList *list, int index, CljMap *env);
+bool is_symbol(ID v, const char *name);
 
 #endif

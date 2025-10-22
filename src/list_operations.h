@@ -6,12 +6,12 @@
 #include <stdbool.h>
 
 // List operation functions
-CljObject* list_first(CljObject *list);
-CljObject* list_nth(CljObject *list, int n);
-int list_count(CljObject *list);
+ID list_first(CljList *list);
+ID list_nth(CljList *list, int n);
+int list_count(CljList *list);
 CljValue make_list_from_stack(CljValue *stack, int count);
-bool is_list(CljObject *v);
-bool is_symbol(CljObject *v, const char *name);
+bool is_list(ID v);
+bool is_symbol(ID v, const char *name);
 
 // Convenience functions for creating lists
 CljObject* list_from_ints(int count, ...);

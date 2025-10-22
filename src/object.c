@@ -410,7 +410,7 @@ char* to_string(CljObject *v) {
                 // Use the existing iterator instead of creating a new seq
                 SeqIterator temp_iter = seq->iter;
                 while (!seq_iter_empty(&temp_iter)) {
-                    CljObject *element = seq_iter_first(&temp_iter);
+                    CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
                     if (!element) {
                         seq_iter_next(&temp_iter);
                         continue;
@@ -744,7 +744,7 @@ void meta_set(CljObject *v, CljObject *meta) {
 ID meta_get(CljObject *v) {
     if (!v || !meta_registry) return NULL;
     
-    return map_get(meta_registry, v);
+    return (ID)map_get((CljValue)meta_registry, (CljValue)v);
 }
 
 void meta_clear(CljObject *v) {
@@ -800,11 +800,11 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     return (id)new_env;
 }
 
-CljObject* env_get_stack(CljObject *env, CljObject *key) {
+ID env_get_stack(CljObject *env, CljObject *key) {
     if (!env || !key) return NULL;
     
     // Direct map lookup
-    return (CljObject*)map_get(env, key);
+    return (ID)map_get((CljValue)env, (CljValue)key);
 }
 
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {

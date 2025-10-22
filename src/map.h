@@ -4,9 +4,6 @@
 #include "object.h"
 #include "value.h"
 
-// === Legacy API (deprecated - use CljValue API) ===
-/** @deprecated Use map_get() instead. Get value for key or NULL if absent (structural key equality). */
-CljObject* map_get(CljObject *map, CljObject *key);
 /** @deprecated Use map_assoc() instead. Associate key->value (replace if key exists; retains value). */
 void map_assoc(CljObject *map, CljObject *key, CljObject *value);
 /** @deprecated Use map_keys_v() instead. Return a vector of keys (retained). */

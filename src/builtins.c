@@ -22,9 +22,14 @@ ID nth2(ID *args, int argc) {
     return OBJ_TO_ID(RETAIN(v->data[i]));
 }
 
-CljObject* conj2(CljObject *vec, CljObject *val) {
-    if (!vec || vec->type != CLJ_VECTOR) return NULL;
-    CljPersistentVector *v = as_vector(vec);
+ID conj2_wrapper(ID *args, int argc) {
+    if (argc != 2) return NULL;
+    return conj2(args[0], args[1]);
+}
+
+ID conj2(ID vec, ID val) {
+    if (!vec || ((CljObject*)vec)->type != CLJ_VECTOR) return NULL;
+    CljPersistentVector *v = as_vector((CljObject*)vec);
     int is_mutable = v ? v->mutable_flag : 0;
     if (is_mutable) {
         if (v->count >= v->capacity) {
@@ -34,8 +39,8 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
             v->data = (CljObject**)newmem;
             v->capacity = newcap;
         }
-        v->data[v->count++] = (RETAIN(val), val);
-        return RETAIN(vec);
+        v->data[v->count++] = (RETAIN((CljObject*)val), (CljObject*)val);
+        return (ID)RETAIN((CljObject*)vec);
     } else {
         int need = v->count + 1;
         int newcap = v->capacity;
@@ -48,8 +53,8 @@ CljObject* conj2(CljObject *vec, CljObject *val) {
             c->data[i] = (RETAIN(v->data[i]), v->data[i]);
         }
         c->count = v->count;
-        c->data[c->count++] = (RETAIN(val), val);
-        return copy;
+        c->data[c->count++] = (RETAIN((CljObject*)val), (CljObject*)val);
+        return (ID)copy;
     }
 }
 
@@ -84,12 +89,12 @@ ID native_rest(ID *args, int argc) {
         if (!seq) return OBJ_TO_ID(make_list(NULL, NULL));
         
         // Return rest of sequence (O(1) operation!)
-        return OBJ_TO_ID(seq_rest(seq));
+        return seq_rest(seq);
     }
     
     if (coll->type == CLJ_SEQ) {
         // Already a sequence - just call seq_rest
-        return OBJ_TO_ID(seq_rest(coll));
+        return seq_rest(coll);
     }
     
     return OBJ_TO_ID(NULL); // Unsupported collection type
@@ -331,7 +336,7 @@ ID native_array_map(ID *args, int argc) {
 
 // make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
 
-CljObject* make_named_func(BuiltinFn fn, void *env, const char *name) {
+ID make_named_func(BuiltinFn fn, void *env, const char *name) {
     CljFunc *func = ALLOC(CljFunc, 1);
     if (!func) return NULL;
     
@@ -351,12 +356,12 @@ CljObject* make_named_func(BuiltinFn fn, void *env, const char *name) {
         func->name = NULL;
     }
     
-    return (CljObject*)func;
+    return func;
 }
 
 static const BuiltinEntry builtins[] = {
     {"nth", FN_GENERIC, .u.generic = nth2},
-    {"conj", FN_ARITY2, .u.fn2 = conj2},
+    {"conj", FN_GENERIC, .u.generic = conj2_wrapper},
     {"assoc", FN_GENERIC, .u.generic = assoc3},
     {"array-map", FN_GENERIC, .u.generic = native_array_map},
     {"transient", FN_GENERIC, .u.generic = native_transient},

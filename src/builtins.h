@@ -13,22 +13,22 @@ typedef struct BuiltinEntry {
     FnKind kind;
     union {
         CljNativeFn generic;
-        CljObject* (*fn1)(CljObject*);
-        CljObject* (*fn2)(CljObject*, CljObject*);
-        CljObject* (*fn3)(CljObject*, CljObject*, CljObject*);
+        ID (*fn1)(ID);
+        ID (*fn2)(ID, ID);
+        ID (*fn3)(ID, ID, ID);
     } u;
 } BuiltinEntry;
 
 // Example implementations
 ID nth2(ID *args, int argc);
-CljObject* conj2(CljObject *vec, CljObject *val);
+ID conj2(ID vec, ID val);
 ID assoc3(ID *args, int argc);
 ID native_if(ID *args, int argc);
 ID native_type(ID *args, int argc);
 ID native_array_map(ID *args, int argc);
 
 // Function value constructors
-CljObject* make_named_func(BuiltinFn fn, void *env, const char *name);
+ID make_named_func(BuiltinFn fn, void *env, const char *name);
 
 // Eval helpers
 ID apply_builtin(const BuiltinEntry *entry, ID *args, int argc);

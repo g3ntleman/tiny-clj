@@ -251,16 +251,32 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
         size_t allocs = stats->allocations_by_type[i];
         size_t deallocs = stats->deallocations_by_type[i];
-        if (allocs > 0 || deallocs > 0) {
+        size_t retains = stats->retains_by_type[i];
+        size_t releases = stats->releases_by_type[i];
+        size_t autoreleases = stats->autoreleases_by_type[i];
+        
+        if (allocs > 0 || deallocs > 0 || retains > 0 || releases > 0 || autoreleases > 0) {
             if (!has_activity) {
                 printf("📋 Types: ");
                 has_activity = true;
             }
             const char* type_name = clj_type_name((CljType)i);
-            printf("%s:%zu/%zu ", type_name, allocs, deallocs);
+            printf("%s: A:%zu/%zu", type_name, allocs, deallocs);
+            
+            // Add retain/release/autorelease info if > 0
+            if (retains > 0) printf(" R:%zu", retains);
+            if (releases > 0) printf(" Rel:%zu", releases);
+            if (autoreleases > 0) printf(" AR:%zu", autoreleases);
+            
+            printf(" ");
         }
     }
     if (has_activity) printf("\n");
+    
+    // Always show basic stats even if no activity
+    if (!has_activity) {
+        printf("📋 Types: (no memory activity detected)\n");
+    }
     
     // Compact leak detection
     if (stats->memory_leaks > 0) {
