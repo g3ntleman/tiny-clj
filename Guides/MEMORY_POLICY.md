@@ -248,6 +248,8 @@ for (int i = 0; i < count; i++) {
 
 The `ASSIGN(var, new_obj)` macro provides safe object assignment following the classic Objective-C pattern. It handles retain/release operations automatically and prevents common memory management errors.
 
+**Note:** ASSIGN is typically used for heap objects (CljObject*), not immediate values (CljValue). For immediate values, direct assignment is sufficient since they don't require reference counting.
+
 #### Usage Pattern:
 ```c
 CljObject *obj = NULL;
@@ -262,6 +264,7 @@ ASSIGN(obj, new_obj);  // obj is now retained, old value (if any) is released
 2. **Releases the old object** (if not NULL) 
 3. **Assigns the new object** to the variable
 4. **Optimizes self-assignment** (skips operations if `new_obj == var`)
+5. **Handles NULL safely** in both `var` and `new_obj` parameters
 
 #### Classic Objective-C Pattern:
 ```c
@@ -300,6 +303,12 @@ ASSIGN(old_vec, new_vec);  // old_vec now points to new_vec, old data released
 CljObject *obj = make_int(42);
 // ... use obj ...
 ASSIGN(obj, NULL);  // Safely releases obj and sets to NULL
+```
+
+**NULL to NULL Assignment:**
+```c
+CljObject *obj = NULL;
+ASSIGN(obj, NULL);  // Safe no-op - no operations performed
 ```
 
 **Self-Assignment Optimization:**

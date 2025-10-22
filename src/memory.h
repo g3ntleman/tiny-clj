@@ -130,23 +130,6 @@ int get_retain_count(CljObject *obj);
         } \
         (CljObject*)_id; \
     })
-    /** @brief Safe object assignment with automatic retain/release management.
-     *  @param var Variable to assign to
-     *  @param new_obj New object to assign (can be NULL)
-     *  Follows classic Objective-C pattern: retains new object, releases old one.
-     */
-    #define ASSIGN(var, new_obj) do { \
-        typeof(var) _tmp = (new_obj); \
-        if (_tmp != (var)) { \
-            if (_tmp != NULL) { \
-                retain(_tmp); \
-            } \
-            if ((var) != NULL) { \
-                release(var); \
-            } \
-            (var) = _tmp; \
-        } \
-    } while(0)
     
     // Foundation-style autorelease pool - compatible with setjmp/longjmp
     // Like NSAutoreleasePool in pre-ARC Objective-C
@@ -180,6 +163,21 @@ int get_retain_count(CljObject *obj);
     
     // Retain count macro for testing
     #define REFERENCE_COUNT(obj) get_retain_count(obj)
+    
+    /** @brief Safe object assignment with automatic retain/release management.
+     *  @param var Variable to assign to
+     *  @param new_obj New object to assign (can be NULL)
+     *  Follows classic Objective-C pattern: retains new object, releases old one.
+     *  Works in both DEBUG and RELEASE builds using RETAIN/RELEASE macros.
+     */
+    #define ASSIGN(var, new_obj) do { \
+        typeof(var) _tmp = (new_obj); \
+        if (_tmp != (var)) { \
+            RETAIN(_tmp); \
+            RELEASE(var); \
+            (var) = _tmp; \
+        } \
+    } while(0)
     
     // Fluent autorelease pool macro with EvalState management
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { \
@@ -231,14 +229,6 @@ int get_retain_count(CljObject *obj);
         } \
         (CljObject*)_id; \
     })
-    #define ASSIGN(var, new_obj) do { \
-        typeof(var) _tmp = (new_obj); \
-        if (_tmp != (var)) { \
-            RETAIN(_tmp); \
-            RELEASEr(var); \
-            (var) = _tmp; \
-        } \
-    } while(0)
     
     // Foundation-style autorelease pool for release builds
     #define WITH_AUTORELEASE_POOL(code) do { \
