@@ -70,3 +70,6 @@ test_output.txt
 test_output_full.txt
 test_simple.c
 test_assert.c
+
+# Generated files
+tags
