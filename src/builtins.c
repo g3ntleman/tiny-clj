@@ -450,7 +450,7 @@ static int32_t fixnum_to_fixed(int fixnum) {
 // String concatenation (variadic)
 ID native_str(ID *args, int argc) {
     if (argc == 0) {
-        return OBJ_TO_ID(make_string(""));
+        return OBJ_TO_ID(make_string_impl(""));
     }
     
     // Calculate total length
@@ -465,7 +465,7 @@ ID native_str(ID *args, int argc) {
     
     // Allocate buffer
     char *buffer = ALLOC(char, total_len + 1);
-    if (!buffer) return make_string("");
+    if (!buffer) return make_string_impl("");
     buffer[0] = '\0';
     
     // Concatenate all strings
@@ -477,7 +477,7 @@ ID native_str(ID *args, int argc) {
         }
     }
     
-    CljObject *result = make_string(buffer);
+    CljObject *result = make_string_impl(buffer);
     free(buffer);
     return result;
 }

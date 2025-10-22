@@ -1393,10 +1393,10 @@ CljObject* eval_str(CljObject *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
-    if (!arg) return AUTORELEASE(make_string(""));
+    if (!arg) return AUTORELEASE(make_string_impl(""));
     
     char *str = pr_str(arg);
-    CljObject *result = AUTORELEASE(make_string(str));
+    CljObject *result = AUTORELEASE(make_string_impl(str));
     free(str);
     return result;
 }

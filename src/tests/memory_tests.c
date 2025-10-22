@@ -28,7 +28,7 @@ void test_memory_allocation(void) {
         // Test basic object creation
         CljObject *int_obj = fixnum(42);
         CljObject *float_obj = make_fixed(3.14f);
-        CljValue str_obj = make_string("hello");
+        CljValue str_obj = make_string_impl("hello");
         
         TEST_ASSERT_NOT_NULL(int_obj);
         TEST_ASSERT_NOT_NULL(float_obj);
@@ -52,7 +52,7 @@ void test_memory_deallocation(void) {
     {
         // Test object lifecycle with heap-allocated object (not immediate)
         // Use a string object since symbols are singletons and don't use reference counting
-        CljObject *obj = make_string("test_string_for_reference_counting");
+        CljObject *obj = make_string_impl("test_string_for_reference_counting");
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting

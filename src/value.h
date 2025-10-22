@@ -242,10 +242,6 @@ static inline CljValue make_float(double x) {
     return (CljValue)make_fixed((float)x);
 }
 
-// Inline wrapper for make_string (simple delegation)
-static inline CljValue make_string(const char *str) {
-    return make_string_impl(str);
-}
 
 // Inline wrapper for make_symbol (simple delegation)
 static inline CljValue make_symbol(const char *name, const char *ns) {
