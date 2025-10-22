@@ -548,9 +548,7 @@ LineEditor* get_line_editor(void) {
     return NULL;
 }
 
-void cleanup_line_editor(void) {
-    // Nothing to do when line editing is disabled
-}
+// cleanup_line_editor() is defined above in the enabled section
 
 void line_editor_reset_history_index(LineEditor *editor) {
     (void)editor;
