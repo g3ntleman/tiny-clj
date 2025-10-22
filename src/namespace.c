@@ -278,7 +278,7 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
             if (result) result = AUTORELEASE(result);
         } else if (is_type(expr, CLJ_LIST)) {
             CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
-            result = eval_list(expr, (CljMap*)env, st);
+            result = eval_list(as_list(expr), (CljMap*)env, st);
             if (result) result = AUTORELEASE(result);
         } else {
             result = AUTORELEASE(expr);

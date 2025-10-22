@@ -27,7 +27,7 @@ void test_memory_allocation(void) {
     {
         // Test basic object creation
         CljObject *int_obj = fixnum(42);
-        CljObject *float_obj = make_fixed(3.14f);
+        CljObject *float_obj = fixed(3.14f);
         CljValue str_obj = make_string_impl("hello");
         
         TEST_ASSERT_NOT_NULL(int_obj);

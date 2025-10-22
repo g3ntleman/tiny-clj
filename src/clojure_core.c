@@ -63,7 +63,8 @@ static bool eval_core_source(const char *src, EvalState *st) {
       // Don't call pr_str on exception to avoid potential double free
     } END_TRY
     
-    RELEASE((CljObject*)form);
+    // Don't RELEASE form here - it's already managed by the parser
+    // RELEASE((CljObject*)form);
     expr_count++;
   }
   

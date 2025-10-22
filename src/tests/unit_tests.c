@@ -162,17 +162,10 @@ void test_array_map_builtin(void) {
         // result0 and eval0 are automatically managed by AUTORELEASE
 
         // Test single key-value: (array-map "a" 1)
-        CljObject *result1 = parse("(array-map \"a\" 1)", eval_state);
-        CljObject *eval1 = eval_expr_simple(result1, eval_state);
+        CljObject *eval1 = eval_string("(array-map \"a\" 1)", eval_state);
         
-        // Debug: Check what native_array_map actually receives
-        // ID args[2] = {OBJ_TO_ID(key), OBJ_TO_ID(value)}; // Unused variable removed
-        
-        
-        
-        // ID result = native_array_map(args, 2); // Unused variable removed
-        // CljObject *result_obj = ID_TO_OBJ(result); // Unused variable removed
-        // key and value are automatically managed by AUTORELEASE
+        TEST_ASSERT_NOT_NULL(eval1);
+        TEST_ASSERT_EQUAL_INT(CLJ_MAP, eval1->type);
         TEST_ASSERT_EQUAL_INT(1, map_count(eval1));
         // result1 and eval1 are automatically managed by parse() and eval_expr_simple()
 
@@ -393,7 +386,7 @@ void test_cljvalue_wrapper_functions(void) {
     {
         // Test wrapper functions for existing APIs
         CljValue int_val = integer(42);
-        CljValue float_val = make_float(3.14);
+        CljValue float_val = fixed(3.14f);
         CljValue str_val = make_string_impl("hello");
         CljValue sym_val = make_symbol_impl("test", NULL);
         
@@ -452,9 +445,9 @@ void test_cljvalue_immediates_fixnum(void) {
 void test_cljvalue_immediates_char(void) {
     // Test char immediates (21-bit Unicode)
     {
-        CljValue val1 = make_char('A');
-        CljValue val2 = make_char(0x1F600); // 😀 emoji
-        CljValue val3 = make_char(0);
+        CljValue val1 = character('A');
+        CljValue val2 = character(0x1F600); // 😀 emoji
+        CljValue val3 = character(0);
         
         TEST_ASSERT_TRUE(is_char(val1));
         TEST_ASSERT_TRUE(is_char(val2));
@@ -465,12 +458,12 @@ void test_cljvalue_immediates_char(void) {
         TEST_ASSERT_EQUAL_INT(0, as_char(val3));
         
         // Test edge cases
-        CljValue max_char = make_char(CLJ_CHAR_MAX);
+        CljValue max_char = character(CLJ_CHAR_MAX);
         TEST_ASSERT_TRUE(is_char(max_char));
         TEST_ASSERT_EQUAL_INT(CLJ_CHAR_MAX, as_char(max_char));
         
         // Test invalid character (should fallback to heap)
-        CljValue invalid_char = make_char(CLJ_CHAR_MAX + 1);
+        CljValue invalid_char = character(CLJ_CHAR_MAX + 1);
         TEST_ASSERT_FALSE(is_char(invalid_char));
         TEST_ASSERT_NOT_NULL(invalid_char);
         TEST_ASSERT_EQUAL_INT(CLJ_STRING, invalid_char->type);
@@ -505,7 +498,7 @@ void test_cljvalue_immediates_special(void) {
 void test_cljvalue_immediates_fixed(void) {
     // Test fixed-point immediates (simplified implementation)
     {
-        CljValue val1 = make_fixed(3.14f);
+        CljValue val1 = fixed(3.14f);
         
         // Test fixed-point immediates - only test the first one for now
         TEST_ASSERT_TRUE(is_fixed(val1));
@@ -881,7 +874,7 @@ void test_seq_iterator_verification(void) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_result->type);
     
     // Test 2: Verifiziere, dass es ein CljSeqIterator ist
-    CljSeqIterator *seq = as_seq(rest_result);
+    CljSeqIterator *seq = as_seq((ID)rest_result);
     TEST_ASSERT_NOT_NULL(seq);
     
     // Test 3: Verifiziere, dass der Iterator korrekt initialisiert ist
@@ -899,7 +892,7 @@ void test_seq_iterator_verification(void) {
     // Test 5: Verifiziere, dass der zweite Iterator weiter vorne startet
     // Only test if it's actually a CLJ_SEQ
     if (rest_rest->type == CLJ_SEQ) {
-        CljSeqIterator *seq2 = as_seq(rest_rest);
+        CljSeqIterator *seq2 = as_seq((ID)rest_rest);
         TEST_ASSERT_NOT_NULL(seq2);
         TEST_ASSERT_TRUE(seq2->iter.state.vec.index >= 2);
     }
@@ -1105,22 +1098,22 @@ void test_map_function(void) {
 
 void test_fixed_creation_and_conversion(void) {
     // Test basic Fixed-Point creation
-    CljValue f1 = make_fixed(1.5f);
+    CljValue f1 = fixed(1.5f);
     TEST_ASSERT_TRUE(is_fixed(f1));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.5f, as_fixed(f1));
     
     // Test negative values
-    CljValue f2 = make_fixed(-2.25f);
+    CljValue f2 = fixed(-2.25f);
     TEST_ASSERT_TRUE(is_fixed(f2));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -2.25f, as_fixed(f2));
     
     // Test zero
-    CljValue f3 = make_fixed(0.0f);
+    CljValue f3 = fixed(0.0f);
     TEST_ASSERT_TRUE(is_fixed(f3));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, as_fixed(f3));
     
     // Test very small values
-    CljValue f4 = make_fixed(0.001f);
+    CljValue f4 = fixed(0.001f);
     TEST_ASSERT_TRUE(is_fixed(f4));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.001f, as_fixed(f4));
 }

@@ -7,7 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING")
 # Disable Unity's setjmp/longjmp to avoid conflict with our exception system
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNITY_EXCLUDE_SETJMP")
 # Production/Release: platform-specific optimization policy

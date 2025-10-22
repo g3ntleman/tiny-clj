@@ -144,11 +144,24 @@ static void usage(const char *prog) {
  *  @param exit_code Exit code to use
  */
 static void cleanup_and_exit(const char **eval_args, int exit_code) {
-    // Print memory profiling stats in debug mode
-#ifdef DEBUG
+    // Print memory profiling stats
+#ifdef ENABLE_MEMORY_PROFILING
     printf("\n🔍 === REPL Memory Profiling Stats ===\n");
     MEMORY_PROFILER_PRINT_STATS("REPL Session");
+    
+#ifdef DEBUG
+    // Also call the function directly to ensure it works
+    memory_profiler_print_stats("REPL Session Direct");
+    
+    // Force print some debug information
+    printf("🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
+           g_memory_stats.total_allocations, g_memory_stats.total_deallocations, 
+           g_memory_stats.retain_calls, g_memory_stats.release_calls, g_memory_stats.autorelease_calls);
+#endif
+    
     printf("📊 Final memory state before exit\n");
+#else
+    printf("\n🔍 Memory profiling disabled - no stats available\n");
 #endif
     
     if (eval_args) free(eval_args);
@@ -258,6 +271,48 @@ static bool run_interactive_repl(EvalState *st) {
         // Use eval_string_repl for proper exception handling
         bool success = eval_string_repl(acc, st);
         
+        // Show memory stats after each evaluation (if enabled)
+#ifdef ENABLE_MEMORY_PROFILING
+        if (g_memory_verbose_mode) {
+#ifdef DEBUG
+            printf("🔍 Memory: %zu allocs, %zu deallocs, %zu bytes\n", 
+                   g_memory_stats.total_allocations,
+                   g_memory_stats.total_deallocations,
+                   g_memory_stats.current_memory_usage);
+            
+            // Show detailed type breakdown - one line per type
+            if (g_memory_stats.allocations_by_type[CLJ_SYMBOL] > 0 || g_memory_stats.deallocations_by_type[CLJ_SYMBOL] > 0) {
+                printf("📋 Symbol: A:%zu/%zu R:%zu AR:%zu\n", 
+                       g_memory_stats.allocations_by_type[CLJ_SYMBOL], g_memory_stats.deallocations_by_type[CLJ_SYMBOL],
+                       g_memory_stats.retains_by_type[CLJ_SYMBOL], g_memory_stats.autoreleases_by_type[CLJ_SYMBOL]);
+            }
+            if (g_memory_stats.allocations_by_type[CLJ_STRING] > 0 || g_memory_stats.deallocations_by_type[CLJ_STRING] > 0) {
+                printf("📋 String: A:%zu/%zu R:%zu Rel:%zu AR:%zu\n", 
+                       g_memory_stats.allocations_by_type[CLJ_STRING], g_memory_stats.deallocations_by_type[CLJ_STRING],
+                       g_memory_stats.retains_by_type[CLJ_STRING], g_memory_stats.releases_by_type[CLJ_STRING], g_memory_stats.autoreleases_by_type[CLJ_STRING]);
+            }
+            if (g_memory_stats.allocations_by_type[CLJ_VECTOR] > 0 || g_memory_stats.deallocations_by_type[CLJ_VECTOR] > 0) {
+                printf("📋 Vector: A:%zu/%zu Rel:%zu\n", 
+                       g_memory_stats.allocations_by_type[CLJ_VECTOR], g_memory_stats.deallocations_by_type[CLJ_VECTOR],
+                       g_memory_stats.releases_by_type[CLJ_VECTOR]);
+            }
+            if (g_memory_stats.allocations_by_type[CLJ_LIST] > 0 || g_memory_stats.deallocations_by_type[CLJ_LIST] > 0) {
+                printf("📋 List: A:%zu/%zu R:%zu AR:%zu\n", 
+                       g_memory_stats.allocations_by_type[CLJ_LIST], g_memory_stats.deallocations_by_type[CLJ_LIST],
+                       g_memory_stats.retains_by_type[CLJ_LIST], g_memory_stats.autoreleases_by_type[CLJ_LIST]);
+            }
+#else
+            // In release builds, only show if there are actual allocations
+            if (g_memory_stats.total_allocations > 0) {
+                printf("🔍 Memory: %zu allocs, %zu deallocs, %zu bytes\n", 
+                       g_memory_stats.total_allocations,
+                       g_memory_stats.total_deallocations,
+                       g_memory_stats.current_memory_usage);
+            }
+#endif
+        }
+#endif
+        
         // Always add command to history (successful or failed) so user can correct it
         if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
@@ -277,10 +332,23 @@ static bool run_interactive_repl(EvalState *st) {
     }
 
     // Print memory profiling stats before exiting REPL
-#ifdef DEBUG
+#ifdef ENABLE_MEMORY_PROFILING
     printf("\n🔍 === REPL Memory Profiling Stats (EOF) ===\n");
     MEMORY_PROFILER_PRINT_STATS("REPL Session");
+    
+#ifdef DEBUG
+    // Also call the function directly to ensure it works
+    memory_profiler_print_stats("REPL Session Direct");
+    
+    // Force print some debug information
+    printf("🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
+           g_memory_stats.total_allocations, g_memory_stats.total_deallocations, 
+           g_memory_stats.retain_calls, g_memory_stats.release_calls, g_memory_stats.autorelease_calls);
+#endif
+    
     printf("📊 Final memory state before exit\n");
+#else
+    printf("\n🔍 Memory profiling disabled - no stats available\n");
 #endif
 
     return true;
@@ -347,8 +415,22 @@ int main(int argc, char **argv) {
     register_builtins();
     
     // Initialize memory profiling AFTER core loading and builtins registration
+#ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
+    
+    // Enable verbose memory mode for REPL
+    g_memory_verbose_mode = true;
+    
+    // Memory profiling is automatically enabled for debug builds
+#ifdef DEBUG
+    printf("🔍 Memory profiling initialized for REPL (Debug Build)\n");
+#else
+    printf("🔍 Memory profiling initialized for REPL (Release Build)\n");
+#endif
+#else
+    printf("🔍 Memory profiling disabled for REPL (Release Build)\n");
+#endif
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);

@@ -234,8 +234,8 @@ int get_retain_count(CljObject *obj);
     #define ASSIGN(var, new_obj) do { \
         typeof(var) _tmp = (new_obj); \
         if (_tmp != (var)) { \
-            if (_tmp != NULL) retain(_tmp); \
-            if ((var) != NULL) release(var); \
+            RETAIN(_tmp); \
+            RELEASEr(var); \
             (var) = _tmp; \
         } \
     } while(0)

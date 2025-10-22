@@ -276,7 +276,13 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     // Always show basic stats even if no activity
     if (!has_activity) {
         printf("📋 Types: (no memory activity detected)\n");
+        printf("🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
+               stats->total_allocations, stats->total_deallocations, 
+               stats->retain_calls, stats->release_calls, stats->autorelease_calls);
     }
+    
+    // Force show some debug info to verify the function is called
+    printf("🔍 Memory Profiling Debug: Function called successfully\n");
     
     // Compact leak detection
     if (stats->memory_leaks > 0) {

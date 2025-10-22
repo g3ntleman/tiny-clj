@@ -238,7 +238,7 @@ CljObject* seq_create(ID obj) {
 
 void seq_release(ID seq_obj) {
     if (!seq_obj) return;
-    CljSeqIterator *seq = as_seq((CljObject*)seq_obj);
+    CljSeqIterator *seq = as_seq((ID)seq_obj);
     if (!seq) return;
     
     // Stack iterator doesn't need cleanup
@@ -247,7 +247,7 @@ void seq_release(ID seq_obj) {
 
 ID seq_first(ID seq_obj) {
     if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq((CljObject*)seq_obj);
+    CljSeqIterator *seq = as_seq((ID)seq_obj);
     if (!seq) return NULL;
     
     return seq_iter_first(&seq->iter);
@@ -255,7 +255,7 @@ ID seq_first(ID seq_obj) {
 
 ID seq_rest(ID seq_obj) {
     if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq((CljObject*)seq_obj);
+    CljSeqIterator *seq = as_seq((ID)seq_obj);
     if (!seq) return NULL;
     
     // Create new heap wrapper with advanced iterator
@@ -278,7 +278,7 @@ ID seq_next(ID seq_obj) {
 
 bool seq_empty(ID seq_obj) {
     if (!seq_obj) return true;
-    CljSeqIterator *seq = as_seq((CljObject*)seq_obj);
+    CljSeqIterator *seq = as_seq((ID)seq_obj);
     if (!seq) return true;
     
     return seq_iter_empty(&seq->iter);
@@ -289,7 +289,7 @@ int seq_count(ID obj) {
     
     // If it's already a seq wrapper, count from iterator state
     if (is_type((CljObject*)obj, CLJ_SEQ)) {
-        CljSeqIterator *seq = as_seq((CljObject*)obj);
+        CljSeqIterator *seq = as_seq((ID)obj);
         if (!seq) return 0;
         
         // Get count from embedded iterator state

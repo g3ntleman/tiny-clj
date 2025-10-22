@@ -52,7 +52,7 @@ void test_seq_create_vector(void) {
         // Create sequence iterator
         CljObject *seq = seq_create((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(seq);
-        CljSeqIterator *seq_iter = as_seq(seq);
+        CljSeqIterator *seq_iter = as_seq((ID)seq);
         TEST_ASSERT_NOT_NULL(seq_iter);
         
         // Test sequence properties
@@ -71,7 +71,7 @@ void test_seq_create_string(void) {
         // Create sequence iterator
         CljObject *seq = seq_create((CljObject*)str);
         TEST_ASSERT_NOT_NULL(seq);
-        CljSeqIterator *seq_iter = as_seq(seq);
+        CljSeqIterator *seq_iter = as_seq((ID)seq);
         TEST_ASSERT_NOT_NULL(seq_iter);
         
         // Test sequence properties

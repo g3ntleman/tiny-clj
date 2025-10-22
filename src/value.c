@@ -1,6 +1,7 @@
 #include "value.h"
 #include "object.h"
 #include "exception.h"
+#include "memory.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,7 +12,7 @@
  * @param codepoint Unicode codepoint
  * @return CljValue character or heap-allocated string for invalid chars
  */
-CljValue make_char_impl(uint32_t codepoint) {
+CljValue character(uint32_t codepoint) {
     if (codepoint > CLJ_CHAR_MAX) {
         // Fallback to heap allocation for invalid characters
         CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
@@ -33,7 +34,7 @@ CljValue make_char_impl(uint32_t codepoint) {
  * @param value Float value to convert
  * @return CljValue fixed-point representation
  */
-CljValue make_fixed_impl(float value) {
+CljValue fixed(float value) {
     int32_t fixed = (int32_t)(value * 8192.0f);
     // Saturierung zu ±32767.9998 (±268435455 in Fixed-Point)
     if (fixed > 268435455) fixed = 268435455;
@@ -50,8 +51,8 @@ CljValue make_string_impl(const char *str) {
     if (!str || str[0] == '\0') {
         return (CljValue)empty_string_singleton;
     }
-    // Allocate CljObject + space for char* pointer
-    CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
+    // Allocate CljObject + space for char* pointer using profiling-aware alloc
+    CljObject *v = (CljObject*)alloc(sizeof(CljObject) + sizeof(char*), 1, CLJ_STRING);
     if (!v) return NULL;
     v->type = CLJ_STRING;
     v->rc = 1;

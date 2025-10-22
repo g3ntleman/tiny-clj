@@ -212,9 +212,9 @@ char* to_string(CljObject *v) {
                 default: return strdup("unknown");
             }
         }
-        if (is_char(v)) {
+        if (is_character(v)) {
             char buf[8];
-            snprintf(buf, sizeof(buf), "%c", (char)as_char(v));
+            snprintf(buf, sizeof(buf), "%c", (char)as_character(v));
             return strdup(buf);
         }
     }
@@ -399,7 +399,7 @@ char* to_string(CljObject *v) {
 
         case CLJ_SEQ:
             {
-                CljSeqIterator *seq = as_seq(v);
+                CljSeqIterator *seq = as_seq((ID)v);
                 if (!seq) return strdup("()");
                 
                 // Direktes Drucken ohne Umkopieren
@@ -508,8 +508,8 @@ bool clj_equal_id(ID a, ID b) {
         if (is_fixnum(a) && is_fixnum(b)) {
             return as_fixnum(a) == as_fixnum(b);
         }
-        if (is_char(a) && is_char(b)) {
-            return as_char(a) == as_char(b);
+        if (is_character(a) && is_character(b)) {
+            return as_character(a) == as_character(b);
         }
         if (is_fixed(a) && is_fixed(b)) {
             return as_fixed(a) == as_fixed(b);

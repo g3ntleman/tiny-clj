@@ -332,11 +332,11 @@ static inline void* assert_type(CljObject *obj, CljType expected_type) {
 }
 
 // Type-safe casting (static inline for performance)
-static inline CljSymbol* as_symbol(CljObject *obj) {
-    return (CljSymbol*)assert_type(obj, CLJ_SYMBOL);
+static inline CljSymbol* as_symbol(ID obj) {
+    return (CljSymbol*)assert_type((CljObject*)obj, CLJ_SYMBOL);
 }
-static inline CljPersistentVector* as_vector(CljObject *obj) {
-    if (!is_type(obj, CLJ_VECTOR) && !is_type(obj, CLJ_WEAK_VECTOR) && !is_type(obj, CLJ_TRANSIENT_VECTOR)) {
+static inline CljPersistentVector* as_vector(ID obj) {
+    if (!is_type((CljObject*)obj, CLJ_VECTOR) && !is_type((CljObject*)obj, CLJ_WEAK_VECTOR) && !is_type((CljObject*)obj, CLJ_TRANSIENT_VECTOR)) {
 #ifdef DEBUG
         const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
@@ -346,8 +346,8 @@ static inline CljPersistentVector* as_vector(CljObject *obj) {
     }
     return (CljPersistentVector*)obj;
 }
-static inline CljMap* as_map(CljObject *obj) {
-    if (!is_type(obj, CLJ_MAP) && !is_type(obj, CLJ_TRANSIENT_MAP)) {
+static inline CljMap* as_map(ID obj) {
+    if (!is_type((CljObject*)obj, CLJ_MAP) && !is_type((CljObject*)obj, CLJ_TRANSIENT_MAP)) {
 #ifdef DEBUG
         const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 
@@ -357,8 +357,8 @@ static inline CljMap* as_map(CljObject *obj) {
     }
     return (CljMap*)obj;
 }
-static inline CljList* as_list(CljObject *obj) {
-    if (!is_type(obj, CLJ_LIST)) {
+static inline CljList* as_list(ID obj) {
+    if (!is_type((CljObject*)obj, CLJ_LIST)) {
         char error_msg[128];
         snprintf(error_msg, sizeof(error_msg), 
                 "Type mismatch: expected List, got %s", 
@@ -367,11 +367,11 @@ static inline CljList* as_list(CljObject *obj) {
     }
     return (CljList*)obj;
 }
-static inline CljFunction* as_function(CljObject *obj) {
-    return (CljFunction*)assert_type(obj, CLJ_CLOSURE);
+static inline CljFunction* as_function(ID obj) {
+    return (CljFunction*)assert_type((CljObject*)obj, CLJ_CLOSURE);
 }
-static inline CLJException* as_exception(CljObject *obj) {
-    return (CLJException*)assert_type(obj, CLJ_EXCEPTION);
+static inline CLJException* as_exception(ID obj) {
+    return (CLJException*)assert_type((CljObject*)obj, CLJ_EXCEPTION);
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)

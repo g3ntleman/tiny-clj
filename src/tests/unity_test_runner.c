@@ -219,6 +219,10 @@ extern void test_eval_list_function_call(void);
 extern void test_recur_factorial(void);
 extern void test_recur_deep_recursion(void);
 extern void test_recur_arity_error(void);
+extern void test_recur_countdown(void);
+extern void test_recur_sum(void);
+extern void test_recur_tail_position_error(void);
+extern void test_if_bug_in_functions(void);
 
 // Equal function tests
 extern void test_equal_null_pointers(void);
@@ -248,7 +252,7 @@ static void test_group_unit(void) {
         RUN_TEST(test_string_creation);
         RUN_TEST(test_vector_creation);
         RUN_TEST(test_map_creation);
-        // RUN_TEST(test_array_map_builtin);  // Temporarily disabled due to segfault
+        RUN_TEST(test_array_map_builtin);
         RUN_TEST(test_integer_creation);
         RUN_TEST(test_float_creation);
         RUN_TEST(test_nil_creation);
@@ -257,7 +261,7 @@ static void test_group_unit(void) {
         RUN_TEST(test_load_multiline_file);
         
         // Map function test
-        // RUN_TEST(test_map_function);  // Temporarily disabled due to segfault
+        RUN_TEST(test_map_function);
         
         // Fixed-Point arithmetic tests
         RUN_TEST(test_fixed_creation_and_conversion);
@@ -302,10 +306,14 @@ static void test_group_unit(void) {
         // RUN_TEST(test_eval_list_simple_arithmetic);
         // RUN_TEST(test_eval_list_function_call);
         
-        // Recur tests
+        // Recur tests - re-enabled with proper implementation
         RUN_TEST(test_recur_factorial);
-        RUN_TEST(test_recur_deep_recursion);  // Now enabled
-        RUN_TEST(test_recur_arity_error);     // Now enabled
+        RUN_TEST(test_recur_deep_recursion);
+        RUN_TEST(test_recur_arity_error);
+        RUN_TEST(test_recur_countdown);
+        RUN_TEST(test_recur_sum);
+        RUN_TEST(test_recur_tail_position_error);
+        RUN_TEST(test_if_bug_in_functions);
     });
 }
 
@@ -455,6 +463,10 @@ static void test_group_recur(void) {
     RUN_TEST(test_recur_factorial);
     RUN_TEST(test_recur_deep_recursion);
     RUN_TEST(test_recur_arity_error);
+    RUN_TEST(test_recur_countdown);
+    RUN_TEST(test_recur_sum);
+    RUN_TEST(test_recur_tail_position_error);
+    RUN_TEST(test_if_bug_in_functions);
 }
 
 static void test_group_debugging(void) {

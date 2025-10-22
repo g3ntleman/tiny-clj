@@ -270,7 +270,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
         result = (CljObject*)parsed_expr;
     } else if (is_type(parsed_expr, CLJ_LIST)) {
         CljObject *env = (eval_state && eval_state->current_ns) ? (CljObject*)eval_state->current_ns->mappings : NULL;
-        result = eval_list(parsed_expr, (CljMap*)env, eval_state);
+        result = eval_list(as_list(parsed_expr), (CljMap*)env, eval_state);
         // eval_list already returns autoreleased object
     } else {
         // Handle other types with eval_expr_simple
@@ -569,7 +569,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
   }
   
   if (strchr(buf, '.'))
-    return make_fixed((float)atof(buf));
+    return fixed((float)atof(buf));
   return fixnum(atoi(buf));
 }
 

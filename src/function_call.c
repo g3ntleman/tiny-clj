@@ -13,6 +13,7 @@
 #include "object.h"
 #include "function_call.h"
 #include "symbol.h"
+#include <stdint.h>
 #include <string.h>
 #include "string.h"
 #include "seq.h"
@@ -38,7 +39,6 @@ static _Thread_local bool g_recur_detected = false;
 // Forward declarations  
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
-CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_add_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_sub_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_mul_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
@@ -57,8 +57,8 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env);
 
 // Macros for common argument evaluation patterns
 #define EVAL_TWO_ARGS(list, env, a, b) do { \
-    (a) = eval_arg_retained((list), 1, (env)); \
-    (b) = eval_arg_retained((list), 2, (env)); \
+    (a) = eval_arg_retained(as_list((ID)(list)), 1, (env)); \
+    (b) = eval_arg_retained(as_list((ID)(list)), 2, (env)); \
     if (!(a) || !(b)) { \
         if (a && !is_immediate((CljValue)(a))) RELEASE(a); \
         if (b && !is_immediate((CljValue)(b))) RELEASE(b); \
@@ -142,7 +142,7 @@ static bool compare_numeric_values(CljObject *a, CljObject *b, ComparisonOp op) 
  * @param op The comparison operation to perform
  * @return CljObject* The result (true/false) or NULL on error
  */
-static CljObject* eval_numeric_comparison(CljObject *list, CljMap *env, ComparisonOp op) {
+static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, ComparisonOp op) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CljObject *a, *b;
@@ -182,15 +182,15 @@ static inline void free_obj_array(CljObject **array, CljObject **stack_buffer) {
 }
 
 /** @brief Get raw nth element from a list (0=head). Returns NULL if out of bounds */
-static CljObject* list_get_element(CljObject *list, int index) {
-    if (!list || list->type != CLJ_LIST || index < 0) return NULL;
-    CljList *node = as_list(list);
+static CljObject* list_get_element(CljList *list, int index) {
+    if (!list || index < 0) return NULL;
+        CljList *node = list;
     if (index == 0) return LIST_FIRST(node);
     int i = 0;
     while (i < index) {
         CljObject *rest = LIST_REST(node);
         if (!rest || !is_type(rest, CLJ_LIST)) return NULL;
-        node = as_list(rest);
+        node = as_list((ID)rest);
         i++;
     }
     return LIST_FIRST(node);
@@ -294,8 +294,8 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
 
 // Generic arithmetic function (with parameter substitution)
 CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, ArithOp op, CljObject *closure_env) {
-    CljObject *a = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
-    CljObject *b = eval_arg_with_substitution(list, 2, params, values, param_count, closure_env);
+    CljObject *a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
+    CljObject *b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, closure_env);
     
     // Check for nil arguments
     if (!a || !b) {
@@ -400,68 +400,50 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
         current_args[i] = RETAIN(args[i]);
     }
     
-    while (true) {
-        // Reset recur detection before each iteration
+    // TCO Loop - iterate on recur
+    CljObject *result = NULL;
+    do {
         g_recur_detected = false;
+        g_recur_arg_count = 0;
         
-        // Evaluate function body with current arguments
-        CljObject *result = eval_body_with_params(func->body, func->params, current_args, current_argc, func->closure_env);
+        // Evaluate function body
+        CljObject *new_result = eval_body_with_params(func->body, func->params, 
+                                                       current_args, current_argc, 
+                                                       func->closure_env);
         
-        if (!result) {
-            // Cleanup on error
-            for (int i = 0; i < current_argc; i++) {
-                RELEASE(current_args[i]);
-            }
-            return NULL;
-        }
-        
-        // Check if recur was called (detected by global flag - no symbol lookup needed)
         if (g_recur_detected) {
-            if (g_recur_arg_count <= 0) {
-                return NULL;
-            }
-            if (g_recur_arg_count > 16) {
-                return NULL;
-            }
-            // Recur detected - check arity
-            if (g_recur_arg_count != current_argc) {
-                // Arity mismatch
-                for (int i = 0; i < current_argc; i++) {
-                    RELEASE(current_args[i]);
-                }
-                // Clean up recur args
-                for (int i = 0; i < g_recur_arg_count; i++) {
-                    RELEASE(g_recur_args[i]);
-                }
-                throw_exception("ArityError", "recur arity mismatch", NULL, 0, 0);
-                return NULL;
-            }
+            // ✅ CRITICAL: Release intermediate result from recur iteration
+            // RELEASE/RETAIN macros handle immediates automatically - no guard needed
+            RELEASE(new_result);
             
-            // Release old arguments
+            // Release old arguments and copy new ones
             for (int i = 0; i < current_argc; i++) {
                 RELEASE(current_args[i]);
             }
             
-            // Copy new arguments from global state (already retained in eval_list)
-            for (int i = 0; i < g_recur_arg_count; i++) {
-                current_args[i] = g_recur_args[i]; // Transfer ownership
-            }
+            // Update argc and copy new arguments from g_recur_args
             current_argc = g_recur_arg_count;
+            for (int i = 0; i < current_argc; i++) {
+                current_args[i] = g_recur_args[i]; // Already retained in recur evaluation
+                g_recur_args[i] = NULL; // Clear global to prevent double-release
+            }
             
-            // Reset recur state
-            g_recur_detected = false;
-            g_recur_arg_count = 0;
-            
-            // Continue loop with new arguments
+            // Continue loop
             continue;
         }
         
-        // No recur - cleanup and return result
-        for (int i = 0; i < current_argc; i++) {
-            RELEASE(current_args[i]);
-        }
-        return result;
+        // No recur - this is the final result
+        // Use ASSIGN for proper refcounting (handles retain/release automatically)
+        ASSIGN(result, new_result);
+        break;
+    } while (true);
+    
+    // Cleanup arguments
+    for (int i = 0; i < current_argc; i++) {
+        RELEASE(current_args[i]);
     }
+    
+    return result;
 }
 
 
@@ -480,7 +462,7 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
         case CLJ_LIST: {
             // Type check before calling
             if (!is_type(body, CLJ_LIST)) return NULL;
-            CljList *list_data = as_list(body);
+            CljList *list_data = as_list((ID)body);
             return eval_list_with_env(list_data, env);
         }
         
@@ -509,7 +491,7 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env) {
             // If it's a function, call it
             if (is_type(resolved, CLJ_FUNC)) {
                 // Count arguments
-                int total_count = list_count(as_list((CljObject*)list));
+                int total_count = list_count(as_list((ID)list));
                 int argc = total_count - 1;
                 if (argc < 0) argc = 0;
                 
@@ -518,7 +500,7 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env) {
                 ID *args = alloc_obj_array(argc, args_stack);
                 
                 for (int i = 0; i < argc; i++) {
-                    args[i] = eval_body_with_env(list_get_element((CljObject*)list, i + 1), env);
+                    args[i] = eval_body_with_env(list_get_element(list, i + 1), env);
                     if (!args[i]) args[i] = NULL;
                 }
                 
@@ -556,8 +538,8 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
             }
             // Also try name comparison for non-interned symbols
             if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
-                CljSymbol *param_sym = as_symbol(params[i]);
-                CljSymbol *body_sym = as_symbol(body);
+                CljSymbol *param_sym = as_symbol((ID)params[i]);
+                CljSymbol *body_sym = as_symbol((ID)body);
                 if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
                     return AUTORELEASE(RETAIN(values[i]));
                 }
@@ -574,6 +556,22 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         // This is the "Lazy Binding" fallback for global symbols
         // For now, return the symbol itself - it will be resolved in eval_list_with_param_substitution
         return AUTORELEASE(RETAIN(body));
+    }
+    
+    // Check for NULL body
+    if (!body) {
+        return NULL;
+    }
+    
+    // Check if body is an immediate value (fixnum, char, special, fixed)
+    if (IS_IMMEDIATE(body)) {
+        // Immediate values don't need retain/release
+        return (CljObject*)body;
+    }
+    
+    // Check if body is a valid pointer (not pointing to invalid memory)
+    if ((uintptr_t)body < 0x1000) {
+        return NULL;
     }
     
     // For lists, evaluate them with parameter substitution
@@ -595,7 +593,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     assert(param_count >= 0); // param_count should be non-negative
     if (list->type != CLJ_LIST) return NULL;
     
-    CljList *list_data = as_list(list);
+    CljList *list_data = as_list((ID)list);
     if (!list_data) return NULL;
     
     CljObject *head = list_data->first;
@@ -615,8 +613,8 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     if (op == SYM_EQUALS || op == SYM_EQUAL) {
-        CljObject *a = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
-        CljObject *b = eval_arg_with_substitution(list, 2, params, values, param_count, closure_env);
+        CljObject *a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
+        CljObject *b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, closure_env);
         
         if (!a || !b) return NULL;
         
@@ -633,9 +631,11 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     
     if (op == SYM_IF) {
         // (if cond then else?)
-        CljObject *cond_val = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
+        CljObject *cond_val = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
+        if (!cond_val) return NULL;
+        
         bool truthy = clj_is_truthy(cond_val);
-        CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
+        CljObject *branch = truthy ? list_get_element(as_list((ID)list), 2) : list_get_element(as_list((ID)list), 3);
         if (!branch) return NULL;
         return eval_body_with_params(branch, params, values, param_count, closure_env);
     }
@@ -650,55 +650,44 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     if (op == SYM_RECUR) {
-        // Store arguments in global state
-        int argc = list_count(as_list((CljObject*)list)) - 1;
-        if (argc < 0) argc = 0;
+        // Evaluate all recur arguments
+        int recur_argc = list_count(as_list((ID)list)) - 1;
         
-        if (argc > 16) {
-            throw_exception("ArityError", "Too many recur arguments (max 16)", NULL, 0, 0);
+        // Arity check
+        if (recur_argc != param_count) {
+            throw_exception_formatted("ArityError", __FILE__, __LINE__, 0,
+                "Mismatched argument count to recur (expected: %d, got: %d)", 
+                param_count, recur_argc);
             return NULL;
         }
         
-        // Evaluate and store arguments with parameter substitution
-        if (argc <= 0) {
-            return NULL;
-        }
-        for (int i = 0; i < argc; i++) {
-            if (i >= 16) {
-                return NULL;
-            }
-            g_recur_args[i] = eval_arg_with_substitution(list, i + 1, params, values, param_count, closure_env);
+        // Evaluate new argument values
+        for (int i = 0; i < recur_argc; i++) {
+            g_recur_args[i] = eval_body_with_params(
+                list_get_element(as_list((ID)list), i + 1), 
+                params, values, param_count, closure_env);
             if (!g_recur_args[i]) {
                 // Cleanup on error
                 for (int j = 0; j < i; j++) {
                     RELEASE(g_recur_args[j]);
                 }
-                // Reset recur state
-                g_recur_detected = false;
-                g_recur_arg_count = 0;
-                throw_exception("EvaluationError", "Failed to evaluate recur argument", NULL, 0, 0);
                 return NULL;
             }
+            RETAIN(g_recur_args[i]);
         }
         
-        g_recur_arg_count = argc;
+        g_recur_arg_count = recur_argc;
         g_recur_detected = true;
-        
-        // Return special marker symbol (cached for performance)
-        static CljObject* __RECUR__MARKER = NULL;
-        if (!__RECUR__MARKER) {
-            __RECUR__MARKER = (CljObject*)intern_symbol_global("__RECUR__");
-        }
-        return __RECUR__MARKER;
+        return NULL; // Signal to loop to continue
     }
     
     if (op == SYM_PRINTLN) {
-        return eval_println(as_list((CljObject*)list), NULL);  // Simplified - no parameter substitution for now
+        return eval_println(as_list((ID)list), NULL);  // Simplified - no parameter substitution for now
     }
     
     // Handle maps as functions (for key lookup)
     if (is_type(op, CLJ_MAP)) {
-        int total_count = list_count(as_list((CljObject*)list));
+        int total_count = list_count(as_list((ID)list));
         int argc = total_count - 1;
         
         if (argc != 1) {
@@ -707,7 +696,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
             return NULL;
         }
         
-        CljObject *key = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
+        CljObject *key = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
         if (!key) return NULL;
         
         CljObject *result = (CljObject*)map_get((CljValue)op, (CljValue)key);
@@ -722,8 +711,8 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
             break;
         }
         if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(op, CLJ_SYMBOL)) {
-            CljSymbol *param_sym = as_symbol(params[i]);
-            CljSymbol *op_sym = as_symbol(op);
+            CljSymbol *param_sym = as_symbol((ID)params[i]);
+            CljSymbol *op_sym = as_symbol((ID)op);
             if (param_sym && op_sym && strcmp(param_sym->name, op_sym->name) == 0) {
                 resolved_op = values[i];
                 break;
@@ -739,7 +728,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     // If op was resolved to a function, call it
     if (resolved_op && is_type(resolved_op, CLJ_FUNC)) {
         // Count arguments
-        int total_count = list_count(as_list((CljObject*)list));
+        int total_count = list_count(as_list((ID)list));
         int argc = total_count - 1;
         if (argc < 0) argc = 0;
         
@@ -748,7 +737,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         ID *args = (ID*)alloc_obj_array(argc, args_stack);
         
         for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg_with_substitution(list, i + 1, params, values, param_count, closure_env);
+            args[i] = eval_body_with_params(list_get_element(as_list((ID)list), i + 1), params, values, param_count, closure_env);
             if (!args[i]) args[i] = NULL;
         }
         
@@ -775,7 +764,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
     switch (((CljObject*)body)->type) {
         case CLJ_LIST: {
             // Evaluate list
-            return eval_list(as_list(body), env, st);
+            return eval_list(as_list((ID)body), env, st);
         }
         
         case CLJ_SYMBOL: {
@@ -790,8 +779,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
 }
 
 // Helper functions for eval_list optimization
-static CljObject* eval_map_lookup(CljObject *list, CljMap *env, CljObject *map) {
-    int total_count = list_count(as_list((CljObject*)list));
+static CljObject* eval_map_lookup(CljList *list, CljMap *env, CljObject *map) {
+    int total_count = list_count(list);
     int argc = total_count - 1;
     
     if (argc != 1) {
@@ -808,15 +797,15 @@ static CljObject* eval_map_lookup(CljObject *list, CljMap *env, CljObject *map) 
     return result ? AUTORELEASE(RETAIN(result)) : NULL;
 }
 
-static CljObject* eval_arithmetic_dispatch(CljObject *list, CljMap *env, EvalState *st, CljObject *op) {
-    if (op == SYM_PLUS) return eval_arithmetic_generic(as_list((CljObject*)list), env, ARITH_ADD, st);
-    if (op == SYM_MINUS) return eval_arithmetic_generic(as_list((CljObject*)list), env, ARITH_SUB, st);
-    if (op == SYM_MULTIPLY) return eval_arithmetic_generic(as_list((CljObject*)list), env, ARITH_MUL, st);
-    if (op == SYM_DIVIDE) return eval_arithmetic_generic(as_list((CljObject*)list), env, ARITH_DIV, st);
+static CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, EvalState *st, CljObject *op) {
+    if (op == SYM_PLUS) return eval_arithmetic_generic(list, env, ARITH_ADD, st);
+    if (op == SYM_MINUS) return eval_arithmetic_generic(list, env, ARITH_SUB, st);
+    if (op == SYM_MULTIPLY) return eval_arithmetic_generic(list, env, ARITH_MUL, st);
+    if (op == SYM_DIVIDE) return eval_arithmetic_generic(list, env, ARITH_DIV, st);
     return NULL;
 }
 
-static CljObject* eval_comparison_dispatch(CljObject *list, CljMap *env, CljObject *op) {
+static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject *op) {
     if (op == SYM_EQUALS || op == SYM_EQUAL) {
         CljObject *a, *b;
         EVAL_TWO_ARGS(list, env, a, b);
@@ -843,21 +832,47 @@ static CljObject* eval_comparison_dispatch(CljObject *list, CljMap *env, CljObje
     return NULL;
 }
 
-static CljObject* eval_sequence_dispatch(CljObject *list, CljMap *env, CljObject *op) {
-    if (op == SYM_FIRST) return eval_first(as_list((CljObject*)list), env);
-    if (op == SYM_REST) return eval_rest(as_list((CljObject*)list), env);
-    if (op == SYM_CONS) return eval_cons(as_list((CljObject*)list), env);
-    if (op == SYM_SEQ) return eval_seq(as_list((CljObject*)list), env);
-    if (op == SYM_NEXT) return eval_rest(as_list((CljObject*)list), env); // next is alias for rest
-    if (op == SYM_COUNT) return eval_count(as_list((CljObject*)list), env);
+static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *op) {
+    if (op == SYM_FIRST) return eval_first(list, env);
+    if (op == SYM_REST) return eval_rest(list, env);
+    if (op == SYM_CONS) return eval_cons(list, env);
+    if (op == SYM_SEQ) return eval_seq(list, env);
+    if (op == SYM_NEXT) return eval_rest(list, env); // next is alias for rest
+    if (op == SYM_COUNT) return eval_count(list, env);
     return NULL;
 }
 
-static CljObject* eval_loop_dispatch(CljObject *list, CljMap *env, CljObject *op) {
-    if (op == SYM_FOR) return AUTORELEASE(eval_for(as_list((CljObject*)list), env));
-    if (op == SYM_DOSEQ) return AUTORELEASE(eval_doseq(as_list((CljObject*)list), env));
-    if (op == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(as_list((CljObject*)list), env));
+static CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
+    if (op == SYM_FOR) return AUTORELEASE(eval_for(list, env));
+    if (op == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
+    if (op == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(list, env));
     return NULL;
+}
+
+// Helper function to call a function with arguments
+static ID call_function_with_args(ID fn, CljList *list, CljMap *env) {
+    // Count arguments
+    int total_count = list_count(list);
+    int argc = total_count - 1; // -1 for the function symbol itself
+    if (argc < 0) argc = 0;
+    
+    // Stack allocate arguments array
+    CljObject *args_stack[16];
+    ID *args = (ID*)alloc_obj_array(argc, args_stack);
+    
+    // Evaluate arguments
+    for (int i = 0; i < argc; i++) {
+        args[i] = eval_arg_retained(list, i + 1, env);
+        if (!args[i]) args[i] = NULL;
+    }
+    
+    // Call the function
+    ID result = eval_function_call(fn, args, argc, env);
+    
+    // Cleanup heap-allocated args if any
+    free_obj_array((CljObject**)args, args_stack);
+    
+    return result;
 }
 
 // Simplified list evaluation
@@ -876,7 +891,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     if (is_type(op, CLJ_LIST)) {
-        op = eval_list(as_list(op), env, st);
+        op = eval_list(as_list((ID)op), env, st);
         if (!op) {
             return NULL;
         }
@@ -922,7 +937,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // Tier 4: String and I/O operations
     if (original_op == SYM_STR) {
-        int total_count = list_count(as_list((CljObject*)list));
+        int total_count = list_count(as_list((ID)list));
         int argc = total_count - 1;
         if (argc < 0) argc = 0;
         
@@ -944,7 +959,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     if (original_op == SYM_PRINTLN) {
-        return eval_println(as_list((CljObject*)list), env);
+        return eval_println(list, env);
     }
     
     // Tier 4: Less frequent (10-30% of calls)
@@ -988,15 +1003,15 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // Tier 5: Special forms and definitions
     if (original_op == SYM_DEF) {
-        return eval_def(as_list((CljObject*)list), env, st);
+        return eval_def(list, env, st);
     }
     
     if (original_op == SYM_NS) {
-        return eval_ns(as_list((CljObject*)list), env, st);
+        return eval_ns(list, env, st);
     }
     
     if (original_op == SYM_FN) {
-        return AUTORELEASE(eval_fn(as_list((CljObject*)list), env));
+        return AUTORELEASE(eval_fn(list, env));
     }
     
     if (original_op == SYM_QUOTE) {
@@ -1017,16 +1032,21 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     if (result) return result;
     
     if (original_op == SYM_LIST) {
-        return AUTORELEASE(eval_list_function(as_list((CljObject*)list), env));
+        return AUTORELEASE(eval_list_function(list, env));
+    }
+    
+    // Check if op (after resolution) is a function
+    if (is_type(op, CLJ_FUNC) || is_type(op, CLJ_CLOSURE)) {
+        return call_function_with_args(op, list, env);
     }
     
     // Fallback: try to resolve symbol and call as function
     if (is_type(op, CLJ_SYMBOL)) {
         // Handle keywords as functions (for map lookup)
-        CljSymbol *sym = as_symbol(op);
+        CljSymbol *sym = as_symbol((ID)op);
         if (sym->name[0] == ':') {
             // Keyword as function - perform map lookup
-            int total_count = list_count(as_list((CljObject*)list));
+            int total_count = list_count(as_list((ID)list));
             int argc = total_count - 1;
             
             if (argc == 1) {
@@ -1062,28 +1082,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         
         // Check if it's a function (native or interpreted)
         if (is_type(fn, CLJ_FUNC) || is_type(fn, CLJ_CLOSURE)) {
-            // Count arguments
-            int total_count = list_count(as_list((CljObject*)list));
-            int argc = total_count - 1; // -1 for the function symbol itself
-            if (argc < 0) argc = 0;
-            
-            // Stack allocate arguments array
-            CljObject *args_stack[16];
-            ID *args = (ID*)alloc_obj_array(argc, args_stack);
-            
-            // Evaluate arguments
-            for (int i = 0; i < argc; i++) {
-                args[i] = eval_arg_retained(list, i + 1, env);
-                if (!args[i]) args[i] = NULL;
-            }
-            
-            // Call the function
-            CljObject *result = eval_function_call(fn, args, argc, env);
-            
-            // Cleanup heap-allocated args if any
-            free_obj_array((CljObject**)args, args_stack);
-            
-            return result;
+            return call_function_with_args(fn, list, env);
         }
         
         // Not a function, just return the resolved value
@@ -1155,7 +1154,7 @@ CljObject* eval_div_with_substitution(CljObject *list, CljObject **params, CljOb
 }
 
 CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    CljObject *arg = eval_arg_with_substitution(list, 1, params, values, param_count, closure_env);
+    CljObject *arg = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
     if (arg) {
         char *str = pr_str(arg);
         printf("println: %s\n", str);
@@ -1198,7 +1197,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Evaluate the value expression
     CljObject *value = NULL;
     if (is_type(value_expr, CLJ_LIST)) {
-        value = eval_list(as_list(value_expr), env, st);
+        value = eval_list(as_list((ID)value_expr), env, st);
     } else {
         value = eval_expr_simple(value_expr, st);
     }
@@ -1208,8 +1207,8 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     
     // If the value is a function, set its name
     if (is_type(value, CLJ_FUNC)) {
-        CljFunction *func = as_function(value);
-        CljSymbol *sym = as_symbol(symbol);
+        CljFunction *func = as_function((ID)value);
+        CljSymbol *sym = as_symbol((ID)symbol);
         if (func && sym && sym->name[0] && !func->name) {
             func->name = strdup(sym->name);
         }
@@ -1240,7 +1239,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    CljSymbol *ns_sym = as_symbol(ns_name_obj);
+    CljSymbol *ns_sym = as_symbol((ID)ns_name_obj);
     if (!ns_sym || !ns_sym->name[0]) {
         eval_error("ns symbol has no name", st);
         return NULL;
@@ -1273,7 +1272,7 @@ ID eval_fn(CljList *list, CljMap *env) {
     // Convert parameter list/vector to array
     int param_count = 0;
     if (is_type(params_list, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector(params_list);
+        CljPersistentVector *vec = as_vector((ID)params_list);
         param_count = vec ? vec->count : 0;
     } else {
         param_count = list_count(as_list(params_list));
@@ -1284,10 +1283,10 @@ ID eval_fn(CljList *list, CljMap *env) {
     
     for (int i = 0; i < param_count; i++) {
         if (is_type(params_list, CLJ_VECTOR)) {
-            CljPersistentVector *vec = as_vector(params_list);
+            CljPersistentVector *vec = as_vector((ID)params_list);
             params[i] = vec->data[i];
         } else {
-            params[i] = list_get_element(params_list, i);
+            params[i] = list_get_element(as_list((ID)params_list), i);
         }
         if (!params[i] || ((CljObject*)params[i])->type != CLJ_SYMBOL) {
             // Invalid parameter
@@ -1310,7 +1309,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
         return NULL;
     }
     
-    CljSymbol *sym = as_symbol(symbol);
+    CljSymbol *sym = as_symbol((ID)symbol);
     
     // Keywords evaluate to themselves
     if (sym && sym->name[0] == ':') {
@@ -1330,6 +1329,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
     if (value) {
         return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
     }
+    
     
     // Fallback: Try global namespace lookup for special forms and builtins
     if (sym) {
@@ -1418,7 +1418,7 @@ ID eval_count(CljList *list, CljMap *env) {
     
     switch (arg->type) {
         case CLJ_VECTOR: {
-            CljPersistentVector *vec = as_vector(arg);
+            CljPersistentVector *vec = as_vector((ID)arg);
             return vec ? fixnum(vec->count) : fixnum(0);
         }
         
@@ -1428,7 +1428,7 @@ ID eval_count(CljList *list, CljMap *env) {
         }
         
         case CLJ_MAP: {
-            CljMap *map = as_map(arg);
+            CljMap *map = as_map((ID)arg);
             return map ? fixnum(map->count) : fixnum(0);
         }
         
@@ -1604,7 +1604,7 @@ ID eval_for(CljList *list, CljMap *env) {
     // (for [binding coll] expr)
     // Returns a lazy sequence of results
     
-    if (!list || !is_type(list, CLJ_LIST)) {
+    if (!list) {
         return NULL;
     }
     
@@ -1684,7 +1684,7 @@ ID eval_doseq(CljList *list, CljMap *env) {
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
     
-    if (!list || !is_type(list, CLJ_LIST)) {
+    if (!list) {
         return NULL;
     }
     
@@ -1765,7 +1765,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
     CLJ_ASSERT(list != NULL);
     if (((CljObject*)list)->type != CLJ_LIST) return NULL;
     
-    CljList *list_data = as_list((CljObject*)list);
+    CljList *list_data = as_list((ID)list);
     
     // Create new list starting from the second element (skip 'list' symbol)
     CljObject *args_list = (CljObject*)LIST_REST(list_data);
@@ -1782,12 +1782,12 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
     
-    if (!list || !is_type(list, CLJ_LIST)) {
+    if (!list) {
         return NULL;
     }
     
     // Parse arguments directly without evaluation
-    CljList *list_data = as_list(list);
+    CljList *list_data = as_list((ID)list);
     if (!list_data->rest) {
         return NULL;
     }
@@ -1871,12 +1871,12 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
     // Handle NULL environment gracefully
     if (env == NULL) {
         // Return the element as-is if no environment is available
-        CljObject *element = (CljObject*)list_nth(list, index);
+        CljObject *element = (CljObject*)list_nth(as_list((ID)list), index);
         return element ? RETAIN(element) : NULL;
     }
     
     // Use the existing list_nth function which is safer
-    CljObject *element = (CljObject*)list_nth(list, index);
+    CljObject *element = (CljObject*)list_nth(as_list((ID)list), index);
     if (!element) return NULL;
     
     // For simple types (numbers, strings, booleans), return as-is
@@ -1907,7 +1907,7 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
         // Evaluate nested list with depth tracking
         g_eval_arg_depth++;
         EvalState *st = evalstate();
-        CljObject *result = eval_list(as_list(element), env, st);
+        CljObject *result = eval_list(as_list((ID)element), env, st);
         g_eval_arg_depth--;
         
         return result;
@@ -1917,17 +1917,5 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
     return element; // Don't retain - caller will handle retention
 }
 
-// Evaluate argument with parameter substitution
-CljObject* eval_arg_with_substitution(CljObject *list, int index, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    if (!list || index < 0 || param_count < 0 || list->type != CLJ_LIST) {
-        return NULL;
-    }
-    
-    // Use the existing list_nth function which is safer
-    CljObject *element = (CljObject*)list_nth(as_list((CljObject*)list), index);
-    if (!element) return NULL;
-    
-    return eval_body_with_params(element, params, values, param_count, closure_env);
-}
 
 // is_symbol is already defined in namespace.c

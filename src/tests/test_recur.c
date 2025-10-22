@@ -12,6 +12,10 @@
 void test_recur_factorial(void);
 void test_recur_deep_recursion(void);
 void test_recur_arity_error(void);
+void test_recur_countdown(void);
+void test_recur_sum(void);
+void test_recur_tail_position_error(void);
+void test_if_bug_in_functions(void);
 
 // Test group for recur functionality - defined in unity_test_runner.c
 
@@ -26,9 +30,22 @@ void test_recur_factorial(void) {
     // Initialize special symbols first
     init_special_symbols();
     
-    // Test only the function definition first - no call
+    // Test function definition
     CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
     TEST_ASSERT_NOT_NULL(factorial_def);
+    
+    // Test that recur now works correctly
+    printf("Testing factorial call (should return 6)...\n");
+    CljObject *result = eval_string("(factorial 3 1)", st);
+    // Should return 6 (3! = 6)
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
+    
+    // Clean up
+    if (factorial_def) {
+        RELEASE(factorial_def);
+    }
     
     evalstate_free(st);
 }
@@ -44,15 +61,22 @@ void test_recur_deep_recursion(void) {
     // Initialize special symbols first
     init_special_symbols();
     
-    // Test deep recursion with recur
+    // Test deep recursion with recur - test function definition
     CljObject *deep_def = eval_string("(def deep (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", st);
     TEST_ASSERT_NOT_NULL(deep_def);
     
-    // Test deep(5, 0) = 5 (very small value for testing)
-    CljObject *result = eval_string("(deep 5 0)", st);
+    // Test that recur now works correctly
+    printf("Testing deep call (should return 3)...\n");
+    CljObject *result = eval_string("(deep 3 0)", st);
+    // Should return 3 (countdown from 3 to 0, returns 3)
     TEST_ASSERT_NOT_NULL(result);
-    // Just test that we get a result - don't check type yet
-    TEST_ASSERT_TRUE(result != NULL);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result));
+    
+    // Clean up
+    if (deep_def) {
+        RELEASE(deep_def);
+    }
     
     evalstate_free(st);
 }
@@ -75,6 +99,122 @@ void test_recur_arity_error(void) {
     // For now, just test that the function can be defined
     // TODO: Implement proper arity checking for recur
     TEST_ASSERT_TRUE(arity_def != NULL);
+    
+    evalstate_free(st);
+}
+
+// Test simple countdown with recur
+void test_recur_countdown(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize special symbols first
+    init_special_symbols();
+    
+    // Test function definition
+    CljObject *countdown_def = eval_string("(def countdown (fn [n] (if (= n 0) :done (recur (- n 1)))))", st);
+    TEST_ASSERT_NOT_NULL(countdown_def);
+    
+    // Test that recur now works correctly
+    printf("Testing countdown call (should return :done)...\n");
+    CljObject *result = eval_string("(countdown 5)", st);
+    // Should return :done (countdown from 5 to 0)
+    TEST_ASSERT_NOT_NULL(result);
+    // :done is a keyword symbol, check it's truthy
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+    
+    // Clean up
+    if (countdown_def) {
+        RELEASE(countdown_def);
+    }
+    
+    evalstate_free(st);
+}
+
+// Test sum with accumulator using recur
+void test_recur_sum(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize special symbols first
+    init_special_symbols();
+    
+    // Test function definition
+    CljObject *sum_def = eval_string("(def sum (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc n)))))", st);
+    TEST_ASSERT_NOT_NULL(sum_def);
+    
+    // Test that recur now works correctly
+    printf("Testing sum call (should return 15)...\n");
+    CljObject *result = eval_string("(sum 5 0)", st);
+    // Should return 15 (sum of 1+2+3+4+5 = 15)
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum((CljValue)result));
+    
+    // Clean up
+    if (sum_def) {
+        RELEASE(sum_def);
+    }
+    
+    evalstate_free(st);
+}
+
+// Test tail position error with recur
+void test_recur_tail_position_error(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize special symbols first
+    init_special_symbols();
+    
+    // Test function definition with recur not in tail position
+    // This should fail at definition time in real Clojure
+    CljObject *bad_def = eval_string("(def bad-recur (fn [n] (+ 1 (recur (- n 1)))))", st);
+    TEST_ASSERT_NOT_NULL(bad_def);
+    
+    // For now, just test that the function can be defined
+    // TODO: Implement proper tail position checking for recur
+    TEST_ASSERT_TRUE(bad_def != NULL);
+    
+    evalstate_free(st);
+}
+
+// Test if-statement bug in functions with parameters
+void test_if_bug_in_functions(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize special symbols first
+    init_special_symbols();
+    
+    // Test function definition with if statement
+    CljObject *if_def = eval_string("(def test-if (fn [n] (if (= n 0) :yes :no)))", st);
+    TEST_ASSERT_NOT_NULL(if_def);
+    
+    // Test that if statement works correctly in function
+    printf("Testing if statement in function (should return :yes)...\n");
+    CljObject *result = eval_string("(test-if 0)", st);
+    // Should return :yes (if bug is now fixed)
+    TEST_ASSERT_NOT_NULL(result);
+    // :yes is a keyword symbol, check it's truthy
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+    
+    // Clean up
+    if (if_def) {
+        RELEASE(if_def);
+    }
     
     evalstate_free(st);
 }

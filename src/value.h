@@ -101,23 +101,28 @@ static inline int32_t as_fixnum(CljValue val) {
 #define CLJ_CHAR_MAX ((1 << CHAR_BITS) - 1)
 
 // Function declarations for large functions moved to value.c
-CljValue make_char_impl(uint32_t codepoint);
-CljValue make_fixed_impl(float value);
+CljValue character(uint32_t codepoint);
+CljValue fixed(float value);
 CljValue make_string_impl(const char *str);
 CljValue make_symbol_impl(const char *name, const char *ns);
 
-// Inline wrapper for make_char (simple delegation)
-static inline CljValue make_char(uint32_t codepoint) {
-    return make_char_impl(codepoint);
-}
 
-static inline bool is_char(CljValue val) {
+static inline bool is_character(CljValue val) {
     return get_tag(val) == TAG_CHAR;
 }
 
-static inline uint32_t as_char(CljValue val) {
-    if (!is_char(val)) return 0;
+static inline uint32_t as_character(CljValue val) {
+    if (!is_character(val)) return 0;
     return (uint32_t)((uintptr_t)val >> TAG_BITS);
+}
+
+// Legacy aliases for compatibility
+static inline bool is_char(CljValue val) {
+    return is_character(val);
+}
+
+static inline uint32_t as_char(CljValue val) {
+    return as_character(val);
 }
 
 static inline bool is_special(CljValue val) {
@@ -133,17 +138,13 @@ static inline uint8_t as_special(CljValue val) {
 // 1 bit sign + 16 bits integer + 13 bits fraction
 // Range: ±32767.9998, Precision: 1/8192 ≈ 0.00012
 
-// Inline wrapper for make_fixed (simple delegation)
-static inline CljValue make_fixed(float value) {
-    return make_fixed_impl(value);
-}
 
 static inline bool is_fixed(CljValue val) {
     return get_tag(val) == TAG_FIXED;
 }
 
 static inline float as_fixed(CljValue val) {
-    if (!is_fixed(val)) return 0.0f;
+    assert(is_fixed(val));
     int32_t fixed = (int32_t)((intptr_t)val >> TAG_BITS);
     return (float)fixed / 8192.0f;
 }
@@ -156,13 +157,12 @@ static inline float as_fixed(CljValue val) {
  * @return true if immediate, false if heap object
  */
 static inline bool is_immediate(CljValue val) {
-    if (!val) return false;  // NULL ist kein Immediate
+    if (!val) return true;  // NULL ist kein Immediate
     return ((uintptr_t)val & 0x1);  // Ungerade = Immediate
 }
 
 static inline bool is_heap_object(CljValue val) {
-    if (!val) return false;  // NULL ist kein Heap-Objekt
-    return !((uintptr_t)val & 0x1);  // Gerade = Heap-Objekt
+    return !is_immediate(val);
 }
 
 
@@ -238,9 +238,6 @@ static inline CljValue integer(int x) {
     return fixnum(x);
 }
 
-static inline CljValue make_float(double x) {
-    return (CljValue)make_fixed((float)x);
-}
 
 
 
