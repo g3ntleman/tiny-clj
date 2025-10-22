@@ -59,7 +59,7 @@ static void benchmark_setup(void) {
     if (clojure_core) {
         // Add common clojure.core symbols
         for (int i = 0; i < NUM_TEST_SYMBOLS; i++) {
-            CljObject *sym = make_symbol(test_symbols[i], NULL);
+            CljObject *sym = make_symbol_impl(test_symbols[i], NULL);
             CljValue val = fixnum(i * 1000); // High priority values
             map_assoc((CljObject*)clojure_core->mappings, sym, (CljObject*)val);
         }
@@ -74,7 +74,7 @@ static void benchmark_setup(void) {
         for (int j = 0; j < 10; j++) {
             char sym_name[64];
             snprintf(sym_name, sizeof(sym_name), "var%d", j);
-            CljObject *sym = make_symbol(sym_name, NULL);
+            CljObject *sym = make_symbol_impl(sym_name, NULL);
             CljValue val = fixnum(j * 100 + i);
             map_assoc((CljObject*)test_namespaces[i]->mappings, sym, (CljObject*)val);
         }
@@ -110,13 +110,13 @@ static void benchmark_current_namespace_lookup(void) {
     
     // Add test symbols to current namespace
     for (int i = 0; i < NUM_TEST_SYMBOLS; i++) {
-        CljObject *sym = make_symbol(test_symbols[i], NULL);
+        CljObject *sym = make_symbol_impl(test_symbols[i], NULL);
         CljValue val = fixnum(i);
         map_assoc((CljObject*)benchmark_eval_state->current_ns->mappings, sym, (CljObject*)val);
     }
     
     for (int i = 0; i < iterations; i++) {
-        CljObject *sym = make_symbol(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
+        CljObject *sym = make_symbol_impl(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
         CljObject *result = map_get((CljObject*)benchmark_eval_state->current_ns->mappings, sym);
         (void)result; // Prevent optimization
     }
@@ -132,14 +132,14 @@ static void benchmark_global_namespace_search(void) {
     // Add test symbols to various namespaces
     for (int ns_idx = 0; ns_idx < num_test_namespaces; ns_idx++) {
         for (int i = 0; i < NUM_TEST_SYMBOLS; i++) {
-            CljObject *sym = make_symbol(test_symbols[i], NULL);
+            CljObject *sym = make_symbol_impl(test_symbols[i], NULL);
             CljValue val = fixnum(i * 1000 + ns_idx);
             map_assoc((CljObject*)test_namespaces[ns_idx]->mappings, sym, (CljObject*)val);
         }
     }
     
     for (int i = 0; i < iterations; i++) {
-        CljObject *sym = make_symbol(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
+        CljObject *sym = make_symbol_impl(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
         CljObject *result = ns_resolve(benchmark_eval_state, sym);
         (void)result; // Prevent optimization
     }
@@ -199,12 +199,12 @@ static void benchmark_mixed_lookup_scenarios(void) {
     
     for (int i = 0; i < iterations; i++) {
         // Scenario 1: Current namespace lookup (fast)
-        CljObject *sym1 = make_symbol("current-symbol", NULL);
+        CljObject *sym1 = make_symbol_impl("current-symbol", NULL);
         CljObject *result1 = map_get((CljObject*)benchmark_eval_state->current_ns->mappings, sym1);
         (void)result1;
         
         // Scenario 2: Global namespace search (slow)
-        CljObject *sym2 = make_symbol(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
+        CljObject *sym2 = make_symbol_impl(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
         CljObject *result2 = ns_resolve(benchmark_eval_state, sym2);
         (void)result2;
         
@@ -229,7 +229,7 @@ static void benchmark_namespace_isolation(void) {
     CljNamespace *ns2 = ns_get_or_create("isolation.ns2", "benchmark-test.c");
     
     // Add same symbol to both namespaces
-    CljObject *shared_sym = make_symbol("shared-symbol", NULL);
+    CljObject *shared_sym = make_symbol_impl("shared-symbol", NULL);
     CljValue val1 = fixnum(100);
     CljValue val2 = fixnum(200);
     
@@ -260,7 +260,7 @@ static void benchmark_clojure_core_priority(void) {
     
     // Test that clojure.core symbols are found first
     for (int i = 0; i < iterations; i++) {
-        CljObject *sym = make_symbol(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
+        CljObject *sym = make_symbol_impl(test_symbols[i % NUM_TEST_SYMBOLS], NULL);
         CljObject *result = ns_resolve(benchmark_eval_state, sym);
         
         // Verify that clojure.core symbols are found (should be high priority values)

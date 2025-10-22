@@ -243,9 +243,5 @@ static inline CljValue make_float(double x) {
 }
 
 
-// Inline wrapper for make_symbol (simple delegation)
-static inline CljValue make_symbol(const char *name, const char *ns) {
-    return make_symbol_impl(name, ns);
-}
 
 #endif

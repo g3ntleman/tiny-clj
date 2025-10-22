@@ -395,7 +395,7 @@ void test_cljvalue_wrapper_functions(void) {
         CljValue int_val = integer(42);
         CljValue float_val = make_float(3.14);
         CljValue str_val = make_string_impl("hello");
-        CljValue sym_val = make_symbol("test", NULL);
+        CljValue sym_val = make_symbol_impl("test", NULL);
         
         TEST_ASSERT_NOT_NULL(int_val);
         TEST_ASSERT_NOT_NULL(float_val);
@@ -1475,7 +1475,7 @@ void test_as_list_invalid(void) {
     TEST_ASSERT_NULL(result);
     
     // Test with non-list type
-    CljObject *symbol = make_symbol("test", "user");
+    CljObject *symbol = make_symbol_impl("test", "user");
     TEST_ASSERT_NOT_NULL(symbol);
     
     // This should abort due to assert_type

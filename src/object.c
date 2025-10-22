@@ -667,7 +667,7 @@ CljObject* intern_symbol(const char *ns, const char *name) {
     }
     
     // Symbol nicht gefunden, erstelle neues
-    CljObject *symbol = make_symbol(name, ns);
+    CljObject *symbol = make_symbol_impl(name, ns);
     if (!symbol) return NULL;
     
     // Füge zur Symbol-Table hinzu
