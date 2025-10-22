@@ -49,14 +49,3 @@ CLJException* exception(const char *msg, const char *file, int line, int col) {
     return make_exception("Error", msg, file, line, col);
 }
 
-/**
- * @brief Create exception with dynamic error message.
- * @param msg Error message string (will be duplicated)
- * @param file Source file name
- * @param line Line number
- * @param col Column number
- * @return New exception object or NULL on failure
- */
-CLJException* exception_dynamic(const char *msg, const char *file, int line, int col) {
-    return make_exception("Error", msg, file, line, col);
-}
