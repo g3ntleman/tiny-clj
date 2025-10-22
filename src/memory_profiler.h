@@ -255,8 +255,8 @@ void memory_test_start(const char *test_name);
  */
 void memory_test_end(const char *test_name);
 
-#ifdef DEBUG
-// Enable memory profiling in debug builds
+#ifdef ENABLE_MEMORY_PROFILING
+// Enable memory profiling when ENABLE_MEMORY_PROFILING is defined
 
 // Memory usage macros
 #define MEMORY_PROFILER_INIT() memory_profiler_init()

@@ -39,9 +39,8 @@ void platform_put_string(const char *s) {
 }
 
 // Line editor cleanup function for STM32
-void cleanup_line_editor(void) {
-    // Nothing to do for STM32 - line editor is disabled
-}
+// Note: This function is also defined in line_editor.c
+// The linker will use the one from line_editor.c
 
 // Raw mode support (stub for STM32)
 void platform_set_raw_mode(int enable) {

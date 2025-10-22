@@ -229,9 +229,11 @@ add_executable(debug_parser
     src/error_messages.c
     src/value.c
 )
-target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING)
+# Unity Tests - Memory profiling only in Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(unity-tests PRIVATE DEBUG)
+    target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+else()
+    target_compile_definitions(unity-tests PRIVATE ENABLE_META)
 endif()
 target_include_directories(unity-tests PRIVATE external/unity/src)
 

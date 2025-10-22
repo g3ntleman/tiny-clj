@@ -77,7 +77,7 @@ bool g_memory_verbose_mode = false;
 // MEMORY HOOKS IMPLEMENTATION
 // ============================================================================
 
-#ifdef DEBUG
+#ifdef ENABLE_MEMORY_PROFILING
 // Global hook function (only one hook supported for simplicity)
 static MemoryHookFunc g_hook_func = NULL;
 
@@ -538,7 +538,7 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name) {
 // ============================================================================
 
 void enable_memory_profiling(bool enabled) {
-#ifdef DEBUG
+#ifdef ENABLE_MEMORY_PROFILING
     g_memory_profiling_enabled = enabled;
     if (enabled) {
         // Reset statistics when enabling profiling
@@ -554,7 +554,7 @@ void enable_memory_profiling(bool enabled) {
 }
 
 bool is_memory_profiling_enabled(void) {
-#ifdef DEBUG
+#ifdef ENABLE_MEMORY_PROFILING
     return g_memory_profiling_enabled;
 #else
     return false;
@@ -562,7 +562,7 @@ bool is_memory_profiling_enabled(void) {
 }
 
 void set_memory_verbose_mode(bool verbose) {
-#ifdef DEBUG
+#ifdef ENABLE_MEMORY_PROFILING
     g_memory_verbose_mode = verbose;
 #else
     (void)verbose; // Suppress unused parameter warning
