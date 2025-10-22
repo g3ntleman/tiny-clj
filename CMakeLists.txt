@@ -13,27 +13,28 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNITY_EXCLUDE_SETJMP")
 # Production/Release: platform-specific optimization policy
 if(APPLE)
   # macOS: favor size for benchmarks, speed for general release
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG -ffunction-sections -fdata-sections")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,-dead_strip")
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,-dead_strip -Wl,-S")
 else()
-  # Embedded/other: favor size
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Os -DNDEBUG -ffunction-sections -fdata-sections")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections")
+  # Embedded/other: favor size with aggressive stripping
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
 endif()
 
 # Benchmark-specific optimization (size-optimized)
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -Os -DNDEBUG -ffunction-sections -fdata-sections")
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden")
 if(APPLE)
-  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,-dead_strip")
+  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,-dead_strip -Wl,-S")
 else()
-  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections")
+  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
 endif()
 
-# Enable LTO if the toolchain supports it (Release only)
+# Enable LTO if the toolchain supports it (Release and MinSizeRel)
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_msg)
 if(ipo_supported)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
 endif()
 
 # Include directories
@@ -60,6 +61,7 @@ list(APPEND SOURCES
     src/memory.c
     src/error_messages.c
     src/memory_profiler.c
+    src/value.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -85,17 +87,36 @@ set(STM32_SOURCES
     src/seq.c
     src/memory.c
     src/error_messages.c
-    src/memory_profiler.c
+    src/value.c
 )
 
-# STM32-optimized main (no test code, no memory profiling)
-add_executable(tiny-clj-stm32-main
+# STM32-optimized embedded interpreter (no REPL, executes startup-code.clj)
+add_executable(tiny-clj-stm32
     src/main_stm32.c
-    src/platform_stm32.c
-    ${STM32_SOURCES}
+    src/platform_stm32_embedded.c
+    src/clojure_core.c
+    src/types.c
+    src/object.c
+    src/builtins.c
+    src/runtime.c
+    src/namespace.c
+    src/symbol.c
+    src/exception.c
+    src/parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/seq.c
+    src/memory.c
+    src/error_messages.c
+    src/memory_profiler.c
+    src/value.c
 )
-target_compile_definitions(tiny-clj-stm32-main PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING)
-set_target_properties(tiny-clj-stm32-main PROPERTIES
+target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+set_target_properties(tiny-clj-stm32 PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
 )
@@ -109,14 +130,16 @@ add_executable(tiny-clj-repl
 )
 target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
 
-# STM32-optimized REPL (no test code, no memory profiling, minimal size)
-add_executable(tiny-clj-stm32
+# STM32-optimized REPL (no test code, includes memory profiling for REPL)
+add_executable(tiny-clj-stm32-repl
     src/repl.c
     src/platform_stm32.c
+    src/line_editor.c
+    src/memory_profiler.c
     ${STM32_SOURCES}
 )
-target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING)
-set_target_properties(tiny-clj-stm32 PROPERTIES
+target_compile_definitions(tiny-clj-stm32-repl PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
+set_target_properties(tiny-clj-stm32-repl PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
 )
@@ -159,6 +182,7 @@ add_executable(unity-tests
     src/memory.c
     src/runtime.c
     src/error_messages.c
+    src/value.c
 )
 
 add_executable(debug_parser
@@ -182,6 +206,7 @@ add_executable(debug_parser
     src/exception.c
     src/memory_profiler.c
     src/error_messages.c
+    src/value.c
 )
 target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

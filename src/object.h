@@ -181,12 +181,8 @@ typedef struct {
 // Function wrappers moved to value.h to avoid circular dependency
 // moved to vector.h
 // make_symbol_old declaration removed - use make_symbol from value.h instead
-/** Convenience: create generic error exception object. */
-CljObject* make_error(const char *message, const char *file, int line, int col);
 /** Create a CLJException object (rc=1) with optional data. */
 CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col);
-/** Create a CljObject wrapper for CLJException (rc=1) with optional data. */
-CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col);
 
 // Exception throwing
 /** Throw exception via longjmp; transfers ownership to runtime. */
@@ -308,9 +304,6 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value);
 /** Allocate CLJException with type/message/location and optional data. */
 
 
-// Polymorphic helpers for subtyping
-/** Allocate CljObject shell with given type (no data). */
-CljObject* create_object(CljType type);
 // Old memory management functions removed - use RETAIN/RELEASE macros instead
 
 // Debug macros removed - no debug output in any builds

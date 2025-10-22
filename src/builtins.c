@@ -329,9 +329,7 @@ ID native_array_map(ID *args, int argc) {
     return OBJ_TO_ID((CljObject*)map);
 }
 
-CljObject* make_func(BuiltinFn fn, void *env) {
-    return make_named_func(fn, env, NULL);
-}
+// make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
 
 CljObject* make_named_func(BuiltinFn fn, void *env, const char *name) {
     CljFunc *func = ALLOC(CljFunc, 1);
@@ -366,10 +364,10 @@ static const BuiltinEntry builtins[] = {
     {"conj!", FN_GENERIC, .u.generic = native_conj_bang},
     {"if", FN_GENERIC, .u.generic = native_if},
     {"type", FN_GENERIC, .u.generic = native_type},
-    {"+", FN_GENERIC, .u.generic = native_add},
-    {"-", FN_GENERIC, .u.generic = native_sub},
-    {"*", FN_GENERIC, .u.generic = native_mul},
-    {"/", FN_GENERIC, .u.generic = native_div},
+    {"+", FN_GENERIC, .u.generic = native_add_variadic},
+    {"-", FN_GENERIC, .u.generic = native_sub_variadic},
+    {"*", FN_GENERIC, .u.generic = native_mul_variadic},
+    {"/", FN_GENERIC, .u.generic = native_div_variadic},
     {"str", FN_GENERIC, .u.generic = native_str},
 };
 
@@ -390,14 +388,7 @@ ID apply_builtin(const BuiltinEntry *entry, ID *args, int argc) {
     return NULL;
 }
 
-// Wrapper functions for arithmetic operations (delegate to variadic versions)
-ID native_add(ID *args, int argc) { return native_add_variadic(args, argc); }
-
-ID native_sub(ID *args, int argc) { return native_sub_variadic(args, argc); }
-
-ID native_mul(ID *args, int argc) { return native_mul_variadic(args, argc); }
-
-ID native_div(ID *args, int argc) { return native_div_variadic(args, argc); }
+// Arithmetic wrapper functions removed - using *_variadic directly in builtins[] array
 
 ID native_println(ID *args, int argc) {
     if (argc < 1) return OBJ_TO_ID(NULL);
@@ -689,10 +680,10 @@ void register_builtins() {
     register_builtin("test-native", (BuiltinFn)native_if);
     
     // Register all builtins in clojure.core namespace (DRY principle)
-    register_builtin_in_namespace("+", native_add);
-    register_builtin_in_namespace("-", native_sub);
-    register_builtin_in_namespace("*", native_mul);
-    register_builtin_in_namespace("/", native_div);
+    register_builtin_in_namespace("+", native_add_variadic);
+    register_builtin_in_namespace("-", native_sub_variadic);
+    register_builtin_in_namespace("*", native_mul_variadic);
+    register_builtin_in_namespace("/", native_div_variadic);
     register_builtin_in_namespace("str", native_str);
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);

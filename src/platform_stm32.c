@@ -6,10 +6,9 @@ void platform_init() {
 }
 
 void platform_print(const char *message) {
-    if (message == NULL) {
-        return;
-    }
-    printf("%s\n", message);
+    if (!message) return;
+    fputs(message, stdout);
+    fputc('\n', stdout);
 }
 
 const char *platform_name() {
@@ -36,7 +35,7 @@ void platform_put_char(char c) {
 }
 
 void platform_put_string(const char *s) {
-    printf("%s", s);
+    if (s) fputs(s, stdout);
 }
 
 // Line editor cleanup function for STM32

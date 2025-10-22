@@ -100,21 +100,15 @@ static inline int32_t as_fixnum(CljValue val) {
 #define CHAR_BITS 21
 #define CLJ_CHAR_MAX ((1 << CHAR_BITS) - 1)
 
+// Function declarations for large functions moved to value.c
+CljValue make_char_impl(uint32_t codepoint);
+CljValue make_fixed_impl(float value);
+CljValue make_string_impl(const char *str);
+CljValue make_symbol_impl(const char *name, const char *ns);
+
+// Inline wrapper for make_char (simple delegation)
 static inline CljValue make_char(uint32_t codepoint) {
-    if (codepoint > CLJ_CHAR_MAX) {
-        // Fallback to heap allocation for invalid characters
-        CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
-        if (!v) return NULL;
-        v->type = CLJ_STRING;
-        v->rc = 1;
-        // Store string pointer after CljObject header
-        char **str_ptr = (char**)((char*)v + sizeof(CljObject));
-        *str_ptr = strdup("?");
-        
-        return (CljValue)v;
-    }
-    // Encode as tagged pointer: codepoint << 3 | TAG_CHAR
-    return (CljValue)(((uintptr_t)codepoint << TAG_BITS) | TAG_CHAR);
+    return make_char_impl(codepoint);
 }
 
 static inline bool is_char(CljValue val) {
@@ -139,12 +133,9 @@ static inline uint8_t as_special(CljValue val) {
 // 1 bit sign + 16 bits integer + 13 bits fraction
 // Range: ±32767.9998, Precision: 1/8192 ≈ 0.00012
 
+// Inline wrapper for make_fixed (simple delegation)
 static inline CljValue make_fixed(float value) {
-    int32_t fixed = (int32_t)(value * 8192.0f);
-    // Saturierung zu ±32767.9998 (±268435455 in Fixed-Point)
-    if (fixed > 268435455) fixed = 268435455;
-    if (fixed < -268435456) fixed = -268435456;
-    return (CljValue)(((uintptr_t)fixed << TAG_BITS) | TAG_FIXED);
+    return make_fixed_impl(value);
 }
 
 static inline bool is_fixed(CljValue val) {
@@ -218,7 +209,9 @@ static inline CljObject* ID_TO_OBJ(ID id) {
     if (obj->type < CLJ_TYPE_COUNT) {
         return obj;
     }
+#ifdef DEBUG
     fprintf(stderr, "ID_TO_OBJ: Invalid object type %d at %p\n", obj->type, obj);
+#endif
     abort();
 }
 #else
@@ -249,67 +242,14 @@ static inline CljValue make_float(double x) {
     return (CljValue)make_fixed((float)x);
 }
 
+// Inline wrapper for make_string (simple delegation)
 static inline CljValue make_string(const char *str) {
-    if (!str || str[0] == '\0') {
-        return (CljValue)empty_string_singleton;
-    }
-    // Allocate CljObject + space for char* pointer
-    CljObject *v = (CljObject*)malloc(sizeof(CljObject) + sizeof(char*));
-    if (!v) return NULL;
-    v->type = CLJ_STRING;
-    v->rc = 1;
-    // Store string pointer after CljObject header
-    char **str_ptr = (char**)((char*)v + sizeof(CljObject));
-    *str_ptr = strdup(str);
-    
-    return (CljValue)v;
+    return make_string_impl(str);
 }
 
+// Inline wrapper for make_symbol (simple delegation)
 static inline CljValue make_symbol(const char *name, const char *ns) {
-    if (!name) {
-        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
-                "make_symbol: name cannot be NULL");
-        return NULL;
-    }
-    
-    // Range check for name length
-    if (strlen(name) >= SYMBOL_NAME_MAX_LEN) {
-        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
-                "Symbol name '%s' exceeds maximum length of %d characters", 
-                name, SYMBOL_NAME_MAX_LEN - 1);
-        return NULL;
-    }
-    
-    // Use malloc directly instead of ALLOC macro
-    CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
-    if (!sym) {
-        throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
-                "Failed to allocate memory for symbol '%s'", name);
-        return NULL;
-    }
-    
-    sym->base.type = CLJ_SYMBOL;
-    sym->base.rc = 1;
-    
-    // Copy name to fixed buffer
-    strncpy(sym->name, name, SYMBOL_NAME_MAX_LEN - 1);
-    sym->name[SYMBOL_NAME_MAX_LEN - 1] = '\0';  // Ensure null termination
-    
-    // Get or create namespace object
-    if (ns) {
-        sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
-        if (!sym->ns) {
-            free(sym);
-            throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
-                    "Failed to create namespace '%s' for symbol '%s'", ns, name);
-            return NULL;
-        }
-        // Namespace is already retained by ns_get_or_create
-    } else {
-        sym->ns = NULL;  // No namespace
-    }
-    
-    return (CljValue)sym;
+    return make_symbol_impl(name, ns);
 }
 
 #endif

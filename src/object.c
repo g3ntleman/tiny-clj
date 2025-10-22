@@ -141,54 +141,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 
 
 
-/** @brief Create integer object */
-// make_int() and make_float() removed - use fixnum() and make_fixed() instead
 
-// retain() function moved to memory.c
-
-// release() function moved to memory.c
-
-// is_autorelease_pool_active() function moved to memory.c
-
-// autorelease() function moved to memory.c
-
-// autorelease_pool_push() function moved to memory.c
-
-// autorelease_pool_pop_internal() function moved to memory.c
-
-// autorelease_pool_pop() function moved to memory.c
-
-// autorelease_pool_pop_specific() function moved to memory.c
-
-// autorelease_pool_pop_legacy() function moved to memory.c
-
-// autorelease_pool_cleanup_all() function moved to memory.c
-// release_object_deep() function moved to memory.c
-
-// moved to string.c
-
-// make_nil() and make_bool() functions removed - use NULL, make_special() instead
-
-// vector functions moved to vector.c
-
-// Forward declarations for early use
-// empty map singleton moved to map.c
-
-// map functions moved to map.c
-
-// make_symbol_old function removed - use make_symbol from value.h instead
-
-CljObject* make_error(const char *message, const char *file, int line, int col) {
-    return make_exception_wrapper("Error", message, file, line, col);
-}
-
-CljObject* make_exception_wrapper(const char *type, const char *message, const char *file, int line, int col) {
-    if (!type || !message) return NULL;
-    
-    CLJException *exc = make_exception(type, message, file, line, col);
-    
-    return (CljObject*)exc;
-}
 
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
@@ -576,10 +529,6 @@ bool clj_equal_id(ID a, ID b) {
     return false;
 }
 
-// Legacy-Wrapper für CljValue-Parameter
-static bool clj_equal_value(CljValue a, CljValue b) {
-    return clj_equal_id((ID)a, (ID)b);
-}
 
 // Korrekte Gleichheitsprüfung mit Inhalt-Vergleich
 bool clj_equal(CljObject *a, CljObject *b) {
@@ -617,7 +566,7 @@ bool clj_equal(CljObject *a, CljObject *b) {
             if (vec_a->count != vec_b->count) return false;
             for (int i = 0; i < vec_a->count; i++) {
                 // Vektorelemente können CljValue (immediate values) oder CljObject* sein
-                if (!clj_equal_value(vec_a->data[i], vec_b->data[i])) return false;
+                if (!clj_equal_id(vec_a->data[i], vec_b->data[i])) return false;
             }
             return true;
         }
@@ -632,7 +581,7 @@ bool clj_equal(CljObject *a, CljObject *b) {
                 CljValue val_a = KV_VALUE(map_a->data, i);
                 CljValue val_b = map_get((CljValue)b, key_a);
                 // Map-Werte können CljValue (immediate values) oder CljObject* sein
-                if (!clj_equal_value(val_a, val_b)) return false;
+                if (!clj_equal_id(val_a, val_b)) return false;
             }
             return true;
         }
@@ -733,6 +682,8 @@ CljObject* intern_symbol_global(const char *name) {
 }
 
 // Clean up symbol table (ONLY for test cleanup, not regular symbols)
+// This function will be eliminated by dead-code-elimination in production builds
+// since it's only called from test files
 void symbol_table_cleanup() {
 // Symbols should live until program end!
 // Free only SymbolEntry structures, NOT the symbols themselves
@@ -869,10 +820,10 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     // Arity check
     CljFunction *func = as_function(fn);
     if (!func) {
-        return make_error("Invalid function object", NULL, 0, 0);
+        return (CljObject*)make_exception("Error", "Invalid function object", NULL, 0, 0);
     }
     if (argc != func->param_count) {
-        return make_error("Arity mismatch in function call", NULL, 0, 0);
+        return (CljObject*)make_exception("Error", "Arity mismatch in function call", NULL, 0, 0);
     }
     
     // Heap-allocated parameter array
@@ -885,7 +836,7 @@ CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
     CljObject *call_env = env_extend_stack(func->closure_env, func->params, heap_params, argc);
     if (!call_env) {
         DEALLOC(heap_params);
-        return make_error("Failed to create function environment", NULL, 0, 0);
+        return (CljObject*)make_exception("Error", "Failed to create function environment", NULL, 0, 0);
     }
     
     // Evaluate function body (simplified; would normally call eval())
@@ -911,19 +862,6 @@ CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObje
     return clj_call_function(fn, argc, eval_args);
 }
 
-// Polymorphe Funktionen für Subtyping
-CljObject* create_object(CljType type) {
-    CljObject *obj = ALLOC_SIMPLE(type);
-    if (!obj) return NULL;
-    
-    obj->type = type;
-    obj->rc = 1;
-    
-    // Initialisiere je nach Typ
-    // Note: nil is now represented as NULL, no special handling needed
-    
-    return obj;
-}
 
 // Old memory management functions removed - use RETAIN/RELEASE macros instead
 

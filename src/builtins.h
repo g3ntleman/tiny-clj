@@ -28,7 +28,6 @@ ID native_type(ID *args, int argc);
 ID native_array_map(ID *args, int argc);
 
 // Function value constructors
-CljObject* make_func(BuiltinFn fn, void *env);
 CljObject* make_named_func(BuiltinFn fn, void *env, const char *name);
 
 // Eval helpers
@@ -39,10 +38,7 @@ void register_builtins();
 
 // Variadic functions (Phase 1)
 ID native_str(ID *args, int argc);
-ID native_add(ID *args, int argc);
-ID native_sub(ID *args, int argc);
-ID native_mul(ID *args, int argc);
-ID native_div(ID *args, int argc);
+// Arithmetic wrapper functions removed - using *_variadic directly
 ID native_add_variadic(ID *args, int argc);
 ID native_sub_variadic(ID *args, int argc);
 ID native_mul_variadic(ID *args, int argc);

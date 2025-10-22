@@ -42,13 +42,16 @@ CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filen
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
 void ns_define(EvalState *st, CljObject *symbol, CljObject *value);
-void ns_cleanup();
 
 // EvalState functions
 EvalState* evalstate();
 EvalState* evalstate_new();
 void evalstate_free(EvalState *st);
 void evalstate_set_ns(EvalState *st, const char *ns_name);
+
+// Optimized EvalState functions
+EvalState* evalstate_new_lazy();
+void evalstate_ensure_initialized(EvalState *st);
 
 // Exception handling
 void eval_error(const char *msg, EvalState *st);

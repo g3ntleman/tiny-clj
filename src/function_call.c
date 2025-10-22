@@ -380,7 +380,7 @@ CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljMap 
     // It's a Clojure function (CljFunction)
     CljFunction *func = (CljFunction*)fn;
     if (!func) {
-        return make_error("Invalid function object", NULL, 0, 0);
+        return (CljObject*)make_exception("Error", "Invalid function object", NULL, 0, 0);
     }
     
     // Arity check

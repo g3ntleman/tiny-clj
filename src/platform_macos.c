@@ -11,10 +11,9 @@ void platform_init() {
 }
 
 void platform_print(const char *message) {
-    if (message == NULL) {
-        return;
-    }
-    printf("%s\n", message);
+    if (!message) return;
+    fputs(message, stdout);
+    fputc('\n', stdout);
 }
 
 const char *platform_name() {
