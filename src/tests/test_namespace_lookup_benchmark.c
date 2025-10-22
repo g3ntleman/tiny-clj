@@ -264,8 +264,8 @@ static void benchmark_clojure_core_priority(void) {
         CljObject *result = ns_resolve(benchmark_eval_state, sym);
         
         // Verify that clojure.core symbols are found (should be high priority values)
-        if (result && is_fixnum((CljValue)result)) {
-            int val = as_fixnum((CljValue)result);
+        if (result && is_fixnum(result)) {
+            int val = as_fixnum(result);
             // clojure.core values should be >= 1000 (high priority)
             if (val >= 1000) {
                 // Success: Found clojure.core symbol first

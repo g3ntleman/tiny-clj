@@ -165,7 +165,7 @@ void test_map_arity_exception_zero_args(void) {
     
     TRY {
         // Create a map and bind it to 'm'
-        CljValue map_obj = AUTORELEASE((CljValue)make_map(2));
+        CljValue map_obj = AUTORELEASE(make_map(2));
         CljObject *key = AUTORELEASE(make_symbol_impl(":a", NULL));
         CljObject *val = fixnum(1);
         map_assoc(map_obj, key, val);

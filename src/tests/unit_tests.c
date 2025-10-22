@@ -67,8 +67,8 @@ void test_list_creation(void) {
     // Test count function
     CljObject *count_result = eval_string("(count (list 1 2 3))", st);
     TEST_ASSERT_NOT_NULL(count_result);
-    if (count_result && is_fixnum((CljValue)count_result)) {
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)count_result));
+    if (count_result && is_fixnum(count_result)) {
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
     }
     
     // Memory is automatically managed by eval_string
@@ -133,8 +133,8 @@ void test_vector_creation(void) {
     // Test vector count
     CljObject *count_result = eval_string("(count [1 2 3 4 5])", st);
     TEST_ASSERT_NOT_NULL(count_result);
-    if (count_result && is_fixnum((CljValue)count_result)) {
-        TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)count_result));
+    if (count_result && is_fixnum(count_result)) {
+        TEST_ASSERT_EQUAL_INT(5, as_fixnum(count_result));
     }
     
     // Memory is automatically managed by eval_string
@@ -200,20 +200,20 @@ void test_integer_creation(void) {
     // Test positive integer
     CljObject *int_val = eval_string("42", st);
     TEST_ASSERT_NOT_NULL(int_val);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)int_val));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_val));
+    TEST_ASSERT_TRUE(is_fixnum(int_val));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(int_val));
     
     // Test negative integer
     CljObject *neg_int = eval_string("-100", st);
     TEST_ASSERT_NOT_NULL(neg_int);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)neg_int));
-    TEST_ASSERT_EQUAL_INT(-100, as_fixnum((CljValue)neg_int));
+    TEST_ASSERT_TRUE(is_fixnum(neg_int));
+    TEST_ASSERT_EQUAL_INT(-100, as_fixnum(neg_int));
     
     // Test zero
     CljObject *zero = eval_string("0", st);
     TEST_ASSERT_NOT_NULL(zero);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)zero));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)zero));
+    TEST_ASSERT_TRUE(is_fixnum(zero));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(zero));
     
     // Memory is automatically managed by eval_string
 }
@@ -226,20 +226,20 @@ void test_float_creation(void) {
     // Test positive float
     CljObject *float_val = eval_string("3.14", st);
     TEST_ASSERT_NOT_NULL(float_val);
-    TEST_ASSERT_TRUE(is_fixed((CljValue)float_val));
-    TEST_ASSERT_TRUE(as_fixed((CljValue)float_val) > 3.1f && as_fixed((CljValue)float_val) < 3.2f);
+    TEST_ASSERT_TRUE(is_fixed(float_val));
+    TEST_ASSERT_TRUE(as_fixed(float_val) > 3.1f && as_fixed(float_val) < 3.2f);
     
     // Test negative float
     CljObject *neg_float = eval_string("-2.5", st);
     TEST_ASSERT_NOT_NULL(neg_float);
-    TEST_ASSERT_TRUE(is_fixed((CljValue)neg_float));
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, -2.5f, as_fixed((CljValue)neg_float));
+    TEST_ASSERT_TRUE(is_fixed(neg_float));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -2.5f, as_fixed(neg_float));
     
     // Test zero float
     CljObject *zero_float = eval_string("0.0", st);
     TEST_ASSERT_NOT_NULL(zero_float);
-    TEST_ASSERT_TRUE(is_fixed((CljValue)zero_float));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, as_fixed((CljValue)zero_float));
+    TEST_ASSERT_TRUE(is_fixed(zero_float));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, as_fixed(zero_float));
     
     // Memory is automatically managed by eval_string
 }
@@ -354,7 +354,7 @@ void test_cljvalue_transient_vector(void) {
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, pvec->type);
         TEST_ASSERT_TRUE(tvec != pvec);  // Different instance
         
-        // item1 and item2 are immediate values (CljValue), no release needed
+        // item1 and item2 are immediate values , no release needed
         // pvec, tvec, and vec are automatically managed by their respective functions
     }
 }
@@ -621,8 +621,8 @@ void test_cljvalue_vectors_high_level(void) {
         // Test vector count
         CljObject *count = eval_string("(count [1 2 3 4 5])", st);
         TEST_ASSERT_NOT_NULL(count);
-        TEST_ASSERT_TRUE(is_fixnum((CljValue)count));
-        TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)count));
+        TEST_ASSERT_TRUE(is_fixnum(count));
+        TEST_ASSERT_EQUAL_INT(5, as_fixnum(count));
         
         // Test vector conj (should create new vector)
         CljObject *conj_result = eval_string("(conj [1 2 3] 4)", st);
@@ -650,8 +650,8 @@ void test_cljvalue_immediates_high_level(void) {
         // Test integer literals (should use fixnum immediates)
         CljObject *int_val = eval_string("42", st);
         if (int_val) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)int_val));
-            TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_val));
+            TEST_ASSERT_TRUE(is_fixnum(int_val));
+            TEST_ASSERT_EQUAL_INT(42, as_fixnum(int_val));
         } else {
             // Parse failed due to exception - this is OK
         }
@@ -659,8 +659,8 @@ void test_cljvalue_immediates_high_level(void) {
         // Test negative integers
         CljObject *neg_int = eval_string("-100", st);
         if (neg_int) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)neg_int));
-            TEST_ASSERT_EQUAL_INT(-100, as_fixnum((CljValue)neg_int));
+            TEST_ASSERT_TRUE(is_fixnum(neg_int));
+            TEST_ASSERT_EQUAL_INT(-100, as_fixnum(neg_int));
         } else {
             // Parse failed due to exception - this is OK
         }
@@ -672,19 +672,19 @@ void test_cljvalue_immediates_high_level(void) {
         // Test boolean literals
         CljObject *true_val = eval_string("true", st);
         TEST_ASSERT_NOT_NULL(true_val);
-        TEST_ASSERT_TRUE(is_special((CljValue)true_val));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special((CljValue)true_val));
+        TEST_ASSERT_TRUE(is_special(true_val));
+        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(true_val));
         
         CljObject *false_val = eval_string("false", st);
         TEST_ASSERT_NOT_NULL(false_val);
-        TEST_ASSERT_TRUE(is_special((CljValue)false_val));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special((CljValue)false_val));
+        TEST_ASSERT_TRUE(is_special(false_val));
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(false_val));
         
         // Test float literals
         CljObject *float_val = eval_string("3.14", st);
         TEST_ASSERT_NOT_NULL(float_val);
-        TEST_ASSERT_TRUE(is_fixed((CljValue)float_val));
-        TEST_ASSERT_TRUE(as_fixed((CljValue)float_val) > 3.1f && as_fixed((CljValue)float_val) < 3.2f);
+        TEST_ASSERT_TRUE(is_fixed(float_val));
+        TEST_ASSERT_TRUE(as_fixed(float_val) > 3.1f && as_fixed(float_val) < 3.2f);
         
         // Test string literals
         CljObject *str_val = eval_string("\"hello world\"", st);
@@ -738,14 +738,14 @@ void test_cljvalue_transient_map_clojure_semantics(void) {
         // Test get function with the map
         CljObject *get_result = eval_string("(get {:a 1 :b 2} :a)", st);
         TEST_ASSERT_NOT_NULL(get_result);
-        TEST_ASSERT_TRUE(is_fixnum((CljValue)get_result));
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)get_result));
+        TEST_ASSERT_TRUE(is_fixnum(get_result));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(get_result));
         
         // Test map count
         CljObject *count = eval_string("(count {:x 1 :y 2 :z 3})", st);
         TEST_ASSERT_NOT_NULL(count);
-        TEST_ASSERT_TRUE(is_fixnum((CljValue)count));
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)count));
+        TEST_ASSERT_TRUE(is_fixnum(count));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(count));
         
         // Test map keys and values
         CljObject *keys = eval_string("(keys {:a 1 :b 2})", st);
@@ -973,8 +973,8 @@ void test_map_function(void) {
         // Test first on vectors (builtin function)
         CljObject *first_result = eval_string("(first [1 2 3])", st);
         if (first_result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)first_result));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)first_result));
+            TEST_ASSERT_TRUE(is_fixnum(first_result));
+            TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
         }
         
         // Test rest on vectors (builtin function)
@@ -995,89 +995,89 @@ void test_map_function(void) {
         // Test vector count
         CljObject *count_result = eval_string("(count [1 2 3 4])", st);
         if (count_result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)count_result));
-            TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)count_result));
+            TEST_ASSERT_TRUE(is_fixnum(count_result));
+            TEST_ASSERT_EQUAL_INT(4, as_fixnum(count_result));
         }
         
         // Test list count
         CljObject *list_count_result = eval_string("(count (list 1 2 3))", st);
         if (list_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)list_count_result));
-            TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)list_count_result));
+            TEST_ASSERT_TRUE(is_fixnum(list_count_result));
+            TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_count_result));
         }
         
         // Test string count
         CljObject *string_count_result = eval_string("(count \"hello\")", st);
         if (string_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)string_count_result));
-            TEST_ASSERT_EQUAL_INT(5, as_fixnum((CljValue)string_count_result));
+            TEST_ASSERT_TRUE(is_fixnum(string_count_result));
+            TEST_ASSERT_EQUAL_INT(5, as_fixnum(string_count_result));
         }
         
         // Test map count
         CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", st);
         if (map_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)map_count_result));
-            TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)map_count_result));
+            TEST_ASSERT_TRUE(is_fixnum(map_count_result));
+            TEST_ASSERT_EQUAL_INT(3, as_fixnum(map_count_result));
         }
         
         // Test nil count (should return 0)
         CljObject *nil_count_result = eval_string("(count nil)", st);
         if (nil_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)nil_count_result));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)nil_count_result));
+            TEST_ASSERT_TRUE(is_fixnum(nil_count_result));
+            TEST_ASSERT_EQUAL_INT(0, as_fixnum(nil_count_result));
         }
         
         // Test empty vector count
         CljObject *empty_vec_count = eval_string("(count [])", st);
         if (empty_vec_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)empty_vec_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)empty_vec_count));
+            TEST_ASSERT_TRUE(is_fixnum(empty_vec_count));
+            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_vec_count));
         }
         
         // Test empty list count
         CljObject *empty_list_count = eval_string("(count (list))", st);
         if (empty_list_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)empty_list_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)empty_list_count));
+            TEST_ASSERT_TRUE(is_fixnum(empty_list_count));
+            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_list_count));
         }
         
         // Test empty string count
         CljObject *empty_string_count = eval_string("(count \"\")", st);
         if (empty_string_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)empty_string_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)empty_string_count));
+            TEST_ASSERT_TRUE(is_fixnum(empty_string_count));
+            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_string_count));
         }
         
         // Test empty map count
         CljObject *empty_map_count = eval_string("(count {})", st);
         if (empty_map_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)empty_map_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)empty_map_count));
+            TEST_ASSERT_TRUE(is_fixnum(empty_map_count));
+            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_map_count));
         }
         
         // Test single element containers
         CljObject *single_vec_count = eval_string("(count [42])", st);
         if (single_vec_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)single_vec_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)single_vec_count));
+            TEST_ASSERT_TRUE(is_fixnum(single_vec_count));
+            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_vec_count));
         }
         
         CljObject *single_list_count = eval_string("(count (list 42))", st);
         if (single_list_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)single_list_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)single_list_count));
+            TEST_ASSERT_TRUE(is_fixnum(single_list_count));
+            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_list_count));
         }
         
         CljObject *single_string_count = eval_string("(count \"x\")", st);
         if (single_string_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)single_string_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)single_string_count));
+            TEST_ASSERT_TRUE(is_fixnum(single_string_count));
+            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_string_count));
         }
         
         CljObject *single_map_count = eval_string("(count {:a 1})", st);
         if (single_map_count) {
-            TEST_ASSERT_TRUE(is_fixnum((CljValue)single_map_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)single_map_count));
+            TEST_ASSERT_TRUE(is_fixnum(single_map_count));
+            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_map_count));
         }
         
         // TODO: When map is implemented as builtin, add tests like:
@@ -1138,8 +1138,8 @@ void test_fixed_arithmetic_operations(void) {
         // Test addition: 1.5 + 2.25 = 3.75
         CljObject *result = eval_string("(+ 1.5 2.25)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.75f, val);
         }
         RELEASE(result);
@@ -1147,8 +1147,8 @@ void test_fixed_arithmetic_operations(void) {
         // Test subtraction: 5.0 - 1.5 = 3.5
         result = eval_string("(- 5.0 1.5)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.5f, val);
         }
         RELEASE(result);
@@ -1156,8 +1156,8 @@ void test_fixed_arithmetic_operations(void) {
         // Test multiplication: 2.5 * 3.0 = 7.5
         result = eval_string("(* 2.5 3.0)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 7.5f, val);
         }
         RELEASE(result);
@@ -1165,8 +1165,8 @@ void test_fixed_arithmetic_operations(void) {
         // Test division: 6.0 / 2.0 = 3.0
         result = eval_string("(/ 6.0 2.0)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.0f, val);
         }
         RELEASE(result);
@@ -1188,8 +1188,8 @@ void test_fixed_mixed_type_operations(void) {
         // Test int + float: 1 + 1.2 = 2.2 (with Fixed-Point precision)
         CljObject *result = eval_string("(+ 1 1.2)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             // Fixed-Point precision: 2.2 becomes ~2.199
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.2f, val);
         }
@@ -1198,8 +1198,8 @@ void test_fixed_mixed_type_operations(void) {
         // Test float + int: 2.5 + 3 = 5.5
         result = eval_string("(+ 2.5 3)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, val);
         }
         RELEASE(result);
@@ -1207,8 +1207,8 @@ void test_fixed_mixed_type_operations(void) {
         // Test multiple mixed types: 1 + 2.5 + 3 = 6.5
         result = eval_string("(+ 1 2.5 3)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 6.5f, val);
         }
         RELEASE(result);
@@ -1230,8 +1230,8 @@ void test_fixed_division_with_remainder(void) {
         // Test integer division (no remainder): 6 / 2 = 3 (integer)
         CljObject *result = eval_string("(/ 6 2)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixnum((CljValue)result)) {
-            int val = as_fixnum((CljValue)result);
+        if (result && is_fixnum(result)) {
+            int val = as_fixnum(result);
             TEST_ASSERT_EQUAL_INT(3, val);
         }
         RELEASE(result);
@@ -1239,8 +1239,8 @@ void test_fixed_division_with_remainder(void) {
         // Test float division (with remainder): 5 / 2 = 2.5 (Fixed-Point)
         result = eval_string("(/ 5 2)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, val);
         }
         RELEASE(result);
@@ -1248,8 +1248,8 @@ void test_fixed_division_with_remainder(void) {
         // Test mixed division: 7.0 / 2 = 3.5 (Fixed-Point)
         result = eval_string("(/ 7.0 2)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.5f, val);
         }
         RELEASE(result);
@@ -1272,8 +1272,8 @@ void test_fixed_precision_limits(void) {
         // Very small number
         CljObject *result = eval_string("0.001", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.001f, val);
         }
         RELEASE(result);
@@ -1281,8 +1281,8 @@ void test_fixed_precision_limits(void) {
         // Test that very precise numbers get rounded
         result = eval_string("1.23456789", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             // Fixed-Point should round to ~4 significant digits
             TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.235f, val);
         }
@@ -1291,8 +1291,8 @@ void test_fixed_precision_limits(void) {
         // Test large number
         result = eval_string("1000.5", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.1f, 1000.5f, val);
         }
         RELEASE(result);
@@ -1314,8 +1314,8 @@ void test_fixed_variadic_operations(void) {
         // Test multiple float addition
         CljObject *result = eval_string("(+ 1.0 2.0 3.0 4.0)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, val);
         }
         RELEASE(result);
@@ -1323,8 +1323,8 @@ void test_fixed_variadic_operations(void) {
         // Test mixed variadic: 1 + 2.5 + 3 + 4.5 = 11.0
         result = eval_string("(+ 1 2.5 3 4.5)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 11.0f, val);
         }
         RELEASE(result);
@@ -1332,8 +1332,8 @@ void test_fixed_variadic_operations(void) {
         // Test multiplication with floats
         result = eval_string("(* 2.0 3.0 4.0)", st);
         TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.1f, 24.0f, val);
         }
         RELEASE(result);
@@ -1355,8 +1355,8 @@ void test_fixed_error_handling(void) {
         CljObject *result = eval_string("(/ 1.0 0.0)", st);
         TEST_ASSERT_NOT_NULL(result);
         // Should return infinity or throw error
-        if (result && is_fixed((CljValue)result)) {
-            float val = as_fixed((CljValue)result);
+        if (result && is_fixed(result)) {
+            float val = as_fixed(result);
             // Check for infinity (positive or negative)
             TEST_ASSERT_TRUE(val != val || val == val); // NaN check or infinity
         }

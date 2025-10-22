@@ -192,29 +192,29 @@ char* to_string(CljObject *v) {
     }
 
     // Handle immediates (CljValue tagged pointers)
-    if (is_immediate((CljValue)v)) {
-        if (is_fixnum((CljValue)v)) {
+    if (is_immediate(v)) {
+        if (is_fixnum(v)) {
             char buf[32];
-            snprintf(buf, sizeof(buf), "%d", as_fixnum((CljValue)v));
+            snprintf(buf, sizeof(buf), "%d", as_fixnum(v));
             return strdup(buf);
         }
-        if (is_fixed((CljValue)v)) {
+        if (is_fixed(v)) {
             char buf[32];
-            double val = as_fixed((CljValue)v);
+            double val = as_fixed(v);
             snprintf(buf, sizeof(buf), "%.4g", val);
             return strdup(buf);
         }
-        if (is_special((CljValue)v)) {
-            uint8_t special = as_special((CljValue)v);
+        if (is_special(v)) {
+            uint8_t special = as_special(v);
             switch (special) {
                 case SPECIAL_TRUE: return strdup("true");
                 case SPECIAL_FALSE: return strdup("false");
                 default: return strdup("unknown");
             }
         }
-        if (is_char((CljValue)v)) {
+        if (is_char(v)) {
             char buf[8];
-            snprintf(buf, sizeof(buf), "%c", (char)as_char((CljValue)v));
+            snprintf(buf, sizeof(buf), "%c", (char)as_char(v));
             return strdup(buf);
         }
     }
@@ -504,24 +504,24 @@ bool clj_equal_id(ID a, ID b) {
     if (!a || !b) return false;
     
     // Beide sind immediate values (CljValue)
-    if (is_immediate((CljValue)a) && is_immediate((CljValue)b)) {
-        if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
-            return as_fixnum((CljValue)a) == as_fixnum((CljValue)b);
+    if (is_immediate(a) && is_immediate(b)) {
+        if (is_fixnum(a) && is_fixnum(b)) {
+            return as_fixnum(a) == as_fixnum(b);
         }
-        if (is_char((CljValue)a) && is_char((CljValue)b)) {
-            return as_char((CljValue)a) == as_char((CljValue)b);
+        if (is_char(a) && is_char(b)) {
+            return as_char(a) == as_char(b);
         }
-        if (is_fixed((CljValue)a) && is_fixed((CljValue)b)) {
-            return as_fixed((CljValue)a) == as_fixed((CljValue)b);
+        if (is_fixed(a) && is_fixed(b)) {
+            return as_fixed(a) == as_fixed(b);
         }
-        if (is_special((CljValue)a) && is_special((CljValue)b)) {
-            return as_special((CljValue)a) == as_special((CljValue)b);
+        if (is_special(a) && is_special(b)) {
+            return as_special(a) == as_special(b);
         }
         return false; // Verschiedene immediate value Typen
     }
     
     // Beide sind CljObject* (heap objects)
-    if (!is_immediate((CljValue)a) && !is_immediate((CljValue)b)) {
+    if (!is_immediate(a) && !is_immediate(b)) {
         return clj_equal((CljObject*)a, (CljObject*)b);
     }
     
@@ -579,7 +579,7 @@ bool clj_equal(CljObject *a, CljObject *b) {
             for (int i = 0; i < map_a->count; i++) {
                 CljValue key_a = KV_KEY(map_a->data, i);
                 CljValue val_a = KV_VALUE(map_a->data, i);
-                CljValue val_b = map_get((CljValue)b, key_a);
+                CljValue val_b = map_get(b, key_a);
                 // Map-Werte können CljValue (immediate values) oder CljObject* sein
                 if (!clj_equal_id(val_a, val_b)) return false;
             }
@@ -738,13 +738,13 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    map_assoc((CljValue)meta_registry, (CljValue)v, (CljValue)meta);
+    map_assoc(meta_registry, v, meta);
 }
 
 CljObject* meta_get(CljObject *v) {
     if (!v || !meta_registry) return NULL;
     
-    return (CljObject*)map_get((CljValue)meta_registry, (CljValue)v);
+    return (CljObject*)map_get(meta_registry, v);
 }
 
 void meta_clear(CljObject *v) {
@@ -804,13 +804,13 @@ CljObject* env_get_stack(CljObject *env, CljObject *key) {
     if (!env || !key) return NULL;
     
     // Direct map lookup
-    return (CljObject*)map_get((CljValue)env, (CljValue)key);
+    return (CljObject*)map_get(env, key);
 }
 
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
     if (!env || !key) return;
     
-    map_assoc((CljValue)env, (CljValue)key, (CljValue)value);
+    map_assoc(env, key, value);
 }
 
 // Function call implementation using stack allocation
