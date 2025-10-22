@@ -66,6 +66,12 @@ list(APPEND SOURCES
 
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL ${SOURCES})
+# Main Build - Meta only in Debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj PRIVATE)
+else()
+    target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
+endif()
 
 # STM32-optimized sources (no memory profiling for embedded)
 set(STM32_SOURCES
@@ -115,7 +121,12 @@ add_executable(tiny-clj-stm32
     src/memory_profiler.c
     src/value.c
 )
-target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+# STM32 Production Build - No Meta, Optimized
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj-stm32 PRIVATE STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+else()
+    target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+endif()
 set_target_properties(tiny-clj-stm32 PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
@@ -128,7 +139,12 @@ add_executable(tiny-clj-repl
     src/line_editor.c
     ${SOURCES}
 )
-target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
+# REPL Build - Meta only in Debug builds
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)
+else()
+    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
+endif()
 
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
 add_executable(tiny-clj-stm32-repl
@@ -138,7 +154,12 @@ add_executable(tiny-clj-stm32-repl
     src/memory_profiler.c
     ${STM32_SOURCES}
 )
-target_compile_definitions(tiny-clj-stm32-repl PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
+# STM32 REPL Build - No Meta in Release, Optimized
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj-stm32-repl PRIVATE STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
+else()
+    target_compile_definitions(tiny-clj-stm32-repl PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
+endif()
 set_target_properties(tiny-clj-stm32-repl PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
@@ -279,11 +300,9 @@ set(COMMON_TEST_SOURCES
 # COMPILE DEFINITIONS
 # ============================================================================
 
-# Meta-Funktionalität aktivieren
-target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
-
-# Meta-Funktionalität für Test-Executables aktivieren
-target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
+# Meta-Funktionalität wird jetzt pro-Target basierend auf Build-Type konfiguriert
+# Release builds: ENABLE_META deaktiviert (kleinere Binaries, bessere Performance)
+# Debug builds: ENABLE_META aktiviert (für Development/Debugging)
 
 # ============================================================================
 # CUSTOM TARGETS
