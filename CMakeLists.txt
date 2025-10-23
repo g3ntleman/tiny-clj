@@ -29,6 +29,18 @@ else()
   set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
 endif()
 
+# Ultra-compact build for <100KB target (embedded deployment)
+# Target: ARM Cortex-M (32-bit) for ESP32
+set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
+if(APPLE)
+  # For macOS testing: use size-optimized build (simulate embedded constraints)
+  set(CMAKE_EXE_LINKER_FLAGS_EMBEDDED "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED} -Wl,-dead_strip -Wl,-S -Wl,-x")
+else()
+  # For embedded: ESP32 toolchain (when using cross-compiler)
+  set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -mlongcalls")
+  set(CMAKE_EXE_LINKER_FLAGS_EMBEDDED "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED} -Wl,--gc-sections -Wl,--strip-all -Wl,-S -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls")
+endif()
+
 # Enable LTO if the toolchain supports it (Release and MinSizeRel)
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_msg)
@@ -96,10 +108,10 @@ set(STM32_SOURCES
     src/value.c
 )
 
-# STM32-optimized embedded interpreter (no REPL, executes startup-code.clj)
-add_executable(tiny-clj-stm32
-    src/main_stm32.c
-    src/platform_stm32_embedded.c
+# ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
+add_executable(tiny-clj-esp32
+    src/main_esp32.c
+    src/platform_esp32_embedded.c
     src/clojure_core.c
     src/types.c
     src/object.c
@@ -121,16 +133,100 @@ add_executable(tiny-clj-stm32
     src/memory_profiler.c
     src/value.c
 )
-# STM32 Production Build - No Meta, Optimized
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-stm32 PRIVATE STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
-else()
-    target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
-endif()
-set_target_properties(tiny-clj-stm32 PROPERTIES
-    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
-    LINK_FLAGS "-Wl,-dead_strip"
+
+# ESP32 Ultra-Compact Build (aggressive optimization for <100KB)
+add_executable(tiny-clj-esp32-minimal
+    src/main_esp32.c
+    src/platform_esp32_embedded.c
+    src/clojure_core.c
+    src/types.c
+    src/object.c
+    src/builtins.c
+    src/runtime.c
+    src/namespace.c
+    src/symbol.c
+    src/exception.c
+    src/parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/seq.c
+    src/memory.c
+    src/error_messages.c
+    src/memory_profiler.c
+    src/value.c
 )
+
+# ESP32 Ultra-Minimal Build (only core features for <100KB)
+add_executable(tiny-clj-esp32-ultra
+    src/main_esp32.c
+    src/platform_esp32_embedded.c
+    src/clojure_core.c
+    src/types.c
+    src/object.c
+    src/builtins.c
+    src/runtime.c
+    src/namespace.c
+    src/symbol.c
+    src/exception.c
+    src/parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/seq.c
+    src/memory.c
+    src/error_messages.c
+    src/memory_profiler.c
+    src/value.c
+)
+
+# ESP32 Production Build - No Meta, Optimized
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS DISABLE_ERROR_MESSAGES DISABLE_STRING_FORMATTING)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Embedded")
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS DISABLE_ERROR_MESSAGES DISABLE_STRING_FORMATTING DISABLE_META DISABLE_COMPLEX_PARSING DISABLE_VECTOR_OPERATIONS DISABLE_MAP_OPERATIONS)
+else()
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ENABLE_META ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+endif()
+set_target_properties(tiny-clj-esp32 PROPERTIES
+    COMPILE_FLAGS "${CMAKE_C_FLAGS_EMBEDDED}"
+    LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED}"
+)
+
+# ESP32 Minimal Build Configuration (ultra-aggressive optimization)
+target_compile_definitions(tiny-clj-esp32-minimal PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+set_target_properties(tiny-clj-esp32-minimal PROPERTIES
+    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common -mlongcalls -fno-builtin -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-common -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables"
+    LINK_FLAGS "-Wl,--gc-sections -Wl,--strip-all -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls"
+)
+
+# ESP32 Ultra-Minimal Build Configuration (maximum size reduction)
+target_compile_definitions(tiny-clj-esp32-ultra PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS)
+set_target_properties(tiny-clj-esp32-ultra PROPERTIES
+    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common -mlongcalls -fno-builtin -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-common -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-ident -fno-common -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables"
+    LINK_FLAGS "-Wl,--gc-sections -Wl,--strip-all -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls -Wl,--no-undefined -Wl,--no-warn-mismatch"
+)
+
+# Generate Raw Binary for ESP32 Ultra (eliminates ELF overhead)
+add_custom_command(TARGET tiny-clj-esp32-ultra POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Converting to raw binary..."
+    COMMAND /Users/theisen/esp/xtensa-esp32-elf-clang/bin/xtensa-esp32-elf-objcopy -O binary tiny-clj-esp32-ultra tiny-clj-esp32-ultra.bin
+    COMMENT "Converting ESP32 binary to raw format for size optimization"
+)
+
+# ESP32 Cross-Compilation Support
+if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")
+    message(STATUS "🔧 Using ESP32 cross-compilation toolchain")
+    message(STATUS "📱 Target: ESP32 (Xtensa LX6)")
+    message(STATUS "💾 Flash: 4MB, RAM: 520KB")
+    message(STATUS "🎯 Binary Size Target: <100KB")
+endif()
 
 # REPL executable (with line editing support)
 add_executable(tiny-clj-repl
@@ -147,7 +243,7 @@ else()
 endif()
 
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
-add_executable(tiny-clj-stm32-repl
+add_executable(tiny-clj-esp32-repl
     src/repl.c
     src/platform_stm32.c
     src/line_editor.c
@@ -156,11 +252,11 @@ add_executable(tiny-clj-stm32-repl
 )
 # STM32 REPL Build - No Meta in Release, Optimized
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-stm32-repl PRIVATE STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
+    target_compile_definitions(tiny-clj-esp32-repl PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
 else()
-    target_compile_definitions(tiny-clj-stm32-repl PRIVATE ENABLE_META STM32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
+    target_compile_definitions(tiny-clj-esp32-repl PRIVATE ENABLE_META ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
 endif()
-set_target_properties(tiny-clj-stm32-repl PROPERTIES
+set_target_properties(tiny-clj-esp32-repl PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
 )
