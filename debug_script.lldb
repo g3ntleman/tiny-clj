@@ -1,4 +1,0 @@
-b eval_function_call
-run --no-core -e "(def test-fn (fn [x] x))" -e "(test-fn 42)"
-bt
-quit
