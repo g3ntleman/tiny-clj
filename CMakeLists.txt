@@ -208,7 +208,7 @@ add_executable(tiny-clj-repl
 # REPL Build - Always in Debug mode for development
 target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
 set_target_properties(tiny-clj-repl PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG"
+    COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING"
 )
 
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
@@ -384,6 +384,39 @@ add_custom_target(run-unit-tests
     COMMAND test-unit
     DEPENDS test-unit
     COMMENT "Running unit tests"
+)
+
+# Benchmark targets (integrated from Makefile.benchmark)
+add_custom_target(benchmark
+    COMMAND ${CMAKE_COMMAND} -E echo "=== All Tests Passed! Running Performance Benchmarks with Analysis ==="
+    COMMAND ./scripts/benchmark_with_analysis.sh
+    DEPENDS unity-tests
+    COMMENT "Running all tests first, then benchmarks with change analysis"
+)
+
+add_custom_target(benchmark-analyze
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Running Enhanced Benchmark Analysis ==="
+    COMMAND ./scripts/benchmark_with_analysis.sh --update-baseline
+    DEPENDS unity-tests
+    COMMENT "Running enhanced benchmark analysis"
+)
+
+add_custom_target(benchmark-baseline
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Creating Performance Baseline ==="
+    COMMAND ${CMAKE_COMMAND} -E copy benchmark_results.csv benchmark_baseline.csv
+    COMMAND ${CMAKE_COMMAND} -E echo "✓ Baseline created from current benchmark results"
+    COMMAND ${CMAKE_COMMAND} -E echo "Run 'make benchmark-compare' to compare future runs"
+    DEPENDS benchmark
+    COMMENT "Creating performance baseline"
+)
+
+add_custom_target(benchmark-compare
+    COMMAND ${CMAKE_COMMAND} -E echo "=== Running Performance Change Analysis ==="
+    COMMAND make test-benchmark-simple > /dev/null 2>&1
+    COMMAND ./test-benchmark-simple > benchmark_output.txt
+    COMMAND ./scripts/benchmark_with_analysis.sh
+    DEPENDS unity-tests
+    COMMENT "Running performance change analysis"
 )
 
 # Custom targets for legacy test-integration and test-benchmark removed
