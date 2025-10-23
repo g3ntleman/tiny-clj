@@ -16,6 +16,7 @@ void test_recur_countdown(void);
 void test_recur_sum(void);
 void test_recur_tail_position_error(void);
 void test_if_bug_in_functions(void);
+void test_integer_overflow_detection(void);
 
 // Test group for recur functionality - defined in unity_test_runner.c
 
@@ -214,6 +215,52 @@ void test_if_bug_in_functions(void) {
     // Clean up
     if (if_def) {
         RELEASE(if_def);
+    }
+    
+    evalstate_free(st);
+}
+
+// Test integer overflow detection
+void test_integer_overflow_detection(void) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Initialize special symbols first
+    init_special_symbols();
+    
+    // Test that normal multiplication still works
+    printf("Testing normal multiplication...\n");
+    CljObject *normal_result = eval_string("(* 2 3 4)", st);
+    TEST_ASSERT_NOT_NULL(normal_result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)normal_result));
+    TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)normal_result));
+    
+    // Test that factorial with small numbers works
+    printf("Testing factorial with small numbers...\n");
+    CljObject *small_factorial = eval_string("((fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))) 5 1)", st);
+    TEST_ASSERT_NOT_NULL(small_factorial);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)small_factorial));
+    TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)small_factorial));
+    
+    // Test addition overflow
+    printf("Testing addition overflow...\n");
+    CljObject *add_result = eval_string("(+ 2000000000 2000000000)", st);
+    TEST_ASSERT_NULL(add_result); // Should throw exception
+    
+    // Test subtraction underflow
+    printf("Testing subtraction underflow...\n");
+    CljObject *sub_result = eval_string("(- -2000000000 2000000000)", st);
+    TEST_ASSERT_NULL(sub_result); // Should throw exception
+    
+    // Clean up
+    if (normal_result) {
+        RELEASE(normal_result);
+    }
+    if (small_factorial) {
+        RELEASE(small_factorial);
     }
     
     evalstate_free(st);

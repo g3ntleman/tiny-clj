@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -10,6 +11,7 @@
 #include "value.h"
 #include "error_messages.h"
 #include "seq.h"
+
 
 ID nth2(ID *args, int argc) {
     if (argc != 2) return OBJ_TO_ID(NULL);
@@ -393,7 +395,7 @@ ID apply_builtin(const BuiltinEntry *entry, ID *args, int argc) {
     return NULL;
 }
 
-// Arithmetic wrapper functions removed - using *_variadic directly in builtins[] array
+// Arithmetic functions - native_*_variadic implement operations directly (no wrappers)
 
 ID native_println(ID *args, int argc) {
     if (argc < 1) return OBJ_TO_ID(NULL);
@@ -431,6 +433,12 @@ static int32_t apply_saturation(int32_t acc_fixed) {
 static ID create_fixed_result(int32_t acc_fixed) {
     acc_fixed = apply_saturation(acc_fixed);
     return OBJ_TO_ID((CljObject*)(uintptr_t)((acc_fixed << TAG_BITS) | TAG_FIXED));
+}
+
+// Helper function to throw arithmetic overflow exceptions (DRY principle)
+static ID throw_arithmetic_overflow(const char* err_msg, int a, int b) {
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
+    return OBJ_TO_ID(NULL);
 }
 
 // Helper function to create fixnum result
@@ -489,7 +497,7 @@ ID native_str(ID *args, int argc) {
 
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
-static ID reduce_add(ID *args, int argc) {
+ID native_add_variadic(ID *args, int argc) {
     if (argc == 0) return create_fixnum_result(0);
     if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
     
@@ -502,7 +510,17 @@ static ID reduce_add(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
         if (!sawFixed) {
             if (IS_FIXNUM(args[i])) {
-                acc_i += AS_FIXNUM(args[i]);
+                int new_val = AS_FIXNUM(args[i]);
+                // Check for integer overflow before addition
+                if (acc_i > 0 && new_val > INT_MAX - acc_i) {
+                    // Overflow detected - throw exception
+                    return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_ADDITION, acc_i, new_val);
+                } else if (acc_i < 0 && new_val < INT_MIN - acc_i) {
+                    // Underflow detected - throw exception
+                    return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_ADDITION, acc_i, new_val);
+                } else {
+                    acc_i += new_val;
+                }
             } else {
                 sawFixed = true;
                 acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
@@ -517,7 +535,7 @@ static ID reduce_add(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-static ID reduce_mul(ID *args, int argc) {
+ID native_mul_variadic(ID *args, int argc) {
     if (argc == 0) return create_fixnum_result(1);
     if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
     
@@ -530,7 +548,19 @@ static ID reduce_mul(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
         if (!sawFixed) {
             if (IS_FIXNUM(args[i])) {
-                acc_i *= AS_FIXNUM(args[i]);
+                int new_val = AS_FIXNUM(args[i]);
+                // Check for integer overflow before multiplication
+                if (acc_i != 0 && new_val != 0) {
+                    // Check if multiplication would overflow
+                    if (acc_i > INT_MAX / new_val || acc_i < INT_MIN / new_val) {
+                        // Overflow detected - throw exception (no promotion possible)
+                        return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_MULTIPLICATION, acc_i, new_val);
+                    } else {
+                        acc_i *= new_val;
+                    }
+                } else {
+                    acc_i *= new_val; // Safe: one operand is 0
+                }
             } else {
                 sawFixed = true;
                 acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
@@ -545,7 +575,7 @@ static ID reduce_mul(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-static ID reduce_sub(ID *args, int argc) {
+ID native_sub_variadic(ID *args, int argc) {
     if (argc == 0) { 
         throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
         return OBJ_TO_ID(NULL); 
@@ -574,7 +604,17 @@ static ID reduce_sub(ID *args, int argc) {
     
     for (int i = 1; i < argc; i++) {
         if (!sawFixed && IS_FIXNUM(args[i])) {
-            acc_i -= AS_FIXNUM(args[i]);
+            int new_val = AS_FIXNUM(args[i]);
+            // Check for integer overflow/underflow before subtraction
+            if (acc_i > 0 && new_val < acc_i - INT_MAX) {
+                // Overflow detected - throw exception
+                return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_SUBTRACTION, acc_i, new_val);
+            } else if (acc_i < 0 && new_val > acc_i - INT_MIN) {
+                // Underflow detected - throw exception
+                return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_SUBTRACTION, acc_i, new_val);
+            } else {
+                acc_i -= new_val;
+            }
         } else {
             if (!sawFixed) {
                 acc_fixed = fixnum_to_fixed(acc_i);
@@ -589,7 +629,7 @@ static ID reduce_sub(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-static ID reduce_div(ID *args, int argc) {
+ID native_div_variadic(ID *args, int argc) {
     if (argc == 0) { 
         throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
         return OBJ_TO_ID(NULL); 
@@ -654,11 +694,7 @@ static ID reduce_div(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-// Public API (variadisch)
-ID native_add_variadic(ID *args, int argc) { return reduce_add(args, argc); }
-ID native_mul_variadic(ID *args, int argc) { return reduce_mul(args, argc); }
-ID native_sub_variadic(ID *args, int argc) { return reduce_sub(args, argc); }
-ID native_div_variadic(ID *args, int argc) { return reduce_div(args, argc); }
+// Arithmetic functions - native_*_variadic implement operations directly (no wrappers)
 
 // Helper function to register a builtin in current namespace (DRY principle)
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {

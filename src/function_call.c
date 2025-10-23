@@ -13,6 +13,9 @@
 #include "object.h"
 #include "function_call.h"
 #include "symbol.h"
+
+#include "error_messages.h"
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 #include "string.h"
@@ -39,10 +42,6 @@ static _Thread_local bool g_recur_detected = false;
 // Forward declarations  
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
-CljObject* eval_add_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
-CljObject* eval_sub_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
-CljObject* eval_mul_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
-CljObject* eval_div_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 
 CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 
@@ -333,19 +332,50 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
         return NULL;
     }
     
+    int a_val = as_fixnum((CljValue)a);
+    int b_val = as_fixnum((CljValue)b);
     int result;
+    
     switch (op) {
         case ARITH_ADD:
-            result = as_fixnum((CljValue)a) + as_fixnum((CljValue)b);
+            // Check for integer overflow before addition
+            if (a_val > 0 && b_val > INT_MAX - a_val) {
+                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                    ERR_INTEGER_OVERFLOW_ADDITION, a_val, b_val);
+                return NULL;
+            } else if (a_val < 0 && b_val < INT_MIN - a_val) {
+                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                    ERR_INTEGER_UNDERFLOW_ADDITION, a_val, b_val);
+                return NULL;
+            }
+            result = a_val + b_val;
             break;
         case ARITH_SUB:
-            result = as_fixnum((CljValue)a) - as_fixnum((CljValue)b);
+            // Check for integer overflow/underflow before subtraction
+            if (a_val > 0 && b_val < a_val - INT_MAX) {
+                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                    ERR_INTEGER_OVERFLOW_SUBTRACTION, a_val, b_val);
+                return NULL;
+            } else if (a_val < 0 && b_val > a_val - INT_MIN) {
+                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                    ERR_INTEGER_UNDERFLOW_SUBTRACTION, a_val, b_val);
+                return NULL;
+            }
+            result = a_val - b_val;
             break;
         case ARITH_MUL:
-            result = as_fixnum((CljValue)a) * as_fixnum((CljValue)b);
+            // Check for integer overflow before multiplication
+            if (a_val != 0 && b_val != 0) {
+                if (a_val > INT_MAX / b_val || a_val < INT_MIN / b_val) {
+                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                        ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
+                    return NULL;
+                }
+            }
+            result = a_val * b_val;
             break;
         case ARITH_DIV:
-            result = as_fixnum((CljValue)a) / as_fixnum((CljValue)b);
+            result = a_val / b_val;
             break;
         default:
             return NULL;
@@ -1100,30 +1130,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     return AUTORELEASE(RETAIN(head));
 }
 
-// Small wrapper functions for arithmetic operations
-ID eval_add(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    return eval_arithmetic_generic(list, env, ARITH_ADD, NULL);
-}
-
-ID eval_sub(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    return eval_arithmetic_generic(list, env, ARITH_SUB, NULL);
-}
-
-ID eval_mul(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    return eval_arithmetic_generic(list, env, ARITH_MUL, NULL);
-}
-
-ID eval_div(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    return eval_arithmetic_generic(list, env, ARITH_DIV, NULL);
-}
 
 ID eval_equal(CljList *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
@@ -1137,21 +1143,6 @@ ID eval_equal(CljList *list, CljMap *env) {
     return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
-CljObject* eval_add_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_ADD, closure_env);
-}
-
-CljObject* eval_sub_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_SUB, closure_env);
-}
-
-CljObject* eval_mul_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_MUL, closure_env);
-}
-
-CljObject* eval_div_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_DIV, closure_env);
-}
 
 CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
     CljObject *arg = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);

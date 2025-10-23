@@ -103,7 +103,7 @@ MAP:      20 allocations
 | Metric | Baseline | Current | Change |
 |--------|----------|---------|--------|
 | **Binary Size (REPL)** | 508KB | 303KB | **-40%** ✅ |
-| **Binary Size (STM32)** | 258KB | 239KB | **-7%** ✅ |
+| **Binary Size (ESP32)** | 258KB | 239KB | **-7%** ✅ |
 | **Binary Size (Tests)** | 659KB | 424KB | **-36%** ✅ |
 | **Test Pass Rate** | 100% | 100% | **0%** ✅ |
 | **Memory Clean** | ✅ | ✅ | **0%** ✅ |
@@ -141,21 +141,21 @@ MAP:      20 allocations
 | Component | Debug Size | Release Size | Reduction |
 |-----------|------------|--------------|-----------|
 | **REPL** | ~600KB | 303KB | **~50%** |
-| **STM32** | ~400KB | 239KB | **~40%** |
+| **ESP32** | ~400KB | 239KB | **~40%** |
 | **Tests** | ~800KB | 424KB | **~47%** |
 
 ---
 
-## 🎯 Embedded System Impact (STM32)
+## 🎯 Embedded System Impact (ESP32)
 
-### Target: <60KB Binary
+### Target: <100KB Binary
 
 **Current Status:**
 - tiny-clj-stm32: 239KB (Release build)
 - TEXT section: 131KB
 - DATA section: 32KB
 
-**For <60KB Target:**
+**For <100KB Target:**
 - Need additional optimization
 - Strip unnecessary features
 - Use -Os (optimize for size) instead of -O3
@@ -193,7 +193,7 @@ MAP:      20 allocations
 ### Performance Tests
 - **Type Checking:** ~10x faster (immediate values)
 - **Memory Allocation:** 100% reduction (immediate values)
-- **Binary Size:** 40% reduction (REPL), 7% reduction (STM32)
+- **Binary Size:** 40% reduction (REPL), 7% reduction (ESP32)
 - **Status:** ✅ Significant improvements
 
 ### Regression Tests
@@ -206,7 +206,7 @@ MAP:      20 allocations
 
 ## 🔮 Further Optimization Opportunities
 
-### 1. Size Optimization for STM32
+### 1. Size Optimization for ESP32
 ```bash
 # Use size optimization
 cmake -DCMAKE_BUILD_TYPE=MinSizeRel .
@@ -219,7 +219,7 @@ cmake -DCMAKE_BUILD_TYPE=MinSizeRel .
 -Wl,--gc-sections
 ```
 
-**Expected Result:** <100KB for STM32 target
+**Expected Result:** <100KB for ESP32 target
 
 ### 2. Performance Optimization
 - Migrate remaining `make_int()` calls to `make_fixnum()`
@@ -241,7 +241,7 @@ The **Tagged Pointer System** implementation is **highly successful**:
 ✅ **Memory Efficiency:** Zero allocation for immediate values  
 ✅ **Performance:** ~10x faster type checking  
 ✅ **Quality:** All tests passing, clean memory profile  
-✅ **Embedded Ready:** Significant improvements for STM32 deployment
+✅ **Embedded Ready:** Significant improvements for ESP32 deployment
 
 ### Achievements
 
@@ -252,10 +252,10 @@ The **Tagged Pointer System** implementation is **highly successful**:
 
 ### Next Steps
 
-1. ⏳ Further size optimization for <60KB STM32 target
+1. ⏳ Further size optimization for <100KB ESP32 target
 2. ⏳ Migrate remaining code to use immediate values
 3. ⏳ Profile hot paths and optimize further
-4. ⏳ Deploy to STM32 hardware and test
+4. ⏳ Deploy to ESP32 hardware and test
 
 ---
 

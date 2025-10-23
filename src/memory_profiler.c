@@ -1,3 +1,5 @@
+#ifndef DISABLE_MEMORY_PROFILER
+
 /*
  * Memory Profiler Implementation for Tiny-CLJ
  * 
@@ -590,4 +592,6 @@ void set_memory_verbose_mode(bool verbose) {
     (void)verbose; // Suppress unused parameter warning
 #endif
 }
+
+#endif // DISABLE_MEMORY_PROFILER
 

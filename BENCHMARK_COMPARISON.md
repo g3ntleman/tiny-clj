@@ -125,7 +125,7 @@ static inline bool clj_is_truthy(CljValue val) {
 
 2. **Header Reduction** - Every heap object saves 4 bytes:
    - Example: 1000 objects = 4KB savings
-   - Significant for embedded systems (STM32)
+   - Significant for embedded systems (ESP32)
 
 3. **Cache Efficiency** - Smaller objects = better cache utilization
 
@@ -166,7 +166,7 @@ static inline bool clj_is_truthy(CljValue val) {
 
 1. ⏳ **Performance Benchmarks** - Run full benchmark suite with immediate values
 2. ⏳ **Binary Size Analysis** - Measure size impact in release build
-3. ⏳ **Embedded Testing** - Verify on STM32 target
+3. ⏳ **Embedded Testing** - Verify on ESP32 target
 4. ⏳ **Documentation** - Update memory profiling docs
 
 ---
@@ -185,7 +185,7 @@ The Tagged Pointer System implementation is **successful and stable**:
 - Performance benchmarking
 - Embedded deployment
 
-**Target:** <60KB binary for STM32 deployment
+**Target:** <100KB binary for ESP32 deployment
 
 ---
 

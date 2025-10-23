@@ -134,31 +134,6 @@ add_executable(tiny-clj-esp32
     src/value.c
 )
 
-# ESP32 Ultra-Compact Build (aggressive optimization for <100KB)
-add_executable(tiny-clj-esp32-minimal
-    src/main_esp32.c
-    src/platform_esp32_embedded.c
-    src/clojure_core.c
-    src/types.c
-    src/object.c
-    src/builtins.c
-    src/runtime.c
-    src/namespace.c
-    src/symbol.c
-    src/exception.c
-    src/parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/seq.c
-    src/memory.c
-    src/error_messages.c
-    src/memory_profiler.c
-    src/value.c
-)
 
 # ESP32 Ultra-Minimal Build (only core features for <100KB)
 add_executable(tiny-clj-esp32-ultra
@@ -199,15 +174,10 @@ set_target_properties(tiny-clj-esp32 PROPERTIES
     LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED}"
 )
 
-# ESP32 Minimal Build Configuration (ultra-aggressive optimization)
-target_compile_definitions(tiny-clj-esp32-minimal PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
-set_target_properties(tiny-clj-esp32-minimal PROPERTIES
-    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common -mlongcalls -fno-builtin -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-common -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables"
-    LINK_FLAGS "-Wl,--gc-sections -Wl,--strip-all -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls"
-)
 
 # ESP32 Ultra-Minimal Build Configuration (maximum size reduction)
 target_compile_definitions(tiny-clj-esp32-ultra PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS)
+# Note: ENABLE_DEBUG_STRINGS intentionally NOT defined to remove debug strings
 set_target_properties(tiny-clj-esp32-ultra PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common -mlongcalls -fno-builtin -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-common -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-ident -fno-common -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables"
     LINK_FLAGS "-Wl,--gc-sections -Wl,--strip-all -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls -Wl,--no-undefined -Wl,--no-warn-mismatch"

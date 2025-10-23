@@ -223,6 +223,7 @@ extern void test_recur_countdown(void);
 extern void test_recur_sum(void);
 extern void test_recur_tail_position_error(void);
 extern void test_if_bug_in_functions(void);
+extern void test_integer_overflow_detection(void);
 
 // Equal function tests
 extern void test_equal_null_pointers(void);
@@ -467,6 +468,7 @@ static void test_group_recur(void) {
     RUN_TEST(test_recur_sum);
     RUN_TEST(test_recur_tail_position_error);
     RUN_TEST(test_if_bug_in_functions);
+    RUN_TEST(test_integer_overflow_detection);
 }
 
 static void test_group_debugging(void) {

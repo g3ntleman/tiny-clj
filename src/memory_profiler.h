@@ -1,3 +1,5 @@
+#ifndef DISABLE_MEMORY_PROFILER
+
 /*
  * Memory Profiler for Tiny-CLJ
  * 
@@ -368,5 +370,7 @@ void memory_test_end(const char *test_name);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // DISABLE_MEMORY_PROFILER
 
 #endif /* TINY_CLJ_MEMORY_PROFILER_H */

@@ -115,7 +115,7 @@ bash scripts/benchmark_optimized.sh
 ### Production (Release Build)
 - **tiny-clj-repl:** ~140KB
 - **tiny-clj-stm32:** ~110KB
-- **unity-tests:** ~160KB
+- **unity-tests:** ~1100KB
 
 ---
 

@@ -1,6 +1,6 @@
 # Tiny-CLJ
 
-An **embedded-first Clojure interpreter** for microcontrollers (STM32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
+An **embedded-first Clojure interpreter** for microcontrollers (ESP32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
 
 ## Status: Not usable, yet. Pre-alpha. Embedded target not functional, yet.
 
@@ -25,8 +25,8 @@ brew install cmake
 
 
 ### Optional Tools
-- **STM32CubeIDE**: For STM32 development and debugging
-- **OpenOCD**: For STM32 flashing and debugging
+- **ESP32CubeIDE**: For ESP32 development and debugging
+- **OpenOCD**: For ESP32 flashing and debugging
 - **GDB**: For debugging (usually included with compiler toolchain)
 
 ## Primary Objective
@@ -42,10 +42,10 @@ brew install cmake
 - **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
 
 ### Technical Features
-- **Embedded Target:** STM32, ESP32, ARM Cortex-M microcontrollers
+- **Embedded Target:** ESP32, ESP32, ARM Cortex-M microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
-- **Small Binary:** Target <60KB for embedded deployment
+- **Small Binary:** Target <100KB for embedded deployment
 
 ## Quick Start
 

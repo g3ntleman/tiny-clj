@@ -12,25 +12,33 @@
 #include "memory_profiler.h"
 #include <stdbool.h>
 
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 // ============================================================================
 // REFERENCE COUNTING FUNCTIONS
 // ============================================================================
 
-/** Increase reference count if applicable; ignored for singletons/primitives. */
+/** @brief Increase reference count if applicable; ignored for singletons/primitives.
+ *  @param v Object to retain
+ *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+ */
 void retain(CljObject *v);
 
-/** Decrease reference count and free at rc==0; ignored for singletons/primitives. */
+/** @brief Decrease reference count and free at rc==0; ignored for singletons/primitives.
+ *  @param v Object to release
+ *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+ */
 void release(CljObject *v);
 
-/** Add object to autorelease pool for deferred cleanup. */
+/** @brief Add object to autorelease pool for deferred cleanup.
+ *  @param v Object to autorelease
+ *  @return The same object (for chaining)
+ *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+ */
 CljObject *autorelease(CljObject *v);
 
-/** Check if a pointer points to stack memory. */
+/** @brief Check if a pointer points to stack memory.
+ *  @param ptr Pointer to check
+ *  @return true if pointer is on stack, false otherwise
+ */
 bool is_pointer_on_stack(const void *ptr);
 
 // ============================================================================
@@ -40,27 +48,37 @@ bool is_pointer_on_stack(const void *ptr);
 // Forward declaration for autorelease pool structure
 typedef struct CljObjectPool CljObjectPool;
 
-/** Push a new autorelease pool; returns pool handle. */
+/** @brief Push a new autorelease pool; returns pool handle.
+ *  @return Pool handle for later use with autorelease_pool_pop_specific()
+ *  @note Use WITH_AUTORELEASE_POOL macro for automatic cleanup
+ */
 CljObjectPool *autorelease_pool_push();
 
-/** Pop and drain current autorelease pool (most common usage). */
-// Removed: autorelease_pool_pop() - use autorelease_pool_pop_specific() instead
-
-
-// CFAutoreleasePool: Exception-safe cleanup
-void autorelease_pool_cleanup_after_exception();
-
-/** Pop and drain specific autorelease pool (advanced usage). */
+/** @brief Pop and drain specific autorelease pool (advanced usage).
+ *  @param pool Pool handle returned by autorelease_pool_push()
+ *  @note Prefer WITH_AUTORELEASE_POOL macro for automatic cleanup
+ */
 void autorelease_pool_pop_specific(CljObjectPool *pool);
 
+/** @brief Exception-safe cleanup after longjmp/setjmp.
+ *  @note Called automatically by exception handling system
+ */
+void autorelease_pool_cleanup_after_exception();
 
-/** Drain all autorelease pools (global cleanup). */
+/** @brief Drain all autorelease pools (global cleanup).
+ *  @note Use only for emergency cleanup or shutdown
+ */
 void autorelease_pool_cleanup_all();
 
-/** Check if autorelease pool is active. */
+/** @brief Check if autorelease pool is active.
+ *  @return true if at least one pool is active
+ */
 bool is_autorelease_pool_active(void);
 
-/** Get reference count of object (0 for singletons, actual rc for others). */
+/** @brief Get reference count of object (0 for singletons, actual rc for others).
+ *  @param obj Object to check
+ *  @return Reference count (0 for immediate values and singletons)
+ */
 int get_retain_count(CljObject *obj);
 
 // AUTORELEASE_POOL_SCOPE removed - use WITH_AUTORELEASE_POOL instead
@@ -70,29 +88,28 @@ int get_retain_count(CljObject *obj);
 // MEMORY ALLOCATION MACROS
 // ============================================================================
 
-// Allocate `count` objects of type `type` on the heap
-// Note: ALLOC should only be used for CljObject subtypes per MEMORY_POLICY
-#ifdef DEBUG
-    #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
-#else
-    #define ALLOC(type, count) ((type*) malloc(sizeof(type) * (count)))
-#endif
+/** @brief Allocate `count` objects of type `type` on the heap.
+ *  @param type Type to allocate (must be CljObject subtype)
+ *  @param count Number of objects to allocate
+ *  @return Pointer to allocated memory
+ *  @note Only use for CljObject subtypes per MEMORY_POLICY
+ */
+#define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 
-// Allocate and zero-initialize `count` objects of type `type` on the heap
-// Note: ALLOC_ZERO should only be used for CljObject subtypes per MEMORY_POLICY
-#ifdef DEBUG
-    #define ALLOC_ZERO(type, count) ((type*) alloc_zero(sizeof(type), (count), TYPE_OF(type)))
-#else
-    #define ALLOC_ZERO(type, count) ((type*) calloc(count, sizeof(type)))
-#endif
+/** @brief Allocate and zero-initialize `count` objects of type `type` on the heap.
+ *  @param type Type to allocate (must be CljObject subtype)
+ *  @param count Number of objects to allocate
+ *  @return Pointer to zero-initialized allocated memory
+ *  @note Only use for CljObject subtypes per MEMORY_POLICY
+ */
+#define ALLOC_ZERO(type, count) ((type*) alloc_zero(sizeof(type), (count), TYPE_OF(type)))
 
-// Special allocation for CljObject with dynamic type
-#ifdef DEBUG
-    #define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
-#else
-    #define ALLOC_SIMPLE(obj_type) ((CljObject*) malloc(sizeof(CljObject)))
-#endif
-
+/** @brief Special allocation for CljObject with dynamic type.
+ *  @param obj_type Type of CljObject to allocate
+ *  @return Pointer to allocated CljObject
+ *  @note Used for dynamic object creation
+ */
+#define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
 
 // ============================================================================
 // MEMORY MANAGEMENT MACROS
@@ -100,12 +117,22 @@ int get_retain_count(CljObject *obj);
 
 // Clean, simple macros for memory operations
 #ifdef DEBUG
+    /** @brief Deallocate object with memory profiling (DEBUG builds).
+     *  @param obj Object to deallocate
+     *  @note Tracks object destruction for memory profiling
+     */
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
         if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
             memory_profiler_track_object_destruction((CljObject*)_tmp); \
         } \
     } while(0)
+    
+    /** @brief Retain object (safe for immediate values).
+     *  @param obj Object to retain
+     *  @return Same object (for chaining)
+     *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+     */
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
@@ -114,6 +141,12 @@ int get_retain_count(CljObject *obj);
         } \
         (CljObject*)_id; \
     })
+    
+    /** @brief Release object (safe for immediate values).
+     *  @param obj Object to release
+     *  @return Same object (for chaining)
+     *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+     */
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
@@ -122,6 +155,12 @@ int get_retain_count(CljObject *obj);
         } \
         (CljObject*)_id; \
     })
+    
+    /** @brief Autorelease object (safe for immediate values).
+     *  @param obj Object to autorelease
+     *  @return Same object (for chaining)
+     *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+     */
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
@@ -131,28 +170,36 @@ int get_retain_count(CljObject *obj);
         (CljObject*)_id; \
     })
     
-    // Foundation-style autorelease pool - compatible with setjmp/longjmp
-    // Like NSAutoreleasePool in pre-ARC Objective-C
+    /** @brief Foundation-style autorelease pool - compatible with setjmp/longjmp.
+     *  @param code Code block to execute within autorelease pool
+     *  @note Like NSAutoreleasePool in pre-ARC Objective-C
+     */
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
         code; \
         autorelease_pool_pop_specific(_pool); \
     } while(0)
     
-    // Exception-safe autorelease pool macro for TRY/CATCH blocks
-    // This macro is compatible with longjmp by not using block scopes
+    /** @brief Exception-safe autorelease pool macro for TRY/CATCH blocks.
+     *  @param code Code block to execute within autorelease pool
+     *  @note Compatible with longjmp by not using block scopes
+     */
     #define WITH_AUTORELEASE_POOL_TRY_CATCH(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
         code; \
         autorelease_pool_pop_specific(_pool); \
     } while(0)
     
-    // Simple autorelease pool management for TRY/CATCH
-    // Use this pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
+    /** @brief Simple autorelease pool management for TRY/CATCH.
+     *  @note Use pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
+     */
     #define AUTORELEASE_POOL_BEGIN() CljObjectPool *_pool = autorelease_pool_push()
     #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
     
-    // CFAutoreleasePool: Exception-safe pool for TRY/CATCH
+    /** @brief CFAutoreleasePool: Exception-safe pool for TRY/CATCH.
+     *  @param var Variable name for pool handle
+     *  @param code Code block to execute within autorelease pool
+     */
     #define CFAUTORELEASE_POOL_SCOPE(var, code) do { \
         CljObjectPool *var = autorelease_pool_push(); \
         do { \
@@ -161,50 +208,57 @@ int get_retain_count(CljObject *obj);
         autorelease_pool_pop_specific(var); \
     } while(0)
     
-    // Retain count macro for testing
+    /** @brief Retain count macro for testing.
+     *  @param obj Object to check
+     *  @return Reference count
+     */
     #define REFERENCE_COUNT(obj) get_retain_count(obj)
     
-    /** @brief Safe object assignment with automatic retain/release management.
-     *  @param var Variable to assign to
-     *  @param new_obj New object to assign (can be NULL)
-     *  Follows classic Objective-C pattern: retains new object, releases old one.
-     *  Works in both DEBUG and RELEASE builds using RETAIN/RELEASE macros.
+    /** @brief Fluent autorelease pool macro with EvalState management.
+     *  @param code Code block to execute with EvalState
+     *  @note Creates and manages EvalState automatically
      */
-    #define ASSIGN(var, new_obj) do { \
-        typeof(var) _tmp = (new_obj); \
-        if (_tmp != (var)) { \
-            RETAIN(_tmp); \
-            RELEASE(var); \
-            (var) = _tmp; \
-        } \
-    } while(0)
-    
-    // Fluent autorelease pool macro with EvalState management
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { \
         EvalState *eval_state = evalstate_new(); \
         code; \
         evalstate_free(eval_state); \
     } while(0)
     
-    // Memory test wrapper macro (recommended)
+    /** @brief Memory test wrapper macro (recommended).
+     *  @param code Code block to profile
+     *  @note Tracks memory usage for the current function
+     */
     #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
         code; \
         MEMORY_TEST_END(__FUNCTION__); \
     } while(0)
     
-    // New name for time/memory test wrapper (alias)
+    /** @brief New name for time/memory test wrapper (alias).
+     *  @param code Code block to profile
+     */
     #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
     
-    // Legacy alias maintained for compatibility
+    /** @brief Legacy alias maintained for compatibility.
+     *  @param code Code block to profile
+     */
     #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
 #else
-    // Release builds: DEALLOC calls free() but no memory profiling
+    /** @brief Deallocate object (RELEASE builds - no profiling).
+     *  @param obj Object to deallocate
+     *  @note Calls free() directly without memory profiling
+     */
     #define DEALLOC(obj) do { \
         if ((obj) && !IS_IMMEDIATE(obj)) { \
             free((obj)); \
         } \
     } while(0)
+    
+    /** @brief Retain object (safe for immediate values).
+     *  @param obj Object to retain
+     *  @return Same object (for chaining)
+     *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+     */
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
@@ -213,6 +267,12 @@ int get_retain_count(CljObject *obj);
         } \
         (CljObject*)_id; \
     })
+    
+    /** @brief Release object (safe for immediate values).
+     *  @param obj Object to release
+     *  @return Same object (for chaining)
+     *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+     */
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
@@ -221,6 +281,12 @@ int get_retain_count(CljObject *obj);
         } \
         (CljObject*)_id; \
     })
+    
+    /** @brief Autorelease object (safe for immediate values).
+     *  @param obj Object to autorelease
+     *  @return Same object (for chaining)
+     *  @note Safe to call on immediate values (fixnums, chars, booleans, nil)
+     */
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
@@ -230,24 +296,45 @@ int get_retain_count(CljObject *obj);
         (CljObject*)_id; \
     })
     
-    // Foundation-style autorelease pool for release builds
+    /** @brief Foundation-style autorelease pool for release builds.
+     *  @param code Code block to execute within autorelease pool
+     */
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
         code; \
         autorelease_pool_pop_specific(_pool); \
     } while(0)
     
-    // Simple autorelease pool management for TRY/CATCH (release builds)
+    /** @brief Simple autorelease pool management for TRY/CATCH (release builds).
+     *  @note Use pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
+     */
     #define AUTORELEASE_POOL_BEGIN() CljObjectPool *_pool = autorelease_pool_push()
     #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
     
+    /** @brief No-op macros for release builds (no profiling).
+     *  @param code Code block (ignored in release builds)
+     */
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
     #define WITH_MEMORY_PROFILING(code) do { code } while(0)
     #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
     #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
     #define REFERENCE_COUNT(obj) get_retain_count(obj)
-    
 #endif
+
+/** @brief Safe object assignment with automatic retain/release management.
+ *  @param var Variable to assign to
+ *  @param new_obj New object to assign (can be NULL)
+ *  Follows classic Objective-C pattern: retains new object, releases old one.
+ *  Works in both DEBUG and RELEASE builds using RETAIN/RELEASE macros.
+ */
+#define ASSIGN(var, new_obj) do { \
+    CljObject *_tmp = (new_obj); \
+    if (_tmp != (var)) { \
+        RETAIN(_tmp); \
+        RELEASE(var); \
+        (var) = _tmp; \
+    } \
+} while(0)
 
 // ============================================================================
 // MEMORY ALLOCATION FUNCTIONS
@@ -270,10 +357,5 @@ void* alloc(size_t type_size, size_t count, CljType obj_type);
  * @return Pointer to allocated memory
  */
 void* alloc_zero(size_t type_size, size_t count, CljType obj_type);
-
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // TINY_CLJ_MEMORY_H

@@ -10,11 +10,6 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env);
 ID eval_body(ID body, CljMap *env, EvalState *st);
 ID eval_list(CljList *list, CljMap *env, EvalState *st);
 
-// Arithmetische Operationen
-ID eval_add(CljList *list, CljMap *env);
-ID eval_sub(CljList *list, CljMap *env);
-ID eval_mul(CljList *list, CljMap *env);
-ID eval_div(CljList *list, CljMap *env);
 ID eval_equal(CljList *list, CljMap *env);
 ID eval_println(CljList *list, CljMap *env);
 

@@ -6,10 +6,21 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdlib.h>
+#ifndef ESP32_BUILD
 #include <execinfo.h>
 #include <unistd.h>
+#endif
 
 // Custom assert with stack trace
+#ifdef ESP32_BUILD
+#define CLJ_ASSERT(expr) do { \
+    if (!(expr)) { \
+        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s\n", #expr); \
+        fprintf(stderr, "📍 File: %s, Line: %d\n", __FILE__, __LINE__); \
+        abort(); \
+    } \
+} while(0)
+#else
 #define CLJ_ASSERT(expr) do { \
     if (!(expr)) { \
         fprintf(stderr, "\n🚨 ASSERTION FAILED: %s\n", #expr); \
@@ -26,6 +37,7 @@
         abort(); \
     } \
 } while(0)
+#endif
 
 // Debug-only assert with stack trace
 #ifdef DEBUG

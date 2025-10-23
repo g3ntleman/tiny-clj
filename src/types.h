@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-typedef enum : uint16_t {
+typedef enum {
     // Singletons (0-1) - no reference counting needed, can use simple range check
     CLJ_SYMBOL,  // Interned symbols - no reference counting needed
     // Complex types (2+) - require individual checks, have reference counting
