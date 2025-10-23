@@ -32,8 +32,8 @@ set(CMAKE_OBJCOPY "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objcopy" CACHE F
 set(CMAKE_OBJDUMP "${ESP32_TOOLCHAIN_PATH}/bin/xtensa-esp32-elf-objdump" CACHE FILEPATH "Objdump")
 
 # ESP32-specific compiler flags
-set(CMAKE_C_FLAGS_INIT "-mlongcalls")
-set(CMAKE_CXX_FLAGS_INIT "-mlongcalls")
+set(CMAKE_C_FLAGS_INIT "-mlongcalls -DNO_TERMIOS")
+set(CMAKE_CXX_FLAGS_INIT "-mlongcalls -DNO_TERMIOS")
 
 # ESP32 linker flags
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-mlongcalls")
@@ -49,18 +49,18 @@ add_definitions(-DXTENSA_CPU=esp32)
 add_definitions(-DIDF_VER="4.4.0")
 
 # ESP32 memory layout
-set(ESP32_FLASH_SIZE "4MB" CACHE STRING "ESP32 Flash size")
-set(ESP32_RAM_SIZE "520KB" CACHE STRING "ESP32 RAM size")
+set(ESP32_FLASH_SIZE_KB 4096 CACHE STRING "ESP32 Flash size in KB")
+set(ESP32_RAM_SIZE_KB 520 CACHE STRING "ESP32 RAM size in KB")
 
 # ESP32 partition table (minimal for Tiny-CLJ)
-set(ESP32_PARTITION_TABLE_SIZE "4KB" CACHE STRING "ESP32 partition table size")
+set(ESP32_PARTITION_TABLE_SIZE_KB 4 CACHE STRING "ESP32 partition table size in KB")
 
 # Calculate available space for application
-math(EXPR ESP32_APP_SIZE "${ESP32_FLASH_SIZE} - ${ESP32_PARTITION_TABLE_SIZE}")
-set(ESP32_APP_SIZE "${ESP32_APP_SIZE}KB")
+math(EXPR ESP32_APP_SIZE_KB "${ESP32_FLASH_SIZE_KB} - ${ESP32_PARTITION_TABLE_SIZE_KB}")
+set(ESP32_APP_SIZE "${ESP32_APP_SIZE_KB}KB")
 
 message(STATUS "ESP32 Toolchain: ${ESP32_TOOLCHAIN_PATH}")
-message(STATUS "ESP32 Flash: ${ESP32_FLASH_SIZE}, RAM: ${ESP32_RAM_SIZE}")
+message(STATUS "ESP32 Flash: ${ESP32_FLASH_SIZE_KB}KB, RAM: ${ESP32_RAM_SIZE_KB}KB")
 message(STATUS "Available for app: ${ESP32_APP_SIZE}")
 
 # ESP32 optimization flags for size

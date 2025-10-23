@@ -41,11 +41,11 @@ void test_list_count(void) {
         // Test non-list object (this should not crash)
         // Create a proper CljObject for testing
         CljObject *int_obj = AUTORELEASE(make_string_impl("42")); // Use string as non-list object
-        TEST_ASSERT_EQUAL_INT(0, list_count(int_obj));
+        TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)int_obj));
 
         // Test empty list (clj_nil is not a list)
         CljObject *empty_list = NULL;
-        TEST_ASSERT_EQUAL_INT(0, list_count(empty_list));
+        TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)empty_list));
     }
 }
 

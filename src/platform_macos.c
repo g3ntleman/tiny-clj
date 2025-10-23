@@ -4,8 +4,13 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <termios.h>
 #include <stdbool.h>
+
+#ifdef ESP32_BUILD
+#include "termios_stub.h"
+#else
+#include <termios.h>
+#endif
 
 void platform_init() {
 }
@@ -104,10 +109,11 @@ void platform_put_string(const char *s) {
 }
 
 // Raw mode support for line editor
-static struct termios original_termios;
 static bool raw_mode_enabled = false;
 
 void platform_set_raw_mode(int enable) {
+    static struct termios original_termios;
+    
     if (enable && !raw_mode_enabled) {
         // Save original terminal settings
         tcgetattr(STDIN_FILENO, &original_termios);

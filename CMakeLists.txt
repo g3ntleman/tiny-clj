@@ -205,12 +205,11 @@ add_executable(tiny-clj-repl
     src/line_editor.c
     ${SOURCES}
 )
-# REPL Build - Meta only in Debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)
-else()
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
-endif()
+# REPL Build - Always in Debug mode for development
+target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
+set_target_properties(tiny-clj-repl PROPERTIES
+    COMPILE_FLAGS "-g -O0 -DDEBUG"
+)
 
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
 add_executable(tiny-clj-esp32-repl
@@ -295,12 +294,16 @@ add_executable(debug_parser
     src/error_messages.c
     src/value.c
 )
-# Unity Tests - Memory profiling only in Debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
-else()
-    target_compile_definitions(unity-tests PRIVATE ENABLE_META)
-endif()
+# Debug parser - Always in Debug mode for development
+target_compile_definitions(debug_parser PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+set_target_properties(debug_parser PROPERTIES
+    COMPILE_FLAGS "-g -O0 -DDEBUG"
+)
+# Unity Tests - Always in Debug mode for comprehensive testing
+target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+set_target_properties(unity-tests PROPERTIES
+    COMPILE_FLAGS "-g -O0 -DDEBUG"
+)
 target_include_directories(unity-tests PRIVATE external/unity/src)
 
 # Utility tests removed - no main function available

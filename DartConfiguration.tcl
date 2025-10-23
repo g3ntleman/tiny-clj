@@ -14,7 +14,7 @@ CostDataFile:
 Site: Fatboy.local
 
 # Build name is osname-revision-compiler, i.e. Linux-2.4.2-2smp-c++
-BuildName: Generic-make
+BuildName: Darwin-c++
 
 # Subprojects
 LabelsForSubprojects: 
@@ -63,8 +63,8 @@ UpdateOptions:
 UpdateType: git
 
 # Compiler info
-Compiler: /Users/theisen/esp/xtensa-esp32-elf-clang/bin/xtensa-esp32-elf-g++
-CompilerVersion: 8.4.0
+Compiler: /usr/bin/c++
+CompilerVersion: 17.0.0.17000013
 
 # Dynamic analysis (MemCheck)
 PurifyCommand: 

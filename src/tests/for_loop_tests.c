@@ -31,7 +31,7 @@ void test_dotimes_basic(void) {
     
     // Test with non-list
     CljValue not_list = fixnum(42);
-    result = eval_dotimes((CljObject*)not_list, env);
+    result = eval_dotimes((CljList*)(CljObject*)not_list, env);
     TEST_ASSERT_TRUE(result == NULL);
     
     // Clean up
@@ -50,7 +50,7 @@ void test_doseq_basic(void) {
     
     // Test with non-list
     CljValue not_list = fixnum(42);
-    result = eval_doseq((CljObject*)not_list, env);
+    result = eval_doseq((CljList*)(CljObject*)not_list, env);
     TEST_ASSERT_TRUE(result == NULL);
     
     // Clean up
@@ -69,7 +69,7 @@ void test_for_basic(void) {
     
     // Test with non-list
     CljValue not_list = fixnum(42);
-    result = eval_for((CljObject*)not_list, env);
+    result = eval_for((CljList*)(CljObject*)not_list, env);
     TEST_ASSERT_TRUE(result == NULL);
     
     // Clean up
@@ -98,7 +98,7 @@ void test_dotimes_with_environment(void) {
         CljMap *env = (CljMap*)make_map(4);
         
         // Test dotimes evaluation with environment
-        CljObject *result = eval_dotimes((CljObject*)dotimes_call, env);
+        CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
         TEST_ASSERT_TRUE(result == NULL);
         
         // Clean up environment
@@ -143,7 +143,7 @@ void test_doseq_with_environment(void) {
         CljMap *env = (CljMap*)make_map(4);
         
         // Test doseq evaluation with environment
-        CljObject *result = eval_doseq((CljObject*)doseq_call, env);
+        CljObject *result = eval_doseq((CljList*)(CljObject*)doseq_call, env);
         TEST_ASSERT_TRUE(result == NULL);
         
         // Clean up environment
