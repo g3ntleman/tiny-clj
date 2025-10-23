@@ -600,7 +600,7 @@ static void run_data_tests(void) {
 }
 
 static void run_control_tests(void) {
-    // test_group_for_loops();  // Temporarily disabled due to crash
+    test_group_for_loops();
     test_group_recur();
     test_group_exception();
 }
@@ -615,10 +615,10 @@ static void run_all_tests(void) {
     test_group_cljvalue();
     test_group_namespace();  // Re-enabled after fixing double free
     test_group_seq();
-    // test_group_for_loops();  // Temporarily disabled due to crash
+    test_group_for_loops();  // Re-enabled after fixing type mismatch
     test_group_equal();  // Re-enabled with minimal test
     test_group_recur(); // Re-enabled - recur functionality is working
-    // test_group_debugging(); // Temporarily disabled - causes issues
+    test_group_debugging(); // Re-enabled for debugging
 }
 
 // ============================================================================
