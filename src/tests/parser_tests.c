@@ -5,7 +5,7 @@
  * collections, comments, and metadata parsing.
  */
 
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../object.h"
 #include "../parser.h"
 #include "../namespace.h"

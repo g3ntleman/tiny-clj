@@ -4,7 +4,7 @@
  * Simple tests for clj_equal function using basic objects.
  */
 
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../object.h"
 #include "../memory.h"
 #include "../vector.h"

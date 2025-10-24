@@ -4,7 +4,7 @@
  * Central test runner that includes all test suites with command-line parameter support.
  */
 
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../object.h"
 #include "../memory.h"
 #include "../memory_profiler.h"
@@ -71,12 +71,20 @@ extern void test_memory_allocation(void);
 extern void test_memory_deallocation(void);
 extern void test_memory_leak_detection(void);
 extern void test_vector_memory(void);
+extern void test_autorelease_pool_basic(void);
+extern void test_autorelease_pool_nested(void);
+extern void test_autorelease_pool_memory_cleanup(void);
 
 static void test_group_memory(void) {
     // RUN_TEST(test_memory_allocation);  // Temporarily disabled due to crash
     // RUN_TEST(test_memory_deallocation);  // Temporarily disabled due to crash
     // RUN_TEST(test_memory_leak_detection);  // Temporarily disabled due to crash
     // RUN_TEST(test_vector_memory);  // Temporarily disabled due to crash
+    
+    // Autorelease pool tests - these should work
+    RUN_TEST(test_autorelease_pool_basic);
+    RUN_TEST(test_autorelease_pool_nested);
+    RUN_TEST(test_autorelease_pool_memory_cleanup);
 }
 
 // ============================================================================

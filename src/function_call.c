@@ -1763,8 +1763,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
     if (!args_list) return NULL;
     
     // Simply return the arguments as a list (they're already evaluated by eval_list)
-    RETAIN(args_list);
-    return args_list;
+    return AUTORELEASE(args_list);
 }
 
 ID eval_dotimes(CljList *list, CljMap *env) {

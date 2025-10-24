@@ -116,20 +116,28 @@ static void print_exception(CLJException *ex) {
  *  @return true if successful, false on parse or evaluation error
  */
 static bool eval_string_repl(const char *code, EvalState *st) {
-    WITH_AUTORELEASE_POOL({
-        // Use TRY/CATCH to handle exceptions in REPL
-        TRY {
-            CljObject *res = eval_string(code, st);
-            // Note: res can be NULL for nil, which is valid
-            print_result(res);
-            return true;
-        } CATCH(ex) {
-            // Print exception and continue REPL
-            print_exception((CLJException*)ex);
-            return false; // Return false to indicate error, but don't exit REPL
-        } END_TRY
-    });
-    return false; // Fallback return (should never be reached)
+    CljObjectPool *pool = autorelease_pool_push();
+    printf("🔍 eval_string_repl: Created pool %p\n", pool);
+    
+    // Use TRY/CATCH to handle exceptions in REPL
+    TRY {
+        CljObject *res = eval_string(code, st);
+        // Note: res can be NULL for nil, which is valid
+        print_result(res);
+        
+        // Manually drain the autorelease pool
+        printf("🔍 eval_string_repl: Draining pool %p\n", pool);
+        autorelease_pool_pop_specific(pool);
+        return true;
+    } CATCH(ex) {
+        // Print exception and continue REPL
+        print_exception((CLJException*)ex);
+        
+        // Manually drain the autorelease pool even on exception
+        printf("🔍 eval_string_repl: Draining pool %p after exception\n", pool);
+        autorelease_pool_pop_specific(pool);
+        return false; // Return false to indicate error, but don't exit REPL
+    } END_TRY
 }
 
 /** @brief Print command-line usage information.
@@ -173,6 +181,20 @@ static void cleanup_and_exit(const char **eval_args, int exit_code) {
  *  @return true on successful completion
  */
 static bool run_interactive_repl(EvalState *st) {
+    // Initialize memory profiling DIRECTLY before the first prompt
+#ifdef ENABLE_MEMORY_PROFILING
+    MEMORY_PROFILER_INIT();
+    enable_memory_profiling(true);
+    
+    // Enable verbose memory mode for REPL
+    g_memory_verbose_mode = true;
+    
+    // Memory profiling is now initialized and ready
+    printf("🔍 Memory profiling initialized for REPL (Debug Build)\n");
+#else
+    printf("🔍 Memory profiling disabled for REPL (Release Build)\n");
+#endif
+
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
 #ifdef ENABLE_LINE_EDITING
     // Line editor needs blocking input for proper character handling
@@ -198,6 +220,12 @@ static bool run_interactive_repl(EvalState *st) {
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
+#ifdef ENABLE_MEMORY_PROFILING
+            // Enable debug output AFTER the first prompt is about to be shown
+            if (!prompt_shown) {
+                enable_memory_debug_output();
+            }
+#endif
             print_prompt(st, form_balance(acc, NULL) == 0);
             prompt_shown = true;
         }
@@ -411,26 +439,8 @@ int main(int argc, char **argv) {
         load_clojure_core(st);
     }
     
-    // Register builtin functions BEFORE memory profiling to avoid tracking them as leaks
+    // Register builtin functions
     register_builtins();
-    
-    // Initialize memory profiling AFTER core loading and builtins registration
-#ifdef ENABLE_MEMORY_PROFILING
-    MEMORY_PROFILER_INIT();
-    enable_memory_profiling(true);
-    
-    // Enable verbose memory mode for REPL
-    g_memory_verbose_mode = true;
-    
-    // Memory profiling is automatically enabled for debug builds
-#ifdef DEBUG
-    printf("🔍 Memory profiling initialized for REPL (Debug Build)\n");
-#else
-    printf("🔍 Memory profiling initialized for REPL (Release Build)\n");
-#endif
-#else
-    printf("🔍 Memory profiling disabled for REPL (Release Build)\n");
-#endif
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);

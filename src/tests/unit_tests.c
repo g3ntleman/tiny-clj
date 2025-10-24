@@ -4,7 +4,7 @@
  * Basic unit tests for Tiny-Clj core functionality migrated from MinUnit.
  */
 
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../object.h"
 #include "../parser.h"
 #include "../symbol.h"

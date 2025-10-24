@@ -4,7 +4,7 @@
  * Tests for namespace management, EvalState, and namespace isolation.
  */
 
-#include "unity.h"
+#include "unity/src/unity.h"
 #include "object.h"
 #include "parser.h"
 #include "symbol.h"

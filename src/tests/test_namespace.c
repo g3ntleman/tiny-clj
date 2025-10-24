@@ -1,4 +1,4 @@
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../tiny_clj.h"
 #include "../function_call.h"
 #include "../object.h"

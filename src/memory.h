@@ -28,6 +28,13 @@ void retain(CljObject *v);
  */
 void release(CljObject *v);
 
+/** @brief Enable memory debug output after initialization
+ * 
+ * Call this after memory profiling is initialized to enable debug output.
+ * This prevents debug output during the initialization phase.
+ */
+void enable_memory_debug_output(void);
+
 /** @brief Add object to autorelease pool for deferred cleanup.
  *  @param v Object to autorelease
  *  @return The same object (for chaining)

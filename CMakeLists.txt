@@ -271,40 +271,13 @@ add_executable(unity-tests
     src/value.c
 )
 
-add_executable(debug_parser
-    debug_parser.c
-    src/function_call.c
-    src/object.c
-    src/namespace.c
-    src/memory.c
-    src/symbol.c
-    src/runtime.c
-    src/parser.c
-    src/reader.c
-    src/types.c
-    src/string.c
-    src/map.c
-    src/vector.c
-    src/list_operations.c
-    src/seq.c
-    src/builtins.c
-    src/clojure_core.c
-    src/exception.c
-    src/memory_profiler.c
-    src/error_messages.c
-    src/value.c
-)
-# Debug parser - Always in Debug mode for development
-target_compile_definitions(debug_parser PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
-set_target_properties(debug_parser PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG"
-)
+# Debug parser target removed - file not found
 # Unity Tests - Always in Debug mode for comprehensive testing
 target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
 set_target_properties(unity-tests PROPERTIES
     COMPILE_FLAGS "-g -O0 -DDEBUG"
 )
-target_include_directories(unity-tests PRIVATE external/unity/src)
+target_include_directories(unity-tests PRIVATE external)
 
 # Utility tests removed - no main function available
 # target_compile_options(run-tests PRIVATE -fsanitize=address -g)

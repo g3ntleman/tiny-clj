@@ -158,8 +158,7 @@ CljValue clj_conj(CljValue tvec, CljValue item) {
         v->capacity = newcap;
     }
     
-    v->data[v->count++] = item;
-    RETAIN(item);
+    v->data[v->count++] = RETAIN(item);
     
     return tvec; // In-place mutation
 }

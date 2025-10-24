@@ -4,7 +4,7 @@
  * Tests for sequence semantics and iterator-based implementation.
  */
 
-#include "unity.h"
+#include "unity/src/unity.h"
 #include "seq.h"
 #include "clj_string.h"
 #include "vector.h"

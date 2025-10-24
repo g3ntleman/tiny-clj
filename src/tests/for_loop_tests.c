@@ -4,7 +4,7 @@
  * Tests for for, doseq, and dotimes implementations.
  */
 
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../object.h"
 #include "../vector.h"
 #include "../value.h"

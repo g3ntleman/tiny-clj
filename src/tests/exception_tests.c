@@ -5,7 +5,7 @@
  * exception handling, auto-release, and exception stack.
  */
 
-#include "../../external/unity/src/unity.h"
+#include "unity/src/unity.h"
 #include "../object.h"
 #include "../exception.h"
 #include "../memory.h"
