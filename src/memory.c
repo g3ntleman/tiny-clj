@@ -157,19 +157,24 @@ void release(CljObject *v) {
         return;
     }
     
+    // Check for underflow BEFORE decrementing
+    if (v->rc == 0) {
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+            printf("❌ UNDERFLOW! Object already freed\n");
+        }
+        throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
+            "Use-after-free detected! Object %p (type=%s) was already freed (rc=0). "
+            "This indicates the object was released more times than retained, "
+            "likely due to duplicate AUTORELEASE or incorrect memory management.",
+            v, clj_type_name(v->type));
+        return;
+    }
+
     v->rc--;
     printf("rc=%d\n", v->rc);
     
     // Track release operation
     MEMORY_PROFILER_TRACK_RELEASE(v);
-    
-    // Check for double-free after decrement
-    if (v->rc < 0) {
-        throw_exception_formatted("DoubleFreeError", __FILE__, __LINE__, 0,
-                "Double free detected! Object %p (type=%d, rc=%d) was freed twice. "
-                "Object type: %s. This indicates a memory management bug.", 
-                v, v->type, v->rc, clj_type_name(v->type));
-    }
     
     if (v->rc == 0) { 
         if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {

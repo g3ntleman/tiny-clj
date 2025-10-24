@@ -135,31 +135,8 @@ add_executable(tiny-clj-esp32
 )
 
 
-# ESP32 Ultra-Minimal Build (only core features for <100KB)
-add_executable(tiny-clj-esp32-ultra
-    src/main_esp32.c
-    src/platform_esp32_embedded.c
-    src/clojure_core.c
-    src/types.c
-    src/object.c
-    src/builtins.c
-    src/runtime.c
-    src/namespace.c
-    src/symbol.c
-    src/exception.c
-    src/parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/seq.c
-    src/memory.c
-    src/error_messages.c
-    src/memory_profiler.c
-    src/value.c
-)
+# ESP32 Ultra-Minimal Build (only core features for <100KB) - DISABLED
+# This target has linker issues on macOS and is not needed for development
 
 # ESP32 Production Build - No Meta, Optimized
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -175,20 +152,8 @@ set_target_properties(tiny-clj-esp32 PROPERTIES
 )
 
 
-# ESP32 Ultra-Minimal Build Configuration (maximum size reduction)
-target_compile_definitions(tiny-clj-esp32-ultra PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS)
-# Note: ENABLE_DEBUG_STRINGS intentionally NOT defined to remove debug strings
-set_target_properties(tiny-clj-esp32-ultra PROPERTIES
-    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common -mlongcalls -fno-builtin -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -fno-common -fno-ident -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-ident -fno-common -fno-stack-protector -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables"
-    LINK_FLAGS "-Wl,--gc-sections -Wl,--strip-all -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls -Wl,--no-undefined -Wl,--no-warn-mismatch"
-)
-
-# Generate Raw Binary for ESP32 Ultra (eliminates ELF overhead)
-add_custom_command(TARGET tiny-clj-esp32-ultra POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E echo "Converting to raw binary..."
-    COMMAND /Users/theisen/esp/xtensa-esp32-elf-clang/bin/xtensa-esp32-elf-objcopy -O binary tiny-clj-esp32-ultra tiny-clj-esp32-ultra.bin
-    COMMENT "Converting ESP32 binary to raw format for size optimization"
-)
+# ESP32 Ultra-Minimal Build Configuration - DISABLED
+# This target has linker issues on macOS and is not needed for development
 
 # ESP32 Cross-Compilation Support
 if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")

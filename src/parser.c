@@ -636,10 +636,7 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
   // For complex structures, fall back to heap allocation
   // TODO: Implement CljValue-based vector/map/list parsing
   CljValue obj = make_object_by_parsing_expr(reader, st);
-  if (!obj) {
-    // Reader is EOF or parsing failed - return NULL
-    return NULL;
-  }
+
   return obj;
 }
 
@@ -659,12 +656,9 @@ CljValue parse(const char *input, EvalState *st) {
   
   // Don't catch exceptions - let them propagate
   result = make_value_by_parsing_expr(&reader, st);
-  if (result) {
-    // Only autorelease heap objects, not immediate values
-    if (!IS_IMMEDIATE(result)) {
-      result = AUTORELEASE(result);
-    }
-  }
+  
+  // Don't autorelease here - parse functions already autorelease their results
+  // (parse_string_internal, parse_vector, parse_list, etc. all use AUTORELEASE)
   
   return result;
 }

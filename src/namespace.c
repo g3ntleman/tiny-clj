@@ -281,7 +281,8 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
             result = eval_list(as_list(expr), (CljMap*)env, st);
             if (result) result = AUTORELEASE(result);
         } else {
-            result = AUTORELEASE(expr);
+            // expr is already autoreleased by parse() - just return it
+            result = expr;
         }
     } CATCH(ex) {
         // Exception caught - re-throw to let caller handle it
