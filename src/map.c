@@ -8,17 +8,17 @@
 #include <stdbool.h>
 
 // Empty-map singleton: CLJ_MAP with rc=0, statically initialized
+// Note: Cannot use flexible array member in static initialization
 static struct {
-    CljMap map;
+    CljObject base;
+    int count;
+    int capacity;
 } clj_empty_map_singleton_data = {
-    .map = {
-        .base = { .type = CLJ_MAP, .rc = 0 },
-        .count = 0,
-        .capacity = 0,
-        .data = NULL
-    }
+    .base = { .type = CLJ_MAP, .rc = 0 },
+    .count = 0,
+    .capacity = 0
 };
-static CljMap *clj_empty_map_singleton = &clj_empty_map_singleton_data.map;
+static CljMap *clj_empty_map_singleton = (CljMap*)&clj_empty_map_singleton_data;
 
 
 // === CljValue API (Phase 1: Parallel) ===
@@ -28,18 +28,27 @@ CljObject* make_map(int capacity) {
   if (capacity <= 0) {
     return (CljObject*)clj_empty_map_singleton;
   }
-  CljMap *map = ALLOC(CljMap, 1);
-  if (!map)
+  
+  // Allocate struct + data array in ONE malloc
+  size_t struct_size = sizeof(CljMap);
+  size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
+  size_t total_size = struct_size + data_size;
+  
+  CljMap *map = (CljMap*)malloc(total_size);
+  if (!map) {
     throw_oom(CLJ_MAP);
+  }
+  
   map->base.type = CLJ_MAP;
   map->base.rc = 1;
   map->count = 0;
   map->capacity = capacity;
-  map->data = (CljObject **)calloc((size_t)capacity * 2, sizeof(CljObject *));
-  if (!map->data) {
-    free(map);
-    throw_oom(CLJ_MAP);
+  
+  // Initialize embedded array to NULL
+  for (int i = 0; i < capacity * 2; i++) {
+    map->data[i] = NULL;
   }
+  
   return (CljObject*)map;
 }
 
@@ -78,6 +87,8 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
   if (!map_data) {
     return;
   }
+  
+  // Check if key exists
   for (int i = 0; i < map_data->count; i++) {
     CljObject *k = map_data->data[2 * i];
     if (k && clj_equal(k, key_obj)) {
@@ -88,26 +99,112 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
       return;
     }
   }
-  if (map_data->count >= map_data->capacity) {
-    int new_capacity = map_data->capacity * 2;
-    if (new_capacity < 4)
-      new_capacity = 4;
-    CljObject **new_data =
-        (CljObject **)calloc((size_t)new_capacity * 2, sizeof(CljObject *));
-    if (!new_data)
-      return;
-    for (int i = 0; i < map_data->count; i++) {
-      new_data[i * 2] = map_data->data[2 * i];
-      new_data[i * 2 + 1] = map_data->data[2 * i + 1];
-    }
-    free(map_data->data);
-    map_data->data = new_data;
-    map_data->capacity = new_capacity;
+  
+  // Add new entry (if capacity allows)
+  if (map_data->count < map_data->capacity) {
+    int idx = map_data->count;
+    map_data->data[2 * idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
+    map_data->data[2 * idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+    map_data->count++;
   }
-  int idx = map_data->count;
-  map_data->data[2 * idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
-  map_data->data[2 * idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
-  map_data->count++;
+  // Note: No growth for in-place map_assoc (use map_assoc_cow for that)
+}
+
+/** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
+CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
+  CljObject *map_obj = (CljObject*)map;
+  CljObject *key_obj = (CljObject*)key;
+  CljObject *value_obj = (CljObject*)value;
+  
+  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj) {
+    return map;  // Return original map on error
+  }
+  
+  CljMap *map_data = as_map(map_obj);
+  if (!map_data) {
+    return map;  // Return original map on error
+  }
+  
+  // OPTIMIZATION: If RC=1, we're the only owner - mutate in-place
+  if (map_data->base.rc == 1) {
+    // Check if key exists - update value
+    for (int i = 0; i < map_data->count; i++) {
+      CljObject *k = map_data->data[2 * i];
+      if (k && clj_equal(k, key_obj)) {
+        CljObject *old_value = map_data->data[2 * i + 1];
+        if (old_value)
+          RELEASE(old_value);
+        map_data->data[2 * i + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+        return map;  // Return SAME map
+      }
+    }
+    
+    // Add new entry (if capacity allows)
+    if (map_data->count < map_data->capacity) {
+      int idx = map_data->count;
+      map_data->data[2 * idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
+      map_data->data[2 * idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+      map_data->count++;
+      return map;  // Return SAME map
+    }
+    
+    // Out of capacity - need to grow (fall through to COW path)
+  }
+  
+  // RC>1 or out of capacity: Copy-on-Write with optional growth
+  int new_capacity = map_data->capacity;
+  if (map_data->count >= map_data->capacity) {
+    new_capacity = map_data->capacity * 2;
+    if (new_capacity < 4) new_capacity = 4;
+  }
+  
+  // Allocate new map with embedded data array
+  size_t struct_size = sizeof(CljMap);
+  size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
+  CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+  if (!new_map) {
+    return map;  // Return original map on OOM
+  }
+  
+  new_map->base.type = CLJ_MAP;
+  new_map->base.rc = 1;
+  new_map->count = 0;  // Start with 0, will be set correctly below
+  new_map->capacity = new_capacity;
+  
+  // Initialize new data array
+  for (int i = 0; i < new_capacity * 2; i++) {
+    new_map->data[i] = NULL;
+  }
+  
+  // Copy existing entries with RETAIN
+  bool key_found = false;
+  int new_idx = 0;
+  
+  for (int i = 0; i < map_data->count; i++) {
+    if (map_data->data[2 * i] && clj_equal(map_data->data[2 * i], key_obj)) {
+      // Key found - update value
+      new_map->data[2 * new_idx] = RETAIN(map_data->data[2 * i]);
+      new_map->data[2 * new_idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+      key_found = true;
+    } else {
+      // Copy existing entry
+      new_map->data[2 * new_idx] = map_data->data[2 * i] ? (RETAIN(map_data->data[2 * i]), map_data->data[2 * i]) : NULL;
+      new_map->data[2 * new_idx + 1] = map_data->data[2 * i + 1] ? (RETAIN(map_data->data[2 * i + 1]), map_data->data[2 * i + 1]) : NULL;
+    }
+    new_idx++;
+  }
+  
+  // Add new key if not found
+  if (!key_found && new_idx < new_map->capacity) {
+    new_map->data[2 * new_idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
+    new_map->data[2 * new_idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+    new_idx++;
+  }
+  
+  // Set final count
+  new_map->count = new_idx;
+  
+  return (CljValue)new_map;  // Return NEW map
 }
 
 /** Return a vector of keys (retained). */
@@ -180,12 +277,8 @@ void map_put(CljValue map, CljValue key, CljValue value) {
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
     return;
-  int newcap = map_data->capacity * 2;
-  if (newcap < 4)
-    newcap = 4;
-  map_data->data =
-      (CljObject **)realloc(map_data->data, sizeof(CljObject *) * newcap * 2);
-  map_data->capacity = newcap;
+  // Note: map_put() cannot grow embedded arrays - use map_assoc_cow() instead
+  // This function is deprecated for embedded array approach
   map_data->data[map_data->count * 2] = key_obj;
   map_data->data[map_data->count * 2 + 1] = value_obj;
   map_data->count++;
@@ -281,20 +374,40 @@ CljValue transient_map(CljValue map) {
     tmap->count = m->count;
     tmap->capacity = m->capacity;
     
+    // For transient maps, we need to allocate with embedded data array
     if (m->capacity > 0) {
-        tmap->data = (CljObject**)calloc((size_t)m->capacity * 2, sizeof(CljObject*));
-        if (!tmap->data) {
+        // Allocate new transient map with embedded data array
+        size_t struct_size = sizeof(CljMap);
+        size_t data_size = (size_t)m->capacity * 2 * sizeof(CljObject*);
+        size_t total_size = struct_size + data_size;
+        
+        CljMap *new_tmap = (CljMap*)malloc(total_size);
+        if (!new_tmap) {
             free(tmap);
             return NULL;
         }
+        
+        new_tmap->base.type = CLJ_TRANSIENT_MAP;
+        new_tmap->base.rc = 1;
+        new_tmap->count = m->count;
+        new_tmap->capacity = m->capacity;
+        
+        // Initialize embedded array
+        for (int i = 0; i < m->capacity * 2; i++) {
+            new_tmap->data[i] = NULL;
+        }
+        
+        // Copy existing entries
         for (int i = 0; i < m->count * 2; i++) {
             if (m->data[i]) {
-                tmap->data[i] = m->data[i];
+                new_tmap->data[i] = m->data[i];
                 RETAIN(m->data[i]);
             }
         }
-    } else {
-        tmap->data = NULL;
+        
+        // Replace the old tmap with the new one
+        free(tmap);
+        tmap = new_tmap;
     }
     
     return (CljValue)tmap;
@@ -323,13 +436,9 @@ CljValue conj_map(CljValue tmap, CljValue key, CljValue value) {
     
     // Add new key-value pair
     if (m->count >= m->capacity) {
-        int newcap = m->capacity ? m->capacity * 2 : 4;
-        void *p = realloc(m->data, (size_t)newcap * 2 * sizeof(CljObject*));
-        if (!p) return NULL;
-        m->data = (CljObject**)p;
-        for (int i = m->capacity * 2; i < newcap * 2; ++i)
-            m->data[i] = NULL;
-        m->capacity = newcap;
+        // Cannot grow embedded arrays - transient maps have fixed capacity
+        // This is a limitation of the embedded array approach
+        return NULL;  // Out of capacity
     }
     
     m->data[m->count * 2] = (CljObject*)key;

@@ -63,9 +63,9 @@ void test_equal_different_types(void) {
     
     CljObject *vec = (CljObject*)vec_val;
     
-    TEST_ASSERT_FALSE(clj_equal(vec, (CljObject*)map));
-    TEST_ASSERT_FALSE(clj_equal(vec, (CljObject*)list));
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)map, (CljObject*)list));
+    TEST_ASSERT_FALSE(clj_equal(vec, map));
+    TEST_ASSERT_FALSE(clj_equal(vec, list));
+    TEST_ASSERT_FALSE(clj_equal(map, list));
     
     RELEASE(vec);
     RELEASE(map);
@@ -194,7 +194,7 @@ void test_vector_equal_different_values(void) {
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec2_val)->type);
     
     // Test vector equality with clj_equal - now supports immediate values in vectors
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)vec1_val, (CljObject*)vec2_val));
+    TEST_ASSERT_FALSE(clj_equal(vec1_val, vec2_val));
     
     });
 }
@@ -305,7 +305,7 @@ void test_map_equal_same_maps(void) {
     map_assoc((CljObject*)map2, key2, val2);
     
     // Test equality
-    TEST_ASSERT_TRUE(clj_equal((CljObject*)map1, (CljObject*)map2));
+    TEST_ASSERT_TRUE(clj_equal(map1, map2));
     
     // Cleanup
     RELEASE(map1);
@@ -339,7 +339,7 @@ void test_map_equal_different_keys(void) {
     map_assoc((CljObject*)map2, key3, val2); // Different key
     
     // Test inequality
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)map1, (CljObject*)map2));
+    TEST_ASSERT_FALSE(clj_equal(map1, map2));
     
     // Cleanup
     RELEASE(map1);
@@ -374,7 +374,7 @@ void test_map_equal_different_values(void) {
     map_assoc((CljObject*)map2, key2, val3); // Different value
     
     // Test inequality
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)map1, (CljObject*)map2));
+    TEST_ASSERT_FALSE(clj_equal(map1, map2));
     
     // Cleanup
     RELEASE(map1);
@@ -408,7 +408,7 @@ void test_map_equal_different_sizes(void) {
     // map2 has only one entry
     
     // Test inequality
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)map1, (CljObject*)map2));
+    TEST_ASSERT_FALSE(clj_equal(map1, map2));
     
     // Cleanup
     RELEASE(map1);
@@ -455,7 +455,7 @@ void test_map_equal_with_nested_vectors(void) {
     map_assoc((CljObject*)map2, val_str, val_str);
     
     // Test equality (should be true due to structural equality of vectors)
-    TEST_ASSERT_TRUE(clj_equal((CljObject*)map1, (CljObject*)map2));
+    TEST_ASSERT_TRUE(clj_equal(map1, map2));
     
     // Cleanup
     RELEASE(map1);
@@ -481,7 +481,7 @@ void test_list_equal_same_lists(void) {
     
     // Test equality (lists use pointer comparison, so this should be false)
     // Lists are only equal if they are the same instance
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)list1, (CljObject*)list2));
+    TEST_ASSERT_FALSE(clj_equal(list1, list2));
     
     // Cleanup
     RELEASE(list1);
@@ -497,7 +497,7 @@ void test_list_equal_same_instance(void) {
     CljObject *list2 = (CljObject*)list1; // Same instance
     
     // Test equality of same instance
-    TEST_ASSERT_TRUE(clj_equal((CljObject*)list1, list2));
+    TEST_ASSERT_TRUE(clj_equal(list1, list2));
     
     // Cleanup
     RELEASE(list1);
@@ -512,7 +512,7 @@ void test_list_equal_empty_lists(void) {
     CljObject *list2 = make_list(NULL, NULL);
     
     // Test equality of different empty lists (should be false due to pointer comparison)
-    TEST_ASSERT_FALSE(clj_equal((CljObject*)list1, (CljObject*)list2));
+    TEST_ASSERT_FALSE(clj_equal(list1, list2));
     
     // Cleanup
     RELEASE(list1);

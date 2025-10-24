@@ -30,6 +30,8 @@ CljObject* make_map(int capacity);
 CljValue map_get(CljValue map, CljValue key);
 /** Associate key->value (replace if key exists; retains value). */
 void map_assoc(CljValue map, CljValue key, CljValue value);
+/** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
+CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value);
 /** Return a vector of keys (retained). */
 CljValue map_keys(CljValue map);
 /** Return a vector of values (retained). */

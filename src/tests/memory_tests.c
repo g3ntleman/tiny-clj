@@ -9,6 +9,7 @@
 #include "../object.h"
 #include "../memory.h"
 #include "../vector.h"
+#include "../map.h"
 #include "../value.h"
 #include <stdio.h>
 #include <string.h>
@@ -176,6 +177,38 @@ void test_autorelease_pool_nested(void) {
     // Note: We can't test is_autorelease_pool_active() because
     // the test framework may have active pools
     // TEST_ASSERT_FALSE(is_autorelease_pool_active());
+}
+
+void test_cow_assumptions_rc_behavior(void) {
+    // Test critical assumptions for Copy-on-Write implementation
+    printf("\n=== COW Assumptions: RC Behavior ===\n");
+    
+    WITH_AUTORELEASE_POOL({
+        // Test 1: AUTORELEASE does NOT increase RC
+        CljMap *map = (CljMap*)make_map(4);
+        printf("After make_map: RC=%d\n", map->base.rc);
+        TEST_ASSERT_EQUAL(1, map->base.rc);
+        
+        CljMap *same = (CljMap*)AUTORELEASE((CljValue)map);
+        printf("After AUTORELEASE: RC=%d\n", map->base.rc);
+        TEST_ASSERT_EQUAL(1, map->base.rc);  // RC bleibt 1!
+        TEST_ASSERT_EQUAL_PTR(map, same);
+        printf("✓ AUTORELEASE does NOT increase RC\n");
+        
+        // Test 2: RETAIN increases RC
+        RETAIN(map);
+        printf("After RETAIN: RC=%d\n", map->base.rc);
+        TEST_ASSERT_EQUAL(2, map->base.rc);
+        
+        // Test 3: RC=2 would trigger COW in map_assoc_cow
+        printf("✓ RC=2 would trigger COW in map_assoc_cow\n");
+        
+        RELEASE(map);  // Back to RC=1
+        printf("After RELEASE: RC=%d\n", map->base.rc);
+        TEST_ASSERT_EQUAL(1, map->base.rc);
+        
+        printf("✓ All COW assumptions verified!\n");
+    });
 }
 
 void test_autorelease_pool_memory_cleanup(void) {

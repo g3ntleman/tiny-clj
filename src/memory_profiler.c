@@ -228,6 +228,10 @@ void memory_profiler_cleanup(void) {
  * Safe to call from any thread.
  */
 MemoryStats memory_profiler_get_stats(void) {
+    if (!g_memory_profiling_enabled) {
+        MemoryStats empty = {0};
+        return empty;
+    }
     return g_memory_stats;
 }
 
@@ -295,6 +299,7 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
 }
 
 void memory_profiler_print_stats(const char *test_name) {
+    if (!g_memory_profiling_enabled) return;
     print_memory_table(&g_memory_stats, test_name, false);
 }
 
@@ -429,6 +434,7 @@ void memory_profiler_track_autorelease(CljObject *obj) {
 // ============================================================================
 
 void memory_profiler_check_leaks(const char *location) {
+    if (!g_memory_profiling_enabled) return;
     if (g_memory_stats.memory_leaks > 0) {
         printf("\n🚨 MEMORY LEAK DETECTED at %s:\n", location ? location : "Unknown");
         printf("   ┌─────────────────────────────────────────────────────────┐\n");
@@ -463,6 +469,7 @@ void memory_profiler_check_leaks(const char *location) {
 }
 
 bool memory_profiler_has_leaks(void) {
+    if (!g_memory_profiling_enabled) return false;
     return g_memory_stats.memory_leaks > 0;
 }
 

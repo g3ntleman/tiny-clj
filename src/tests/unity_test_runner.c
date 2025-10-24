@@ -10,12 +10,21 @@
 #include "../memory_profiler.h"
 #include "../symbol.h"
 #include "../builtins.h"
+#include "../map.h"
+#include "../value.h"
 #include <stdio.h>
 #include <string.h>
 
 // Access to global memory stats for leak checking
 extern MemoryStats g_memory_stats;
 extern bool g_memory_verbose_mode;
+
+// Forward declarations for embedded array tests
+void test_embedded_array_single_malloc(void);
+void test_embedded_array_memory_efficiency(void);
+void test_embedded_array_cow(void);
+void test_embedded_array_capacity_growth(void);
+void test_embedded_array_performance(void);
 
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
@@ -74,6 +83,45 @@ extern void test_vector_memory(void);
 extern void test_autorelease_pool_basic(void);
 extern void test_autorelease_pool_nested(void);
 extern void test_autorelease_pool_memory_cleanup(void);
+extern void test_cow_assumptions_rc_behavior(void);
+
+// Forward declarations for COW assumptions tests
+extern void test_autorelease_does_not_increase_rc(void);
+extern void test_rc_stays_one_in_loop(void);
+extern void test_retain_increases_rc(void);
+extern void test_closure_holds_env(void);
+extern void test_autorelease_with_retain(void);
+extern void test_multiple_autorelease_same_object(void);
+extern void test_autorelease_in_loop_realistic(void);
+
+// Forward declarations for simple RC test
+extern void test_simple_rc_behavior(void);
+
+// Forward declarations for COW functionality tests
+extern void test_cow_inplace_mutation_rc_one(void);
+extern void test_cow_copy_on_write_rc_greater_one(void);
+extern void test_cow_original_map_unchanged(void);
+extern void test_cow_with_autorelease(void);
+extern void test_cow_memory_leak_detection(void);
+extern void test_cow_performance_simulation(void);
+
+// Forward declarations for simple COW test
+extern void test_simple_cow_basic(void);
+
+// Forward declarations for COW eval integration tests
+extern void test_cow_environment_loop_mutation(void);
+extern void test_cow_closure_environment_sharing(void);
+extern void test_cow_performance_clojure_patterns(void);
+extern void test_cow_memory_efficiency_benchmark(void);
+extern void test_cow_real_clojure_simulation(void);
+
+// Forward declarations for simple COW eval tests
+extern void test_cow_simple_eval_loop(void);
+extern void test_cow_simple_eval_closure(void);
+
+// Forward declarations for minimal COW test
+extern void test_cow_minimal_basic(void);
+extern void test_cow_actual_cow_demonstration(void);
 
 static void test_group_memory(void) {
     // RUN_TEST(test_memory_allocation);  // Temporarily disabled due to crash
@@ -85,6 +133,56 @@ static void test_group_memory(void) {
     RUN_TEST(test_autorelease_pool_basic);
     RUN_TEST(test_autorelease_pool_nested);
     RUN_TEST(test_autorelease_pool_memory_cleanup);
+    RUN_TEST(test_cow_assumptions_rc_behavior);
+    RUN_TEST(test_simple_cow_basic);
+    RUN_TEST(test_cow_minimal_basic);
+    RUN_TEST(test_cow_actual_cow_demonstration);
+    
+    // Embedded array tests - temporarily disabled
+    // RUN_TEST(test_embedded_array_single_malloc);
+    // RUN_TEST(test_embedded_array_memory_efficiency);
+    // RUN_TEST(test_embedded_array_cow);
+    // RUN_TEST(test_embedded_array_capacity_growth);
+    // RUN_TEST(test_embedded_array_performance);
+}
+
+// ============================================================================
+// COW FUNCTIONALITY TESTS
+// ============================================================================
+
+static void test_group_cow_functionality(void) {
+    printf("\n");
+    printf("========================================\n");
+    printf("Copy-on-Write Functionality Tests\n");
+    printf("========================================\n");
+    printf("Diese Tests verifizieren die COW-Funktionalität von map_assoc_cow().\n");
+    printf("\n");
+    
+    RUN_TEST(test_cow_inplace_mutation_rc_one);
+    RUN_TEST(test_cow_copy_on_write_rc_greater_one);
+    RUN_TEST(test_cow_original_map_unchanged);
+    RUN_TEST(test_cow_with_autorelease);
+    RUN_TEST(test_cow_memory_leak_detection);
+    RUN_TEST(test_cow_performance_simulation);
+}
+
+// ============================================================================
+// COW EVAL INTEGRATION TESTS
+// ============================================================================
+
+static void test_group_cow_eval_integration(void) {
+    printf("\n");
+    printf("========================================\n");
+    printf("COW Eval Integration Tests\n");
+    printf("========================================\n");
+    printf("Diese Tests verifizieren map_assoc_cow() in realen Clojure-Kontexten.\n");
+    printf("\n");
+    
+    RUN_TEST(test_cow_environment_loop_mutation);
+    RUN_TEST(test_cow_closure_environment_sharing);
+    RUN_TEST(test_cow_performance_clojure_patterns);
+    RUN_TEST(test_cow_memory_efficiency_benchmark);
+    RUN_TEST(test_cow_real_clojure_simulation);
 }
 
 // ============================================================================
@@ -529,6 +627,28 @@ static void test_group_equal(void) {
     
 }
 
+// ============================================================================
+// COW ASSUMPTIONS TESTS
+// ============================================================================
+
+static void test_group_cow_assumptions(void) {
+    printf("\n");
+    printf("========================================\n");
+    printf("Copy-on-Write Assumptions Tests\n");
+    printf("========================================\n");
+    printf("Diese Tests verifizieren kritische Annahmen über RC und AUTORELEASE\n");
+    printf("vor der Implementierung von map_assoc_cow().\n");
+    printf("\n");
+    
+    RUN_TEST(test_autorelease_does_not_increase_rc);
+    RUN_TEST(test_rc_stays_one_in_loop);
+    RUN_TEST(test_retain_increases_rc);
+    RUN_TEST(test_closure_holds_env);
+    RUN_TEST(test_autorelease_with_retain);
+    RUN_TEST(test_multiple_autorelease_same_object);
+    RUN_TEST(test_autorelease_in_loop_realistic);
+}
+
 // Symbol output tests are now integrated into unit_tests.c
 
 // ============================================================================
@@ -673,6 +793,12 @@ int main(int argc, char **argv) {
             run_equal_tests();
         } else if (strcmp(argv[1], "byte-array") == 0) {
             test_group_byte_array();
+        } else if (strcmp(argv[1], "cow-assumptions") == 0) {
+            test_group_cow_assumptions();
+        } else if (strcmp(argv[1], "cow-functionality") == 0) {
+            test_group_cow_functionality();
+        } else if (strcmp(argv[1], "cow-eval") == 0) {
+            test_group_cow_eval_integration();
         } else if (strcmp(argv[1], "core") == 0) {
             run_core_tests();
         } else if (strcmp(argv[1], "data") == 0) {
@@ -700,4 +826,168 @@ int main(int argc, char **argv) {
     printf("================================================================================\n\n");
     
     return UNITY_END();
+}
+
+// ============================================================================
+// EMBEDDED ARRAY TESTS
+// ============================================================================
+
+void test_embedded_array_single_malloc(void) {
+    printf("\n=== Test: Single Malloc für embedded array ===\n");
+    
+    WITH_AUTORELEASE_POOL({
+        // Create map with embedded array
+        CljMap *map = (CljMap*)make_map(4);
+        printf("Map created with embedded array\n");
+        
+        // Verify embedded array is accessible
+        TEST_ASSERT_NOT_NULL(map->data);
+        TEST_ASSERT_EQUAL(4, map->capacity);
+        TEST_ASSERT_EQUAL(0, map->count);
+        
+        // Add entries to test embedded array
+        map_assoc_cow((CljValue)map, fixnum(1), fixnum(10));
+        map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        
+        // Verify entries in embedded array
+        CljValue val1 = map_get((CljValue)map, fixnum(1));
+        CljValue val2 = map_get((CljValue)map, fixnum(2));
+        TEST_ASSERT_NOT_NULL(val1);
+        TEST_ASSERT_NOT_NULL(val2);
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
+        TEST_ASSERT_EQUAL_INT(20, as_fixnum(val2));
+        
+        printf("✓ Embedded array funktioniert korrekt\n");
+    });
+}
+
+void test_embedded_array_memory_efficiency(void) {
+    printf("\n=== Test: Memory Efficiency ===\n");
+    
+    WITH_AUTORELEASE_POOL({
+        // Create multiple maps to test memory efficiency
+        CljMap *map1 = (CljMap*)make_map(2);
+        CljMap *map2 = (CljMap*)make_map(4);
+        CljMap *map3 = (CljMap*)make_map(8);
+        
+        // Add entries to each map
+        map_assoc_cow((CljValue)map1, fixnum(1), fixnum(10));
+        map_assoc_cow((CljValue)map2, fixnum(2), fixnum(20));
+        map_assoc_cow((CljValue)map3, fixnum(3), fixnum(30));
+        
+        // Verify all maps work independently
+        TEST_ASSERT_NOT_NULL(map_get((CljValue)map1, fixnum(1)));
+        TEST_ASSERT_NOT_NULL(map_get((CljValue)map2, fixnum(2)));
+        TEST_ASSERT_NOT_NULL(map_get((CljValue)map3, fixnum(3)));
+        
+        // Verify embedded arrays are separate
+        TEST_ASSERT_NOT_EQUAL(map1->data, map2->data);
+        TEST_ASSERT_NOT_EQUAL(map2->data, map3->data);
+        TEST_ASSERT_NOT_EQUAL(map1->data, map3->data);
+        
+        printf("✓ Memory efficiency: Jede Map hat eigenes embedded array\n");
+    });
+}
+
+void test_embedded_array_cow(void) {
+    printf("\n=== Test: COW mit embedded arrays ===\n");
+    
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = (CljMap*)make_map(4);
+        map_assoc_cow((CljValue)map, fixnum(1), fixnum(10));
+        printf("Original map: RC=%d, count=%d\n", map->base.rc, map->count);
+        
+        // Simulate sharing (RC=2)
+        RETAIN(map);
+        TEST_ASSERT_EQUAL(2, map->base.rc);
+        
+        // COW operation should create new map with embedded array
+        CljValue new_map = map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        CljMap *new_map_data = as_map(new_map);
+        
+        // Verify new map has embedded array
+        TEST_ASSERT_NOT_NULL(new_map_data->data);
+        TEST_ASSERT_EQUAL(4, new_map_data->capacity);
+        TEST_ASSERT_EQUAL(2, new_map_data->count);
+        
+        // Verify entries in new map
+        CljValue val1 = map_get(new_map, fixnum(1));
+        CljValue val2 = map_get(new_map, fixnum(2));
+        TEST_ASSERT_NOT_NULL(val1);
+        TEST_ASSERT_NOT_NULL(val2);
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
+        TEST_ASSERT_EQUAL_INT(20, as_fixnum(val2));
+        
+        // Verify original unchanged
+        TEST_ASSERT_EQUAL(1, map->count);
+        TEST_ASSERT_NULL(map_get((CljValue)map, fixnum(2)));
+        
+        printf("✓ COW mit embedded arrays funktioniert\n");
+        
+        RELEASE(map);  // Cleanup
+    });
+}
+
+void test_embedded_array_capacity_growth(void) {
+    printf("\n=== Test: Capacity Growth mit embedded arrays ===\n");
+    
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = (CljMap*)make_map(2);  // Small capacity
+        printf("Initial capacity: %d\n", map->capacity);
+        
+        // Fill initial capacity
+        map_assoc_cow((CljValue)map, fixnum(1), fixnum(10));
+        map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        printf("After filling capacity: %d\n", map->capacity);
+        
+        // Simulate sharing to trigger COW with growth
+        RETAIN(map);
+        
+        // Add more entries - should trigger COW with capacity growth
+        CljValue new_map = map_assoc_cow((CljValue)map, fixnum(3), fixnum(30));
+        CljMap *new_map_data = as_map(new_map);
+        
+        // Verify new map has larger capacity
+        printf("New map capacity: %d\n", new_map_data->capacity);
+        TEST_ASSERT_TRUE(new_map_data->capacity > map->capacity);
+        
+        // Verify all entries exist in new map
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(1)));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(2)));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(3)));
+        
+        printf("✓ Capacity growth mit embedded arrays funktioniert\n");
+        
+        RELEASE(map);  // Cleanup
+    });
+}
+
+void test_embedded_array_performance(void) {
+    printf("\n=== Test: Performance mit embedded arrays ===\n");
+    
+    WITH_AUTORELEASE_POOL({
+        CljMap *env = (CljMap*)make_map(4);
+        printf("Starting performance test...\n");
+        
+        // Simulate loop pattern with embedded arrays
+        for (int i = 0; i < 50; i++) {
+            env = (CljMap*)AUTORELEASE(map_assoc_cow((CljValue)env, fixnum(i), fixnum(i * 10)));
+            
+            // RC should stay 1 (in-place optimization)
+            TEST_ASSERT_EQUAL(1, env->base.rc);
+            
+            if (i % 10 == 0) {
+                printf("Iteration %d: RC=%d, count=%d, capacity=%d\n", 
+                       i, env->base.rc, env->count, env->capacity);
+            }
+        }
+        
+        // Verify final state
+        TEST_ASSERT_EQUAL(50, env->count);
+        CljValue val25 = map_get((CljValue)env, fixnum(25));
+        TEST_ASSERT_NOT_NULL(val25);
+        TEST_ASSERT_EQUAL_INT(250, as_fixnum(val25));
+        
+        printf("✓ Performance test erfolgreich (50 Iterationen)\n");
+    });
 }

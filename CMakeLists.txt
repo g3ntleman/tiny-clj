@@ -217,6 +217,12 @@ add_executable(unity-tests
     src/tests/test_recur.c
     src/tests/fixed_point_tests.c
     src/tests/byte_array_tests.c
+    src/tests/cow_assumptions_tests.c
+    src/tests/test_map_cow.c
+    src/tests/test_simple_cow.c
+    src/tests/test_cow_eval_integration.c
+    src/tests/test_cow_simple_eval.c
+    src/tests/test_cow_minimal.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c
@@ -248,6 +254,39 @@ set_target_properties(unity-tests PROPERTIES
     COMPILE_FLAGS "-g -O0 -DDEBUG"
 )
 target_include_directories(unity-tests PRIVATE external)
+
+# Copy-on-Write Assumptions Tests (standalone test executable)
+add_executable(test-cow-assumptions
+    src/tests/test_cow_assumptions.c
+    external/unity/src/unity.c
+    src/builtins.c
+    src/byte_array.c
+    src/object.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/symbol.c
+    src/namespace.c
+    src/parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/clojure_core.c
+    src/exception.c
+    src/memory_profiler.c
+    src/memory.c
+    src/runtime.c
+    src/error_messages.c
+    src/value.c
+)
+target_compile_definitions(test-cow-assumptions PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+set_target_properties(test-cow-assumptions PROPERTIES
+    COMPILE_FLAGS "-g -O0 -DDEBUG"
+)
+target_include_directories(test-cow-assumptions PRIVATE external)
+
 
 # Utility tests removed - no main function available
 # target_compile_options(run-tests PRIVATE -fsanitize=address -g)

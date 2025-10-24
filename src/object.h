@@ -9,13 +9,14 @@
  * - Memory management with reference counting
  */
 
-// value.h included later to avoid circular dependency
-
 #ifndef TINY_CLJ_OBJECT_H
 #define TINY_CLJ_OBJECT_H
 
 // Forward declaration for ID type to avoid circular dependency
 typedef void* ID;
+
+// Forward declaration for CljValue to avoid circular dependency
+typedef struct CljObject* CljValue;
 
 #include "common.h"
 #include "types.h"
@@ -118,7 +119,7 @@ typedef struct {
     CljObject base;         // Embedded base object
     int count;
     int capacity;
-    CljObject **data;  // [key1, val1, key2, val2, ...]
+    CljObject *data[];  // Flexible array member - allocated with struct
 } CljMap;
 
 // CljList represents a Clojure-style linked list with flexible rest handling:
@@ -223,7 +224,7 @@ static inline bool is_type(CljObject *obj, CljType expected_type) {
 
 // Equality comparison
 /** Structural equality for collections; pointer equality fast path. */
-bool clj_equal(CljObject *a, CljObject *b);
+bool clj_equal(CljValue a, CljValue b);
 bool clj_equal_id(ID a, ID b);
 static inline bool clj_is_truthy(CljObject *v) {
     // Ultra-schneller Bit-Trick: nil(0) und false(5) haben Byte < 8

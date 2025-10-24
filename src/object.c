@@ -549,7 +549,7 @@ bool clj_equal_id(ID a, ID b) {
     
     // Beide sind CljObject* (heap objects)
     if (!is_immediate(a) && !is_immediate(b)) {
-        return clj_equal((CljObject*)a, (CljObject*)b);
+        return clj_equal(a, b);
     }
     
     // Gemischte Typen (ein immediate, ein heap object)
@@ -558,18 +558,31 @@ bool clj_equal_id(ID a, ID b) {
 
 
 // Korrekte Gleichheitsprüfung mit Inhalt-Vergleich
-bool clj_equal(CljObject *a, CljObject *b) {
+bool clj_equal(CljValue a, CljValue b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
     if (!a || !b) return false;
     
-    // Check if pointers are valid CljObject* (not immediate values)
-    // Immediate values (CljValue) have different memory layout
-    // We can't easily distinguish between CljObject* and CljValue* at runtime
-    // So we rely on the type field being valid for CljObject*
-    // Note: This validation is removed as it was causing segmentation faults
-    // The function should be called with valid CljObject* pointers
+    // Handle tagged integers (fixnums) - most common case
+    if (is_fixnum(a) || is_fixnum(b)) {
+        if (is_fixnum(a) && is_fixnum(b)) {
+            return as_fixnum(a) == as_fixnum(b);
+        }
+        return false;  // Different types
+    }
     
-    if (!is_type(a, b->type)) return false;
+    // Handle other immediate types (bool, etc.)
+    if (is_immediate(a) || is_immediate(b)) {
+        if (is_immediate(a) && is_immediate(b)) {
+            return a == b;  // For immediates, pointer equality is sufficient
+        }
+        return false;  // Different types
+    }
+    
+    // Handle CljObject* types
+    CljObject *a_obj = (CljObject*)a;
+    CljObject *b_obj = (CljObject*)b;
+    
+    if (!is_type(a_obj, b_obj->type)) return false;
     
     // Inhalt-Vergleich basierend auf Typ
     // Hinweis: CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
