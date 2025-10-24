@@ -213,7 +213,7 @@ void test_cow_assumptions_rc_behavior(void) {
 
 void test_autorelease_pool_memory_cleanup(void) {
     // Test that autorelease pool properly cleans up memory
-    MemoryStats before_stats = memory_profiler_get_stats();
+    // MemoryStats before_stats = memory_profiler_get_stats(); // Unused
     
     WITH_AUTORELEASE_POOL({
         // Create multiple objects that should be autoreleased

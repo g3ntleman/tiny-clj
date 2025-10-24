@@ -22,7 +22,7 @@
 #include <stdio.h>
 
 // Test-Setup und Teardown
-static bool builtins_registered = false;
+// static bool builtins_registered = false; // Unused
 
 void setUp(void) {
     // Keine Initialisierung für direktes RC-Testing
@@ -39,23 +39,18 @@ void tearDown(void) {
 void test_autorelease_does_not_increase_rc(void) {
     printf("\n=== Test 1: AUTORELEASE does NOT increase RC ===\n");
     
-    // Erstelle autorelease pool manuell
-    CljObjectPool *pool = autorelease_pool_push();
-    TEST_ASSERT_NOT_NULL(pool);
-    
-    CljMap *map = (CljMap*)make_map(4);
-    printf("After make_map: RC=%d\n", map->base.rc);
-    TEST_ASSERT_EQUAL(1, map->base.rc);  // RC=1 nach make_map
-    
-    CljMap *same = (CljMap*)AUTORELEASE((CljValue)map);
-    printf("After AUTORELEASE: RC=%d\n", map->base.rc);
-    TEST_ASSERT_EQUAL(1, map->base.rc);  // RC bleibt 1!
-    TEST_ASSERT_EQUAL_PTR(map, same);    // Gleicher Pointer
-    
-    printf("✓ AUTORELEASE fügt nur weak reference hinzu, RC bleibt 1\n");
-    
-    // Pool drain gibt map frei
-    autorelease_pool_pop_specific(pool);
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = (CljMap*)make_map(4);
+        printf("After make_map: RC=%d\n", map->base.rc);
+        TEST_ASSERT_EQUAL(1, map->base.rc);  // RC=1 nach make_map
+        
+        CljMap *same = (CljMap*)AUTORELEASE((CljValue)map);
+        printf("After AUTORELEASE: RC=%d\n", map->base.rc);
+        TEST_ASSERT_EQUAL(1, map->base.rc);  // RC bleibt 1!
+        TEST_ASSERT_EQUAL_PTR(map, same);    // Gleicher Pointer
+        
+        printf("✓ AUTORELEASE fügt nur weak reference hinzu, RC bleibt 1\n");
+    });
 }
 
 // ============================================================================

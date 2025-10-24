@@ -49,7 +49,7 @@ void test_cow_actual_cow_demonstration(void) {
         
         // Test 3: COW operation should create NEW map
         printf("Before COW: RC=%d\n", map->base.rc);
-        CljValue new_map = map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        // CljValue new_map = map_assoc_cow((CljValue)map, fixnum(2), fixnum(20)); // Unused
         printf("After COW: Original RC=%d\n", map->base.rc);
         
         // Verify COW behavior - original should be unchanged

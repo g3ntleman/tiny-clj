@@ -17,8 +17,7 @@ extern CljObject* empty_string_singleton;
 // Forward declarations for namespace functions
 extern struct CljNamespace* ns_get_or_create(const char *name, const char *file);
 
-// CljValue als Alias für CljObject* (Phase 0: Kein Refactoring!)
-typedef CljObject* CljValue;
+// CljValue is already defined in object.h to avoid circular dependency
 
 // ID-Typ ist in object.h definiert
 

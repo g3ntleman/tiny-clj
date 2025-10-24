@@ -63,9 +63,9 @@ void test_equal_different_types(void) {
     
     CljObject *vec = (CljObject*)vec_val;
     
-    TEST_ASSERT_FALSE(clj_equal(vec, map));
-    TEST_ASSERT_FALSE(clj_equal(vec, list));
-    TEST_ASSERT_FALSE(clj_equal(map, list));
+    TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)map));
+    TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)list));
+    TEST_ASSERT_FALSE(clj_equal((CljValue)map, (CljValue)list));
     
     RELEASE(vec);
     RELEASE(map);

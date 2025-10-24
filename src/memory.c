@@ -79,12 +79,14 @@ void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
 
 // Autorelease pool structure backed by weak vector for efficiency
 struct CljObjectPool { 
-    CljObject *backing; 
-    struct CljObjectPool *prev; 
+    CljObject *backing;
+    // No prev pointer needed - using array-based stack instead
 };
 
-static CljObjectPool *g_cv_pool_top = NULL;
-static int g_pool_push_count = 0;  // Track push/pop balance for error detection
+// Array-based pool stack (exception-safe, survives longjmp)
+#define MAX_POOL_DEPTH 24
+static CljObjectPool *g_pool_stack[MAX_POOL_DEPTH] = {NULL};
+static int g_pool_stack_top = -1;  // -1 = empty stack
 
 // Forward declaration
 static void release_object_deep(CljObject *v);
@@ -203,23 +205,22 @@ CljObject *autorelease(CljObject *v) {
     
 
     // Require active autorelease pool
-    if (!g_cv_pool_top) {
+    if (g_pool_stack_top < 0) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
                 v, v ? v->type : -1);
-    } else 
-
+    } else {
         // Only show debug output if memory profiling is enabled and verbose mode is on
         if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
             printf("🔍 autorelease: Object %p, type=%d (%s), rc=%d\n", 
                    v, v->type, clj_type_name(v->type), v->rc);
         }
-        
+    }
     
     // Add to pool (weak reference, no retain)
     // Use direct manipulation for autorelease pool
-    CljPersistentVector *backing = as_vector(g_cv_pool_top->backing);
+    CljPersistentVector *backing = as_vector(g_pool_stack[g_pool_stack_top]->backing);
     if (backing && backing->count < backing->capacity) {
         backing->data[backing->count++] = v;
         if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
@@ -250,26 +251,33 @@ CljObject *autorelease(CljObject *v) {
  * the pool is popped.
  */
 // CFAutoreleasePool: Exception-safe pool management
-// Compatible with setjmp/longjmp by using global stack tracking
-
-// Global stack of active pools for exception safety
-static CljObjectPool *g_exception_safe_pools[64] = {0};
-static int g_exception_safe_count = 0;
+// Compatible with setjmp/longjmp by using array-based stack (already defined above)
 
 CljObjectPool *autorelease_pool_push() {
+    // Check for stack overflow
+    if (g_pool_stack_top >= MAX_POOL_DEPTH - 1) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+            "Autorelease pool stack overflow! Maximum depth of %d exceeded. "
+            "This indicates too many nested WITH_AUTORELEASE_POOL blocks.", 
+            MAX_POOL_DEPTH);
+        return NULL;
+    }
+    
+    // Allocate new pool
     CljObjectPool *p = (CljObjectPool*)malloc(sizeof(CljObjectPool));
     if (!p) return NULL;
     
     // Create weak vector using new API - increase capacity for core loading
     CljValue backing_val = make_vector(1024, 1); // mutable, larger capacity
     p->backing = (CljObject*)backing_val;
-    p->prev = g_cv_pool_top;
-    g_cv_pool_top = p;
-    g_pool_push_count++;  // Increment push counter
     
-    // CFAutoreleasePool: Register for exception safety
-    if (g_exception_safe_count < 64) {
-        g_exception_safe_pools[g_exception_safe_count++] = p;
+    // Push to array stack
+    g_pool_stack[++g_pool_stack_top] = p;
+    
+    // Debug output if verbose mode enabled
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%d)\n", 
+               p, g_pool_stack_top + 1);
     }
     
     return p;
@@ -277,87 +285,67 @@ CljObjectPool *autorelease_pool_push() {
 
 
 static void autorelease_pool_pop_internal(CljObjectPool *pool) {
-    printf("🔍 autorelease_pool_pop_internal: Pool %p, push_count=%d\n", pool, g_pool_push_count);
-    
-    // Check for push/pop imbalance - use printf instead of throw_exception
-    if (g_pool_push_count <= 0) {
-        printf("ERROR: autorelease_pool_pop() called more times than autorelease_pool_push()! "
-               "Push count: %d, attempting to pop pool %p. "
-               "This indicates unbalanced pool operations.\n", 
-               g_pool_push_count, pool);
+    // Check for stack underflow
+    if (g_pool_stack_top < 0) {
+        printf("ERROR: autorelease_pool_pop() called on empty stack! "
+               "This indicates more pop() calls than push() calls.\n");
         return; // Safe return instead of throwing exception
     }
     
     // Use current pool if none specified
     if (!pool) {
-        pool = g_cv_pool_top;
+        pool = g_pool_stack[g_pool_stack_top];
     }
-    if (!pool || g_cv_pool_top != pool) {
-        printf("🔍 autorelease_pool_pop_internal: Pool mismatch, skipping\n");
+    
+    // Verify balanced push/pop (pool must be top of stack)
+    if (!pool || g_pool_stack[g_pool_stack_top] != pool) {
+        printf("ERROR: Pool mismatch! Expected top pool %p, got %p. "
+               "This indicates unbalanced pool operations.\n", 
+               g_pool_stack[g_pool_stack_top], pool);
         return;
     }
     
-    // CFAutoreleasePool: Exception-safe cleanup
-    // Remove from exception-safe stack if present
-    for (int i = 0; i < g_exception_safe_count; i++) {
-        if (g_exception_safe_pools[i] == pool) {
-            // Shift remaining pools down
-            for (int j = i; j < g_exception_safe_count - 1; j++) {
-                g_exception_safe_pools[j] = g_exception_safe_pools[j + 1];
-            }
-            g_exception_safe_count--;
-            break;
-        }
+    // Debug output
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        printf("🔍 autorelease_pool_pop_internal: Pool %p popped from stack (depth=%d)\n", 
+               pool, g_pool_stack_top + 1);
     }
     
+    // Release all objects in pool
     CljPersistentVector *vec = as_vector(pool->backing);
     if (vec) {
         for (int i = vec->count - 1; i >= 0; --i) {
             CljObject *obj = vec->data[i];
             vec->data[i] = NULL;  // Prevent double-free
-            // Foundation-style exception-safe cleanup
             if (obj && TRACKS_RETAINS(obj)) {
-                // Use proper release() instead of direct free() to ensure
-                // proper cleanup of object references and prevent use-after-free
                 RELEASE(obj);
             }
         }
         vec->count = 0;
     }
     
-    // Update stack pointer and decrement push count
-    g_cv_pool_top = pool->prev;
-    g_pool_push_count--;
+    // Release the backing vector
+    RELEASE(pool->backing);
+    pool->backing = NULL;
+    
+    // Pop from stack
+    g_pool_stack[g_pool_stack_top--] = NULL;
+    
+    // Free pool structure - now SAFE with array-based stack!
+    free(pool);
     
     // Debug output to verify stack state
-    printf("🔍 autorelease_pool_pop_internal: After pop, g_cv_pool_top=%p, push_count=%d\n", 
-           g_cv_pool_top, g_pool_push_count);
-    
-    // Note: Pool structure is not freed here to avoid use-after-free
-    // This is a memory leak, but it's better than a crash
-    // TODO: Implement proper pool cleanup
-    
-    // Check for negative push count (imbalance) - use printf instead of throw_exception
-    if (g_pool_push_count < 0) {
-        printf("ERROR: Pool push/pop imbalance! Push count: %d. "
-               "This indicates more pop() calls than push() calls.\n", g_pool_push_count);
-        g_pool_push_count = 0; // Reset to prevent further issues
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        printf("🔍 autorelease_pool_pop_internal: After pop, stack_top=%d\n", g_pool_stack_top);
     }
-    
-    // Release the weak vector backing
-    if (pool->backing) {
-        RELEASE(pool->backing);
-    }
-    
-    free(pool);
 }
 
 // CFAutoreleasePool: Exception-safe cleanup function
 // Call this from CATCH blocks to clean up pools after exceptions
 void autorelease_pool_cleanup_after_exception() {
-    // Clean up all registered pools
-    for (int i = g_exception_safe_count - 1; i >= 0; i--) {
-        CljObjectPool *pool = g_exception_safe_pools[i];
+    // Clean up all pools from array stack
+    while (g_pool_stack_top >= 0) {
+        CljObjectPool *pool = g_pool_stack[g_pool_stack_top];
         if (pool) {
             // Clean up pool contents
             CljPersistentVector *vec = as_vector(pool->backing);
@@ -379,12 +367,13 @@ void autorelease_pool_cleanup_after_exception() {
             
             free(pool);
         }
+        
+        // Pop from stack
+        g_pool_stack[g_pool_stack_top--] = NULL;
     }
     
-    // Reset exception-safe stack
-    g_exception_safe_count = 0;
-    g_cv_pool_top = NULL;
-    g_pool_push_count = 0;
+    // Reset stack to empty state
+    g_pool_stack_top = -1;
 }
 
 /** @brief Pop and drain current autorelease pool (most common usage)
@@ -418,8 +407,8 @@ void autorelease_pool_pop_specific(CljObjectPool *pool) {
  * at program termination or when you need to ensure all pools are drained.
  */
 void autorelease_pool_cleanup_all() {
-    while (g_cv_pool_top) {
-        autorelease_pool_pop_internal(g_cv_pool_top);
+    while (g_pool_stack_top >= 0) {
+        autorelease_pool_pop_internal(g_pool_stack[g_pool_stack_top]);
     }
 }
 
@@ -430,7 +419,7 @@ void autorelease_pool_cleanup_all() {
  * Useful for debugging and ensuring proper pool management.
  */
 bool is_autorelease_pool_active(void) {
-    return g_cv_pool_top != NULL;
+    return g_pool_stack_top >= 0;
 }
 
 /** @brief Get retain count of object
@@ -534,7 +523,7 @@ static void release_object_deep(CljObject *v) {
         case CLJ_MAP:
             {
                 CljMap *map = as_map(v);
-                if (map && map->data) {
+                if (map) {
                     // Release all key-value pairs
                     for (int i = 0; i < map->count * 2; i += 2) {
                         RELEASE(map->data[i]);     // key

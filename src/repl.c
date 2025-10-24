@@ -116,28 +116,24 @@ static void print_exception(CLJException *ex) {
  *  @return true if successful, false on parse or evaluation error
  */
 static bool eval_string_repl(const char *code, EvalState *st) {
-    CljObjectPool *pool = autorelease_pool_push();
-    printf("🔍 eval_string_repl: Created pool %p\n", pool);
+    bool result = false;
     
-    // Use TRY/CATCH to handle exceptions in REPL
-    TRY {
-        CljObject *res = eval_string(code, st);
-        // Note: res can be NULL for nil, which is valid
-        print_result(res);
-        
-        // Manually drain the autorelease pool
-        printf("🔍 eval_string_repl: Draining pool %p\n", pool);
-        autorelease_pool_pop_specific(pool);
-        return true;
-    } CATCH(ex) {
-        // Print exception and continue REPL
-        print_exception((CLJException*)ex);
-        
-        // Manually drain the autorelease pool even on exception
-        printf("🔍 eval_string_repl: Draining pool %p after exception\n", pool);
-        autorelease_pool_pop_specific(pool);
-        return false; // Return false to indicate error, but don't exit REPL
-    } END_TRY
+    // Use WITH_AUTORELEASE_POOL for automatic cleanup
+    WITH_AUTORELEASE_POOL({
+        // Use TRY/CATCH to handle exceptions in REPL
+        TRY {
+            CljObject *res = eval_string(code, st);
+            // Note: res can be NULL for nil, which is valid
+            print_result(res);
+            result = true;
+        } CATCH(ex) {
+            // Print exception and continue REPL
+            print_exception((CLJException*)ex);
+            result = false; // Return false to indicate error, but don't exit REPL
+        } END_TRY
+    });
+    
+    return result;
 }
 
 /** @brief Print command-line usage information.
@@ -436,7 +432,10 @@ int main(int argc, char **argv) {
     }
 
     if (!no_core) {
-        load_clojure_core(st);
+        // Load clojure.core in autorelease pool to handle AUTORELEASE calls
+        WITH_AUTORELEASE_POOL({
+            load_clojure_core(st);
+        });
     }
     
     // Register builtin functions

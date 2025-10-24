@@ -363,39 +363,40 @@ extern void test_map_equal_different_sizes(void);
 extern void test_map_equal_with_nested_vectors(void);
 
 static void test_group_unit(void) {
+    // Wrap all tests in WITH_AUTORELEASE_POOL to handle AUTORELEASE calls
     WITH_AUTORELEASE_POOL({
         RUN_TEST(test_list_count);
-        RUN_TEST(test_list_creation);
-        RUN_TEST(test_symbol_creation);
-        RUN_TEST(test_string_creation);
-        RUN_TEST(test_vector_creation);
-        RUN_TEST(test_map_creation);
-        RUN_TEST(test_array_map_builtin);
-        RUN_TEST(test_integer_creation);
-        RUN_TEST(test_float_creation);
-        RUN_TEST(test_nil_creation);
-        
-        // Multiline file loading test
-        RUN_TEST(test_load_multiline_file);
-        
-        // Map function test
-        RUN_TEST(test_map_function);
-        
-        // Fixed-Point arithmetic tests
-        RUN_TEST(test_fixed_creation_and_conversion);
-        RUN_TEST(test_fixed_arithmetic_operations);
-        RUN_TEST(test_fixed_mixed_type_operations);
-        RUN_TEST(test_fixed_division_with_remainder);
-        RUN_TEST(test_fixed_precision_limits);
-        RUN_TEST(test_fixed_variadic_operations);
-        // RUN_TEST(test_fixed_error_handling); // Temporarily disabled due to Autorelease Pool issue
-        RUN_TEST(test_fixed_comparison_operators);
-        
-        // Fixed-Point detailed tests
-        RUN_TEST(test_fixed_basic_creation);
-        RUN_TEST(test_fixed_negative_values);
-        RUN_TEST(test_fixed_precision);
-        RUN_TEST(test_fixed_multiplication_raw);
+    RUN_TEST(test_list_creation);
+    RUN_TEST(test_symbol_creation);
+    RUN_TEST(test_string_creation);
+    RUN_TEST(test_vector_creation);
+    RUN_TEST(test_map_creation);
+    RUN_TEST(test_array_map_builtin);
+    RUN_TEST(test_integer_creation);
+    RUN_TEST(test_float_creation);
+    RUN_TEST(test_nil_creation);
+    
+    // Multiline file loading test
+    RUN_TEST(test_load_multiline_file);
+    
+    // Map function test
+    RUN_TEST(test_map_function);
+    
+    // Fixed-Point arithmetic tests
+    RUN_TEST(test_fixed_creation_and_conversion);
+    RUN_TEST(test_fixed_arithmetic_operations);
+    RUN_TEST(test_fixed_mixed_type_operations);
+    RUN_TEST(test_fixed_division_with_remainder);
+    RUN_TEST(test_fixed_precision_limits);
+    RUN_TEST(test_fixed_variadic_operations);
+    // RUN_TEST(test_fixed_error_handling); // Temporarily disabled due to Autorelease Pool issue
+    RUN_TEST(test_fixed_comparison_operators);
+    
+    // Fixed-Point detailed tests
+    RUN_TEST(test_fixed_basic_creation);
+    RUN_TEST(test_fixed_negative_values);
+    RUN_TEST(test_fixed_precision);
+    RUN_TEST(test_fixed_multiplication_raw);
         RUN_TEST(test_fixed_mixed_type_promotion);
         RUN_TEST(test_fixed_saturation_max);
         RUN_TEST(test_fixed_saturation_min);
@@ -767,7 +768,9 @@ static void run_all_tests(void) {
 // ============================================================================
 
 int main(int argc, char **argv) {
-    UNITY_BEGIN();
+    // Wrap entire test execution in WITH_AUTORELEASE_POOL to handle all AUTORELEASE calls
+    WITH_AUTORELEASE_POOL({
+        UNITY_BEGIN();
     
     if (argc > 1) {
         if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
@@ -826,6 +829,7 @@ int main(int argc, char **argv) {
     printf("================================================================================\n\n");
     
     return UNITY_END();
+    });
 }
 
 // ============================================================================

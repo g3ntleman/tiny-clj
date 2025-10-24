@@ -163,15 +163,11 @@ EvalState* evalstate() {
     }
     
     memset(st, 0, sizeof(EvalState));
-    st->pool = autorelease_pool_push();
-    if (!st->pool) {
-        free(st);
-        return NULL;
-    }
+    // Remove pool management from EvalState - use global pools instead
+    st->pool = NULL; // No longer needed
     
     st->current_ns = ns_get_or_create("user", NULL); // Default namespace
     if (!st->current_ns) {
-        autorelease_pool_pop_specific(st->pool);
         free(st);
         return NULL;
     }
@@ -191,8 +187,7 @@ EvalState* evalstate_new() {
 void evalstate_free(EvalState *st) {
     if (!st) return;
     
-    // Don't pop the pool here - it's already been popped by the global autorelease pool
-    // if (st->pool) autorelease_pool_pop_specific(st->pool);
+    // No pool management needed - EvalState no longer owns a pool
     if (st->stack) free(st->stack);
     free(st);
 }
@@ -275,11 +270,11 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     TRY {
         if (is_type(expr, CLJ_SYMBOL)) {
             result = eval_symbol(expr, st);
-            if (result) result = AUTORELEASE(result);
+            // Don't AUTORELEASE here - let caller handle it
         } else if (is_type(expr, CLJ_LIST)) {
             CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
             result = eval_list(as_list(expr), (CljMap*)env, st);
-            if (result) result = AUTORELEASE(result);
+            // Don't AUTORELEASE here - let caller handle it
         } else {
             // expr is already autoreleased by parse() - just return it
             result = expr;
