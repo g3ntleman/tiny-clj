@@ -48,6 +48,13 @@ CljObject *autorelease(CljObject *v);
  */
 bool is_pointer_on_stack(const void *ptr);
 
+/**
+ * @brief Throw OutOfMemoryError with type tag and abort
+ * @param type The CljType being allocated (e.g., CLJ_BYTE_ARRAY)
+ * @note This function never returns
+ */
+void throw_oom(CljType type) __attribute__((noreturn));
+
 // ============================================================================
 // AUTORELEASE POOL MANAGEMENT
 // ============================================================================

@@ -1529,7 +1529,7 @@ ID eval_cons(CljList *list, CljMap *env) {
         case CLJ_LIST:
         case CLJ_SEQ: {
             // Bereits CLJ_LIST oder CLJ_SEQ → direkt als rest verwenden
-                result = make_list(elem, coll);
+                result = make_list(elem, (CljList*)coll);
             RELEASE(elem);   // Balance: make_list macht RETAIN
             RELEASE(coll);   // Balance: make_list macht RETAIN
             return AUTORELEASE(result);
@@ -1545,7 +1545,7 @@ ID eval_cons(CljList *list, CljMap *env) {
                 result = make_list(elem, NULL);
             } else {
                 // Seq als rest → make_list macht RETAIN auf seq
-                result = make_list(elem, seq);  // Heap-Objekt 2
+                result = make_list(elem, (CljList*)seq);  // Heap-Objekt 2
                 RELEASE(seq);  // Balance: make_list macht RETAIN
             }
             

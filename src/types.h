@@ -16,6 +16,7 @@ typedef enum {
     CLJ_FUNC,        // Native C functions (CljFunc)
     CLJ_CLOSURE,     // Interpreted Clojure functions (CljFunction)
     CLJ_EXCEPTION,
+    CLJ_BYTE_ARRAY,  // Mutable byte array (Clojure-compatible)
     // Transient types (Clojure-kompatibel: nur Vector und Map)
     CLJ_TRANSIENT_VECTOR,
     CLJ_TRANSIENT_MAP,

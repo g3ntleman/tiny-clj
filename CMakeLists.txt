@@ -63,6 +63,7 @@ list(APPEND SOURCES
     src/symbol.c
     src/exception.c
     src/parser.c
+    src/byte_array.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -96,6 +97,7 @@ set(STM32_SOURCES
     src/symbol.c
     src/exception.c
     src/parser.c
+    src/byte_array.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -121,6 +123,7 @@ add_executable(tiny-clj-esp32
     src/symbol.c
     src/exception.c
     src/parser.c
+    src/byte_array.c
     src/reader.c
     src/function_call.c
     src/list_operations.c
@@ -213,8 +216,10 @@ add_executable(unity-tests
     src/tests/for_loop_tests.c
     src/tests/test_recur.c
     src/tests/fixed_point_tests.c
+    src/tests/byte_array_tests.c
     external/unity/src/unity.c
     src/builtins.c
+    src/byte_array.c
     src/object.c
     src/types.c
     src/vector.c

@@ -52,6 +52,7 @@ struct CljNamespace;
 #define TYPE_OF_CljMap CLJ_MAP
 #define TYPE_OF_CLJException CLJ_EXCEPTION
 #define TYPE_OF_CljSeqIterator CLJ_SEQ
+#define TYPE_OF_CljByteArray CLJ_BYTE_ARRAY
 // Für primitive Typen die nicht als Struct existieren
 #define TYPE_OF_int CLJ_INT
 #define TYPE_OF_double CLJ_FLOAT
@@ -155,6 +156,12 @@ typedef struct {
     const char *name;       // Optional function name
 } CljFunction;
 
+typedef struct {
+    CljObject base;         // Embedded base object
+    int length;             // Length in bytes
+    uint8_t *data;          // Mutable byte data
+} CljByteArray;
+
 // ============================================================================
 // Exception structure as CljObject subtype (embedded pattern)
 //
@@ -192,7 +199,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 /** Create interpreted function with params/body/closure; rc=1. */
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
 /** Create empty list node (rc=1). */
-CljObject* make_list(CljObject *first, CljObject *rest);
+CljObject* make_list(ID first, CljList *rest);
 
 // Singleton access functions
 // clj_nil(), clj_true(), clj_false() are now macros defined above
@@ -372,6 +379,9 @@ static inline CljFunction* as_function(ID obj) {
 }
 static inline CLJException* as_exception(ID obj) {
     return (CLJException*)assert_type((CljObject*)obj, CLJ_EXCEPTION);
+}
+static inline CljByteArray* as_byte_array(ID obj) {
+    return (CljByteArray*)assert_type((CljObject*)obj, CLJ_BYTE_ARRAY);
 }
 
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)

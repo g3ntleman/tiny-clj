@@ -30,7 +30,7 @@ CljObject* make_map(int capacity) {
   }
   CljMap *map = ALLOC(CljMap, 1);
   if (!map)
-    return NULL;
+    throw_oom(CLJ_MAP);
   map->base.type = CLJ_MAP;
   map->base.rc = 1;
   map->count = 0;
@@ -38,7 +38,7 @@ CljObject* make_map(int capacity) {
   map->data = (CljObject **)calloc((size_t)capacity * 2, sizeof(CljObject *));
   if (!map->data) {
     free(map);
-    return NULL;
+    throw_oom(CLJ_MAP);
   }
   return (CljObject*)map;
 }

@@ -113,6 +113,17 @@ static void test_group_parser(void) {
 }
 
 // ============================================================================
+// BYTE ARRAY TESTS (from byte_array_tests.c)
+// ============================================================================
+
+// Forward declaration for byte array test runner
+extern void run_byte_array_tests(void);
+
+static void test_group_byte_array(void) {
+    run_byte_array_tests();
+}
+
+// ============================================================================
 // EXCEPTION TESTS (from exception_tests.c)
 // ============================================================================
 
@@ -605,6 +616,7 @@ static void run_data_tests(void) {
     test_group_seq();
     test_group_equal();
     test_group_memory();
+    test_group_byte_array();
 }
 
 static void run_control_tests(void) {
@@ -627,6 +639,7 @@ static void run_all_tests(void) {
     test_group_equal();  // Re-enabled with minimal test
     test_group_recur(); // Re-enabled - recur functionality is working
     test_group_debugging(); // Re-enabled for debugging
+    test_group_byte_array();
 }
 
 // ============================================================================
@@ -658,6 +671,8 @@ int main(int argc, char **argv) {
             run_for_loop_tests();
         } else if (strcmp(argv[1], "equal") == 0) {
             run_equal_tests();
+        } else if (strcmp(argv[1], "byte-array") == 0) {
+            test_group_byte_array();
         } else if (strcmp(argv[1], "core") == 0) {
             run_core_tests();
         } else if (strcmp(argv[1], "data") == 0) {

@@ -16,7 +16,10 @@ const char* clj_type_name(CljType type) {
         case CLJ_FUNC: return "Function";
         case CLJ_CLOSURE: return "Closure";
         case CLJ_EXCEPTION: return "Exception";
+        case CLJ_BYTE_ARRAY: return "ByteArray";
         case CLJ_SEQ: return "Sequence";
+        case CLJ_TRANSIENT_VECTOR: return "TransientVector";
+        case CLJ_TRANSIENT_MAP: return "TransientMap";
         case CLJ_UNKNOWN: return "Unknown";
         default: return "Unknown";
     }

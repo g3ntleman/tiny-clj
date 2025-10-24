@@ -247,13 +247,25 @@ void test_integer_overflow_detection(void) {
     
     // Test addition overflow
     printf("Testing addition overflow...\n");
-    CljObject *add_result = eval_string("(+ 2000000000 2000000000)", st);
-    TEST_ASSERT_NULL(add_result); // Should throw exception
+    CljObject *add_result = NULL;
+    TRY {
+        add_result = eval_string("(+ 2000000000 2000000000)", st);
+        TEST_FAIL_MESSAGE("Expected ArithmeticException for addition overflow");
+    } CATCH(ex) {
+        // Exception was thrown as expected
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
     
     // Test subtraction underflow
     printf("Testing subtraction underflow...\n");
-    CljObject *sub_result = eval_string("(- -2000000000 2000000000)", st);
-    TEST_ASSERT_NULL(sub_result); // Should throw exception
+    CljObject *sub_result = NULL;
+    TRY {
+        sub_result = eval_string("(- -2000000000 2000000000)", st);
+        TEST_FAIL_MESSAGE("Expected ArithmeticException for subtraction underflow");
+    } CATCH(ex) {
+        // Exception was thrown as expected
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
     
     // Clean up
     if (normal_result) {

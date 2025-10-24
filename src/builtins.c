@@ -11,6 +11,7 @@
 #include "value.h"
 #include "error_messages.h"
 #include "seq.h"
+#include "byte_array.h"
 
 
 ID nth2(ID *args, int argc) {
@@ -49,7 +50,6 @@ ID conj2(ID vec, ID val) {
         if (need > newcap) newcap = newcap > 0 ? newcap * 2 : 1;
         CljValue copy_val = make_vector(newcap, 0);
         CljObject *copy = (CljObject*)copy_val;
-        if (!copy) return NULL;
         CljPersistentVector *c = as_vector(copy);
         for (int i = 0; i < v->count; ++i) {
             c->data[i] = (RETAIN(v->data[i]), v->data[i]);
@@ -119,7 +119,6 @@ ID assoc3(ID *args, int argc) {
     } else {
         CljValue copy_val = make_vector(v->capacity, 0);
         CljObject *copy = (CljObject*)copy_val;
-        if (!copy) return OBJ_TO_ID(NULL);
         CljPersistentVector *c = as_vector(copy);
         for (int j = 0; j < v->count; ++j) {
             c->data[j] = (RETAIN(v->data[j]), v->data[j]);
@@ -321,10 +320,6 @@ ID native_array_map(ID *args, int argc) {
     }
     
     CljMap *map = (CljMap*)make_map(pair_count);
-    if (!map) {
-        // Return empty map instead of nil on allocation failure
-        return OBJ_TO_ID(make_map(0));
-    }
     
     // Add all key-value pairs
     for (int i = 0; i < argc; i += 2) {
@@ -696,6 +691,165 @@ ID native_div_variadic(ID *args, int argc) {
 
 // Arithmetic functions - native_*_variadic implement operations directly (no wrappers)
 
+// ============================================================================
+// BYTE ARRAY BUILTINS
+// ============================================================================
+
+ID native_byte_array(ID *args, int argc) {
+    if (argc != 1) {
+        throw_exception("IllegalArgumentException", "byte-array requires exactly 1 argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // If argument is a fixnum, create array with that size
+    if (IS_FIXNUM(args[0])) {
+        int size = AS_FIXNUM(args[0]);
+        if (size < 0) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "byte-array size must be non-negative, got %d", size);
+            return NULL;
+        }
+        return (ID)make_byte_array(size);
+    }
+    
+    // Otherwise, treat as sequence and create array from values
+    CljObject *seq = ID_TO_OBJ(args[0]);
+    if (!seq) {
+        throw_exception("IllegalArgumentException", "byte-array argument must be a number or sequence",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // For now, only support vectors as sequences
+    if (seq->type == CLJ_VECTOR) {
+        CljPersistentVector *vec = as_vector(seq);
+        CljValue arr = make_byte_array(vec->count);
+        
+        for (int i = 0; i < vec->count; i++) {
+            if (!IS_FIXNUM(vec->data[i])) {
+                RELEASE((CljObject*)arr);
+                throw_exception("IllegalArgumentException", "byte-array sequence elements must be numbers",
+                               __FILE__, __LINE__, 0);
+                return NULL;
+            }
+            int val = AS_FIXNUM(vec->data[i]);
+            if (val < 0 || val > 255) {
+                RELEASE((CljObject*)arr);
+                throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                        "byte values must be 0-255, got %d", val);
+                return NULL;
+            }
+            byte_array_set(arr, i, (uint8_t)val);
+        }
+        
+        return (ID)arr;
+    }
+    
+    throw_exception("IllegalArgumentException", "byte-array currently only supports vectors as sequences",
+                   __FILE__, __LINE__, 0);
+    return NULL;
+}
+
+ID native_aget(ID *args, int argc) {
+    if (argc != 2) {
+        throw_exception("IllegalArgumentException", "aget requires exactly 2 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *arr = ID_TO_OBJ(args[0]);
+    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+        throw_exception("IllegalArgumentException", "aget first argument must be a byte-array",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (!IS_FIXNUM(args[1])) {
+        throw_exception("IllegalArgumentException", "aget index must be a number",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int index = AS_FIXNUM(args[1]);
+    uint8_t value = byte_array_get((CljValue)arr, index);
+    return fixnum(value);
+}
+
+ID native_aset(ID *args, int argc) {
+    if (argc != 3) {
+        throw_exception("IllegalArgumentException", "aset requires exactly 3 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *arr = ID_TO_OBJ(args[0]);
+    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+        throw_exception("IllegalArgumentException", "aset first argument must be a byte-array",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (!IS_FIXNUM(args[1])) {
+        throw_exception("IllegalArgumentException", "aset index must be a number",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (!IS_FIXNUM(args[2])) {
+        throw_exception("IllegalArgumentException", "aset value must be a number",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int index = AS_FIXNUM(args[1]);
+    int value = AS_FIXNUM(args[2]);
+    
+    if (value < 0 || value > 255) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "byte value must be 0-255, got %d", value);
+        return NULL;
+    }
+    
+    byte_array_set((CljValue)arr, index, (uint8_t)value);
+    return args[2]; // Return the value (Clojure-compatible)
+}
+
+ID native_alength(ID *args, int argc) {
+    if (argc != 1) {
+        throw_exception("IllegalArgumentException", "alength requires exactly 1 argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *arr = ID_TO_OBJ(args[0]);
+    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+        throw_exception("IllegalArgumentException", "alength argument must be a byte-array",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int length = byte_array_length((CljValue)arr);
+    return fixnum(length);
+}
+
+ID native_aclone(ID *args, int argc) {
+    if (argc != 1) {
+        throw_exception("IllegalArgumentException", "aclone requires exactly 1 argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *arr = ID_TO_OBJ(args[0]);
+    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+        throw_exception("IllegalArgumentException", "aclone argument must be a byte-array",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return (ID)byte_array_clone((CljValue)arr);
+}
+
 // Helper function to register a builtin in current namespace (DRY principle)
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     EvalState *st = evalstate();
@@ -741,4 +895,11 @@ void register_builtins() {
     register_builtin_in_namespace("vals", native_vals);
     register_builtin_in_namespace("test-native", native_if);
     register_builtin_in_namespace("println", native_println);
+    
+    // Byte array functions
+    register_builtin_in_namespace("byte-array", native_byte_array);
+    register_builtin_in_namespace("aget", native_aget);
+    register_builtin_in_namespace("aset", native_aset);
+    register_builtin_in_namespace("alength", native_alength);
+    register_builtin_in_namespace("aclone", native_aclone);
 }

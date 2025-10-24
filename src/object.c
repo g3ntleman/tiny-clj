@@ -147,7 +147,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
-    if (!func) return NULL;
+    if (!func) throw_oom(CLJ_CLOSURE);
     
     func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
     func->base.rc = 1;
@@ -161,7 +161,7 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
         func->params = (CljObject**)malloc(sizeof(CljObject*) * param_count);
         if (!func->params) {
             DEALLOC(func);
-            return NULL;
+            throw_oom(CLJ_CLOSURE);
         }
         for (int i = 0; i < param_count; i++) {
             func->params[i] = RETAIN(params[i]);
@@ -173,14 +173,14 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     return (CljObject*)func;
 }
 
-CljObject* make_list(CljObject *first, CljObject *rest) {
+CljObject* make_list(ID first, CljList *rest) {
     CljList *list = ALLOC(CljList, 1);
-    if (!list) return NULL;
+    if (!list) throw_oom(CLJ_LIST);
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;
-    list->first = RETAIN(first);
-    list->rest = RETAIN(rest);
+    list->first = RETAIN((CljObject*)first);
+    list->rest = RETAIN((CljObject*)rest);
     
     return (CljObject*)list;
 }
@@ -467,6 +467,33 @@ char* to_string(CljObject *v) {
                     result = strdup(buf);
                 }
                 return result;
+            }
+
+        case CLJ_BYTE_ARRAY:
+            {
+                CljByteArray *ba = as_byte_array(v);
+                if (!ba) return strdup("#<byte-array>");
+                
+                // Show first few bytes in hex format
+                char buf[256];
+                int preview_len = ba->length < 8 ? ba->length : 8;
+                int offset = snprintf(buf, sizeof(buf), "#<byte-array [");
+                
+                for (int i = 0; i < preview_len; i++) {
+                    offset += snprintf(buf + offset, sizeof(buf) - offset, 
+                                      "0x%02x", ba->data[i]);
+                    if (i < preview_len - 1) {
+                        offset += snprintf(buf + offset, sizeof(buf) - offset, " ");
+                    }
+                }
+                
+                if (ba->length > 8) {
+                    snprintf(buf + offset, sizeof(buf) - offset, " ...]>");
+                } else {
+                    snprintf(buf + offset, sizeof(buf) - offset, "]>");
+                }
+                
+                return strdup(buf);
             }
 
         default:

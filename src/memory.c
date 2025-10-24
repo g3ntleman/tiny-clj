@@ -9,6 +9,7 @@
 #include "object.h"
 #include "vector.h"
 #include "memory_profiler.h"
+#include "types.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -570,6 +571,15 @@ static void release_object_deep(CljObject *v) {
             // Native functions are static - no cleanup needed
             break;
             
+        case CLJ_BYTE_ARRAY:
+            {
+                CljByteArray *ba = as_byte_array(v);
+                if (ba && ba->data) {
+                    free(ba->data);
+                }
+            }
+            break;
+            
         // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
             
         default:
@@ -601,4 +611,15 @@ bool is_pointer_on_stack(const void *ptr) {
     // TODO: Implement proper stack detection without causing issues
     (void)ptr; // Suppress unused parameter warning
     return false;
+}
+
+// ============================================================================
+// OUT OF MEMORY HELPER
+// ============================================================================
+
+void throw_oom(CljType type) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Failed to allocate %s", clj_type_name(type));
+    throw_exception("OutOfMemoryError", msg, __FILE__, __LINE__, 0);
+    abort(); // Ensure no return
 }

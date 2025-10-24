@@ -44,7 +44,7 @@ CljValue make_vector(int capacity, int is_mutable) {
     }
     CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
     if (!vec)
-        return NULL;
+        throw_oom(CLJ_VECTOR);
 
     vec->base.type = CLJ_VECTOR;
     vec->base.rc = 1;
@@ -55,7 +55,7 @@ CljValue make_vector(int capacity, int is_mutable) {
         vec->data = (CljObject **)calloc((size_t)capacity, sizeof(CljObject *));
         if (!vec->data) {
             free(vec);
-            return NULL;
+            throw_oom(CLJ_VECTOR);
         }
     } else {
         vec->data = NULL;
@@ -79,8 +79,6 @@ CljValue vector_conj(CljValue vec, CljValue item) {
 
     CljValue new_vec_obj = make_vector(new_capacity, 0);
     CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
-    if (!new_vec)
-        return NULL;
 
     for (int i = 0; i < old_vec->count; i++) {
         if (old_vec->data[i]) {
@@ -175,7 +173,6 @@ CljValue persistent(CljValue tvec) {
     // Clojure-Semantik: Erstelle NEUE persistent collection
     CljValue new_vec = make_vector(v->capacity, 0);  // Neue Instanz
     CljPersistentVector *new_v = as_vector(new_vec);
-    if (!new_v) return NULL;
     
     // Kopiere alle Elemente
     for (int i = 0; i < v->count; i++) {

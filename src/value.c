@@ -53,7 +53,7 @@ CljValue make_string_impl(const char *str) {
     }
     // Allocate CljObject + space for char* pointer using profiling-aware alloc
     CljObject *v = (CljObject*)alloc(sizeof(CljObject) + sizeof(char*), 1, CLJ_STRING);
-    if (!v) return NULL;
+    if (!v) throw_oom(CLJ_STRING);
     v->type = CLJ_STRING;
     v->rc = 1;
     // Store string pointer after CljObject header
