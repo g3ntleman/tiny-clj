@@ -1,20 +1,20 @@
 #include "tests_common.h"
 
-void test_fixed_basic_creation(void) {
+TEST(test_fixed_basic_creation) {
     // Test basic creation and conversion
     CljValue fixed_val = fixed(1.5f);
     TEST_ASSERT_TRUE(is_fixed(fixed_val));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.5f, as_fixed(fixed_val));
 }
 
-void test_fixed_negative_values(void) {
+TEST(test_fixed_negative_values) {
     // Test negative values
     CljValue fixed_val = fixed(-2.25f);
     TEST_ASSERT_TRUE(is_fixed(fixed_val));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, -2.25f, as_fixed(fixed_val));
 }
 
-void test_fixed_precision(void) {
+TEST(test_fixed_precision) {
     // Test precision: 0.1 + 0.2 should be close to 0.3
     CljValue a = fixed(0.1f);
     CljValue b = fixed(0.2f);
@@ -22,7 +22,7 @@ void test_fixed_precision(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.3f, sum);
 }
 
-void test_fixed_multiplication_raw(void) {
+TEST(test_fixed_multiplication_raw) {
     // Test multiplication using raw fixed-point arithmetic
     // 1.5 * 2.5 = 3.75
     CljValue a = fixed(1.5f);
@@ -34,7 +34,7 @@ void test_fixed_multiplication_raw(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.75f, result_f);
 }
 
-void test_fixed_mixed_type_promotion(void) {
+TEST(test_fixed_mixed_type_promotion) {
     // Test mixed type: Fixnum + Fixed
     // 1 (Fixnum) + 0.5 (Fixed) = 1.5
     CljValue fixnum_val = fixnum(1);
@@ -46,7 +46,7 @@ void test_fixed_mixed_type_promotion(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 1.5f, result);
 }
 
-void test_fixed_saturation_max(void) {
+TEST(test_fixed_saturation_max) {
     // Test saturation at maximum value
     CljValue max = fixed(32767.0f);
     TEST_ASSERT_TRUE(is_fixed(max));
@@ -54,7 +54,7 @@ void test_fixed_saturation_max(void) {
     TEST_ASSERT_TRUE(value >= 32767.0f);
 }
 
-void test_fixed_saturation_min(void) {
+TEST(test_fixed_saturation_min) {
     // Test saturation at minimum value
     CljValue min = fixed(-32768.0f);
     TEST_ASSERT_TRUE(is_fixed(min));
@@ -62,7 +62,7 @@ void test_fixed_saturation_min(void) {
     TEST_ASSERT_TRUE(value <= -32768.0f);
 }
 
-void test_fixed_division_raw(void) {
+TEST(test_fixed_division_raw) {
     // Test division using raw fixed-point arithmetic
     // 1.0 / 3.0 ≈ 0.333
     CljValue a = fixed(1.0f);
@@ -74,7 +74,7 @@ void test_fixed_division_raw(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.333f, result_f);
 }
 
-void test_fixed_edge_cases(void) {
+TEST(test_fixed_edge_cases) {
     // Test edge cases
     CljValue zero = fixed(0.0f);
     TEST_ASSERT_TRUE(is_fixed(zero));
@@ -87,14 +87,14 @@ void test_fixed_edge_cases(void) {
     TEST_ASSERT_TRUE(value >= 0.0f);
 }
 
-void test_fixed_tag_consistency(void) {
+TEST(test_fixed_tag_consistency) {
     // Test that the tag is correctly set
     CljValue fixed_val = fixed(42.5f);
     uint8_t tag = get_tag(fixed_val);
     TEST_ASSERT_EQUAL(TAG_FIXED, tag);
 }
 
-void test_fixed_addition_builtin(void) {
+TEST(test_fixed_addition_builtin) {
     // Test addition using builtin functions
     CljValue a = fixed(1.5f);
     CljValue b = fixed(2.25f);
@@ -112,7 +112,7 @@ void test_fixed_addition_builtin(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.75f, result);
 }
 
-void test_fixed_subtraction_builtin(void) {
+TEST(test_fixed_subtraction_builtin) {
     // Test subtraction using builtin functions
     CljValue a = fixed(5.0f);
     CljValue b = fixed(2.5f);
@@ -130,7 +130,7 @@ void test_fixed_subtraction_builtin(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, result);
 }
 
-void test_fixed_mixed_addition(void) {
+TEST(test_fixed_mixed_addition) {
     // Test mixed type addition: Fixnum + Fixed
     CljValue fixnum_val = fixnum(10);
     CljValue fixed_val = fixed(0.5f);
@@ -144,7 +144,7 @@ void test_fixed_mixed_addition(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 10.5f, result);
 }
 
-void test_fixed_negative_addition(void) {
+TEST(test_fixed_negative_addition) {
     // Test negative number addition
     CljValue a = fixed(-1.5f);
     CljValue b = fixed(2.0f);
@@ -157,7 +157,7 @@ void test_fixed_negative_addition(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.5f, result);
 }
 
-void test_fixed_multiplication_builtin(void) {
+TEST(test_fixed_multiplication_builtin) {
     // Test multiplication using builtin functions
     CljValue a = fixed(1.5f);
     CljValue b = fixed(2.0f);
@@ -175,7 +175,7 @@ void test_fixed_multiplication_builtin(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.0f, result);
 }
 
-void test_fixed_division_builtin(void) {
+TEST(test_fixed_division_builtin) {
     // Test division using builtin functions
     CljValue a = fixed(6.0f);
     CljValue b = fixed(2.0f);
@@ -193,7 +193,7 @@ void test_fixed_division_builtin(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.0f, result);
 }
 
-void test_fixed_mixed_multiplication(void) {
+TEST(test_fixed_mixed_multiplication) {
     // Test mixed type multiplication: Fixnum * Fixed
     CljValue fixnum_val = fixnum(4);
     CljValue fixed_val = fixed(0.5f);
@@ -207,7 +207,7 @@ void test_fixed_mixed_multiplication(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.0f, result);
 }
 
-void test_fixed_division_by_zero(void) {
+TEST(test_fixed_division_by_zero) {
     // Test division by zero handling
     CljValue a = fixed(1.0f);
     CljValue b = fixed(0.0f);
@@ -227,7 +227,7 @@ void test_fixed_division_by_zero(void) {
     }
 }
 
-void test_fixed_complex_arithmetic(void) {
+TEST(test_fixed_complex_arithmetic) {
     // Test complex arithmetic: (1.5 + 2.5) * 0.5 = 2.0
     CljValue a = fixed(1.5f);
     CljValue b = fixed(2.5f);
@@ -246,25 +246,6 @@ void test_fixed_complex_arithmetic(void) {
 }
 
 // Register all tests
-REGISTER_TEST(test_fixed_basic_creation)
-REGISTER_TEST(test_fixed_negative_values)
-REGISTER_TEST(test_fixed_precision)
-REGISTER_TEST(test_fixed_multiplication_raw)
-REGISTER_TEST(test_fixed_mixed_type_promotion)
-REGISTER_TEST(test_fixed_saturation_max)
-REGISTER_TEST(test_fixed_saturation_min)
-REGISTER_TEST(test_fixed_division_raw)
-REGISTER_TEST(test_fixed_edge_cases)
-REGISTER_TEST(test_fixed_tag_consistency)
-REGISTER_TEST(test_fixed_addition_builtin)
-REGISTER_TEST(test_fixed_subtraction_builtin)
-REGISTER_TEST(test_fixed_mixed_addition)
-REGISTER_TEST(test_fixed_negative_addition)
-REGISTER_TEST(test_fixed_multiplication_builtin)
-REGISTER_TEST(test_fixed_division_builtin)
-REGISTER_TEST(test_fixed_mixed_multiplication)
-REGISTER_TEST(test_fixed_division_by_zero)
-REGISTER_TEST(test_fixed_complex_arithmetic)
 
 // Test for fixed-point overflow detection
 TEST(test_fixed_overflow_detection) {

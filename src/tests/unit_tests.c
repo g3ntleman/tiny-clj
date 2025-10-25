@@ -21,7 +21,7 @@ int load_clojure_core(EvalState *st);
 // BASIC FUNCTIONALITY TESTS
 // ============================================================================
 
-void test_list_count(void) {
+TEST(test_list_count) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test null pointer
@@ -38,7 +38,7 @@ void test_list_count(void) {
     }
 }
 
-void test_list_creation(void) {
+TEST {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -63,7 +63,7 @@ void test_list_creation(void) {
     // Memory is automatically managed by eval_string
 }
 
-void test_symbol_creation(void) {
+TEST {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -81,7 +81,7 @@ void test_symbol_creation(void) {
     // Memory is automatically managed by eval_string
 }
 
-void test_string_creation(void) {
+TEST {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -1583,22 +1583,3 @@ void test_group_debugging(void) {
 // ============================================================================
 
 // Register all tests
-REGISTER_TEST(test_list_count)
-REGISTER_TEST(test_list_creation)
-REGISTER_TEST(test_symbol_creation)
-REGISTER_TEST(test_string_creation)
-REGISTER_TEST(test_vector_creation)
-REGISTER_TEST(test_map_creation)
-REGISTER_TEST(test_array_map_builtin)
-REGISTER_TEST(test_integer_creation)
-REGISTER_TEST(test_float_creation)
-REGISTER_TEST(test_nil_creation)
-REGISTER_TEST(test_cljvalue_immediate_helpers)
-REGISTER_TEST(test_cljvalue_vector_api)
-REGISTER_TEST(test_cljvalue_transient_vector)
-REGISTER_TEST(test_cljvalue_clojure_semantics)
-REGISTER_TEST(test_cljvalue_wrapper_functions)
-REGISTER_TEST(test_cljvalue_immediates_fixnum)
-REGISTER_TEST(test_cljvalue_immediates_char)
-REGISTER_TEST(test_cljvalue_immediates_special)
-REGISTER_TEST(test_cljvalue_immediates_fixed)

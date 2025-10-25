@@ -160,8 +160,8 @@ void release(CljObject *v) {
         return;
     }
     
-    // Skip native functions (they are static)
-    if (is_type(v, CLJ_FUNC)) {
+    // Skip native functions and closures (they are static)
+    if (is_type(v, CLJ_FUNC) || is_type(v, CLJ_CLOSURE)) {
         return;
     }
     

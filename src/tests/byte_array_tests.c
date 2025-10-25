@@ -10,7 +10,7 @@
 // TEST CASES
 // ============================================================================
 
-void test_byte_array_creation(void) {
+TEST(test_byte_array_creation) {
     // Test creating byte array with size
     CljValue arr = make_byte_array(10);
     TEST_ASSERT_NOT_NULL(arr);
@@ -28,7 +28,7 @@ void test_byte_array_creation(void) {
     RELEASE((CljObject*)arr);
 }
 
-void test_byte_array_from_bytes(void) {
+TEST(test_byte_array_from_bytes) {
     // Test creating byte array from existing data
     uint8_t data[] = {1, 2, 3, 4, 5};
     CljValue arr = make_byte_array_from_bytes(data, 5);
@@ -44,7 +44,7 @@ void test_byte_array_from_bytes(void) {
     RELEASE((CljObject*)arr);
 }
 
-void test_byte_array_get_set(void) {
+TEST(test_byte_array_get_set) {
     // Test reading and writing bytes
     CljValue arr = make_byte_array(5);
     TEST_ASSERT_NOT_NULL(arr);
@@ -66,7 +66,7 @@ void test_byte_array_get_set(void) {
     RELEASE((CljObject*)arr);
 }
 
-void test_byte_array_length(void) {
+TEST(test_byte_array_length) {
     // Test length function
     CljValue arr1 = make_byte_array(0);
     TEST_ASSERT_EQUAL_INT(0, byte_array_length(arr1));
@@ -81,7 +81,7 @@ void test_byte_array_length(void) {
     RELEASE((CljObject*)arr3);
 }
 
-void test_byte_array_clone(void) {
+TEST(test_byte_array_clone) {
     // Test cloning
     CljValue arr1 = make_byte_array(5);
     byte_array_set(arr1, 0, 10);
@@ -109,7 +109,7 @@ void test_byte_array_clone(void) {
     RELEASE((CljObject*)arr2);
 }
 
-void test_byte_array_copy_from(void) {
+TEST(test_byte_array_copy_from) {
     // Test copying from C array to byte array
     CljValue arr = make_byte_array(10);
     uint8_t data[] = {1, 2, 3, 4, 5};
@@ -128,7 +128,7 @@ void test_byte_array_copy_from(void) {
     RELEASE((CljObject*)arr);
 }
 
-void test_byte_array_copy_to(void) {
+TEST(test_byte_array_copy_to) {
     // Test copying from byte array to C array
     CljValue arr = make_byte_array(5);
     for (int i = 0; i < 5; i++) {
@@ -145,7 +145,7 @@ void test_byte_array_copy_to(void) {
     RELEASE((CljObject*)arr);
 }
 
-void test_byte_array_copy_between(void) {
+TEST(test_byte_array_copy_between) {
     // Test copying between two byte arrays
     CljValue src = make_byte_array(10);
     CljValue dest = make_byte_array(10);
@@ -170,7 +170,7 @@ void test_byte_array_copy_between(void) {
     RELEASE((CljObject*)dest);
 }
 
-void test_byte_array_slice(void) {
+TEST(test_byte_array_slice) {
     // Test slicing
     CljValue arr = make_byte_array(10);
     for (int i = 0; i < 10; i++) {
@@ -190,7 +190,7 @@ void test_byte_array_slice(void) {
     RELEASE((CljObject*)slice);
 }
 
-void test_byte_array_id_operations(void) {
+TEST(test_byte_array_id_operations) {
     // Test reading and writing 32-bit/64-bit IDs (raw pointer values)
     // Note: ID is a void* pointer, so size depends on platform (4 bytes on 32-bit, 8 bytes on 64-bit)
     CljValue arr = make_byte_array(32); // Ensure enough space for 64-bit pointers
@@ -220,7 +220,7 @@ void test_byte_array_id_operations(void) {
     RELEASE((CljObject*)arr);
 }
 
-void test_byte_array_memory_management(void) {
+TEST(test_byte_array_memory_management) {
     // Test reference counting
     CljValue arr = make_byte_array(10);
     TEST_ASSERT_NOT_NULL(arr);
@@ -237,7 +237,7 @@ void test_byte_array_memory_management(void) {
     RELEASE(obj); // Final release
 }
 
-void test_byte_array_empty(void) {
+TEST(test_byte_array_empty) {
     // Test edge case: zero-length array
     CljValue arr = make_byte_array(0);
     TEST_ASSERT_NOT_NULL(arr);
@@ -264,20 +264,5 @@ void run_byte_array_tests(void) {
     RUN_TEST(test_byte_array_copy_between);
     RUN_TEST(test_byte_array_slice);
     RUN_TEST(test_byte_array_id_operations);
-    RUN_TEST(test_byte_array_memory_management);
-    RUN_TEST(test_byte_array_empty);
 }
 
-// Register all tests
-REGISTER_TEST(test_byte_array_creation)
-REGISTER_TEST(test_byte_array_from_bytes)
-REGISTER_TEST(test_byte_array_get_set)
-REGISTER_TEST(test_byte_array_length)
-REGISTER_TEST(test_byte_array_clone)
-REGISTER_TEST(test_byte_array_copy_from)
-REGISTER_TEST(test_byte_array_copy_to)
-REGISTER_TEST(test_byte_array_copy_between)
-REGISTER_TEST(test_byte_array_slice)
-REGISTER_TEST(test_byte_array_id_operations)
-REGISTER_TEST(test_byte_array_memory_management)
-REGISTER_TEST(test_byte_array_empty)

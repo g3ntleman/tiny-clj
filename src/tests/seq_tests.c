@@ -16,7 +16,7 @@
 // SEQ CREATION TESTS
 // ============================================================================
 
-void test_seq_create_list(void) {
+TEST(test_seq_create_list) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test with nil first
@@ -25,7 +25,7 @@ void test_seq_create_list(void) {
     }
 }
 
-void test_seq_create_vector(void) {
+TEST(test_seq_create_vector) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
@@ -50,7 +50,7 @@ void test_seq_create_vector(void) {
     }
 }
 
-void test_seq_create_string(void) {
+TEST(test_seq_create_string) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test string
@@ -69,7 +69,7 @@ void test_seq_create_string(void) {
     }
 }
 
-void test_seq_create_map(void) {
+TEST(test_seq_create_map) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test map
@@ -88,7 +88,7 @@ void test_seq_create_map(void) {
 // SEQ ITERATION TESTS
 // ============================================================================
 
-void test_seq_first(void) {
+TEST(test_seq_first) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
@@ -110,7 +110,7 @@ void test_seq_first(void) {
     }
 }
 
-void test_seq_rest(void) {
+TEST {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
@@ -131,7 +131,7 @@ void test_seq_rest(void) {
     }
 }
 
-void test_seq_next(void) {
+TEST(test_seq_next) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
@@ -156,7 +156,7 @@ void test_seq_next(void) {
 // SEQ EQUALITY TESTS
 // ============================================================================
 
-void test_seq_equality(void) {
+TEST(test_seq_next) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create two identical vectors
@@ -194,11 +194,8 @@ void test_seq_equality(void) {
 // ============================================================================
 
 // Register all tests
-REGISTER_TEST(test_seq_create_list)
-REGISTER_TEST(test_seq_create_vector)
-REGISTER_TEST(test_seq_create_string)
-REGISTER_TEST(test_seq_create_map)
-REGISTER_TEST(test_seq_first)
-REGISTER_TEST(test_seq_rest)
-REGISTER_TEST(test_seq_next)
-REGISTER_TEST(test_seq_equality)
+(test_seq_create_list)
+(test_seq_create_vector)
+(test_seq_create_string)
+(test_seq_create_map)
+(test_seq_first)
