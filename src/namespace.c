@@ -7,18 +7,21 @@
 #include "function_call.h"
 #include "exception.h"
 #include "symbol.h"
+#include "runtime.h"
 
-// Global namespace registry
-CljNamespace *ns_registry = NULL;
+// Direkte Zugriffe auf g_runtime (ohne Makros)
+// #define ns_registry ((CljNamespace*)g_runtime.ns_registry)
+// #define clojure_core_cache ((CljNamespace*)g_runtime.clojure_core_cache)
 
-// Cached reference to clojure.core for priority lookup
-static CljNamespace *clojure_core_cache = NULL;
+// Alte Definitionen auskommentieren:
+// CljNamespace *ns_registry = NULL;
+// static CljNamespace *clojure_core_cache = NULL;
 
 CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!name) return NULL;
     
     // First, look for an existing namespace
-    CljNamespace *cur = ns_registry;
+    CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
         if (cur->name) {
             CljSymbol *name_sym = as_symbol(cur->name);
@@ -36,12 +39,12 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     ns->name = intern_symbol(NULL, name);
     ns->mappings = (CljMap*)make_map(64); // Increased capacity for clojure.core // Initial capacity
     ns->filename = file ? strdup(file) : NULL;
-    ns->next = ns_registry;
-    ns_registry = ns;
+    ns->next = (CljNamespace*)g_runtime.ns_registry;
+    g_runtime.ns_registry = (void*)ns;
     
     // Cache clojure.core for priority lookup
     if (strcmp(name, "clojure.core") == 0) {
-        clojure_core_cache = ns;
+        g_runtime.clojure_core_cache = (void*)ns;
     }
     
     return ns;
@@ -60,14 +63,14 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
 
     // OPTIMIZATION: Priority-based namespace search
     // 1. Search clojure.core first (most common) - use cache for O(1) lookup
-    if (!clojure_core_cache) {
+    if (!g_runtime.clojure_core_cache) {
         // Find and cache clojure.core namespace
-        CljNamespace *cur = ns_registry;
+        CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
         while (cur) {
             if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
                 CljSymbol *name_sym = as_symbol(cur->name);
                 if (name_sym && strcmp(name_sym->name, "clojure.core") == 0) {
-                    clojure_core_cache = cur;
+                    g_runtime.clojure_core_cache = (void*)cur;
                     break;
                 }
             }
@@ -76,15 +79,15 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     }
     
     // Search clojure.core first if cached
-    if (clojure_core_cache && clojure_core_cache->mappings) {
-        v = (CljObject*)map_get((CljValue)clojure_core_cache->mappings, (CljValue)sym);
+    if (g_runtime.clojure_core_cache && ((CljNamespace*)g_runtime.clojure_core_cache)->mappings) {
+        v = (CljObject*)map_get((CljValue)((CljNamespace*)g_runtime.clojure_core_cache)->mappings, (CljValue)sym);
         if (v) return (ID)v;
     }
     
     // 2. Search other namespaces (excluding clojure.core to avoid double search)
-    CljNamespace *cur = ns_registry;
+    CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
-        if (cur != clojure_core_cache && cur->mappings) {
+        if (cur != (CljNamespace*)g_runtime.clojure_core_cache && cur->mappings) {
             v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
             if (v) return (ID)v;
         }
@@ -110,21 +113,21 @@ void ns_register(CljNamespace *ns) {
     if (!ns) return;
     
     // Check if namespace is already registered
-    CljNamespace *cur = ns_registry;
+    CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
         if (cur == ns) return; // Already registered
         cur = cur->next;
     }
     
     // Add namespace to registry
-    ns->next = ns_registry;
-    ns_registry = ns;
+    ns->next = (CljNamespace*)g_runtime.ns_registry;
+    g_runtime.ns_registry = (void*)ns;
 }
 
 CljNamespace* ns_find(const char *name) {
     if (!name) return NULL;
     
-    CljNamespace *cur = ns_registry;
+    CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
         if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
             CljSymbol *sym = as_symbol(cur->name);
@@ -138,21 +141,17 @@ CljNamespace* ns_find(const char *name) {
 }
 
 void ns_cleanup() {
-    // Namespaces should live until program end!
-    // Free only the namespace structs, NOT names and mappings
-    CljNamespace *cur = ns_registry;
+    CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
         CljNamespace *next = cur->next;
-        
-        // DO NOT: if (cur->name) release(cur->name);
-        // DO NOT: if (cur->mappings) release(cur->mappings);
-        // Names and mappings remain allocated until program end
         if (cur->filename) free((void*)cur->filename);
+        // ADDED: Freigebe mappings
+        if (cur->mappings) RELEASE((CljObject*)cur->mappings);
         free(cur);
-        
         cur = next;
     }
-    ns_registry = NULL;
+    g_runtime.ns_registry = NULL;
+    g_runtime.clojure_core_cache = NULL;
 }
 
 // EvalState functions

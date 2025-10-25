@@ -18,6 +18,7 @@
 #include "../byte_array.h"
 #include "../exception.h"
 #include "../meta.h"
+#include "../runtime.h"
 #include <stdio.h>
 #include <string.h>
 #include "../clj_strings.h"
@@ -40,42 +41,28 @@ void test_embedded_array_performance(void);
 static bool builtins_registered = false;
 
 void setUp(void) {
-    // Global setup for each test
-    // NO autorelease pools in setUp/tearDown - incompatible with setjmp/longjmp
-    // Tests must use manual memory management or WITH_AUTORELEASE_POOL
+    runtime_init();
     
-    init_special_symbols();
-    meta_registry_init();
+    if (!g_runtime.builtins_registered) {
+        init_special_symbols();
+        meta_registry_init();
+        register_builtins();
+        g_runtime.builtins_registered = true;
+    }
     
     MEMORY_PROFILER_INIT();
-    // Enable memory profiling for tests
     enable_memory_profiling(true);
-    // Disable verbose mode for clean test output (only show errors/leaks)
     set_memory_verbose_mode(false);
-    
-    // Register builtin functions once for all tests
-    if (!builtins_registered) {
-        register_builtins();
-        builtins_registered = true;
-    }
 }
 
 void tearDown(void) {
-    // Global teardown for each test
-    // NO autorelease pools in setUp/tearDown - incompatible with setjmp/longjmp
-    // Tests must use manual memory management or WITH_AUTORELEASE_POOL
-    
-    symbol_table_cleanup();
-    meta_registry_cleanup();
-    // Only print memory statistics if there are leaks or in verbose mode
     if (g_memory_stats.memory_leaks > 0 || g_memory_verbose_mode) {
         memory_profiler_print_stats("Test Complete");
     }
     memory_profiler_check_leaks("Test Complete");
-    // Reset memory profiler for next test to isolate memory leaks per test
     memory_profiler_reset();
-    // Cleanup memory profiler
-    memory_profiler_cleanup();
+    
+    runtime_free();
 }
 
 // ============================================================================

@@ -6,6 +6,7 @@
  */
 
 #include "memory.h"
+#include "runtime.h"
 #include "object.h"
 #include "vector.h"
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
@@ -88,10 +89,12 @@ struct CljObjectPool {
     // No prev pointer needed - using array-based stack instead
 };
 
-// Array-based pool stack (exception-safe, survives longjmp)
+// Array-based pool stack (exception-safe, survives longjmp) - jetzt in g_runtime
 #define MAX_POOL_DEPTH 24
-static CljObjectPool *g_pool_stack[MAX_POOL_DEPTH] = {NULL};
-static int g_pool_stack_top = -1;  // -1 = empty stack
+// static CljObjectPool *g_pool_stack[MAX_POOL_DEPTH] = {NULL};
+// static int g_pool_stack_top = -1;  // -1 = empty stack
+#define g_pool_stack ((CljObjectPool**)g_runtime.pool_stack)
+#define g_pool_stack_top (g_runtime.pool_stack_top)
 
 // Forward declaration
 static void release_object_deep(CljObject *v);

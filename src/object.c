@@ -18,6 +18,7 @@
 #include <stdarg.h>
 #include "object.h"
 #include "memory.h"
+#include "runtime.h"
 #include "seq.h"
 #include "runtime.h"
 #include "map.h"
@@ -664,15 +665,16 @@ bool clj_equal(CljValue a, CljValue b) {
 
 // Map functions are implemented in map.c
 
-// Symbol table for real interning
-SymbolEntry *symbol_table = NULL;
+// Symbol table for real interning - jetzt in g_runtime
+// SymbolEntry *symbol_table = NULL;
+// #define symbol_table ((SymbolEntry*)g_runtime.symbol_table)
 
 // Hash function for symbol names (unused)
 // Removed to silence unused-function warnings
 
 // Find symbol in the table
 static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
-    SymbolEntry *entry = symbol_table;
+    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
     while (entry) {
         if (entry->ns && ns) {
             if (strcmp(entry->ns, ns) == 0 && strcmp(entry->name, name) == 0) {
@@ -696,8 +698,8 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbo
     entry->ns = ns ? strdup(ns) : NULL;
     entry->name = strdup(name);
     entry->symbol = symbol;
-    entry->next = symbol_table;
-    symbol_table = entry;
+    entry->next = (SymbolEntry*)g_runtime.symbol_table;
+    g_runtime.symbol_table = (void*)entry;
     
     return entry;
 }
@@ -731,27 +733,21 @@ CljObject* intern_symbol_global(const char *name) {
 // This function will be eliminated by dead-code-elimination in production builds
 // since it's only called from test files
 void symbol_table_cleanup() {
-// Symbols should live until program end!
-// Free only SymbolEntry structures, NOT the symbols themselves
-    SymbolEntry *entry = symbol_table;
+    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
     while (entry) {
         SymbolEntry *next = entry->next;
-        
         if (entry->ns) free(entry->ns);
         if (entry->name) free(entry->name);
-        // NICHT: if (entry->symbol) release(entry->symbol);
-        // Symbole bleiben im Speicher bis zum Programmende
         free(entry);
-        
         entry = next;
     }
-    symbol_table = NULL;
+    g_runtime.symbol_table = NULL;
 }
 
 // Number of symbols in the table
 int symbol_count() {
     int count = 0;
-    SymbolEntry *entry = symbol_table;
+    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
     while (entry) {
         count++;
         entry = entry->next;
@@ -760,44 +756,45 @@ int symbol_count() {
 }
 
 #ifdef ENABLE_META
-// Meta registry for metadata
-CljObject *meta_registry = NULL;
+// Meta registry for metadata - jetzt in g_runtime
+// CljObject *meta_registry = NULL;
+// #define meta_registry ((CljObject*)g_runtime.meta_registry)
 
 void meta_registry_init() {
     {
-        meta_registry = (CljObject*)make_map(32); // Initial capacity for metadata entries
+        g_runtime.meta_registry = (void*)make_map(32); // Initial capacity for metadata entries
     }
 }
 
 void meta_registry_cleanup() {
-    // Meta registry should live until program end!
-    // DO NOT: release(meta_registry);
-    // Meta registry stays allocated until program end
-    meta_registry = NULL;
+    if (g_runtime.meta_registry) {
+        RELEASE((CljObject*)g_runtime.meta_registry);  // ADDED
+    }
+    g_runtime.meta_registry = NULL;
 }
 
 void meta_set(CljObject *v, CljObject *meta) {
     if (!v) return;
     
     meta_registry_init();
-    if (!meta_registry) return;
+    if (!g_runtime.meta_registry) return;
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    map_assoc(meta_registry, v, meta);
+    map_assoc((CljValue)g_runtime.meta_registry, v, meta);
 }
 
 ID meta_get(CljObject *v) {
-    if (!v || !meta_registry) return NULL;
+    if (!v || !g_runtime.meta_registry) return NULL;
     
-    return (ID)map_get((CljValue)meta_registry, (CljValue)v);
+    return (ID)map_get((CljValue)g_runtime.meta_registry, (CljValue)v);
 }
 
 void meta_clear(CljObject *v) {
-    if (!v || !meta_registry) return;
+    if (!v || !g_runtime.meta_registry) return;
     
     // Find the entry and remove it using KV macros
-    CljMap *map = (CljMap*)meta_registry;
+    CljMap *map = (CljMap*)g_runtime.meta_registry;
     int index = KV_FIND_INDEX(map->data, map->count, v);
     if (index >= 0) {
         // Entry found; remove it

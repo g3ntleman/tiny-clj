@@ -44,6 +44,7 @@ CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filen
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
 void ns_define(EvalState *st, CljObject *symbol, CljObject *value);
+void ns_cleanup(void);
 
 // EvalState functions
 EvalState* evalstate();
