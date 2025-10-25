@@ -188,15 +188,17 @@ int get_retain_count(CljObject *obj);
         (CljObject*)_id; \
     })
     
-    /** @brief Foundation-style autorelease pool - compatible with setjmp/longjmp.
+    /** @brief Foundation-style autorelease pool - now exception-safe.
      *  @param code Code block to execute within autorelease pool
      *  @note Like NSAutoreleasePool in pre-ARC Objective-C
+     *  @note Now implemented as wrapper around WITH_AUTORELEASE_POOL_TRY_CATCH
+     *  @note Automatically catches exceptions, pops pool, and re-throws
      */
-    #define WITH_AUTORELEASE_POOL(code) do { \
-        CljObjectPool *_pool = autorelease_pool_push(); \
-        code; \
-        autorelease_pool_pop(_pool); \
-    } while(0)
+    #define WITH_AUTORELEASE_POOL(code) \
+        WITH_AUTORELEASE_POOL_TRY_CATCH(code, { \
+            /* Pool already popped by TRY_CATCH */ \
+            /* Exception propagates automatically */ \
+        })
     
     /** @brief Exception-safe autorelease pool macro for TRY/CATCH blocks.
      *  @param code Code block to execute within autorelease pool
