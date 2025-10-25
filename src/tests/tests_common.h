@@ -53,16 +53,16 @@ void test_registry_add(const char *name, void (*func)(void));
 // Simple TEST macro that defines and registers a test function
 // Automatically wraps test in WITH_AUTORELEASE_POOL for memory management
 #define TEST(name) \
-    static void name##_impl(void); \
-    void name##_wrapper(void) { \
+    static void name##_body(void); \
+    void name(void) { \
         WITH_AUTORELEASE_POOL({ \
-            name##_impl(); \
+            name##_body(); \
         }); \
     } \
     static void register_##name(void) __attribute__((constructor)); \
     static void register_##name(void) { \
-        test_registry_add(#name, name##_wrapper); \
+        test_registry_add(#name, name); \
     } \
-    static void name##_impl(void)
+    static void name##_body(void)
 
 #endif // TESTS_COMMON_H

@@ -41,4 +41,10 @@ const char *ERR_INTEGER_UNDERFLOW_SUBTRACTION = "Integer underflow in subtractio
 /** @brief Standard error message: Integer overflow in multiplication */
 const char *ERR_INTEGER_OVERFLOW_MULTIPLICATION = "Integer overflow in multiplication: %d * %d would exceed INT_MAX";
 
+// Fixed-point overflow/underflow error messages
+/** @brief Standard error message: Fixed-point overflow in multiplication */
+const char *ERR_FIXED_OVERFLOW_MULTIPLICATION = "Fixed-point overflow in multiplication would exceed representable range";
+/** @brief Standard error message: Fixed-point overflow in addition */
+const char *ERR_FIXED_OVERFLOW_ADDITION = "Fixed-point overflow in addition would exceed representable range";
+
 

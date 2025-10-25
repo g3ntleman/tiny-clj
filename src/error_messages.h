@@ -32,6 +32,10 @@ extern const char *ERR_INTEGER_OVERFLOW_SUBTRACTION;  /* "Integer overflow in su
 extern const char *ERR_INTEGER_UNDERFLOW_SUBTRACTION; /* "Integer underflow in subtraction: %d - %d would exceed INT_MIN" */
 extern const char *ERR_INTEGER_OVERFLOW_MULTIPLICATION; /* "Integer overflow in multiplication: %d * %d would exceed INT_MAX" */
 
+// Fixed-point overflow/underflow error messages
+extern const char *ERR_FIXED_OVERFLOW_MULTIPLICATION; /* "Fixed-point overflow in multiplication would exceed representable range" */
+extern const char *ERR_FIXED_OVERFLOW_ADDITION;       /* "Fixed-point overflow in addition would exceed representable range" */
+
 #ifdef __cplusplus
 }
 #endif

@@ -66,16 +66,11 @@ void throw_oom(CljType type) __attribute__((noreturn));
 typedef struct CljObjectPool CljObjectPool;
 
 /** @brief Push a new autorelease pool; returns pool handle.
- *  @return Pool handle for later use with autorelease_pool_pop_specific()
+ *  @return Pool handle for later use with autorelease_pool_pop()
  *  @note Use WITH_AUTORELEASE_POOL macro for automatic cleanup
  */
 CljObjectPool *autorelease_pool_push();
 
-/** @brief Pop and drain specific autorelease pool (advanced usage).
- *  @param pool Pool handle returned by autorelease_pool_push()
- *  @note Prefer WITH_AUTORELEASE_POOL macro for automatic cleanup
- */
-void autorelease_pool_pop_specific(CljObjectPool *pool);
 
 /** @brief Exception-safe cleanup after longjmp/setjmp.
  *  @note Called automatically by exception handling system
@@ -91,6 +86,12 @@ void autorelease_pool_cleanup_all();
  *  @return true if at least one pool is active
  */
 bool is_autorelease_pool_active(void);
+
+/** @brief Internal function to pop autorelease pool.
+ *  @param pool Pool to pop
+ *  @note Used by WITH_AUTORELEASE_POOL macro
+ */
+void autorelease_pool_pop(CljObjectPool *pool);
 
 /** @brief Get reference count of object (0 for singletons, actual rc for others).
  *  @param obj Object to check
@@ -194,7 +195,7 @@ int get_retain_count(CljObject *obj);
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
         code; \
-        autorelease_pool_pop_specific(_pool); \
+        autorelease_pool_pop(_pool); \
     } while(0)
     
     /** @brief Exception-safe autorelease pool macro for TRY/CATCH blocks.
@@ -204,26 +205,14 @@ int get_retain_count(CljObject *obj);
     #define WITH_AUTORELEASE_POOL_TRY_CATCH(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
         code; \
-        autorelease_pool_pop_specific(_pool); \
+        autorelease_pool_pop(_pool); \
     } while(0)
     
     /** @brief Simple autorelease pool management for TRY/CATCH.
      *  @note Use pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
      */
     #define AUTORELEASE_POOL_BEGIN() CljObjectPool *_pool = autorelease_pool_push()
-    #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
-    
-    /** @brief CFAutoreleasePool: Exception-safe pool for TRY/CATCH.
-     *  @param var Variable name for pool handle
-     *  @param code Code block to execute within autorelease pool
-     */
-    #define CFAUTORELEASE_POOL_SCOPE(var, code) do { \
-        CljObjectPool *var = autorelease_pool_push(); \
-        do { \
-            code; \
-        } while(0); \
-        autorelease_pool_pop_specific(var); \
-    } while(0)
+    #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
     
     /** @brief Retain count macro for testing.
      *  @param obj Object to check
@@ -231,15 +220,6 @@ int get_retain_count(CljObject *obj);
      */
     #define REFERENCE_COUNT(obj) get_retain_count(obj)
     
-    /** @brief Fluent autorelease pool macro with EvalState management.
-     *  @param code Code block to execute with EvalState
-     *  @note Creates and manages EvalState automatically
-     */
-    #define WITH_AUTORELEASE_POOL_EVAL(code) do { \
-        EvalState *eval_state = evalstate_new(); \
-        code; \
-        evalstate_free(eval_state); \
-    } while(0)
     
     /** @brief Memory test wrapper macro (recommended).
      *  @param code Code block to profile
@@ -319,14 +299,14 @@ int get_retain_count(CljObject *obj);
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
         code; \
-        autorelease_pool_pop_specific(_pool); \
+        autorelease_pool_pop(_pool); \
     } while(0)
     
     /** @brief Simple autorelease pool management for TRY/CATCH (release builds).
      *  @note Use pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
      */
     #define AUTORELEASE_POOL_BEGIN() CljObjectPool *_pool = autorelease_pool_push()
-    #define AUTORELEASE_POOL_END() autorelease_pool_pop_specific(_pool)
+    #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
     
     /** @brief No-op macros for release builds (no profiling).
      *  @param code Code block (ignored in release builds)

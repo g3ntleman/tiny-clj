@@ -288,7 +288,7 @@ CljObjectPool *autorelease_pool_push() {
 }
 
 
-static void autorelease_pool_pop_internal(CljObjectPool *pool) {
+void autorelease_pool_pop(CljObjectPool *pool) {
     // Check for stack underflow
     if (g_pool_stack_top < 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
@@ -311,7 +311,7 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
     
     // Debug output
     if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
-        printf("🔍 autorelease_pool_pop_internal: Pool %p popped from stack (depth=%d)\n", 
+        printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%d)\n", 
                pool, g_pool_stack_top + 1);
     }
     
@@ -340,7 +340,7 @@ static void autorelease_pool_pop_internal(CljObjectPool *pool) {
     
     // Debug output to verify stack state
     if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
-        printf("🔍 autorelease_pool_pop_internal: After pop, stack_top=%d\n", g_pool_stack_top);
+        printf("🔍 autorelease_pool_pop: After pop, stack_top=%d\n", g_pool_stack_top);
     }
 }
 
@@ -394,9 +394,6 @@ void autorelease_pool_cleanup_after_exception() {
  * Allows popping a specific pool, useful for advanced memory management
  * scenarios where you need fine-grained control over pool lifetimes.
  */
-void autorelease_pool_pop_specific(CljObjectPool *pool) {
-    autorelease_pool_pop_internal(pool);
-}
 
 /** @brief Legacy API: Pop and drain given autorelease pool (backward compatibility)
  * 
@@ -412,7 +409,7 @@ void autorelease_pool_pop_specific(CljObjectPool *pool) {
  */
 void autorelease_pool_cleanup_all() {
     while (g_pool_stack_top >= 0) {
-        autorelease_pool_pop_internal(g_pool_stack[g_pool_stack_top]);
+        autorelease_pool_pop(g_pool_stack[g_pool_stack_top]);
     }
 }
 

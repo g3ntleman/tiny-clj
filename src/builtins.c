@@ -441,6 +441,12 @@ static ID throw_arithmetic_overflow(const char* err_msg, int a, int b) {
     return OBJ_TO_ID(NULL);
 }
 
+// Helper function to throw fixed-point overflow exceptions
+static ID throw_fixed_overflow(const char* err_msg) {
+    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
+    return OBJ_TO_ID(NULL);
+}
+
 // Helper function to create fixnum result
 static ID create_fixnum_result(int acc_i) {
     return OBJ_TO_ID(fixnum(acc_i));
@@ -523,11 +529,27 @@ ID native_add_variadic(ID *args, int argc) {
                 }
             } else {
                 sawFixed = true;
+                // Check for fixed-point overflow before conversion using original values
+                float acc_f = (float)acc_i;
+                float val_f = as_fixed(args[i]);
+                float result = acc_f + val_f;
+                if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
+                    return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
+                }
                 acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
             }
         } else {
             int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
                                               : extract_fixed_value(args[i]);
+            
+            // Check for fixed-point addition overflow using original values
+            float acc_f = (float)acc_fixed / 8192.0f;
+            float val_f = IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : as_fixed(args[i]);
+            float result = acc_f + val_f;
+            if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
+                return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
+            }
+            
             acc_fixed += val;
         }
     }
@@ -563,11 +585,32 @@ ID native_mul_variadic(ID *args, int argc) {
                 }
             } else {
                 sawFixed = true;
+                // Check for fixed-point overflow before conversion
+                float acc_f = (float)acc_i;
+                float val_f = as_fixed(args[i]);
+                if (acc_f != 0.0f && val_f != 0.0f) {
+                    // Check if multiplication would exceed fixed-point range
+                    float result = acc_f * val_f;
+                    if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
+                        return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
+                    }
+                }
                 acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
             }
         } else {
             int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
                                               : extract_fixed_value(args[i]);
+            
+            // Check for fixed-point multiplication overflow
+            float acc_f = (float)acc_fixed / 8192.0f;
+            float val_f = IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : as_fixed(args[i]);
+            if (acc_f != 0.0f && val_f != 0.0f) {
+                float result = acc_f * val_f;
+                if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
+                    return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
+                }
+            }
+            
             acc_fixed = (acc_fixed * val) >> 13; // Fixed-Point Multiplikation mit Shift
         }
     }
