@@ -1,6 +1,6 @@
+#include "exception.h"
 #include "byte_array.h"
 #include "memory.h"
-#include "exception.h"
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>

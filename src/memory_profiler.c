@@ -262,22 +262,18 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         size_t autoreleases = stats->autoreleases_by_type[i];
         
         if (allocs > 0 || deallocs > 0 || retains > 0 || releases > 0 || autoreleases > 0) {
-            if (!has_activity) {
-                printf("📋 Types: ");
-                has_activity = true;
-            }
+            has_activity = true;
             const char* type_name = clj_type_name((CljType)i);
-            printf("%s: A:%zu/%zu", type_name, allocs, deallocs);
+            printf("📋 %s: A:%zu/%zu", type_name, allocs, deallocs);
             
             // Add retain/release/autorelease info if > 0
             if (retains > 0) printf(" R:%zu", retains);
             if (releases > 0) printf(" Rel:%zu", releases);
             if (autoreleases > 0) printf(" AR:%zu", autoreleases);
             
-            printf(" ");
+            printf("\n");
         }
     }
-    if (has_activity) printf("\n");
     
     // Always show basic stats even if no activity
     if (!has_activity) {
@@ -287,14 +283,10 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
                stats->retain_calls, stats->release_calls, stats->autorelease_calls);
     }
     
-    // Force show some debug info to verify the function is called
-    printf("🔍 Memory Profiling Debug: Function called successfully\n");
     
     // Compact leak detection
     if (stats->memory_leaks > 0) {
         printf("🚨 LEAK: %zu objects, %zu bytes\n", stats->memory_leaks, stats->current_memory_usage);
-    } else if (stats->total_allocations > 0) {
-        printf("✅ Clean: All %zu objects freed\n", stats->total_allocations);
     }
 }
 
@@ -447,24 +439,17 @@ void memory_profiler_check_leaks(const char *location) {
         printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
         printf("   └─────────────────────────────────────────────────────────┘\n");
         
-        // Compact leak breakdown
-        printf("🔍 Leak breakdown: ");
-        bool first = true;
+        // Leak breakdown - one line per type
         for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
             size_t allocs = g_memory_stats.allocations_by_type[i];
             size_t deallocs = g_memory_stats.deallocations_by_type[i];
             size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
             
             if (leaks > 0) {
-                if (!first) printf(", ");
                 const char* type_name = clj_type_name((CljType)i);
-                printf("%s:%zu", type_name, leaks);
-                first = false;
+                printf("🔍 %s: %zu leaks\n", type_name, leaks);
             }
         }
-        printf("\n");
-    } else {
-        printf("\n✅ MEMORY CLEAN: All allocations properly freed at %s\n", location ? location : "Unknown");
     }
 }
 

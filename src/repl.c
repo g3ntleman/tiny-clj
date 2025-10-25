@@ -8,6 +8,7 @@
 #include "memory_profiler.h"
 #include "line_editor.h"
 #include "symbol.h"
+#include "clj_strings.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>

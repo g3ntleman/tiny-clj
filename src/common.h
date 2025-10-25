@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 #ifndef ESP32_BUILD
 #include <execinfo.h>
 #include <unistd.h>

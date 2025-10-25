@@ -3,10 +3,10 @@
 #include "namespace.h"
 #include "object.h"
 #include "map.h"
-#include "list_operations.h"
+#include "list.h"
 #include "function_call.h"
-#include "memory.h"
 #include "exception.h"
+#include "symbol.h"
 
 // Global namespace registry
 CljNamespace *ns_registry = NULL;

@@ -24,8 +24,14 @@
 #include "kv_macros.h"
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
+#include "clj_strings.h"
+#include "function.h"
+#include "list.h"
+#include "symbol.h"
+#include "vector.h"
+#include "byte_array.h"
 
-// Safe string copy helper (from string.c)
+// Safe string copy helper (from strings.c)
 static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
     if (!dest || !src || dest_size == 0) return;
     strncpy(dest, src, dest_size - 1);
@@ -815,7 +821,7 @@ void meta_clear(CljObject *v) {
 // Static singletons - these live forever and are never freed
 // Note: nil is now represented as NULL, true/false as immediate values
 // empty_map, empty_vector, and empty_string singletons are now statically initialized
-// in their respective source files (map.c, vector.c, string.c)
+// in their respective source files (map.c, vector.c, strings.c)
 
 // Singleton access functions
 // Function wrappers moved to object.h as macros

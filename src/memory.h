@@ -8,6 +8,9 @@
 #ifndef TINY_CLJ_MEMORY_H
 #define TINY_CLJ_MEMORY_H
 
+// Forward declaration for IS_IMMEDIATE macro
+// IS_IMMEDIATE is defined in value.h but we can't include it here due to circular dependency
+
 #include "object.h"
 #include "memory_profiler.h"
 #include <stdbool.h>

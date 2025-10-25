@@ -15,8 +15,6 @@
 #include "../object.h"
 #include "../map.h"
 #include "../memory.h"
-#include "../memory_profiler.h"
-#include "../symbol.h"
 #include "../value.h"
 #include "../../external/unity/src/unity.h"
 #include <stdio.h>

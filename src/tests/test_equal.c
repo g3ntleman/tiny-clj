@@ -4,12 +4,13 @@
  * Simple tests for clj_equal function using basic objects.
  */
 
-#include "unity/src/unity.h"
+#include <unity/src/unity.h>
 #include "../object.h"
 #include "../memory.h"
 #include "../vector.h"
 #include "../map.h"
 #include "../value.h"
+#include "../list.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -305,7 +306,7 @@ void test_map_equal_same_maps(void) {
     map_assoc((CljObject*)map2, key2, val2);
     
     // Test equality
-    TEST_ASSERT_TRUE(clj_equal(map1, map2));
+    TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
     
     // Cleanup
     RELEASE(map1);
@@ -339,7 +340,7 @@ void test_map_equal_different_keys(void) {
     map_assoc((CljObject*)map2, key3, val2); // Different key
     
     // Test inequality
-    TEST_ASSERT_FALSE(clj_equal(map1, map2));
+    TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
     
     // Cleanup
     RELEASE(map1);
@@ -374,7 +375,7 @@ void test_map_equal_different_values(void) {
     map_assoc((CljObject*)map2, key2, val3); // Different value
     
     // Test inequality
-    TEST_ASSERT_FALSE(clj_equal(map1, map2));
+    TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
     
     // Cleanup
     RELEASE(map1);
@@ -408,7 +409,7 @@ void test_map_equal_different_sizes(void) {
     // map2 has only one entry
     
     // Test inequality
-    TEST_ASSERT_FALSE(clj_equal(map1, map2));
+    TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
     
     // Cleanup
     RELEASE(map1);
@@ -455,7 +456,7 @@ void test_map_equal_with_nested_vectors(void) {
     map_assoc((CljObject*)map2, val_str, val_str);
     
     // Test equality (should be true due to structural equality of vectors)
-    TEST_ASSERT_TRUE(clj_equal(map1, map2));
+    TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
     
     // Cleanup
     RELEASE(map1);

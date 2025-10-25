@@ -9,6 +9,8 @@
 #include "../object.h"
 #include "../parser.h"
 #include "../namespace.h"
+#include "../symbol.h"
+#include "../vector.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

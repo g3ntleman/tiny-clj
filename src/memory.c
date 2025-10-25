@@ -8,8 +8,13 @@
 #include "memory.h"
 #include "object.h"
 #include "vector.h"
+#include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "memory_profiler.h"
 #include "types.h"
+#include "exception.h"
+#include "map.h"
+#include "list.h"
+#include "byte_array.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -144,19 +149,16 @@ void release(CljObject *v) {
     // Safety check: ensure the pointer is valid and points to a valid object
     // Check if the pointer is in a reasonable memory range (not in zero page)
     if ((uintptr_t)v < 0x1000) {
-        printf("SKIPPED (invalid pointer)\n");
         return;
     }
     
     // Skip singletons (they don't use retain counting)
     if (!TRACKS_RETAINS(v)) {
-        printf("SKIPPED (singleton)\n");
         return;
     }
     
     // Skip native functions (they are static)
     if (is_type(v, CLJ_FUNC)) {
-        printf("SKIPPED (native function)\n");
         return;
     }
     
@@ -174,7 +176,6 @@ void release(CljObject *v) {
     }
 
     v->rc--;
-    printf("rc=%d\n", v->rc);
     
     // Track release operation
     MEMORY_PROFILER_TRACK_RELEASE(v);

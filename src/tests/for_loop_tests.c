@@ -11,6 +11,8 @@
 #include "../function_call.h"
 #include "../memory.h"
 #include "../map.h"
+#include "../symbol.h"
+#include "../list.h"
 #include <stdio.h>
 
 // ============================================================================
@@ -80,13 +82,13 @@ void test_dotimes_with_environment(void) {
         TEST_ASSERT_NOT_NULL(eval_state);
         
         // Create binding list: [i 3]
-        CljObject *binding_list = make_list(intern_symbol_global("i"), make_list(fixnum(3), NULL));
+        CljObject *binding_list = make_list((ID)intern_symbol_global("i"), (CljList*)make_list((ID)fixnum(3), NULL));
         
         // Create body: i - symbol reference
         CljObject *body = intern_symbol_global("i");
         
         // Create function call: (dotimes [i 3] i)
-        CljObject *dotimes_call = make_list(intern_symbol_global("dotimes"), make_list((CljObject*)binding_list, make_list(body, NULL)));
+        CljObject *dotimes_call = make_list((ID)intern_symbol_global("dotimes"), (CljList*)make_list((ID)binding_list, (CljList*)make_list((ID)body, NULL)));
         
         // Create a simple environment
         CljMap *env = (CljMap*)make_map(4);
@@ -125,13 +127,13 @@ void test_doseq_with_environment(void) {
         vec_data->count = 3;
         
         // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
+        CljObject *binding_list = make_list((ID)intern_symbol_global("x"), (CljList*)make_list((ID)vec, NULL));
         
         // Create body: x - symbol reference
         CljObject *body = intern_symbol_global("x");
         
         // Create function call: (doseq [x [1 2 3]] x)
-        CljObject *doseq_call = make_list(intern_symbol_global("doseq"), make_list((CljObject*)binding_list, make_list(body, NULL)));
+        CljObject *doseq_call = make_list((ID)intern_symbol_global("doseq"), (CljList*)make_list((ID)binding_list, (CljList*)make_list((ID)body, NULL)));
         
         // Create a simple environment
         CljMap *env = (CljMap*)make_map(4);

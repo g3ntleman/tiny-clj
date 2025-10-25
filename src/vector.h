@@ -2,7 +2,28 @@
 #define TINY_CLJ_VECTOR_H
 
 #include "object.h"
-#include "value.h"
+
+// CljPersistentVector struct definition
+typedef struct {
+    CljObject base;
+    int count;
+    int capacity;
+    int mutable_flag;
+    CljObject **data;
+} CljPersistentVector;
+
+// Type-safe casting
+static inline CljPersistentVector* as_vector(ID obj) {
+    if (!is_type((CljObject*)obj, CLJ_VECTOR) && !is_type((CljObject*)obj, CLJ_WEAK_VECTOR) && !is_type((CljObject*)obj, CLJ_TRANSIENT_VECTOR)) {
+#ifdef DEBUG
+        const char *actual_type = obj ? "Vector" : "NULL";
+        fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
+                actual_type, __FILE__, __LINE__);
+#endif
+        abort();
+    }
+    return (CljPersistentVector*)obj;
+}
 
 // === Legacy API removed - use CljValue API instead ===
 

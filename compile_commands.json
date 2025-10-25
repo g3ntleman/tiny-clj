@@ -1,0 +1,27 @@
+[
+  {
+    "directory": "/Users/theisen/Projects/tiny-clj",
+    "command": "gcc -Iexternal/unity/src -Iexternal -Isrc -DENABLE_MEMORY_PROFILING -DDEBUG -DENABLE_META -Wall -Wextra -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DUNITY_EXCLUDE_SETJMP -c src/tests/unity_test_runner.c -o build/unity_test_runner.o",
+    "file": "src/tests/unity_test_runner.c"
+  },
+  {
+    "directory": "/Users/theisen/Projects/tiny-clj",
+    "command": "gcc -Iexternal/unity/src -Iexternal -Isrc -DENABLE_MEMORY_PROFILING -DDEBUG -DENABLE_META -Wall -Wextra -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DUNITY_EXCLUDE_SETJMP -c src/tests/memory_tests.c -o build/memory_tests.o",
+    "file": "src/tests/memory_tests.c"
+  },
+  {
+    "directory": "/Users/theisen/Projects/tiny-clj",
+    "command": "gcc -Iexternal/unity/src -Iexternal -Isrc -DENABLE_MEMORY_PROFILING -DDEBUG -DENABLE_META -Wall -Wextra -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DUNITY_EXCLUDE_SETJMP -c src/tests/for_loop_tests.c -o build/for_loop_tests.o",
+    "file": "src/tests/for_loop_tests.c"
+  },
+  {
+    "directory": "/Users/theisen/Projects/tiny-clj",
+    "command": "gcc -Iexternal/unity/src -Iexternal -Isrc -DENABLE_MEMORY_PROFILING -DDEBUG -DENABLE_META -Wall -Wextra -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DUNITY_EXCLUDE_SETJMP -c src/tests/test_equal.c -o build/test_equal.o",
+    "file": "src/tests/test_equal.c"
+  },
+  {
+    "directory": "/Users/theisen/Projects/tiny-clj",
+    "command": "gcc -Iexternal/unity/src -Iexternal -Isrc -DENABLE_MEMORY_PROFILING -DDEBUG -DENABLE_META -Wall -Wextra -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DUNITY_EXCLUDE_SETJMP -c src/tests/test_cow_minimal.c -o build/test_cow_minimal.o",
+    "file": "src/tests/test_cow_minimal.c"
+  }
+]

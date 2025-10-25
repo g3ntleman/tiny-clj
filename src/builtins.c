@@ -12,6 +12,11 @@
 #include "error_messages.h"
 #include "seq.h"
 #include "byte_array.h"
+#include "list.h"
+#include "symbol.h"
+#include "function.h"
+#include "exception.h"
+#include "clj_strings.h"
 
 
 ID nth2(ID *args, int argc) {

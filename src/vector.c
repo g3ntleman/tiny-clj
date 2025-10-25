@@ -1,5 +1,6 @@
 #include "vector.h"
 #include "memory.h"
+#include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include <stdlib.h>
 #include <stdbool.h>
 

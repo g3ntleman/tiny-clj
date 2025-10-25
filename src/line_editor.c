@@ -1,8 +1,9 @@
 #include "line_editor.h"
 #include "vector.h"
-#include "string.h"
+#include "clj_strings.h"
 #include "memory.h"
 #include "memory_profiler.h"
+#include "value.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

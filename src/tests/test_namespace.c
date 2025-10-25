@@ -5,6 +5,7 @@
 #include "../namespace.h"
 #include "../memory.h"
 #include "../value.h"
+#include "../symbol.h"
 
 // Forward declaration for load_clojure_core
 int load_clojure_core(EvalState *st);

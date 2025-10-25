@@ -1,6 +1,7 @@
-#include "list_operations.h"
+#include "list.h"
 #include "memory.h"
 #include "value.h"
+#include "symbol.h"
 #include <stdarg.h>
 
 // List-Operationen für try/catch

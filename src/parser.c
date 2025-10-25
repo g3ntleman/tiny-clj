@@ -12,7 +12,7 @@
 
 #include "parser.h"
 #include "function_call.h"
-#include "list_operations.h"
+#include "list.h"
 #include "vector.h"
 #include <string.h>
 #include "map.h"
@@ -21,6 +21,8 @@
 #include "utf8.h"
 #include "vector.h"
 #include "value.h"
+#include "symbol.h"
+#include "meta.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>

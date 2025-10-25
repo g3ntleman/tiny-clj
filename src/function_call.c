@@ -13,19 +13,23 @@
 #include "object.h"
 #include "function_call.h"
 #include "symbol.h"
+#include "function.h"
 
 #include "error_messages.h"
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
-#include "string.h"
+#include "clj_strings.h"
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
 #include "error_messages.h"
-#include "list_operations.h"
+#include "list.h"
 #include "builtins.h"
 #include "value.h"
+#include "environment.h"
+#include "clj_strings.h"
+#include "vector.h"
 
 // Global state for stack-based recur implementation - statically initialized
 static _Thread_local CljObject* g_recur_args[16] = {0};  // Max 16 arguments, initialized to NULL

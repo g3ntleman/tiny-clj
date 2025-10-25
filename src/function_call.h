@@ -3,6 +3,8 @@
 
 #include "object.h"
 #include "namespace.h"
+#include "map.h"
+#include "list.h"
 
 
 // Erweiterte Funktionsaufruf-Funktionen

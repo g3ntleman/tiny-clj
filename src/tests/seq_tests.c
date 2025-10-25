@@ -6,11 +6,11 @@
 
 #include "unity/src/unity.h"
 #include "seq.h"
-#include "clj_string.h"
+#include "clj_strings.h"
 #include "vector.h"
 #include "value.h"
 #include "object.h"
-#include "list_operations.h"
+#include "list.h"
 #include "map.h"
 #include "symbol.h"
 #include "memory_profiler.h"

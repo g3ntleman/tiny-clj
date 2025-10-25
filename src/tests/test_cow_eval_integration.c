@@ -13,6 +13,7 @@
 #include "../memory.h"
 #include "../namespace.h"
 #include "../parser.h"
+#include "../symbol.h"
 #include "../value.h"
 #include "unity/src/unity.h"
 #include <stdio.h>

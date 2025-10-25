@@ -2,12 +2,11 @@
 #define TINY_CLJ_VALUE_H
 
 #include "object.h"
-#include "clj_string.h"
 #include "namespace.h"
-#include "symbol.h"
 #include <stdint.h>
-#include <math.h>
 #include <string.h>
+#include <stdio.h>
+#include <assert.h>
 
 // CljNamespace is already defined in namespace.h
 

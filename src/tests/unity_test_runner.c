@@ -8,12 +8,19 @@
 #include "../object.h"
 #include "../memory.h"
 #include "../memory_profiler.h"
-#include "../symbol.h"
-#include "../builtins.h"
-#include "../map.h"
 #include "../value.h"
+#include "../builtins.h"
+#include "../symbol.h"
+#include "../map.h"
+#include "../list.h"
+#include "../vector.h"
+#include "../function.h"
+#include "../byte_array.h"
+#include "../exception.h"
+#include "../meta.h"
 #include <stdio.h>
 #include <string.h>
+#include "../clj_strings.h"
 
 // Access to global memory stats for leak checking
 extern MemoryStats g_memory_stats;

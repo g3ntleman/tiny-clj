@@ -7,6 +7,8 @@
 
 #include "seq.h"
 #include "value.h"
+#include "list.h"
+#include "vector.h"
 #include <string.h>
 #include <stdlib.h>
 

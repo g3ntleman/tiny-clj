@@ -1,7 +1,8 @@
 #include "value.h"
 #include "object.h"
-#include "exception.h"
 #include "memory.h"
+#include "exception.h"
+#include "symbol.h"
 #include <stdlib.h>
 #include <string.h>
 

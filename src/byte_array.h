@@ -5,6 +5,18 @@
 #include "value.h"
 #include <stdint.h>
 
+// CljByteArray struct definition
+typedef struct {
+    CljObject base;
+    int length;
+    uint8_t *data;
+} CljByteArray;
+
+// Type-safe casting
+static inline CljByteArray* as_byte_array(ID obj) {
+    return (CljByteArray*)assert_type((CljObject*)obj, CLJ_BYTE_ARRAY);
+}
+
 // ============================================================================
 // BASIC OPERATIONS
 // ============================================================================

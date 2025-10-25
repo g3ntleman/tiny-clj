@@ -4,6 +4,20 @@
 #include "object.h"
 #include <stdbool.h>
 
+// CljSymbol struct definition
+#define SYMBOL_NAME_MAX_LEN 32
+
+typedef struct {
+    CljObject base;
+    struct CljNamespace *ns;
+    const char *name;
+} CljSymbol;
+
+// Type-safe casting
+static inline CljSymbol* as_symbol(ID obj) {
+    return (CljSymbol*)assert_type((CljObject*)obj, CLJ_SYMBOL);
+}
+
 // Globale Symbol-Pointer für Spezialformen (direkt als CljObject*)
 extern CljObject *SYM_TRY;
 extern CljObject *SYM_CATCH;
@@ -60,6 +74,22 @@ extern CljObject *SYM_KW_FILE;
 extern CljObject *SYM_KW_DOC;
 extern CljObject *SYM_KW_ERROR;
 extern CljObject *SYM_KW_STACK;
+
+// Symbol interning with a real symbol table
+typedef struct SymbolEntry {
+    char *ns;
+    char *name;
+    CljObject *symbol;
+    struct SymbolEntry *next;
+} SymbolEntry;
+
+extern SymbolEntry *symbol_table;
+
+CljObject* intern_symbol(const char *ns, const char *name);
+CljObject* intern_symbol_global(const char *name);  // Without namespace
+SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol);
+void symbol_table_cleanup();
+int symbol_count();
 
 // Initialisierung der globalen Symbole
 void init_special_symbols();

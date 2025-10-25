@@ -11,7 +11,29 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-// CLJException is now defined in CljObject.h to avoid circular dependencies
+// CLJException struct definition
+typedef struct {
+    CljObject base;
+    char type[64];
+    char message[256];
+    char file[128];
+    int line;
+    int col;
+} CLJException;
+
+// Type-safe casting
+static inline CLJException* as_exception(ID obj) {
+    return (CLJException*)assert_type((CljObject*)obj, CLJ_EXCEPTION);
+}
+
+/** Create a CLJException object (rc=1) with optional data. */
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col);
+
+// Exception throwing functions
+/** Throw exception via longjmp; transfers ownership to runtime. */
+void throw_exception(const char *type, const char *message, const char *file, int line, int col);
+/** Throw exception with printf-style formatting; transfers ownership to runtime. */
+void throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
 
 // ============================================================================
 // GLOBAL EXCEPTION STACK (independent of EvalState)

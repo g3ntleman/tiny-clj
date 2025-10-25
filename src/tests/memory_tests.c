@@ -11,6 +11,7 @@
 #include "../vector.h"
 #include "../map.h"
 #include "../value.h"
+#include "../list.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -130,7 +131,7 @@ void test_autorelease_pool_basic(void) {
         // Create some objects that should be autoreleased
         CljObject *str1 = (CljObject*)make_string_impl("test1");
         CljObject *str2 = (CljObject*)make_string_impl("test2");
-        CljObject *list = (CljObject*)make_list(str1, str2);
+        CljObject *list = (CljObject*)make_list((ID)str1, (CljList*)str2);
         
         TEST_ASSERT_NOT_NULL(str1);
         TEST_ASSERT_NOT_NULL(str2);
@@ -233,7 +234,7 @@ void test_autorelease_pool_memory_cleanup(void) {
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "list_item_%d", i);
             CljObject *str = (CljObject*)make_string_impl(buffer);
-            list = (CljObject*)make_list(str, list);
+            list = (CljObject*)make_list((ID)str, (CljList*)list);
             AUTORELEASE(str);
         }
         AUTORELEASE(list);

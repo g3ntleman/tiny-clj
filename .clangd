@@ -1,0 +1,8 @@
+CompileFlags:
+  Add:
+    - -Iexternal/unity/src
+    - -Iexternal
+    - -Isrc
+    - -DENABLE_MEMORY_PROFILING
+    - -DDEBUG
+    - -DENABLE_META

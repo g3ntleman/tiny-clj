@@ -3,11 +3,9 @@
 #include "parser.h"
 #include "namespace.h"
 #include "builtins.h"
-#include "runtime.h"
 #include "memory.h"
-#include "function_call.h"
 #include "reader.h"
-#include "value.h"
+#include "symbol.h"
 #include <stdio.h>
 #include <stdlib.h>
 

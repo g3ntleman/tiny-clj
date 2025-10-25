@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
 
+# Include common paths configuration
+include(cmake_include_paths.cmake)
+
 # Set C standard
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -66,10 +69,10 @@ list(APPEND SOURCES
     src/byte_array.c
     src/reader.c
     src/function_call.c
-    src/list_operations.c
+    src/list.c
     src/vector.c
     src/map.c
-    src/string.c
+    src/strings.c
     src/seq.c
     src/memory.c
     src/error_messages.c
@@ -100,10 +103,10 @@ set(STM32_SOURCES
     src/byte_array.c
     src/reader.c
     src/function_call.c
-    src/list_operations.c
+    src/list.c
     src/vector.c
     src/map.c
-    src/string.c
+    src/strings.c
     src/seq.c
     src/memory.c
     src/error_messages.c
@@ -126,10 +129,10 @@ add_executable(tiny-clj-esp32
     src/byte_array.c
     src/reader.c
     src/function_call.c
-    src/list_operations.c
+    src/list.c
     src/vector.c
     src/map.c
-    src/string.c
+    src/strings.c
     src/seq.c
     src/memory.c
     src/error_messages.c
@@ -230,13 +233,13 @@ add_executable(unity-tests
     src/types.c
     src/vector.c
     src/map.c
-    src/string.c
+    src/strings.c
     src/symbol.c
     src/namespace.c
     src/parser.c
     src/reader.c
     src/function_call.c
-    src/list_operations.c
+    src/list.c
     src/seq.c
     src/clojure_core.c
     src/exception.c
@@ -249,11 +252,10 @@ add_executable(unity-tests
 
 # Debug parser target removed - file not found
 # Unity Tests - Always in Debug mode for comprehensive testing
-target_compile_definitions(unity-tests PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+apply_common_settings(unity-tests)
 set_target_properties(unity-tests PROPERTIES
     COMPILE_FLAGS "-g -O0 -DDEBUG"
 )
-target_include_directories(unity-tests PRIVATE external)
 
 # Copy-on-Write Assumptions Tests (standalone test executable)
 add_executable(test-cow-assumptions
@@ -265,13 +267,13 @@ add_executable(test-cow-assumptions
     src/types.c
     src/vector.c
     src/map.c
-    src/string.c
+    src/strings.c
     src/symbol.c
     src/namespace.c
     src/parser.c
     src/reader.c
     src/function_call.c
-    src/list_operations.c
+    src/list.c
     src/seq.c
     src/clojure_core.c
     src/exception.c
@@ -281,11 +283,10 @@ add_executable(test-cow-assumptions
     src/error_messages.c
     src/value.c
 )
-target_compile_definitions(test-cow-assumptions PRIVATE ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+apply_common_settings(test-cow-assumptions)
 set_target_properties(test-cow-assumptions PROPERTIES
     COMPILE_FLAGS "-g -O0 -DDEBUG"
 )
-target_include_directories(test-cow-assumptions PRIVATE external)
 
 
 # Utility tests removed - no main function available
@@ -311,13 +312,13 @@ set(COMMON_TEST_SOURCES
     src/types.c
     src/vector.c
     src/map.c
-    src/string.c
+    src/strings.c
     src/symbol.c
     src/namespace.c
     src/parser.c
     src/reader.c
     src/function_call.c
-    src/list_operations.c
+    src/list.c
     src/seq.c
     src/exception.c
     src/memory.c
@@ -363,8 +364,8 @@ set(COMMON_TEST_SOURCES
 
 # Test targets for easy execution
 add_custom_target(run-unit-tests
-    COMMAND test-unit
-    DEPENDS test-unit
+    COMMAND unity-tests
+    DEPENDS unity-tests
     COMMENT "Running unit tests"
 )
 

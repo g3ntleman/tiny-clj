@@ -4,23 +4,48 @@
 #include "object.h"
 #include "value.h"
 
-/** @deprecated Use map_assoc() instead. Associate key->value (replace if key exists; retains value). */
+// CljMap struct definition
+typedef struct {
+    CljObject base;
+    int count;
+    int capacity;
+    CljObject *data[];
+} CljMap;
+
+// Type-safe casting
+static inline CljMap* as_map(ID obj) {
+    if (!is_type((CljObject*)obj, CLJ_MAP) && !is_type((CljObject*)obj, CLJ_TRANSIENT_MAP)) {
+#ifdef DEBUG
+        const char *actual_type = obj ? "Vector" : "NULL";
+        fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 
+                actual_type, __FILE__, __LINE__);
+#endif
+        abort();
+    }
+    return (CljMap*)obj;
+}
+
+// Map operations (optimized with pointer fast paths)
+/** Get value for key or NULL (structural key equality). */
+/** Associate key->value (replaces existing; retains value). */
 void map_assoc(CljObject *map, CljObject *key, CljObject *value);
-/** @deprecated Use map_keys_v() instead. Return a vector of keys (retained). */
+/** Vector of keys (retained elements). */
 CljObject* map_keys(CljObject *map);
-/** @deprecated Use map_vals_v() instead. Return a vector of values (retained). */
+/** Vector of values (retained elements). */
 CljObject* map_vals(CljObject *map);
-/** @deprecated Use map_count_v() instead. Return number of key/value pairs. */
+/** Number of entries. */
 int map_count(CljObject *map);
-/** @deprecated Use map_put_v() instead. Append key/value without structural duplicate check (retains both). */
+
+// Optimized map operations with pointer comparisons
+/** Append key/value without duplicate check (retains both). */
 void map_put(CljObject *map, CljObject *key, CljObject *value);
-/** @deprecated Use map_foreach_v() instead. Iterate over all key/value pairs calling func(key,value). */
+/** Iterate pairs and call func(key,value) for each. */
 void map_foreach(CljObject *map, void (*func)(CljObject*, CljObject*));
-/** @deprecated Use map_contains_v() instead. Return 1 if key exists (pointer equality fast-path). */
+/** Returns 1 if key exists (may use pointer fast-path). */
 int map_contains(CljObject *map, CljObject *key);
-/** @deprecated Use map_remove_v() instead. Remove key if present (releases removed references). */
+/** Remove key if present; releases removed items. */
 void map_remove(CljObject *map, CljObject *key);
-/** @deprecated Use map_from_stack() instead. */
+/** Create map from stack of key/value pairs. */
 CljObject* map_from_stack(CljObject **pairs, int pair_count);
 
 // === CljValue API (Phase 1: Parallel) ===

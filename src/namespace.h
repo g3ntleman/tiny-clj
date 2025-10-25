@@ -5,10 +5,12 @@
 #include "memory.h"
 #include <stdbool.h>
 
+// Use CljObject* instead of specific types to avoid circular dependencies
+
 // Namespace structure
 typedef struct CljNamespace {
     CljObject *name;          // z.B. 'user', 'math'
-    CljMap *mappings;      // Map: Symbol → CljObject (def, defn, vars)
+    CljObject *mappings;      // Map: Symbol → CljObject (def, defn, vars)
     const char *filename;    // optional: zugeordnetes File
     struct CljNamespace *next;
 } CljNamespace;
@@ -60,11 +62,6 @@ CljObject* eval_try(CljObject *form, EvalState *st);
 CljObject* eval_catch(CljObject *form, EvalState *st);
 CljObject* eval_expr_simple(CljObject *expr, EvalState *st);
 
-// List helpers for try/catch
-ID list_first(CljList *list);
-ID list_nth(CljList *list, int n);
-int list_count(CljList *list);
-bool is_list(ID v);
-bool is_symbol(ID v, const char *name);
+// List helpers moved to list.h
 
 #endif

@@ -8,7 +8,7 @@
 #include "object.h"
 #include "parser.h"
 #include "symbol.h"
-#include "clj_string.h"
+#include "clj_strings.h"
 #include "namespace.h"
 #include "map.h"
 #include "tiny_clj.h"

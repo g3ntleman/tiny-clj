@@ -13,6 +13,7 @@
 #include "../vector.h"
 #include "../value.h"
 #include "../memory.h"
+#include "../list.h"
 #include "../builtins.h"
 #include "../tiny_clj.h"
 #include "../seq.h"

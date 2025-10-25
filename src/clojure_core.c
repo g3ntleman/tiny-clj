@@ -4,8 +4,7 @@
 #include "namespace.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include "memory.h"
-#include "value.h"
+#include "symbol.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
