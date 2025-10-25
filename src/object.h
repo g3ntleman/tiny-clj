@@ -20,9 +20,6 @@ typedef struct CljObject* CljValue;
 #include "common.h"
 
 
-// Forward declaration to avoid circular dependency
-struct CljNamespace;
-
 // Type optimization constants
 #define LAST_SINGLETON_TYPE CLJ_SYMBOL  // Last singleton type (0-2)
 

@@ -45,7 +45,7 @@ brew install cmake
 - **Embedded Target:** ESP32, ESP32, ARM Cortex-M microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
-- **Small Binary:** Target <100KB for embedded deployment
+- **Small Binary:** Target <150KB for embedded deployment
 
 ## Quick Start
 

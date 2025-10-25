@@ -47,9 +47,7 @@ void test_equal_different_strings(void) {
     TEST_ASSERT_FALSE(clj_equal(str1, str2));
     TEST_ASSERT_TRUE(clj_equal(str1, str3));
     
-    RELEASE(str1);
-    RELEASE(str2);
-    RELEASE(str3);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
     });
 }
@@ -68,9 +66,7 @@ void test_equal_different_types(void) {
     TEST_ASSERT_FALSE(clj_equal((CljValue)vec, (CljValue)list));
     TEST_ASSERT_FALSE(clj_equal((CljValue)map, (CljValue)list));
     
-    RELEASE(vec);
-    RELEASE(map);
-    RELEASE(list);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
     });
 }
@@ -128,8 +124,7 @@ void test_vector_equal_same_vectors(void) {
     TEST_ASSERT_TRUE(clj_equal(vec1, vec2));
     
     // Cleanup
-    RELEASE(vec1);
-    RELEASE(vec2);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
     });
 }
@@ -163,8 +158,7 @@ void test_vector_equal_different_lengths(void) {
     TEST_ASSERT_FALSE(clj_equal(vec1, vec2));
     
     // Cleanup
-    RELEASE(vec1);
-    RELEASE(vec2);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
     });
 }
@@ -233,10 +227,7 @@ void test_clj_equal_id_function(void) {
     TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)NULL));
     TEST_ASSERT_FALSE(clj_equal_id((ID)NULL, (ID)str1));
     
-    // Cleanup
-    RELEASE(str1);
-    RELEASE(str2);
-    RELEASE(str3);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
     });
 }
@@ -271,12 +262,8 @@ void test_vector_equal_with_strings(void) {
     TEST_ASSERT_TRUE(clj_equal(vec1, vec2));
     
     // Cleanup
-    RELEASE(vec1);
-    RELEASE(vec2);
-    RELEASE(str1);
-    RELEASE(str2);
-    RELEASE(str3);
-    RELEASE(str4);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
     });
 }
@@ -461,8 +448,7 @@ void test_map_equal_with_nested_vectors(void) {
     // Cleanup
     RELEASE(map1);
     RELEASE(map2);
-    RELEASE(vec1);
-    RELEASE(vec2);
+    // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     RELEASE(key1);
     RELEASE(val_str);
     

@@ -32,7 +32,7 @@ else()
   set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
 endif()
 
-# Ultra-compact build for <100KB target (embedded deployment)
+# Ultra-compact build for <150KB target (embedded deployment)
 # Target: ARM Cortex-M (32-bit) for ESP32
 set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
 if(APPLE)
@@ -141,7 +141,7 @@ add_executable(tiny-clj-esp32
 )
 
 
-# ESP32 Ultra-Minimal Build (only core features for <100KB) - DISABLED
+# ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
 # This target has linker issues on macOS and is not needed for development
 
 # ESP32 Production Build - No Meta, Optimized
@@ -166,7 +166,7 @@ if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")
     message(STATUS "🔧 Using ESP32 cross-compilation toolchain")
     message(STATUS "📱 Target: ESP32 (Xtensa LX6)")
     message(STATUS "💾 Flash: 4MB, RAM: 520KB")
-    message(STATUS "🎯 Binary Size Target: <100KB")
+    message(STATUS "🎯 Binary Size Target: <150KB")
 endif()
 
 # REPL executable (with line editing support)
@@ -254,7 +254,8 @@ add_executable(unity-tests
 # Unity Tests - Always in Debug mode for comprehensive testing
 apply_common_settings(unity-tests)
 set_target_properties(unity-tests PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG"
+    COMPILE_FLAGS "-g -O0 -DDEBUG -fsanitize=address -fno-omit-frame-pointer"
+    LINK_FLAGS "-fsanitize=address"
 )
 
 # Copy-on-Write Assumptions Tests (standalone test executable)

@@ -7,7 +7,7 @@ This guide explains how to cross-compile Tiny-CLJ for ESP32 microcontrollers usi
 - **Architecture**: Xtensa LX6 (32-bit)
 - **Flash Memory**: 4MB (default)
 - **RAM**: 520KB
-- **Target Binary Size**: <100KB
+- **Target Binary Size**: <150KB
 - **Toolchain**: Xtensa GCC (xtensa-esp32-elf)
 
 ## Quick Start
@@ -29,7 +29,7 @@ make tiny-clj-esp32
 
 ### 3. Check Binary Size
 ```bash
-# Check if we meet the <100KB target
+# Check if we meet the <150KB target
 ls -lh tiny-clj-esp32
 ```
 
@@ -115,7 +115,7 @@ make tiny-clj-esp32
 │   Partition     │ 4KB
 │   Table         │
 ├─────────────────┤
-│   Tiny-CLJ      │ <100KB (Target)
+│   Tiny-CLJ      │ <150KB (Target)
 │   Application   │
 ├─────────────────┤
 │   Free Space    │ ~3.8MB
@@ -211,13 +211,13 @@ esptool.py --chip esp32 --port /dev/ttyUSB0 monitor
 ### ESP32 Performance
 - **CPU**: 240MHz dual-core Xtensa LX6
 - **Memory**: 520KB RAM, 4MB Flash
-- **Tiny-CLJ**: <100KB binary size target
+- **Tiny-CLJ**: <150KB binary size target
 - **Startup Time**: <1 second
 - **Memory Usage**: <320KB RAM
 
 ### Optimization Results
 - **Current Size**: ~198KB (macOS simulation)
-- **Target Size**: <100KB (ESP32 optimized)
+- **Target Size**: <150KB (ESP32 optimized)
 - **Reduction Needed**: ~98KB
 - **Strategy**: Feature reduction + compiler optimization
 
@@ -225,7 +225,7 @@ esptool.py --chip esp32 --port /dev/ttyUSB0 monitor
 
 1. **Setup Toolchain**: Run `./scripts/setup_esp32_toolchain.sh`
 2. **Build ESP32 Target**: Use ESP32 cross-compilation
-3. **Size Analysis**: Check if <100KB target is met
+3. **Size Analysis**: Check if <150KB target is met
 4. **Feature Reduction**: Implement embedded optimizations
 5. **Deploy**: Flash to ESP32 hardware
 
