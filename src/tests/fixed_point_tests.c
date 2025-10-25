@@ -1,5 +1,4 @@
-#include "unity/src/unity.h"
-#include "../value.h"
+#include "tests_common.h"
 
 void test_fixed_basic_creation(void) {
     // Test basic creation and conversion
@@ -245,3 +244,24 @@ void test_fixed_complex_arithmetic(void) {
     float result_f = (float)result / 8192.0f;
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.0f, result_f);
 }
+
+// Register all tests
+REGISTER_TEST(test_fixed_basic_creation)
+REGISTER_TEST(test_fixed_negative_values)
+REGISTER_TEST(test_fixed_precision)
+REGISTER_TEST(test_fixed_multiplication_raw)
+REGISTER_TEST(test_fixed_mixed_type_promotion)
+REGISTER_TEST(test_fixed_saturation_max)
+REGISTER_TEST(test_fixed_saturation_min)
+REGISTER_TEST(test_fixed_division_raw)
+REGISTER_TEST(test_fixed_edge_cases)
+REGISTER_TEST(test_fixed_tag_consistency)
+REGISTER_TEST(test_fixed_addition_builtin)
+REGISTER_TEST(test_fixed_subtraction_builtin)
+REGISTER_TEST(test_fixed_mixed_addition)
+REGISTER_TEST(test_fixed_negative_addition)
+REGISTER_TEST(test_fixed_multiplication_builtin)
+REGISTER_TEST(test_fixed_division_builtin)
+REGISTER_TEST(test_fixed_mixed_multiplication)
+REGISTER_TEST(test_fixed_division_by_zero)
+REGISTER_TEST(test_fixed_complex_arithmetic)

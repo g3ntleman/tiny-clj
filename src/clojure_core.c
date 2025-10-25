@@ -20,8 +20,8 @@ const char *clojure_core_code =
 
     ;
 
-// Forward declaration for make_value_by_parsing_expr
-extern CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
+// Forward declaration for value_by_parsing_expr
+extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
@@ -43,7 +43,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
     
-    CljValue form = make_value_by_parsing_expr(&reader, st);
+    CljValue form = value_by_parsing_expr(&reader, st);
     if (!form) {
       // Continue to next expression instead of breaking
       expr_count++;

@@ -18,15 +18,13 @@ static const char *startup_code =
     ;
 
 // Forward declaration
-extern CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
+extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 int main() {
     platform_init();
     DEBUG_PRINT("Tiny-Clj ESP32 - Embedded Execution");
     
     // Initialize interpreter
-    meta_registry_init();
-    init_special_symbols();
     register_builtins();
     
     // Create evaluation state
@@ -50,8 +48,6 @@ int main() {
     // Cleanup
     DEBUG_PRINT("Done");
     evalstate_free(state);
-    symbol_table_cleanup();
-    meta_registry_cleanup();
     autorelease_pool_cleanup_all();
     
     return 0;

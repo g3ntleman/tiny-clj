@@ -5,16 +5,7 @@
  * Demonstrates single test execution and test isolation.
  */
 
-#include "unity/src/unity.h"
-#include "../object.h"
-#include "../memory.h"
-#include "../vector.h"
-#include "../map.h"
-#include "../value.h"
-#include "../list.h"
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
+#include "tests_common.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -48,6 +39,7 @@ void test_memory_allocation(void) {
         // Objects are automatically cleaned up by WITH_AUTORELEASE_POOL
     }
 }
+REGISTER_TEST(test_memory_allocation)
 
 void test_memory_deallocation(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
@@ -74,6 +66,7 @@ void test_memory_deallocation(void) {
         RELEASE(obj);
     }
 }
+REGISTER_TEST(test_memory_deallocation)
 
 void test_memory_leak_detection(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
@@ -87,6 +80,7 @@ void test_memory_leak_detection(void) {
         }
     }
 }
+REGISTER_TEST(test_memory_leak_detection)
 
 void test_vector_memory(void) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
@@ -122,6 +116,7 @@ void test_vector_memory(void) {
         RELEASE((CljObject*)vec);
     }
 }
+REGISTER_TEST(test_vector_memory)
 
 void test_autorelease_pool_basic(void) {
     // Test basic WITH_AUTORELEASE_POOL functionality
@@ -152,6 +147,7 @@ void test_autorelease_pool_basic(void) {
     // the test framework may have active pools
     // TEST_ASSERT_FALSE(is_autorelease_pool_active());
 }
+REGISTER_TEST(test_autorelease_pool_basic)
 
 void test_autorelease_pool_nested(void) {
     // Test nested autorelease pools
@@ -179,6 +175,7 @@ void test_autorelease_pool_nested(void) {
     // the test framework may have active pools
     // TEST_ASSERT_FALSE(is_autorelease_pool_active());
 }
+REGISTER_TEST(test_autorelease_pool_nested)
 
 void test_cow_assumptions_rc_behavior(void) {
     // Test critical assumptions for Copy-on-Write implementation
@@ -211,6 +208,7 @@ void test_cow_assumptions_rc_behavior(void) {
         printf("✓ All COW assumptions verified!\n");
     });
 }
+REGISTER_TEST(test_cow_assumptions_rc_behavior)
 
 void test_autorelease_pool_memory_cleanup(void) {
     // Test that autorelease pool properly cleans up memory
@@ -261,6 +259,7 @@ void test_autorelease_pool_memory_cleanup(void) {
     // Memory leaks should be minimal (some may remain due to singletons)
     TEST_ASSERT_TRUE(after_stats.memory_leaks <= 10); // Allow for some singleton objects
 }
+REGISTER_TEST(test_autorelease_pool_memory_cleanup)
 
 // ============================================================================
 // TEST GROUPS

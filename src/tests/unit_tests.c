@@ -4,19 +4,7 @@
  * Basic unit tests for Tiny-Clj core functionality migrated from MinUnit.
  */
 
-#include "unity/src/unity.h"
-#include "../object.h"
-#include "../parser.h"
-#include "../symbol.h"
-#include "../map.h"
-#include "../namespace.h"
-#include "../vector.h"
-#include "../value.h"
-#include "../memory.h"
-#include "../list.h"
-#include "../builtins.h"
-#include "../tiny_clj.h"
-#include "../seq.h"
+#include "tests_common.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -1593,3 +1581,24 @@ void test_group_debugging(void) {
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
+
+// Register all tests
+REGISTER_TEST(test_list_count)
+REGISTER_TEST(test_list_creation)
+REGISTER_TEST(test_symbol_creation)
+REGISTER_TEST(test_string_creation)
+REGISTER_TEST(test_vector_creation)
+REGISTER_TEST(test_map_creation)
+REGISTER_TEST(test_array_map_builtin)
+REGISTER_TEST(test_integer_creation)
+REGISTER_TEST(test_float_creation)
+REGISTER_TEST(test_nil_creation)
+REGISTER_TEST(test_cljvalue_immediate_helpers)
+REGISTER_TEST(test_cljvalue_vector_api)
+REGISTER_TEST(test_cljvalue_transient_vector)
+REGISTER_TEST(test_cljvalue_clojure_semantics)
+REGISTER_TEST(test_cljvalue_wrapper_functions)
+REGISTER_TEST(test_cljvalue_immediates_fixnum)
+REGISTER_TEST(test_cljvalue_immediates_char)
+REGISTER_TEST(test_cljvalue_immediates_special)
+REGISTER_TEST(test_cljvalue_immediates_fixed)

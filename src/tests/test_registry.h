@@ -1,49 +1,34 @@
 /*
- * Test Registry for MinUnit Tests
+ * Test Registry for Tiny-CLJ
  * 
- * Central registry for all MinUnit tests to enable single executable runner.
- * Pure C - no POSIX dependencies for STM32 compatibility.
+ * Dynamic test registration system that allows tests to register themselves
+ * at program startup using GCC constructor attributes.
  */
 
 #ifndef TEST_REGISTRY_H
 #define TEST_REGISTRY_H
 
+#include <stddef.h>
+#include <stdbool.h>
+
+// Test function pointer type
+typedef void (*TestFunc)(void);
+
+// Test structure
 typedef struct {
-    const char *name;         // Test suite name
-    const char *suite;        // Suite category
-    char *(*test_func)(void); // Test runner function
-} TestEntry;
+    const char *name;    // Test function name
+    TestFunc func;      // Test function pointer
+} Test;
 
-// Forward declarations for remaining MinUnit test suite runners
-extern char *run_namespace_tests(void);
-extern char *run_seq_tests(void);
-extern char *run_for_loop_tests(void);
-extern char *run_eval_string_api_tests(void);
-extern char *run_function_types_tests(void);
-extern char *test_nil_arithmetic_suite(void);
+// Registry API
+void test_registry_add(const char *name, TestFunc func);
+Test *test_registry_find(const char *name);
+Test *test_registry_find_by_pattern(const char *pattern);
+Test *test_registry_get_all(size_t *count);
+void test_registry_list_all(void);
+void test_registry_clear(void);
 
-// Line editor test declarations
-extern char *run_line_editor_tests(void);
-extern char *run_platform_mock_tests(void);
-extern char *run_platform_abstraction_tests(void);
-extern char *run_repl_line_editing_tests(void);
-
-// Global test registry (compile-time, no dlsym needed)
-static TestEntry all_minunit_tests[] = {
-    {"namespace",       "core",    run_namespace_tests},
-    {"seq",             "data",    run_seq_tests},
-    {"for_loops",       "control", run_for_loop_tests},
-    {"eval_string_api", "api",     run_eval_string_api_tests},
-    {"function_types",  "core",    run_function_types_tests},
-    {"nil_arithmetic",  "core",    test_nil_arithmetic_suite},
-    
-    // Line editor tests
-    {"line_editor",     "ui",      run_line_editor_tests},
-    {"platform_mock",   "ui",      run_platform_mock_tests},
-    {"platform_abstraction", "ui", run_platform_abstraction_tests},
-    {"repl_line_editing", "ui",    run_repl_line_editing_tests},
-};
-
-static const int minunit_test_count = sizeof(all_minunit_tests) / sizeof(all_minunit_tests[0]);
+// Pattern matching helper
+bool test_name_matches_pattern(const char *name, const char *pattern);
 
 #endif // TEST_REGISTRY_H

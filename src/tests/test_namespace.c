@@ -1,17 +1,10 @@
-#include "unity/src/unity.h"
-#include "../tiny_clj.h"
-#include "../function_call.h"
-#include "../object.h"
-#include "../namespace.h"
-#include "../memory.h"
-#include "../value.h"
-#include "../symbol.h"
+#include "tests_common.h"
 
 // Forward declaration for load_clojure_core
 int load_clojure_core(EvalState *st);
 
 // Test namespace lookup for core functions
-void test_namespace_lookup_core_functions(void) {
+TEST(test_namespace_lookup_core_functions) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -39,7 +32,7 @@ void test_namespace_lookup_core_functions(void) {
 }
 
 // Test namespace lookup for user namespace
-void test_namespace_lookup_user_namespace(void) {
+TEST(test_namespace_lookup_user_namespace) {
     // Test that symbols are resolved in user namespace by default
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -65,7 +58,7 @@ void test_namespace_lookup_user_namespace(void) {
 }
 
 // Test cross-namespace symbol resolution
-void test_namespace_lookup_cross_namespace(void) {
+TEST(test_namespace_lookup_cross_namespace) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -90,7 +83,7 @@ void test_namespace_lookup_cross_namespace(void) {
 }
 
 // Test symbol interning - same symbol should return same pointer
-void test_symbol_interning_consistency(void) {
+TEST(test_symbol_interning_consistency) {
     // Test that intern_symbol_global returns the same pointer for the same name
     CljObject *sym1 = intern_symbol_global("test-symbol");
     CljObject *sym2 = intern_symbol_global("test-symbol");
@@ -111,7 +104,7 @@ void test_symbol_interning_consistency(void) {
 }
 
 // Test symbol interning with namespace
-void test_symbol_interning_with_namespace(void) {
+TEST(test_symbol_interning_with_namespace) {
     // Test that intern_symbol with namespace works correctly
     CljObject *sym1 = intern_symbol("user", "test-symbol");
     CljObject *sym2 = intern_symbol("user", "test-symbol");
@@ -132,7 +125,7 @@ void test_symbol_interning_with_namespace(void) {
 }
 
 // Test symbol interning with NULL namespace (global)
-void test_symbol_interning_global(void) {
+TEST(test_symbol_interning_global) {
     // Test that intern_symbol_global is equivalent to intern_symbol(NULL, name)
     CljObject *sym1 = intern_symbol_global("global-symbol");
     CljObject *sym2 = intern_symbol(NULL, "global-symbol");
@@ -147,7 +140,7 @@ void test_symbol_interning_global(void) {
 }
 
 // Test symbol table functionality
-void test_symbol_table_operations(void) {
+TEST(test_symbol_table_operations) {
     // Test that symbol table correctly stores and retrieves symbols
     const char *test_name = "table-test-symbol";
     
@@ -170,7 +163,7 @@ void test_symbol_table_operations(void) {
 }
 
 // Test namespace creation and switching
-void test_namespace_creation_and_switching(void) {
+TEST(test_namespace_creation_and_switching) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -191,7 +184,7 @@ void test_namespace_creation_and_switching(void) {
 }
 
 // Test namespace variable storage and retrieval
-void test_namespace_variable_storage(void) {
+TEST(test_namespace_variable_storage) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -216,7 +209,7 @@ void test_namespace_variable_storage(void) {
 }
 
 // Test namespace with multiple variables
-void test_namespace_multiple_variables(void) {
+TEST(test_namespace_multiple_variables) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -250,7 +243,7 @@ void test_namespace_multiple_variables(void) {
 }
 
 // Test symbol resolution with fallback to global namespace
-void test_symbol_resolution_fallback(void) {
+TEST(test_symbol_resolution_fallback) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -268,7 +261,7 @@ void test_symbol_resolution_fallback(void) {
 }
 
 // Test namespace with special characters in names
-void test_namespace_special_characters(void) {
+TEST(test_namespace_special_characters) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -291,7 +284,7 @@ void test_namespace_special_characters(void) {
 }
 
 // Test namespace error handling
-void test_namespace_error_handling(void) {
+TEST(test_namespace_error_handling) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -314,7 +307,7 @@ void test_namespace_error_handling(void) {
 }
 
 // Test namespace memory management
-void test_namespace_memory_management(void) {
+TEST(test_namespace_memory_management) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     

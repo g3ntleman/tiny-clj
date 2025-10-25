@@ -4,16 +4,7 @@
  * Tests for for, doseq, and dotimes implementations.
  */
 
-#include "unity/src/unity.h"
-#include "../object.h"
-#include "../vector.h"
-#include "../value.h"
-#include "../function_call.h"
-#include "../memory.h"
-#include "../map.h"
-#include "../symbol.h"
-#include "../list.h"
-#include <stdio.h>
+#include "tests_common.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -157,3 +148,10 @@ void test_doseq_with_environment(void) {
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
+
+// Register all tests
+REGISTER_TEST(test_dotimes_basic)
+REGISTER_TEST(test_doseq_basic)
+REGISTER_TEST(test_for_basic)
+REGISTER_TEST(test_dotimes_with_environment)
+REGISTER_TEST(test_doseq_with_environment)

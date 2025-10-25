@@ -291,7 +291,7 @@ CljObjectPool *autorelease_pool_push() {
 static void autorelease_pool_pop_internal(CljObjectPool *pool) {
     // Check for stack underflow
     if (g_pool_stack_top < 0) {
-        printf("ERROR: autorelease_pool_pop() called on empty stack! "
+        printf("WARNING: autorelease_pool_pop() called on empty stack! "
                "This indicates more pop() calls than push() calls.\n");
         return; // Safe return instead of throwing exception
     }

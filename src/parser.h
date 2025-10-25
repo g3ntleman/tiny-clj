@@ -53,7 +53,7 @@ ID eval_string(const char* expr_str, EvalState *eval_state);
  * @param st Evaluation state
  * @return New CljValue or NULL on error
  */
-CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
+CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 /**
  * @brief Create CljValue by parsing expression from Reader

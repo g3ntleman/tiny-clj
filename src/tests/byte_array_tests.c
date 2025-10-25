@@ -4,13 +4,7 @@
  * Tests for mutable byte array implementation (Clojure-compatible)
  */
 
-#include "unity/src/unity.h"
-#include "../object.h"
-#include "../memory.h"
-#include "../byte_array.h"
-#include "../value.h"
-#include <stdio.h>
-#include <string.h>
+#include "tests_common.h"
 
 // ============================================================================
 // TEST CASES
@@ -274,3 +268,16 @@ void run_byte_array_tests(void) {
     RUN_TEST(test_byte_array_empty);
 }
 
+// Register all tests
+REGISTER_TEST(test_byte_array_creation)
+REGISTER_TEST(test_byte_array_from_bytes)
+REGISTER_TEST(test_byte_array_get_set)
+REGISTER_TEST(test_byte_array_length)
+REGISTER_TEST(test_byte_array_clone)
+REGISTER_TEST(test_byte_array_copy_from)
+REGISTER_TEST(test_byte_array_copy_to)
+REGISTER_TEST(test_byte_array_copy_between)
+REGISTER_TEST(test_byte_array_slice)
+REGISTER_TEST(test_byte_array_id_operations)
+REGISTER_TEST(test_byte_array_memory_management)
+REGISTER_TEST(test_byte_array_empty)

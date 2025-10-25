@@ -5,17 +5,7 @@
  * exception handling, auto-release, and exception stack.
  */
 
-#include "unity/src/unity.h"
-#include "../object.h"
-#include "../exception.h"
-#include "../memory.h"
-#include "../namespace.h"
-#include "../value.h"
-#include "../map.h"
-#include "../parser.h"
-#include <string.h>
-#include <stdbool.h>
-#include <stdlib.h>
+#include "tests_common.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -209,3 +199,12 @@ void test_map_arity_exception_zero_args(void) {
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
+
+// Register all tests
+REGISTER_TEST(test_simple_try_catch_exception_caught)
+REGISTER_TEST(test_simple_try_catch_no_exception)
+REGISTER_TEST(test_nested_try_catch_inner_exception)
+REGISTER_TEST(test_nested_try_catch_outer_exception)
+REGISTER_TEST(test_exception_with_autorelease)
+REGISTER_TEST(test_repl_crash_scenario)
+REGISTER_TEST(test_map_arity_exception_zero_args)

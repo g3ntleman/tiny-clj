@@ -4,17 +4,7 @@
  * Simple tests for clj_equal function using basic objects.
  */
 
-#include <unity/src/unity.h>
-#include "../object.h"
-#include "../memory.h"
-#include "../vector.h"
-#include "../map.h"
-#include "../value.h"
-#include "../list.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
+#include "tests_common.h"
 
 // ============================================================================
 // BASIC EQUALITY TESTS
@@ -507,3 +497,23 @@ void test_list_equal_empty_lists(void) {
     
     });
 }
+
+// Register all tests
+REGISTER_TEST(test_equal_null_pointers)
+REGISTER_TEST(test_equal_same_objects)
+REGISTER_TEST(test_equal_different_strings)
+REGISTER_TEST(test_equal_different_types)
+REGISTER_TEST(test_equal_immediate_values)
+REGISTER_TEST(test_vector_equal_same_vectors)
+REGISTER_TEST(test_vector_equal_different_lengths)
+REGISTER_TEST(test_vector_equal_different_values)
+REGISTER_TEST(test_clj_equal_id_function)
+REGISTER_TEST(test_vector_equal_with_strings)
+REGISTER_TEST(test_map_equal_same_maps)
+REGISTER_TEST(test_map_equal_different_keys)
+REGISTER_TEST(test_map_equal_different_values)
+REGISTER_TEST(test_map_equal_different_sizes)
+REGISTER_TEST(test_map_equal_with_nested_vectors)
+REGISTER_TEST(test_list_equal_same_lists)
+REGISTER_TEST(test_list_equal_same_instance)
+REGISTER_TEST(test_list_equal_empty_lists)

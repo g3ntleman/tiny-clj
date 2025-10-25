@@ -4,17 +4,7 @@
  * Tests for namespace management, EvalState, and namespace isolation.
  */
 
-#include "unity/src/unity.h"
-#include "object.h"
-#include "parser.h"
-#include "symbol.h"
-#include "clj_strings.h"
-#include "namespace.h"
-#include "map.h"
-#include "tiny_clj.h"
-#include "memory_profiler.h"
-#include <stdio.h>
-#include <string.h>
+#include "tests_common.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -126,3 +116,11 @@ void test_namespace_binding(void) {
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
+
+// Register all tests
+REGISTER_TEST(test_evalstate_creation)
+REGISTER_TEST(test_namespace_switching)
+REGISTER_TEST(test_namespace_isolation)
+REGISTER_TEST(test_special_ns_variable)
+REGISTER_TEST(test_namespace_lookup)
+REGISTER_TEST(test_namespace_binding)

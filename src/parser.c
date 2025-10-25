@@ -589,7 +589,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return New CljValue or NULL on error
  */
-CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
+CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   if (reader_is_eof(reader))
     return NULL;
@@ -651,16 +651,18 @@ CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st) {
 CljValue parse(const char *input, EvalState *st) {
   if (!input || !st) return NULL;
   
-  Reader reader;
-  reader_init(&reader, input);
-  
   CljValue result = NULL;
   
-  // Don't catch exceptions - let them propagate
-  result = make_value_by_parsing_expr(&reader, st);
-  
-  // Don't autorelease here - parse functions already autorelease their results
-  // (parse_string_internal, parse_vector, parse_list, etc. all use AUTORELEASE)
+  // Create autorelease pool for parse operations
+  WITH_AUTORELEASE_POOL({
+    Reader reader;
+    reader_init(&reader, input);
+    
+    // Don't catch exceptions - let them propagate
+    result = value_by_parsing_expr(&reader, st);
+    
+    // Result is already autoreleased by the pool
+  });
   
   return result;
 }

@@ -4,18 +4,7 @@
  * Tests for sequence semantics and iterator-based implementation.
  */
 
-#include "unity/src/unity.h"
-#include "seq.h"
-#include "clj_strings.h"
-#include "vector.h"
-#include "value.h"
-#include "object.h"
-#include "list.h"
-#include "map.h"
-#include "symbol.h"
-#include "memory_profiler.h"
-#include "memory.h"
-#include "object.h"
+#include "tests_common.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -203,3 +192,13 @@ void test_seq_equality(void) {
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
+
+// Register all tests
+REGISTER_TEST(test_seq_create_list)
+REGISTER_TEST(test_seq_create_vector)
+REGISTER_TEST(test_seq_create_string)
+REGISTER_TEST(test_seq_create_map)
+REGISTER_TEST(test_seq_first)
+REGISTER_TEST(test_seq_rest)
+REGISTER_TEST(test_seq_next)
+REGISTER_TEST(test_seq_equality)

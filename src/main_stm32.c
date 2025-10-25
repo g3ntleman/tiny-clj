@@ -15,7 +15,7 @@ static const char *startup_code =
     ;
 
 // Forward declaration
-extern CljValue make_value_by_parsing_expr(Reader *reader, EvalState *st);
+extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 int main() {
     platform_init();
