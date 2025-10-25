@@ -376,18 +376,21 @@ void test_cow_real_clojure_simulation(void) {
         CljMap *env = (CljMap*)make_map(4);
         printf("Simulating Clojure reduce with assoc...\n");
         
+        CljValue current_env = (CljValue)env;
+        
         for (int i = 0; i < 100; i++) {
-            CljValue new_env = map_assoc_cow((CljValue)env, fixnum(i), fixnum(i * 10));
+            CljValue new_env = map_assoc_cow(current_env, fixnum(i), fixnum(i * 10));
             AUTORELEASE(new_env);
+            current_env = new_env; // Update to the new map
             
             if (i % 20 == 0) {
-                printf("  Item %d: RC=%d, count=%d\n", i, env->base.rc, env->count);
+                printf("  Item %d: RC=%d, count=%d\n", i, ((CljMap*)current_env)->base.rc, ((CljMap*)current_env)->count);
             }
         }
         
-        // Verify some entries
+        // Verify some entries in the final map
         for (int i = 0; i < 100; i += 20) {
-            CljValue val = map_get((CljValue)env, fixnum(i));
+            CljValue val = map_get(current_env, fixnum(i));
             TEST_ASSERT_NOT_NULL(val);
             TEST_ASSERT_EQUAL_INT(i * 10, as_fixnum(val));
         }
