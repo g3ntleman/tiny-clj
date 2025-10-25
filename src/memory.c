@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
 
 // External reference to verbose mode
 extern bool g_memory_verbose_mode;

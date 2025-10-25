@@ -42,6 +42,10 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 // Global storage for current exception (defined in exception.c)
 extern CLJException *g_current_exception;
 
+// Forward declaration to avoid circular dependency with memory.h
+// Note: CljObjectPool is typedef'd in memory.h
+struct CljObjectPool;
+
 /**
  * @brief Exception handler for TRY/CATCH blocks.
  * Contains jump state and linked list structure for exception handling.

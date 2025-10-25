@@ -200,12 +200,20 @@ int get_retain_count(CljObject *obj);
     
     /** @brief Exception-safe autorelease pool macro for TRY/CATCH blocks.
      *  @param code Code block to execute within autorelease pool
-     *  @note Compatible with longjmp by not using block scopes
+     *  @param catch_code Exception handler code block
+     *  @note Catches exceptions, pops pool, then re-throws exception
+     *  @note Requires exception.h to be included BEFORE this header for TRY/CATCH macros
+     *  @note Usage: Include exception.h first, then use this macro in tests
      */
-    #define WITH_AUTORELEASE_POOL_TRY_CATCH(code) do { \
+    #define WITH_AUTORELEASE_POOL_TRY_CATCH(code, catch_code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
-        code; \
-        autorelease_pool_pop(_pool); \
+        TRY { \
+            code; \
+            autorelease_pool_pop(_pool); \
+        } CATCH(ex) { \
+            autorelease_pool_pop(_pool); \
+            catch_code; \
+        } END_TRY; \
     } while(0)
     
     /** @brief Simple autorelease pool management for TRY/CATCH.

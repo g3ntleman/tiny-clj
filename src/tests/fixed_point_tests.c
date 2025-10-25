@@ -248,21 +248,29 @@ TEST(test_fixed_complex_arithmetic) {
 // Register all tests
 
 // Test for fixed-point overflow detection
-// TEMPORARILY DISABLED: This test causes unhandled exceptions that crash the test runner
-// TODO: Fix eval_string() to properly handle exceptions or implement exception handling in tests
-/*
 TEST(test_fixed_overflow_detection) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Test multiplication overflow - this should throw an exception with correct values
-    CljObject *result = eval_string("(* 1000.8 1000000.9)", st);
+    CljObject *result = NULL;
+    WITH_AUTORELEASE_POOL_TRY_CATCH({
+        result = eval_string("(* 1000.8 1000000.9)", st);
+    }, {
+        // Exception caught - result should remain NULL
+        result = NULL;
+    });
     TEST_ASSERT_NULL(result); // Should be NULL due to exception
     
     // Test addition overflow - this should also throw an exception with correct values
-    CljObject *result2 = eval_string("(+ 1000000.5 1000000.5)", st);
+    CljObject *result2 = NULL;
+    WITH_AUTORELEASE_POOL_TRY_CATCH({
+        result2 = eval_string("(+ 1000000.5 1000000.5)", st);
+    }, {
+        // Exception caught - result2 should remain NULL
+        result2 = NULL;
+    });
     TEST_ASSERT_NULL(result2); // Should be NULL due to exception
     
     evalstate_free(st);
 }
-*/

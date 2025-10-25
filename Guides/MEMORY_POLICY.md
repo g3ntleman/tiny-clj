@@ -444,6 +444,83 @@ if (!is_immediate(value)) {
 - **32-bit tagged pointers** store immediate values directly without heap allocation
 - **Type checking** via `is_immediate()` determines if value needs memory management
 
+## Autorelease Pool Management
+
+### Critical Rule: Balanced Push/Pop Operations
+
+**`autorelease_pool_pop()` on empty stack** indicates **unbalanced autorelease pool operations**, not too many pools. This happens when:
+
+1. **Missing `WITH_AUTORELEASE_POOL` wrappers** - Code uses `AUTORELEASE` without a pool
+2. **Early returns** - Code jumps out of pool with `return` statements  
+3. **Exception handling** - Code jumps out of pool with exceptions
+
+### ❌ Common Unbalanced Pool Patterns
+
+```c
+// WRONG: AUTORELEASE without pool
+CljValue result = parse("42", st);  // parse() uses AUTORELEASE internally
+AUTORELEASE(result);  // ❌ ERROR: No WITH_AUTORELEASE_POOL wrapper!
+
+// WRONG: Early return from pool
+WITH_AUTORELEASE_POOL({
+    if (error) {
+        return;  // ❌ ERROR: Jumps out of pool, never popped!
+    }
+    // Pool never gets popped
+});
+
+// WRONG: Exception from pool
+WITH_AUTORELEASE_POOL({
+    throw_exception("Error");  // ❌ ERROR: Jumps out of pool, never popped!
+    // Pool never gets popped
+});
+```
+
+### ✅ Correct Pool Management
+
+```c
+// CORRECT: Pool wraps all AUTORELEASE usage
+WITH_AUTORELEASE_POOL({
+    CljValue result = parse("42", st);
+    AUTORELEASE(result);
+    // Pool automatically popped at end
+});
+
+// CORRECT: Exception handling with pool
+WITH_AUTORELEASE_POOL_TRY_CATCH({
+    CljValue result = parse("42", st);
+    AUTORELEASE(result);
+}, {
+    // Exception handler - pool still gets popped
+});
+
+// CORRECT: No early returns from pool
+WITH_AUTORELEASE_POOL({
+    CljValue result = NULL;
+    if (!error) {
+        result = parse("42", st);
+        AUTORELEASE(result);
+    }
+    // Pool automatically popped at end
+});
+```
+
+### Debugging Unbalanced Pools
+
+When you see `autorelease_pool_pop() called on empty stack` warnings:
+
+1. **Check for missing `WITH_AUTORELEASE_POOL`** around code that uses `AUTORELEASE`
+2. **Look for early returns** that jump out of pool scope
+3. **Check for exceptions** that jump out of pool scope
+4. **Verify pool nesting** - ensure every `push` has a corresponding `pop`
+
+### Memory Policy Impact
+
+- **Unbalanced pools** cause memory leaks (objects never freed)
+- **Missing pools** cause crashes (AUTORELEASE called without active pool)
+- **Early returns** prevent proper cleanup
+- **Exception handling** must use `WITH_AUTORELEASE_POOL_TRY_CATCH`
+
 ## Common Mistakes and Solutions
 
 ### ❌ Incorrect Assumptions
