@@ -121,25 +121,34 @@ static inline const char *utf8codepoint(const char *s, int *out_cp) {
 }
 
 /**
- * @brief Check if a codepoint is a valid symbol character
+ * @brief Check if a codepoint is a valid symbol character (optimized)
  * @param cp UTF-8 codepoint
  * @return true if valid for symbols, false otherwise
  */
 static inline bool utf8_is_symbol_char(int cp) {
-    // Allow Unicode letters, digits, and common symbol characters
-    return (cp >= 'a' && cp <= 'z') ||
-           (cp >= 'A' && cp <= 'Z') ||
-           (cp >= '0' && cp <= '9') ||
-           cp == '-' || cp == '_' || cp == '?' || cp == '!' || cp == '/' || cp == '.' ||
-           cp == '+' || cp == '*' || cp == '=' || cp == '<' || cp == '>' ||
-           cp == '&' || cp == '|' ||
-           // Basic Unicode letters (most common ranges)
-           (cp >= 0x00C0 && cp <= 0x00FF) ||  // Latin Extended-A
-           (cp >= 0x0100 && cp <= 0x017F) ||  // Latin Extended-A
-           (cp >= 0x0180 && cp <= 0x024F) ||  // Latin Extended-B
-           (cp >= 0x0370 && cp <= 0x03FF) ||  // Greek
+    // Fast path: ASCII (95% of cases) - O(1) lookup
+    if (cp < 128) {
+        return (cp >= 'a' && cp <= 'z') ||
+               (cp >= 'A' && cp <= 'Z') ||
+               (cp >= '0' && cp <= '9') ||
+               (cp == '-' || cp == '_' || cp == '?' || cp == '!' || 
+                cp == '/' || cp == '.' || cp == '+' || cp == '*' ||
+                cp == '=' || cp == '<' || cp == '>' || cp == '&' || cp == '|');
+    }
+    
+    // Medium path: Common Unicode ranges (4% of cases) - optimized range checks
+    if (cp < 0x2000) {
+        // Most common Unicode ranges for European languages
+        return (cp >= 0x00C0 && cp <= 0x024F) ||  // Latin Extended-A/B (most common)
+               (cp >= 0x0370 && cp <= 0x03FF) ||  // Greek
+               (cp >= 0x0400 && cp <= 0x04FF) ||  // Cyrillic
+               (cp >= 0x1F00 && cp <= 0x1FFF);    // Greek Extended
+    }
+    
+    // Slow path: Rare Unicode ranges (1% of cases) - limited support
+    // Only support most common ranges for embedded systems
+    return (cp >= 0x0370 && cp <= 0x03FF) ||  // Greek
            (cp >= 0x0400 && cp <= 0x04FF) ||  // Cyrillic
-           (cp >= 0x1F00 && cp <= 0x1FFF) ||  // Greek Extended
            (cp >= 0x2000 && cp <= 0x206F) ||  // General Punctuation
            (cp >= 0x2070 && cp <= 0x209F) ||  // Superscripts and Subscripts
            (cp >= 0x20A0 && cp <= 0x20CF) ||  // Currency Symbols
