@@ -15,7 +15,7 @@
 // EXCEPTION TESTS
 // ============================================================================
 
-void test_simple_try_catch_exception_caught(void) {
+TEST(test_simple_try_catch_exception_caught) {
     bool exception_caught = false;
     
     TRY {
@@ -32,7 +32,7 @@ void test_simple_try_catch_exception_caught(void) {
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been caught");
 }
 
-void test_simple_try_catch_no_exception(void) {
+TEST(test_simple_try_catch_no_exception) {
     bool try_executed = false;
     bool catch_executed = false;
     
@@ -48,7 +48,7 @@ void test_simple_try_catch_no_exception(void) {
     TEST_ASSERT_FALSE_MESSAGE(catch_executed, "CATCH block should not have executed");
 }
 
-void test_nested_try_catch_inner_exception(void) {
+TEST(test_nested_try_catch_inner_exception) {
     bool outer_try = false, inner_try = false, inner_catch = false;
     bool outer_catch = false, after_inner = false;
     
@@ -77,7 +77,7 @@ void test_nested_try_catch_inner_exception(void) {
     TEST_ASSERT_FALSE_MESSAGE(outer_catch, "Outer CATCH should not have executed");
 }
 
-void test_nested_try_catch_outer_exception(void) {
+TEST(test_nested_try_catch_outer_exception) {
     bool outer_try = false, inner_try = false, inner_catch = false;
     bool outer_catch = false, after_inner = false;
     
@@ -104,7 +104,7 @@ void test_nested_try_catch_outer_exception(void) {
     TEST_ASSERT_TRUE_MESSAGE(outer_catch, "Outer CATCH should have executed");
 }
 
-void test_exception_with_autorelease(void) {
+TEST(test_exception_with_autorelease) {
     bool exception_caught = false;
     
     TRY {
@@ -126,7 +126,7 @@ void test_exception_with_autorelease(void) {
     // Objects are automatically cleaned up by AUTORELEASE
 }
 
-void test_repl_crash_scenario(void) {
+TEST(test_repl_crash_scenario) {
     // This test reproduces the exact crash scenario from the REPL
     // Test manual memory management with exceptions - Foundation-style
     
@@ -149,7 +149,7 @@ void test_repl_crash_scenario(void) {
     } END_TRY
 }
 
-void test_map_arity_exception_zero_args(void) {
+TEST(test_map_arity_exception_zero_args) {
     EvalState *st = evalstate_new();
     bool exception_caught = false;
     
@@ -183,7 +183,7 @@ void test_map_arity_exception_zero_args(void) {
     evalstate_free(st);
 }
 
-void test_with_autorelease_pool_swallows_exceptions(void) {
+TEST(test_with_autorelease_pool_swallows_exceptions) {
     bool exception_caught_outside = false;
     
     // Test that WITH_AUTORELEASE_POOL now DOES propagate exceptions correctly
@@ -223,7 +223,7 @@ void test_with_autorelease_pool_swallows_exceptions(void) {
     // This test should now PASS, proving the fix works
 }
 
-void test_throw_existing_exception(void) {
+TEST(test_throw_existing_exception) {
     bool exception_caught = false;
     CLJException *original_exception = NULL;
     
@@ -258,7 +258,7 @@ void test_throw_existing_exception(void) {
         "Exception should have been caught when using THROW(ex)");
 }
 
-void test_throw_macro_convenience(void) {
+TEST(test_throw_macro_convenience) {
     bool exception_caught = false;
     CLJException *original_exception = NULL;
     
@@ -311,13 +311,3 @@ void test_throw_macro_convenience(void) {
 // ============================================================================
 
 // Register all tests
-REGISTER_TEST(test_simple_try_catch_exception_caught)
-REGISTER_TEST(test_simple_try_catch_no_exception)
-REGISTER_TEST(test_nested_try_catch_inner_exception)
-REGISTER_TEST(test_nested_try_catch_outer_exception)
-REGISTER_TEST(test_exception_with_autorelease)
-REGISTER_TEST(test_repl_crash_scenario)
-REGISTER_TEST(test_map_arity_exception_zero_args)
-REGISTER_TEST(test_with_autorelease_pool_swallows_exceptions)
-REGISTER_TEST(test_throw_existing_exception)
-REGISTER_TEST(test_throw_macro_convenience)

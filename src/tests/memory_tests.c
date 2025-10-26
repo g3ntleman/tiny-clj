@@ -15,7 +15,7 @@
 // TEST CASES (using WITH_AUTORELEASE_POOL for additional isolation)
 // ============================================================================
 
-void test_memory_allocation(void) {
+TEST(test_memory_allocation) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test basic object creation
@@ -39,9 +39,8 @@ void test_memory_allocation(void) {
         // Objects are automatically cleaned up by WITH_AUTORELEASE_POOL
     }
 }
-REGISTER_TEST(test_memory_allocation)
 
-void test_memory_deallocation(void) {
+TEST(test_memory_deallocation) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test object lifecycle with heap-allocated object (not immediate)
@@ -66,9 +65,8 @@ void test_memory_deallocation(void) {
         RELEASE(obj);
     }
 }
-REGISTER_TEST(test_memory_deallocation)
 
-void test_memory_leak_detection(void) {
+TEST(test_memory_leak_detection) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test that no memory leaks occur
@@ -80,9 +78,8 @@ void test_memory_leak_detection(void) {
         }
     }
 }
-REGISTER_TEST(test_memory_leak_detection)
 
-void test_vector_memory(void) {
+TEST(test_vector_memory) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test vector creation and memory management
@@ -116,9 +113,8 @@ void test_vector_memory(void) {
         RELEASE((CljObject*)vec);
     }
 }
-REGISTER_TEST(test_vector_memory)
 
-void test_autorelease_pool_basic(void) {
+TEST(test_autorelease_pool_basic) {
     // Test basic WITH_AUTORELEASE_POOL functionality
     // Note: We can't test is_autorelease_pool_active() because
     // the test framework may have active pools
@@ -147,9 +143,8 @@ void test_autorelease_pool_basic(void) {
     // the test framework may have active pools
     // TEST_ASSERT_FALSE(is_autorelease_pool_active());
 }
-REGISTER_TEST(test_autorelease_pool_basic)
 
-void test_autorelease_pool_nested(void) {
+TEST(test_autorelease_pool_nested) {
     // Test nested autorelease pools
     WITH_AUTORELEASE_POOL({
         CljObject *outer_str = (CljObject*)make_string_impl("outer");
@@ -175,9 +170,8 @@ void test_autorelease_pool_nested(void) {
     // the test framework may have active pools
     // TEST_ASSERT_FALSE(is_autorelease_pool_active());
 }
-REGISTER_TEST(test_autorelease_pool_nested)
 
-void test_cow_assumptions_rc_behavior(void) {
+TEST(test_cow_assumptions_rc_behavior) {
     // Test critical assumptions for Copy-on-Write implementation
     printf("\n=== COW Assumptions: RC Behavior ===\n");
     
@@ -208,9 +202,8 @@ void test_cow_assumptions_rc_behavior(void) {
         printf("✓ All COW assumptions verified!\n");
     });
 }
-REGISTER_TEST(test_cow_assumptions_rc_behavior)
 
-void test_autorelease_pool_memory_cleanup(void) {
+TEST(test_autorelease_pool_memory_cleanup) {
     // Test that autorelease pool properly cleans up memory
     // MemoryStats before_stats = memory_profiler_get_stats(); // Unused
     
@@ -259,7 +252,6 @@ void test_autorelease_pool_memory_cleanup(void) {
     // Memory leaks should be minimal (some may remain due to singletons)
     TEST_ASSERT_TRUE(after_stats.memory_leaks <= 10); // Allow for some singleton objects
 }
-REGISTER_TEST(test_autorelease_pool_memory_cleanup)
 
 // ============================================================================
 // TEST GROUPS

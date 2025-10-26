@@ -17,7 +17,7 @@
 // COW ASSUMPTIONS TESTS
 // ============================================================================
 
-void test_autorelease_does_not_increase_rc(void) {
+TEST(test_autorelease_does_not_increase_rc) {
     printf("\n=== COW Assumptions: AUTORELEASE does NOT increase RC ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -35,7 +35,7 @@ void test_autorelease_does_not_increase_rc(void) {
 }
 
 
-void test_retain_increases_rc(void) {
+TEST(test_retain_increases_rc) {
     printf("\n=== COW Assumptions: RETAIN increases RC ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -58,7 +58,7 @@ void test_retain_increases_rc(void) {
 }
 
 
-void test_autorelease_with_retain(void) {
+TEST(test_autorelease_with_retain) {
     printf("\n=== COW Assumptions: AUTORELEASE with RETAIN ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -81,7 +81,7 @@ void test_autorelease_with_retain(void) {
     });
 }
 
-void test_multiple_autorelease_same_object(void) {
+TEST(test_multiple_autorelease_same_object) {
     printf("\n=== COW Assumptions: Multiple AUTORELEASE same object ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -100,7 +100,7 @@ void test_multiple_autorelease_same_object(void) {
     });
 }
 
-void test_autorelease_in_loop_realistic(void) {
+TEST(test_autorelease_in_loop_realistic) {
     printf("\n=== COW Assumptions: AUTORELEASE in loop (realistic) ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -126,7 +126,7 @@ void test_autorelease_in_loop_realistic(void) {
 // COW FUNCTIONALITY TESTS
 // ============================================================================
 
-void test_cow_inplace_mutation_rc_one(void) {
+TEST(test_cow_inplace_mutation_rc_one) {
     printf("\n=== Test 1: In-place mutation bei RC=1 ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -159,7 +159,7 @@ void test_cow_inplace_mutation_rc_one(void) {
     });
 }
 
-void test_cow_copy_on_write_rc_greater_one(void) {
+TEST(test_cow_copy_on_write_rc_greater_one) {
     printf("\n=== Test 2: COW bei RC>1 ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -204,7 +204,7 @@ void test_cow_copy_on_write_rc_greater_one(void) {
     });
 }
 
-void test_cow_original_map_unchanged(void) {
+TEST(test_cow_original_map_unchanged) {
     printf("\n=== Test 3: Original Map unverändert nach COW ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -236,7 +236,7 @@ void test_cow_original_map_unchanged(void) {
     });
 }
 
-void test_cow_with_autorelease(void) {
+TEST(test_cow_with_autorelease) {
     printf("\n=== Test 4: AUTORELEASE mit COW ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -258,7 +258,7 @@ void test_cow_with_autorelease(void) {
     });
 }
 
-void test_cow_memory_leak_detection(void) {
+TEST(test_cow_memory_leak_detection) {
     printf("\n=== Test 5: Memory Leak Detection ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -289,7 +289,7 @@ void test_cow_memory_leak_detection(void) {
 // COW EVAL INTEGRATION TESTS
 // ============================================================================
 
-void test_cow_environment_loop_mutation(void) {
+TEST(test_cow_environment_loop_mutation) {
     printf("\n=== Test 1: Environment-Mutation in Loop ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -310,7 +310,7 @@ void test_cow_environment_loop_mutation(void) {
     });
 }
 
-void test_cow_closure_environment_sharing(void) {
+TEST(test_cow_closure_environment_sharing) {
     printf("\n=== Test 2: Closure-Environment-Sharing ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -345,7 +345,7 @@ void test_cow_closure_environment_sharing(void) {
 }
 
 
-void test_cow_memory_efficiency_benchmark(void) {
+TEST(test_cow_memory_efficiency_benchmark) {
     printf("\n=== Test 4: Memory-Effizienz Benchmark ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -368,7 +368,7 @@ void test_cow_memory_efficiency_benchmark(void) {
     });
 }
 
-void test_cow_real_clojure_simulation(void) {
+TEST(test_cow_real_clojure_simulation) {
     printf("\n=== Test 5: Real Clojure Code Simulation ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -410,7 +410,7 @@ void test_cow_real_clojure_simulation(void) {
 // ============================================================================
 
 
-void test_cow_actual_cow_demonstration(void) {
+TEST(test_cow_actual_cow_demonstration) {
     printf("\n=== COW Actual COW Demonstration ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -463,26 +463,3 @@ void test_cow_actual_cow_demonstration(void) {
 // ============================================================================
 // REGISTER ALL TESTS
 // ============================================================================
-
-// COW Assumptions Tests
-REGISTER_TEST(test_autorelease_does_not_increase_rc)
-REGISTER_TEST(test_retain_increases_rc)
-REGISTER_TEST(test_autorelease_with_retain)
-REGISTER_TEST(test_multiple_autorelease_same_object)
-REGISTER_TEST(test_autorelease_in_loop_realistic)
-
-// COW Functionality Tests
-REGISTER_TEST(test_cow_inplace_mutation_rc_one)
-REGISTER_TEST(test_cow_copy_on_write_rc_greater_one)
-REGISTER_TEST(test_cow_original_map_unchanged)
-REGISTER_TEST(test_cow_with_autorelease)
-REGISTER_TEST(test_cow_memory_leak_detection)
-
-// COW Eval Integration Tests
-REGISTER_TEST(test_cow_environment_loop_mutation)
-REGISTER_TEST(test_cow_closure_environment_sharing)
-REGISTER_TEST(test_cow_memory_efficiency_benchmark)
-REGISTER_TEST(test_cow_real_clojure_simulation)
-
-// COW Minimal Tests
-REGISTER_TEST(test_cow_actual_cow_demonstration)

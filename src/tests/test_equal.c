@@ -10,7 +10,7 @@
 // BASIC EQUALITY TESTS
 // ============================================================================
 
-void test_equal_null_pointers(void) {
+TEST(test_equal_null_pointers) {
     WITH_MEMORY_PROFILING({
     
     // Test null pointer cases
@@ -21,12 +21,12 @@ void test_equal_null_pointers(void) {
     });
 }
 
-void test_equal_same_objects(void) {
+TEST(test_equal_same_objects) {
     // Test same object reference - minimal test
     TEST_ASSERT_TRUE(1 == 1); // Just test that the test framework works
 }
 
-void test_equal_different_strings(void) {
+TEST(test_equal_different_strings) {
     WITH_MEMORY_PROFILING({
     
     // Test different strings
@@ -42,7 +42,7 @@ void test_equal_different_strings(void) {
     });
 }
 
-void test_equal_different_types(void) {
+TEST(test_equal_different_types) {
     WITH_MEMORY_PROFILING({
     
     // Test different types
@@ -61,7 +61,7 @@ void test_equal_different_types(void) {
     });
 }
 
-void test_equal_immediate_values(void) {
+TEST(test_equal_immediate_values) {
     WITH_MEMORY_PROFILING({
     
     // Test immediate values - these should not be passed to clj_equal
@@ -84,7 +84,7 @@ void test_equal_immediate_values(void) {
 // VECTOR EQUALITY TESTS
 // ============================================================================
 
-void test_vector_equal_same_vectors(void) {
+TEST(test_vector_equal_same_vectors) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical vectors using CljValue API
@@ -119,7 +119,7 @@ void test_vector_equal_same_vectors(void) {
     });
 }
 
-void test_vector_equal_different_lengths(void) {
+TEST(test_vector_equal_different_lengths) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different lengths
@@ -153,7 +153,7 @@ void test_vector_equal_different_lengths(void) {
     });
 }
 
-void test_vector_equal_different_values(void) {
+TEST(test_vector_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different values using CljValue API
@@ -184,7 +184,7 @@ void test_vector_equal_different_values(void) {
     });
 }
 
-void test_clj_equal_id_function(void) {
+TEST(test_clj_equal_id_function) {
     WITH_MEMORY_PROFILING({
     
     // Test immediate values (CljValue)
@@ -222,7 +222,7 @@ void test_clj_equal_id_function(void) {
     });
 }
 
-void test_vector_equal_with_strings(void) {
+TEST(test_vector_equal_with_strings) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with strings
@@ -262,7 +262,7 @@ void test_vector_equal_with_strings(void) {
 // MAP EQUALITY TESTS
 // ============================================================================
 
-void test_map_equal_same_maps(void) {
+TEST(test_map_equal_same_maps) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical maps using old API
@@ -296,7 +296,7 @@ void test_map_equal_same_maps(void) {
     });
 }
 
-void test_map_equal_different_keys(void) {
+TEST(test_map_equal_different_keys) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -331,7 +331,7 @@ void test_map_equal_different_keys(void) {
     });
 }
 
-void test_map_equal_different_values(void) {
+TEST(test_map_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -366,7 +366,7 @@ void test_map_equal_different_values(void) {
     });
 }
 
-void test_map_equal_different_sizes(void) {
+TEST(test_map_equal_different_sizes) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -399,7 +399,7 @@ void test_map_equal_different_sizes(void) {
     });
 }
 
-void test_map_equal_with_nested_vectors(void) {
+TEST(test_map_equal_with_nested_vectors) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -449,7 +449,7 @@ void test_map_equal_with_nested_vectors(void) {
 // LIST EQUALITY TESTS
 // ============================================================================
 
-void test_list_equal_same_lists(void) {
+TEST(test_list_equal_same_lists) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical lists
@@ -467,7 +467,7 @@ void test_list_equal_same_lists(void) {
     });
 }
 
-void test_list_equal_same_instance(void) {
+TEST(test_list_equal_same_instance) {
     WITH_MEMORY_PROFILING({
     
     CljObject *list1 = empty_list();
@@ -482,7 +482,7 @@ void test_list_equal_same_instance(void) {
     });
 }
 
-void test_list_equal_empty_lists(void) {
+TEST(test_list_equal_empty_lists) {
     WITH_MEMORY_PROFILING({
     
     CljObject *list1 = empty_list();
@@ -499,21 +499,3 @@ void test_list_equal_empty_lists(void) {
 }
 
 // Register all tests
-REGISTER_TEST(test_equal_null_pointers)
-REGISTER_TEST(test_equal_same_objects)
-REGISTER_TEST(test_equal_different_strings)
-REGISTER_TEST(test_equal_different_types)
-REGISTER_TEST(test_equal_immediate_values)
-REGISTER_TEST(test_vector_equal_same_vectors)
-REGISTER_TEST(test_vector_equal_different_lengths)
-REGISTER_TEST(test_vector_equal_different_values)
-REGISTER_TEST(test_clj_equal_id_function)
-REGISTER_TEST(test_vector_equal_with_strings)
-REGISTER_TEST(test_map_equal_same_maps)
-REGISTER_TEST(test_map_equal_different_keys)
-REGISTER_TEST(test_map_equal_different_values)
-REGISTER_TEST(test_map_equal_different_sizes)
-REGISTER_TEST(test_map_equal_with_nested_vectors)
-REGISTER_TEST(test_list_equal_same_lists)
-REGISTER_TEST(test_list_equal_same_instance)
-REGISTER_TEST(test_list_equal_empty_lists)

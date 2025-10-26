@@ -14,7 +14,7 @@
 // FOR-LOOP TESTS
 // ============================================================================
 
-void test_dotimes_basic(void) {
+TEST(test_dotimes_basic) {
     // Test that eval_dotimes handles NULL input gracefully
     CljMap *env = (CljMap*)make_map(4);
     
@@ -31,7 +31,7 @@ void test_dotimes_basic(void) {
     RELEASE(env);
 }
 
-void test_doseq_basic(void) {
+TEST(test_doseq_basic) {
     // Test that eval_doseq handles NULL input gracefully
     CljMap *env = (CljMap*)make_map(4);
     
@@ -48,7 +48,7 @@ void test_doseq_basic(void) {
     RELEASE(env);
 }
 
-void test_for_basic(void) {
+TEST(test_for_basic) {
     // Test that eval_for handles NULL input gracefully
     CljMap *env = (CljMap*)make_map(4);
     
@@ -65,7 +65,7 @@ void test_for_basic(void) {
     RELEASE(env);
 }
 
-void test_dotimes_with_environment(void) {
+TEST(test_dotimes_with_environment) {
     // Use WITH_AUTORELEASE_POOL for eval_dotimes which uses autorelease()
     WITH_AUTORELEASE_POOL({
         // Test dotimes with environment binding
@@ -100,7 +100,7 @@ void test_dotimes_with_environment(void) {
     });
 }
 
-void test_doseq_with_environment(void) {
+TEST(test_doseq_with_environment) {
     // Use WITH_AUTORELEASE_POOL for eval_doseq which uses autorelease()
     WITH_AUTORELEASE_POOL({
         // Test doseq with environment binding
@@ -150,8 +150,3 @@ void test_doseq_with_environment(void) {
 // ============================================================================
 
 // Register all tests
-REGISTER_TEST(test_dotimes_basic)
-REGISTER_TEST(test_doseq_basic)
-REGISTER_TEST(test_for_basic)
-REGISTER_TEST(test_dotimes_with_environment)
-REGISTER_TEST(test_doseq_with_environment)

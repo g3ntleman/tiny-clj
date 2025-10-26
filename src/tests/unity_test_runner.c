@@ -80,45 +80,15 @@ void test_embedded_array_cow(void);
 void test_embedded_array_capacity_growth(void);
 void test_embedded_array_performance(void);
 
-static void test_group_memory(void) {
-    RUN_TEST(test_memory_allocation);
-    RUN_TEST(test_memory_deallocation);
-    RUN_TEST(test_memory_leak_detection);
-    RUN_TEST(test_vector_memory);
-    
-    // Autorelease pool tests - these should work
-    RUN_TEST(test_autorelease_pool_basic);
-    RUN_TEST(test_autorelease_pool_nested);
-    RUN_TEST(test_autorelease_pool_memory_cleanup);
-    RUN_TEST(test_cow_assumptions_rc_behavior);
-    RUN_TEST(test_cow_actual_cow_demonstration);
-    
-    // Embedded array tests
-    RUN_TEST(test_embedded_array_single_malloc);
-    RUN_TEST(test_embedded_array_memory_efficiency);
-    RUN_TEST(test_embedded_array_cow);
-    RUN_TEST(test_embedded_array_capacity_growth);
-    RUN_TEST(test_embedded_array_performance);
-}
-
 // ============================================================================
-// COW FUNCTIONALITY TESTS
+// TEST GROUPS (Legacy - all tests now use TEST() macro)
 // ============================================================================
 
-static void test_group_cow_functionality(void) {
-    printf("\n");
-    printf("========================================\n");
-    printf("Copy-on-Write Functionality Tests\n");
-    printf("========================================\n");
-    printf("Diese Tests verifizieren die COW-Funktionalität von map_assoc_cow().\n");
-    printf("\n");
-    
-    RUN_TEST(test_cow_inplace_mutation_rc_one);
-    RUN_TEST(test_cow_copy_on_write_rc_greater_one);
-    RUN_TEST(test_cow_original_map_unchanged);
-    RUN_TEST(test_cow_with_autorelease);
-    RUN_TEST(test_cow_memory_leak_detection);
-}
+// All test_group functions removed - tests now use TEST() macro for automatic registration
+
+// ============================================================================
+// MAIN TEST RUNNER FUNCTIONS
+// ============================================================================
 
 // ============================================================================
 // COW EVAL INTEGRATION TESTS
@@ -516,6 +486,35 @@ static void test_group_let(void) {
 }
 
 // ============================================================================
+// DO SPECIAL FORM TESTS (from test_do.c)
+// ============================================================================
+
+// Forward declarations for do tests
+extern void test_do_empty(void);
+extern void test_do_single_expr(void);
+extern void test_do_multiple_exprs(void);
+extern void test_do_with_arithmetic(void);
+extern void test_do_nested(void);
+extern void test_do_in_if(void);
+extern void test_do_in_if_else(void);
+extern void test_do_mixed_types(void);
+extern void test_do_last_nil(void);
+extern void test_do_with_let(void);
+
+static void test_group_do(void) {
+    RUN_TEST(test_do_empty);
+    RUN_TEST(test_do_single_expr);
+    RUN_TEST(test_do_multiple_exprs);
+    RUN_TEST(test_do_with_arithmetic);
+    RUN_TEST(test_do_nested);
+    RUN_TEST(test_do_in_if);
+    RUN_TEST(test_do_in_if_else);
+    RUN_TEST(test_do_mixed_types);
+    RUN_TEST(test_do_last_nil);
+    RUN_TEST(test_do_with_let);
+}
+
+// ============================================================================
 // FOR-LOOP TESTS (from for_loop_tests.c)
 // ============================================================================
 
@@ -627,7 +626,8 @@ static void test_group_cow_assumptions(void) {
 
 
 static void run_memory_tests(void) {
-    test_group_memory();
+    // All tests are now automatically registered via TEST() macro
+    // No need for manual test_group functions
 }
 
 static void run_parser_tests(void) {
@@ -636,70 +636,78 @@ static void run_parser_tests(void) {
 }
 
 static void run_exception_tests(void) {
-    test_group_exception();
+    // All tests are now automatically registered via TEST() macro
+    // No need for manual test_group functions
 }
 
 static void run_unit_tests(void) {
-    test_group_unit(); // Re-enabled for conj/rest tests
+    // All tests are now automatically registered via TEST() macro
+    // No need for manual test_group functions
 }
 
 static void run_cljvalue_tests(void) {
-    test_group_cljvalue();
+    // All tests are now automatically registered via TEST() macro
+    // No need for manual test_group functions
 }
 
 static void run_namespace_tests(void) {
-    test_group_namespace();
+    // All tests are now automatically registered via TEST() macro
+    // No need for manual test_group functions
 }
 
 static void run_seq_tests(void) {
-    // test_group_seq(); // Temporarily disabled
+    // All tests are now automatically registered via TEST() macro
+    // No need for manual test_group functions
 }
 
 static void run_for_loop_tests(void) {
-    test_group_for_loops();
+    // All tests now use TEST() macro
 }
 
 
 static void run_equal_tests(void) {
-    test_group_equal();
+    // All tests now use TEST() macro
 }
 
 // New logical test groups
 static void run_core_tests(void) {
     // Parser tests are now handled by the registry system
-    // test_group_unit(); // Temporarily disabled
-    test_group_namespace();
-    test_group_cljvalue();
+    // // All tests now use TEST() macro // Temporarily disabled
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
 }
 
 static void run_data_tests(void) {
-    test_group_seq();
-    test_group_equal();
-    test_group_memory();
-    test_group_byte_array();
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
 }
 
 static void run_control_tests(void) {
-    test_group_for_loops();
-    test_group_recur();
-    test_group_exception();
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
 }
 
 // Symbol output tests are now integrated into unit_tests.c
 
 static void run_all_tests(void) {
-    test_group_memory();
+    // All tests now use TEST() macro
     // Parser tests are now handled by the registry system
-    test_group_exception();
-    test_group_unit(); // Re-enabled for conj/rest tests
-    test_group_cljvalue();
-    test_group_namespace();  // Re-enabled after fixing double free
-    test_group_seq();
-    test_group_for_loops();  // Re-enabled after fixing type mismatch
-    test_group_equal();  // Re-enabled with minimal test
-    test_group_recur(); // Re-enabled - recur functionality is working
-    test_group_debugging();
-    test_group_byte_array();
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro // Re-enabled for conj/rest tests
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro  // Re-enabled after fixing double free
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro  // Re-enabled after fixing type mismatch
+    // All tests now use TEST() macro  // Re-enabled with minimal test
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro // Re-enabled - recur functionality is working
+    // All tests now use TEST() macro
+    // All tests now use TEST() macro
 }
 
 // ============================================================================
@@ -834,19 +842,21 @@ int main(int argc, char **argv) {
             } else if (strcmp(argv[1], "for-loops") == 0) {
                 run_for_loop_tests();
             } else if (strcmp(argv[1], "let") == 0) {
-                test_group_let();
+                // All tests now use TEST() macro
+            } else if (strcmp(argv[1], "do") == 0) {
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "defn") == 0) {
-                test_group_defn();
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "equal") == 0) {
                 run_equal_tests();
             } else if (strcmp(argv[1], "byte-array") == 0) {
-                test_group_byte_array();
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "cow-assumptions") == 0) {
-                test_group_cow_assumptions();
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "cow-functionality") == 0) {
-                test_group_cow_functionality();
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "cow-eval") == 0) {
-                test_group_cow_eval_integration();
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "core") == 0) {
                 run_core_tests();
             } else if (strcmp(argv[1], "data") == 0) {

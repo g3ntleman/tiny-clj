@@ -38,7 +38,7 @@ TEST(test_list_count) {
     }
 }
 
-void test_list_creation(void) {
+TEST(test_list_creation) {
     WITH_AUTORELEASE_POOL({
         // High-level test using eval_string
         EvalState *st = evalstate_new();
@@ -66,7 +66,7 @@ void test_list_creation(void) {
     });
 }
 
-void test_symbol_creation(void) {
+TEST(test_symbol_creation) {
     WITH_AUTORELEASE_POOL({
         // High-level test using eval_string
         EvalState *st = evalstate_new();
@@ -87,7 +87,7 @@ void test_symbol_creation(void) {
     });
 }
 
-void test_string_creation(void) {
+TEST(test_string_creation) {
     WITH_AUTORELEASE_POOL({
         // High-level test using eval_string
         EvalState *st = evalstate_new();
@@ -113,7 +113,7 @@ void test_string_creation(void) {
     });
 }
 
-void test_vector_creation(void) {
+TEST(test_vector_creation) {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -138,7 +138,7 @@ void test_vector_creation(void) {
     // Memory is automatically managed by eval_string
 }
 
-void test_map_creation(void) {
+TEST(test_map_creation) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test map creation using CljValue API
@@ -148,7 +148,7 @@ void test_map_creation(void) {
     }
 }
 
-void test_array_map_builtin(void) {
+TEST(test_array_map_builtin) {
     // Manual memory management - WITH_AUTORELEASE_POOL incompatible with setjmp/longjmp
     {
         EvalState *eval_state = evalstate_new();
@@ -183,7 +183,7 @@ void test_array_map_builtin(void) {
     }
 }
 
-void test_integer_creation(void) {
+TEST(test_integer_creation) {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -209,7 +209,7 @@ void test_integer_creation(void) {
     // Memory is automatically managed by eval_string
 }
 
-void test_float_creation(void) {
+TEST(test_float_creation) {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -235,7 +235,7 @@ void test_float_creation(void) {
     // Memory is automatically managed by eval_string
 }
 
-void test_nil_creation(void) {
+TEST(test_nil_creation) {
     // High-level test using eval_string
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
@@ -278,7 +278,7 @@ void test_nil_creation(void) {
 
 // CljValue tests moved to test_values.c to avoid duplication
 
-void test_special_form_and(void) {
+TEST(test_special_form_and) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -308,7 +308,7 @@ void test_special_form_and(void) {
     evalstate_free(st);
 }
 
-void test_special_form_or(void) {
+TEST(test_special_form_or) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
@@ -347,7 +347,7 @@ void test_special_form_or(void) {
     evalstate_free(st);
 }
 
-void test_seq_rest_performance(void) {
+TEST(test_seq_rest_performance) {
     // Test that (rest (rest (rest ...))) uses CljSeqIterator efficiently
     EvalState *st = evalstate_new();
     
@@ -384,12 +384,12 @@ void test_seq_rest_performance(void) {
     evalstate_free(st);
 }
 
-void test_seq_iterator_verification(void) {
+TEST(test_seq_iterator_verification) {
     // Test disabled due to implementation issues
     TEST_ASSERT_TRUE(true);
 }
 
-void test_load_multiline_file(void) {
+TEST(test_load_multiline_file) {
     // Test multiline expressions parsing (without evaluation)
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
@@ -431,7 +431,7 @@ void test_load_multiline_file(void) {
 }
 
 
-void test_map_function(void) {
+TEST(test_map_function) {
     // Test the map higher-order function
     // NOTE: map needs to be implemented as a builtin function
     // This test is currently a placeholder that verifies the system is ready for map
@@ -572,7 +572,7 @@ void test_map_function(void) {
 // FIXED-POINT ARITHMETIC TESTS
 // ============================================================================
 
-void test_fixed_creation_and_conversion(void) {
+TEST(test_fixed_creation_and_conversion) {
     // Test basic Fixed-Point creation
     CljValue f1 = fixed(1.5f);
     TEST_ASSERT_TRUE(is_fixed(f1));
@@ -594,7 +594,7 @@ void test_fixed_creation_and_conversion(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.001f, as_fixed(f4));
 }
 
-void test_fixed_arithmetic_operations(void) {
+TEST(test_fixed_arithmetic_operations) {
     WITH_AUTORELEASE_POOL({
         EvalState *st = evalstate_new();
         if (!st) {
@@ -644,7 +644,7 @@ void test_fixed_arithmetic_operations(void) {
     });
 }
 
-void test_fixed_mixed_type_operations(void) {
+TEST(test_fixed_mixed_type_operations) {
     WITH_AUTORELEASE_POOL({
             EvalState *st = evalstate_new();
             if (!st) {
@@ -686,7 +686,7 @@ void test_fixed_mixed_type_operations(void) {
     });
 }
 
-void test_fixed_division_with_remainder(void) {
+TEST(test_fixed_division_with_remainder) {
     WITH_AUTORELEASE_POOL({
             EvalState *st = evalstate_new();
             if (!st) {
@@ -727,7 +727,7 @@ void test_fixed_division_with_remainder(void) {
     });
 }
 
-void test_fixed_precision_limits(void) {
+TEST(test_fixed_precision_limits) {
     WITH_AUTORELEASE_POOL({
             EvalState *st = evalstate_new();
             if (!st) {
@@ -770,7 +770,7 @@ void test_fixed_precision_limits(void) {
     });
 }
 
-void test_fixed_variadic_operations(void) {
+TEST(test_fixed_variadic_operations) {
     WITH_AUTORELEASE_POOL({
             EvalState *st = evalstate_new();
             if (!st) {
@@ -811,7 +811,7 @@ void test_fixed_variadic_operations(void) {
     });
 }
 
-void test_fixed_error_handling(void) {
+TEST(test_fixed_error_handling) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -839,7 +839,7 @@ void test_fixed_error_handling(void) {
     evalstate_free(st);
 }
 
-void test_fixed_comparison_operators(void) {
+TEST(test_fixed_comparison_operators) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -910,7 +910,7 @@ void test_fixed_comparison_operators(void) {
 // ============================================================================
 
 // Test as_list function with valid list
-void test_as_list_valid(void) {
+TEST(test_as_list_valid) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -938,7 +938,7 @@ void test_as_list_valid(void) {
 }
 
 // Test as_list function with invalid input
-void test_as_list_invalid(void) {
+TEST(test_as_list_invalid) {
     // Test with NULL
     CljList *result = as_list(NULL);
     TEST_ASSERT_NULL(result);
@@ -953,7 +953,7 @@ void test_as_list_invalid(void) {
 }
 
 // Test LIST_FIRST with valid list
-void test_list_first_valid(void) {
+TEST(test_list_first_valid) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -979,7 +979,7 @@ void test_list_first_valid(void) {
 }
 
 // Test is_type function with various types
-void test_is_type_function(void) {
+TEST(test_is_type_function) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -1013,7 +1013,7 @@ void test_is_type_function(void) {
 }
 
 // Test eval_list with simple arithmetic
-void test_eval_list_simple_arithmetic(void) {
+TEST(test_eval_list_simple_arithmetic) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -1032,7 +1032,7 @@ void test_eval_list_simple_arithmetic(void) {
 }
 
 // Test eval_list with function call
-void test_eval_list_function_call(void) {
+TEST(test_eval_list_function_call) {
     EvalState *st = evalstate_new();
     if (!st) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
@@ -1056,7 +1056,7 @@ void test_eval_list_function_call(void) {
 }
 
 // Test group for debugging functions
-void test_group_debugging(void) {
+TEST(test_group_debugging) {
     RUN_TEST(test_as_list_valid);
     RUN_TEST(test_as_list_invalid);
     RUN_TEST(test_list_first_valid);
@@ -1237,7 +1237,7 @@ TEST(test_rest_single_element) {
 }
 
 // Test group for conj and rest functions
-void test_group_conj_rest(void) {
+TEST(test_group_conj_rest) {
     RUN_TEST(test_conj_arity_0);
     RUN_TEST(test_conj_arity_1);
     RUN_TEST(test_conj_arity_2);
@@ -1252,7 +1252,5 @@ void test_group_conj_rest(void) {
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
-
-REGISTER_TEST(test_list_creation);
 
 // Register all tests

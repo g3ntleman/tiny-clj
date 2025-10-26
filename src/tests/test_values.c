@@ -14,7 +14,7 @@
 // CLJVALUE TESTS
 // ============================================================================
 
-void test_cljvalue_immediate_helpers(void) {
+TEST(test_cljvalue_immediate_helpers) {
     WITH_AUTORELEASE_POOL({
         // Test immediate value helpers
         CljValue fixnum_val = fixnum(42);
@@ -34,7 +34,7 @@ void test_cljvalue_immediate_helpers(void) {
     });
 }
 
-void test_cljvalue_vector_api(void) {
+TEST(test_cljvalue_vector_api) {
     WITH_AUTORELEASE_POOL({
         // Test vector API
         CljValue vec = make_vector(3, 1);
@@ -58,7 +58,7 @@ void test_cljvalue_vector_api(void) {
     });
 }
 
-void test_cljvalue_transient_vector(void) {
+TEST(test_cljvalue_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Test transient vector operations
         CljValue tvec = make_vector(5, 1);  // 1 = mutable
@@ -80,7 +80,7 @@ void test_cljvalue_transient_vector(void) {
     });
 }
 
-void test_cljvalue_clojure_semantics(void) {
+TEST(test_cljvalue_clojure_semantics) {
     WITH_AUTORELEASE_POOL({
         // Test Clojure semantics
         CljValue vec = make_vector(2, 1);
@@ -99,7 +99,7 @@ void test_cljvalue_clojure_semantics(void) {
     });
 }
 
-void test_cljvalue_wrapper_functions(void) {
+TEST(test_cljvalue_wrapper_functions) {
     WITH_AUTORELEASE_POOL({
         // Test wrapper functions
         CljValue fixnum_val = fixnum(123);
@@ -116,7 +116,7 @@ void test_cljvalue_wrapper_functions(void) {
     });
 }
 
-void test_cljvalue_immediates_fixnum(void) {
+TEST(test_cljvalue_immediates_fixnum) {
     WITH_AUTORELEASE_POOL({
         // Test fixnum immediates
         CljValue val1 = fixnum(0);
@@ -138,7 +138,7 @@ void test_cljvalue_immediates_fixnum(void) {
     });
 }
 
-void test_cljvalue_immediates_char(void) {
+TEST(test_cljvalue_immediates_char) {
     WITH_AUTORELEASE_POOL({
         // Test char immediates
         CljValue char1 = character('A');
@@ -159,7 +159,7 @@ void test_cljvalue_immediates_char(void) {
     });
 }
 
-void test_cljvalue_immediates_special(void) {
+TEST(test_cljvalue_immediates_special) {
     WITH_AUTORELEASE_POOL({
         // Test special immediates
         CljValue nil_val = SPECIAL_NIL;
@@ -178,7 +178,7 @@ void test_cljvalue_immediates_special(void) {
     });
 }
 
-void test_cljvalue_immediates_fixed(void) {
+TEST(test_cljvalue_immediates_fixed) {
     WITH_AUTORELEASE_POOL({
         // Test fixed-point immediates
         CljValue fixed_val = fixed(123.45f);
@@ -191,7 +191,7 @@ void test_cljvalue_immediates_fixed(void) {
     });
 }
 
-void test_cljvalue_parser_immediates(void) {
+TEST(test_cljvalue_parser_immediates) {
     WITH_AUTORELEASE_POOL({
         // Test parser immediate value creation
         EvalState *st = evalstate_new();
@@ -231,7 +231,7 @@ void test_cljvalue_parser_immediates(void) {
     });
 }
 
-void test_cljvalue_memory_efficiency(void) {
+TEST(test_cljvalue_memory_efficiency) {
     WITH_AUTORELEASE_POOL({
         // Test memory efficiency of immediate values
         CljValue fixnum_val = fixnum(42);
@@ -255,7 +255,7 @@ void test_cljvalue_memory_efficiency(void) {
     });
 }
 
-void test_cljvalue_vectors_high_level(void) {
+TEST(test_cljvalue_vectors_high_level) {
     WITH_AUTORELEASE_POOL({
         // Test vectors at high level
         CljValue vec = make_vector(3, 1);
@@ -277,7 +277,7 @@ void test_cljvalue_vectors_high_level(void) {
     });
 }
 
-void test_cljvalue_immediates_high_level(void) {
+TEST(test_cljvalue_immediates_high_level) {
     WITH_AUTORELEASE_POOL({
         // Test immediates at high level
         CljValue fixnum_val = fixnum(42);
@@ -300,17 +300,3 @@ void test_cljvalue_immediates_high_level(void) {
 // ============================================================================
 // TEST REGISTRATION
 // ============================================================================
-
-REGISTER_TEST(test_cljvalue_immediate_helpers)
-REGISTER_TEST(test_cljvalue_vector_api)
-REGISTER_TEST(test_cljvalue_transient_vector)
-REGISTER_TEST(test_cljvalue_clojure_semantics)
-REGISTER_TEST(test_cljvalue_wrapper_functions)
-REGISTER_TEST(test_cljvalue_immediates_fixnum)
-REGISTER_TEST(test_cljvalue_immediates_char)
-REGISTER_TEST(test_cljvalue_immediates_special)
-REGISTER_TEST(test_cljvalue_immediates_fixed)
-REGISTER_TEST(test_cljvalue_parser_immediates)
-REGISTER_TEST(test_cljvalue_memory_efficiency)
-REGISTER_TEST(test_cljvalue_vectors_high_level)
-REGISTER_TEST(test_cljvalue_immediates_high_level)

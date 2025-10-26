@@ -17,7 +17,7 @@ int load_clojure_core(EvalState *st);
 // NAMESPACE TESTS
 // ============================================================================
 
-void test_evalstate_creation(void) {
+TEST(test_evalstate_creation) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         EvalState *eval_state = evalstate_new();
@@ -30,7 +30,7 @@ void test_evalstate_creation(void) {
     }
 }
 
-void test_namespace_switching(void) {
+TEST(test_namespace_switching) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         EvalState *eval_state = evalstate_new();
@@ -48,7 +48,7 @@ void test_namespace_switching(void) {
     }
 }
 
-void test_namespace_isolation(void) {
+TEST(test_namespace_isolation) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         EvalState *eval_state = evalstate_new();
@@ -66,7 +66,7 @@ void test_namespace_isolation(void) {
     }
 }
 
-void test_special_ns_variable(void) {
+TEST(test_special_ns_variable) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         EvalState *eval_state = evalstate_new();
@@ -80,7 +80,7 @@ void test_special_ns_variable(void) {
     }
 }
 
-void test_namespace_lookup(void) {
+TEST(test_namespace_lookup) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         EvalState *eval_state = evalstate_new();
@@ -95,7 +95,7 @@ void test_namespace_lookup(void) {
     }
 }
 
-void test_namespace_binding(void) {
+TEST(test_namespace_binding) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         EvalState *eval_state = evalstate_new();
@@ -118,9 +118,3 @@ void test_namespace_binding(void) {
 // ============================================================================
 
 // Register all tests
-REGISTER_TEST(test_evalstate_creation)
-REGISTER_TEST(test_namespace_switching)
-REGISTER_TEST(test_namespace_isolation)
-REGISTER_TEST(test_special_ns_variable)
-REGISTER_TEST(test_namespace_lookup)
-REGISTER_TEST(test_namespace_binding)
