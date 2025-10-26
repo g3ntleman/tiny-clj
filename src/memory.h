@@ -196,8 +196,13 @@ int get_retain_count(CljObject *obj);
      */
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
-        code; \
-        autorelease_pool_pop(_pool); \
+        TRY { \
+            code; \
+            autorelease_pool_pop(_pool); \
+        } CATCH(ex) { \
+            autorelease_pool_pop(_pool); \
+            THROW(ex); \
+        } END_TRY \
     } while(0)
     
     /** @brief Simple autorelease pool management for TRY/CATCH.
@@ -290,8 +295,13 @@ int get_retain_count(CljObject *obj);
      */
     #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
-        code; \
-        autorelease_pool_pop(_pool); \
+        TRY { \
+            code; \
+            autorelease_pool_pop(_pool); \
+        } CATCH(ex) { \
+            autorelease_pool_pop(_pool); \
+            THROW(ex); \
+        } END_TRY \
     } while(0)
     
     /** @brief Simple autorelease pool management for TRY/CATCH (release builds).

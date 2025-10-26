@@ -18,15 +18,14 @@ extern bool g_memory_verbose_mode;
 
 
 void setUp(void) {
-    WITH_AUTORELEASE_POOL(
-        // Reset memory profiler statistics BEFORE each test
-        memory_profiler_reset();
-        
-        runtime_init();
-        
-        if (!g_runtime.builtins_registered) {
-            init_special_symbols();
-            meta_registry_init();
+    // Reset memory profiler statistics BEFORE each test
+    memory_profiler_reset();
+    
+    runtime_init();
+    
+    if (!g_runtime.builtins_registered) {
+        init_special_symbols();
+        meta_registry_init();
             register_builtins();
             g_runtime.builtins_registered = true;
         }
@@ -34,7 +33,6 @@ void setUp(void) {
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
         set_memory_verbose_mode(false);
-    );
 }
 
 void tearDown(void) {
@@ -298,9 +296,9 @@ extern void test_map_equal_different_sizes(void);
 extern void test_map_equal_with_nested_vectors(void);
 
 static void test_group_unit(void) {
-    // Wrap all tests in WITH_AUTORELEASE_POOL to handle AUTORELEASE calls
-    WITH_AUTORELEASE_POOL({
-        RUN_TEST(test_list_count);
+    // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
+    // Cannot use WITH_AUTORELEASE_POOL here as it would violate LIFO principle with nested pools
+    RUN_TEST(test_list_count);
     RUN_TEST(test_list_creation);
     RUN_TEST(test_symbol_creation);
     RUN_TEST(test_string_creation);
@@ -355,43 +353,40 @@ static void test_group_unit(void) {
         // Debugging tests moved to test_group_debugging() to avoid duplication
         
         // Recur tests moved to test_group_recur() to avoid duplication
-    });
 }
 
 static void test_group_cljvalue(void) {
-    // Wrap CljValue tests in WITH_AUTORELEASE_POOL to handle AUTORELEASE calls
-    WITH_AUTORELEASE_POOL({
-        // CljValue API tests
-        RUN_TEST(test_cljvalue_immediate_helpers);
-        RUN_TEST(test_cljvalue_vector_api);
-        RUN_TEST(test_cljvalue_transient_vector);
-        RUN_TEST(test_cljvalue_clojure_semantics);
-        RUN_TEST(test_cljvalue_wrapper_functions);
+    // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
+    // CljValue API tests
+    RUN_TEST(test_cljvalue_immediate_helpers);
+    RUN_TEST(test_cljvalue_vector_api);
+    RUN_TEST(test_cljvalue_transient_vector);
+    RUN_TEST(test_cljvalue_clojure_semantics);
+    RUN_TEST(test_cljvalue_wrapper_functions);
+    
+    // New immediate value tests
+    RUN_TEST(test_cljvalue_immediates_fixnum);
+    RUN_TEST(test_cljvalue_immediates_char);
+    RUN_TEST(test_cljvalue_immediates_special);
+    RUN_TEST(test_cljvalue_immediates_fixed);
+    RUN_TEST(test_cljvalue_parser_immediates);
+    RUN_TEST(test_cljvalue_memory_efficiency);
+    
+    // Transient map tests
+    // RUN_TEST(test_cljvalue_transient_map_clojure_semantics); // Moved to test_values.c
+    
+    // High-level integration tests
+    // RUN_TEST(test_cljvalue_transient_maps_high_level); // Moved to test_values.c
+    RUN_TEST(test_cljvalue_vectors_high_level);
+    RUN_TEST(test_cljvalue_immediates_high_level);
+    
+    // Special forms tests
+    RUN_TEST(test_special_form_and);
+    RUN_TEST(test_special_form_or);
         
-        // New immediate value tests
-        RUN_TEST(test_cljvalue_immediates_fixnum);
-        RUN_TEST(test_cljvalue_immediates_char);
-        RUN_TEST(test_cljvalue_immediates_special);
-        RUN_TEST(test_cljvalue_immediates_fixed);
-        RUN_TEST(test_cljvalue_parser_immediates);
-        RUN_TEST(test_cljvalue_memory_efficiency);
-        
-        // Transient map tests
-        // RUN_TEST(test_cljvalue_transient_map_clojure_semantics); // Moved to test_values.c
-        
-        // High-level integration tests
-        // RUN_TEST(test_cljvalue_transient_maps_high_level); // Moved to test_values.c
-        RUN_TEST(test_cljvalue_vectors_high_level);
-        RUN_TEST(test_cljvalue_immediates_high_level);
-        
-        // Special forms tests
-        RUN_TEST(test_special_form_and);
-        RUN_TEST(test_special_form_or);
-        
-        // Performance tests
-        RUN_TEST(test_seq_rest_performance);
-        // RUN_TEST(test_seq_iterator_verification); // Disabled due to implementation issues
-    });
+    // Performance tests
+    RUN_TEST(test_seq_rest_performance);
+    // RUN_TEST(test_seq_iterator_verification); // Disabled due to implementation issues
 }
 
 // ============================================================================
@@ -409,18 +404,16 @@ extern void test_namespace_binding(void);
 // Namespace tests (from test_namespace.c) - now self-registering via TEST() macro
 
 static void test_group_namespace(void) {
-    // Wrap namespace tests in WITH_AUTORELEASE_POOL to handle AUTORELEASE calls
-    WITH_AUTORELEASE_POOL({
-        RUN_TEST(test_evalstate_creation);
-        RUN_TEST(test_namespace_switching);
-        RUN_TEST(test_namespace_isolation);
-        RUN_TEST(test_special_ns_variable);
-        RUN_TEST(test_namespace_lookup);
-        RUN_TEST(test_namespace_binding);
-        
-        // Namespace tests are now self-registering via TEST() macro
-        // They will be automatically discovered and run by the registry system
-    });
+    // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
+    RUN_TEST(test_evalstate_creation);
+    RUN_TEST(test_namespace_switching);
+    RUN_TEST(test_namespace_isolation);
+    RUN_TEST(test_special_ns_variable);
+    RUN_TEST(test_namespace_lookup);
+    RUN_TEST(test_namespace_binding);
+    
+    // Namespace tests are now self-registering via TEST() macro
+    // They will be automatically discovered and run by the registry system
 }
 
 // ============================================================================

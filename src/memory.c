@@ -302,10 +302,10 @@ void autorelease_pool_pop(CljObjectPool *pool) {
         pool = g_pool_stack[g_pool_stack_top];
     }
     
-    // Verify balanced push/pop (pool must be top of stack)
+    // Verify pool is at top of stack (LIFO principle - Last In, First Out)
     if (!pool || g_pool_stack[g_pool_stack_top] != pool) {
         printf("ERROR: Pool mismatch! Expected top pool %p, got %p. "
-               "This indicates unbalanced pool operations.\n", 
+               "Pools must be popped in reverse order (LIFO). This indicates unbalanced pool operations.\n", 
                g_pool_stack[g_pool_stack_top], pool);
         return;
     }
@@ -333,10 +333,10 @@ void autorelease_pool_pop(CljObjectPool *pool) {
     RELEASE(pool->backing);
     pool->backing = NULL;
     
-    // Pop from stack
+    // Pop from stack (LIFO - Last In, First Out)
     g_pool_stack[g_pool_stack_top--] = NULL;
     
-    // Free pool structure - now SAFE with array-based stack!
+    // Free pool structure
     free(pool);
     
     // Debug output to verify stack state
