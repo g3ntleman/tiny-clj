@@ -78,6 +78,7 @@ See `Guides/` directory for detailed documentation:
 - **`MEMORY_POLICY.md`** - Memory management guidelines
 - **`PERFORMANCE_GUIDE.md`** - Performance optimization
 - **`ERROR_HANDLING_GUIDE.md`** - Exception handling
+- **`TESTING_GUIDE.md`** - Unity test framework and debugging
 
 ## Contributing
 - Keep the core small and clean

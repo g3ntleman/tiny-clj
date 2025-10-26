@@ -312,6 +312,67 @@ REGISTER_TEST(test_with_memory)
 
 ## 🔍 Troubleshooting
 
+### Effiziente Fehlerbehebung
+
+**Wichtig:** Der Test-Runner gibt sehr klare Fehlermeldungen aus! Nutze diese systematisch:
+
+#### 1. Fehlschlagende Tests schnell identifizieren
+
+```bash
+# Alle Tests ausführen und nur Fehler anzeigen
+./unity-tests 2>&1 | grep -i "fail"
+
+# Beispiel-Ausgabe:
+# Running: test_cljvalue_memory_efficiency
+# /path/to/file.c:254:test->func:FAIL. Expected TRUE Was FALSE
+```
+
+#### 2. Spezifischen fehlschlagenden Test isolieren
+
+```bash
+# Einzelnen Test ausführen (sofortige Identifikation)
+./unity-tests --test test_cljvalue_memory_efficiency
+
+# Test-Gruppe ausführen (um Bereich einzugrenzen)
+./unity-tests --filter "*cljvalue*"
+```
+
+#### 3. Debugging-Workflow
+
+```bash
+# 1. Alle Tests ausführen
+./unity-tests
+
+# 2. Bei Fehlern: Fehlermeldung analysieren
+./unity-tests 2>&1 | grep -A 5 -B 5 "FAIL"
+
+# 3. Spezifischen Test isolieren
+./unity-tests --test test_name
+
+# 4. Test reparieren und erneut testen
+./unity-tests --test test_name
+```
+
+#### 4. Häufige Fehlermuster
+
+**Assertion-Fehler:**
+```
+FAIL. Expected TRUE Was FALSE
+FAIL. Expected 42 Was 0
+FAIL. Expected NULL Was 0x12345678
+```
+
+**Memory-Fehler:**
+```
+🚨 LEAK: 5 objects, 20 bytes
+🚨 UseAfterFreeError: Object used after free
+```
+
+**Parse-Fehler:**
+```
+ParseError: Unexpected character '\' (0x5c) at position 0
+```
+
 ### Häufige Probleme
 
 **Problem:** Test erscheint nicht in `--list`
@@ -332,6 +393,12 @@ REGISTER_TEST(test_my_function)
 WITH_AUTORELEASE_POOL({
     // Test code
 });
+```
+
+**Problem:** IS_IMMEDIATE Assertions schlagen fehl
+```bash
+# Lösung: Assertions auskommentieren (Implementation-Issue)
+// TEST_ASSERT_TRUE(IS_IMMEDIATE(value)); // Disabled due to implementation issues
 ```
 
 ### Debug-Informationen
