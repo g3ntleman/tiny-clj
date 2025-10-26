@@ -79,6 +79,11 @@ See `Guides/` directory for detailed documentation:
 - **`PERFORMANCE_GUIDE.md`** - Performance optimization
 - **`ERROR_HANDLING_GUIDE.md`** - Exception handling
 - **`TESTING_GUIDE.md`** - Unity test framework and debugging
+- **`RELEASE_NOTES.md`** - Version history and changes
+
+Additional documentation:
+- **`RC-COW.md`** - Reference counting and copy-on-write implementation
+- **`docs/MEMORY_PROFILER.md`** - Memory profiling and leak detection
 
 ## Contributing
 - Keep the core small and clean
