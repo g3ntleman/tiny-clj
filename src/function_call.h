@@ -36,6 +36,12 @@ ID eval_for(CljList *list, CljMap *env);
 ID eval_doseq(CljList *list, CljMap *env);
 ID eval_dotimes(CljList *list, CljMap *env);
 
+// Let bindings
+ID eval_let(CljList *list, CljMap *env, EvalState *st);
+
+// Function definition macro
+ID eval_defn(CljList *list, CljMap *env, EvalState *st);
+
 // Hilfsfunktionen
 ID eval_arg(CljList *list, int index, CljMap *env);
 ID eval_arg_retained(CljList *list, int index, CljMap *env);

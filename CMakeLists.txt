@@ -219,6 +219,8 @@ add_executable(unity-tests
     src/tests/seq_tests.c
     src/tests/test_values.c
     src/tests/test_recur.c
+    src/tests/test_let.c
+    src/tests/test_defn.c
     src/tests/for_loop_tests.c
     src/tests/fixed_point_tests.c
     src/tests/byte_array_tests.c

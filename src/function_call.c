@@ -759,8 +759,21 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         resolved_op = (CljObject*)map_get((CljValue)closure_env, (CljValue)op);
     }
     
+    // If still not found, try global namespace lookup (for recursive calls)
+    if (!resolved_op && is_type(op, CLJ_SYMBOL)) {
+        EvalState *st = evalstate();
+        // Use TRY/CATCH to handle exceptions from eval_symbol
+        TRY {
+            resolved_op = eval_symbol(op, st);
+        } CATCH(ex) {
+            // If symbol resolution fails, continue without resolving
+            // This allows the function to fall through to the fallback case
+            resolved_op = NULL;
+        } END_TRY
+    }
+    
     // If op was resolved to a function, call it
-    if (resolved_op && is_type(resolved_op, CLJ_FUNC)) {
+    if (resolved_op && (is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE))) {
         // Count arguments
         int total_count = list_count(as_list((ID)list));
         int argc = total_count - 1;
@@ -783,7 +796,30 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return result;
     }
     
-    // Fallback: return first element
+    // If we have a resolved_op but it's not a function, that's an error
+    if (resolved_op && !is_type(resolved_op, CLJ_FUNC) && !is_type(resolved_op, CLJ_CLOSURE)) {
+        const char *op_name = "unknown";
+        if (is_type(op, CLJ_SYMBOL)) {
+            CljSymbol *sym = as_symbol((ID)op);
+            if (sym && sym->name) {
+                op_name = sym->name;
+            }
+        }
+        throw_exception_formatted("TypeError", __FILE__, __LINE__, 0,
+            "Value is not a function: %s", op_name);
+        return NULL;
+    }
+    
+    // If we couldn't resolve the operator and it's a symbol, that's an error
+    if (is_type(op, CLJ_SYMBOL)) {
+        CljSymbol *sym = as_symbol((ID)op);
+        const char *op_name = sym && sym->name ? sym->name : "unknown";
+        throw_exception_formatted("UndefinedFunctionError", __FILE__, __LINE__, 0,
+            "Function not found: %s", op_name);
+        return NULL;
+    }
+    
+    // Fallback: return first element (for non-symbol operators)
     return AUTORELEASE(RETAIN(head));
 }
 
@@ -1046,6 +1082,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     if (original_op == SYM_FN) {
         return AUTORELEASE(eval_fn(list, env));
+    }
+    
+    if (original_op == SYM_LET) {
+        // (let [bindings*] body*)
+        return eval_let(list, env, st);
+    }
+    
+    if (original_op == SYM_DEFN) {
+        // (defn name [params*] body*)
+        return eval_defn(list, env, st);
     }
     
     if (original_op == SYM_QUOTE) {
@@ -1332,7 +1378,8 @@ ID eval_symbol(ID symbol, EvalState *st) {
         
         // Check against cached symbol pointers for O(1) lookup (only if initialized)
         if ((SYM_IF && symbol == SYM_IF) || (SYM_DEF && symbol == SYM_DEF) || 
-            (SYM_FN && symbol == SYM_FN) || (SYM_QUOTE && symbol == SYM_QUOTE) || 
+            (SYM_DEFN && symbol == SYM_DEFN) || (SYM_FN && symbol == SYM_FN) || 
+            (SYM_QUOTE && symbol == SYM_QUOTE) || 
             (SYM_RECUR && symbol == SYM_RECUR) || (SYM_AND && symbol == SYM_AND) || 
             (SYM_OR && symbol == SYM_OR) || (SYM_NS && symbol == SYM_NS) || 
             (SYM_TRY && symbol == SYM_TRY) || (SYM_CATCH && symbol == SYM_CATCH) || 
@@ -1842,6 +1889,325 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     }
     
     return AUTORELEASE(NULL); // dotimes always returns nil
+}
+
+// ============================================================================
+// EVAL_LET - Let bindings implementation
+// ============================================================================
+ID eval_let(CljList *list, CljMap *env, EvalState *st) {
+    // (let [bindings*] body*)
+    // bindings* => binding-form init-expr
+    
+    // Assertion: Environment must not be NULL when expected
+    CLJ_ASSERT(env != NULL);
+    
+    if (!list || !st) {
+        return NULL;
+    }
+    
+    // Get bindings vector (second element): (let [x 10 y 20] ...)
+    CljObject *bindings_vec = list_get_element(list, 1);
+    if (!bindings_vec || !is_type(bindings_vec, CLJ_VECTOR)) {
+        throw_exception("IllegalArgumentException", 
+                       "let requires a vector for bindings", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    CljPersistentVector *bindings = as_vector((CljValue)bindings_vec);
+    if (!bindings) {
+        throw_exception("IllegalArgumentException", 
+                       "let bindings must be a valid vector", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    int binding_count = bindings->count;
+    
+    // Bindings must come in pairs (symbol value symbol value ...)
+    if (binding_count % 2 != 0) {
+        throw_exception("IllegalArgumentException", 
+                       "let requires an even number of forms in binding vector", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Create new environment extending the current one
+    // If no env provided, create empty environment
+    CljMap *let_env = NULL;
+    if (!env) {
+        // No parent environment - create new one
+        let_env = (CljMap*)make_map(binding_count / 2 + 4);
+    } else {
+        // Extend existing environment
+        let_env = (CljMap*)make_map(binding_count / 2 + env->count);
+        if (let_env && env->count > 0) {
+            // Copy existing environment bindings
+            for (int i = 0; i < env->capacity; i++) {
+                CljValue key = env->data[i * 2];
+                CljValue val = env->data[i * 2 + 1];
+                if (key) {
+                    map_assoc((CljObject*)let_env, (CljObject*)key, (CljObject*)val);
+                }
+            }
+        }
+    }
+    
+    if (!let_env) {
+        return NULL;
+    }
+    
+    // Process bindings sequentially (each binding can reference previous ones)
+    for (int i = 0; i < binding_count; i += 2) {
+        CljValue sym_val = bindings->data[i];
+        CljValue init_val = bindings->data[i + 1];
+        
+        if (!sym_val || !is_type((CljObject*)sym_val, CLJ_SYMBOL)) {
+            RELEASE(let_env);
+            throw_exception("IllegalArgumentException", 
+                           "let binding must be a symbol", 
+                           NULL, 0, 0);
+            return NULL;
+        }
+        
+        if (!init_val) {
+            RELEASE(let_env);
+            throw_exception("IllegalArgumentException", 
+                           "let binding init expression cannot be null", 
+                           NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Evaluate init expression in the current let environment
+        // This allows later bindings to reference earlier ones
+        CljObject *value = NULL;
+        
+        // Check if init_val is an immediate value (doesn't need evaluation)
+        if (is_fixnum(init_val) || is_special(init_val)) {
+            // Immediate value - use as is
+            value = (CljObject*)init_val;
+            RETAIN(value);  // Retain for consistency
+        } else {
+            // Complex expression - evaluate it
+            value = eval_body((ID)init_val, let_env, st);
+            if (!value) {
+                RELEASE(let_env);
+                return NULL;
+            }
+        }
+        
+        // Add binding to environment
+        map_assoc((CljObject*)let_env, (CljObject*)sym_val, value);
+        
+        // Note: value is retained by map_assoc via RETAIN in map implementation
+        // So we need to release our reference
+        RELEASE(value);
+    }
+    
+    // Evaluate body expressions with the let environment
+    // Body is everything after the bindings vector
+    CljObject *result = NULL;
+    int list_len = list_count(list);
+    
+    if (list_len <= 2) {
+        // No body expressions - return nil
+        result = NULL;
+    } else {
+        // Evaluate all body expressions, return last one
+        for (int i = 2; i < list_len; i++) {
+            CljObject *body_expr = list_get_element(list, i);
+            if (body_expr) {
+                if (result) {
+                    RELEASE(result);
+                }
+                
+                // Check if body_expr is an immediate value (doesn't need evaluation)
+                if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
+                    // Immediate value - use as is
+                    result = body_expr;
+                    RETAIN(result);  // Retain for consistency
+                } else {
+                    // Complex expression - evaluate it
+                    result = eval_body(body_expr, let_env, st);
+                }
+            }
+        }
+    }
+    
+    // Clean up environment
+    RELEASE(let_env);
+    
+    return AUTORELEASE(result);
+}
+
+// ============================================================================
+// EVAL_DEFN - Function definition macro implementation
+// ============================================================================
+ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
+    // (defn name [params*] body*)
+    // Expands to: (def name (fn [params*] body*))
+    
+    // Assertion: Environment must not be NULL when expected
+    CLJ_ASSERT(env != NULL);
+    
+    if (!list || !st) {
+        return NULL;
+    }
+    
+    // Parse arguments using rest traversal: (defn name [params] body...)
+    CljList *rest = list->rest;
+    if (!rest) {
+        throw_exception("IllegalArgumentException", 
+                       "defn requires function name", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Get function name (first element after defn)
+    CljObject *name_sym = rest->first;
+    if (!name_sym || !is_type(name_sym, CLJ_SYMBOL)) {
+        throw_exception("IllegalArgumentException", 
+                       "defn requires a symbol for function name", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Get parameter vector (second element after defn)
+    rest = rest->rest;
+    if (!rest) {
+        throw_exception("IllegalArgumentException", 
+                       "defn requires parameter vector", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    CljObject *params_vec = rest->first;
+    if (!params_vec || !is_type(params_vec, CLJ_VECTOR)) {
+        throw_exception("IllegalArgumentException", 
+                       "defn requires a vector for parameters", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Get body expressions (everything after params)
+    rest = rest->rest;
+    if (!rest) {
+        throw_exception("IllegalArgumentException", 
+                       "defn requires at least one body expression", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Extract parameters from vector
+    CljPersistentVector *params_vec_data = as_vector((CljValue)params_vec);
+    if (!params_vec_data) {
+        throw_exception("IllegalArgumentException", 
+                       "defn requires a valid parameter vector", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    int param_count = params_vec_data->count;
+    CljObject *params_stack[16];
+    CljObject **params = alloc_obj_array(param_count, params_stack);
+    
+    for (int i = 0; i < param_count; i++) {
+        params[i] = params_vec_data->data[i];
+        if (!params[i] || !is_type(params[i], CLJ_SYMBOL)) {
+            free_obj_array(params, params_stack);
+            throw_exception("IllegalArgumentException", 
+                           "defn parameters must be symbols", 
+                           NULL, 0, 0);
+            return NULL;
+        }
+    }
+    
+    // Create fn expression: (fn [params*] body*)
+    // We'll create this as a list structure
+    
+    // Create body list with all expressions
+    // For multiple body expressions, we need to create a do block
+    CljList *body_list = NULL;
+    
+    // rest now points to the body expressions
+    if (rest->rest == NULL) {
+        // Single body expression - use directly
+        CljObject *body_expr = rest->first;
+        if (body_expr) {
+            body_list = make_list(body_expr, NULL);
+        }
+    } else {
+        // Multiple body expressions - just use the last one for now
+        // TODO: Implement proper do block or let sequencing
+        CljList *current = rest;
+        while (current->rest) {
+            current = current->rest;
+        }
+        CljObject *last_expr = current->first;
+        if (last_expr) {
+            body_list = make_list(last_expr, NULL);
+        }
+    }
+    
+    if (!body_list) {
+        throw_exception("IllegalArgumentException", 
+                       "defn body cannot be empty", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Create fn list: (fn params_vec body_list)
+    CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
+    if (!fn_list) return NULL;
+    
+    // Add params vector as second element
+    fn_list->rest = (CljObject*)make_list(params_vec, NULL);
+    
+    // Add body as third element
+    CljList *fn_rest = as_list(fn_list->rest);
+    if (fn_rest) {
+        fn_rest->rest = (CljObject*)body_list;
+    }
+    
+    // Create def expression: (def name_sym fn_list)
+    CljList *def_list = make_list((CljObject*)SYM_DEF, NULL);
+    if (!def_list) return NULL;
+    
+    def_list->rest = (CljObject*)make_list(name_sym, NULL);
+    CljList *def_rest = as_list(def_list->rest);
+    if (def_rest) {
+        def_rest->rest = (CljObject*)make_list((CljObject*)fn_list, NULL);
+    }
+    
+    // Create function object directly
+    CljObject *fn_obj = make_function((CljObject**)params, param_count, body_list, (CljObject*)env, NULL);
+    if (!fn_obj) {
+        RELEASE(fn_list);
+        RELEASE(def_list);
+        return NULL;
+    }
+    
+    // CRITICAL: Add function to its own closure_env for recursive calls
+    // This allows recursive functions to find themselves
+    if (is_type(fn_obj, CLJ_CLOSURE)) {
+        CljFunction *func = as_function((ID)fn_obj);
+        if (func && func->closure_env) {
+            // map_assoc_cow returns a new map, so we need to update the function's closure_env
+            CljObject *new_closure_env = map_assoc_cow(func->closure_env, name_sym, fn_obj);
+            if (new_closure_env) {
+                RELEASE(func->closure_env);
+                func->closure_env = RETAIN(new_closure_env);
+            }
+        }
+    }
+    
+    // Now evaluate the def expression (which will also add to environment)
+    CljObject *result = eval_def(def_list, env, st);
+    
+    RELEASE(fn_obj);
+    RELEASE(fn_list);
+    RELEASE(def_list);
+    free_obj_array(params, params_stack);
+    return AUTORELEASE(result);
 }
 
 // Helper function for evaluating arguments with automatic retention

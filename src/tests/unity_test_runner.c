@@ -445,6 +445,56 @@ static void test_group_seq(void) {
 // FOR-LOOP TESTS (from for_loop_tests.c)
 // ============================================================================
 
+// ============================================================================
+// DEFN FUNCTION TESTS (from test_defn.c)
+// ============================================================================
+
+// Forward declarations for defn tests
+extern void test_defn_basic_function(void);
+extern void test_defn_single_parameter(void);
+extern void test_defn_no_parameters(void);
+extern void test_defn_multiple_body_expressions(void);
+extern void test_defn_recursive_function(void);
+
+static void test_group_defn(void) {
+    RUN_TEST(test_defn_basic_function);
+    RUN_TEST(test_defn_single_parameter);
+    RUN_TEST(test_defn_no_parameters);
+    RUN_TEST(test_defn_multiple_body_expressions);
+    RUN_TEST(test_defn_recursive_function);
+}
+
+// ============================================================================
+// LET BINDING TESTS (from test_let.c)
+// ============================================================================
+
+// Forward declarations for let binding tests
+extern void test_let_basic_binding(void);
+extern void test_let_multiple_bindings(void);
+extern void test_let_sequential_bindings(void);
+extern void test_let_expression_body(void);
+extern void test_let_multiple_body_expressions(void);
+extern void test_let_nested(void);
+extern void test_let_shadowing(void);
+extern void test_let_with_function_calls(void);
+extern void test_let_empty_bindings(void);
+
+static void test_group_let(void) {
+    RUN_TEST(test_let_basic_binding);
+    RUN_TEST(test_let_multiple_bindings);
+    RUN_TEST(test_let_sequential_bindings);
+    RUN_TEST(test_let_expression_body);
+    RUN_TEST(test_let_multiple_body_expressions);
+    RUN_TEST(test_let_nested);
+    RUN_TEST(test_let_shadowing);
+    RUN_TEST(test_let_with_function_calls);
+    RUN_TEST(test_let_empty_bindings);
+}
+
+// ============================================================================
+// FOR-LOOP TESTS (from for_loop_tests.c)
+// ============================================================================
+
 // Forward declarations for for-loop tests
 extern void test_dotimes_basic(void);
 extern void test_doseq_basic(void);
@@ -746,6 +796,10 @@ int main(int argc, char **argv) {
                 run_seq_tests();
             } else if (strcmp(argv[1], "for-loops") == 0) {
                 run_for_loop_tests();
+            } else if (strcmp(argv[1], "let") == 0) {
+                test_group_let();
+            } else if (strcmp(argv[1], "defn") == 0) {
+                test_group_defn();
             } else if (strcmp(argv[1], "equal") == 0) {
                 run_equal_tests();
             } else if (strcmp(argv[1], "byte-array") == 0) {
