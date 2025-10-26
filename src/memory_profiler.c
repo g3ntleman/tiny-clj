@@ -68,6 +68,14 @@ MemoryStats g_memory_stats = {0};
 bool g_memory_profiling_enabled = false;
 
 /**
+ * @brief Global memory leak reporting flag
+ * 
+ * Controls whether memory leak messages are printed for each test.
+ * When false, only summary leak information is printed.
+ */
+bool g_memory_leak_reporting_enabled = true;
+
+/**
  * @brief Global memory verbose mode flag
  * 
  * Controls whether detailed memory statistics are printed for successful tests.
@@ -428,27 +436,32 @@ void memory_profiler_track_autorelease(CljObject *obj) {
 void memory_profiler_check_leaks(const char *location) {
     if (!g_memory_profiling_enabled) return;
     if (g_memory_stats.memory_leaks > 0) {
-        printf("\n🚨 MEMORY LEAK DETECTED at %s:\n", location ? location : "Unknown");
-        printf("   ┌─────────────────────────────────────────────────────────┐\n");
-        printf("   │ LEAK SUMMARY                                            │\n");
-        printf("   ├─────────────────────────────────────────────────────────┤\n");
-        printf("   │ Total Leaks:        %10zu allocations                    │\n", g_memory_stats.memory_leaks);
-        printf("   │ Current Memory:     %10zu bytes                         │\n", g_memory_stats.current_memory_usage);
-        printf("   │ Peak Memory:       %10zu bytes                         │\n", g_memory_stats.peak_memory_usage);
-        printf("   │ Allocations:        %10zu                               │\n", g_memory_stats.total_allocations);
-        printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
-        printf("   └─────────────────────────────────────────────────────────┘\n");
-        
-        // Leak breakdown - one line per type
-        for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
-            size_t allocs = g_memory_stats.allocations_by_type[i];
-            size_t deallocs = g_memory_stats.deallocations_by_type[i];
-            size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
+        if (g_memory_leak_reporting_enabled) {
+            printf("\n🚨 MEMORY LEAK DETECTED at %s:\n", location ? location : "Unknown");
+            printf("   ┌─────────────────────────────────────────────────────────┐\n");
+            printf("   │ LEAK SUMMARY                                            │\n");
+            printf("   ├─────────────────────────────────────────────────────────┤\n");
+            printf("   │ Total Leaks:        %10zu allocations                    │\n", g_memory_stats.memory_leaks);
+            printf("   │ Current Memory:     %10zu bytes                         │\n", g_memory_stats.current_memory_usage);
+            printf("   │ Peak Memory:       %10zu bytes                         │\n", g_memory_stats.peak_memory_usage);
+            printf("   │ Allocations:        %10zu                               │\n", g_memory_stats.total_allocations);
+            printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
+            printf("   └─────────────────────────────────────────────────────────┘\n");
             
-            if (leaks > 0) {
-                const char* type_name = clj_type_name((CljType)i);
-                printf("🔍 %s: %zu leaks\n", type_name, leaks);
+            // Leak breakdown - one line per type
+            for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+                size_t allocs = g_memory_stats.allocations_by_type[i];
+                size_t deallocs = g_memory_stats.deallocations_by_type[i];
+                size_t leaks = (allocs >= deallocs) ? (allocs - deallocs) : 0;
+                
+                if (leaks > 0) {
+                    const char* type_name = clj_type_name((CljType)i);
+                    printf("🔍 %s: %zu leaks\n", type_name, leaks);
+                }
             }
+        } else {
+            // Minimal leak reporting
+            printf("⚠️  Memory leak detected at %s: %zu leaks\n", location ? location : "Unknown", g_memory_stats.memory_leaks);
         }
     }
 }
@@ -575,6 +588,19 @@ bool is_memory_profiling_enabled(void) {
 #else
     return false;
 #endif
+}
+
+void set_memory_leak_reporting_enabled(bool enabled) {
+    g_memory_leak_reporting_enabled = enabled;
+    if (enabled) {
+        printf("🔍 Memory leak reporting enabled\n");
+    } else {
+        printf("🔍 Memory leak reporting disabled (minimal mode)\n");
+    }
+}
+
+bool is_memory_leak_reporting_enabled(void) {
+    return g_memory_leak_reporting_enabled;
 }
 
 void set_memory_verbose_mode(bool verbose) {

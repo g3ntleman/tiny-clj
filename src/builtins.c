@@ -19,15 +19,15 @@
 #include "clj_strings.h"
 
 
-ID nth2(ID *args, int argc) {
-    if (argc != 2) return OBJ_TO_ID(NULL);
-    CljObject *vec = ID_TO_OBJ(args[0]);
-    CljObject *idx = ID_TO_OBJ(args[1]);
-    if (!vec || !idx || vec->type != CLJ_VECTOR || !IS_FIXNUM(idx)) return OBJ_TO_ID(NULL);
+ID nth2(ID *args, unsigned int argc) {
+    if (argc != 2) return NULL;
+    ID vec = args[0];
+    ID idx = args[1];
+    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return (NULL);
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
-    if (!v || i < 0 || i >= v->count) return OBJ_TO_ID(NULL);
-    return OBJ_TO_ID(RETAIN(v->data[i]));
+    if (!v || i < 0 || i >= v->count) return (NULL);
+    return (RETAIN(v->data[i]));
 }
 
 ID conj2_wrapper(ID *args, int argc) {
@@ -36,8 +36,8 @@ ID conj2_wrapper(ID *args, int argc) {
 }
 
 ID conj2(ID vec, ID val) {
-    if (!vec || ((CljObject*)vec)->type != CLJ_VECTOR) return NULL;
-    CljPersistentVector *v = as_vector((CljObject*)vec);
+    if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
+    CljPersistentVector *v = as_vector(vec);
     int is_mutable = v ? v->mutable_flag : 0;
     if (is_mutable) {
         if (v->count >= v->capacity) {
@@ -47,80 +47,207 @@ ID conj2(ID vec, ID val) {
             v->data = (CljObject**)newmem;
             v->capacity = newcap;
         }
-        v->data[v->count++] = (RETAIN((CljObject*)val), (CljObject*)val);
-        return (ID)RETAIN((CljObject*)vec);
+        v->data[v->count++] = (RETAIN(val), val);
+        return (ID)RETAIN(vec);
     } else {
         int need = v->count + 1;
         int newcap = v->capacity;
         if (need > newcap) newcap = newcap > 0 ? newcap * 2 : 1;
         CljValue copy_val = make_vector(newcap, 0);
-        CljObject *copy = (CljObject*)copy_val;
+        CljObject *copy = copy_val;
         CljPersistentVector *c = as_vector(copy);
         for (int i = 0; i < v->count; ++i) {
             c->data[i] = (RETAIN(v->data[i]), v->data[i]);
         }
         c->count = v->count;
-        c->data[c->count++] = (RETAIN((CljObject*)val), (CljObject*)val);
+        c->data[c->count++] = (RETAIN(val), val);
         return (ID)copy;
     }
 }
 
 // Generic conj function that works with BuiltinFn signature
-ID native_conj(ID *args, int argc) {
-    if (argc != 2) return OBJ_TO_ID(NULL);
-    CljObject *coll = ID_TO_OBJ(args[0]);
-    CljObject *val = ID_TO_OBJ(args[1]);
-    if (!coll || !val) return OBJ_TO_ID(NULL);
+ID native_conj(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
     
-    if (coll->type == CLJ_VECTOR) {
-        return OBJ_TO_ID(conj2(coll, val));
+    // Handle different arities like Clojure
+    if (argc == 0) {
+        // conj with no args returns nil (like Clojure)
+        return NULL;
     }
     
-    return OBJ_TO_ID(NULL); // Unsupported collection type
+    if (argc == 1) {
+        // conj with one arg returns the collection unchanged
+        return args[0];
+    }
+    
+    // For 2+ args, conj all values to the collection
+    CljObject *coll = args[0];
+    if (!coll) {
+        // conj nil with values creates a list
+        CljObject *result = NULL;
+        for (unsigned int i = argc - 1; i >= 1; i--) {
+            CljObject *val = args[i];
+            result = make_list((ID)val, (CljList*)result);
+        }
+        return (result);
+    }
+    
+    if (is_type(coll, CLJ_VECTOR)) {
+        CljObject *result = coll;
+        for (unsigned int i = 1; i < argc; i++) {
+            CljObject *val = args[i];
+            result = conj2((ID)result, (ID)val);
+            if (!result) return (NULL);
+        }
+        return (result);
+    }
+    
+    // Throw exception for unsupported collection type
+    throw_exception("IllegalArgumentException", 
+                    "conj not supported on this type", 
+                    __FILE__, __LINE__, 0);
+    return (NULL);
+}
+
+// First function that works with BuiltinFn signature
+ID native_first(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+    
+    if (argc != 1) {
+        throw_exception("ArityException", 
+                        "Wrong number of args passed to: first", 
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *coll = args[0];
+    if (!coll) {
+        // first of nil returns nil
+        return NULL;
+    }
+    
+    // Direct access for lists (already a seq) - no allocation needed
+    if (is_type(coll, CLJ_LIST)) {
+        return LIST_FIRST((CljList*)coll);
+    }
+    
+    // Use seq implementation for other types (vectors, maps, strings)
+    CljObject *seq = seq_create(coll);
+    if (!seq) return NULL;
+    
+    CljObject *result = seq_first(seq);
+    seq_release(seq);
+    
+    return result;
 }
 
 // Rest function that works with BuiltinFn signature
-ID native_rest(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
-    CljObject *coll = ID_TO_OBJ(args[0]);
-    if (!coll) return OBJ_TO_ID(NULL);
+ID native_rest(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
     
-    if (coll->type == CLJ_VECTOR) {
+    if (argc != 1) {
+        throw_exception("ArityException", 
+                        "Wrong number of args (0) passed to: rest", 
+                        __FILE__, __LINE__, 0);
+        return (NULL);
+    }
+    
+    CljObject *coll = args[0];
+    if (!coll) {
+        // rest of nil returns empty list
+        return (make_list(NULL, NULL));
+    }
+    
+    // Direct access for lists (already a seq) - no allocation needed
+    if (is_type(coll, CLJ_LIST)) {
+        CljObject *rest = LIST_REST((CljList*)coll);
+        return rest ? rest : NULL;
+    }
+    
+    if (is_type(coll, CLJ_VECTOR)) {
         CljPersistentVector *v = as_vector(coll);
         if (!v || v->count <= 1) {
-            return OBJ_TO_ID(make_list(NULL, NULL));
+            return (make_list(NULL, NULL));
         }
         
         // Use CljSeqIterator (existing!) instead of copying
         CljObject *seq = seq_create(coll);
-        if (!seq) return OBJ_TO_ID(make_list(NULL, NULL));
+        if (!seq) return (make_list(NULL, NULL));
         
         // Return rest of sequence (O(1) operation!)
         return seq_rest(seq);
     }
     
-    if (coll->type == CLJ_SEQ) {
+    if (is_type(coll, CLJ_SEQ)) {
         // Already a sequence - just call seq_rest
         return seq_rest(coll);
     }
     
-    return OBJ_TO_ID(NULL); // Unsupported collection type
+    // Throw exception for unsupported collection type
+    throw_exception("IllegalArgumentException", 
+                    "rest not supported on this type", 
+                    __FILE__, __LINE__, 0);
+    return (NULL);
 }
 
-ID assoc3(ID *args, int argc) {
-    if (argc != 3) return OBJ_TO_ID(NULL);
-    CljObject *vec = ID_TO_OBJ(args[0]);
-    CljObject *idx = ID_TO_OBJ(args[1]);
-    CljObject *val = ID_TO_OBJ(args[2]);
-    if (!vec || vec->type != CLJ_VECTOR || !idx || !IS_FIXNUM(idx)) return OBJ_TO_ID(NULL);
+// Cons function that works with BuiltinFn signature
+ID native_cons(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+    
+    if (argc != 2) {
+        throw_exception("ArityException",
+                        "Wrong number of args passed to: cons",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *elem = args[0];
+    CljObject *coll = args[1];
+    
+    if (!elem) elem = NULL;
+    
+    CljObject *result = NULL;
+    
+    // nil oder leer
+    if (!coll) {
+        result = (CljObject*)make_list(elem, NULL);
+        return result;
+    }
+    
+    // Typ-basierte Behandlung
+    switch (coll->type) {
+        case CLJ_LIST:
+        case CLJ_SEQ:
+            result = make_list(elem, (CljList*)coll);
+            return result;
+        
+        default: {
+            // Vektor oder andere → zu Seq konvertieren
+            CljObject *seq = seq_create(coll);
+            if (!seq) {
+                result = make_list(elem, NULL);
+            } else {
+                result = make_list(elem, (CljList*)seq);
+            }
+            return result;
+        }
+    }
+}
+
+ID assoc3(ID *args, unsigned int argc) {
+    if (argc != 3) return (NULL);
+    CljObject *vec = args[0];
+    CljObject *idx = args[1];
+    CljObject *val = args[2];
+    if (!vec || !is_type(vec, CLJ_VECTOR) || !idx || !IS_FIXNUM(idx)) return (NULL);
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
-    if (!v || i < 0 || i >= v->count) return OBJ_TO_ID(NULL);
+    if (!v || i < 0 || i >= v->count) return (NULL);
     int is_mutable = v->mutable_flag;
     if (is_mutable) {
         RELEASE(v->data[i]);
         v->data[i] = (RETAIN(val), val);
-        return OBJ_TO_ID(RETAIN(vec));
+        return (RETAIN(vec));
     } else {
         CljValue copy_val = make_vector(v->capacity, 0);
         CljObject *copy = (CljObject*)copy_val;
@@ -131,70 +258,70 @@ ID assoc3(ID *args, int argc) {
         c->count = v->count;
         RELEASE(c->data[i]);
         c->data[i] = (RETAIN(val), val);
-        return OBJ_TO_ID(copy);
+        return (copy);
     }
 }
 
 // Transient functions
-ID native_transient(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
+ID native_transient(ID *args, unsigned int argc) {
+    if (argc != 1) return (NULL);
     
-    CljObject *coll = ID_TO_OBJ(args[0]);
-    if (!coll) return OBJ_TO_ID(NULL);
+    CljObject *coll = args[0];
+    if (!coll) return (NULL);
     
-    if (coll->type == CLJ_VECTOR) {
-        return OBJ_TO_ID((CljObject*)transient((CljValue)coll));
-    } else if (coll->type == CLJ_MAP) {
-        return OBJ_TO_ID((CljObject*)transient_map((CljValue)coll));
-    } else if (coll->type == CLJ_TRANSIENT_VECTOR || coll->type == CLJ_TRANSIENT_MAP) {
+    if (is_type(coll, CLJ_VECTOR)) {
+        return ((CljObject*)transient((CljValue)coll));
+    } else if (is_type(coll, CLJ_MAP)) {
+        return ((CljObject*)transient_map((CljValue)coll));
+    } else if (is_type(coll, CLJ_TRANSIENT_VECTOR) || is_type(coll, CLJ_TRANSIENT_MAP)) {
         // Clojure-compatible: transient on transient returns the same object
-        return OBJ_TO_ID(coll);
+        return (coll);
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
     throw_exception("IllegalArgumentException", 
                     "transient requires a persistent collection at position 1", 
                     __FILE__, __LINE__, 0);
-    return OBJ_TO_ID(NULL);
+    return (NULL);
 }
 
-ID native_persistent(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
+ID native_persistent(ID *args, unsigned int argc) {
+    if (argc != 1) return (NULL);
     
-    CljObject *coll = ID_TO_OBJ(args[0]);
-    if (!coll) return OBJ_TO_ID(NULL);
+    CljObject *coll = args[0];
+    if (!coll) return (NULL);
     
-    if (coll->type == CLJ_TRANSIENT_VECTOR) {
-        return OBJ_TO_ID((CljObject*)persistent((CljValue)coll));
-    } else if (coll->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)persistent_map((CljValue)coll));
-    } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_MAP) {
+    if (is_type(coll, CLJ_TRANSIENT_VECTOR)) {
+        return ((CljObject*)persistent((CljValue)coll));
+    } else if (is_type(coll, CLJ_TRANSIENT_MAP)) {
+        return ((CljObject*)persistent_map((CljValue)coll));
+    } else if (is_type(coll, CLJ_VECTOR) || is_type(coll, CLJ_MAP)) {
         // Clojure-compatible: persistent! on persistent returns the same object
-        return OBJ_TO_ID(coll);
+        return (coll);
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
     throw_exception("IllegalArgumentException", 
                     "persistent! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
-    return OBJ_TO_ID(NULL);
+    return (NULL);
 }
 
-ID native_conj_bang(ID *args, int argc) {
-    if (argc < 2) return OBJ_TO_ID(NULL);
+ID native_conj_bang(ID *args, unsigned int argc) {
+    if (argc < 2) return (NULL);
     
     CljObject *coll = args[0];
     if (!coll) return NULL;
     
     
-    if (coll->type == CLJ_TRANSIENT_VECTOR) {
+    if (is_type(coll, CLJ_TRANSIENT_VECTOR)) {
         CljValue result = (CljValue)coll;
-        for (int i = 1; i < argc; i++) {
+        for (unsigned int i = 1; i < argc; i++) {
             result = clj_conj(result, (CljValue)args[i]);
             if (!result) return NULL;
         }
         return (CljObject*)result;
-    } else if (coll->type == CLJ_TRANSIENT_MAP) {
+    } else if (is_type(coll, CLJ_TRANSIENT_MAP)) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
         return (CljObject*)conj_map((CljValue)coll, (CljValue)args[1], (CljValue)args[2]);
     }
@@ -206,77 +333,82 @@ ID native_conj_bang(ID *args, int argc) {
     return NULL;
 }
 
-ID native_get(ID *args, int argc) {
-    if (argc != 2) return OBJ_TO_ID(NULL);
-    CljObject *map = ID_TO_OBJ(args[0]);
-    CljObject *key = ID_TO_OBJ(args[1]);
-    if (!map || !key) return OBJ_TO_ID(NULL);
+ID native_get(ID *args, unsigned int argc) {
+    if (argc != 2) return NULL;
+    CljObject *map = (CljObject*)args[0];
+    CljObject *key = (CljObject*)args[1];
+    if (!map || !key) return (NULL);
     
-    if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)map_get((CljValue)map, (CljValue)key));
+    if (is_type(map, CLJ_MAP) || is_type(map, CLJ_TRANSIENT_MAP)) {
+        return ((CljObject*)map_get((CljValue)map, (CljValue)key));
     }
     
-    return OBJ_TO_ID(NULL); // Return nil for unsupported types
+    return (NULL); // Return nil for unsupported types
 }
 
-ID native_count(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
-    CljObject *coll = ID_TO_OBJ(args[0]);
-    if (!coll) return OBJ_TO_ID(NULL);
+ID native_count(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
     
-    if (coll->type == CLJ_MAP || coll->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID(fixnum(map_count((CljValue)coll)));
-    } else if (coll->type == CLJ_VECTOR || coll->type == CLJ_TRANSIENT_VECTOR) {
+    if (argc != 1) return (NULL);
+    CljObject *coll = args[0];
+    if (!coll) return (NULL);
+    
+    if (is_type(coll, CLJ_MAP) || is_type(coll, CLJ_TRANSIENT_MAP)) {
+        return (fixnum(map_count((CljValue)coll)));
+    } else if (is_type(coll, CLJ_VECTOR) || is_type(coll, CLJ_TRANSIENT_VECTOR)) {
         CljPersistentVector *vec = as_vector(coll);
-        return OBJ_TO_ID(fixnum(vec ? vec->count : 0));
+        return (fixnum(vec ? vec->count : 0));
+    } else if (is_type(coll, CLJ_LIST)) {
+        CljList *list = as_list(coll);
+        return (fixnum(list_count(list)));
     }
     
-    return OBJ_TO_ID(fixnum(0)); // Default count for unsupported types
+    return (fixnum(0)); // Default count for unsupported types
 }
 
-ID native_keys(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
-    CljObject *map = ID_TO_OBJ(args[0]);
-    if (!map) return OBJ_TO_ID(NULL);
+ID native_keys(ID *args, unsigned int argc) {
+    if (argc != 1) return (NULL);
+    CljObject *map = (CljObject*)args[0];
+    if (!map) return (NULL);
     
-    if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)map_keys((CljValue)map));
+    if (is_type(map, CLJ_MAP) || is_type(map, CLJ_TRANSIENT_MAP)) {
+        return ((CljObject*)map_keys((CljValue)map));
     }
     
-    return OBJ_TO_ID(NULL); // Return nil for unsupported types
+    return (NULL); // Return nil for unsupported types
 }
 
-ID native_vals(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
-    CljObject *map = ID_TO_OBJ(args[0]);
-    if (!map) return OBJ_TO_ID(NULL);
+ID native_vals(ID *args, unsigned int argc) {
+    if (argc != 1) return (NULL);
+    CljObject *map = (CljObject*)args[0];
+    if (!map) return (NULL);
     
-    if (map->type == CLJ_MAP || map->type == CLJ_TRANSIENT_MAP) {
-        return OBJ_TO_ID((CljObject*)map_vals((CljValue)map));
+    if (is_type(map, CLJ_MAP) || is_type(map, CLJ_TRANSIENT_MAP)) {
+        return ((CljObject*)map_vals((CljValue)map));
     }
     
-    return OBJ_TO_ID(NULL); // Return nil for unsupported types
+    return (NULL); // Return nil for unsupported types
 }
 
-ID native_if(ID *args, int argc) {
-    if (argc < 2) return OBJ_TO_ID(NULL);
-    CljObject *cond = ID_TO_OBJ(args[0]);
+ID native_if(ID *args, unsigned int argc) {
+    if (argc < 2) return (NULL);
+    CljObject *cond = (CljObject*)args[0];
     if (clj_is_truthy(cond)) {
-        return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[1])));
+        return (RETAIN((CljObject*)args[1]));
     } else if (argc > 2) {
-        return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[2])));
+        return (RETAIN((CljObject*)args[2]));
     } else {
-        return OBJ_TO_ID(NULL);
+        return (NULL);
     }
 }
 
-ID native_type(ID *args, int argc) {
-    if (argc != 1) return OBJ_TO_ID(NULL);
-    CljObject *obj = ID_TO_OBJ(args[0]);
-    if (!obj) return OBJ_TO_ID((CljObject*)intern_symbol_global("nil"));
+ID native_type(ID *args, unsigned int argc) {
+    if (argc != 1) return (NULL);
+    CljObject *obj = (CljObject*)args[0];
+    if (!obj) return ((CljObject*)intern_symbol_global("nil"));
     
     // Check for keyword (symbol with ':' prefix)
-    if (obj->type == CLJ_SYMBOL) {
+    if (is_type(obj, CLJ_SYMBOL)) {
         CljSymbol *sym = as_symbol(obj);
         if (sym && sym->name[0] == ':') {
             return (CljObject*)intern_symbol_global("Keyword");
@@ -309,11 +441,11 @@ ID native_type(ID *args, int argc) {
     }
 }
 
-ID native_array_map(ID *args, int argc) {
+ID native_array_map(ID *args, unsigned int argc) {
     // Must have even number of arguments (key-value pairs)
     if (argc % 2 != 0) {
         // Return empty map instead of nil for odd number of args
-        return OBJ_TO_ID(make_map(0));
+        return (make_map(0));
     }
     
     // Create map with appropriate capacity
@@ -321,19 +453,19 @@ ID native_array_map(ID *args, int argc) {
     
     // Handle empty map case specially
     if (pair_count == 0) {
-        return OBJ_TO_ID(make_map(0));
+        return (make_map(0));
     }
     
     CljMap *map = (CljMap*)make_map(pair_count);
     
     // Add all key-value pairs
-    for (int i = 0; i < argc; i += 2) {
-        CljObject *key = ID_TO_OBJ(args[i]);
-        CljObject *value = ID_TO_OBJ(args[i + 1]);
+    for (unsigned int i = 0; i < argc; i += 2) {
+        CljObject *key = (CljObject*)args[i];
+        CljObject *value = (CljObject*)args[i + 1];
         map_assoc((CljValue)map, (CljValue)key, (CljValue)value);
     }
     
-    return OBJ_TO_ID((CljObject*)map);
+    return ((CljObject*)map);
 }
 
 // make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
@@ -361,50 +493,18 @@ ID make_named_func(BuiltinFn fn, void *env, const char *name) {
     return func;
 }
 
-static const BuiltinEntry builtins[] = {
-    {"nth", FN_GENERIC, .u.generic = nth2},
-    {"conj", FN_GENERIC, .u.generic = conj2_wrapper},
-    {"assoc", FN_GENERIC, .u.generic = assoc3},
-    {"array-map", FN_GENERIC, .u.generic = native_array_map},
-    {"transient", FN_GENERIC, .u.generic = native_transient},
-    {"persistent!", FN_GENERIC, .u.generic = native_persistent},
-    {"conj!", FN_GENERIC, .u.generic = native_conj_bang},
-    {"if", FN_GENERIC, .u.generic = native_if},
-    {"type", FN_GENERIC, .u.generic = native_type},
-    {"+", FN_GENERIC, .u.generic = native_add_variadic},
-    {"-", FN_GENERIC, .u.generic = native_sub_variadic},
-    {"*", FN_GENERIC, .u.generic = native_mul_variadic},
-    {"/", FN_GENERIC, .u.generic = native_div_variadic},
-    {"str", FN_GENERIC, .u.generic = native_str},
-};
-
-ID apply_builtin(const BuiltinEntry *entry, ID *args, int argc) {
-    switch (entry->kind) {
-        case FN_ARITY1:
-            if (argc == 1) return entry->u.fn1(args[0]);
-            break;
-        case FN_ARITY2:
-            if (argc == 2) return entry->u.fn2(args[0], args[1]);
-            break;
-        case FN_ARITY3:
-            if (argc == 3) return entry->u.fn3(args[0], args[1], args[2]);
-            break;
-        case FN_GENERIC:
-            return entry->u.generic(args, argc);
-    }
-    return NULL;
-}
+// Legacy builtin table and apply_builtin removed - all builtins now use namespace registration
 
 // Arithmetic functions - native_*_variadic implement operations directly (no wrappers)
 
-ID native_println(ID *args, int argc) {
-    if (argc < 1) return OBJ_TO_ID(NULL);
+ID native_println(ID *args, unsigned int argc) {
+    if (argc < 1) return (NULL);
     if (args[0]) {
-        char *str = pr_str(ID_TO_OBJ(args[0]));
+        char *str = pr_str((CljObject*)args[0]);
         printf("%s\n", str);
         free(str);
     }
-    return OBJ_TO_ID(NULL);
+    return (NULL);
 }
 
 // ============================================================================
@@ -413,7 +513,7 @@ ID native_println(ID *args, int argc) {
 
 // Helper function to validate numeric arguments
 static bool validate_numeric_args(ID *args, int argc) {
-    for (int i = 0; i < argc; i++) {
+    for (unsigned int i = 0; i < argc; i++) {
         if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
             throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
@@ -432,24 +532,24 @@ static int32_t apply_saturation(int32_t acc_fixed) {
 // Helper function to create fixed-point result
 static ID create_fixed_result(int32_t acc_fixed) {
     acc_fixed = apply_saturation(acc_fixed);
-    return OBJ_TO_ID((CljObject*)(uintptr_t)((acc_fixed << TAG_BITS) | TAG_FIXED));
+    return ((CljObject*)(uintptr_t)((acc_fixed << TAG_BITS) | TAG_FIXED));
 }
 
 // Helper function to throw arithmetic overflow exceptions (DRY principle)
 static ID throw_arithmetic_overflow(const char* err_msg, int a, int b) {
     throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
-    return OBJ_TO_ID(NULL);
+    return (NULL);
 }
 
 // Helper function to throw fixed-point overflow exceptions
 static ID throw_fixed_overflow(const char* err_msg) {
     throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
-    return OBJ_TO_ID(NULL);
+    return (NULL);
 }
 
 // Helper function to create fixnum result
 static ID create_fixnum_result(int acc_i) {
-    return OBJ_TO_ID(fixnum(acc_i));
+    return (fixnum(acc_i));
 }
 
 // Helper function to extract raw fixed-point value
@@ -467,14 +567,14 @@ static int32_t fixnum_to_fixed(int fixnum) {
 // ============================================================================
 
 // String concatenation (variadic)
-ID native_str(ID *args, int argc) {
+ID native_str(ID *args, unsigned int argc) {
     if (argc == 0) {
-        return OBJ_TO_ID(make_string_impl(""));
+        return (make_string_impl(""));
     }
     
     // Calculate total length
     size_t total_len = 0;
-    for (int i = 0; i < argc; i++) {
+    for (unsigned int i = 0; i < argc; i++) {
         char *s = to_string(args[i]);
         if (s) {
             total_len += strlen(s);
@@ -488,7 +588,7 @@ ID native_str(ID *args, int argc) {
     buffer[0] = '\0';
     
     // Concatenate all strings
-    for (int i = 0; i < argc; i++) {
+    for (unsigned int i = 0; i < argc; i++) {
         char *s = to_string(args[i]);
         if (s) {
             strcat(buffer, s);
@@ -503,17 +603,17 @@ ID native_str(ID *args, int argc) {
 
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
-ID native_add_variadic(ID *args, int argc) {
+ID native_add_variadic(ID *args, unsigned int argc) {
     if (argc == 0) return create_fixnum_result(0);
-    if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
+    if (argc == 1) return (RETAIN((CljObject*)args[0]));
     
-    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    if (!validate_numeric_args(args, argc)) return (NULL);
     
     bool sawFixed = false; 
     int acc_i = 0; 
     int32_t acc_fixed = 0;
     
-    for (int i = 0; i < argc; i++) {
+    for (unsigned int i = 0; i < argc; i++) {
         if (!sawFixed) {
             if (IS_FIXNUM(args[i])) {
                 int new_val = AS_FIXNUM(args[i]);
@@ -557,17 +657,17 @@ ID native_add_variadic(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-ID native_mul_variadic(ID *args, int argc) {
+ID native_mul_variadic(ID *args, unsigned int argc) {
     if (argc == 0) return create_fixnum_result(1);
-    if (argc == 1) return OBJ_TO_ID(RETAIN(ID_TO_OBJ(args[0])));
+    if (argc == 1) return (RETAIN((CljObject*)args[0]));
     
-    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    if (!validate_numeric_args(args, argc)) return (NULL);
     
     bool sawFixed = false; 
     int acc_i = 1; 
     int32_t acc_fixed = 0;
     
-    for (int i = 0; i < argc; i++) {
+    for (unsigned int i = 0; i < argc; i++) {
         if (!sawFixed) {
             if (IS_FIXNUM(args[i])) {
                 int new_val = AS_FIXNUM(args[i]);
@@ -618,21 +718,21 @@ ID native_mul_variadic(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-ID native_sub_variadic(ID *args, int argc) {
+ID native_sub_variadic(ID *args, unsigned int argc) {
     if (argc == 0) { 
         throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
-        return OBJ_TO_ID(NULL); 
+        return (NULL); 
     }
     if (argc == 1) {
         if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
             throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
-            return OBJ_TO_ID(NULL);
+            return (NULL);
         } 
         return IS_FIXNUM(args[0]) ? create_fixnum_result(-AS_FIXNUM(args[0]))
                                   : create_fixed_result(-extract_fixed_value(args[0]));
     }
     
-    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    if (!validate_numeric_args(args, argc)) return (NULL);
     
     bool sawFixed = false; 
     int32_t acc_fixed = 0; 
@@ -645,7 +745,7 @@ ID native_sub_variadic(ID *args, int argc) {
         acc_fixed = extract_fixed_value(args[0]);
     }
     
-    for (int i = 1; i < argc; i++) {
+        for (unsigned int i = 1; i < argc; i++) {
         if (!sawFixed && IS_FIXNUM(args[i])) {
             int new_val = AS_FIXNUM(args[i]);
             // Check for integer overflow/underflow before subtraction
@@ -672,15 +772,15 @@ ID native_sub_variadic(ID *args, int argc) {
     return sawFixed ? create_fixed_result(acc_fixed) : create_fixnum_result(acc_i);
 }
 
-ID native_div_variadic(ID *args, int argc) {
+ID native_div_variadic(ID *args, unsigned int argc) {
     if (argc == 0) { 
         throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
-        return OBJ_TO_ID(NULL); 
+        return (NULL); 
     }
     if (argc == 1) {
         if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
             throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
-            return OBJ_TO_ID(NULL);
+            return (NULL);
         } 
         if (IS_FIXNUM(args[0])) { 
             int x = AS_FIXNUM(args[0]); 
@@ -692,7 +792,7 @@ ID native_div_variadic(ID *args, int argc) {
         }
     }
     
-    if (!validate_numeric_args(args, argc)) return OBJ_TO_ID(NULL);
+    if (!validate_numeric_args(args, argc)) return (NULL);
     
     bool sawFixed = false; 
     int32_t acc_fixed = 0; 
@@ -705,12 +805,12 @@ ID native_div_variadic(ID *args, int argc) {
         acc_fixed = extract_fixed_value(args[0]);
     }
     
-    for (int i = 1; i < argc; i++) {
+        for (unsigned int i = 1; i < argc; i++) {
         if (!sawFixed && IS_FIXNUM(args[i])) {
             int d = AS_FIXNUM(args[i]);
             if (d == 0) {
                 // Division by zero - return nil
-                return OBJ_TO_ID(NULL);
+                return (NULL);
             }
             if (acc_i % d == 0) {
                 acc_i /= d;
@@ -727,7 +827,7 @@ ID native_div_variadic(ID *args, int argc) {
                                             : extract_fixed_value(args[i]);
             if (d == 0) {
                 // Division by zero - return nil
-                return OBJ_TO_ID(NULL);
+                return (NULL);
             } else {
                 acc_fixed = (acc_fixed << 13) / d; // Fixed-Point Division mit Shift
             }
@@ -743,7 +843,7 @@ ID native_div_variadic(ID *args, int argc) {
 // BYTE ARRAY BUILTINS
 // ============================================================================
 
-ID native_byte_array(ID *args, int argc) {
+ID native_byte_array(ID *args, unsigned int argc) {
     if (argc != 1) {
         throw_exception("IllegalArgumentException", "byte-array requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
@@ -762,7 +862,7 @@ ID native_byte_array(ID *args, int argc) {
     }
     
     // Otherwise, treat as sequence and create array from values
-    CljObject *seq = ID_TO_OBJ(args[0]);
+    CljObject *seq = (CljObject*)args[0];
     if (!seq) {
         throw_exception("IllegalArgumentException", "byte-array argument must be a number or sequence",
                        __FILE__, __LINE__, 0);
@@ -770,7 +870,7 @@ ID native_byte_array(ID *args, int argc) {
     }
     
     // For now, only support vectors as sequences
-    if (seq->type == CLJ_VECTOR) {
+    if (is_type(seq, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector(seq);
         CljValue arr = make_byte_array(vec->count);
         
@@ -799,15 +899,15 @@ ID native_byte_array(ID *args, int argc) {
     return NULL;
 }
 
-ID native_aget(ID *args, int argc) {
+ID native_aget(ID *args, unsigned int argc) {
     if (argc != 2) {
         throw_exception("IllegalArgumentException", "aget requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *arr = ID_TO_OBJ(args[0]);
-    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+    CljObject *arr = (CljObject*)args[0];
+    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
         throw_exception("IllegalArgumentException", "aget first argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -824,15 +924,15 @@ ID native_aget(ID *args, int argc) {
     return fixnum(value);
 }
 
-ID native_aset(ID *args, int argc) {
+ID native_aset(ID *args, unsigned int argc) {
     if (argc != 3) {
         throw_exception("IllegalArgumentException", "aset requires exactly 3 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *arr = ID_TO_OBJ(args[0]);
-    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+    CljObject *arr = (CljObject*)args[0];
+    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
         throw_exception("IllegalArgumentException", "aset first argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -863,15 +963,15 @@ ID native_aset(ID *args, int argc) {
     return args[2]; // Return the value (Clojure-compatible)
 }
 
-ID native_alength(ID *args, int argc) {
+ID native_alength(ID *args, unsigned int argc) {
     if (argc != 1) {
         throw_exception("IllegalArgumentException", "alength requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *arr = ID_TO_OBJ(args[0]);
-    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+    CljObject *arr = (CljObject*)args[0];
+    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
         throw_exception("IllegalArgumentException", "alength argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -881,15 +981,15 @@ ID native_alength(ID *args, int argc) {
     return fixnum(length);
 }
 
-ID native_aclone(ID *args, int argc) {
+ID native_aclone(ID *args, unsigned int argc) {
     if (argc != 1) {
         throw_exception("IllegalArgumentException", "aclone requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *arr = ID_TO_OBJ(args[0]);
-    if (!arr || arr->type != CLJ_BYTE_ARRAY) {
+    CljObject *arr = (CljObject*)args[0];
+    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
         throw_exception("IllegalArgumentException", "aclone argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -899,15 +999,15 @@ ID native_aclone(ID *args, int argc) {
 }
 
 // Comparison operators as native functions
-ID native_lt(ID *args, int argc) {
+ID native_lt(ID *args, unsigned int argc) {
     if (argc != 2) {
         throw_exception("IllegalArgumentException", "< requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *a = ID_TO_OBJ(args[0]);
-    CljObject *b = ID_TO_OBJ(args[1]);
+    CljObject *a = (CljObject*)args[0];
+    CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
         throw_exception("IllegalArgumentException", "< arguments cannot be null",
@@ -940,15 +1040,15 @@ ID native_lt(ID *args, int argc) {
     return val_a < val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
-ID native_gt(ID *args, int argc) {
+ID native_gt(ID *args, unsigned int argc) {
     if (argc != 2) {
         throw_exception("IllegalArgumentException", "> requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *a = ID_TO_OBJ(args[0]);
-    CljObject *b = ID_TO_OBJ(args[1]);
+    CljObject *a = (CljObject*)args[0];
+    CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
         throw_exception("IllegalArgumentException", "> arguments cannot be null",
@@ -981,15 +1081,15 @@ ID native_gt(ID *args, int argc) {
     return val_a > val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
-ID native_le(ID *args, int argc) {
+ID native_le(ID *args, unsigned int argc) {
     if (argc != 2) {
         throw_exception("IllegalArgumentException", "<= requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *a = ID_TO_OBJ(args[0]);
-    CljObject *b = ID_TO_OBJ(args[1]);
+    CljObject *a = (CljObject*)args[0];
+    CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
         throw_exception("IllegalArgumentException", "<= arguments cannot be null",
@@ -1022,15 +1122,15 @@ ID native_le(ID *args, int argc) {
     return val_a <= val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
-ID native_ge(ID *args, int argc) {
+ID native_ge(ID *args, unsigned int argc) {
     if (argc != 2) {
         throw_exception("IllegalArgumentException", ">= requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *a = ID_TO_OBJ(args[0]);
-    CljObject *b = ID_TO_OBJ(args[1]);
+    CljObject *a = (CljObject*)args[0];
+    CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
         throw_exception("IllegalArgumentException", ">= arguments cannot be null",
@@ -1063,15 +1163,15 @@ ID native_ge(ID *args, int argc) {
     return val_a >= val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
-ID native_eq(ID *args, int argc) {
+ID native_eq(ID *args, unsigned int argc) {
     if (argc != 2) {
         throw_exception("IllegalArgumentException", "= requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    CljObject *a = ID_TO_OBJ(args[0]);
-    CljObject *b = ID_TO_OBJ(args[1]);
+    CljObject *a = (CljObject*)args[0];
+    CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
         throw_exception("IllegalArgumentException", "= arguments cannot be null",
@@ -1111,7 +1211,7 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     CljObject *symbol = intern_symbol(NULL, name);
     CljObject *func_obj = make_named_func(func, NULL, name);
     if (symbol && func_obj) {
-        ns_define(st, symbol, func_obj);
+        ns_define(st->current_ns, symbol, func_obj);
         // Builtin registered successfully
     } else {
         // Failed to register builtin
@@ -1119,14 +1219,7 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
 }
 
 void register_builtins() {
-    for (size_t i = 0; i < sizeof(builtins)/sizeof(builtins[0]); ++i) {
-        register_builtin(builtins[i].name, (BuiltinFn)builtins[i].u.generic /* placeholder */);
-    }
-    
-    // Register a test native function to demonstrate the difference
-    register_builtin("test-native", (BuiltinFn)native_if);
-    
-    // Register all builtins in clojure.core namespace (DRY principle)
+    // Register all builtins in clojure.core namespace (unified system)
     register_builtin_in_namespace("+", native_add_variadic);
     register_builtin_in_namespace("-", native_sub_variadic);
     register_builtin_in_namespace("*", native_mul_variadic);
@@ -1136,16 +1229,17 @@ void register_builtins() {
     register_builtin_in_namespace("array-map", native_array_map);
     register_builtin_in_namespace("nth", nth2);
     register_builtin_in_namespace("conj", native_conj);
+    register_builtin_in_namespace("first", native_first);
     register_builtin_in_namespace("rest", native_rest);
+    register_builtin_in_namespace("cons", native_cons);
+    register_builtin_in_namespace("count", native_count);
     register_builtin_in_namespace("assoc", assoc3);
     register_builtin_in_namespace("transient", native_transient);
     register_builtin_in_namespace("persistent!", native_persistent);
     register_builtin_in_namespace("conj!", native_conj_bang);
     register_builtin_in_namespace("get", native_get);
-    register_builtin_in_namespace("count", native_count);
     register_builtin_in_namespace("keys", native_keys);
     register_builtin_in_namespace("vals", native_vals);
-    register_builtin_in_namespace("test-native", native_if);
     register_builtin_in_namespace("println", native_println);
     
     // Register comparison operators as normal functions

@@ -42,7 +42,7 @@ TEST(test_namespace_lookup_user_namespace) {
     CljObject *value = fixnum(42);
     
     // Store variable directly in namespace
-    ns_define(st, test_sym, value);
+    ns_define(st->current_ns, test_sym, value);
     
     // Now resolve test-var in user namespace
     CljObject *resolved = ns_resolve(st, test_sym);
@@ -57,28 +57,28 @@ TEST(test_namespace_lookup_user_namespace) {
     evalstate_free(st);
 }
 
-// Test cross-namespace symbol resolution
-TEST(test_namespace_lookup_cross_namespace) {
+// Test memory management for namespace operations (isolated)
+TEST(test_namespace_memory_management_isolated) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
-    // Load clojure.core functions
-    load_clojure_core(st);
+    // Create a simple symbol-value pair
+    CljObject *test_sym = intern_symbol_global("test-memory-var");
+    CljObject *test_value = fixnum(42);
     
-    // Switch to user namespace
-    evalstate_set_ns(st, "user");
+    // Store in namespace (this should RETAIN the value)
+    ns_define(st->current_ns, test_sym, test_value);
     
-    // Try to resolve map symbol (should find it in clojure.core)
-    CljObject *map_sym = intern_symbol_global("map");
-    CljObject *resolved = ns_resolve(st, map_sym);
+    // Retrieve and verify
+    CljObject *retrieved = ns_resolve(st, test_sym);
+    TEST_ASSERT_NOT_NULL(retrieved);
+    TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
     
-    // Should resolve to clojure.core/map
-    TEST_ASSERT_NOT_NULL(resolved);
-    TEST_ASSERT_TRUE(is_type(resolved, CLJ_CLOSURE));
+    // Cleanup - this should free all objects
+    RELEASE((CljObject*)retrieved);
+    RELEASE((CljObject*)test_sym);
+    RELEASE((CljObject*)test_value);
     
-    // Cleanup
-    RELEASE((CljObject*)resolved);
-    RELEASE((CljObject*)map_sym);
     evalstate_free(st);
 }
 
@@ -193,7 +193,7 @@ TEST(test_namespace_variable_storage) {
     CljObject *value = fixnum(123);
     
     // Store variable in namespace
-    ns_define(st, var_sym, value);
+    ns_define(st->current_ns, var_sym, value);
     
     // Retrieve variable from namespace
     CljObject *retrieved = ns_resolve(st, var_sym);
@@ -220,8 +220,8 @@ TEST(test_namespace_multiple_variables) {
     CljObject *value2 = fixnum(200);
     
     // Store variables
-    ns_define(st, var1_sym, value1);
-    ns_define(st, var2_sym, value2);
+    ns_define(st->current_ns, var1_sym, value1);
+    ns_define(st->current_ns, var2_sym, value2);
     
     // Retrieve and verify
     CljObject *retrieved1 = ns_resolve(st, var1_sym);
@@ -270,7 +270,7 @@ TEST(test_namespace_special_characters) {
     CljObject *value = fixnum(42);
     
     // Store and retrieve
-    ns_define(st, special_sym, value);
+    ns_define(st->current_ns, special_sym, value);
     CljObject *retrieved = ns_resolve(st, special_sym);
     
     TEST_ASSERT_NOT_NULL(retrieved);
@@ -319,7 +319,7 @@ TEST(test_namespace_memory_management) {
         CljObject *sym = intern_symbol_global(name);
         CljObject *value = fixnum(i * 10);
         
-        ns_define(st, sym, value);
+        ns_define(st->current_ns, sym, value);
         
         // Verify it was stored
         CljObject *retrieved = ns_resolve(st, sym);

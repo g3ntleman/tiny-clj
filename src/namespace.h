@@ -43,7 +43,7 @@ ID ns_resolve(EvalState *st, CljObject *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
-void ns_define(EvalState *st, CljObject *symbol, CljObject *value);
+void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_cleanup(void);
 
 // EvalState functions

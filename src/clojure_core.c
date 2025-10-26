@@ -5,6 +5,7 @@
 #include "tiny_clj.h"
 #include "reader.h"
 #include "symbol.h"
+#include "value.h"  // For IS_IMMEDIATE macro
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -61,6 +62,12 @@ static bool eval_core_source(const char *src, EvalState *st) {
       // Exception occurred during evaluation
       // Don't call pr_str on exception to avoid potential double free
     } END_TRY
+    
+    // CRITICAL: Release form after evaluation
+    // value_by_parsing_expr returns object with rc=1
+    if (!IS_IMMEDIATE(form)) {
+      RELEASE((CljObject*)form);
+    }
     
     // Don't RELEASE form here - it's already managed by the parser
     // RELEASE((CljObject*)form);

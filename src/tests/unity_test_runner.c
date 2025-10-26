@@ -6,6 +6,7 @@
 
 #include "tests_common.h"
 #include "test_registry.h"
+#include "memory_profiler.h"
 
 // Access to global memory stats for leak checking
 extern MemoryStats g_memory_stats;
@@ -295,6 +296,18 @@ extern void test_map_equal_different_values(void);
 extern void test_map_equal_different_sizes(void);
 extern void test_map_equal_with_nested_vectors(void);
 
+// Forward declarations for conj and rest tests
+extern void test_conj_arity_0(void);
+extern void test_conj_arity_1(void);
+extern void test_conj_arity_2(void);
+extern void test_conj_arity_variadic(void);
+extern void test_conj_nil_collection(void);
+extern void test_rest_arity_0(void);
+extern void test_rest_nil(void);
+extern void test_rest_empty_vector(void);
+extern void test_rest_single_element(void);
+extern void test_group_conj_rest(void);
+
 static void test_group_unit(void) {
     // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
     // Cannot use WITH_AUTORELEASE_POOL here as it would violate LIFO principle with nested pools
@@ -353,6 +366,17 @@ static void test_group_unit(void) {
         // Debugging tests moved to test_group_debugging() to avoid duplication
         
         // Recur tests moved to test_group_recur() to avoid duplication
+        
+        // Conj and rest tests
+        RUN_TEST(test_conj_arity_0);
+        RUN_TEST(test_conj_arity_1);
+        RUN_TEST(test_conj_arity_2);
+        RUN_TEST(test_conj_arity_variadic);
+        RUN_TEST(test_conj_nil_collection);
+        RUN_TEST(test_rest_arity_0);
+        RUN_TEST(test_rest_nil);
+        RUN_TEST(test_rest_empty_vector);
+        RUN_TEST(test_rest_single_element);
 }
 
 static void test_group_cljvalue(void) {
@@ -616,7 +640,7 @@ static void run_exception_tests(void) {
 }
 
 static void run_unit_tests(void) {
-    // test_group_unit(); // Temporarily disabled
+    test_group_unit(); // Re-enabled for conj/rest tests
 }
 
 static void run_cljvalue_tests(void) {
@@ -667,7 +691,7 @@ static void run_all_tests(void) {
     test_group_memory();
     // Parser tests are now handled by the registry system
     test_group_exception();
-    // test_group_unit(); // Temporarily disabled
+    test_group_unit(); // Re-enabled for conj/rest tests
     test_group_cljvalue();
     test_group_namespace();  // Re-enabled after fixing double free
     test_group_seq();
@@ -693,12 +717,14 @@ static void print_new_usage(const char *program_name) {
     printf("  --test <name>        Run specific test by name\n");
     printf("  --filter <pattern>   Run tests matching pattern (supports * wildcard)\n");
     printf("  --list              List all available tests\n");
+    printf("  --quiet             Run all tests with minimal memory leak output\n");
     printf("  --help, -h          Show this help\n");
     printf("  (no args)           Run all tests\n\n");
     printf("Examples:\n");
     printf("  %s --test test_parse_basic_types\n", program_name);
     printf("  %s --filter \"test_parse_*\"\n", program_name);
     printf("  %s --filter \"*cow*\"\n", program_name);
+    printf("  %s --quiet\n", program_name);
     printf("  %s --list\n", program_name);
     printf("  %s\n", program_name);
 }
@@ -715,17 +741,20 @@ static void run_tests_by_registry(void) {
     printf("Running %zu registered tests...\n", test_count);
     
     for (size_t i = 0; i < test_count; i++) {
+        printf("🧪 Running test: %s\n", all_tests[i].name);
         RUN_TEST(all_tests[i].func);
+        printf("✅ Test completed: %s\n\n", all_tests[i].name);
     }
 }
 
 static void run_specific_test(const char *test_name) {
     Test *test = test_registry_find(test_name);
     if (test) {
-        printf("Running test: %s\n", test_name);
+        printf("🧪 Running specific test: %s\n", test_name);
         RUN_TEST(test->func);
+        printf("✅ Test completed: %s\n", test_name);
     } else {
-        printf("Test not found: %s\n", test_name);
+        printf("❌ Test not found: %s\n", test_name);
         printf("Use --list to see available tests\n");
     }
 }
@@ -735,26 +764,30 @@ static void run_filtered_tests(const char *pattern) {
     Test *all_tests = test_registry_get_all(&test_count);
     int found = 0;
     
-    printf("Running tests matching pattern: %s\n", pattern);
+    printf("🔍 Running tests matching pattern: %s\n", pattern);
     
     for (size_t i = 0; i < test_count; i++) {
         if (test_name_matches_pattern(all_tests[i].name, pattern)) {
-            printf("Running: %s\n", all_tests[i].name);
+            printf("🧪 Running: %s\n", all_tests[i].name);
             RUN_TEST(all_tests[i].func);
+            printf("✅ Completed: %s\n\n", all_tests[i].name);
             found++;
         }
     }
     
     if (found == 0) {
-        printf("No tests found matching pattern: %s\n", pattern);
+        printf("❌ No tests found matching pattern: %s\n", pattern);
         printf("Use --list to see available tests\n");
     } else {
-        printf("Ran %d tests matching pattern\n", found);
+        printf("✅ Ran %d tests matching pattern\n", found);
     }
 }
 
 int main(int argc, char **argv) {
     UNITY_BEGIN();
+    
+    // Enable memory profiling for tests
+    enable_memory_profiling(true);
     
     // Parse command line arguments
     if (argc > 1) {
@@ -764,6 +797,10 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[1], "--list") == 0) {
             test_registry_list_all();
             return 0;
+        } else if (strcmp(argv[1], "--quiet") == 0) {
+            // Reduce memory leak spam for cleaner output
+            set_memory_leak_reporting_enabled(false);
+            run_all_tests();
         } else if (strcmp(argv[1], "--test") == 0) {
             if (argc < 3) {
                 printf("Error: --test requires a test name\n");

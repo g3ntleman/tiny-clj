@@ -60,163 +60,166 @@ CljObject *SYM_KW_ERROR = NULL;
 CljObject *SYM_KW_STACK = NULL;
 
 // Static symbol structs for special forms (compile-time initialization)
+// These symbols have rc = 1 and use string literals (no strdup needed)
 static struct { CljSymbol sym; } sym_try_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "try" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "try" }
 };
 static struct { CljSymbol sym; } sym_catch_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "catch" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "catch" }
 };
 static struct { CljSymbol sym; } sym_if_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "if" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "if" }
 };
 static struct { CljSymbol sym; } sym_let_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "let" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "let" }
 };
 static struct { CljSymbol sym; } sym_fn_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "fn" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "fn" }
 };
 static struct { CljSymbol sym; } sym_def_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "def" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "def" }
 };
 static struct { CljSymbol sym; } sym_defn_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "defn" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "defn" }
 };
 static struct { CljSymbol sym; } sym_quote_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "quote" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "quote" }
 };
 static struct { CljSymbol sym; } sym_quasiquote_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "quasiquote" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "quasiquote" }
 };
 static struct { CljSymbol sym; } sym_unquote_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "unquote" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "unquote" }
 };
 static struct { CljSymbol sym; } sym_splice_unquote_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "splice-unquote" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "splice-unquote" }
 };
 static struct { CljSymbol sym; } sym_do_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "do" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "do" }
 };
 static struct { CljSymbol sym; } sym_loop_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "loop" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "loop" }
 };
 static struct { CljSymbol sym; } sym_recur_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "recur" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "recur" }
 };
 static struct { CljSymbol sym; } sym_throw_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "throw" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "throw" }
 };
 static struct { CljSymbol sym; } sym_finally_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "finally" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "finally" }
 };
 static struct { CljSymbol sym; } sym_ns_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "ns" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "ns" }
 };
 
 // Static symbol structs for built-in functions (compile-time initialization)
 static struct { CljSymbol sym; } sym_plus_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "+" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "+" }
 };
 static struct { CljSymbol sym; } sym_minus_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "-" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "-" }
 };
 static struct { CljSymbol sym; } sym_multiply_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "*" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "*" }
 };
 static struct { CljSymbol sym; } sym_divide_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "/" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "/" }
 };
 static struct { CljSymbol sym; } sym_equals_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "=" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "=" }
 };
 static struct { CljSymbol sym; } sym_equal_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "equal" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "equal" }
 };
 static struct { CljSymbol sym; } sym_lt_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "<" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "<" }
 };
 static struct { CljSymbol sym; } sym_gt_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ">" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ">" }
 };
 static struct { CljSymbol sym; } sym_le_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "<=" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "<=" }
 };
 static struct { CljSymbol sym; } sym_ge_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ">=" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ">=" }
 };
 static struct { CljSymbol sym; } sym_println_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "println" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "println" }
 };
 static struct { CljSymbol sym; } sym_print_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "print" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "print" }
 };
 static struct { CljSymbol sym; } sym_str_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "str" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "str" }
 };
 static struct { CljSymbol sym; } sym_conj_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "conj" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "conj" }
 };
 static struct { CljSymbol sym; } sym_nth_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "nth" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "nth" }
 };
 static struct { CljSymbol sym; } sym_first_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "first" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "first" }
 };
 static struct { CljSymbol sym; } sym_rest_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "rest" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "rest" }
 };
 static struct { CljSymbol sym; } sym_count_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "count" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "count" }
 };
 
 // Static symbol structs for additional symbols (compile-time initialization)
 static struct { CljSymbol sym; } sym_cons_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "cons" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "cons" }
 };
 static struct { CljSymbol sym; } sym_seq_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "seq" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "seq" }
 };
 static struct { CljSymbol sym; } sym_next_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "next" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "next" }
 };
 static struct { CljSymbol sym; } sym_list_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "list" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "list" }
 };
 static struct { CljSymbol sym; } sym_and_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "and" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "and" }
 };
 static struct { CljSymbol sym; } sym_or_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "or" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "or" }
 };
 static struct { CljSymbol sym; } sym_for_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "for" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "for" }
 };
 static struct { CljSymbol sym; } sym_doseq_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "doseq" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "doseq" }
 };
 static struct { CljSymbol sym; } sym_dotimes_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = "dotimes" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "dotimes" }
 };
 
 // Static symbol structs for keywords (compile-time initialization)
 static struct { CljSymbol sym; } sym_kw_line_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ":line" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":line" }
 };
 static struct { CljSymbol sym; } sym_kw_file_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ":file" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":file" }
 };
 static struct { CljSymbol sym; } sym_kw_doc_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ":doc" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":doc" }
 };
 static struct { CljSymbol sym; } sym_kw_error_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ":error" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":error" }
 };
 static struct { CljSymbol sym; } sym_kw_stack_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 0 }, .ns = NULL, .name = ":stack" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":stack" }
 };
 
 // Initialisierung der globalen Symbole
 void init_special_symbols() {
     // Special forms - static structs with symbol table registration
+    // Initialize names with strdup to avoid string literal issues
+    sym_try_data.sym.name = strdup("try");
     SYM_TRY = (CljObject*)&sym_try_data;
     symbol_table_add(NULL, "try", SYM_TRY);
     

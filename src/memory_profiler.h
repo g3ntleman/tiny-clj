@@ -172,6 +172,18 @@ void enable_memory_profiling(bool enabled);
 bool is_memory_profiling_enabled(void);
 
 /**
+ * @brief Set memory leak reporting mode
+ * @param enabled true for detailed leak reports, false for minimal reporting
+ */
+void set_memory_leak_reporting_enabled(bool enabled);
+
+/**
+ * @brief Check if memory leak reporting is enabled
+ * @return true if enabled, false otherwise
+ */
+bool is_memory_leak_reporting_enabled(void);
+
+/**
  * @brief Set memory verbose mode for test output
  * @param verbose true to show detailed stats for all tests, false to show only errors/leaks
  */

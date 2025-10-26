@@ -446,6 +446,68 @@ if (!is_immediate(value)) {
 
 ## Autorelease Pool Management
 
+### Exception-Safe Memory Cleanup
+
+**`WITH_AUTORELEASE_POOL` provides exception-safe memory cleanup** that automatically handles both normal execution and exception scenarios:
+
+```c
+#define WITH_AUTORELEASE_POOL(code) do { \
+    CljObjectPool *_pool = autorelease_pool_push(); \
+    TRY { \
+        code; \
+        autorelease_pool_pop(_pool);  // ← Normal cleanup
+    } CATCH(ex) { \
+        autorelease_pool_pop(_pool);  // ← Cleanup also on exception!
+        THROW(ex);                   // ← Exception propagation
+    } END_TRY \
+} while(0)
+```
+
+#### Key Benefits:
+
+1. **Exception-Safe Cleanup**: Objects are freed even when exceptions occur
+2. **No Memory Leaks**: Pool cleanup happens in both success and failure paths
+3. **Exception Propagation**: Exceptions are properly propagated to callers
+4. **Simplified Code**: No need for manual exception handling in many cases
+
+#### Impact on Code Design:
+
+**Before (redundant exception handling):**
+```c
+CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
+    TRY {
+        result = eval_symbol(expr, st);
+        result = AUTORELEASE(result);
+    } CATCH(ex) {
+        throw_exception_formatted(...);  // ← Redundant!
+        result = NULL;
+    } END_TRY
+    return result;
+}
+```
+
+**After (simplified with WITH_AUTORELEASE_POOL):**
+```c
+CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
+    result = eval_symbol(expr, st);
+    result = AUTORELEASE(result);  // ← Exception-safe via pool
+    return result;
+}
+```
+
+#### When Exception Handlers Are Still Needed:
+
+- **Custom exception handling logic** beyond simple propagation
+- **Resource cleanup** beyond autorelease pool (file handles, etc.)
+- **Exception transformation** (changing exception types/messages)
+- **Recovery logic** (fallback behavior on exceptions)
+
+#### When Exception Handlers Are Redundant:
+
+- **Simple propagation** - `WITH_AUTORELEASE_POOL` handles this automatically
+- **Memory cleanup only** - Pool cleanup is exception-safe
+- **Standard evaluation** - Most eval functions can rely on pool cleanup
+
 ### Critical Rule: Balanced Push/Pop Operations
 
 **`autorelease_pool_pop()` on empty stack** indicates **unbalanced autorelease pool operations**, not too many pools. This happens when:

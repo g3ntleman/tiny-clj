@@ -162,7 +162,7 @@ void test_map_arity_exception_zero_args(void) {
         
         // Define 'm' in current namespace
         CljObject *m_sym = AUTORELEASE(make_symbol_impl("m", NULL));
-        ns_define(st, m_sym, (CljObject*)map_obj);
+        ns_define(st->current_ns, m_sym, (CljObject*)map_obj);
         
         // Try to call map with 0 arguments: (m)
         // CljObject *result = eval_string("(m)", st); // Unused variable removed

@@ -216,7 +216,7 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
     if (!quoted) return NULL;
     // Create (quote <expr>) list: (quote expr)
     // Build list using the same pattern as parse_list
-    CljObject *quote_sym = (CljObject*)intern_symbol_global("quote");
+    CljObject *quote_sym = intern_symbol_global("quote");
     ID elements[2] = {(CljValue)quote_sym, quoted};
     return make_list_from_stack((CljValue*)elements, 2);
   }
@@ -256,12 +256,11 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
  * @brief Evaluate a parsed Clojure expression
  * @param parsed_expr The parsed AST
  * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL on error
+ * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
 CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
-    if (!parsed_expr) {
-        return NULL;
-    }
+    CLJ_ASSERT(parsed_expr != NULL);
+    CLJ_ASSERT(eval_state != NULL);
     
     CljObject *result = NULL;
     
@@ -269,9 +268,10 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
     // Check if parsed_expr is an immediate value first
     if (IS_IMMEDIATE(parsed_expr)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
-        result = (CljObject*)parsed_expr;
+        result = parsed_expr;
     } else if (is_type(parsed_expr, CLJ_LIST)) {
-        CljObject *env = (eval_state && eval_state->current_ns) ? (CljObject*)eval_state->current_ns->mappings : NULL;
+        CLJ_ASSERT(eval_state->current_ns != NULL);
+        CljObject *env = eval_state->current_ns->mappings;
         result = eval_list(as_list(parsed_expr), (CljMap*)env, eval_state);
         // eval_list already returns autoreleased object
     } else {
@@ -280,6 +280,8 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
         // eval_expr_simple already returns autoreleased object
     }
     
+    // result can be NULL only if the evaluation result is nil
+    // If evaluation fails, it should throw an exception, not return NULL
     return result;
 }
 
@@ -287,23 +289,36 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
  * @brief Parse and evaluate a Clojure expression from a string (convenience)
  * @param expr_str The Clojure expression as a string
  * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL on error
+ * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
 ID eval_string(const char* expr_str, EvalState *eval_state) {
+    CLJ_ASSERT(expr_str != NULL);
+    CLJ_ASSERT(eval_state != NULL);
+    
     CljValue parsed = parse(expr_str, eval_state);
     if (parsed == NULL) {
+        // Check if this is a valid nil result vs a parsing error
+        // If the input is exactly "nil", then NULL is a valid result
+        if (strcmp(expr_str, "nil") == 0) {
+            return NULL; // nil is represented as NULL in our system
+        }
+        
+        // Otherwise, this is a parsing error
+        throw_exception("ParseError", "Failed to parse expression", __FILE__, __LINE__, 0);
         return NULL;
     }
     
     // Check if parsed is an immediate value
     if (IS_IMMEDIATE(parsed)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
-        return (ID)(CljObject*)parsed;
+        return parsed;
     }
     
     // For heap objects, evaluate them
-    CljObject *result = eval_parsed((CljObject*)parsed, eval_state);
+    CljObject *result = eval_parsed(parsed, eval_state);
     
+    // result can be NULL only if the evaluation result is nil
+    // If eval_parsed fails, it should throw an exception, not return NULL
     return (ID)result;
 }
 
@@ -397,22 +412,16 @@ static ID parse_list(Reader *reader, EvalState *st) {
   
   while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
     ID element = make_object_by_parsing_expr(reader, st);
-    if (!element) {
-      // Clean up already parsed elements
-      for (int i = 0; i < count; i++) {
-        RELEASE(elements[i]);
-      }
-      return NULL;
-    }
+    // element can be NULL for nil, which is valid
     reader_skip_all(reader);
     
-    // Store element in array
+    // Store element in array (including NULL for nil)
     if (count >= MAX_STACK_LIST_SIZE) {
       // Clean up already parsed elements
       for (int i = 0; i < count; i++) {
         RELEASE(elements[i]);
       }
-      RELEASE(element);
+      if (element) RELEASE(element);
       return NULL;
     }
     elements[count++] = element;
@@ -687,7 +696,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     RELEASE(meta);
     return NULL;
   }
-  meta_set(ID_TO_OBJ(obj), ID_TO_OBJ(meta));
+  meta_set(obj, meta);
   RELEASE(meta);
   return AUTORELEASE(obj);
 }
@@ -713,7 +722,7 @@ static ID parse_meta_map(Reader *reader,
     RELEASE(meta);
     return NULL;
   }
-  meta_set(ID_TO_OBJ(obj), ID_TO_OBJ(meta));
+  meta_set(obj, meta);
   RELEASE(meta);
   return AUTORELEASE(obj);
 }

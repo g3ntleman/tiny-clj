@@ -31,7 +31,7 @@
 // Maximum autorelease pool depth
 #define MAX_POOL_DEPTH 24
 
-typedef ID (*BuiltinFn)(ID *args, int argc);
+typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 
 // Runtime state management
 typedef struct TinyClJRuntime {
@@ -59,7 +59,6 @@ extern TinyClJRuntime g_runtime;
 void runtime_init(void);
 void runtime_free(void);
 
-void register_builtin(const char *name, BuiltinFn fn);
-BuiltinFn find_builtin(const char *name);
+// Legacy builtin functions removed - all builtins now use namespace registration
 
 #endif

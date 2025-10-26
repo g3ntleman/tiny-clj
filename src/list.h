@@ -14,9 +14,10 @@ typedef struct CljList {
     CljObject *rest;
 } CljList;
 
-// Safe accessor macros
-#define LIST_FIRST(list) ((list) ? (list)->first : NULL)
-#define LIST_REST(list) ((list) ? (list)->rest : NULL)
+// Safe accessor macros with proper memory management
+// These return autoreleased objects following MEMORY_POLICY
+#define LIST_FIRST(list) ((list) && (list)->first ? AUTORELEASE(RETAIN((list)->first)) : NULL)
+#define LIST_REST(list) ((list) && (list)->rest ? AUTORELEASE(RETAIN((list)->rest)) : NULL)
 
 // List creation and operations
 CljObject* make_list(ID first, CljList *rest);
@@ -32,7 +33,6 @@ static inline CljList* as_list(ID obj) {
     }
     return (CljList*)obj;
 }
-ID list_first(CljList *list);
 ID list_nth(CljList *list, int n);
 int list_count(CljList *list);
 CljValue make_list_from_stack(CljValue *stack, int count);

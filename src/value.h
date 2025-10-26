@@ -192,32 +192,28 @@ static inline bool is_falsy(CljValue val) {
 // Optimized: immediate values have odd tags (1,3,5,7), heap objects have even tags (0,2,4,6)
 #define IS_IMMEDIATE(val) (((uintptr_t)(val) & TAG_MASK) & 1)
 
-// Safe cast from ID to CljObject* with debug checks
+// Safe cast from ID to ID with debug checks
 #ifdef DEBUG
-static inline CljObject* ID_TO_OBJ(ID id) {
+static inline ID CHECKED(ID id) {
     if (!id) return NULL;
     CljValue val = (CljValue)id;
     // Check if it's an immediate or heap object
     if (IS_IMMEDIATE(val)) {
-        // It's an immediate - return as-is (will be treated as CljObject*)
-        return (CljObject*)val;
+        // It's an immediate - return as-is
+        return id;
     }
     // It's a heap object - verify it has a valid type
     CljObject* obj = (CljObject*)val;
     if (obj->type < CLJ_TYPE_COUNT) {
-        return obj;
+        return id;
     }
-#ifdef DEBUG
     fprintf(stderr, "ID_TO_OBJ: Invalid object type %d at %p\n", obj->type, obj);
-#endif
     abort();
 }
 #else
-#define ID_TO_OBJ(id) ((CljObject*)(id))
+#define ID_TO_OBJ(id) (id)
 #endif
 
-// Safe cast from CljObject* to ID (always safe, no check needed)
-#define OBJ_TO_ID(obj) ((ID)(obj))
 
 // Convenience macros for type checking with ID or any pointer type
 // These eliminate the need to cast to CljValue before checking

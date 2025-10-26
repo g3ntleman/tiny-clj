@@ -56,7 +56,7 @@ CljObject* make_map(int capacity) {
 CljValue map_get(CljValue map, CljValue key) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
-  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj)
+  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj)
     return (CljValue)NULL;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
@@ -80,7 +80,7 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
   CljObject *value_obj = (CljObject*)value;
-  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj) {
+  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj) {
     return;
   }
   CljMap *map_data = as_map(map_obj);
@@ -116,7 +116,7 @@ CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
   CljObject *key_obj = (CljObject*)key;
   CljObject *value_obj = (CljObject*)value;
   
-  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj) {
+  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj) {
     return map;  // Return original map on error
   }
   
@@ -210,7 +210,7 @@ CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
 /** Return a vector of keys (retained). */
 CljValue map_keys(CljValue map) {
   CljObject *map_obj = (CljObject*)map;
-  if (!map_obj || map_obj->type != CLJ_MAP)
+  if (!map_obj || !is_type(map_obj, CLJ_MAP))
     return (CljValue)NULL;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
@@ -232,7 +232,7 @@ CljValue map_keys(CljValue map) {
 /** Return a vector of values (retained). */
 CljValue map_vals(CljValue map) {
   CljObject *map_obj = (CljObject*)map;
-  if (!map_obj || map_obj->type != CLJ_MAP)
+  if (!map_obj || !is_type(map_obj, CLJ_MAP))
     return (CljValue)NULL;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
@@ -272,7 +272,7 @@ void map_put(CljValue map, CljValue key, CljValue value) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
   CljObject *value_obj = (CljObject*)value;
-  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj)
+  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj)
     return;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
@@ -302,7 +302,7 @@ void map_foreach(CljValue map, void (*func)(CljValue, CljValue)) {
 int map_contains(CljValue map, CljValue key) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
-  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj)
+  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj)
     return 0;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
@@ -314,7 +314,7 @@ int map_contains(CljValue map, CljValue key) {
 void map_remove(CljValue map, CljValue key) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
-  if (!map_obj || map_obj->type != CLJ_MAP || !key_obj)
+  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj)
     return;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)

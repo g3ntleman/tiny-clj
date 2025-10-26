@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "runtime.h"
 #include "object.h"
+#include "symbol.h"
 #include "vector.h"
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "memory_profiler.h"
@@ -503,7 +504,18 @@ static void release_object_deep(CljObject *v) {
             break;
             
         case CLJ_SYMBOL:
-            // Symbols are interned; no cleanup needed
+            {
+                if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                    printf("🔍 release_object_deep: Freeing SYMBOL object %p\n", v);
+                }
+                CljSymbol *sym = (CljSymbol*)v;
+                if (sym && sym->name) {
+                    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                        printf("🔍 release_object_deep: Freeing symbol name: '%s'\n", sym->name);
+                    }
+                    free((void*)sym->name);
+                }
+            }
             break;
             
         case CLJ_VECTOR:

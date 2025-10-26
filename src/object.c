@@ -625,7 +625,17 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbo
     if (!entry) return NULL;
     
     entry->ns = ns ? strdup(ns) : NULL;
-    entry->name = strdup(name);
+    
+    // Use tagged pointer system to detect heap vs static symbols
+    // Heap symbols (TAG_POINTER) need strdup, static symbols use string literals
+    if (symbol && get_tag((CljValue)symbol) == TAG_POINTER) {
+        // This is a heap-allocated symbol, strdup the name
+        entry->name = strdup(name);
+    } else {
+        // This is a static symbol with string literal, don't strdup
+        entry->name = (char*)name;
+    }
+    
     entry->symbol = symbol;
     entry->next = (SymbolEntry*)g_runtime.symbol_table;
     g_runtime.symbol_table = (void*)entry;
@@ -666,7 +676,13 @@ void symbol_table_cleanup() {
     while (entry) {
         SymbolEntry *next = entry->next;
         if (entry->ns) free(entry->ns);
-        if (entry->name) free(entry->name);
+        
+        // Only free entry->name if it was strdup'd (heap symbols)
+        // Static symbols use string literals that shouldn't be freed
+        if (entry->name && entry->symbol && get_tag((CljValue)entry->symbol) == TAG_POINTER) {
+            free(entry->name);
+        }
+        
         free(entry);
         entry = next;
     }

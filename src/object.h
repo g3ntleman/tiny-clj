@@ -11,7 +11,7 @@
 #define TINY_CLJ_OBJECT_H
 
 // Forward declaration for ID type to avoid circular dependency
-typedef void* ID;
+#define ID void*
 
 // Forward declaration for CljValue to avoid circular dependency
 typedef struct CljObject* CljValue;

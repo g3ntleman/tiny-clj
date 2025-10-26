@@ -235,7 +235,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
         // Search for catch clauses
         for (int i = 2; i < list_count(as_list(form)); i++) {
             CljObject *clause = (CljObject*)list_nth(as_list(form), i);
-            if (is_list(clause) && is_symbol((CljObject*)list_first(as_list(clause)), "catch")) {
+            if (is_list(clause) && is_symbol(LIST_FIRST(as_list(clause)), "catch")) {
                 CljObject *sym = (CljObject*)list_nth(as_list(clause), 1);
                 CljObject *body = (CljObject*)list_nth(as_list(clause), 2);
                 
@@ -265,24 +265,17 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     
     CljObject *result = NULL;
     
-    // Use TRY/CATCH to handle exceptions
-    TRY {
-        if (is_type(expr, CLJ_SYMBOL)) {
-            result = eval_symbol(expr, st);
-            // Don't AUTORELEASE here - let caller handle it
-        } else if (is_type(expr, CLJ_LIST)) {
-            CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
-            result = eval_list(as_list(expr), (CljMap*)env, st);
-            // Don't AUTORELEASE here - let caller handle it
-        } else {
-            // expr is already autoreleased by parse() - just return it
-            result = expr;
-        }
-    } CATCH(ex) {
-        // Exception caught - re-throw to let caller handle it
-        throw_exception_formatted(ex->type, ex->file, ex->line, ex->col, "%s", ex->message);
-        result = NULL;
-    } END_TRY
+    if (is_type(expr, CLJ_SYMBOL)) {
+        result = eval_symbol(expr, st);
+        result = AUTORELEASE(result);
+    } else if (is_type(expr, CLJ_LIST)) {
+        CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
+        result = eval_list(as_list(expr), (CljMap*)env, st);
+        result = AUTORELEASE(result);
+    } else {
+        // expr is already autoreleased by parse() - just return it
+        result = expr;
+    }
     
     return result;
 }
@@ -293,21 +286,17 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
  * @param symbol Symbol to define
  * @param value Value to bind to symbol
  */
-void ns_define(EvalState *st, CljObject *symbol, CljObject *value) {
-    if (!st || !symbol || !value) return;
-    
-    // Get current namespace
-    CljNamespace *ns = st->current_ns;
-    if (!ns) {
-        ns = ns_get_or_create("user", NULL);
-        st->current_ns = ns;
-    }
+void ns_define(CljNamespace *ns, ID symbol, ID value) {
+    if (!ns || !symbol || !value) return;
     
     // Create or update mappings
     if (!ns->mappings) {
-        ns->mappings = (CljMap*)make_map(16);  // Initial capacity of 16
+        ns->mappings = (CljMap*)make_map(16);
     }
     
     // Store symbol-value binding (overwrites existing)
-    map_assoc((CljObject*)ns->mappings, symbol, value);
+    // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
+    // See src/map.c:98 and src/map.c:106-107
+    // Use CljValue API (ID = CljValue)
+    map_assoc((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
 }

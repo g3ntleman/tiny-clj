@@ -5,14 +5,6 @@
 #include <stdarg.h>
 
 // List-Operationen für try/catch
-ID list_first(CljList *list) {
-    if (!list) return NULL;
-    
-    // For empty lists, LIST_FIRST returns NULL, but we should return NULL singleton
-    CljObject *first = LIST_FIRST(list);
-    return (ID)(first ? first : NULL);
-}
-
 ID list_nth(CljList *list, int n) {
     if (!list || n < 0) return NULL;
     
@@ -38,14 +30,12 @@ int list_count(CljList *list) {
     if (!list) return 0;
     
     int count = 0;
-    // Work directly with CljList*
     CljObject *current = (CljObject*)list;
     while (current && is_type(current, CLJ_LIST)) {
         CljList *current_list = as_list(current);
-        // Only count if the list has a first element (not empty)
-        if (LIST_FIRST(current_list)) {
-            count++;
-        }
+        // Count the element (first) of this list node
+        // Even if LIST_FIRST is NULL (nil), it's still an element
+        count++;
         current = LIST_REST(current_list);
         if (current && !is_type(current, CLJ_LIST)) {
             current = NULL; // Stop if rest is not a list
@@ -63,10 +53,10 @@ CljValue make_list_from_stack(CljValue *stack, int count) {
     // Build list from end to start using make_list
     CljObject *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
-        CljObject *element = ID_TO_OBJ(stack[i]);
+        CljObject *element = stack[i];
         CljObject *new_node = make_list(element, (CljList*)result);
         if (element) RETAIN(element);
-        result = (CljObject*)new_node;
+        result = new_node;
     }
     return (CljValue)result;
 }
@@ -76,7 +66,7 @@ bool is_list(ID v) {
 }
 
 bool is_symbol(ID v, const char *name) {
-    if (!v || ((CljObject*)v)->type != CLJ_SYMBOL || !name) return false;
+    if (!v || !is_type(v, CLJ_SYMBOL) || !name) return false;
     
     // Erstelle Symbol für Vergleich (wird interniert)
     CljObject *compare_symbol = intern_symbol_global(name);
@@ -101,9 +91,9 @@ CljObject* list_from_ints(int count, ...) {
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
         CljObject *new_node = make_list(fixnum(value), (CljList*)result);
-        result = (CljObject*)new_node;
+        result = new_node;
     }
     
     va_end(args);
-    return result ? (CljObject*)result : NULL;
+    return result ? result : NULL;
 }
