@@ -34,6 +34,8 @@ CLJException* make_exception(const char *type, const char *message, const char *
 void throw_exception(const char *type, const char *message, const char *file, int line, int col);
 /** Throw exception with printf-style formatting; transfers ownership to runtime. */
 void throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
+/** Re-throw existing exception object; transfers ownership to runtime. */
+void throw_exception_object(CLJException *ex);
 
 // ============================================================================
 // GLOBAL EXCEPTION STACK (independent of EvalState)
@@ -114,6 +116,9 @@ extern GlobalExceptionStack global_exception_stack;
         /* Exception manually released */ \
     } \
 }
+
+/** @brief Re-throw existing exception object (convenience macro) */
+#define THROW(ex) throw_exception_object(ex)
 
 /**
  * @brief Create exception with standard error message.

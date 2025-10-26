@@ -254,22 +254,36 @@ TEST(test_fixed_overflow_detection) {
     
     // Test multiplication overflow - this should throw an exception with correct values
     CljObject *result = NULL;
-    WITH_AUTORELEASE_POOL_TRY_CATCH({
-        result = eval_string("(* 1000.8 1000000.9)", st);
-    }, {
-        // Exception caught - result should remain NULL
+    bool exception_caught = false;
+    TRY {
+        WITH_AUTORELEASE_POOL({
+            result = eval_string("(* 1000.8 1000000.9)", st);
+        });
+        // If we reach here, no exception was thrown
         result = NULL;
-    });
+    } CATCH(ex) {
+        // Exception caught - result should remain NULL
+        exception_caught = true;
+        result = NULL;
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been thrown");
     TEST_ASSERT_NULL(result); // Should be NULL due to exception
     
     // Test addition overflow - this should also throw an exception with correct values
     CljObject *result2 = NULL;
-    WITH_AUTORELEASE_POOL_TRY_CATCH({
-        result2 = eval_string("(+ 1000000.5 1000000.5)", st);
-    }, {
-        // Exception caught - result2 should remain NULL
+    bool exception_caught2 = false;
+    TRY {
+        WITH_AUTORELEASE_POOL({
+            result2 = eval_string("(+ 1000000.5 1000000.5)", st);
+        });
+        // If we reach here, no exception was thrown
         result2 = NULL;
-    });
+    } CATCH(ex) {
+        // Exception caught - result2 should remain NULL
+        exception_caught2 = true;
+        result2 = NULL;
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught2, "Exception should have been thrown");
     TEST_ASSERT_NULL(result2); // Should be NULL due to exception
     
     evalstate_free(st);

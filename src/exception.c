@@ -5,18 +5,115 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <setjmp.h>
 #include "namespace.h"  // Must be before exception.h for EvalState definition
 #include "exception.h"
 #include "error_messages.h"
 #include "runtime.h"
+#include "object.h"  // For make_exception
+#include "clj_strings.h"  // For to_string
 
 // Global storage for current exception
 CLJException *g_current_exception = NULL;
 
+// Global exception stack (independent of EvalState)
+GlobalExceptionStack global_exception_stack = {0};
+
+// ============================================================================
+// EXCEPTION THROWING FUNCTIONS
+// ============================================================================
+
+/**
+ * Convenience function for throwing exceptions with printf-style formatting
+ * 
+ * @param type Exception type (NULL for generic "RuntimeException")
+ * @param file Source file name (use __FILE__)
+ * @param line Line number (use __LINE__)
+ * @param code Error code (use 0 for most cases)
+ * @param format printf-style format string
+ * @param ... Variable arguments for formatting
+ */
+void throw_exception_formatted(const char *type, const char *file, int line, int code, 
+                              const char *format, ...) {
+    char message[512];  // Increased buffer size for longer messages
+    va_list args;
+    
+    va_start(args, format);
+    int result = vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
+    
+    // Additional safety: ensure null termination if message was truncated
+    if (result >= (int)sizeof(message)) {
+        // Message was truncated - ensure null termination
+        message[sizeof(message)-1] = '\0';
+    }
+    
+    // Shorten file path to show only from /src/ onwards
+    const char *short_file = file;
+    const char *src_pos = strstr(file, "/src/");
+    if (src_pos) {
+        short_file = src_pos + 1; // Skip the leading "/"
+    }
+    
+    // Use generic RuntimeException if type is NULL
+    const char *exception_type = (type != NULL) ? type : "RuntimeException";
+    
+    // Create exception and use the unified function
+    CLJException *exception = make_exception(exception_type, message, short_file, line, code);
+    if (!exception) {
+#ifdef DEBUG
+        fprintf(stderr, "FAILED TO ALLOCATE FORMATTED EXCEPTION\n");
+#endif
+        exit(1);
+    }
+    
+    throw_exception_object(exception);
+}
+
+/** @brief Throw an exception with type, message, and location */
+void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
+    CLJException *exception = make_exception(type, message, file, line, col);
+    if (!exception) {
+#ifdef DEBUG
+        fprintf(stderr, "FAILED TO ALLOCATE EXCEPTION\n");
+#endif
+        exit(1);
+    }
+    
+    // Use the new unified function
+    throw_exception_object(exception);
+}
+
+/** @brief Re-throw an existing exception object */
+void throw_exception_object(CLJException *ex) {
+    if (!ex) {
+#ifdef DEBUG
+        fprintf(stderr, "FAILED TO RE-THROW NULL EXCEPTION\n");
+#endif
+        exit(1);
+    }
+    
+    if (!global_exception_stack.top) {
+        // No handler - unhandled exception
+#ifdef DEBUG
+        char *str = to_string((CljObject*)ex); 
+        fprintf(stderr, "UNHANDLED: %s\n", str ? str : "<null>");
+        free(str);
+#endif
+        free(ex); exit(1);
+    }
+    
+    // Store existing exception in thread-local variable
+    // Note: We don't create a new exception, we reuse the existing one
+    g_current_exception = ex;
+    longjmp(global_exception_stack.top->jump_state, 1);
+}
+
 // ============================================================================
 // STANDARD ERROR MESSAGES
 // ============================================================================
-
 
 /**
  * @brief Create exception with standard error message.

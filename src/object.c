@@ -42,81 +42,10 @@ static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
 // release_object_deep() function moved to memory.c
 
 
-/**
- * Convenience function for throwing exceptions with printf-style formatting
- * 
- * @param type Exception type (NULL for generic "RuntimeException")
- * @param file Source file name (use __FILE__)
- * @param line Line number (use __LINE__)
- * @param code Error code (use 0 for most cases)
- * @param format printf-style format string
- * @param ... Variable arguments for formatting
- */
-void throw_exception_formatted(const char *type, const char *file, int line, int code, 
-                              const char *format, ...) {
-    char message[512];  // Increased buffer size for longer messages
-    va_list args;
-    
-    va_start(args, format);
-    int result = vsnprintf(message, sizeof(message), format, args);
-    va_end(args);
-    
-    // Additional safety: ensure null termination if message was truncated
-    if (result >= (int)sizeof(message)) {
-        // Message was truncated - ensure null termination
-        message[sizeof(message)-1] = '\0';
-    }
-    
-    // Shorten file path to show only from /src/ onwards
-    const char *short_file = file;
-    const char *src_pos = strstr(file, "/src/");
-    if (src_pos) {
-        short_file = src_pos + 1; // Skip the leading "/"
-    }
-    
-    // Use generic RuntimeException if type is NULL
-    const char *exception_type = (type != NULL) ? type : "RuntimeException";
-    throw_exception(exception_type, message, short_file, line, code);
-}
-
 // Memory management functions moved to memory.c
 
 // Helper functions for optimized structure
 // Note: is_primitive_type function replaced by IS_PRIMITIVE_TYPE macro in header
-
-// Global exception stack (independent of EvalState)
-GlobalExceptionStack global_exception_stack = {0};
-
-// Exception throwing (compatible with try/catch system)
-// Ownership/RC:
-// - create_exception returns rc=1 (no autorelease)
-// - Ownership is transferred to exception stack before longjmp
-// - Catch handler automatically releases exception in END_TRY
-/** @brief Throw an exception with type, message, and location */
-void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
-    if (!global_exception_stack.top) {
-        // No handler - unhandled exception
-        CLJException *temp = make_exception(type, message, file, line, col);
-#ifdef DEBUG
-        char *str = to_string((CljObject*)temp); 
-        fprintf(stderr, "UNHANDLED: %s\n", str ? str : "<null>");
-        free(str);
-#endif
-        free(temp); exit(1);
-    }
-    
-    CLJException *exception = make_exception(type, message, file, line, col);
-    if (!exception) {
-#ifdef DEBUG
-        fprintf(stderr, "FAILED TO ALLOCATE EXCEPTION\n");
-#endif
-        exit(1);
-    }
-    
-    // Store exception in thread-local variable
-    g_current_exception = exception;
-    longjmp(global_exception_stack.top->jump_state, 1);
-}
 
 
 // Note: set_global_eval_state() removed - Exception handling now independent of EvalState

@@ -218,6 +218,7 @@ add_executable(unity-tests
     src/tests/test_equal.c
     # src/tests/seq_tests.c  # Temporarily disabled due to conversion issues
     src/tests/test_recur.c
+    src/tests/for_loop_tests.c
     src/tests/fixed_point_tests.c
     src/tests/byte_array_tests.c
     src/tests/test_cow.c

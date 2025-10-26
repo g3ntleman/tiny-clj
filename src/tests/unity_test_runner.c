@@ -468,12 +468,11 @@ extern void test_recur_deep_recursion(void);
 extern void test_recur_arity_error(void);
 
 static void test_group_for_loops(void) {
-    // For-loop tests temporarily disabled due to missing function declarations
-    // RUN_TEST(test_dotimes_basic);
-    // RUN_TEST(test_doseq_basic);
-    // RUN_TEST(test_for_basic);
-    // RUN_TEST(test_dotimes_with_environment);
-    // RUN_TEST(test_doseq_with_environment);
+    RUN_TEST(test_dotimes_basic);
+    RUN_TEST(test_doseq_basic);
+    RUN_TEST(test_for_basic);
+    RUN_TEST(test_dotimes_with_environment);
+    RUN_TEST(test_doseq_with_environment);
 }
 
 static void test_group_recur(void) {

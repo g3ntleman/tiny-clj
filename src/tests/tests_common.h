@@ -19,7 +19,7 @@
 
 // Tiny-CLJ Core Headers
 #include "../object.h"
-#include "../exception.h"  // Must be included before memory.h for WITH_AUTORELEASE_POOL_TRY_CATCH
+#include "../exception.h"  // Must be included before memory.h for WITH_AUTORELEASE_POOL
 #include "../memory.h"
 #include "../memory_profiler.h"
 #include "../value.h"

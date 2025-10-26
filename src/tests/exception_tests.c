@@ -183,6 +183,116 @@ void test_map_arity_exception_zero_args(void) {
     evalstate_free(st);
 }
 
+void test_with_autorelease_pool_swallows_exceptions(void) {
+    bool exception_caught_outside = false;
+    
+    // Test that WITH_AUTORELEASE_POOL now DOES propagate exceptions correctly
+    // The comment now correctly states "Exception propagates automatically"
+    
+    TRY {
+        // This should throw an exception inside WITH_AUTORELEASE_POOL
+        WITH_AUTORELEASE_POOL({
+            // Create some objects to test memory cleanup
+            CljObject *obj1 = AUTORELEASE(make_symbol_impl("test1", NULL));
+            CljObject *obj2 = AUTORELEASE(make_symbol_impl("test2", NULL));
+            TEST_ASSERT_NOT_NULL(obj1);
+            TEST_ASSERT_NOT_NULL(obj2);
+            
+            // Throw exception inside the pool
+            throw_exception("TestException", "Exception inside WITH_AUTORELEASE_POOL", 
+                          __FILE__, __LINE__, 0);
+            
+            // This should never be reached
+            TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");
+        });
+        
+        // If we reach here, the exception was NOT propagated
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here - exception should have been propagated");
+        
+    } CATCH(ex) {
+        // This CATCH should NOW execute because WITH_AUTORELEASE_POOL properly propagates
+        exception_caught_outside = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("TestException", ex->type);
+    } END_TRY
+    
+    // The fix: WITH_AUTORELEASE_POOL now properly propagates exceptions
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught_outside, 
+        "WITH_AUTORELEASE_POOL should now properly propagate exceptions to outer TRY/CATCH");
+    
+    // This test should now PASS, proving the fix works
+}
+
+void test_throw_existing_exception(void) {
+    bool exception_caught = false;
+    CLJException *original_exception = NULL;
+    
+    // Test that THROW(ex) properly re-throws an existing exception
+    TRY {
+        // Create an exception
+        original_exception = make_exception("OriginalException", "Original error message", 
+                                           __FILE__, __LINE__, 0);
+        TEST_ASSERT_NOT_NULL(original_exception);
+        
+        // Throw it
+        throw_exception_object(original_exception);
+        
+        // Should not reach here
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");
+        
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        
+        // Verify it's the same exception object (same pointer)
+        TEST_ASSERT_EQUAL_PTR(original_exception, ex);
+        
+        // Verify the exception details are preserved
+        TEST_ASSERT_EQUAL_STRING("OriginalException", ex->type);
+        TEST_ASSERT_EQUAL_STRING("Original error message", ex->message);
+        
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, 
+        "Exception should have been caught when using THROW(ex)");
+}
+
+void test_throw_macro_convenience(void) {
+    bool exception_caught = false;
+    CLJException *original_exception = NULL;
+    
+    // Test that THROW(ex) macro works the same as throw_exception_object(ex)
+    TRY {
+        // Create an exception
+        original_exception = make_exception("MacroException", "Macro test message", 
+                                           __FILE__, __LINE__, 0);
+        TEST_ASSERT_NOT_NULL(original_exception);
+        
+        // Throw it using the macro
+        THROW(original_exception);
+        
+        // Should not reach here
+        TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after THROW");
+        
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        
+        // Verify it's the same exception object
+        TEST_ASSERT_EQUAL_PTR(original_exception, ex);
+        
+        // Verify the exception details are preserved
+        TEST_ASSERT_EQUAL_STRING("MacroException", ex->type);
+        TEST_ASSERT_EQUAL_STRING("Macro test message", ex->message);
+        
+        // Exception is automatically managed by CATCH macro
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, 
+        "Exception should have been caught when using THROW macro");
+}
+
 // ============================================================================
 // TEST GROUPS
 // ============================================================================
@@ -208,3 +318,6 @@ REGISTER_TEST(test_nested_try_catch_outer_exception)
 REGISTER_TEST(test_exception_with_autorelease)
 REGISTER_TEST(test_repl_crash_scenario)
 REGISTER_TEST(test_map_arity_exception_zero_args)
+REGISTER_TEST(test_with_autorelease_pool_swallows_exceptions)
+REGISTER_TEST(test_throw_existing_exception)
+REGISTER_TEST(test_throw_macro_convenience)

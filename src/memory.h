@@ -188,34 +188,16 @@ int get_retain_count(CljObject *obj);
         (CljObject*)_id; \
     })
     
-    /** @brief Foundation-style autorelease pool - now exception-safe.
+    
+    /** @brief Simple autorelease pool macro.
      *  @param code Code block to execute within autorelease pool
      *  @note Like NSAutoreleasePool in pre-ARC Objective-C
-     *  @note Now implemented as wrapper around WITH_AUTORELEASE_POOL_TRY_CATCH
-     *  @note Automatically catches exceptions, pops pool, and re-throws
+     *  @note For exception-safe usage, wrap in TRY/CATCH blocks
      */
-    #define WITH_AUTORELEASE_POOL(code) \
-        WITH_AUTORELEASE_POOL_TRY_CATCH(code, { \
-            /* Pool already popped by TRY_CATCH */ \
-            /* Exception propagates automatically */ \
-        })
-    
-    /** @brief Exception-safe autorelease pool macro for TRY/CATCH blocks.
-     *  @param code Code block to execute within autorelease pool
-     *  @param catch_code Exception handler code block
-     *  @note Catches exceptions, pops pool, then re-throws exception
-     *  @note Requires exception.h to be included BEFORE this header for TRY/CATCH macros
-     *  @note Usage: Include exception.h first, then use this macro in tests
-     */
-    #define WITH_AUTORELEASE_POOL_TRY_CATCH(code, catch_code) do { \
+    #define WITH_AUTORELEASE_POOL(code) do { \
         CljObjectPool *_pool = autorelease_pool_push(); \
-        TRY { \
-            code; \
-            autorelease_pool_pop(_pool); \
-        } CATCH(ex) { \
-            autorelease_pool_pop(_pool); \
-            catch_code; \
-        } END_TRY; \
+        code; \
+        autorelease_pool_pop(_pool); \
     } while(0)
     
     /** @brief Simple autorelease pool management for TRY/CATCH.
