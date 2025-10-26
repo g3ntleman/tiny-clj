@@ -49,4 +49,11 @@ ID native_transient(ID *args, int argc);
 ID native_persistent(ID *args, int argc);
 ID native_conj_bang(ID *args, int argc);
 
+// Comparison operators
+ID native_lt(ID *args, int argc);
+ID native_gt(ID *args, int argc);
+ID native_le(ID *args, int argc);
+ID native_ge(ID *args, int argc);
+ID native_eq(ID *args, int argc);
+
 #endif

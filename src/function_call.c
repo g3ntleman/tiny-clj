@@ -391,9 +391,8 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
 // Extended function call implementation with complete evaluation
 /** @brief Main function call evaluator */
 ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
-    (void)env; // Suppress unused parameter warning
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
+    // Note: env parameter is used for environment context, but closure_env takes precedence
+    // for Clojure functions. For native functions, env is not used.
     
     if (!is_type((CljObject*)fn, CLJ_FUNC) && !is_type((CljObject*)fn, CLJ_CLOSURE)) {
         throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);

@@ -898,6 +898,210 @@ ID native_aclone(ID *args, int argc) {
     return (ID)byte_array_clone((CljValue)arr);
 }
 
+// Comparison operators as native functions
+ID native_lt(ID *args, int argc) {
+    if (argc != 2) {
+        throw_exception("IllegalArgumentException", "< requires exactly 2 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *a = ID_TO_OBJ(args[0]);
+    CljObject *b = ID_TO_OBJ(args[1]);
+    
+    if (!a || !b) {
+        throw_exception("IllegalArgumentException", "< arguments cannot be null",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Extract numeric values
+    float val_a, val_b;
+    if (is_fixnum((CljValue)a)) {
+        val_a = (float)as_fixnum((CljValue)a);
+    } else if (is_fixed((CljValue)a)) {
+        val_a = as_fixed((CljValue)a);
+    } else {
+        throw_exception("TypeError", "Expected number for < comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (is_fixnum((CljValue)b)) {
+        val_b = (float)as_fixnum((CljValue)b);
+    } else if (is_fixed((CljValue)b)) {
+        val_b = as_fixed((CljValue)b);
+    } else {
+        throw_exception("TypeError", "Expected number for < comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return val_a < val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
+ID native_gt(ID *args, int argc) {
+    if (argc != 2) {
+        throw_exception("IllegalArgumentException", "> requires exactly 2 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *a = ID_TO_OBJ(args[0]);
+    CljObject *b = ID_TO_OBJ(args[1]);
+    
+    if (!a || !b) {
+        throw_exception("IllegalArgumentException", "> arguments cannot be null",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Extract numeric values
+    float val_a, val_b;
+    if (is_fixnum((CljValue)a)) {
+        val_a = (float)as_fixnum((CljValue)a);
+    } else if (is_fixed((CljValue)a)) {
+        val_a = as_fixed((CljValue)a);
+    } else {
+        throw_exception("TypeError", "Expected number for > comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (is_fixnum((CljValue)b)) {
+        val_b = (float)as_fixnum((CljValue)b);
+    } else if (is_fixed((CljValue)b)) {
+        val_b = as_fixed((CljValue)b);
+    } else {
+        throw_exception("TypeError", "Expected number for > comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return val_a > val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
+ID native_le(ID *args, int argc) {
+    if (argc != 2) {
+        throw_exception("IllegalArgumentException", "<= requires exactly 2 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *a = ID_TO_OBJ(args[0]);
+    CljObject *b = ID_TO_OBJ(args[1]);
+    
+    if (!a || !b) {
+        throw_exception("IllegalArgumentException", "<= arguments cannot be null",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Extract numeric values
+    float val_a, val_b;
+    if (is_fixnum((CljValue)a)) {
+        val_a = (float)as_fixnum((CljValue)a);
+    } else if (is_fixed((CljValue)a)) {
+        val_a = as_fixed((CljValue)a);
+    } else {
+        throw_exception("TypeError", "Expected number for <= comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (is_fixnum((CljValue)b)) {
+        val_b = (float)as_fixnum((CljValue)b);
+    } else if (is_fixed((CljValue)b)) {
+        val_b = as_fixed((CljValue)b);
+    } else {
+        throw_exception("TypeError", "Expected number for <= comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return val_a <= val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
+ID native_ge(ID *args, int argc) {
+    if (argc != 2) {
+        throw_exception("IllegalArgumentException", ">= requires exactly 2 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *a = ID_TO_OBJ(args[0]);
+    CljObject *b = ID_TO_OBJ(args[1]);
+    
+    if (!a || !b) {
+        throw_exception("IllegalArgumentException", ">= arguments cannot be null",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Extract numeric values
+    float val_a, val_b;
+    if (is_fixnum((CljValue)a)) {
+        val_a = (float)as_fixnum((CljValue)a);
+    } else if (is_fixed((CljValue)a)) {
+        val_a = as_fixed((CljValue)a);
+    } else {
+        throw_exception("TypeError", "Expected number for >= comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    if (is_fixnum((CljValue)b)) {
+        val_b = (float)as_fixnum((CljValue)b);
+    } else if (is_fixed((CljValue)b)) {
+        val_b = as_fixed((CljValue)b);
+    } else {
+        throw_exception("TypeError", "Expected number for >= comparison",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return val_a >= val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
+ID native_eq(ID *args, int argc) {
+    if (argc != 2) {
+        throw_exception("IllegalArgumentException", "= requires exactly 2 arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *a = ID_TO_OBJ(args[0]);
+    CljObject *b = ID_TO_OBJ(args[1]);
+    
+    if (!a || !b) {
+        throw_exception("IllegalArgumentException", "= arguments cannot be null",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Try numeric comparison first
+    float val_a, val_b;
+    if (is_fixnum((CljValue)a)) {
+        val_a = (float)as_fixnum((CljValue)a);
+    } else if (is_fixed((CljValue)a)) {
+        val_a = as_fixed((CljValue)a);
+    } else {
+        // Not numeric, use general equality
+        return clj_equal(a, b) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    }
+    
+    if (is_fixnum((CljValue)b)) {
+        val_b = (float)as_fixnum((CljValue)b);
+    } else if (is_fixed((CljValue)b)) {
+        val_b = as_fixed((CljValue)b);
+    } else {
+        // Not numeric, use general equality
+        return clj_equal(a, b) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    }
+    
+    return val_a == val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
 // Helper function to register a builtin in current namespace (DRY principle)
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     EvalState *st = evalstate();
@@ -943,6 +1147,13 @@ void register_builtins() {
     register_builtin_in_namespace("vals", native_vals);
     register_builtin_in_namespace("test-native", native_if);
     register_builtin_in_namespace("println", native_println);
+    
+    // Register comparison operators as normal functions
+    register_builtin_in_namespace("<", native_lt);
+    register_builtin_in_namespace(">", native_gt);
+    register_builtin_in_namespace("<=", native_le);
+    register_builtin_in_namespace(">=", native_ge);
+    register_builtin_in_namespace("=", native_eq);
     
     // Byte array functions
     register_builtin_in_namespace("byte-array", native_byte_array);
