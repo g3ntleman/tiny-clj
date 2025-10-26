@@ -238,10 +238,10 @@ extern void test_cljvalue_parser_immediates(void);
 extern void test_cljvalue_memory_efficiency(void);
 
 // Transient map tests
-extern void test_cljvalue_transient_map_clojure_semantics(void);
+// extern void test_cljvalue_transient_map_clojure_semantics(void); // Moved to test_values.c
 
 // High-level integration tests
-extern void test_cljvalue_transient_maps_high_level(void);
+// extern void test_cljvalue_transient_maps_high_level(void); // Moved to test_values.c
 extern void test_cljvalue_vectors_high_level(void);
 extern void test_cljvalue_immediates_high_level(void);
 
@@ -377,10 +377,10 @@ static void test_group_cljvalue(void) {
         RUN_TEST(test_cljvalue_memory_efficiency);
         
         // Transient map tests
-        RUN_TEST(test_cljvalue_transient_map_clojure_semantics);
+        // RUN_TEST(test_cljvalue_transient_map_clojure_semantics); // Moved to test_values.c
         
         // High-level integration tests
-        RUN_TEST(test_cljvalue_transient_maps_high_level);
+        // RUN_TEST(test_cljvalue_transient_maps_high_level); // Moved to test_values.c
         RUN_TEST(test_cljvalue_vectors_high_level);
         RUN_TEST(test_cljvalue_immediates_high_level);
         
@@ -577,7 +577,7 @@ static void run_unit_tests(void) {
 }
 
 static void run_cljvalue_tests(void) {
-    // test_group_cljvalue(); // Temporarily disabled
+    test_group_cljvalue();
 }
 
 static void run_namespace_tests(void) {
@@ -602,11 +602,11 @@ static void run_core_tests(void) {
     // Parser tests are now handled by the registry system
     // test_group_unit(); // Temporarily disabled
     test_group_namespace();
-    // test_group_cljvalue(); // Temporarily disabled
+    test_group_cljvalue();
 }
 
 static void run_data_tests(void) {
-    // test_group_seq(); // Temporarily disabled
+    test_group_seq();
     test_group_equal();
     test_group_memory();
     test_group_byte_array();
@@ -625,13 +625,13 @@ static void run_all_tests(void) {
     // Parser tests are now handled by the registry system
     test_group_exception();
     // test_group_unit(); // Temporarily disabled
-    // test_group_cljvalue(); // Temporarily disabled
+    test_group_cljvalue();
     test_group_namespace();  // Re-enabled after fixing double free
-    // test_group_seq(); // Temporarily disabled
+    test_group_seq();
     test_group_for_loops();  // Re-enabled after fixing type mismatch
     test_group_equal();  // Re-enabled with minimal test
     test_group_recur(); // Re-enabled - recur functionality is working
-    // test_group_debugging(); // Temporarily disabled
+    test_group_debugging();
     test_group_byte_array();
 }
 

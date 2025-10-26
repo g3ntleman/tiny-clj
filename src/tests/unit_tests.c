@@ -38,70 +38,79 @@ TEST(test_list_count) {
     }
 }
 
-TEST {
-    // High-level test using eval_string
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    
-    // Test empty list creation - (list) returns nil in Clojure
-    CljObject *list = eval_string("(list)", st);
-    TEST_ASSERT_NULL(list);  // (list) returns nil, not empty list
-    
-    // Test list with elements
-    CljObject *list_with_elements = eval_string("(list 1 2 3)", st);
-    TEST_ASSERT_NOT_NULL(list_with_elements);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_with_elements->type);
-    
-    // Test count function
-    CljObject *count_result = eval_string("(count (list 1 2 3))", st);
-    TEST_ASSERT_NOT_NULL(count_result);
-    if (count_result && is_fixnum(count_result)) {
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
-    }
-    
-    // Memory is automatically managed by eval_string
+void test_list_creation(void) {
+    WITH_AUTORELEASE_POOL({
+        // High-level test using eval_string
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        
+        // Test empty list creation - (list) returns nil in Clojure
+        CljObject *list = eval_string("(list)", st);
+        TEST_ASSERT_NULL(list);  // (list) returns nil, not empty list
+        
+        // Test list with elements
+        CljObject *list_with_elements = eval_string("(list 1 2 3)", st);
+        TEST_ASSERT_NOT_NULL(list_with_elements);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_with_elements->type);
+        
+        // Test count function
+        CljObject *count_result = eval_string("(count (list 1 2 3))", st);
+        TEST_ASSERT_NOT_NULL(count_result);
+        if (count_result && is_fixnum(count_result)) {
+            TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
+        }
+        
+        // Clean up
+        evalstate_free(st);
+    });
 }
 
-TEST {
-    // High-level test using eval_string
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    // Test symbol creation (quoted symbol)
-    CljObject *sym = eval_string("'test-symbol", st);
-    TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
-    
-    // Test symbol with namespace
-    CljObject *ns_sym = eval_string("'user/test-symbol", st);
-    TEST_ASSERT_NOT_NULL(ns_sym);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ns_sym->type);
-    
-    // Memory is automatically managed by eval_string
+void test_symbol_creation(void) {
+    WITH_AUTORELEASE_POOL({
+        // High-level test using eval_string
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Test symbol creation (quoted symbol)
+        CljObject *sym = eval_string("'test-symbol", st);
+        TEST_ASSERT_NOT_NULL(sym);
+        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
+        
+        // Test symbol with namespace
+        CljObject *ns_sym = eval_string("'user/test-symbol", st);
+        TEST_ASSERT_NOT_NULL(ns_sym);
+        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ns_sym->type);
+        
+        // Clean up
+        evalstate_free(st);
+    });
 }
 
-TEST {
-    // High-level test using eval_string
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    // Test string creation
-    CljObject *str = eval_string("\"hello world\"", st);
-    TEST_ASSERT_NOT_NULL(str);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
-    
-    // Test empty string
-    CljObject *empty_str = eval_string("\"\"", st);
-    TEST_ASSERT_NOT_NULL(empty_str);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, empty_str->type);
-    
-    // Test string with special characters
-    CljObject *special_str = eval_string("\"hello\\nworld\"", st);
-    TEST_ASSERT_NOT_NULL(special_str);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, special_str->type);
-    
-    // Memory is automatically managed by eval_string
+void test_string_creation(void) {
+    WITH_AUTORELEASE_POOL({
+        // High-level test using eval_string
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Test string creation
+        CljObject *str = eval_string("\"hello world\"", st);
+        TEST_ASSERT_NOT_NULL(str);
+        TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
+        
+        // Test empty string
+        CljObject *empty_str = eval_string("\"\"", st);
+        TEST_ASSERT_NOT_NULL(empty_str);
+        TEST_ASSERT_EQUAL_INT(CLJ_STRING, empty_str->type);
+        
+        // Test string with special characters
+        CljObject *special_str = eval_string("\"hello\\nworld\"", st);
+        TEST_ASSERT_NOT_NULL(special_str);
+        TEST_ASSERT_EQUAL_INT(CLJ_STRING, special_str->type);
+        
+        // Clean up
+        evalstate_free(st);
+    });
 }
 
 void test_vector_creation(void) {
@@ -267,481 +276,7 @@ void test_nil_creation(void) {
 // CLJVALUE API TESTS (Phase 0-2)
 // ============================================================================
 
-void test_cljvalue_immediate_helpers(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test immediate value creation
-        CljValue nil_val = NULL;
-        CljValue true_val = make_special(SPECIAL_TRUE);
-        CljValue false_val = make_special(SPECIAL_FALSE);
-        
-        TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
-        TEST_ASSERT_NOT_NULL(true_val);
-        TEST_ASSERT_NOT_NULL(false_val);
-        
-        // Test immediate value checking
-        TEST_ASSERT_NULL((CljObject*)nil_val);
-        TEST_ASSERT_TRUE(is_true(true_val));
-        TEST_ASSERT_TRUE(is_false(false_val));
-        TEST_ASSERT_FALSE(is_true(false_val));
-        TEST_ASSERT_FALSE(is_false(true_val));
-        TEST_ASSERT_NOT_NULL((CljObject*)true_val);
-    }
-}
-
-void test_cljvalue_vector_api(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test vector creation with CljValue API
-        CljValue vec = make_vector(3, 0);  // capacity=3, immutable
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
-        
-        // Test vector conj with CljValue API
-        CljValue item = integer(42);
-        CljValue result = vector_conj(vec, item);
-        TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(vec != result);  // Should be new vector
-        
-        // item is a CljValue (immediate), no release needed
-        // result is automatically managed by vector_conj (autoreleased)
-        // vec is automatically managed by make_vector (autoreleased)
-    }
-}
-
-void test_cljvalue_transient_vector(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test transient conversion
-        CljValue vec = make_vector(3, 0);
-        CljValue tvec = transient(vec);
-        
-        TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_TRANSIENT_VECTOR, tvec->type);
-        TEST_ASSERT_TRUE(vec != tvec);  // Should be copy
-        
-        // Test transient conj! (in-place mutation)
-        CljValue item1 = integer(1);
-        CljValue item2 = integer(2);
-        
-        CljValue result1 = clj_conj(tvec, item1);
-        TEST_ASSERT_EQUAL_PTR(tvec, result1);  // Same instance (in-place)
-        
-        CljValue result2 = clj_conj(tvec, item2);
-        TEST_ASSERT_EQUAL_PTR(tvec, result2);  // Same instance (in-place)
-        
-        // Test persistent! conversion (new instance)
-        CljValue pvec = persistent(tvec);
-        TEST_ASSERT_NOT_NULL(pvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, pvec->type);
-        TEST_ASSERT_TRUE(tvec != pvec);  // Different instance
-        
-        // item1 and item2 are immediate values , no release needed
-        // pvec, tvec, and vec are automatically managed by their respective functions
-    }
-}
-
-void test_cljvalue_clojure_semantics(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test Clojure-like usage pattern
-        CljValue v1 = make_vector(3, 0);
-        CljValue tv = transient(v1);
-        
-        // Add elements to transient
-        clj_conj(tv, integer(1));
-        clj_conj(tv, integer(2));
-        clj_conj(tv, integer(3));
-        
-        // Convert back to persistent
-        CljValue v2 = persistent(tv);
-        
-        // v1 should be unchanged (original vector)
-        TEST_ASSERT_NOT_NULL(v1);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v1->type);
-        
-        // v2 should be new persistent vector
-        TEST_ASSERT_NOT_NULL(v2);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v2->type);
-        TEST_ASSERT_TRUE(v1 != v2);
-        TEST_ASSERT_TRUE(tv != v2);
-        
-        // v1, tv, and v2 are automatically managed by their respective functions
-    }
-}
-
-void test_cljvalue_wrapper_functions(void) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test wrapper functions for existing APIs
-        CljValue int_val = integer(42);
-        CljValue float_val = fixed(3.14f);
-        CljValue str_val = make_string_impl("hello");
-        CljValue sym_val = make_symbol_impl("test", NULL);
-        
-        TEST_ASSERT_NOT_NULL(int_val);
-        TEST_ASSERT_NOT_NULL(float_val);
-        TEST_ASSERT_NOT_NULL(str_val);
-        TEST_ASSERT_NOT_NULL(sym_val);
-        
-        // Test that they work with existing APIs
-        // For immediate values, check the tag instead of dereferencing
-        TEST_ASSERT_TRUE(is_fixnum(int_val));
-        TEST_ASSERT_TRUE(is_fixed(float_val));
-        TEST_ASSERT_EQUAL_INT(CLJ_STRING, ((CljObject*)str_val)->type);
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ((CljObject*)sym_val)->type);
-        
-        // int_val and float_val are immediates - no need to release
-        // str_val and sym_val are automatically managed by make_string and make_symbol
-    }
-}
-
-void test_cljvalue_immediates_fixnum(void) {
-    // Test fixnum immediates (32-bit tagged pointers)
-    {
-        // Test small integers (should be immediates)
-        CljValue val1 = fixnum(42);
-        CljValue val2 = fixnum(-100);
-        CljValue val3 = fixnum(0);
-        
-        TEST_ASSERT_TRUE(is_fixnum(val1));
-        TEST_ASSERT_TRUE(is_fixnum(val2));
-        TEST_ASSERT_TRUE(is_fixnum(val3));
-        
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
-        TEST_ASSERT_EQUAL_INT(-100, as_fixnum(val2));
-        TEST_ASSERT_EQUAL_INT(0, as_fixnum(val3));
-        
-        // Test edge cases
-        CljValue max_val = fixnum(FIXNUM_MAX);
-        CljValue min_val = fixnum(FIXNUM_MIN);
-        
-        TEST_ASSERT_TRUE(is_fixnum(max_val));
-        TEST_ASSERT_TRUE(is_fixnum(min_val));
-        TEST_ASSERT_EQUAL_INT(FIXNUM_MAX, as_fixnum(max_val));
-        TEST_ASSERT_EQUAL_INT(FIXNUM_MIN, as_fixnum(min_val));
-        
-        // Test large integers (should fallback to heap)
-        // Temporarily disable this test due to implementation issues
-        // CljValue large_val = fixnum(FIXNUM_MAX + 1);
-        // TEST_ASSERT_FALSE(is_fixnum(large_val));
-        // TEST_ASSERT_NOT_NULL(large_val);
-        // TEST_ASSERT_EQUAL_INT(CLJ_INT, ((CljObject*)large_val)->type);
-        // RELEASE((CljObject*)large_val);
-    }
-}
-
-void test_cljvalue_immediates_char(void) {
-    // Test char immediates (21-bit Unicode)
-    {
-        CljValue val1 = character('A');
-        CljValue val2 = character(0x1F600); // 😀 emoji
-        CljValue val3 = character(0);
-        
-        TEST_ASSERT_TRUE(is_char(val1));
-        TEST_ASSERT_TRUE(is_char(val2));
-        TEST_ASSERT_TRUE(is_char(val3));
-        
-        TEST_ASSERT_EQUAL_INT('A', as_char(val1));
-        TEST_ASSERT_EQUAL_INT(0x1F600, as_char(val2));
-        TEST_ASSERT_EQUAL_INT(0, as_char(val3));
-        
-        // Test edge cases
-        CljValue max_char = character(CLJ_CHAR_MAX);
-        TEST_ASSERT_TRUE(is_char(max_char));
-        TEST_ASSERT_EQUAL_INT(CLJ_CHAR_MAX, as_char(max_char));
-        
-        // Test invalid character (should fallback to heap)
-        CljValue invalid_char = character(CLJ_CHAR_MAX + 1);
-        TEST_ASSERT_FALSE(is_char(invalid_char));
-        TEST_ASSERT_NOT_NULL(invalid_char);
-        TEST_ASSERT_EQUAL_INT(CLJ_STRING, invalid_char->type);
-        // invalid_char is automatically managed by parse()
-    }
-}
-
-void test_cljvalue_immediates_special(void) {
-    // Test special values (nil, true, false)
-    {
-        CljValue nil_val = NULL;
-        CljValue true_val = make_special(SPECIAL_TRUE);
-        CljValue false_val = make_special(SPECIAL_FALSE);
-        
-        TEST_ASSERT_NULL((CljObject*)nil_val);
-        TEST_ASSERT_TRUE(is_true(true_val));
-        TEST_ASSERT_TRUE(is_false(false_val));
-        
-        TEST_ASSERT_TRUE(is_bool(true_val));
-        TEST_ASSERT_TRUE(is_bool(false_val));
-        TEST_ASSERT_FALSE(is_bool(nil_val));
-        
-        // Test make_bool function
-        CljValue bool_true = make_special(SPECIAL_TRUE);
-        CljValue bool_false = make_special(SPECIAL_FALSE);
-        
-        TEST_ASSERT_TRUE(is_true(bool_true));
-        TEST_ASSERT_TRUE(is_false(bool_false));
-    }
-}
-
-void test_cljvalue_immediates_fixed(void) {
-    // Test fixed-point immediates (simplified implementation)
-    {
-        CljValue val1 = fixed(3.14f);
-        
-        // Test fixed-point immediates - only test the first one for now
-        TEST_ASSERT_TRUE(is_fixed(val1));
-        
-        // Note: Due to simplified implementation, precision may be limited
-        // TEST_ASSERT_TRUE(as_fixed(val1) > 3.0f && as_fixed(val1) < 3.2f);
-    }
-}
-
-void test_cljvalue_parser_immediates(void) {
-    // Test parser with immediate values
-    {
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Test direct fixnum creation first
-        CljValue direct_fixnum = fixnum(42);
-        if (!direct_fixnum) {
-            // fixnum returned NULL - this is expected for out-of-range values
-        }
-        TEST_ASSERT_NOT_NULL(direct_fixnum);
-        TEST_ASSERT_TRUE(is_fixnum(direct_fixnum));
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(direct_fixnum));
-        
-        // Test parsing integers (should use fixnum immediates)
-        CljValue parsed_int = parse("42", st);
-        if (parsed_int) {
-            TEST_ASSERT_TRUE(is_fixnum(parsed_int));
-            TEST_ASSERT_EQUAL_INT(42, as_fixnum(parsed_int));
-        } else {
-            // Parse failed due to exception - this is OK
-        }
-        
-        // Test parsing negative integers
-        CljValue parsed_neg = parse("-100", st);
-        if (parsed_neg) {
-            TEST_ASSERT_TRUE(is_fixnum(parsed_neg));
-            TEST_ASSERT_EQUAL_INT(-100, as_fixnum(parsed_neg));
-        } else {
-            // Parse failed due to exception - this is OK
-        }
-        
-        // Test parsing nil, true, false
-        CljValue parsed_nil = parse("nil", st);
-        CljValue parsed_true = parse("true", st);
-        CljValue parsed_false = parse("false", st);
-        
-        // nil should be NULL in our system - this is correct!
-        TEST_ASSERT_NULL(parsed_nil);
-        
-        if (parsed_true) {
-            TEST_ASSERT_TRUE(is_true(parsed_true));
-        } else {
-            // Parse failed due to exception - this is OK
-        }
-        
-        if (parsed_false) {
-            TEST_ASSERT_TRUE(is_false(parsed_false));
-        } else {
-            // Parse failed due to exception - this is OK
-        }
-        
-        // Test parsing floats (should use heap allocation)
-        CljValue parsed_float = parse("3.14", st);
-        TEST_ASSERT_NOT_NULL(parsed_float);
-        TEST_ASSERT_TRUE(is_fixed(parsed_float));
-        // No need to release - immediate value
-        
-        evalstate_free(st);
-    }
-}
-
-void test_cljvalue_memory_efficiency(void) {
-    // Test memory efficiency of immediates vs heap objects
-    {
-        // Create many immediate values (should not allocate heap memory)
-        CljValue immediates[1000];
-        for (int i = 0; i < 1000; i++) {
-            immediates[i] = fixnum(i);
-            TEST_ASSERT_TRUE(is_fixnum(immediates[i]));
-            TEST_ASSERT_EQUAL_INT(i, as_fixnum(immediates[i]));
-        }
-        
-        // All should be immediates (no heap allocation)
-        for (int i = 0; i < 1000; i++) {
-            TEST_ASSERT_TRUE(is_fixnum(immediates[i]));
-        }
-        
-        // Test that they don't need manual release (immediates are not heap objects)
-        // This is a key advantage of immediates!
-    }
-}
-
-void test_cljvalue_transient_maps_high_level(void) {
-    // Placeholder test - eval_string has exception handling issues
-    // TODO: Fix exception handling in parse_v/eval_string
-    TEST_ASSERT_TRUE(true);
-}
-
-void test_cljvalue_vectors_high_level(void) {
-    // High-level test using eval_string for vector functionality
-    {
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Initialize namespace first
-        
-        // Test basic vector creation
-        CljObject *vec = eval_string("[1 2 3 4 5]", st);
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
-        
-        // Test vector count
-        CljObject *count = eval_string("(count [1 2 3 4 5])", st);
-        TEST_ASSERT_NOT_NULL(count);
-        TEST_ASSERT_TRUE(is_fixnum(count));
-        TEST_ASSERT_EQUAL_INT(5, as_fixnum(count));
-        
-        // Test vector conj (should create new vector)
-        CljObject *conj_result = eval_string("(conj [1 2 3] 4)", st);
-        TEST_ASSERT_NOT_NULL(conj_result);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, conj_result->type);
-        
-        // Clean up
-        // vec, count, and conj_result are automatically managed by their respective functions
-        evalstate_free(st);
-    }
-}
-
-void test_cljvalue_immediates_high_level(void) {
-    // High-level test using eval_string for immediate values
-    {
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Test direct fixnum creation first
-        CljValue direct_fixnum = fixnum(42);
-        TEST_ASSERT_NOT_NULL(direct_fixnum);
-        TEST_ASSERT_TRUE(is_fixnum(direct_fixnum));
-        TEST_ASSERT_EQUAL_INT(42, as_fixnum(direct_fixnum));
-        
-        // Test integer literals (should use fixnum immediates)
-        CljObject *int_val = eval_string("42", st);
-        if (int_val) {
-            TEST_ASSERT_TRUE(is_fixnum(int_val));
-            TEST_ASSERT_EQUAL_INT(42, as_fixnum(int_val));
-        } else {
-            // Parse failed due to exception - this is OK
-        }
-        
-        // Test negative integers
-        CljObject *neg_int = eval_string("-100", st);
-        if (neg_int) {
-            TEST_ASSERT_TRUE(is_fixnum(neg_int));
-            TEST_ASSERT_EQUAL_INT(-100, as_fixnum(neg_int));
-        } else {
-            // Parse failed due to exception - this is OK
-        }
-        
-        // Test nil literal - nil should be NULL in our system
-        CljObject *nil_val = eval_string("nil", st);
-        TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system - this is correct!
-        
-        // Test boolean literals
-        CljObject *true_val = eval_string("true", st);
-        TEST_ASSERT_NOT_NULL(true_val);
-        TEST_ASSERT_TRUE(is_special(true_val));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(true_val));
-        
-        CljObject *false_val = eval_string("false", st);
-        TEST_ASSERT_NOT_NULL(false_val);
-        TEST_ASSERT_TRUE(is_special(false_val));
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(false_val));
-        
-        // Test float literals
-        CljObject *float_val = eval_string("3.14", st);
-        TEST_ASSERT_NOT_NULL(float_val);
-        TEST_ASSERT_TRUE(is_fixed(float_val));
-        TEST_ASSERT_TRUE(as_fixed(float_val) > 3.1f && as_fixed(float_val) < 3.2f);
-        
-        // Test string literals
-        CljObject *str_val = eval_string("\"hello world\"", st);
-        TEST_ASSERT_NOT_NULL(str_val);
-        TEST_ASSERT_EQUAL_INT(CLJ_STRING, str_val->type);
-        
-        // Test symbol literals (use a simple symbol that should work)
-        // Skip symbol test for now - symbols need to be defined in namespace
-        // CljObject *sym_val = eval_string("test-symbol", st);
-        // TEST_ASSERT_NOT_NULL(sym_val);
-        // TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym_val->type);
-        
-        // Test keyword literals
-        CljObject *keyword = eval_string(":my-keyword", st);
-        TEST_ASSERT_NOT_NULL(keyword);
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, keyword->type);
-        
-        // Clean up
-        evalstate_free(st);
-    }
-}
-
-void test_cljvalue_transient_map_clojure_semantics(void) {
-    // High-level test using eval_string for Clojure-like transient semantics
-    {
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Initialize namespace first
-        
-        // Test that maps are persistent by default
-        CljObject *map1 = eval_string("{:name \"Alice\" :age 30}", st);
-        TEST_ASSERT_NOT_NULL(map1);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map1->type);
-        
-        // Test simple map creation first
-        CljObject *simple_map = eval_string("{:a 1 :b 2}", st);
-        TEST_ASSERT_NOT_NULL(simple_map);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, simple_map->type);
-        
-        // Test that original map is unchanged (persistent semantics)
-        CljObject *original_check = eval_string("{:name \"Alice\" :age 30}", st);
-        TEST_ASSERT_NOT_NULL(original_check);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, original_check->type);
-        
-        // Test map operations - start with basic map creation
-        CljObject *map_test = eval_string("{:a 1 :b 2}", st);
-        TEST_ASSERT_NOT_NULL(map_test);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_test->type);
-        
-        // Test get function with the map
-        CljObject *get_result = eval_string("(get {:a 1 :b 2} :a)", st);
-        TEST_ASSERT_NOT_NULL(get_result);
-        TEST_ASSERT_TRUE(is_fixnum(get_result));
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum(get_result));
-        
-        // Test map count
-        CljObject *count = eval_string("(count {:x 1 :y 2 :z 3})", st);
-        TEST_ASSERT_NOT_NULL(count);
-        TEST_ASSERT_TRUE(is_fixnum(count));
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum(count));
-        
-        // Test map keys and values
-        CljObject *keys = eval_string("(keys {:a 1 :b 2})", st);
-        CljObject *vals = eval_string("(vals {:a 1 :b 2})", st);
-        
-        TEST_ASSERT_NOT_NULL(keys);
-        TEST_ASSERT_NOT_NULL(vals);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, keys->type);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vals->type);
-        
-        // Clean up
-        evalstate_free(st);
-    }
-}
+// CljValue tests moved to test_values.c to avoid duplication
 
 void test_special_form_and(void) {
     EvalState *st = evalstate_new();

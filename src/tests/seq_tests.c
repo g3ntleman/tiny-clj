@@ -110,7 +110,7 @@ TEST(test_seq_first) {
     }
 }
 
-TEST {
+TEST(test_seq_rest) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
@@ -156,7 +156,7 @@ TEST(test_seq_next) {
 // SEQ EQUALITY TESTS
 // ============================================================================
 
-TEST(test_seq_next) {
+TEST(test_seq_equality) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create two identical vectors
@@ -193,9 +193,4 @@ TEST(test_seq_next) {
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
 
-// Register all tests
-(test_seq_create_list)
-(test_seq_create_vector)
-(test_seq_create_string)
-(test_seq_create_map)
-(test_seq_first)
+// Tests are automatically registered by TEST() macros
