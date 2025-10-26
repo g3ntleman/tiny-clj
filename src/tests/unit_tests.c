@@ -611,7 +611,7 @@ void test_fixed_arithmetic_operations(void) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.75f, val);
         }
-        RELEASE(result);
+        // No RELEASE needed - eval_string returns autoreleased object
         
         // Test subtraction: 5.0 - 1.5 = 3.5
         result = eval_string("(- 5.0 1.5)", st);
@@ -620,7 +620,7 @@ void test_fixed_arithmetic_operations(void) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.5f, val);
         }
-        RELEASE(result);
+        // No RELEASE needed - eval_string returns autoreleased object
         
         // Test multiplication: 2.5 * 3.0 = 7.5
         result = eval_string("(* 2.5 3.0)", st);
@@ -629,7 +629,7 @@ void test_fixed_arithmetic_operations(void) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 7.5f, val);
         }
-        RELEASE(result);
+        // No RELEASE needed - eval_string returns autoreleased object
         
         // Test division: 6.0 / 2.0 = 3.0
         result = eval_string("(/ 6.0 2.0)", st);
@@ -1027,7 +1027,7 @@ void test_eval_list_simple_arithmetic(void) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
     
-    RELEASE(result);
+    // No RELEASE needed - eval_string returns autoreleased object
     evalstate_free(st);
 }
 
@@ -1044,14 +1044,14 @@ void test_eval_list_function_call(void) {
     // Define a simple function
     CljObject *def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
     TEST_ASSERT_NOT_NULL(def_result);
-    RELEASE(def_result);
+    // No RELEASE needed - eval_string returns autoreleased object
     
     // Call the function
     CljObject *result = eval_string("(test-fn 5)", st);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
     
-    RELEASE(result);
+    // No RELEASE needed - eval_string returns autoreleased object
     evalstate_free(st);
 }
 
@@ -1066,7 +1066,193 @@ void test_group_debugging(void) {
 }
 
 // ============================================================================
+// CONJ AND REST TESTS
+// ============================================================================
+
+TEST(test_conj_arity_0) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (conj) - should return nil
+    CljObject *result = eval_string("(conj)", st);
+    TEST_ASSERT_NULL(result);
+    
+    evalstate_free(st);
+}
+
+TEST(test_conj_arity_1) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (conj [1 2]) - should return collection unchanged
+    CljObject *result = eval_string("(conj [1 2])", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, result->type);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+TEST(test_conj_arity_2) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (conj [1 2] 3) - should return [1 2 3]
+    CljObject *result = eval_string("(conj [1 2] 3)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, result->type);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+TEST(test_conj_arity_variadic) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (conj [1] 2 3 4) - should return [1 2 3 4]
+    CljObject *result = eval_string("(conj [1] 2 3 4)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, result->type);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+TEST(test_conj_nil_collection) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (conj nil 1) - should return (1)
+    CljObject *result = eval_string("(conj nil 1)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+TEST(test_rest_arity_0) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (rest) - should throw ArityException
+    bool exception_caught = false;
+    TRY {
+        CljObject *result = eval_string("(rest)", st);
+        TEST_FAIL_MESSAGE("Expected ArityException for (rest)");
+        RELEASE(result);
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ArityException", ex->type);
+    } END_TRY
+    
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been caught");
+    evalstate_free(st);
+}
+
+TEST(test_rest_nil) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (rest nil) - should return ()
+    CljObject *result = eval_string("(rest nil)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+TEST(test_rest_empty_vector) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (rest []) - should return ()
+    CljObject *result = eval_string("(rest [])", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+TEST(test_rest_single_element) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    init_special_symbols();
+    
+    // Test (rest [1]) - should return ()
+    CljObject *result = eval_string("(rest [1])", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    RELEASE(result);
+    evalstate_free(st);
+}
+
+// Test group for conj and rest functions
+void test_group_conj_rest(void) {
+    RUN_TEST(test_conj_arity_0);
+    RUN_TEST(test_conj_arity_1);
+    RUN_TEST(test_conj_arity_2);
+    RUN_TEST(test_conj_arity_variadic);
+    RUN_TEST(test_conj_nil_collection);
+    RUN_TEST(test_rest_arity_0);
+    RUN_TEST(test_rest_nil);
+    RUN_TEST(test_rest_empty_vector);
+    RUN_TEST(test_rest_single_element);
+}
+
+// ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
+
+REGISTER_TEST(test_list_creation);
 
 // Register all tests

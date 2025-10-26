@@ -43,10 +43,7 @@ void test_recur_factorial(void) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
     
-    // Clean up
-    if (factorial_def) {
-        RELEASE(factorial_def);
-    }
+    // Clean up - no RELEASE needed for eval_string results
     
     evalstate_free(st);
 }
