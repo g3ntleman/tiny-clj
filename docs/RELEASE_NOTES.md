@@ -1,6 +1,27 @@
-# Tiny-CLJ Release Notes (2025-10-20)
+# Tiny-CLJ Release Notes (2025-01-26)
 
-## Highlights
+## Latest Updates (Recent Commits)
+
+### Documentation Cleanup & Testing Improvements
+- **Documentation Consolidation**: Removed 25 unused markdown files, keeping only documented files
+- **Testing Framework**: Enhanced TESTING_GUIDE.md with efficient debugging workflows
+- **Test Consolidation**: Moved CljValue tests to dedicated test_values.c file
+- **Exception Handling**: Fixed autorelease pool exception propagation bug
+- **Test Coverage**: All 145 tests now pass successfully
+
+### Exception Handling Refactoring
+- **DRY Principle**: Centralized exception throwing with `throw_exception_object()`
+- **Architecture**: Moved exception functions from object.c to dedicated exception.c/h
+- **Autorelease Pool**: Simplified WITH_AUTORELEASE_POOL macro without exception swallowing
+- **Memory Safety**: Fixed exception propagation in autorelease pools
+
+### Memory Management & Testing
+- **Fixed-Point Overflow**: Implemented Defense in Depth strategy for overflow detection
+- **Memory Profiler**: Fixed counter reset issues and improved test isolation
+- **Test Framework**: Enhanced Unity test framework with better error reporting
+- **Memory Leaks**: Resolved various memory management issues in tests
+
+## Previous Release Highlights (2025-10-20)
 - **Q16.13 Fixed-Point Support**: Complete fixed-point arithmetic implementation for embedded systems
 - **Arithmetic Operations**: Full support for +, -, *, / with mixed int/float operations
 - **Comparison Operators**: Complete set of comparison operators (=, <, >, <=, >=) with type promotion

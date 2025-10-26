@@ -72,7 +72,7 @@ ctest --output-on-failure
 - **REPL:** Supports `--no-core`, `-e/--eval`, and `-f/--file` for scripted evaluation
 
 ## Documentation
-See `Guides/` directory for detailed documentation:
+See `docs/` directory for detailed documentation:
 - **`ROADMAP.md`** - Planned work and status
 - **`DEVELOPMENT_INSIGHTS.md`** - API design and memory management
 - **`MEMORY_POLICY.md`** - Memory management guidelines
@@ -80,10 +80,8 @@ See `Guides/` directory for detailed documentation:
 - **`ERROR_HANDLING_GUIDE.md`** - Exception handling
 - **`TESTING_GUIDE.md`** - Unity test framework and debugging
 - **`RELEASE_NOTES.md`** - Version history and changes
-
-Additional documentation:
 - **`RC-COW.md`** - Reference counting and copy-on-write implementation
-- **`docs/MEMORY_PROFILER.md`** - Memory profiling and leak detection
+- **`MEMORY_PROFILER.md`** - Memory profiling and leak detection
 
 ## Contributing
 - Keep the core small and clean
