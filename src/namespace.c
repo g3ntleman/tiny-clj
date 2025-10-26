@@ -266,15 +266,12 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     CljObject *result = NULL;
     
     if (is_type(expr, CLJ_SYMBOL)) {
-        result = eval_symbol(expr, st);
-        result = AUTORELEASE(result);
+        result = eval_symbol(expr, st);  // Bereits autoreleased
     } else if (is_type(expr, CLJ_LIST)) {
-        CljObject *env = (st && st->current_ns) ? (CljObject*)st->current_ns->mappings : NULL;
-        result = eval_list(as_list(expr), (CljMap*)env, st);
-        result = AUTORELEASE(result);
+        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        result = eval_list(as_list(expr), (CljMap*)env, st);  // Bereits autoreleased
     } else {
-        // expr is already autoreleased by parse() - just return it
-        result = expr;
+        result = expr;  // Literal, bereits autoreleased von parse()
     }
     
     return result;

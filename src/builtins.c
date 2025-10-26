@@ -4,7 +4,7 @@
 #include "object.h"
 #include "vector.h"
 #include "map.h"
-#include "builtins.h"
+#include "numeric_utils.h"
 #include "runtime.h"
 #include "memory.h"
 #include "namespace.h"
@@ -29,6 +29,9 @@ ID nth2(ID *args, unsigned int argc) {
     if (!v || i < 0 || i >= v->count) return (NULL);
     return (RETAIN(v->data[i]));
 }
+
+// Forward declaration
+ID conj2(ID vec, ID val);
 
 ID conj2_wrapper(ID *args, int argc) {
     if (argc != 2) return NULL;
@@ -128,7 +131,8 @@ ID native_first(ID *args, unsigned int argc) {
     
     // Direct access for lists (already a seq) - no allocation needed
     if (is_type(coll, CLJ_LIST)) {
-        return LIST_FIRST((CljList*)coll);
+        CljObject *first = LIST_FIRST((CljList*)coll);
+        return first;  // Return existing object directly - no memory management needed
     }
     
     // Use seq implementation for other types (vectors, maps, strings)
@@ -155,24 +159,24 @@ ID native_rest(ID *args, unsigned int argc) {
     CljObject *coll = args[0];
     if (!coll) {
         // rest of nil returns empty list
-        return (make_list(NULL, NULL));
+        return empty_list();
     }
     
     // Direct access for lists (already a seq) - no allocation needed
     if (is_type(coll, CLJ_LIST)) {
         CljObject *rest = LIST_REST((CljList*)coll);
-        return rest ? rest : NULL;
+        return rest ? rest : empty_list();  // No AUTORELEASE needed for singleton
     }
     
     if (is_type(coll, CLJ_VECTOR)) {
         CljPersistentVector *v = as_vector(coll);
         if (!v || v->count <= 1) {
-            return (make_list(NULL, NULL));
+            return empty_list();
         }
         
         // Use CljSeqIterator (existing!) instead of copying
         CljObject *seq = seq_create(coll);
-        if (!seq) return (make_list(NULL, NULL));
+        if (!seq) return empty_list();
         
         // Return rest of sequence (O(1) operation!)
         return seq_rest(seq);
@@ -1000,167 +1004,45 @@ ID native_aclone(ID *args, unsigned int argc) {
 
 // Comparison operators as native functions
 ID native_lt(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception("IllegalArgumentException", "< requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    CljObject *a = (CljObject*)args[0];
-    CljObject *b = (CljObject*)args[1];
-    
-    if (!a || !b) {
-        throw_exception("IllegalArgumentException", "< arguments cannot be null",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Extract numeric values
-    float val_a, val_b;
-    if (is_fixnum((CljValue)a)) {
-        val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        val_a = as_fixed((CljValue)a);
-    } else {
+    CompareResult result;
+    if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for < comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
-    if (is_fixnum((CljValue)b)) {
-        val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        val_b = as_fixed((CljValue)b);
-    } else {
-        throw_exception("TypeError", "Expected number for < comparison",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    return val_a < val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return (result == COMPARE_LESS) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
 ID native_gt(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception("IllegalArgumentException", "> requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    CljObject *a = (CljObject*)args[0];
-    CljObject *b = (CljObject*)args[1];
-    
-    if (!a || !b) {
-        throw_exception("IllegalArgumentException", "> arguments cannot be null",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Extract numeric values
-    float val_a, val_b;
-    if (is_fixnum((CljValue)a)) {
-        val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        val_a = as_fixed((CljValue)a);
-    } else {
+    CompareResult result;
+    if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for > comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
-    if (is_fixnum((CljValue)b)) {
-        val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        val_b = as_fixed((CljValue)b);
-    } else {
-        throw_exception("TypeError", "Expected number for > comparison",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    return val_a > val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return (result == COMPARE_GREATER) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
 ID native_le(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception("IllegalArgumentException", "<= requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    CljObject *a = (CljObject*)args[0];
-    CljObject *b = (CljObject*)args[1];
-    
-    if (!a || !b) {
-        throw_exception("IllegalArgumentException", "<= arguments cannot be null",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Extract numeric values
-    float val_a, val_b;
-    if (is_fixnum((CljValue)a)) {
-        val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        val_a = as_fixed((CljValue)a);
-    } else {
+    CompareResult result;
+    if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for <= comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
-    if (is_fixnum((CljValue)b)) {
-        val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        val_b = as_fixed((CljValue)b);
-    } else {
-        throw_exception("TypeError", "Expected number for <= comparison",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    return val_a <= val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return (result == COMPARE_LESS || result == COMPARE_EQUAL) ? 
+           make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
 ID native_ge(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception("IllegalArgumentException", ">= requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    CljObject *a = (CljObject*)args[0];
-    CljObject *b = (CljObject*)args[1];
-    
-    if (!a || !b) {
-        throw_exception("IllegalArgumentException", ">= arguments cannot be null",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Extract numeric values
-    float val_a, val_b;
-    if (is_fixnum((CljValue)a)) {
-        val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        val_a = as_fixed((CljValue)a);
-    } else {
+    CompareResult result;
+    if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for >= comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
-    if (is_fixnum((CljValue)b)) {
-        val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        val_b = as_fixed((CljValue)b);
-    } else {
-        throw_exception("TypeError", "Expected number for >= comparison",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    return val_a >= val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return (result == COMPARE_GREATER || result == COMPARE_EQUAL) ? 
+           make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
 ID native_eq(ID *args, unsigned int argc) {

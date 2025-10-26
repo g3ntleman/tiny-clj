@@ -14,13 +14,13 @@ typedef struct CljList {
     CljObject *rest;
 } CljList;
 
-// Safe accessor macros with proper memory management
-// These return autoreleased objects following MEMORY_POLICY
-#define LIST_FIRST(list) ((list) && (list)->first ? AUTORELEASE(RETAIN((list)->first)) : NULL)
-#define LIST_REST(list) ((list) && (list)->rest ? AUTORELEASE(RETAIN((list)->rest)) : NULL)
+// Safe accessor macros. They do not do memory-management. They return the object directly.
+#define LIST_FIRST(list) ((list) ? (list)->first : NULL)
+#define LIST_REST(list) ((list) ? (list)->rest : NULL)
 
 // List creation and operations
 CljObject* make_list(ID first, CljList *rest);
+CljObject* empty_list(void);
 
 // Type-safe casting
 static inline CljList* as_list(ID obj) {

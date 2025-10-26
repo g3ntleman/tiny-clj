@@ -78,6 +78,9 @@ list(APPEND SOURCES
     src/error_messages.c
     src/memory_profiler.c
     src/value.c
+    src/numeric_utils.c
+    src/validation.c
+    src/args_utils.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -111,6 +114,9 @@ set(STM32_SOURCES
     src/memory.c
     src/error_messages.c
     src/value.c
+    src/numeric_utils.c
+    src/validation.c
+    src/args_utils.c
 )
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -138,6 +144,9 @@ add_executable(tiny-clj-esp32
     src/error_messages.c
     src/memory_profiler.c
     src/value.c
+    src/numeric_utils.c
+    src/validation.c
+    src/args_utils.c
 )
 
 
@@ -248,6 +257,9 @@ add_executable(unity-tests
     src/runtime.c
     src/error_messages.c
     src/value.c
+    src/numeric_utils.c
+    src/validation.c
+    src/args_utils.c
 )
 
 # Debug parser target removed - file not found

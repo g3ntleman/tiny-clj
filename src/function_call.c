@@ -1448,50 +1448,46 @@ ID eval_prn(CljList *list, CljMap *env) {
     return NULL;
 }
 
-ID eval_count(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
+/**
+ * @brief Helper function to evaluate arguments and call a native function
+ * @param list The function call list
+ * @param env The environment
+ * @param native_func The native function to call
+ * @param max_args Maximum number of arguments expected
+ * @return The result of the native function call
+ */
+static ID eval_and_call_native(CljList *list, CljMap *env, ID (*native_func)(ID*, unsigned int), int max_args) {
     CLJ_ASSERT(env != NULL);
     
-    // Count arguments and call native_count for validation and execution
-    int argc = list_count(list) - 1;  // -1 for 'count' symbol itself
-    ID args[1];
+    int argc = list_count(list) - 1;  // -1 for function symbol itself
+    ID args[max_args];
     
-    if (argc > 0) {
-        args[0] = eval_arg_retained(list, 1, env);
+    // Evaluate arguments
+    for (int i = 0; i < argc && i < max_args; i++) {
+        args[i] = eval_arg_retained(list, i + 1, env);
     }
     
-    // Call native_count which handles validation and throws ArityException if needed
-    ID result = native_count(args, argc);
+    // Call native function
+    ID result = native_func(args, argc);
     
-    // Clean up evaluated argument
-    if (argc > 0 && args[0]) {
-        RELEASE(args[0]);
+    // Clean up evaluated arguments
+    for (int i = 0; i < argc && i < max_args; i++) {
+        if (args[i]) {
+            RELEASE(args[i]);
+        }
     }
     
+    // Native functions return mixed results: some already AUTORELEASE, some not
+    // For now, return as-is and let caller handle AUTORELEASE
     return result;
 }
 
+ID eval_count(CljList *list, CljMap *env) {
+    return eval_and_call_native(list, env, native_count, 1);
+}
+
 ID eval_first(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    
-    // Count arguments and call native_first for validation and execution
-    int argc = list_count(list) - 1;  // -1 for 'first' symbol itself
-    ID args[1];
-    
-    if (argc > 0) {
-        args[0] = eval_arg_retained(list, 1, env);
-    }
-    
-    // Call native_first which handles validation and throws ArityException if needed
-    ID result = native_first(args, argc);
-    
-    // Clean up evaluated argument
-    if (argc > 0 && args[0]) {
-        RELEASE(args[0]);
-    }
-    
-    return result ? AUTORELEASE(result) : NULL;
+    return eval_and_call_native(list, env, native_first, 1);
 }
 
 /**
@@ -1505,51 +1501,11 @@ ID eval_first(CljList *list, CljMap *env) {
  * - Delegates to native_rest for validation and execution (DRY principle)
  */
 ID eval_rest(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    
-    // Count arguments and call native_rest for validation and execution
-    int argc = list_count(list) - 1;  // -1 for 'rest' symbol itself
-    ID args[1];
-    
-    if (argc > 0) {
-        args[0] = eval_arg_retained(list, 1, env);
-    }
-    
-    // Call native_rest which handles validation and throws ArityException if needed
-    ID result = native_rest(args, argc);
-    
-    // Clean up evaluated argument
-    if (argc > 0 && args[0]) {
-        RELEASE(args[0]);
-    }
-    
-    return result;
+    return eval_and_call_native(list, env, native_rest, 1);
 }
 
 ID eval_cons(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    
-    // Count arguments and call native_cons for validation and execution
-    int argc = list_count(list) - 1;  // -1 for 'cons' symbol itself
-    ID args[2];
-    
-    for (int i = 0; i < argc && i < 2; i++) {
-        args[i] = eval_arg_retained(list, i + 1, env);
-    }
-    
-    // Call native_cons which handles validation and throws ArityException if needed
-    ID result = native_cons(args, argc);
-    
-    // Clean up evaluated arguments
-    for (int i = 0; i < argc && i < 2; i++) {
-        if (args[i]) {
-            RELEASE(args[i]);
-        }
-    }
-    
-    return AUTORELEASE(result);
+    return eval_and_call_native(list, env, native_cons, 2);
 }
 
 ID eval_seq(CljList *list, CljMap *env) {
@@ -1585,6 +1541,27 @@ ID eval_seq(CljList *list, CljMap *env) {
 // ============================================================================
 // FOR-LOOP IMPLEMENTATIONS
 // ============================================================================
+
+/**
+ * @brief Helper function to extend environment with a new binding
+ * @param env The existing environment
+ * @param var The variable to bind
+ * @param element The value to bind to the variable
+ * @return A new environment with the binding added
+ */
+static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *element) {
+    CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
+    if (new_env) {
+        // Copy existing environment bindings
+        if (env) {
+            // For now, just use the existing environment
+            // TODO: Implement proper environment copying
+        }
+        // Add new binding
+        map_assoc((CljObject*)new_env, var, element);
+    }
+    return new_env;
+}
 
 ID eval_for(CljList *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
@@ -1624,7 +1601,7 @@ ID eval_for(CljList *list, CljMap *env) {
     }
     
     // Create result list
-    CljObject *result = make_list(NULL, NULL);
+    CljObject *result = empty_list();
     
     // Iterate over collection using seq
     CljObject *seq = seq_create(collection);
@@ -1632,17 +1609,9 @@ ID eval_for(CljList *list, CljMap *env) {
         while (!seq_empty(seq)) {
             CljObject *element = (CljObject*)seq_first(seq);
             
-            // Create new environment with binding using map_assoc
-            CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
+            // Create new environment with binding using helper
+            CljMap *new_env = extend_env_with_binding(env, var, element);
             if (new_env) {
-                // Copy existing environment bindings
-                if (env) {
-                    // For now, just use the existing environment
-                    // TODO: Implement proper environment copying
-                }
-                // Add new binding
-                map_assoc((CljObject*)new_env, var, element);
-                
                 // Evaluate body with new binding
                 CljObject *body_result = eval_body_with_env(body, new_env);
                 if (body_result) {
@@ -1709,17 +1678,9 @@ ID eval_doseq(CljList *list, CljMap *env) {
         while (!seq_empty(seq)) {
             CljObject *element = (CljObject*)seq_first(seq);
             
-            // Create new environment with binding using map_assoc
-            CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
+            // Create new environment with binding using helper
+            CljMap *new_env = extend_env_with_binding(env, var, element);
             if (new_env) {
-                // Copy existing environment bindings
-                if (env) {
-                    // For now, just use the existing environment
-                    // TODO: Implement proper environment copying
-                }
-                // Add new binding
-                map_assoc((CljObject*)new_env, var, element);
-                
                 // Evaluate body with new binding
                 CljObject *body_result = eval_body_with_env(body, new_env);
                 if (body_result) {

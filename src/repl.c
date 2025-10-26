@@ -432,15 +432,17 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!no_core) {
-        // Load clojure.core in autorelease pool to handle AUTORELEASE calls
-        WITH_AUTORELEASE_POOL({
+    // Register builtin functions and load clojure.core in autorelease pool
+    // Both operations may use AUTORELEASE calls (LIST_FIRST/LIST_REST macros)
+    WITH_AUTORELEASE_POOL({
+        // Register builtin functions first (they may be used during core loading)
+        register_builtins();
+        
+        if (!no_core) {
+            // Load clojure.core in autorelease pool to handle AUTORELEASE calls
             load_clojure_core(st);
-        });
-    }
-    
-    // Register builtin functions
-    register_builtins();
+        }
+    });
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);

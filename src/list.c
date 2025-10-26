@@ -4,6 +4,23 @@
 #include "symbol.h"
 #include <stdarg.h>
 
+// Empty-list singleton: CLJ_LIST with rc=0, statically initialized
+static struct {
+    CljList list;
+} clj_empty_list_singleton_data = {
+    .list = {
+        .base = { .type = CLJ_LIST, .rc = 0 },
+        .first = NULL,
+        .rest = NULL
+    }
+};
+static CljList *clj_empty_list_singleton = &clj_empty_list_singleton_data.list;
+
+/** Return empty-list singleton (rc=0, do not retain/release). */
+CljObject* empty_list(void) {
+    return (CljObject*)clj_empty_list_singleton;
+}
+
 // List-Operationen für try/catch
 ID list_nth(CljList *list, int n) {
     if (!list || n < 0) return NULL;
@@ -14,7 +31,7 @@ ID list_nth(CljList *list, int n) {
     for (int i = 0; i <= n && current && is_type(current, CLJ_LIST); i++) {
         if (i == n) {
             CljList *current_list = as_list(current);
-            return (ID)LIST_FIRST(current_list);
+            return (ID)LIST_FIRST(current_list);  // Return directly - no additional memory management
         }
         CljList *current_list = as_list(current);
         current = LIST_REST(current_list);

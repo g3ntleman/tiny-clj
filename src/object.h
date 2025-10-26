@@ -73,7 +73,8 @@ struct CljObject {
 
 // Check if an object is a singleton (should not be reference counted)
 static inline bool is_singleton(CljObject *obj) {
-    if (!obj) return false;
+    // Handle nil (represented as NULL) - it's a singleton!
+    if (!obj) return true;
     
     // Safety check: ensure the pointer is valid and points to a valid object
     // Check if the pointer is in a reasonable memory range (not in zero page)
@@ -84,6 +85,9 @@ static inline bool is_singleton(CljObject *obj) {
     
     // Special case: empty map singleton (rc == 0)
     if (obj->type == CLJ_MAP && obj->rc == 0) return true;
+    
+    // Special case: empty list singleton (rc == 0)
+    if (obj->type == CLJ_LIST && obj->rc == 0) return true;
     
     return false;
 }
