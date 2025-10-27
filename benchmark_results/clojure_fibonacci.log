@@ -1,0 +1,3 @@
+Führe aus: clojure ./fibonacci.clj
+WARNING: Implicit use of clojure.main with options is deprecated, use -M ./fibonacci.clj
+fibonacci(20): 6765

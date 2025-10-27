@@ -1,0 +1,6 @@
+Führe aus: ../tiny-clj-repl -e "(defn add [a b] (+ a b)) (add (add 1 2) (add 3 4))"
+add
+
+🔍 === REPL Memory Profiling Stats ===
+🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
+📊 Final memory state before exit

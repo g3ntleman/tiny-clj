@@ -1,0 +1,6 @@
+Führe aus: ../tiny-clj-repl -e "(defn sum-rec [n] (if (<= n 0) 0 (+ n (sum-rec (- n 1))))) (sum-rec 100)"
+sum-rec
+
+🔍 === REPL Memory Profiling Stats ===
+🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
+📊 Final memory state before exit

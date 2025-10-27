@@ -1,0 +1,4 @@
+Führe aus: clojure -e "(defn add [a b] (+ a b)) (reduce add (range 100))"
+WARNING: Implicit use of clojure.main with options is deprecated, use -M -e (defn add [a b] (+ a b)) (reduce add (range 100))
+#'user/add
+4950

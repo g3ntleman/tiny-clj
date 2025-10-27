@@ -1,0 +1,6 @@
+Führe aus: ../tiny-clj-repl -e "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)"
+fib
+
+🔍 === REPL Memory Profiling Stats ===
+🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
+📊 Final memory state before exit
