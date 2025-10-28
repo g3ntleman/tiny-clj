@@ -474,9 +474,6 @@ static void release_object_deep(CljObject *v) {
     
     // Skip singletons (they don't need cleanup)
     if (!TRACKS_RETAINS(v)) {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
-            printf("🔍 release_object_deep: Skipping singleton object\n");
-        }
         return;
     }
     
