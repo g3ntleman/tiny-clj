@@ -1,0 +1,5 @@
+EXCEPTION: ParseError: Failed to parse expression at /Users/theisen/Projects/tiny-clj/src/parser.c:307:0
+
+🔍 === REPL Memory Profiling Stats ===
+🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
+📊 Final memory state before exit

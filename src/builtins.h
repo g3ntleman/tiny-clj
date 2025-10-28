@@ -51,4 +51,13 @@ ID native_le(ID *args, unsigned int argc);
 ID native_ge(ID *args, unsigned int argc);
 ID native_eq(ID *args, unsigned int argc);
 
+// Time functions
+ID native_time(ID *args, unsigned int argc);
+ID native_time_micro(ID *args, unsigned int argc);
+ID native_sleep(ID *args, unsigned int argc);
+
+// Special forms converted to builtins
+ID native_def(ID *args, unsigned int argc);
+ID native_ns(ID *args, unsigned int argc);
+
 #endif

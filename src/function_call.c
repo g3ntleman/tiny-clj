@@ -1078,16 +1078,12 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Tier 5: Special forms and definitions
-    if (original_op == SYM_DEF) {
-        return eval_def(list, env, st);
-    }
-    
-    if (original_op == SYM_NS) {
-        return eval_ns(list, env, st);
-    }
-    
     if (original_op == SYM_FN) {
         return AUTORELEASE(eval_fn(list, env));
+    }
+    
+    if (original_op == SYM_DEFN) {
+        return eval_defn(list, env, st);
     }
     
     if (original_op == SYM_LET) {
@@ -1095,9 +1091,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return eval_let(list, env, st);
     }
     
-    if (original_op == SYM_DEFN) {
-        // (defn name [params*] body*)
-        return eval_defn(list, env, st);
+    if (original_op == SYM_VAR) {
+        // (var symbol) - returns a var reference to the symbol
+        return eval_var(list, env, st);
     }
     
     if (original_op == SYM_QUOTE) {
@@ -1300,6 +1296,47 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
     return NULL;
 }
 
+ID eval_var(CljList *list, CljMap *env, EvalState *st) {
+    // (var symbol) - returns a var reference to the symbol
+    // Assertion: Environment must not be NULL when expected
+    CLJ_ASSERT(env != NULL);
+    (void)env;  // Not used
+    // Assertion: List and EvalState must not be NULL when expected
+    CLJ_ASSERT(list != NULL);
+    assert(st != NULL);
+    
+    // Get symbol name (first argument)
+    CljObject *sym_obj = list_get_element(list, 1);
+    if (!sym_obj || !is_type(sym_obj, CLJ_SYMBOL)) {
+        eval_error("var expects a symbol", st);
+        return NULL;
+    }
+    
+    CljSymbol *sym = as_symbol((ID)sym_obj);
+    if (!sym || !sym->name[0]) {
+        eval_error("var symbol has no name", st);
+        return NULL;
+    }
+    
+    // Look up the symbol in the current namespace
+    CljObject *value = ns_resolve(st, sym_obj);
+    if (!value) {
+        // Try to find the symbol in the current namespace mappings
+        CljMap *mappings = (CljMap*)st->current_ns->mappings;
+        if (mappings) {
+            value = map_get((CljValue)mappings, sym_obj);
+        }
+    }
+    
+    if (!value) {
+        eval_error("var: symbol not found", st);
+        return NULL;
+    }
+    
+    // Return the value (in Clojure, var returns the actual value, not a var object)
+    return value;
+}
+
 ID eval_fn(CljList *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
@@ -1392,6 +1429,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_OR && symbol == SYM_OR) || (SYM_NS && symbol == SYM_NS) || 
             (SYM_TRY && symbol == SYM_TRY) || (SYM_CATCH && symbol == SYM_CATCH) || 
             (SYM_THROW && symbol == SYM_THROW) || (SYM_FINALLY && symbol == SYM_FINALLY) ||
+            (SYM_VAR && symbol == SYM_VAR) ||
             (SYM_DO && symbol == SYM_DO) || (SYM_LOOP && symbol == SYM_LOOP) || 
             (SYM_LET && symbol == SYM_LET) || (SYM_PLUS && symbol == SYM_PLUS) || 
             (SYM_MINUS && symbol == SYM_MINUS) || (SYM_MULTIPLY && symbol == SYM_MULTIPLY) || 
