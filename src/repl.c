@@ -9,6 +9,7 @@
 #include "line_editor.h"
 #include "symbol.h"
 #include "clj_strings.h"
+#include "reader.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -111,31 +112,83 @@ static void print_exception(CLJException *ex) {
         ex->type, ex->message, ex->file, ex->line, ex->col);
 }
 
+/** @brief Evaluate multiple expressions from a multiline string.
+ *  @param code Multiline string containing multiple expressions
+ *  @param st Evaluation state
+ *  @return true if successful, false on parse or evaluation error
+ */
+static bool eval_multiline_string(const char *code, EvalState *st) {
+    bool result = true; // Start optimistic
+    
+    // Use WITH_AUTORELEASE_POOL for automatic cleanup
+    WITH_AUTORELEASE_POOL({
+        Reader reader;
+        reader_init(&reader, code);
+        
+        // Loop: Parse and evaluate each expression until EOF
+        while (!reader_is_eof(&reader)) {
+            // Skip whitespace and comments
+            reader_skip_all(&reader);
+            
+            // Check if we're at EOF after skipping whitespace
+            if (reader_is_eof(&reader)) {
+                break;
+            }
+            
+            // Use TRY/CATCH to handle exceptions for each expression
+            TRY {
+                // Parse one expression using the new parse_from_reader function
+                CljValue parsed = parse_from_reader(&reader, st);
+                
+                // Check if parsing failed (NULL could mean EOF or parsing error)
+                if (parsed == NULL) {
+                    // Check if we're at EOF
+                    if (reader_is_eof(&reader)) {
+                        break; // Normal EOF, exit loop
+                    } else {
+                        // Parsing error - this should have thrown an exception
+                        // If we get here, it's unexpected
+                        result = false;
+                        break;
+                    }
+                }
+                
+                // Evaluate the parsed expression
+                CljObject *eval_result = eval_parsed(parsed, st);
+                
+                // Print the result (can be NULL for nil)
+                print_result(eval_result);
+                
+            } CATCH(ex) {
+                // Print exception and continue with next expression
+                print_exception((CLJException*)ex);
+                result = false; // Mark as failed, but continue processing
+                
+                // Skip to next line to avoid infinite loop on same expression
+                while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
+                    reader_next(&reader);
+                }
+                if (!reader_is_eof(&reader)) {
+                    reader_next(&reader); // consume the newline
+                }
+            } END_TRY
+        }
+    });
+    
+    return result;
+}
+
 /** @brief Evaluate a string expression in the REPL context.
  *  @param code Expression string to evaluate
  *  @param st Evaluation state
  *  @return true if successful, false on parse or evaluation error
  */
 static bool eval_string_repl(const char *code, EvalState *st) {
-    bool result = false;
-    
-    // Use WITH_AUTORELEASE_POOL for automatic cleanup
-    WITH_AUTORELEASE_POOL({
-        // Use TRY/CATCH to handle exceptions in REPL
-        TRY {
-            CljObject *res = eval_string(code, st);
-            // Note: res can be NULL for nil, which is valid
-            print_result(res);
-            result = true;
-        } CATCH(ex) {
-            // Print exception and continue REPL
-            print_exception((CLJException*)ex);
-            result = false; // Return false to indicate error, but don't exit REPL
-        } END_TRY
-    });
-    
-    return result;
+    // Use the new multiline evaluation function
+    return eval_multiline_string(code, st);
 }
+
+
 
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display

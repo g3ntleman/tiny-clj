@@ -18,6 +18,7 @@ ID eval_println(CljList *list, CljMap *env);
 // Definition und Funktionen
 ID eval_def(CljList *list, CljMap *env, EvalState *st);
 ID eval_ns(CljList *list, CljMap *env, EvalState *st);
+ID eval_var(CljList *list, CljMap *env, EvalState *st);
 ID eval_list_function(CljList *list, CljMap *env);
 ID eval_fn(CljList *list, CljMap *env);
 ID eval_symbol(ID symbol, EvalState *st);

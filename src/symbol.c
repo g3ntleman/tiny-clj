@@ -19,6 +19,7 @@ CljObject *SYM_LOOP = NULL;
 CljObject *SYM_RECUR = NULL;
 CljObject *SYM_THROW = NULL;
 CljObject *SYM_FINALLY = NULL;
+CljObject *SYM_VAR = NULL;
 CljObject *SYM_NS = NULL;
 
 // Builtin-Funktionen
@@ -109,6 +110,9 @@ static struct { CljSymbol sym; } sym_throw_data = {
 };
 static struct { CljSymbol sym; } sym_finally_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "finally" }
+};
+static struct { CljSymbol sym; } sym_var_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "var" }
 };
 static struct { CljSymbol sym; } sym_ns_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "ns" }
@@ -239,12 +243,6 @@ void init_special_symbols() {
     SYM_FN = (CljObject*)&sym_fn_data;
     symbol_table_add(NULL, "fn", SYM_FN);
     
-    SYM_DEF = (CljObject*)&sym_def_data;
-    symbol_table_add(NULL, "def", SYM_DEF);
-    
-    SYM_DEFN = (CljObject*)&sym_defn_data;
-    symbol_table_add(NULL, "defn", SYM_DEFN);
-    
     SYM_QUOTE = (CljObject*)&sym_quote_data;
     symbol_table_add(NULL, "quote", SYM_QUOTE);
     
@@ -272,10 +270,19 @@ void init_special_symbols() {
     SYM_FINALLY = (CljObject*)&sym_finally_data;
     symbol_table_add(NULL, "finally", SYM_FINALLY);
     
+    SYM_DEFN = (CljObject*)&sym_defn_data;
+    symbol_table_add(NULL, "defn", SYM_DEFN);
+    
+    SYM_VAR = (CljObject*)&sym_var_data;
+    symbol_table_add(NULL, "var", SYM_VAR);
+    
+    // Built-in functions - static structs with symbol table registration
+    SYM_DEF = (CljObject*)&sym_def_data;
+    symbol_table_add(NULL, "def", SYM_DEF);
+    
     SYM_NS = (CljObject*)&sym_ns_data;
     symbol_table_add(NULL, "ns", SYM_NS);
     
-    // Built-in functions - static structs with symbol table registration
     SYM_PLUS = (CljObject*)&sym_plus_data;
     symbol_table_add(NULL, "+", SYM_PLUS);
     

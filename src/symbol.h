@@ -26,6 +26,7 @@ extern CljObject *SYM_LET;
 extern CljObject *SYM_FN;
 extern CljObject *SYM_DEF;
 extern CljObject *SYM_DEFN;
+extern CljObject *SYM_VAR;
 extern CljObject *SYM_QUOTE;
 extern CljObject *SYM_QUASIQUOTE;
 extern CljObject *SYM_UNQUOTE;

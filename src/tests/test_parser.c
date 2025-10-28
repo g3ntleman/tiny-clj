@@ -223,6 +223,103 @@ TEST(test_parse_empty_string) {
     evalstate_free(eval_state);
 }
 
+TEST(test_parse_multiple_expressions) {
+    EvalState *eval_state = evalstate_new();
+    
+    // This test verifies that parse() still only parses one expression
+    // The multiline functionality is tested separately
+    
+    // Test 1: Two simple expressions - parse() should only return the first
+    const char *input1 = "42\n(+ 1 2)";
+    CljObject *result1 = parse(input1, eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result1));
+    
+    // Test 2: Three expressions with different types - parse() should only return the first
+    const char *input2 = "\"hello\"\n:keyword\n[1 2 3]";
+    CljObject *result2 = parse(input2, eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, result2->type);
+    
+    // Test 3: Mixed expressions with comments - parse() should only return the first
+    const char *input3 = "; comment\n42\n; another comment\n(+ 1 2)";
+    CljObject *result3 = parse(input3, eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result3));
+    
+    // Test 4: Empty lines between expressions - parse() should only return the first
+    const char *input4 = "1\n\n2\n\n3";
+    CljObject *result4 = parse(input4, eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result4));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result4));
+    
+    evalstate_free(eval_state);
+}
+
+TEST(test_parse_from_reader_multiple_expressions) {
+    EvalState *eval_state = evalstate_new();
+    
+    // This test verifies the new parse_from_reader function can parse multiple expressions
+    // by calling it multiple times on the same reader
+    
+    // Test 1: Two simple expressions
+    const char *input1 = "42\n(+ 1 2)";
+    Reader reader1;
+    reader_init(&reader1, input1);
+    
+    // Parse first expression
+    CljValue result1 = parse_from_reader(&reader1, eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum(result1));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result1));
+    
+    // Parse second expression
+    CljValue result2 = parse_from_reader(&reader1, eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, ((CljObject*)result2)->type);
+    
+    // Test 2: Three expressions with different types
+    const char *input2 = "\"hello\"\n:keyword\n[1 2 3]";
+    Reader reader2;
+    reader_init(&reader2, input2);
+    
+    // Parse first expression (string)
+    CljValue str_result = parse_from_reader(&reader2, eval_state);
+    TEST_ASSERT_NOT_NULL(str_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, ((CljObject*)str_result)->type);
+    
+    // Parse second expression (keyword)
+    CljValue keyword_result = parse_from_reader(&reader2, eval_state);
+    TEST_ASSERT_NOT_NULL(keyword_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ((CljObject*)keyword_result)->type);
+    
+    // Parse third expression (vector)
+    CljValue vec_result = parse_from_reader(&reader2, eval_state);
+    TEST_ASSERT_NOT_NULL(vec_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec_result)->type);
+    
+    // Test 3: Mixed expressions with comments
+    const char *input3 = "; comment\n42\n; another comment\n(+ 1 2)";
+    Reader reader3;
+    reader_init(&reader3, input3);
+    
+    // Parse first expression (after comment)
+    CljValue num_result = parse_from_reader(&reader3, eval_state);
+    TEST_ASSERT_NOT_NULL(num_result);
+    TEST_ASSERT_TRUE(is_fixnum(num_result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(num_result));
+    
+    // Parse second expression (after comment)
+    CljValue list_result = parse_from_reader(&reader3, eval_state);
+    TEST_ASSERT_NOT_NULL(list_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, ((CljObject*)list_result)->type);
+    
+    evalstate_free(eval_state);
+}
+
 // ============================================================================
 // TEST GROUPS
 // ============================================================================

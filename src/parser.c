@@ -600,56 +600,31 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
  * @return New CljValue or NULL on error
  */
 CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
-  reader_skip_all(reader);
-  if (reader_is_eof(reader))
-    return NULL;
-  char c = reader_current(reader);
-  
-  // Handle numbers with immediate fixnum optimization
-  if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing(reader, st);
-  if (isdigit(c))
-    return make_number_by_parsing(reader, st);
-  
-  // Handle nil, true, false literals with immediate special values
-  if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
-      reader_peek_ahead(reader, 2) == 'l' && 
-      !is_alphanumeric(reader_peek_ahead(reader, 3))) {
-    reader_consume(reader); // 'n'
-    reader_consume(reader); // 'i'
-    reader_consume(reader); // 'l'
-    return NULL;
-  }
-  
-  if (c == 't' && reader_peek_ahead(reader, 1) == 'r' && 
-      reader_peek_ahead(reader, 2) == 'u' && 
-      reader_peek_ahead(reader, 3) == 'e' && 
-      !is_alphanumeric(reader_peek_ahead(reader, 4))) {
-    reader_consume(reader); // 't'
-    reader_consume(reader); // 'r'
-    reader_consume(reader); // 'u'
-    reader_consume(reader); // 'e'
-    return make_special(SPECIAL_TRUE);
-  }
-  
-  if (c == 'f' && reader_peek_ahead(reader, 1) == 'a' && 
-      reader_peek_ahead(reader, 2) == 'l' && 
-      reader_peek_ahead(reader, 3) == 's' && 
-      reader_peek_ahead(reader, 4) == 'e' && 
-      !is_alphanumeric(reader_peek_ahead(reader, 5))) {
-    reader_consume(reader); // 'f'
-    reader_consume(reader); // 'a'
-    reader_consume(reader); // 'l'
-    reader_consume(reader); // 's'
-    reader_consume(reader); // 'e'
-    return make_special(SPECIAL_FALSE);
-  }
-  
-  // For complex structures, fall back to heap allocation
-  // TODO: Implement CljValue-based vector/map/list parsing
-  CljValue obj = make_object_by_parsing_expr(reader, st);
+  // Delegate to make_object_by_parsing_expr to avoid code duplication
+  // Both functions do the same thing, just with different return types
+  return (CljValue)make_object_by_parsing_expr(reader, st);
+}
 
-  return obj;
+/**
+ * @brief Parse Clojure expression from Reader (CljValue API)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed CljValue or NULL on error
+ */
+CljValue parse_from_reader(Reader *reader, EvalState *st) {
+  if (!reader || !st) return NULL;
+  
+  CljValue result = NULL;
+  
+  // Create autorelease pool for parse operations
+  WITH_AUTORELEASE_POOL({
+    // Don't catch exceptions - let them propagate
+    result = value_by_parsing_expr(reader, st);
+    
+    // Result is already autoreleased by the pool
+  });
+  
+  return result;
 }
 
 /**
@@ -668,8 +643,8 @@ CljValue parse(const char *input, EvalState *st) {
     Reader reader;
     reader_init(&reader, input);
     
-    // Don't catch exceptions - let them propagate
-    result = value_by_parsing_expr(&reader, st);
+    // Delegate to parse_from_reader (DRY principle)
+    result = parse_from_reader(&reader, st);
     
     // Result is already autoreleased by the pool
   });
