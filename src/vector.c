@@ -39,8 +39,8 @@ static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singl
 // === Neue CljValue API (Phase 1: Parallel) ===
 
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
-CljValue make_vector(int capacity, int is_mutable) {
-    if (capacity <= 0) {
+CljValue make_vector(unsigned int capacity, bool is_mutable) {
+    if (capacity == 0 && !is_mutable) {
         return (CljValue)clj_empty_vector_singleton;
     }
     CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
@@ -51,7 +51,7 @@ CljValue make_vector(int capacity, int is_mutable) {
     vec->base.rc = 1;
     vec->count = 0;
     vec->capacity = capacity;
-    vec->mutable_flag = is_mutable ? 1 : 0;
+    vec->mutable_flag = is_mutable;
     if (capacity > 0) {
         vec->data = (CljObject **)calloc((size_t)capacity, sizeof(CljObject *));
         if (!vec->data) {

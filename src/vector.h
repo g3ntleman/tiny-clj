@@ -29,7 +29,7 @@ static inline CljPersistentVector* as_vector(ID obj) {
 
 // === Neue CljValue API (Phase 1: Parallel) ===
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
-CljValue make_vector(int capacity, int is_mutable);
+CljValue make_vector(unsigned int capacity, bool is_mutable);
 /** Return a new vector with item appended; original vector remains unchanged. */
 CljValue vector_conj(CljValue vec, CljValue item);
 

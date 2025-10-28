@@ -346,12 +346,22 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed vector - missing closing ']'", reader);
     return NULL;
   }
-    // Create vector using new API
-    CljValue vec = AUTORELEASE(make_vector(count, 0));
+    // Create mutable vector for efficient parsing with expected capacity
+    unsigned int expected_capacity = count > 0 ? count : 5;  // Default capacity for empty vectors
+    CljValue vec = make_vector(expected_capacity, true);  // mutable = true
+    CljPersistentVector *v = as_vector((CljObject*)vec);
+    
+    // Add elements directly to mutable vector (O(1) per element)
     for (int i = 0; i < count; i++) {
-      vec = vector_conj(vec, stack[i]);
+      v->data[i] = (CljObject*)stack[i];
+      RETAIN(stack[i]);  // Retain the element
     }
-    return vec;
+    v->count = count;
+    
+    // Convert to immutable at the end
+    v->mutable_flag = false;
+    
+    return AUTORELEASE(vec);
   }
   return NULL;
 }

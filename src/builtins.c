@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <time.h>
 #include <sys/time.h>
+#include <unistd.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -185,7 +186,12 @@ ID native_rest(ID *args, unsigned int argc) {
         if (!seq) return empty_list();
         
         // Return rest of sequence (O(1) operation!)
-        return seq_rest(seq);
+        CljObject *rest_seq = seq_rest(seq);
+        
+        // Free the intermediate seq object to prevent memory leak
+        seq_release(seq);
+        
+        return rest_seq;
     }
     
     if (is_type(coll, CLJ_SEQ)) {
@@ -1204,12 +1210,8 @@ ID native_sleep(ID *args, unsigned int argc) {
     // Convert to seconds (assuming the number is in seconds)
     int duration = as_fixnum((CljValue)duration_obj);
     
-    // Simple busy wait for testing (not a real sleep)
-    for (int i = 0; i < duration * 1000000; i++) {
-        // Busy wait - this will definitely take time
-        volatile int dummy = i;
-        (void)dummy; // Suppress unused variable warning
-    }
+    // Use Unix sleep function
+    sleep(duration);
     
     // Return nil (but not NULL to avoid assertion failure)
     return NULL;
