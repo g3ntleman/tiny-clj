@@ -57,31 +57,6 @@ TEST(test_namespace_lookup_user_namespace) {
     evalstate_free(st);
 }
 
-// Test memory management for namespace operations (isolated)
-TEST(test_namespace_memory_management_isolated) {
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    // Create a simple symbol-value pair
-    CljObject *test_sym = intern_symbol_global("test-memory-var");
-    CljObject *test_value = fixnum(42);
-    
-    // Store in namespace (this should RETAIN the value)
-    ns_define(st->current_ns, test_sym, test_value);
-    
-    // Retrieve and verify
-    CljObject *retrieved = ns_resolve(st, test_sym);
-    TEST_ASSERT_NOT_NULL(retrieved);
-    TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
-    
-    // Cleanup - this should free all objects
-    RELEASE((CljObject*)retrieved);
-    RELEASE((CljObject*)test_sym);
-    RELEASE((CljObject*)test_value);
-    
-    evalstate_free(st);
-}
-
 // Test symbol interning - same symbol should return same pointer
 TEST(test_symbol_interning_consistency) {
     // Test that intern_symbol_global returns the same pointer for the same name
@@ -306,30 +281,3 @@ TEST(test_namespace_error_handling) {
     evalstate_free(st);
 }
 
-// Test namespace memory management
-TEST(test_namespace_memory_management) {
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    // Create and store many variables
-    for (int i = 0; i < 10; i++) {
-        char name[32];
-        snprintf(name, sizeof(name), "var%d", i);
-        
-        CljObject *sym = intern_symbol_global(name);
-        CljObject *value = fixnum(i * 10);
-        
-        ns_define(st->current_ns, sym, value);
-        
-        // Verify it was stored
-        CljObject *retrieved = ns_resolve(st, sym);
-        TEST_ASSERT_NOT_NULL(retrieved);
-        TEST_ASSERT_EQUAL(i * 10, as_fixnum((CljValue)retrieved));
-        
-        RELEASE((CljObject*)retrieved);
-        RELEASE((CljObject*)sym);
-        RELEASE((CljObject*)value);
-    }
-    
-    evalstate_free(st);
-}

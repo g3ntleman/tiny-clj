@@ -51,21 +51,32 @@ static const char* extract_group_from_file(const char* filename) {
     const char* last_slash = strrchr(filename, '/');
     const char* basename = last_slash ? last_slash + 1 : filename;
     
-    // Check if it starts with "test_" and ends with ".c"
-    if (strncmp(basename, "test_", 5) == 0) {
-        size_t len = strlen(basename);
-        if (len > 3 && strcmp(basename + len - 2, ".c") == 0) {
-            // Extract the group name (between "test_" and ".c")
-            static char group_name[64];
-            size_t group_len = len - 7; // "test_" + ".c" = 7 chars
-            if (group_len < sizeof(group_name)) {
-                strncpy(group_name, basename + 5, group_len);
-                group_name[group_len] = '\0';
-                return group_name;
-            }
+    // Remove .c extension and "test_" prefix to get the group name
+    size_t len = strlen(basename);
+    if (len > 2 && strcmp(basename + len - 2, ".c") == 0) {
+        static char group_name[64];
+        size_t group_len = len - 2; // Remove .c
+        
+        // Remove "test_" prefix if present
+        const char* name_start = basename;
+        if (group_len > 5 && strncmp(basename, "test_", 5) == 0) {
+            name_start = basename + 5; // Skip "test_" prefix
+            group_len -= 5;
+        }
+        
+        if (group_len < sizeof(group_name)) {
+            strncpy(group_name, name_start, group_len);
+            group_name[group_len] = '\0';
+            return group_name;
         }
     }
-    return "unknown";
+    
+    // Fallback: return filename without extension and "test_" prefix
+    const char* name_start = basename;
+    if (strncmp(basename, "test_", 5) == 0) {
+        name_start = basename + 5;
+    }
+    return name_start;
 }
 
 // Registration macro for automatic test discovery

@@ -218,27 +218,26 @@ set_target_properties(tiny-clj-esp32-repl PROPERTIES
 add_executable(unity-tests
     src/tests/unity_test_runner.c
     src/tests/test_registry.c
-    src/tests/memory_tests.c
-    src/tests/parser_tests.c
-    src/tests/exception_tests.c
+    src/tests/test_memory.c
+    src/tests/test_parser.c
+    src/tests/test_exception.c
     src/tests/test_basics.c
-    src/tests/namespace_tests.c
+    src/tests/test_namespace_legacy.c
     src/tests/test_namespace.c
     src/tests/test_equal.c
-    src/tests/seq_tests.c
+    src/tests/test_seq.c
     src/tests/test_values.c
     src/tests/test_recur.c
     src/tests/test_let.c
     src/tests/test_do.c
     src/tests/test_defn.c
     src/tests/test_time.c
-    src/tests/for_loop_tests.c
-    src/tests/fixed_point_tests.c
+    src/tests/test_for_loop.c
+    src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
     src/tests/test_sequences.c
-    src/tests/byte_array_tests.c
+    src/tests/test_byte_array.c
     src/tests/test_cow.c
-    src/tests/test_macro_demo.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c

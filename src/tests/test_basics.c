@@ -22,20 +22,17 @@ int load_clojure_core(EvalState *st);
 // ============================================================================
 
 TEST(test_list_count) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test null pointer
-        TEST_ASSERT_EQUAL_INT(0, list_count(NULL));
+    // Test null pointer
+    TEST_ASSERT_EQUAL_INT(0, list_count(NULL));
 
-        // Test non-list object (this should not crash)
-        // Create a proper CljObject for testing
-        CljObject *int_obj = AUTORELEASE(make_string_impl("42")); // Use string as non-list object
-        TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)int_obj));
+    // Test non-list object (this should not crash)
+    // Create a proper CljObject for testing
+    CljObject *int_obj = AUTORELEASE(make_string_impl("42")); // Use string as non-list object
+    TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)int_obj));
 
-        // Test empty list (clj_nil is not a list)
-        CljObject *empty_list = NULL;
-        TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)empty_list));
-    }
+    // Test empty list (clj_nil is not a list)
+    CljObject *empty_list = NULL;
+    TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)empty_list));
 }
 
 TEST(test_list_creation) {
@@ -142,18 +139,13 @@ TEST(test_vector_creation) {
 }
 
 TEST(test_map_creation) {
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        // Test map creation using CljValue API
-        CljObject *map = AUTORELEASE(make_map(16));
-        TEST_ASSERT_NOT_NULL(map);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->type);
-    }
+    // Test map creation using CljValue API
+    CljObject *map = AUTORELEASE(make_map(16));
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->type);
 }
 
 TEST(test_array_map_builtin) {
-    // Manual memory management - WITH_AUTORELEASE_POOL incompatible with setjmp/longjmp
-    {
         EvalState *eval_state = evalstate_new();
         
         // Test empty map: (array-map)
@@ -183,7 +175,6 @@ TEST(test_array_map_builtin) {
         // result3 and eval3 are automatically managed by parse() and eval_expr_simple()
 
         evalstate_free(eval_state);
-    }
 }
 
 TEST(test_integer_creation) {
@@ -358,43 +349,40 @@ TEST(test_special_form_or) {
 
 TEST(test_load_multiline_file) {
     // Test multiline expressions parsing (without evaluation)
-    // Manual memory management - no WITH_AUTORELEASE_POOL
-    {
-        EvalState *st = evalstate_new();
-        
-        // Test 1: Simple multiline function definition
-        const char *multiline_def = "(def add-nums\n  (fn [a b]\n    (+ a b)))";
-        CljObject *parsed1 = parse(multiline_def, st);
-        TEST_ASSERT_NOT_NULL(parsed1);
-        TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed1->type);
-        
-        // Test 2: Multiline function with inline comments
-        const char *multiline_with_comments = "(def multiply\n  (fn [x y] ; parameters\n    (* x y))) ; body";
-        CljObject *parsed2 = parse(multiline_with_comments, st);
-        TEST_ASSERT_NOT_NULL(parsed2);
-        TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed2->type);
-        
-        // Test 3: Multiline vector definition
-        const char *multiline_vec = "(def my-vec\n  [1\n   2\n   3])";
-        CljObject *parsed3 = parse(multiline_vec, st);
-        TEST_ASSERT_NOT_NULL(parsed3);
-        TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed3->type);
-        
-        // Test 4: Multiline map
-        const char *multiline_map = "{:a 1\n :b 2\n :c 3}";
-        CljObject *parsed4 = parse(multiline_map, st);
-        TEST_ASSERT_NOT_NULL(parsed4);
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, parsed4->type);
-        
-        // Test 5: Multiline nested structures
-        const char *multiline_nested = "[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]";
-        CljObject *parsed5 = parse(multiline_nested, st);
-        TEST_ASSERT_NOT_NULL(parsed5);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, parsed5->type);
-        
-        // Clean up
-        evalstate_free(st);
-    }
+    EvalState *st = evalstate_new();
+    
+    // Test 1: Simple multiline function definition
+    const char *multiline_def = "(def add-nums\n  (fn [a b]\n    (+ a b)))";
+    CljObject *parsed1 = parse(multiline_def, st);
+    TEST_ASSERT_NOT_NULL(parsed1);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed1->type);
+    
+    // Test 2: Multiline function with inline comments
+    const char *multiline_with_comments = "(def multiply\n  (fn [x y] ; parameters\n    (* x y))) ; body";
+    CljObject *parsed2 = parse(multiline_with_comments, st);
+    TEST_ASSERT_NOT_NULL(parsed2);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed2->type);
+    
+    // Test 3: Multiline vector definition
+    const char *multiline_vec = "(def my-vec\n  [1\n   2\n   3])";
+    CljObject *parsed3 = parse(multiline_vec, st);
+    TEST_ASSERT_NOT_NULL(parsed3);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed3->type);
+    
+    // Test 4: Multiline map
+    const char *multiline_map = "{:a 1\n :b 2\n :c 3}";
+    CljObject *parsed4 = parse(multiline_map, st);
+    TEST_ASSERT_NOT_NULL(parsed4);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, parsed4->type);
+    
+    // Test 5: Multiline nested structures
+    const char *multiline_nested = "[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]";
+    CljObject *parsed5 = parse(multiline_nested, st);
+    TEST_ASSERT_NOT_NULL(parsed5);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, parsed5->type);
+    
+    // Clean up
+    evalstate_free(st);
 }
 
 
@@ -681,16 +669,6 @@ TEST(test_eval_list_function_call) {
     
     // No RELEASE needed - eval_string returns autoreleased object
     evalstate_free(st);
-}
-
-// Test group for debugging functions
-TEST(test_group_debugging) {
-    RUN_TEST(test_as_list_valid);
-    RUN_TEST(test_as_list_invalid);
-    RUN_TEST(test_list_first_valid);
-    RUN_TEST(test_is_type_function);
-    RUN_TEST(test_eval_list_simple_arithmetic);
-    RUN_TEST(test_eval_list_function_call);
 }
 
 // ============================================================================

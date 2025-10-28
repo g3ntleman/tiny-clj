@@ -249,42 +249,40 @@ TEST(test_fixed_complex_arithmetic) {
 
 // Test for fixed-point overflow detection
 TEST(test_fixed_overflow_detection) {
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    // Test multiplication overflow - this should throw an exception with correct values
-    CljObject *result = NULL;
-    bool exception_caught = false;
-    TRY {
-        WITH_AUTORELEASE_POOL({
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Test multiplication overflow - this should throw an exception with correct values
+        CljObject *result = NULL;
+        bool exception_caught = false;
+        TRY {
             result = eval_string("(* 1000.8 1000000.9)", st);
-        });
-        // If we reach here, no exception was thrown
-        result = NULL;
-    } CATCH(ex) {
-        // Exception caught - result should remain NULL
-        exception_caught = true;
-        result = NULL;
-    } END_TRY
-    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been thrown");
-    TEST_ASSERT_NULL(result); // Should be NULL due to exception
-    
-    // Test addition overflow - this should also throw an exception with correct values
-    CljObject *result2 = NULL;
-    bool exception_caught2 = false;
-    TRY {
-        WITH_AUTORELEASE_POOL({
+            // If we reach here, no exception was thrown
+            result = NULL;
+        } CATCH(ex) {
+            // Exception caught - result should remain NULL
+            exception_caught = true;
+            result = NULL;
+        } END_TRY
+        TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Exception should have been thrown");
+        TEST_ASSERT_NULL(result); // Should be NULL due to exception
+        
+        // Test addition overflow - this should also throw an exception with correct values
+        CljObject *result2 = NULL;
+        bool exception_caught2 = false;
+        TRY {
             result2 = eval_string("(+ 1000000.5 1000000.5)", st);
-        });
-        // If we reach here, no exception was thrown
-        result2 = NULL;
-    } CATCH(ex) {
-        // Exception caught - result2 should remain NULL
-        exception_caught2 = true;
-        result2 = NULL;
-    } END_TRY
-    TEST_ASSERT_TRUE_MESSAGE(exception_caught2, "Exception should have been thrown");
-    TEST_ASSERT_NULL(result2); // Should be NULL due to exception
-    
-    evalstate_free(st);
+            // If we reach here, no exception was thrown
+            result2 = NULL;
+        } CATCH(ex) {
+            // Exception caught - result2 should remain NULL
+            exception_caught2 = true;
+            result2 = NULL;
+        } END_TRY
+        TEST_ASSERT_TRUE_MESSAGE(exception_caught2, "Exception should have been thrown");
+        TEST_ASSERT_NULL(result2); // Should be NULL due to exception
+        
+        evalstate_free(st);
+    });
 }
