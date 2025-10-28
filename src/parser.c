@@ -416,29 +416,15 @@ static ID parse_list(Reader *reader, EvalState *st) {
     return NULL;
   }
   
-  // Parse elements iteratively and build list from start to end
-  ID elements[MAX_STACK_LIST_SIZE];
-  int count = 0;
+  // Parse first element
+  ID first = make_object_by_parsing_expr(reader, st);
+  reader_skip_all(reader);
   
-  while (!reader_eof(reader) && reader_peek_char(reader) != ')') {
-    ID element = make_object_by_parsing_expr(reader, st);
-    // element can be NULL for nil, which is valid
-    reader_skip_all(reader);
-    
-    // Store element in array (including NULL for nil)
-    if (count >= MAX_STACK_LIST_SIZE) {
-      // Clean up already parsed elements
-      for (int i = 0; i < count; i++) {
-        RELEASE(elements[i]);
-      }
-      if (element) RELEASE(element);
-      return NULL;
-    }
-    elements[count++] = element;
-  }
+  // Parse rest of the list recursively
+  ID rest = parse_list_rest(reader, st);
   
-  // Build list from array in correct order
-  CljValue result = AUTORELEASE(make_list_from_stack((CljValue*)elements, count));
+  // Build list from first and rest
+  CljValue result = AUTORELEASE(make_list(first, (CljList*)rest));
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
@@ -447,6 +433,31 @@ static ID parse_list(Reader *reader, EvalState *st) {
   }
   
   return result;
+}
+
+/**
+ * @brief Parse rest of list after first element
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed rest of list or NULL for empty rest
+ */
+static ID parse_list_rest(Reader *reader, EvalState *st) {
+  reader_skip_all(reader);
+  
+  // Check if we're at the end of the list
+  if (reader_peek_char(reader) == ')') {
+    return NULL; // Empty rest
+  }
+  
+  // Parse next element
+  ID element = make_object_by_parsing_expr(reader, st);
+  reader_skip_all(reader);
+  
+  // Parse remaining elements recursively
+  ID rest = parse_list_rest(reader, st);
+  
+  // Build list node
+  return AUTORELEASE(make_list(element, (CljList*)rest));
 }
 
 /**
