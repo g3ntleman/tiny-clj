@@ -526,7 +526,7 @@ ID native_println(ID *args, unsigned int argc) {
 
 // Helper function to validate numeric arguments
 static bool validate_numeric_args(ID *args, int argc) {
-    for (unsigned int i = 0; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
             throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
@@ -1029,6 +1029,7 @@ ID native_aclone(ID *args, unsigned int argc) {
 
 // Comparison operators as native functions
 ID native_lt(ID *args, unsigned int argc) {
+    (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for < comparison",
@@ -1039,6 +1040,7 @@ ID native_lt(ID *args, unsigned int argc) {
 }
 
 ID native_gt(ID *args, unsigned int argc) {
+    (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for > comparison",
@@ -1049,6 +1051,7 @@ ID native_gt(ID *args, unsigned int argc) {
 }
 
 ID native_le(ID *args, unsigned int argc) {
+    (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for <= comparison",
@@ -1060,6 +1063,7 @@ ID native_le(ID *args, unsigned int argc) {
 }
 
 ID native_ge(ID *args, unsigned int argc) {
+    (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
         throw_exception("TypeError", "Expected number for >= comparison",

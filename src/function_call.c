@@ -627,7 +627,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
     assert(param_count >= 0); // param_count should be non-negative
-    if (!is_type(list, CLJ_LIST)) return NULL;
+    if (!is_type((CljObject*)list, CLJ_LIST)) return NULL;
     
     CljList *list_data = as_list((ID)list);
     if (!list_data) return NULL;
@@ -1721,7 +1721,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
     // (list arg1 arg2 ...) - creates a list from the arguments
     // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
-    if (!is_type(list, CLJ_LIST)) return NULL;
+    if (!is_type((CljObject*)list, CLJ_LIST)) return NULL;
     
     CljList *list_data = as_list((ID)list);
     
@@ -2150,7 +2150,7 @@ static _Thread_local int g_eval_arg_depth = 0;
 ID eval_arg(CljList *list, int index, CljMap *env) {
     // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
-    if (!is_type(list, CLJ_LIST)) return NULL;
+    if (!is_type((CljObject*)list, CLJ_LIST)) return NULL;
     
     // Handle NULL environment gracefully
     if (env == NULL) {

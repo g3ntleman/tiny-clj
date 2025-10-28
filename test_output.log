@@ -1,0 +1,470 @@
+🔍 Memory profiling enabled (statistics reset)
+Running 195 registered tests...
+🧪 Running test: test_memory_allocation
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 String: A:1/0
+📋 Vector: A:1/1 Rel:1
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 String: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_memory_allocation
+
+🧪 Running test: test_memory_deallocation
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_memory_deallocation
+
+🧪 Running test: test_memory_leak_detection
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_memory_leak_detection
+
+🧪 Running test: test_vector_memory
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_vector_memory
+
+🧪 Running test: test_autorelease_pool_basic
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:5 Dealloc:2 Peak:20 Current:12 Leaks:3
+📋 String: A:2/0 R:2
+📋 Vector: A:2/2 Rel:2
+📋 List: A:1/0
+🚨 LEAK: 3 objects, 12 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 3 allocations                    │
+   │ Current Memory:             12 bytes                         │
+   │ Peak Memory:               20 bytes                         │
+   │ Allocations:                 5                               │
+   │ Deallocations:               2                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 String: 2 leaks
+🔍 List: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_autorelease_pool_basic
+
+🧪 Running test: test_autorelease_pool_nested
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:6 Dealloc:3 Peak:24 Current:12 Leaks:3
+📋 String: A:2/0 R:1
+📋 Vector: A:3/3 Rel:3
+📋 List: A:1/0
+🚨 LEAK: 3 objects, 12 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 3 allocations                    │
+   │ Current Memory:             12 bytes                         │
+   │ Peak Memory:               24 bytes                         │
+   │ Allocations:                 6                               │
+   │ Deallocations:               3                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 String: 2 leaks
+🔍 List: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_autorelease_pool_nested
+
+🧪 Running test: test_cow_assumptions_rc_behavior
+🔍 Memory profiling enabled (statistics reset)
+
+=== COW Assumptions: RC Behavior ===
+After make_map: RC=1
+After AUTORELEASE: RC=1
+✓ AUTORELEASE does NOT increase RC
+After RETAIN: RC=2
+✓ RC=2 would trigger COW in map_assoc_cow
+After RELEASE: RC=1
+✓ All COW assumptions verified!
+⚠️  WARNING: Potential double-free detected! Object destructions (5) significantly exceed allocations (2).
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_cow_assumptions_rc_behavior
+
+🧪 Running test: test_autorelease_pool_memory_cleanup
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:22 Dealloc:13 Peak:88 Current:36 Leaks:9
+📋 String: A:15/10 R:5 Rel:15 AR:15
+📋 Vector: A:2/2 Rel:2
+📋 List: A:5/1 R:4 Rel:1 AR:1
+🚨 LEAK: 9 objects, 36 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 9 allocations                    │
+   │ Current Memory:             36 bytes                         │
+   │ Peak Memory:               88 bytes                         │
+   │ Allocations:                22                               │
+   │ Deallocations:              13                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 String: 5 leaks
+🔍 List: 4 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_autorelease_pool_memory_cleanup
+
+🧪 Running test: test_parse_basic_types
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_parse_basic_types
+
+🧪 Running test: test_parse_collections
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:11 Dealloc:6 Peak:32 Current:20 Leaks:5
+📋 Symbol: A:0/0 R:2 AR:2
+📋 Vector: A:8/5 Rel:5 AR:1
+📋 List: A:3/1 R:2 Rel:1 AR:1
+🚨 LEAK: 5 objects, 20 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 5 allocations                    │
+   │ Current Memory:             20 bytes                         │
+   │ Peak Memory:               32 bytes                         │
+   │ Allocations:                11                               │
+   │ Deallocations:               6                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Vector: 3 leaks
+🔍 List: 2 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_parse_collections
+
+🧪 Running test: test_parse_comments
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_parse_comments
+
+🧪 Running test: test_parse_metadata
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_parse_metadata
+
+🧪 Running test: test_parse_utf8_symbols
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_parse_utf8_symbols
+
+🧪 Running test: test_keyword_evaluation
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_keyword_evaluation
+
+🧪 Running test: test_keyword_map_access
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:5 Dealloc:4 Peak:16 Current:4 Leaks:1
+📋 Symbol: A:0/0 R:6 AR:5
+📋 Vector: A:3/3 Rel:3
+📋 Map: A:0/0 R:2
+📋 List: A:2/1 R:1 Rel:1 AR:1
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:               16 bytes                         │
+   │ Allocations:                 5                               │
+   │ Deallocations:               4                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 List: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_keyword_map_access
+
+🧪 Running test: test_parse_multiline_expressions
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:42 Dealloc:15 Peak:120 Current:108 Leaks:27
+📋 Symbol: A:0/0 R:22 AR:10
+📋 Vector: A:22/12 R:2 Rel:12 AR:4
+📋 Map: A:0/0 R:3
+📋 List: A:20/3 R:20 Rel:6 AR:6
+🚨 LEAK: 27 objects, 108 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                27 allocations                    │
+   │ Current Memory:            108 bytes                         │
+   │ Peak Memory:              120 bytes                         │
+   │ Allocations:                42                               │
+   │ Deallocations:              15                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Vector: 10 leaks
+🔍 List: 17 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_parse_multiline_expressions
+
+🧪 Running test: test_simple_try_catch_exception_caught
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_simple_try_catch_exception_caught
+
+🧪 Running test: test_simple_try_catch_no_exception
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_simple_try_catch_no_exception
+
+🧪 Running test: test_nested_try_catch_inner_exception
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_nested_try_catch_inner_exception
+
+🧪 Running test: test_nested_try_catch_outer_exception
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_nested_try_catch_outer_exception
+
+🧪 Running test: test_exception_with_autorelease
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:3 Dealloc:1 Peak:12 Current:8 Leaks:2
+📋 String: A:1/0
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 2 objects, 8 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 2 allocations                    │
+   │ Current Memory:              8 bytes                         │
+   │ Peak Memory:               12 bytes                         │
+   │ Allocations:                 3                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 String: 1 leaks
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_exception_with_autorelease
+
+🧪 Running test: test_repl_crash_scenario
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_repl_crash_scenario
+
+🧪 Running test: test_map_arity_exception_zero_args
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:4 Dealloc:3 Peak:12 Current:4 Leaks:1
+📋 Symbol: A:0/0 R:4 AR:3
+📋 Vector: A:2/2 Rel:2
+📋 Map: A:0/0 R:1 Rel:1 AR:1
+📋 List: A:1/1 Rel:1 AR:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:               12 bytes                         │
+   │ Allocations:                 4                               │
+   │ Deallocations:               3                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_map_arity_exception_zero_args
+
+🧪 Running test: test_with_autorelease_pool_swallows_exceptions
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:3 Dealloc:2 Peak:12 Current:4 Leaks:1
+📋 Symbol: A:0/0 AR:2
+📋 Vector: A:2/2 Rel:2
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:               12 bytes                         │
+   │ Allocations:                 3                               │
+   │ Deallocations:               2                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_with_autorelease_pool_swallows_exceptions
+
+🧪 Running test: test_throw_existing_exception
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_throw_existing_exception
+
+🧪 Running test: test_throw_macro_convenience
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:2 Dealloc:1 Peak:8 Current:4 Leaks:1
+📋 Vector: A:1/1 Rel:1
+📋 Exception: A:1/0
+🚨 LEAK: 1 objects, 4 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 1 allocations                    │
+   │ Current Memory:              4 bytes                         │
+   │ Peak Memory:                8 bytes                         │
+   │ Allocations:                 2                               │
+   │ Deallocations:               1                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 Exception: 1 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_throw_macro_convenience
+
+🧪 Running test: test_list_count
+🔍 Memory profiling enabled (statistics reset)
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_list_count
+
+🧪 Running test: test_list_creation
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:16 Dealloc:8 Peak:48 Current:32 Leaks:8
+📋 Symbol: A:0/0 R:11 AR:7
+📋 Vector: A:5/5 Rel:5
+📋 List: A:11/3 R:10 Rel:7 AR:6
+📋 Function: A:0/0 R:1 AR:1
+🚨 LEAK: 8 objects, 32 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 8 allocations                    │
+   │ Current Memory:             32 bytes                         │
+   │ Peak Memory:               48 bytes                         │
+   │ Allocations:                16                               │
+   │ Deallocations:               8                               │
+   └─────────────────────────────────────────────────────────┘
+🔍 List: 8 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_list_creation
+
+🧪 Running test: test_symbol_creation
+🔍 Memory profiling enabled (statistics reset)
+📊 Memory: Alloc:8 Dealloc:4 Peak:28 Current:16 Leaks:4
+📋 Symbol: A:0/0 R:12 AR:4
+📋 Vector: A:4/4 Rel:4
+📋 List: A:4/0 R:2
+🚨 LEAK: 4 objects, 16 bytes
+
+🚨 MEMORY LEAK DETECTED at Test Complete:
+   ┌─────────────────────────────────────────────────────────┐
+   │ LEAK SUMMARY                                            │
+   ├─────────────────────────────────────────────────────────┤
+   │ Total Leaks:                 4 allocations                    │
+   │ Current Memory:             16 bytes                         │
+   │ Peak Memory:               28 bytes                         │
+   │ Allocations:                 8                               │
+   │ Deallocations:               4                               │
+   └──────────────�UNHANDLED: UseAfterFreeError: Use-after-free detected! Object 0x102a8f3a0 (type=String) was already freed (rc=0). This indicates the object was released more times than retained, likely due to duplicate AUTORELEASE or incorrect memory management. at src/memory.c:175:0
+�──────────────────────────────────────────┘
+🔍 List: 4 leaks
+/Users/theisen/Projects/tiny-clj/src/tests/unity_test_runner.c:753:all_tests[i].func:PASS
+✅ Test completed: test_symbol_creation
+
+🧪 Running test: test_string_creation
+🔍 Memory profiling enabled (statistics reset)

@@ -165,7 +165,7 @@ TEST(test_map_arity_exception_zero_args) {
         ns_define(st->current_ns, m_sym, (CljObject*)map_obj);
         
         // Try to call map function with 0 arguments: (map)
-        CljObject *result = eval_string("(map)", st);
+        eval_string("(map)", st);
         
         // Should not reach here
         TEST_ASSERT_TRUE_MESSAGE(false, "Should throw ArityException when calling map with 0 args");

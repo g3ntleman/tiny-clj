@@ -216,7 +216,7 @@ char* to_string(CljObject *v) {
                 // Mark transient vectors for debugging
                 if (v->type == CLJ_TRANSIENT_VECTOR) {
                     char *result = ALLOC(char, strlen(s) + 20);
-                    sprintf(result, "<transient %s>", s);
+                    snprintf(result, strlen(s) + 20, "<transient %s>", s);
                     free(s);
                     return result;
                 }
@@ -304,7 +304,7 @@ char* to_string(CljObject *v) {
                 // Mark transient maps for debugging
                 if (v->type == CLJ_TRANSIENT_MAP) {
                     char *result = ALLOC(char, strlen(s) + 20);
-                    sprintf(result, "<transient %s>", s);
+                    snprintf(result, strlen(s) + 20, "<transient %s>", s);
                     free(s);
                     return result;
                 }

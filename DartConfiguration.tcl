@@ -11,7 +11,7 @@ BuildDirectory: /Users/theisen/Projects/tiny-clj
 CostDataFile: 
 
 # Site is something like machine.domain, i.e. pragmatic.crd
-Site: MacBookPro.fritz.box
+Site: MacBook-Pro-von-Dirk-2.local
 
 # Build name is osname-revision-compiler, i.e. Linux-2.4.2-2smp-c++
 BuildName: Darwin-c++
@@ -64,7 +64,7 @@ UpdateType: git
 
 # Compiler info
 Compiler: /usr/bin/c++
-CompilerVersion: 17.0.0.17000013
+CompilerVersion: 17.0.0.17000319
 
 # Dynamic analysis (MemCheck)
 PurifyCommand: 
