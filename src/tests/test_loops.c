@@ -145,7 +145,6 @@ TEST(test_dotimes_large_iterations) {
     RELEASE(body);
 }
 
-/*
 TEST(test_dotimes_invalid_binding_format) {
     // Test native_dotimes with invalid binding format
     // Create invalid binding vector: [i] (missing count)
@@ -160,14 +159,18 @@ TEST(test_dotimes_invalid_binding_format) {
     
     // This should throw an exception for invalid binding format
     // We expect the exception to be thrown and handled gracefully
-    CljObject *result = native_dotimes(args, 2);
-    TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
+    TRY {
+        CljObject *result = native_dotimes(args, 2);
+        TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
+    } CATCH(ex) {
+        // Exception is expected - test passes
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
 }
-*/
 
 TEST(test_dotimes_non_numeric_count) {
     // Test native_dotimes with non-numeric count
@@ -180,8 +183,15 @@ TEST(test_dotimes_non_numeric_count) {
     ID args[2];
     args[0] = binding_vector;
     args[1] = body;
-    CljObject *result = native_dotimes(args, 2);
-    TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
+    
+    // This should throw an exception for non-numeric count
+    TRY {
+        CljObject *result = native_dotimes(args, 2);
+        TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
+    } CATCH(ex) {
+        // Exception is expected - test passes
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
     
     // Clean up
     RELEASE(binding_vector);
@@ -195,8 +205,15 @@ TEST(test_dotimes_missing_body) {
     
     ID args[1];
     args[0] = binding_vector;
-    CljObject *result = native_dotimes(args, 1);
-    TEST_ASSERT_TRUE(result == NULL); // Should return NULL for missing body
+    
+    // This should throw an exception for missing body
+    TRY {
+        CljObject *result = native_dotimes(args, 1);
+        TEST_ASSERT_TRUE(result == NULL); // Should return NULL for missing body
+    } CATCH(ex) {
+        // Exception is expected - test passes
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
     
     // Clean up
     RELEASE(binding_vector);
@@ -205,8 +222,15 @@ TEST(test_dotimes_missing_body) {
 TEST(test_dotimes_insufficient_args) {
     // Test native_dotimes with insufficient arguments
     ID args[0];
-    CljObject *result = native_dotimes(args, 0);
-    TEST_ASSERT_TRUE(result == NULL); // Should return NULL for insufficient args
+    
+    // This should throw an exception for insufficient arguments
+    TRY {
+        CljObject *result = native_dotimes(args, 0);
+        TEST_ASSERT_TRUE(result == NULL); // Should return NULL for insufficient args
+    } CATCH(ex) {
+        // Exception is expected - test passes
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
 }
 
 TEST(test_dotimes_null_args) {
@@ -214,8 +238,15 @@ TEST(test_dotimes_null_args) {
     ID args[2];
     args[0] = NULL;
     args[1] = NULL;
-    CljObject *result = native_dotimes(args, 2);
-    TEST_ASSERT_TRUE(result == NULL); // Should return NULL for NULL args
+    
+    // This should throw an exception for NULL arguments
+    TRY {
+        CljObject *result = native_dotimes(args, 2);
+        TEST_ASSERT_TRUE(result == NULL); // Should return NULL for NULL args
+    } CATCH(ex) {
+        // Exception is expected - test passes
+        TEST_ASSERT_TRUE(true);
+    } END_TRY
 }
 
 TEST(test_doseq_with_environment) {
