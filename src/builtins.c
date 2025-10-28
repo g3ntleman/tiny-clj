@@ -1245,7 +1245,7 @@ ID native_def(ID *args, unsigned int argc) {
     // Evaluate the value expression
     CljObject *value = NULL;
     if (is_type(value_expr, CLJ_LIST)) {
-        value = eval_list(as_list((ID)value_expr), st->current_ns->mappings, st);
+        value = eval_list(as_list((ID)value_expr), (CljMap*)st->current_ns->mappings, st);
     } else {
         value = eval_expr_simple(value_expr, st);
     }

@@ -180,7 +180,7 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         CljValue new_map = map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
         printf("After COW assoc: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(2, map->base.rc);  // Original RC bleibt 2
-        TEST_ASSERT_NOT_EQUAL(map, new_map); // NEUER Pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)map, new_map); // NEUER Pointer!
         
         // Verify original map unchanged
         CljValue val1_orig = map_get((CljValue)map, fixnum(1));
@@ -328,7 +328,7 @@ TEST(test_cow_closure_environment_sharing) {
         CljValue new_env = map_assoc_cow((CljValue)env, intern_symbol_global("y"), fixnum(2));
         printf("After COW closure operation: RC=%d\n", env->base.rc);
         TEST_ASSERT_EQUAL(2, env->base.rc);  // Original unverändert
-        TEST_ASSERT_NOT_EQUAL(env, new_env); // NEUER Pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)env, new_env); // NEUER Pointer!
         
         // Verify original env unchanged
         CljValue orig_x = map_get((CljValue)env, intern_symbol_global("x"));
@@ -431,7 +431,7 @@ TEST(test_cow_actual_cow_demonstration) {
         CljValue new_map = map_assoc_cow((CljValue)map, fixnum(3), fixnum(30));
         printf("After COW: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(2, map->base.rc);
-        TEST_ASSERT_NOT_EQUAL(map, new_map);
+        TEST_ASSERT_NOT_EQUAL((CljValue)map, new_map);
         
         // Verify original unchanged
         CljValue val3_orig = map_get((CljValue)map, fixnum(3));
