@@ -795,7 +795,8 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         
         free_obj_array((CljObject**)args, args_stack);
         
-        return result;
+        // ✅ FIX: Properly manage the result with AUTORELEASE
+        return result ? AUTORELEASE(RETAIN(result)) : NULL;
     }
     
     // If we have a resolved_op but it's not a function, that's an error
@@ -1459,8 +1460,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             strcmp(name, "nth") == 0 || strcmp(name, "first") == 0 ||
             strcmp(name, "rest") == 0 || strcmp(name, "count") == 0 || strcmp(name, "cons") == 0 ||
             strcmp(name, "seq") == 0 || strcmp(name, "next") == 0 || strcmp(name, "list") == 0 ||
-            strcmp(name, "for") == 0 || strcmp(name, "doseq") == 0 || strcmp(name, "dotimes") == 0 ||
-            strcmp(name, "time") == 0) {
+            strcmp(name, "for") == 0 || strcmp(name, "doseq") == 0 || strcmp(name, "dotimes") == 0) {
             return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
     }
@@ -1768,8 +1768,8 @@ ID eval_list_function(CljList *list, CljMap *env) {
     if (!args_list) return NULL;
     
     // Simply return the arguments as a list (they're already evaluated by eval_list)
-    // LIST_REST already returns an autoreleased object, so no need for additional AUTORELEASE
-    return args_list;
+    // ✅ FIX: LIST_REST does NOT return autoreleased object - need to autorelease it
+    return AUTORELEASE(RETAIN(args_list));
 }
 
 ID eval_dotimes(CljList *list, CljMap *env) {
