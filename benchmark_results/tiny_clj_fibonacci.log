@@ -1,5 +1,9 @@
-Führe aus: ../tiny-clj-repl -e "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)"
+Führe aus: ../tiny-clj-repl -f ./fibonacci.clj
 fib
+run-fib-benchmark
+benchmark-fibonacci
+Elapsed time: 0.00 msecs
+6765
 
 🔍 === REPL Memory Profiling Stats ===
 🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0

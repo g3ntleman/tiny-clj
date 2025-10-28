@@ -371,6 +371,11 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
             return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
+        // Skip singletons (rc==0) - they are never freed
+        if (is_singleton(obj)) {
+            return;
+        }
+        
         g_memory_stats.object_destructions++;
         // Track the deallocation size (approximate)
         memory_profiler_track_deallocation(sizeof(CljObject));
@@ -390,6 +395,11 @@ void memory_profiler_track_retain(CljObject *obj) {
             return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
+        // Skip singletons (rc==0) - they don't use retain counting
+        if (is_singleton(obj)) {
+            return;
+        }
+        
         g_memory_stats.retain_calls++;
         
         // Add per-type tracking
@@ -406,6 +416,11 @@ void memory_profiler_track_release(CljObject *obj) {
         // Only track heap objects, not immediate values
         if (is_immediate((CljValue)obj)) {
             return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
+        }
+        
+        // Skip singletons (rc==0) - they don't use retain counting
+        if (is_singleton(obj)) {
+            return;
         }
         
         g_memory_stats.release_calls++;

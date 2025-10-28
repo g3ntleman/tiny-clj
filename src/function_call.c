@@ -923,7 +923,6 @@ static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *
 static CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
     if (op == SYM_FOR) return AUTORELEASE(eval_for(list, env));
     if (op == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
-    if (op == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(list, env));
     return NULL;
 }
 
@@ -950,6 +949,10 @@ static ID call_function_with_args(ID fn, CljList *list, CljMap *env) {
     // Cleanup heap-allocated args if any
     free_obj_array((CljObject**)args, args_stack);
     
+    // AUTORELEASE to ensure result is managed by caller's pool
+    if (result && !IS_IMMEDIATE(result)) {
+        return AUTORELEASE(result);
+    }
     return result;
 }
 
@@ -1111,7 +1114,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Tier 6: Loop operations (for, doseq, dotimes)
-    if (original_op == SYM_FOR || original_op == SYM_DOSEQ || original_op == SYM_DOTIMES) {
+    if (original_op == SYM_FOR || original_op == SYM_DOSEQ) {
         result = eval_loop_dispatch(list, env, original_op);
         return result; // Return even if NULL
     }
@@ -1443,7 +1446,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_CONS && symbol == SYM_CONS) || (SYM_SEQ && symbol == SYM_SEQ) || 
             (SYM_NEXT && symbol == SYM_NEXT) || (SYM_LIST && symbol == SYM_LIST) ||
             (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
-            (SYM_DOTIMES && symbol == SYM_DOTIMES)) {
+            false) {
             return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
         
@@ -1475,10 +1478,10 @@ ID eval_str(CljList *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg_retained(list, 1, env);
-    if (!arg) return AUTORELEASE(make_string_impl(""));
+    if (!arg) return AUTORELEASE(make_string(""));
     
     char *str = pr_str(arg);
-    CljObject *result = AUTORELEASE(make_string_impl(str));
+    CljObject *result = AUTORELEASE(make_string(str));
     free(str);
     return result;
 }
@@ -1770,80 +1773,6 @@ ID eval_list_function(CljList *list, CljMap *env) {
     // Simply return the arguments as a list (they're already evaluated by eval_list)
     // ✅ FIX: LIST_REST does NOT return autoreleased object - need to autorelease it
     return AUTORELEASE(RETAIN(args_list));
-}
-
-ID eval_dotimes(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    // (dotimes [var n] expr)
-    // Executes expr n times with var bound to 0, 1, ..., n-1
-    
-    if (!list) {
-        return NULL;
-    }
-    
-    // Parse arguments directly without evaluation
-    CljList *list_data = as_list((ID)list);
-    if (!list_data->rest) {
-        return NULL;
-    }
-    
-    CljObject *binding_list = list_data->rest && is_type(list_data->rest, CLJ_LIST) ? as_list(list_data->rest)->first : NULL;
-    CljObject *body = list_data->rest && is_type(list_data->rest, CLJ_LIST) && as_list(list_data->rest)->rest && is_type(as_list(list_data->rest)->rest, CLJ_LIST) ? as_list(as_list(list_data->rest)->rest)->first : NULL;
-    
-    if (!binding_list || !is_type(binding_list, CLJ_LIST)) {
-        return NULL;
-    }
-    
-    // Parse binding: [var n]
-    CljList *binding_data = as_list(binding_list);
-    if (!binding_data->first || !binding_data->rest) {
-        return NULL;
-    }
-    
-    CljObject *var = binding_data->first;
-    CljObject *n_expr = binding_data->rest;
-    
-    // Get number of iterations
-    CljList *n_data = as_list(n_expr);
-    if (!n_data->first) {
-        return NULL;
-    }
-    
-    CljObject *n_obj = n_data->first; // Simple: just use the expression directly
-    if (!is_fixnum((CljValue)n_obj)) {
-        RELEASE(n_obj);
-        return NULL;
-    }
-    
-    int n = as_fixnum((CljValue)n_obj);
-    RELEASE(n_obj);
-    
-    // Execute body n times
-    for (int i = 0; i < n; i++) {
-        // Create new environment with binding using map_assoc
-        CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
-        if (new_env) {
-            // Copy existing environment bindings
-            if (env) {
-                // For now, just use the existing environment
-                // TODO: Implement proper environment copying
-            }
-            // Add new binding
-            map_assoc((CljObject*)new_env, var, fixnum(i));
-            
-            // Evaluate body with new binding
-            CljObject *body_result = eval_body_with_env(body, new_env);
-            if (body_result) {
-                RELEASE(body_result);
-            }
-            
-            // Clean up environment
-            RELEASE(new_env);
-        }
-    }
-    
-    return AUTORELEASE(NULL); // dotimes always returns nil
 }
 
 // ============================================================================

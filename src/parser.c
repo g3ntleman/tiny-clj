@@ -124,6 +124,7 @@ static ID parse_meta_map(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
+static ID parse_list_rest(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
@@ -273,7 +274,7 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
         CLJ_ASSERT(eval_state->current_ns != NULL);
         CljObject *env = eval_state->current_ns->mappings;
         result = eval_list(as_list(parsed_expr), (CljMap*)env, eval_state);
-        // eval_list already returns autoreleased object
+        // eval_list returns mixed results - don't autorelease objects we didn't create
     } else {
         // Handle other types with eval_expr_simple
         result = eval_expr_simple(parsed_expr, eval_state);
@@ -315,11 +316,11 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     }
     
     // For heap objects, evaluate them
-    CljObject *result = eval_parsed(parsed, eval_state);
+    ID result = eval_parsed(parsed, eval_state);
     
     // result can be NULL only if the evaluation result is nil
     // If eval_parsed fails, it should throw an exception, not return NULL
-    return (ID)result;
+    return result;
 }
 
 /**
@@ -557,7 +558,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
   buf[pos] = '\0';
   if (!utf8valid(buf))
     return NULL;
-  ID result = AUTORELEASE(make_string_impl(buf));
+  ID result = AUTORELEASE(make_string(buf));
   return result;
 }
 
@@ -642,10 +643,14 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
     // Don't catch exceptions - let them propagate
     result = value_by_parsing_expr(reader, st);
     
-    // Result is already autoreleased by the pool
+    // RETAIN to prevent inner pool from releasing the result
+    if (result && !IS_IMMEDIATE(result)) {
+      RETAIN(result);
+    }
   });
   
-  return result;
+  // AUTORELEASE to transfer ownership to outer pool
+  return AUTORELEASE(result);
 }
 
 /**
@@ -657,20 +662,12 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
 CljValue parse(const char *input, EvalState *st) {
   if (!input || !st) return NULL;
   
-  CljValue result = NULL;
+  Reader reader;
+  reader_init(&reader, input);
   
-  // Create autorelease pool for parse operations
-  WITH_AUTORELEASE_POOL({
-    Reader reader;
-    reader_init(&reader, input);
-    
-    // Delegate to parse_from_reader (DRY principle)
-    result = parse_from_reader(&reader, st);
-    
-    // Result is already autoreleased by the pool
-  });
-  
-  return result;
+  // Delegate to parse_from_reader (DRY principle)
+  // Don't create autorelease pool here - let caller manage memory
+  return parse_from_reader(&reader, st);
 }
 
 

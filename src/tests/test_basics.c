@@ -27,7 +27,7 @@ TEST(test_list_count) {
 
     // Test non-list object (this should not crash)
     // Create a proper CljObject for testing
-    CljObject *int_obj = AUTORELEASE(make_string_impl("42")); // Use string as non-list object
+    CljObject *int_obj = AUTORELEASE(make_string("42")); // Use string as non-list object
     TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)int_obj));
 
     // Test empty list (clj_nil is not a list)
@@ -90,7 +90,7 @@ TEST(test_string_creation) {
     TEST_ASSERT_NOT_NULL(st);
     
     // Test direct string creation
-    CljObject *str = make_string_impl("hello world");
+    CljObject *str = make_string("hello world");
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
     
@@ -386,56 +386,91 @@ TEST(test_load_multiline_file) {
 }
 
 
+// Isolated tests for easier debugging
+TEST(test_first_function) {
+    EvalState *st = evalstate_new();
+    
+    // Test first on vectors (builtin function)
+    CljObject *first_result = eval_string("(first [1 2 3])", st);
+    if (first_result) {
+        TEST_ASSERT_TRUE(is_fixnum(first_result));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
+    }
+    
+    evalstate_free(st);
+}
+
+TEST(test_rest_function) {
+    EvalState *st = evalstate_new();
+    
+    // Test rest on vectors (builtin function)
+    CljObject *rest_test = eval_string("(rest [1 2 3])", st);
+    if (rest_test) {
+        TEST_ASSERT_NOT_NULL(rest_test);
+        TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
+    }
+    
+    evalstate_free(st);
+}
+
+TEST(test_cons_function) {
+    EvalState *st = evalstate_new();
+    
+    // Test cons (builtin function)
+    CljObject *cons_test = eval_string("(cons 1 '(2 3))", st);
+    if (cons_test) {
+        TEST_ASSERT_NOT_NULL(cons_test);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, cons_test->type);
+    }
+    
+    evalstate_free(st);
+}
+
+TEST(test_count_vector) {
+    EvalState *st = evalstate_new();
+    
+    // Test count on vector
+    CljObject *count_result = eval_string("(count [1 2 3 4])", st);
+    if (count_result) {
+        TEST_ASSERT_TRUE(is_fixnum(count_result));
+        TEST_ASSERT_EQUAL_INT(4, as_fixnum(count_result));
+    }
+    
+    evalstate_free(st);
+}
+
+TEST(test_count_list) {
+    EvalState *st = evalstate_new();
+    
+    // Test count on list
+    CljObject *list_count_result = eval_string("(count (list 1 2 3))", st);
+    if (list_count_result) {
+        TEST_ASSERT_TRUE(is_fixnum(list_count_result));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_count_result));
+    }
+    
+    evalstate_free(st);
+}
+
+TEST(test_count_string) {
+    EvalState *st = evalstate_new();
+    
+    // Test count on string
+    CljObject *string_count_result = eval_string("(count \"hello\")", st);
+    if (string_count_result) {
+        TEST_ASSERT_TRUE(is_fixnum(string_count_result));
+        TEST_ASSERT_EQUAL_INT(5, as_fixnum(string_count_result));
+    }
+    
+    evalstate_free(st);
+}
+
 TEST(test_map_function) {
     // Test the map higher-order function
     // NOTE: map needs to be implemented as a builtin function
     // This test is currently a placeholder that verifies the system is ready for map
     {
         EvalState *st = evalstate_new();
-        
-        // Test 1: Verify that builtin functions work (these are needed for map)
-        // Test first on vectors (builtin function)
-        CljObject *first_result = eval_string("(first [1 2 3])", st);
-        if (first_result) {
-            TEST_ASSERT_TRUE(is_fixnum(first_result));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
-        }
-        
-        // Test rest on vectors (builtin function)
-        CljObject *rest_test = eval_string("(rest [1 2 3])", st);
-        if (rest_test) {
-            TEST_ASSERT_NOT_NULL(rest_test);
-            TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
-        }
-        
-        // Test cons (builtin function)
-        CljObject *cons_test = eval_string("(cons 1 '(2 3))", st);
-        if (cons_test) {
-            TEST_ASSERT_NOT_NULL(cons_test);
-            TEST_ASSERT_EQUAL_INT(CLJ_LIST, cons_test->type);
-        }
-        
-        // Test count (builtin function) - comprehensive tests for all container types
-        // Test vector count
-        CljObject *count_result = eval_string("(count [1 2 3 4])", st);
-        if (count_result) {
-            TEST_ASSERT_TRUE(is_fixnum(count_result));
-            TEST_ASSERT_EQUAL_INT(4, as_fixnum(count_result));
-        }
-        
-        // Test list count
-        CljObject *list_count_result = eval_string("(count (list 1 2 3))", st);
-        if (list_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum(list_count_result));
-            TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_count_result));
-        }
-        
-        // Test string count
-        CljObject *string_count_result = eval_string("(count \"hello\")", st);
-        if (string_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum(string_count_result));
-            TEST_ASSERT_EQUAL_INT(5, as_fixnum(string_count_result));
-        }
         
         // Test map count
         CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", st);

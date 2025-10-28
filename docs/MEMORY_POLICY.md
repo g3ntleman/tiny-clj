@@ -53,6 +53,25 @@ CljObject *list = autorelease(make_list());
 // Objects automatically freed at test end - no manual cleanup needed
 ```
 
+**Important:** The `TEST()` macro already creates an autorelease pool automatically. You do **NOT** need to wrap test code with `WITH_AUTORELEASE_POOL`:
+
+```c
+// ✅ CORRECT: TEST macro provides autorelease pool automatically
+TEST(test_something) {
+    CljObject *vec = autorelease(make_vector(3, 1));
+    CljObject *list = autorelease(make_list());
+    // Objects automatically freed - no manual cleanup needed
+}
+
+// ❌ REDUNDANT: Don't wrap TEST code with WITH_AUTORELEASE_POOL
+TEST(test_something) {
+    WITH_AUTORELEASE_POOL({  // ❌ UNNECESSARY: TEST already provides pool
+        CljObject *vec = autorelease(make_vector(3, 1));
+        CljObject *list = autorelease(make_list());
+    });
+}
+```
+
 #### Production Code Pattern (Performance)
 ```c
 // Use explicit release() for performance-critical code

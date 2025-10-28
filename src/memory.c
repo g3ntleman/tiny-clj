@@ -114,23 +114,12 @@ static void release_object_deep(CljObject *v);
  * also ignored to prevent reference counting issues.
  */
 void retain(CljObject *v) {
-    if (!v) return;
-    
-    // Safety check: ensure the pointer is valid and points to a valid object
-    // Check if the pointer is in a reasonable memory range (not in zero page)
-    if ((uintptr_t)v < 0x1000) {
-        return;
+    // Happy path: valid object that tracks retains
+    if (v && (uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
+        // Track retain call for profiling
+        memory_profiler_track_retain(v);
+        v->rc++;
     }
-    
-    // Track retain call for profiling
-    memory_profiler_track_retain(v);
-    
-    // Skip singletons (they don't use retain counting)
-    if (!TRACKS_RETAINS(v)) {
-        return;
-    }
-    
-    v->rc++;
 }
 
 /** @brief Decrement reference count and free if zero

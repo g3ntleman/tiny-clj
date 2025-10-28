@@ -1,5 +1,13 @@
-Führe aus: ../tiny-clj-repl -e "(defn add [a b] (+ a b)) (add (add 1 2) (add 3 4))"
+Führe aus: ../tiny-clj-repl -f ./function_call_performance.clj
 add
+multiply
+subtract
+test-function-calls
+test-nested-function-calls
+run-function-calls-benchmark
+benchmark-function-calls
+Elapsed time: 0.00 msecs
+18
 
 🔍 === REPL Memory Profiling Stats ===
 🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0

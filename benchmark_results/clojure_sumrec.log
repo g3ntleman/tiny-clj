@@ -1,4 +1,4 @@
-Führe aus: clojure -e "(defn sum-rec [n] (if (<= n 0) 0 (+ n (sum-rec (- n 1))))) (sum-rec 100)"
-WARNING: Implicit use of clojure.main with options is deprecated, use -M -e (defn sum-rec [n] (if (<= n 0) 0 (+ n (sum-rec (- n 1))))) (sum-rec 100)
-#'user/sum-rec
-5050
+Führe aus: clojure ./sum_rec.clj
+WARNING: Implicit use of clojure.main with options is deprecated, use -M ./sum_rec.clj
+Running sum-rec benchmark...
+"Elapsed time: 26.88 msecs"

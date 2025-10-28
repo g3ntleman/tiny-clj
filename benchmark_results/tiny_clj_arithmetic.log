@@ -1,5 +1,10 @@
-Führe aus: ../tiny-clj-repl -e "(+ 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)"
-210
+Führe aus: ../tiny-clj-repl -f ./arithmetic_performance.clj
+test-arithmetic
+test-complex-arithmetic
+run-arithmetic-benchmark
+benchmark-arithmetic
+Elapsed time: 0.00 msecs
+3
 
 🔍 === REPL Memory Profiling Stats ===
 🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0

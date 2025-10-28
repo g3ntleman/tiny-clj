@@ -12,5 +12,21 @@
     (+ (fib (- n 1)) (fib (- n 2)))))
 
 ;; === Benchmark Execution ===
-;; Calculate fibonacci(20) - small enough for reasonable execution time
-(println "fibonacci(20):" (fib 20))
+;; Manual repetition for execution time measurement
+(defn run-fib-benchmark []
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
+  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20))
+
+(defn benchmark-fibonacci []
+  (println "Running fibonacci benchmark...")
+  (time (run-fib-benchmark)))
+
+(benchmark-fibonacci)

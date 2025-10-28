@@ -110,7 +110,7 @@ TEST(test_exception_with_autorelease) {
     TRY {
         // Create some objects that should be cleaned up
         CljObject *obj1 = fixnum(42);
-        CljValue obj2 = make_string_impl("test");
+        CljValue obj2 = make_string("test");
         TEST_ASSERT_NOT_NULL(obj1);
         TEST_ASSERT_NOT_NULL(obj2);
         
@@ -133,7 +133,7 @@ TEST(test_repl_crash_scenario) {
     TRY {
         // Create some objects that will be in the autorelease pool
         // CljObject *obj1 = fixnum(42); // Unused variable removed
-        // CljValue obj2 = make_string_impl("test"); // Unused variable removed
+        // CljValue obj2 = make_string("test"); // Unused variable removed
         // CljObject *obj3 = AUTORELEASE(make_symbol_impl("test", NULL)); // Unused variable removed
         
         // Throw exception - this should cause memory corruption

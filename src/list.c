@@ -72,7 +72,7 @@ CljValue make_list_from_stack(CljValue *stack, int count) {
     for (int i = count - 1; i >= 0; i--) {
         CljObject *element = stack[i];
         CljObject *new_node = make_list(element, (CljList*)result);
-        if (element) RETAIN(element);
+        // ✅ FIX: make_list already does RETAIN, no need to do it again
         result = new_node;
     }
     return (CljValue)result;

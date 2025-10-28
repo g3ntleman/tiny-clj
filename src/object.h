@@ -73,20 +73,14 @@ struct CljObject {
 
 // Check if an object is a singleton (should not be reference counted)
 static inline bool is_singleton(CljObject *obj) {
-    // Handle nil (represented as NULL) - it's a singleton!
-    if (!obj) return true;
+    // Happy path: valid object that is NOT a singleton
+    if (obj && (uintptr_t)obj >= 0x1000 && !IS_SINGLETON_TYPE(obj->type) && 
+        !(obj->rc == 0 && (obj->type == CLJ_MAP || obj->type == CLJ_LIST || obj->type == CLJ_STRING || obj->type == CLJ_VECTOR))) {
+        return false;
+    }
     
-    // Safety check: ensure the pointer is valid and points to a valid object
-    // Check if the pointer is in a reasonable memory range (not in zero page)
-    if ((uintptr_t)obj < 0x1000) return false;
-    
-    // Standard singleton types
-    if (IS_SINGLETON_TYPE(obj->type)) return true;
-    
-    // Special case: empty collection singletons (rc == 0)
-    if (obj->rc == 0 && (obj->type == CLJ_MAP || obj->type == CLJ_LIST || obj->type == CLJ_STRING || obj->type == CLJ_VECTOR)) return true;
-    
-    return false;
+    // All other cases are singletons
+    return true;
 }
 
 // Struct definitions moved to specific headers:

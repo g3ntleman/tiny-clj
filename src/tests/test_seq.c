@@ -54,7 +54,7 @@ TEST(test_seq_create_string) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test string
-        CljValue str = make_string_impl("hello");
+        CljValue str = make_string("hello");
         TEST_ASSERT_NOT_NULL(str);
         
         // Create sequence iterator

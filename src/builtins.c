@@ -32,7 +32,7 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
 #ifdef DEBUG
         char error_msg[128];
         snprintf(error_msg, sizeof(error_msg), "%s requires exactly %u arguments", func_name, expected);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg, __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_TYPE_ARITY, error_msg, __FILE__, __LINE__, 0);
 #else
         (void)func_name; // Suppress unused parameter warning in release builds
 #endif
@@ -591,7 +591,7 @@ static int32_t fixnum_to_fixed(int fixnum) {
 // String concatenation (variadic)
 ID native_str(ID *args, unsigned int argc) {
     if (argc == 0) {
-        return (make_string_impl(""));
+        return (make_string(""));
     }
     
     // Calculate total length
@@ -606,7 +606,7 @@ ID native_str(ID *args, unsigned int argc) {
     
     // Allocate buffer
     char *buffer = ALLOC(char, total_len + 1);
-    if (!buffer) return make_string_impl("");
+    if (!buffer) return make_string("");
     buffer[0] = '\0';
     
     // Concatenate all strings
@@ -618,7 +618,7 @@ ID native_str(ID *args, unsigned int argc) {
         }
     }
     
-    CljObject *result = make_string_impl(buffer);
+    CljObject *result = make_string(buffer);
     free(buffer);
     return result;
 }

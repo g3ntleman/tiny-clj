@@ -232,7 +232,7 @@ add_executable(unity-tests
     src/tests/test_do.c
     src/tests/test_defn.c
     src/tests/test_time.c
-    src/tests/test_for_loop.c
+    src/tests/test_loops.c
     src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
     src/tests/test_sequences.c

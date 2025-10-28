@@ -60,4 +60,7 @@ ID native_sleep(ID *args, unsigned int argc);
 ID native_def(ID *args, unsigned int argc);
 ID native_ns(ID *args, unsigned int argc);
 
+// Loop constructs converted to builtins
+ID native_dotimes(ID *args, unsigned int argc);
+
 #endif

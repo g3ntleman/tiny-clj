@@ -114,6 +114,9 @@ extern GlobalExceptionStack global_exception_stack;
 #define END_TRY \
         } \
         /* Exception manually released */ \
+        if (ex) { \
+            RELEASE((CljObject*)ex); \
+        } \
     } \
 }
 

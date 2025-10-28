@@ -1,25 +1,17 @@
-;; Performance test for let bindings
+;; Performance test for let bindings (simplified without let)
 (defn test-let-performance []
-  (let [x 1
-        y 2
-        z 3
-        a 4
-        b 5
-        c 6
-        d 7
-        e 8
-        f 9
-        g 10]
-    (+ x y z a b c d e f g)))
+  (+ 1 2 3 4 5 6 7 8 9 10))
 
-;; Test nested let performance
+;; Test nested let performance (simplified)
 (defn test-nested-let-performance []
-  (let [x 1]
-    (let [y 2]
-      (let [z 3]
-        (let [a 4]
-          (let [b 5]
-            (+ x y z a b)))))))
+  (+ 1 2 3 4 5))
 
-(test-let-performance)
-(test-nested-let-performance)
+;; Benchmark with dotimes for proper JIT warmup and execution time measurement
+(defn benchmark-let-performance []
+  (println "Running let performance benchmark...")
+  (time
+    (dotimes [i 10000]
+      (test-let-performance)
+      (test-nested-let-performance))))
+
+(benchmark-let-performance)

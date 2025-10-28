@@ -23,51 +23,32 @@ mkdir -p "$RESULTS_DIR"
 echo -e "${BLUE}🚀 Benchmark Runner für tiny-clj vs Standard Clojure${NC}"
 echo "=================================================="
 
-# Funktion zum Messen der Zeit (macOS-kompatibel)
-measure_time() {
+# Funktion zum Messen der Execution-Zeit aus den Log-Dateien
+measure_execution_time() {
     local command="$1"
     local description="$2"
     local output_file="$3"
     
     echo -e "${YELLOW}⏱️  Messe: $description${NC}"
     
-    # macOS time command hat andere Syntax - verwende gtime wenn verfügbar, sonst fallback
-    if command -v gtime &> /dev/null; then
-        # GNU time verfügbar
-        gtime -f "%e %U %S %M" -o "$output_file.tmp" timeout "$TIMEOUT_SECONDS" bash -c "$command" 2>&1 | tee "$output_file.log"
-    else
-        # Fallback: verwende einfaches time und parse Output
-        echo "Führe aus: $command" > "$output_file.log"
-        start_time=$(date +%s)
-        timeout "$TIMEOUT_SECONDS" bash -c "$command" >> "$output_file.log" 2>&1
-        exit_code=$?
-        end_time=$(date +%s)
-        
-        # Berechne elapsed time (einfache Sekunden)
-        elapsed=$(echo "$end_time - $start_time" | bc -l)
-        
-        # Schreibe einfache Zeit-Daten
-        echo "$elapsed 0 0 0" > "$output_file.tmp"
-    fi
+    # Führe den Befehl aus und speichere die Ausgabe
+    echo "Führe aus: $command" > "$output_file.log"
+    timeout "$TIMEOUT_SECONDS" bash -c "$command" >> "$output_file.log" 2>&1
     
-    # Parse die Zeit-Ergebnisse
-    if [ -f "$output_file.tmp" ]; then
-        local real_time=$(awk '{print $1}' "$output_file.tmp")
-        local user_time=$(awk '{print $2}' "$output_file.tmp")
-        local sys_time=$(awk '{print $3}' "$output_file.tmp")
-        local max_memory=$(awk '{print $4}' "$output_file.tmp")
-        
-        echo "$description,$real_time,$user_time,$sys_time,$max_memory" >> "$RESULTS_DIR/timing_results.csv"
-        echo -e "${GREEN}✅ $description: ${real_time}s (User: ${user_time}s, Sys: ${sys_time}s, Memory: ${max_memory}KB)${NC}"
-    else
-        echo -e "${RED}❌ Fehler beim Messen von $description${NC}"
-    fi
+    # Extrahiere die Execution-Zeit aus der Ausgabe
+    local execution_time=$(grep "Elapsed time:" "$output_file.log" | sed 's/.*Elapsed time: \([0-9.]*\) msecs.*/\1/' | head -1)
     
-    rm -f "$output_file.tmp"
+    if [ -n "$execution_time" ]; then
+        echo "$description,$execution_time,0,0,0" >> "$RESULTS_DIR/timing_results.csv"
+        echo -e "${GREEN}✅ $description: ${execution_time}ms (Execution time only)${NC}"
+    else
+        echo -e "${RED}❌ Konnte Execution-Zeit für $description nicht extrahieren${NC}"
+        echo "$description,0,0,0,0" >> "$RESULTS_DIR/timing_results.csv"
+    fi
 }
 
 # CSV-Header schreiben
-echo "Benchmark,Real_Time,User_Time,Sys_Time,Max_Memory_KB" > "$RESULTS_DIR/timing_results.csv"
+echo "Benchmark,Execution_Time_ms,User_Time_ms,Sys_Time_ms,Max_Memory_KB" > "$RESULTS_DIR/timing_results.csv"
 
 # Prüfe ob Standard Clojure verfügbar ist
 if command -v clojure &> /dev/null; then
@@ -94,12 +75,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 1: Fibonacci (fib 20)${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_time "clojure $BENCHMARK_DIR/fibonacci.clj" "Clojure-Fibonacci" "$RESULTS_DIR/clojure_fibonacci"
+    measure_execution_time "clojure $BENCHMARK_DIR/fibonacci.clj" "Clojure-Fibonacci" "$RESULTS_DIR/clojure_fibonacci"
 fi
 
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    # Verwende den funktionierenden Code ohne Kommentare
-    measure_time "../tiny-clj-repl -e \"(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)\"" "tiny-clj-Fibonacci" "$RESULTS_DIR/tiny_clj_fibonacci"
+    measure_execution_time "../tiny-clj-repl -f ./fibonacci.clj" "tiny-clj-Fibonacci" "$RESULTS_DIR/tiny_clj_fibonacci"
 fi
 
 echo ""
@@ -108,11 +88,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 2: Sum Recursive (sum-rec 100)${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_time "clojure -e \"(defn sum-rec [n] (if (<= n 0) 0 (+ n (sum-rec (- n 1))))) (sum-rec 100)\"" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
+    measure_execution_time "clojure ./sum_rec.clj" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
 fi
 
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_time "../tiny-clj-repl -e \"(defn sum-rec [n] (if (<= n 0) 0 (+ n (sum-rec (- n 1))))) (sum-rec 100)\"" "tiny-clj-SumRec" "$RESULTS_DIR/tiny_clj_sumrec"
+    measure_execution_time "../tiny-clj-repl -f ./sum_rec.clj" "tiny-clj-SumRec" "$RESULTS_DIR/tiny_clj_sumrec"
 fi
 
 echo ""
@@ -121,11 +101,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 3: Let Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_time "clojure -e \"(let [x 1 y 2 z 3 a 4 b 5 c 6 d 7 e 8 f 9 g 10] (+ x y z a b c d e f g))\"" "Clojure-Let" "$RESULTS_DIR/clojure_let"
+    measure_execution_time "clojure ./let_performance.clj" "Clojure-Let" "$RESULTS_DIR/clojure_let"
 fi
 
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_time "../tiny-clj-repl -e \"(let [x 1 y 2 z 3 a 4 b 5 c 6 d 7 e 8 f 9 g 10] (+ x y z a b c d e f g))\"" "tiny-clj-Let" "$RESULTS_DIR/tiny_clj_let"
+    measure_execution_time "../tiny-clj-repl -f ./let_performance.clj" "tiny-clj-Let" "$RESULTS_DIR/tiny_clj_let"
 fi
 
 echo ""
@@ -134,11 +114,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 4: Arithmetic Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_time "clojure -e \"(reduce + (range 1000))\"" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
+    measure_execution_time "clojure ./arithmetic_performance.clj" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
 fi
 
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_time "../tiny-clj-repl -e \"(+ 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20)\"" "tiny-clj-Arithmetic" "$RESULTS_DIR/tiny_clj_arithmetic"
+    measure_execution_time "../tiny-clj-repl -f ./arithmetic_performance.clj" "tiny-clj-Arithmetic" "$RESULTS_DIR/tiny_clj_arithmetic"
 fi
 
 echo ""
@@ -147,11 +127,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 5: Function Call Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_time "clojure -e \"(defn add [a b] (+ a b)) (reduce add (range 100))\"" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
+    measure_execution_time "clojure ./function_call_performance.clj" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
 fi
 
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_time "../tiny-clj-repl -e \"(defn add [a b] (+ a b)) (add (add 1 2) (add 3 4))\"" "tiny-clj-FunctionCalls" "$RESULTS_DIR/tiny_clj_functioncalls"
+    measure_execution_time "../tiny-clj-repl -f ./function_call_performance.clj" "tiny-clj-FunctionCalls" "$RESULTS_DIR/tiny_clj_functioncalls"
 fi
 
 echo ""

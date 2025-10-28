@@ -360,8 +360,6 @@ void init_special_symbols() {
     symbol_table_add(NULL, "doseq", SYM_DOSEQ);
     
     sym_dotimes_data.sym.name = strdup("dotimes");
-    SYM_DOTIMES = (CljObject*)&sym_dotimes_data;
-    symbol_table_add(NULL, "dotimes", SYM_DOTIMES);
     
     // Keywords - static structs with symbol table registration
     SYM_KW_LINE = (CljObject*)&sym_kw_line_data;

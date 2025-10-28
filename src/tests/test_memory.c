@@ -21,7 +21,7 @@ TEST(test_memory_allocation) {
         // Test basic object creation
         CljObject *int_obj = fixnum(42);
         CljObject *float_obj = fixed(3.14f);
-        CljValue str_obj = make_string_impl("hello");
+        CljValue str_obj = make_string("hello");
         
         TEST_ASSERT_NOT_NULL(int_obj);
         TEST_ASSERT_NOT_NULL(float_obj);
@@ -45,7 +45,7 @@ TEST(test_memory_deallocation) {
     {
         // Test object lifecycle with heap-allocated object (not immediate)
         // Use a string object since symbols are singletons and don't use reference counting
-        CljObject *obj = make_string_impl("test_string_for_reference_counting");
+        CljObject *obj = make_string("test_string_for_reference_counting");
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting
@@ -120,8 +120,8 @@ TEST(test_autorelease_pool_basic) {
     // the test framework may have active pools
     WITH_AUTORELEASE_POOL({
         // Create some objects that should be autoreleased
-        CljObject *str1 = (CljObject*)make_string_impl("test1");
-        CljObject *str2 = (CljObject*)make_string_impl("test2");
+        CljObject *str1 = (CljObject*)make_string("test1");
+        CljObject *str2 = (CljObject*)make_string("test2");
         CljObject *list = (CljObject*)make_list((ID)str1, (CljList*)str2);
         
         TEST_ASSERT_NOT_NULL(str1);
@@ -147,11 +147,11 @@ TEST(test_autorelease_pool_basic) {
 TEST(test_autorelease_pool_nested) {
     // Test nested autorelease pools
     WITH_AUTORELEASE_POOL({
-        CljObject *outer_str = (CljObject*)make_string_impl("outer");
+        CljObject *outer_str = (CljObject*)make_string("outer");
         TEST_ASSERT_NOT_NULL(outer_str);
         
         WITH_AUTORELEASE_POOL({
-            CljObject *inner_str = (CljObject*)make_string_impl("inner");
+            CljObject *inner_str = (CljObject*)make_string("inner");
             CljObject *inner_list = (CljObject*)make_list(inner_str, NULL);
             
             TEST_ASSERT_NOT_NULL(inner_str);
@@ -212,7 +212,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
         for (int i = 0; i < 10; i++) {
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "test_string_%d", i);
-            CljObject *str = (CljObject*)make_string_impl(buffer);
+            CljObject *str = (CljObject*)make_string(buffer);
             TEST_ASSERT_NOT_NULL(str);
             
             // Add to autorelease pool
@@ -224,7 +224,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
         for (int i = 0; i < 5; i++) {
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "list_item_%d", i);
-            CljObject *str = (CljObject*)make_string_impl(buffer);
+            CljObject *str = (CljObject*)make_string(buffer);
             list = (CljObject*)make_list((ID)str, (CljList*)list);
             AUTORELEASE(str);
         }

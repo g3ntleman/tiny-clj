@@ -1,4 +1,4 @@
-Führe aus: clojure -e "(defn add [a b] (+ a b)) (reduce add (range 100))"
-WARNING: Implicit use of clojure.main with options is deprecated, use -M -e (defn add [a b] (+ a b)) (reduce add (range 100))
-#'user/add
-4950
+Führe aus: clojure ./function_call_performance.clj
+WARNING: Implicit use of clojure.main with options is deprecated, use -M ./function_call_performance.clj
+Running function call performance benchmark...
+"Elapsed time: 0.108166 msecs"
