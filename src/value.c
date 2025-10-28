@@ -55,7 +55,7 @@ CljValue fixed(float value) {
  * @param str String to create
  * @return CljValue string object
  */
-CljValue make_string_impl(const char *str) {
+CljValue make_string(const char *str) {
     if (!str || str[0] == '\0') {
         return (CljValue)empty_string_singleton;
     }

@@ -793,7 +793,7 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
-    CljObject *new_env = make_map(4);
+    CljMap *new_env = make_map(4);
     
     return (id)new_env;
 }

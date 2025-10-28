@@ -4,6 +4,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <stdio.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -25,9 +26,23 @@
 #include "strings.h"
 #include "parser.h"
 
+// Helper function to validate builtin arguments (DRY principle)
+static bool validate_builtin_args(unsigned int argc, unsigned int expected, const char *func_name) {
+    if (argc != expected) {
+#ifdef DEBUG
+        char error_msg[128];
+        snprintf(error_msg, sizeof(error_msg), "%s requires exactly %u arguments", func_name, expected);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg, __FILE__, __LINE__, 0);
+#else
+        (void)func_name; // Suppress unused parameter warning in release builds
+#endif
+        return false;
+    }
+    return true;
+}
 
 ID nth2(ID *args, unsigned int argc) {
-    if (argc != 2) return NULL;
+    if (!validate_builtin_args(argc, 2, "nth")) return NULL;
     ID vec = args[0];
     ID idx = args[1];
     if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return (NULL);
@@ -41,7 +56,7 @@ ID nth2(ID *args, unsigned int argc) {
 ID conj2(ID vec, ID val);
 
 ID conj2_wrapper(ID *args, int argc) {
-    if (argc != 2) return NULL;
+    if (!validate_builtin_args(argc, 2, "conj")) return NULL;
     return conj2(args[0], args[1]);
 }
 
@@ -123,12 +138,7 @@ ID native_conj(ID *args, unsigned int argc) {
 ID native_first(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ARITY, 
-                        "Wrong number of args passed to: first", 
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "first")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) {
@@ -156,12 +166,7 @@ ID native_first(ID *args, unsigned int argc) {
 ID native_rest(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ARITY, 
-                        "Wrong number of args (0) passed to: rest", 
-                        __FILE__, __LINE__, 0);
-        return (NULL);
-    }
+    if (!validate_builtin_args(argc, 1, "rest")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) {
@@ -210,12 +215,7 @@ ID native_rest(ID *args, unsigned int argc) {
 ID native_cons(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (argc != 2) {
-        throw_exception("ArityException",
-                        "Wrong number of args passed to: cons",
-                        __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 2, "cons")) return NULL;
     
     CljObject *elem = args[0];
     CljObject *coll = args[1];
@@ -251,7 +251,7 @@ ID native_cons(ID *args, unsigned int argc) {
 }
 
 ID assoc3(ID *args, unsigned int argc) {
-    if (argc != 3) return (NULL);
+    if (!validate_builtin_args(argc, 3, "assoc")) return NULL;
     CljObject *vec = args[0];
     CljObject *idx = args[1];
     CljObject *val = args[2];
@@ -280,7 +280,7 @@ ID assoc3(ID *args, unsigned int argc) {
 
 // Transient functions
 ID native_transient(ID *args, unsigned int argc) {
-    if (argc != 1) return (NULL);
+    if (!validate_builtin_args(argc, 1, "transient")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) return (NULL);
@@ -302,7 +302,7 @@ ID native_transient(ID *args, unsigned int argc) {
 }
 
 ID native_persistent(ID *args, unsigned int argc) {
-    if (argc != 1) return (NULL);
+    if (!validate_builtin_args(argc, 1, "persistent!")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) return (NULL);
@@ -350,7 +350,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
 }
 
 ID native_get(ID *args, unsigned int argc) {
-    if (argc != 2) return NULL;
+    if (!validate_builtin_args(argc, 2, "get")) return NULL;
     CljObject *map = (CljObject*)args[0];
     CljObject *key = (CljObject*)args[1];
     if (!map || !key) return (NULL);
@@ -365,7 +365,7 @@ ID native_get(ID *args, unsigned int argc) {
 ID native_count(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (argc != 1) return (NULL);
+    if (!validate_builtin_args(argc, 1, "count")) return NULL;
     CljObject *coll = args[0];
     if (!coll) return (NULL);
     
@@ -389,7 +389,7 @@ ID native_count(ID *args, unsigned int argc) {
 }
 
 ID native_keys(ID *args, unsigned int argc) {
-    if (argc != 1) return (NULL);
+    if (!validate_builtin_args(argc, 1, "keys")) return NULL;
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
@@ -401,7 +401,7 @@ ID native_keys(ID *args, unsigned int argc) {
 }
 
 ID native_vals(ID *args, unsigned int argc) {
-    if (argc != 1) return (NULL);
+    if (!validate_builtin_args(argc, 1, "vals")) return NULL;
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
@@ -425,7 +425,7 @@ ID native_if(ID *args, unsigned int argc) {
 }
 
 ID native_type(ID *args, unsigned int argc) {
-    if (argc != 1) return (NULL);
+    if (!validate_builtin_args(argc, 1, "type")) return NULL;
     CljObject *obj = (CljObject*)args[0];
     if (!obj) return ((CljObject*)intern_symbol_global("nil"));
     
@@ -882,11 +882,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
 // ============================================================================
 
 ID native_byte_array(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "byte-array requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "byte-array")) return NULL;
     
     // If argument is a fixnum, create array with that size
     if (IS_FIXNUM(args[0])) {
@@ -938,11 +934,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
 }
 
 ID native_aget(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aget requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 2, "aget")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
@@ -963,11 +955,7 @@ ID native_aget(ID *args, unsigned int argc) {
 }
 
 ID native_aset(ID *args, unsigned int argc) {
-    if (argc != 3) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aset requires exactly 3 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 3, "aset")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
@@ -1002,11 +990,7 @@ ID native_aset(ID *args, unsigned int argc) {
 }
 
 ID native_alength(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "alength requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "alength")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
@@ -1020,11 +1004,7 @@ ID native_alength(ID *args, unsigned int argc) {
 }
 
 ID native_aclone(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aclone requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "aclone")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
@@ -1084,11 +1064,7 @@ ID native_ge(ID *args, unsigned int argc) {
 }
 
 ID native_eq(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "= requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 2, "=")) return NULL;
     
     CljObject *a = (CljObject*)args[0];
     CljObject *b = (CljObject*)args[1];
@@ -1123,11 +1099,7 @@ ID native_eq(ID *args, unsigned int argc) {
 }
 
 ID native_time(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "time requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "time")) return NULL;
     
     // Start timing (Clojure-compatible: capture start time)
     struct timeval start, end;
@@ -1193,11 +1165,7 @@ ID native_time_micro(ID *args, unsigned int argc) {
 
 // Native sleep implementation
 ID native_sleep(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "sleep requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "sleep")) return NULL;
     
     // Get the sleep duration in seconds
     CljObject *duration_obj = args[0];
@@ -1219,11 +1187,7 @@ ID native_sleep(ID *args, unsigned int argc) {
 
 // Native def implementation (converted from special form)
 ID native_def(ID *args, unsigned int argc) {
-    if (argc != 2) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "def requires exactly 2 arguments",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 2, "def")) return NULL;
     
     EvalState *st = evalstate();
     if (!st) {
@@ -1273,11 +1237,7 @@ ID native_def(ID *args, unsigned int argc) {
 
 // Native ns implementation (converted from special form)
 ID native_ns(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "ns requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!validate_builtin_args(argc, 1, "ns")) return NULL;
     
     EvalState *st = evalstate();
     if (!st) {
@@ -1328,6 +1288,74 @@ ID native_do(ID *args, unsigned int argc) {
     }
     
     return NULL;
+}
+
+// dotimes: Execute expression n times with variable bound to 0, 1, ..., n-1
+ID native_dotimes(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "dotimes")) {
+        return NULL;
+    }
+    
+    // args[0] should be the binding vector [var n]
+    // args[1] should be the body expression
+    CljObject *binding_vector = args[0];
+    CljObject *body = args[1];
+    
+    if (!binding_vector || !is_type(binding_vector, CLJ_LIST)) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes binding must be a vector",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Parse binding vector: [var n]
+    CljList *binding_data = as_list(binding_vector);
+    if (!binding_data->first || !binding_data->rest) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes binding must have exactly 2 elements",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *var = binding_data->first;
+    CljObject *n_obj = binding_data->rest;
+    
+    // Get the count from the second element of the binding vector
+    CljList *count_data = as_list(n_obj);
+    if (!count_data->first) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes count must be a number",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *count_value = count_data->first;
+    if (!is_fixnum((CljValue)count_value)) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes count must be a fixnum",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int n = as_fixnum((CljValue)count_value);
+    
+    // Execute body n times
+    EvalState *st = evalstate();
+    for (int i = 0; i < n; i++) {
+        // Create new environment with binding
+        CljMap *new_env = (CljMap*)make_map(1);
+        if (new_env) {
+            // Add new binding: var -> i
+            map_assoc((CljObject*)new_env, var, fixnum(i));
+            
+            // Evaluate body with new binding
+            CljObject *body_result = eval_body(body, new_env, st);
+            if (body_result) {
+                RELEASE(body_result);
+            }
+            
+            // Clean up environment
+            RELEASE(new_env);
+        }
+    }
+    
+    return NULL; // dotimes always returns nil
 }
 
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
@@ -1392,6 +1420,9 @@ void register_builtins() {
     
     // Control flow functions
     register_builtin_in_namespace("do", native_do);
+    
+    // Loop constructs
+    register_builtin_in_namespace("dotimes", native_dotimes);
     
     // Byte array functions
     register_builtin_in_namespace("byte-array", native_byte_array);

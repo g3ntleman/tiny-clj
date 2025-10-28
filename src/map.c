@@ -24,9 +24,9 @@ static CljMap *clj_empty_map_singleton = (CljMap*)&clj_empty_map_singleton_data;
 // === CljValue API (Phase 1: Parallel) ===
 
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
-CljObject* make_map(int capacity) {
+CljMap* make_map(int capacity) {
   if (capacity <= 0) {
-    return (CljObject*)clj_empty_map_singleton;
+    return clj_empty_map_singleton;
   }
   
   // Allocate struct + data array in ONE malloc
@@ -49,30 +49,30 @@ CljObject* make_map(int capacity) {
     map->data[i] = NULL;
   }
   
-  return (CljObject*)map;
+  return map;
 }
 
 /** Get value for key or NULL if absent (structural key equality). */
-CljValue map_get(CljValue map, CljValue key) {
+ID map_get(CljValue map, CljValue key) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
   if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj)
-    return (CljValue)NULL;
+    return NULL;
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
-    return (CljValue)NULL;
+    return NULL;
   for (int i = 0; i < map_data->count; i++) {
     CljObject *stored_key = KV_KEY(map_data->data, i);
     // Fast path: pointer comparison first (for interned symbols)
     if (stored_key == key_obj) {
-      return (CljValue)KV_VALUE(map_data->data, i);
+      return KV_VALUE(map_data->data, i);
     }
     // Fallback: structural comparison for non-interned objects
     if (clj_equal(stored_key, key_obj)) {
-      return (CljValue)KV_VALUE(map_data->data, i);
+      return KV_VALUE(map_data->data, i);
     }
   }
-  return (CljValue)NULL;
+  return NULL;
 }
 
 /** Associate key->value (replace if key exists; retains value). */
@@ -460,8 +460,8 @@ CljValue persistent_map(CljValue tmap) {
     if (!m) return NULL;
     
     // Clojure semantics: Create NEW persistent collection
-    CljObject *new_map = make_map(m->capacity);  // New instance
-    CljMap *new_m = as_map((CljObject*)new_map);
+    CljMap *new_map = make_map(m->capacity);  // New instance
+    CljMap *new_m = new_map;
     if (!new_m) return NULL;
     
     // Copy all key-value pairs
@@ -478,6 +478,6 @@ CljValue persistent_map(CljValue tmap) {
     // Original transient becomes "invalidated" (can be implemented later)
     // m->base.type = CLJ_INVALID;  // TODO: Implement invalidation
     
-    return new_map; // NEW persistent collection
+    return (CljValue)new_map; // NEW persistent collection
 }
 

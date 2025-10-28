@@ -37,7 +37,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!ns) return NULL;
     
     ns->name = intern_symbol(NULL, name);
-    ns->mappings = make_map(64); // Increased capacity for clojure.core // Initial capacity
+    ns->mappings = (CljObject*)make_map(64); // Increased capacity for clojure.core // Initial capacity
     ns->filename = file ? strdup(file) : NULL;
     ns->next = (CljNamespace*)g_runtime.ns_registry;
     g_runtime.ns_registry = (void*)ns;
@@ -291,7 +291,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     
     // Create or update mappings
     if (!ns->mappings) {
-        ns->mappings = make_map(16);
+        ns->mappings = (CljObject*)make_map(16);
     }
     
     // Store symbol-value binding (overwrites existing)
