@@ -169,9 +169,9 @@ void release(CljObject *v) {
     
     // Check for underflow BEFORE decrementing
     if (v->rc == 0) {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-            printf("❌ UNDERFLOW! Object already freed\n");
-        }
+        printf("❌ UNDERFLOW! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
+        printf("🔍 Stack trace for object %p:\n", v);
+        // Print stack trace or more debugging info
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
             "Use-after-free detected! Object %p (type=%s) was already freed (rc=0). "
             "This indicates the object was released more times than retained, "

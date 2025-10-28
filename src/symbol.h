@@ -67,6 +67,7 @@ extern CljObject *SYM_OR;
 extern CljObject *SYM_FOR;
 extern CljObject *SYM_DOSEQ;
 extern CljObject *SYM_DOTIMES;
+extern CljObject *SYM_TIME;
 
 // Globale Symbol-Pointer für Keywords
 extern CljObject *SYM_KW_LINE;

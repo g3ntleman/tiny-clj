@@ -189,4 +189,32 @@ extern const char *ERROR_STACK_OVERFLOW;
 /** @brief Standard error message: Memory allocation failed */
 extern const char *ERROR_MEMORY_ALLOCATION;
 
+// ============================================================================
+// STATIC EXCEPTION TYPE CONSTANTS
+// ============================================================================
+
+/** @brief Static exception type: RuntimeException */
+extern const char *EXCEPTION_TYPE_RUNTIME;
+
+/** @brief Static exception type: ParseError */
+extern const char *EXCEPTION_TYPE_PARSE;
+
+/** @brief Static exception type: IllegalArgumentException */
+extern const char *EXCEPTION_TYPE_ILLEGAL_ARGUMENT;
+
+/** @brief Static exception type: ArityException */
+extern const char *EXCEPTION_TYPE_ARITY;
+
+/** @brief Static exception type: TypeError */
+extern const char *EXCEPTION_TYPE_TYPE;
+
+/** @brief Static exception type: OutOfMemoryError */
+extern const char *EXCEPTION_TYPE_OUT_OF_MEMORY;
+
+/** @brief Static exception type: StackOverflowError */
+extern const char *EXCEPTION_TYPE_STACK_OVERFLOW;
+
+/** @brief Static exception type: DivisionByZeroError */
+extern const char *EXCEPTION_TYPE_DIVISION_BY_ZERO;
+
 #endif

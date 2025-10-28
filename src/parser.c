@@ -536,7 +536,8 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
   buf[pos] = '\0';
   if (!utf8valid(buf))
     return NULL;
-  return AUTORELEASE(make_string_impl(buf));
+  ID result = AUTORELEASE(make_string_impl(buf));
+  return result;
 }
 
 /**

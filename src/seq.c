@@ -9,6 +9,7 @@
 #include "value.h"
 #include "list.h"
 #include "vector.h"
+#include "strings.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -60,17 +61,18 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         }
         
         case CLJ_STRING: {
-            // String data is stored directly after CljObject header
-            char **str_ptr = (char**)((char*)obj + sizeof(CljObject));
-            const char *str_data = (const char*)*str_ptr;
-            if (!str_data || str_data[0] == '\0') {
+            CljString *str = (CljString*)obj;
+            
+            // Special case: empty string singleton
+            if (str == empty_string_singleton) {
                 iter->seq_type = CLJ_UNKNOWN;
                 return true;  // Empty string
             }
             
-            iter->state.str.data = str_data;
+            // Access string data directly
+            iter->state.str.data = str->data;
             iter->state.str.index = 0;
-            iter->state.str.length = strlen(str_data);
+            iter->state.str.length = str->length;
             iter->seq_type = CLJ_STRING;
             return true;
         }

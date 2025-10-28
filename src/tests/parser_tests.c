@@ -189,6 +189,40 @@ TEST(test_parse_multiline_expressions) {
     evalstate_free(eval_state);
 }
 
+TEST(test_parse_empty_string) {
+    EvalState *eval_state = evalstate_new();
+    
+    // Test 1: Parse empty string literal
+    CljObject *empty_str_result = parse("\"\"", eval_state);
+    TEST_ASSERT_NOT_NULL(empty_str_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, empty_str_result->type);
+    
+    // Test 2: Test str function with no arguments (should return empty string)
+    CljObject *str_result = eval_string("(str)", eval_state);
+    TEST_ASSERT_NOT_NULL(str_result);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, str_result->type);
+    
+    // Test 3: Test count function with empty string (should return 0)
+    CljObject *count_result = eval_string("(count \"\")", eval_state);
+    TEST_ASSERT_NOT_NULL(count_result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)count_result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)count_result));
+    
+    // Test 4: Test string equality with empty string
+    CljObject *eq_result = eval_string("(= \"\" \"\")", eval_state);
+    TEST_ASSERT_NOT_NULL(eq_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)eq_result));
+    TEST_ASSERT_TRUE(is_true(eq_result));
+    
+    // Test 5: Test to_string function on empty string (this should fail with NULL pointer)
+    char *str_repr = to_string(empty_str_result);
+    TEST_ASSERT_NOT_NULL(str_repr);
+    TEST_ASSERT_EQUAL_STRING("", str_repr);
+    free(str_repr);
+    
+    evalstate_free(eval_state);
+}
+
 // ============================================================================
 // TEST GROUPS
 // ============================================================================

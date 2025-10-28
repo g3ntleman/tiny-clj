@@ -94,19 +94,6 @@ void test_embedded_array_performance(void);
 // COW EVAL INTEGRATION TESTS
 // ============================================================================
 
-static void test_group_cow_eval_integration(void) {
-    printf("\n");
-    printf("========================================\n");
-    printf("COW Eval Integration Tests\n");
-    printf("========================================\n");
-    printf("Diese Tests verifizieren map_assoc_cow() in realen Clojure-Kontexten.\n");
-    printf("\n");
-    
-    RUN_TEST(test_cow_environment_loop_mutation);
-    RUN_TEST(test_cow_closure_environment_sharing);
-    RUN_TEST(test_cow_memory_efficiency_benchmark);
-    RUN_TEST(test_cow_real_clojure_simulation);
-}
 
 // ============================================================================
 // PARSER TESTS (from parser_tests.c)
@@ -121,9 +108,6 @@ static void test_group_cow_eval_integration(void) {
 // Forward declaration for byte array test runner
 extern void run_byte_array_tests(void);
 
-static void test_group_byte_array(void) {
-    run_byte_array_tests();
-}
 
 // ============================================================================
 // EXCEPTION TESTS (from exception_tests.c)
@@ -136,13 +120,6 @@ extern void test_nested_try_catch_inner_exception(void);
 extern void test_nested_try_catch_outer_exception(void);
 extern void test_exception_with_autorelease(void);
 
-static void test_group_exception(void) {
-    RUN_TEST(test_simple_try_catch_exception_caught);
-    RUN_TEST(test_simple_try_catch_no_exception);
-    RUN_TEST(test_nested_try_catch_inner_exception);
-    RUN_TEST(test_nested_try_catch_outer_exception);
-    RUN_TEST(test_exception_with_autorelease);
-}
 
 // ============================================================================
 // UNIT TESTS (from unit_tests.c)
@@ -213,6 +190,8 @@ extern void test_cljvalue_memory_efficiency(void);
 // extern void test_cljvalue_transient_maps_high_level(void); // Moved to test_values.c
 extern void test_cljvalue_vectors_high_level(void);
 extern void test_cljvalue_immediates_high_level(void);
+extern void test_simple_arithmetic(void);
+extern void test_division_by_zero_exception(void);
 
 // Special forms tests
 extern void test_special_form_and(void);
@@ -278,110 +257,7 @@ extern void test_rest_empty_vector(void);
 extern void test_rest_single_element(void);
 extern void test_group_conj_rest(void);
 
-static void test_group_unit(void) {
-    // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
-    // Cannot use WITH_AUTORELEASE_POOL here as it would violate LIFO principle with nested pools
-    RUN_TEST(test_list_count);
-    RUN_TEST(test_list_creation);
-    RUN_TEST(test_symbol_creation);
-    RUN_TEST(test_string_creation);
-    RUN_TEST(test_vector_creation);
-    RUN_TEST(test_map_creation);
-    RUN_TEST(test_array_map_builtin);
-    RUN_TEST(test_integer_creation);
-    RUN_TEST(test_float_creation);
-    RUN_TEST(test_nil_creation);
-    
-    // Multiline file loading test
-    RUN_TEST(test_load_multiline_file);
-    
-    // Map function test
-    RUN_TEST(test_map_function);
-    
-    // Fixed-Point arithmetic tests
-    RUN_TEST(test_fixed_creation_and_conversion);
-    RUN_TEST(test_fixed_arithmetic_operations);
-    RUN_TEST(test_fixed_mixed_type_operations);
-    RUN_TEST(test_fixed_division_with_remainder);
-    RUN_TEST(test_fixed_precision_limits);
-    RUN_TEST(test_fixed_variadic_operations);
-    RUN_TEST(test_fixed_error_handling);
-    RUN_TEST(test_fixed_comparison_operators);
-    
-    // Fixed-Point detailed tests
-    RUN_TEST(test_fixed_basic_creation);
-    RUN_TEST(test_fixed_negative_values);
-    RUN_TEST(test_fixed_precision);
-    RUN_TEST(test_fixed_multiplication_raw);
-        RUN_TEST(test_fixed_mixed_type_promotion);
-        RUN_TEST(test_fixed_saturation_max);
-        RUN_TEST(test_fixed_saturation_min);
-        RUN_TEST(test_fixed_division_raw);
-        RUN_TEST(test_fixed_edge_cases);
-        RUN_TEST(test_fixed_tag_consistency);
-        
-        // Fixed-Point builtin function tests
-        RUN_TEST(test_fixed_addition_builtin);
-        RUN_TEST(test_fixed_subtraction_builtin);
-        RUN_TEST(test_fixed_mixed_addition);
-        RUN_TEST(test_fixed_negative_addition);
-        
-        // Fixed-Point multiplication and division tests
-        RUN_TEST(test_fixed_multiplication_builtin);
-        RUN_TEST(test_fixed_division_builtin);
-        RUN_TEST(test_fixed_mixed_multiplication);
-        RUN_TEST(test_fixed_division_by_zero);
-        RUN_TEST(test_fixed_complex_arithmetic);
-        
-        // Debugging tests moved to test_group_debugging() to avoid duplication
-        
-        // Recur tests moved to test_group_recur() to avoid duplication
-        
-        // Conj and rest tests
-        RUN_TEST(test_conj_arity_0);
-        RUN_TEST(test_conj_arity_1);
-        RUN_TEST(test_conj_arity_2);
-        RUN_TEST(test_conj_arity_variadic);
-        RUN_TEST(test_conj_nil_collection);
-        RUN_TEST(test_rest_arity_0);
-        RUN_TEST(test_rest_nil);
-        RUN_TEST(test_rest_empty_vector);
-        RUN_TEST(test_rest_single_element);
-}
 
-static void test_group_cljvalue(void) {
-    // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
-    // CljValue API tests
-    RUN_TEST(test_cljvalue_immediate_helpers);
-    RUN_TEST(test_cljvalue_vector_api);
-    RUN_TEST(test_cljvalue_transient_vector);
-    RUN_TEST(test_cljvalue_clojure_semantics);
-    RUN_TEST(test_cljvalue_wrapper_functions);
-    
-    // New immediate value tests
-    RUN_TEST(test_cljvalue_immediates_fixnum);
-    RUN_TEST(test_cljvalue_immediates_char);
-    RUN_TEST(test_cljvalue_immediates_special);
-    RUN_TEST(test_cljvalue_immediates_fixed);
-    RUN_TEST(test_cljvalue_parser_immediates);
-    RUN_TEST(test_cljvalue_memory_efficiency);
-    
-    // Transient map tests
-    // RUN_TEST(test_cljvalue_transient_map_clojure_semantics); // Moved to test_values.c
-    
-    // High-level integration tests
-    // RUN_TEST(test_cljvalue_transient_maps_high_level); // Moved to test_values.c
-    RUN_TEST(test_cljvalue_vectors_high_level);
-    RUN_TEST(test_cljvalue_immediates_high_level);
-    
-    // Special forms tests
-    RUN_TEST(test_special_form_and);
-    RUN_TEST(test_special_form_or);
-        
-    // Performance tests
-    RUN_TEST(test_seq_rest_performance);
-    // RUN_TEST(test_seq_iterator_verification); // Disabled due to implementation issues
-}
 
 // ============================================================================
 // NAMESPACE TESTS (from namespace_tests.c)
@@ -397,18 +273,6 @@ extern void test_namespace_binding(void);
 
 // Namespace tests (from test_namespace.c) - now self-registering via TEST() macro
 
-static void test_group_namespace(void) {
-    // Tests handle their own memory management via TEST() macro or manual WITH_AUTORELEASE_POOL
-    RUN_TEST(test_evalstate_creation);
-    RUN_TEST(test_namespace_switching);
-    RUN_TEST(test_namespace_isolation);
-    RUN_TEST(test_special_ns_variable);
-    RUN_TEST(test_namespace_lookup);
-    RUN_TEST(test_namespace_binding);
-    
-    // Namespace tests are now self-registering via TEST() macro
-    // They will be automatically discovered and run by the registry system
-}
 
 // ============================================================================
 // SEQ TESTS (from seq_tests.c)
@@ -424,16 +288,6 @@ extern void test_seq_rest(void);
 extern void test_seq_next(void);
 extern void test_seq_equality(void);
 
-static void test_group_seq(void) {
-    RUN_TEST(test_seq_create_list);
-    RUN_TEST(test_seq_create_vector);
-    RUN_TEST(test_seq_create_string);
-    RUN_TEST(test_seq_create_map);
-    RUN_TEST(test_seq_first);
-    RUN_TEST(test_seq_rest);
-    RUN_TEST(test_seq_next);
-    RUN_TEST(test_seq_equality);
-}
 
 // ============================================================================
 // FOR-LOOP TESTS (from for_loop_tests.c)
@@ -450,13 +304,12 @@ extern void test_defn_no_parameters(void);
 extern void test_defn_multiple_body_expressions(void);
 extern void test_defn_recursive_function(void);
 
-static void test_group_defn(void) {
-    RUN_TEST(test_defn_basic_function);
-    RUN_TEST(test_defn_single_parameter);
-    RUN_TEST(test_defn_no_parameters);
-    RUN_TEST(test_defn_multiple_body_expressions);
-    RUN_TEST(test_defn_recursive_function);
-}
+extern void test_time_returns_result(void);
+extern void test_time_with_let(void);
+extern void test_time_with_function_call(void);
+extern void test_time_measures_duration(void);
+
+
 
 // ============================================================================
 // LET BINDING TESTS (from test_let.c)
@@ -473,17 +326,17 @@ extern void test_let_shadowing(void);
 extern void test_let_with_function_calls(void);
 extern void test_let_empty_bindings(void);
 
-static void test_group_let(void) {
-    RUN_TEST(test_let_basic_binding);
-    RUN_TEST(test_let_multiple_bindings);
-    RUN_TEST(test_let_sequential_bindings);
-    RUN_TEST(test_let_expression_body);
-    RUN_TEST(test_let_multiple_body_expressions);
-    RUN_TEST(test_let_nested);
-    RUN_TEST(test_let_shadowing);
-    RUN_TEST(test_let_with_function_calls);
-    RUN_TEST(test_let_empty_bindings);
-}
+// static void test_group_let(void) {
+    // RUN_TEST(test_let_basic_binding);
+    // RUN_TEST(test_let_multiple_bindings);
+    // RUN_TEST(test_let_sequential_bindings);
+    // RUN_TEST(test_let_expression_body);
+    // RUN_TEST(test_let_multiple_body_expressions);
+    // RUN_TEST(test_let_nested);
+    // RUN_TEST(test_let_shadowing);
+    // RUN_TEST(test_let_with_function_calls);
+    // RUN_TEST(test_let_empty_bindings);
+// }
 
 // ============================================================================
 // DO SPECIAL FORM TESTS (from test_do.c)
@@ -501,18 +354,18 @@ extern void test_do_mixed_types(void);
 extern void test_do_last_nil(void);
 extern void test_do_with_let(void);
 
-static void test_group_do(void) {
-    RUN_TEST(test_do_empty);
-    RUN_TEST(test_do_single_expr);
-    RUN_TEST(test_do_multiple_exprs);
-    RUN_TEST(test_do_with_arithmetic);
-    RUN_TEST(test_do_nested);
-    RUN_TEST(test_do_in_if);
-    RUN_TEST(test_do_in_if_else);
-    RUN_TEST(test_do_mixed_types);
-    RUN_TEST(test_do_last_nil);
-    RUN_TEST(test_do_with_let);
-}
+// static void test_group_do(void) {
+    // RUN_TEST(test_do_empty);
+    // RUN_TEST(test_do_single_expr);
+    // RUN_TEST(test_do_multiple_exprs);
+    // RUN_TEST(test_do_with_arithmetic);
+    // RUN_TEST(test_do_nested);
+    // RUN_TEST(test_do_in_if);
+    // RUN_TEST(test_do_in_if_else);
+    // RUN_TEST(test_do_mixed_types);
+    // RUN_TEST(test_do_last_nil);
+    // RUN_TEST(test_do_with_let);
+// }
 
 // ============================================================================
 // FOR-LOOP TESTS (from for_loop_tests.c)
@@ -533,63 +386,60 @@ extern void test_recur_factorial(void);
 extern void test_recur_deep_recursion(void);
 extern void test_recur_arity_error(void);
 
-static void test_group_for_loops(void) {
-    RUN_TEST(test_dotimes_basic);
-    RUN_TEST(test_doseq_basic);
-    RUN_TEST(test_for_basic);
-    RUN_TEST(test_dotimes_with_environment);
-    RUN_TEST(test_doseq_with_environment);
-}
+// static void test_group_for_loops(void) {
+    // RUN_TEST(test_dotimes_basic);
+    // RUN_TEST(test_doseq_basic);
+    // RUN_TEST(test_for_basic);
+    // RUN_TEST(test_dotimes_with_environment);
+    // RUN_TEST(test_doseq_with_environment);
+// }
 
-static void test_group_recur(void) {
-    RUN_TEST(test_recur_factorial);
-    RUN_TEST(test_recur_deep_recursion);
-    RUN_TEST(test_recur_arity_error);
-    RUN_TEST(test_recur_countdown);
-    RUN_TEST(test_recur_sum);
-    RUN_TEST(test_recur_tail_position_error);
-    RUN_TEST(test_if_bug_in_functions);
-    RUN_TEST(test_integer_overflow_detection);
-}
-
-static void test_group_debugging(void) {
-    RUN_TEST(test_as_list_valid);
-    RUN_TEST(test_as_list_invalid);
-    RUN_TEST(test_list_first_valid);
-    RUN_TEST(test_is_type_function);
-    RUN_TEST(test_eval_list_simple_arithmetic);
-    RUN_TEST(test_eval_list_function_call);
-}
+// static void test_group_recur(void) {
+    // RUN_TEST(test_recur_factorial);
+    // RUN_TEST(test_recur_deep_recursion);
+    // RUN_TEST(test_recur_arity_error);
+    // RUN_TEST(test_recur_countdown);
+    // RUN_TEST(test_recur_sum);
+    // RUN_TEST(test_recur_tail_position_error);
+    // RUN_TEST(test_if_bug_in_functions);
+    // RUN_TEST(test_integer_overflow_detection);
+// }
 
 
-static void test_group_equal(void) {
-    // Basic equality tests
-    RUN_TEST(test_equal_null_pointers);
-    RUN_TEST(test_equal_same_objects);
-    RUN_TEST(test_equal_different_strings);
-    RUN_TEST(test_equal_different_types);
-    RUN_TEST(test_equal_immediate_values);
-    
-    // Vector equality tests
-    RUN_TEST(test_vector_equal_same_vectors);
-    RUN_TEST(test_vector_equal_different_lengths);
-    RUN_TEST(test_vector_equal_different_values);
-    RUN_TEST(test_clj_equal_id_function);
-    RUN_TEST(test_vector_equal_with_strings);
-    
-    // List equality tests
-    RUN_TEST(test_list_equal_same_lists);
-    RUN_TEST(test_list_equal_same_instance);
-    RUN_TEST(test_list_equal_empty_lists);
-    
-    // Map equality tests
-    RUN_TEST(test_map_equal_same_maps);
-    RUN_TEST(test_map_equal_different_keys);
-    RUN_TEST(test_map_equal_different_values);
-    RUN_TEST(test_map_equal_different_sizes);
-    RUN_TEST(test_map_equal_with_nested_vectors);
-    
-}
+
+
+// ============================================================================
+// FIXED-POINT ARITHMETIC TESTS
+// ============================================================================
+
+// Forward declarations for fixed-point tests
+extern void test_fixed_creation_and_conversion(void);
+extern void test_fixed_arithmetic_operations(void);
+extern void test_fixed_mixed_type_operations(void);
+extern void test_fixed_division_with_remainder(void);
+extern void test_fixed_precision_limits(void);
+extern void test_fixed_variadic_operations(void);
+extern void test_fixed_error_handling(void);
+extern void test_fixed_comparison_operators(void);
+
+
+// ============================================================================
+// SEQUENCE AND COLLECTION TESTS
+// ============================================================================
+
+// Forward declarations for sequence tests
+extern void test_conj_arity_0(void);
+extern void test_conj_arity_1(void);
+extern void test_conj_arity_2(void);
+extern void test_conj_arity_variadic(void);
+extern void test_conj_nil_collection(void);
+extern void test_rest_arity_0(void);
+extern void test_rest_nil(void);
+extern void test_rest_empty_vector(void);
+extern void test_rest_single_element(void);
+extern void test_seq_rest_performance(void);
+extern void test_seq_iterator_verification(void);
+
 
 // ============================================================================
 // COW ASSUMPTIONS TESTS
@@ -602,21 +452,6 @@ extern void test_autorelease_with_retain(void);
 extern void test_multiple_autorelease_same_object(void);
 extern void test_autorelease_in_loop_realistic(void);
 
-static void test_group_cow_assumptions(void) {
-    printf("\n");
-    printf("========================================\n");
-    printf("Copy-on-Write Assumptions Tests\n");
-    printf("========================================\n");
-    printf("Diese Tests verifizieren kritische Annahmen über RC und AUTORELEASE\n");
-    printf("vor der Implementierung von map_assoc_cow().\n");
-    printf("\n");
-    
-    RUN_TEST(test_autorelease_does_not_increase_rc);
-    RUN_TEST(test_retain_increases_rc);
-    RUN_TEST(test_autorelease_with_retain);
-    RUN_TEST(test_multiple_autorelease_same_object);
-    RUN_TEST(test_autorelease_in_loop_realistic);
-}
 
 // Symbol output tests are now integrated into unit_tests.c
 
@@ -722,15 +557,21 @@ static void print_new_usage(const char *program_name) {
     printf("Unity Test Runner for Tiny-CLJ (Dynamic Registry)\n");
     printf("Usage: %s [options]\n\n", program_name);
     printf("Options:\n");
-    printf("  --test <name>        Run specific test by name\n");
-    printf("  --filter <pattern>   Run tests matching pattern (supports * wildcard)\n");
+    printf("  --test <name>        Run specific test by name (supports qualified names)\n");
+    printf("  --filter <pattern>   Run tests matching pattern (supports * wildcard and exact names)\n");
     printf("  --list              List all available tests\n");
     printf("  --quiet             Run all tests with minimal memory leak output\n");
     printf("  --help, -h          Show this help\n");
     printf("  (no args)           Run all tests\n\n");
+    printf("Test Names:\n");
+    printf("  Tests use qualified names: <group>/<test> (without 'test_' prefix)\n");
+    printf("  Examples: values/cljvalue_immediate_helpers\n");
+    printf("           basics/list_count\n");
+    printf("           fixed_point/fixed_creation_and_conversion\n\n");
     printf("Examples:\n");
-    printf("  %s --test test_parse_basic_types\n", program_name);
-    printf("  %s --filter \"test_parse_*\"\n", program_name);
+    printf("  %s --test values/cljvalue_immediate_helpers\n", program_name);
+    printf("  %s --filter \"values/*\"\n", program_name);
+    printf("  %s --filter \"*/cljvalue_*\"\n", program_name);
     printf("  %s --filter \"*cow*\"\n", program_name);
     printf("  %s --quiet\n", program_name);
     printf("  %s --list\n", program_name);
@@ -756,11 +597,20 @@ static void run_tests_by_registry(void) {
 }
 
 static void run_specific_test(const char *test_name) {
-    Test *test = test_registry_find(test_name);
+    Test *test = NULL;
+    
+    // First try to find by qualified name
+    test = test_registry_find_by_qualified_name(test_name);
+    
+    // If not found, try by simple name (backward compatibility)
+    if (!test) {
+        test = test_registry_find(test_name);
+    }
+    
     if (test) {
-        printf("🧪 Running specific test: %s\n", test_name);
+        printf("🧪 Running specific test: %s\n", test->qualified_name);
         RUN_TEST(test->func);
-        printf("✅ Test completed: %s\n", test_name);
+        printf("✅ Test completed: %s\n", test->qualified_name);
     } else {
         printf("❌ Test not found: %s\n", test_name);
         printf("Use --list to see available tests\n");
@@ -772,13 +622,14 @@ static void run_filtered_tests(const char *pattern) {
     Test *all_tests = test_registry_get_all(&test_count);
     int found = 0;
     
-    printf("🔍 Running tests matching pattern: %s\n", pattern);
-    
+    // First pass: count matching tests
     for (size_t i = 0; i < test_count; i++) {
-        if (test_name_matches_pattern(all_tests[i].name, pattern)) {
-            printf("🧪 Running: %s\n", all_tests[i].name);
-            RUN_TEST(all_tests[i].func);
-            printf("✅ Completed: %s\n\n", all_tests[i].name);
+        // Try matching against qualified name first
+        if (test_name_matches_pattern(all_tests[i].qualified_name, pattern)) {
+            found++;
+        }
+        // Fallback to simple name matching for backward compatibility
+        else if (test_name_matches_pattern(all_tests[i].name, pattern)) {
             found++;
         }
     }
@@ -786,10 +637,30 @@ static void run_filtered_tests(const char *pattern) {
     if (found == 0) {
         printf("❌ No tests found matching pattern: %s\n", pattern);
         printf("Use --list to see available tests\n");
-    } else {
-        printf("✅ Ran %d tests matching pattern\n", found);
+        return;
     }
+    
+    printf("🔍 Running %d test(s) matching pattern: %s\n", found, pattern);
+    
+    // Second pass: run matching tests
+    for (size_t i = 0; i < test_count; i++) {
+        // Try matching against qualified name first
+        if (test_name_matches_pattern(all_tests[i].qualified_name, pattern)) {
+            printf("🧪 Running: %s\n", all_tests[i].qualified_name);
+            RUN_TEST(all_tests[i].func);
+            printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
+        }
+        // Fallback to simple name matching for backward compatibility
+        else if (test_name_matches_pattern(all_tests[i].name, pattern)) {
+            printf("🧪 Running: %s\n", all_tests[i].qualified_name);
+            RUN_TEST(all_tests[i].func);
+            printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
+        }
+    }
+    
+    printf("✅ Ran %d test(s) matching pattern\n", found);
 }
+
 
 int main(int argc, char **argv) {
     UNITY_BEGIN();
@@ -833,6 +704,10 @@ int main(int argc, char **argv) {
                 run_exception_tests();
             } else if (strcmp(argv[1], "unit") == 0) {
                 run_unit_tests();
+            } else if (strcmp(argv[1], "fixed-point") == 0) {
+                // All tests now use TEST() macro
+            } else if (strcmp(argv[1], "sequences") == 0) {
+                // All tests now use TEST() macro
             } else if (strcmp(argv[1], "cljvalue") == 0) {
                 run_cljvalue_tests();
             } else if (strcmp(argv[1], "namespace") == 0) {
@@ -846,6 +721,8 @@ int main(int argc, char **argv) {
             } else if (strcmp(argv[1], "do") == 0) {
                 // All tests now use TEST() macro
             } else if (strcmp(argv[1], "defn") == 0) {
+                // All tests now use TEST() macro
+            } else if (strcmp(argv[1], "time") == 0) {
                 // All tests now use TEST() macro
             } else if (strcmp(argv[1], "equal") == 0) {
                 run_equal_tests();

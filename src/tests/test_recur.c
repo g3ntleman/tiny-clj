@@ -28,9 +28,6 @@ void test_recur_factorial(void) {
         return;
     }
     
-    // Initialize special symbols first
-    init_special_symbols();
-    
     // Test function definition
     CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
     TEST_ASSERT_NOT_NULL(factorial_def);
@@ -55,9 +52,6 @@ void test_recur_deep_recursion(void) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
-    
-    // Initialize special symbols first
-    init_special_symbols();
     
     // Test deep recursion with recur - test function definition
     CljObject *deep_def = eval_string("(def deep (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", st);
@@ -87,9 +81,6 @@ void test_recur_arity_error(void) {
         return;
     }
     
-    // Initialize special symbols first
-    init_special_symbols();
-    
     // Test arity error with recur - simplified test
     CljObject *arity_def = eval_string("(def arity-test (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
     TEST_ASSERT_NOT_NULL(arity_def);
@@ -108,9 +99,6 @@ void test_recur_countdown(void) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
-    
-    // Initialize special symbols first
-    init_special_symbols();
     
     // Test function definition
     CljObject *countdown_def = eval_string("(def countdown (fn [n] (if (= n 0) :done (recur (- n 1)))))", st);
@@ -140,9 +128,6 @@ void test_recur_sum(void) {
         return;
     }
     
-    // Initialize special symbols first
-    init_special_symbols();
-    
     // Test function definition
     CljObject *sum_def = eval_string("(def sum (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc n)))))", st);
     TEST_ASSERT_NOT_NULL(sum_def);
@@ -171,9 +156,6 @@ void test_recur_tail_position_error(void) {
         return;
     }
     
-    // Initialize special symbols first
-    init_special_symbols();
-    
     // Test function definition with recur not in tail position
     // This should fail at definition time in real Clojure
     CljObject *bad_def = eval_string("(def bad-recur (fn [n] (+ 1 (recur (- n 1)))))", st);
@@ -193,9 +175,6 @@ void test_if_bug_in_functions(void) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
-    
-    // Initialize special symbols first
-    init_special_symbols();
     
     // Test function definition with if statement
     CljObject *if_def = eval_string("(def test-if (fn [n] (if (= n 0) :yes :no)))", st);
@@ -224,9 +203,6 @@ void test_integer_overflow_detection(void) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
-    
-    // Initialize special symbols first
-    init_special_symbols();
     
     // Test that normal multiplication still works
     printf("Testing normal multiplication...\n");

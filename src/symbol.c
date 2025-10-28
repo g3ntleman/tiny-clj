@@ -51,6 +51,7 @@ CljObject *SYM_OR = NULL;
 CljObject *SYM_FOR = NULL;
 CljObject *SYM_DOSEQ = NULL;
 CljObject *SYM_DOTIMES = NULL;
+CljObject *SYM_TIME = NULL;
 
 // Keywords
 CljObject *SYM_KW_LINE = NULL;
@@ -192,10 +193,13 @@ static struct { CljSymbol sym; } sym_for_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "for" }
 };
 static struct { CljSymbol sym; } sym_doseq_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "doseq" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = NULL }
 };
 static struct { CljSymbol sym; } sym_dotimes_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "dotimes" }
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = NULL }
+};
+static struct { CljSymbol sym; } sym_time_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = NULL }
 };
 
 // Static symbol structs for keywords (compile-time initialization)
@@ -348,11 +352,17 @@ void init_special_symbols() {
     SYM_FOR = (CljObject*)&sym_for_data;
     symbol_table_add(NULL, "for", SYM_FOR);
     
+    sym_doseq_data.sym.name = strdup("doseq");
     SYM_DOSEQ = (CljObject*)&sym_doseq_data;
     symbol_table_add(NULL, "doseq", SYM_DOSEQ);
     
+    sym_dotimes_data.sym.name = strdup("dotimes");
     SYM_DOTIMES = (CljObject*)&sym_dotimes_data;
     symbol_table_add(NULL, "dotimes", SYM_DOTIMES);
+    
+    sym_time_data.sym.name = strdup("time");
+    SYM_TIME = (CljObject*)&sym_time_data;
+    symbol_table_add(NULL, "time", SYM_TIME);
     
     // Keywords - static structs with symbol table registration
     SYM_KW_LINE = (CljObject*)&sym_kw_line_data;

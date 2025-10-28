@@ -221,7 +221,7 @@ add_executable(unity-tests
     src/tests/memory_tests.c
     src/tests/parser_tests.c
     src/tests/exception_tests.c
-    src/tests/unit_tests.c
+    src/tests/test_basics.c
     src/tests/namespace_tests.c
     src/tests/test_namespace.c
     src/tests/test_equal.c
@@ -231,8 +231,11 @@ add_executable(unity-tests
     src/tests/test_let.c
     src/tests/test_do.c
     src/tests/test_defn.c
+    src/tests/test_time.c
     src/tests/for_loop_tests.c
     src/tests/fixed_point_tests.c
+    src/tests/test_fixed_point.c
+    src/tests/test_sequences.c
     src/tests/byte_array_tests.c
     src/tests/test_cow.c
     src/tests/test_macro_demo.c

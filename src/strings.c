@@ -2,18 +2,20 @@
 #include <string.h>
 #include <stdbool.h>
 #include "object.h"
+#include "strings.h"
 
-// Empty-string singleton: CLJ_STRING with rc=0 and data="" (static storage)
-// Directly initialized struct - no runtime initialization needed
+// Empty string singleton with CljString layout
 static struct {
     CljObject base;
-    char *str_ptr;
-} empty_string_singleton_data = {
+    uint16_t length;
+    char data[1];  // Just the null terminator
+} empty_string_data = {
     .base = { .type = CLJ_STRING, .rc = 0 },
-    .str_ptr = ""
+    .length = 0,
+    .data = ""
 };
 
-CljObject* empty_string_singleton = (CljObject*)&empty_string_singleton_data;
+CljString* empty_string_singleton = (CljString*)&empty_string_data;
 
 // make_string_old function removed - use make_string from value.h instead
 

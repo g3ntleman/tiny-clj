@@ -9,16 +9,36 @@ Dieses Dokument beschreibt das **Unity Dynamic Test Runner System** für Tiny-CL
 ### Automatische Test-Discovery
 Tests registrieren sich selbst beim Programmstart - keine manuelle Wartung mehr nötig!
 
+### Voll-qualifizierte Test-Namen (NEU!)
+Tests verwenden jetzt voll-qualifizierte Namen nach dem Schema `<group>/<test>` (ohne "test_"-Präfix):
+- `values/cljvalue_immediate_helpers`
+- `basics/list_count`
+- `fixed_point/fixed_creation_and_conversion`
+
+### Automatische Test-Gruppen
+Tests werden automatisch nach ihrer Quelldatei gruppiert:
+- `test_values.c` → Gruppe `"values"`
+- `test_fixed_point.c` → Gruppe `"fixed_point"`
+- `test_basics.c` → Gruppe `"basics"`
+- etc.
+
+### Erweiterte Wildcard-Unterstützung (NEU!)
+Vollständige Unterstützung für `*`-Wildcards mit voll-qualifizierten Namen:
+- `values/*` - Alle Tests in der Gruppe "values"
+- `*/cljvalue_*` - Alle Tests mit "cljvalue" in beliebiger Gruppe
+- `*cljvalue_immediate*` - Alle Tests mit "cljvalue_immediate" in beliebiger Gruppe
+
 ### Flexible Test-Ausführung
 ```bash
-# Einzelner Test
-./unity-tests --test test_parse_basic_types
+# Einzelner Test mit voll-qualifiziertem Namen
+./unity-tests --test values/cljvalue_immediate_helpers
 
-# Pattern-Matching
-./unity-tests --filter "test_parse_*"
-./unity-tests --filter "*cow*"
+# Pattern-Matching mit Wildcards (ersetzt --group)
+./unity-tests --filter "values/*"
+./unity-tests --filter "*/cljvalue_*"
+./unity-tests --filter "*cljvalue_immediate*"
 
-# Alle Tests auflisten
+# Alle Tests auflisten (zeigt voll-qualifizierte Namen)
 ./unity-tests --list
 
 # Alle Tests (default)
@@ -33,7 +53,7 @@ Tests registrieren sich selbst beim Programmstart - keine manuelle Wartung mehr 
 ### Kernkomponenten
 
 1. **`tests_common.h`** - Zentrale Includes für alle Tests
-2. **`test_registry.h/c`** - Dynamische Test-Registry
+2. **`test_registry.h/c`** - Dynamische Test-Registry mit voll-qualifizierten Namen
 3. **`unity_test_runner.c`** - Modernisierter Test-Runner mit Command-Line Interface
 
 ### Test-Registry System
@@ -44,7 +64,7 @@ Das System verwendet GCC Constructor-Attribute für automatische Registration:
 #define REGISTER_TEST(func) \
     static void register_##func(void) __attribute__((constructor)); \
     static void register_##func(void) { \
-        test_registry_add(#func, func); \
+        test_registry_add_with_group(#func, func, extract_group_from_file(__FILE__)); \
     }
 ```
 
@@ -69,11 +89,10 @@ RUN_TEST(test_new_feature);
 // In test_file.c
 #include "tests_common.h"
 
-void test_new_feature(void) {
-    // Test code
+TEST(test_new_feature) {
+    // Test code - automatisch mit WITH_AUTORELEASE_POOL gewrappt
 }
-REGISTER_TEST(test_new_feature)
-// Fertig! Automatisch verfügbar.
+// Fertig! Automatisch verfügbar mit voll-qualifiziertem Namen.
 ```
 
 ### Test-File erstellen
@@ -83,19 +102,21 @@ REGISTER_TEST(test_new_feature)
    #include "tests_common.h"
    ```
 
-2. **Test-Funktionen schreiben:**
+2. **Test-Funktionen mit TEST-Makro schreiben:**
    ```c
-   void test_my_feature(void) {
-       // Test code
+   TEST(test_my_feature) {
+       // Test code - automatisch mit WITH_AUTORELEASE_POOL gewrappt
+       TEST_ASSERT_TRUE(some_condition);
    }
    ```
 
-3. **Registration hinzufügen:**
-   ```c
-   REGISTER_TEST(test_my_feature)
-   ```
+3. **Fertig!** Der Test ist automatisch verfügbar mit voll-qualifiziertem Namen.
 
-4. **Fertig!** Der Test ist automatisch verfügbar.
+**Wichtig:** Das `TEST()` Makro:
+- Registriert den Test automatisch
+- Gruppiert ihn nach Dateiname (z.B. `test_values.c` → Gruppe `"values"`)
+- Erstellt voll-qualifizierten Namen ohne "test_"-Präfix (z.B. `values/my_feature`)
+- Wrappt den Test automatisch in `WITH_AUTORELEASE_POOL`
 
 ## 🧪 Test-Ausführung
 
@@ -103,32 +124,68 @@ REGISTER_TEST(test_new_feature)
 
 | Option | Beschreibung | Beispiel |
 |--------|-------------|----------|
-| `--test <name>` | Einzelner Test | `--test test_parse_basic_types` |
-| `--filter <pattern>` | Pattern-Matching | `--filter "test_parse_*"` |
+| `--test <name>` | Einzelner Test (voll-qualifiziert) | `--test values/cljvalue_immediate_helpers` |
+| `--filter <pattern>` | Pattern-Matching mit Wildcards oder exakte Namen | `--filter "values/*"` |
 | `--list` | Alle Tests auflisten | `--list` |
 | `--help, -h` | Hilfe anzeigen | `--help` |
 | *(keine Args)* | Alle Tests | *(default)* |
 
-### Pattern-Matching
+### Voll-qualifizierte Test-Namen
 
-Unterstützt einfache Wildcards:
-- `test_parse_*` - Alle Parser-Tests
-- `*cow*` - Alle COW-Tests
-- `test_*_basic` - Tests mit "basic" im Namen
+Tests verwenden jetzt das Schema `<group>/<test>`:
+
+```bash
+# Spezifischen Test mit voll-qualifiziertem Namen ausführen
+./unity-tests --test values/cljvalue_immediate_helpers
+./unity-tests --test basics/list_count
+./unity-tests --test fixed_point/fixed_creation_and_conversion
+
+# Alle Tests auflisten (zeigt voll-qualifizierte Namen)
+./unity-tests --list
+```
+
+### Erweiterte Wildcard-Patterns
+
+Unterstützt komplexe Wildcard-Patterns mit voll-qualifizierten Namen (ersetzt --group):
+
+```bash
+# Alle Tests einer Gruppe (ersetzt --group)
+./unity-tests --filter "values/*"
+./unity-tests --filter "basics/*"
+
+# Tests mit bestimmten Namen in beliebiger Gruppe
+./unity-tests --filter "*/cljvalue_*"
+./unity-tests --filter "*/parse_*"
+
+# Tests mit bestimmten Teilen im Namen
+./unity-tests --filter "*cljvalue_immediate*"
+./unity-tests --filter "*cow*"
+
+# Kombinierte Patterns
+./unity-tests --filter "values/*immediate*"
+./unity-tests --filter "*/*basic*"
+
+# Exakte Test-Namen (ohne Wildcards)
+./unity-tests --filter "values/cljvalue_immediate_helpers"
+```
 
 ### Beispiele
 
 ```bash
 # Einzelner Test für schnelles Debugging
-./unity-tests --test test_parse_basic_types
+./unity-tests --test values/cljvalue_immediate_helpers
 
-# Alle Parser-Tests
-./unity-tests --filter "test_parse_*"
+# Alle Tests einer Gruppe (ersetzt --group)
+./unity-tests --filter "values/*"
+./unity-tests --filter "fixed_point/*"
 
-# Alle COW-Tests
-./unity-tests --filter "*cow*"
+# Tests mit bestimmten Namen in beliebiger Gruppe
+./unity-tests --filter "*/cljvalue_*"
 
-# Verfügbare Tests anzeigen
+# Tests mit bestimmten Teilen im Namen
+./unity-tests --filter "*cljvalue_immediate*"
+
+# Verfügbare Tests anzeigen (voll-qualifizierte Namen)
 ./unity-tests --list
 
 # Alle Tests (wie bisher)
@@ -162,7 +219,7 @@ make unity-tests
 ./unity-tests
 
 # Mit spezifischen Tests
-./unity-tests --test test_parse_basic_types
+./unity-tests --test values/cljvalue_immediate_helpers
 ```
 
 ## 📋 Test-Kategorien
@@ -183,10 +240,10 @@ Das alte Suite-basierte Interface funktioniert weiterhin:
 
 ### Neue Registry-basierte Tests
 
-Alle Tests mit `REGISTER_TEST()` sind automatisch verfügbar:
+Alle Tests mit `TEST()` sind automatisch verfügbar:
 
 ```bash
-./unity-tests --list        # Zeigt alle registrierten Tests
+./unity-tests --list        # Zeigt alle registrierten Tests mit voll-qualifizierten Namen
 ```
 
 ## 🐛 Debugging
@@ -196,12 +253,12 @@ Alle Tests mit `REGISTER_TEST()` sind automatisch verfügbar:
 Für schnelles Debugging einzelner Tests:
 
 ```bash
-# Spezifischen Test ausführen
-./unity-tests --test test_parse_basic_types
+# Spezifischen Test mit voll-qualifiziertem Namen ausführen
+./unity-tests --test values/cljvalue_immediate_helpers
 
 # Mit Debugger
 gdb ./unity-tests
-(gdb) run --test test_parse_basic_types
+(gdb) run --test values/cljvalue_immediate_helpers
 ```
 
 ### Memory-Leak Detection
@@ -229,12 +286,11 @@ Das System behält die bestehende Memory-Profiling-Funktionalität:
    #include "tests_common.h"
    ```
 
-2. **REGISTER_TEST hinzufügen:**
+2. **TEST-Makro verwenden:**
    ```c
-   void test_my_function(void) {
-       // Test code
+   TEST(test_my_function) {
+       // Test code - automatisch mit WITH_AUTORELEASE_POOL gewrappt
    }
-   REGISTER_TEST(test_my_function)
    ```
 
 3. **Forward-Declarations entfernen:**
@@ -243,9 +299,13 @@ Das System behält die bestehende Memory-Profiling-Funktionalität:
 ### Vorteile der Migration
 
 - ✅ **Keine manuelle Wartung** mehr nötig
+- ✅ **Automatische Gruppierung** nach Dateiname
+- ✅ **Voll-qualifizierte Namen** für bessere Übersicht
+- ✅ **Erweiterte Wildcard-Unterstützung** für flexible Filterung
 - ✅ **Schnelleres Debugging** durch einzelne Test-Ausführung
-- ✅ **Flexible Filterung** durch Pattern-Matching
+- ✅ **Flexible Filterung** durch Pattern-Matching und Gruppen
 - ✅ **Sauberer Code** durch zentrale Includes
+- ✅ **Automatisches Memory-Management** durch WITH_AUTORELEASE_POOL
 - ✅ **Backward-Compatibility** mit bestehenden Suites
 
 ## 📊 Performance
@@ -268,19 +328,19 @@ Das System behält die bestehende Memory-Profiling-Funktionalität:
 
 ```c
 // Gut: Beschreibende Namen
-void test_parse_basic_types(void) { }
-void test_cow_inplace_mutation(void) { }
-void test_memory_leak_detection(void) { }
+TEST(test_parse_basic_types) { }
+TEST(test_cow_inplace_mutation) { }
+TEST(test_memory_leak_detection) { }
 
 // Vermeiden: Unklare Namen
-void test1(void) { }
-void test_foo(void) { }
+TEST(test1) { }
+TEST(test_foo) { }
 ```
 
 ### Test-Struktur
 
 ```c
-void test_my_feature(void) {
+TEST(test_my_feature) {
     // Arrange
     EvalState *eval_state = evalstate_new();
     
@@ -294,20 +354,18 @@ void test_my_feature(void) {
     // Cleanup
     evalstate_free(eval_state);
 }
-REGISTER_TEST(test_my_feature)
+// Automatisch registriert mit voll-qualifiziertem Namen!
 ```
 
 ### Memory-Management
 
 ```c
-void test_with_memory(void) {
-    WITH_AUTORELEASE_POOL({
-        // Test code mit AUTORELEASE calls
-        CljValue result = AUTORELEASE(parse("(+ 1 2)", eval_state));
-        TEST_ASSERT_NOT_NULL(result);
-    });
+TEST(test_with_memory) {
+    // Test code mit AUTORELEASE calls
+    CljValue result = AUTORELEASE(parse("(+ 1 2)", eval_state));
+    TEST_ASSERT_NOT_NULL(result);
 }
-REGISTER_TEST(test_with_memory)
+// Automatisch mit WITH_AUTORELEASE_POOL gewrappt!
 ```
 
 ## 🔍 Troubleshooting
@@ -323,18 +381,21 @@ REGISTER_TEST(test_with_memory)
 ./unity-tests 2>&1 | grep -i "fail"
 
 # Beispiel-Ausgabe:
-# Running: test_cljvalue_memory_efficiency
+# Running: values/test_cljvalue_memory_efficiency
 # /path/to/file.c:254:test->func:FAIL. Expected TRUE Was FALSE
 ```
 
 #### 2. Spezifischen fehlschlagenden Test isolieren
 
 ```bash
-# Einzelnen Test ausführen (sofortige Identifikation)
-./unity-tests --test test_cljvalue_memory_efficiency
+# Einzelnen Test mit voll-qualifiziertem Namen ausführen
+./unity-tests --test values/cljvalue_memory_efficiency
 
 # Test-Gruppe ausführen (um Bereich einzugrenzen)
-./unity-tests --filter "*cljvalue*"
+./unity-tests --filter "values/*"
+
+# Tests mit Wildcard-Pattern ausführen
+./unity-tests --filter "values/*memory*"
 ```
 
 #### 3. Debugging-Workflow
@@ -347,10 +408,16 @@ REGISTER_TEST(test_with_memory)
 ./unity-tests 2>&1 | grep -A 5 -B 5 "FAIL"
 
 # 3. Spezifischen Test isolieren
-./unity-tests --test test_name
+./unity-tests --test values/test_name
+
+# 3b. Oder Test-Gruppe isolieren
+./unity-tests --filter "values/*"
+
+# 3c. Oder Tests mit Wildcard isolieren
+./unity-tests --filter "values/*test_name*"
 
 # 4. Test reparieren und erneut testen
-./unity-tests --test test_name
+./unity-tests --test values/test_name
 ```
 
 #### 4. Häufige Fehlermuster
@@ -377,11 +444,13 @@ ParseError: Unexpected character '\' (0x5c) at position 0
 
 **Problem:** Test erscheint nicht in `--list`
 ```bash
-# Lösung: REGISTER_TEST Makro hinzufügen
-REGISTER_TEST(test_my_function)
+# Lösung: TEST-Makro verwenden statt manueller Funktion
+TEST(test_my_function) {
+    // Test code
+}
 ```
 
-**Problem:** Compiler-Fehler bei REGISTER_TEST
+**Problem:** Compiler-Fehler bei TEST-Makro
 ```bash
 # Lösung: tests_common.h korrekt includen
 #include "tests_common.h"
@@ -389,10 +458,10 @@ REGISTER_TEST(test_my_function)
 
 **Problem:** Memory-Leaks in Tests
 ```bash
-# Lösung: WITH_AUTORELEASE_POOL verwenden
-WITH_AUTORELEASE_POOL({
-    // Test code
-});
+# Lösung: TEST-Makro verwendet automatisch WITH_AUTORELEASE_POOL
+TEST(test_my_function) {
+    // Test code - automatisch mit Memory-Management
+}
 ```
 
 **Problem:** IS_IMMEDIATE Assertions schlagen fehl
@@ -404,14 +473,17 @@ WITH_AUTORELEASE_POOL({
 ### Debug-Informationen
 
 ```bash
-# Alle Tests mit Details
+# Alle Tests mit Details (voll-qualifizierte Namen)
 ./unity-tests --list
 
 # Spezifischen Test mit Memory-Info
-./unity-tests --test test_parse_basic_types
+./unity-tests --test values/cljvalue_immediate_helpers
 
 # Pattern mit Details
-./unity-tests --filter "test_parse_*"
+./unity-tests --filter "values/*"
+
+# Gruppe mit Details
+./unity-tests --filter "values/*"
 ```
 
 ## 📚 Weiterführende Dokumentation
@@ -426,9 +498,13 @@ WITH_AUTORELEASE_POOL({
 Das **Unity Dynamic Test Runner System** bietet:
 
 - ✅ **Automatische Test-Discovery** - Keine manuelle Wartung
-- ✅ **Flexible Test-Ausführung** - Einzelne Tests, Pattern-Matching
+- ✅ **Voll-qualifizierte Test-Namen** - Schema `<group>/<test>` für bessere Übersicht
+- ✅ **Automatische Test-Gruppen** - Gruppierung nach Dateiname
+- ✅ **Erweiterte Wildcard-Unterstützung** - Flexible Pattern-Matching mit `*` (ersetzt --group)
+- ✅ **Flexible Test-Ausführung** - Einzelne Tests, Pattern-Matching, exakte Namen
 - ✅ **Schnelleres Debugging** - Isolierte Test-Ausführung
 - ✅ **Sauberer Code** - Zentrale Includes, weniger Boilerplate
+- ✅ **Automatisches Memory-Management** - WITH_AUTORELEASE_POOL Integration
 - ✅ **Backward-Compatibility** - Bestehende Suites funktionieren weiterhin
 - ✅ **Pure C-Lösung** - Keine externen Tools nötig
 

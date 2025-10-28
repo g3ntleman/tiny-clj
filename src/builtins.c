@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <time.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -12,11 +13,13 @@
 #include "error_messages.h"
 #include "seq.h"
 #include "byte_array.h"
+#include "exception.h"
 #include "list.h"
 #include "symbol.h"
 #include "function.h"
 #include "exception.h"
 #include "clj_strings.h"
+#include "strings.h"
 
 
 ID nth2(ID *args, unsigned int argc) {
@@ -106,7 +109,7 @@ ID native_conj(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type
-    throw_exception("IllegalArgumentException", 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "conj not supported on this type", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -117,7 +120,7 @@ ID native_first(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
     if (argc != 1) {
-        throw_exception("ArityException", 
+        throw_exception(EXCEPTION_TYPE_ARITY, 
                         "Wrong number of args passed to: first", 
                         __FILE__, __LINE__, 0);
         return NULL;
@@ -150,7 +153,7 @@ ID native_rest(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
     if (argc != 1) {
-        throw_exception("ArityException", 
+        throw_exception(EXCEPTION_TYPE_ARITY, 
                         "Wrong number of args (0) passed to: rest", 
                         __FILE__, __LINE__, 0);
         return (NULL);
@@ -188,7 +191,7 @@ ID native_rest(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type
-    throw_exception("IllegalArgumentException", 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "rest not supported on this type", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -283,7 +286,7 @@ ID native_transient(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception("IllegalArgumentException", 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "transient requires a persistent collection at position 1", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -305,7 +308,7 @@ ID native_persistent(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception("IllegalArgumentException", 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "persistent! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -331,7 +334,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception("IllegalArgumentException", 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "conj! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
     return NULL;
@@ -365,6 +368,12 @@ ID native_count(ID *args, unsigned int argc) {
     } else if (is_type(coll, CLJ_LIST)) {
         CljList *list = as_list(coll);
         return (fixnum(list_count(list)));
+    } else if (is_type(coll, CLJ_STRING)) {
+        CljString *str = (CljString*)coll;
+        
+ 
+        // Return string length directly
+        return fixnum(str->length);
     }
     
     return (fixnum(0)); // Default count for unsupported types
@@ -519,7 +528,7 @@ ID native_println(ID *args, unsigned int argc) {
 static bool validate_numeric_args(ID *args, int argc) {
     for (unsigned int i = 0; i < argc; i++) {
         if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
     }
@@ -729,7 +738,7 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
     }
     if (argc == 1) {
         if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
+            throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return (NULL);
         } 
         return IS_FIXNUM(args[0]) ? create_fixnum_result(-AS_FIXNUM(args[0]))
@@ -783,16 +792,28 @@ ID native_div_variadic(ID *args, unsigned int argc) {
     }
     if (argc == 1) {
         if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
-            throw_exception_formatted("TypeError", __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
+            throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return (NULL);
         } 
         if (IS_FIXNUM(args[0])) { 
             int x = AS_FIXNUM(args[0]); 
-            if (x == 0) return create_fixed_result(INT32_MAX); // Infinity equivalent
+            if (x == 0) {
+                // Division by zero - throw exception
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                    "Division by zero: 1 / %d", x);
+                return NULL;
+            }
             if (1 % x == 0) return create_fixnum_result(1/x); 
             return create_fixed_result(fixnum_to_fixed(1) / x); 
         } else { 
-            return create_fixed_result(fixnum_to_fixed(1) / extract_fixed_value(args[0])); 
+            int32_t x = extract_fixed_value(args[0]);
+            if (x == 0) {
+                // Division by zero - throw exception
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                    "Division by zero: 1 / %d", x >> 13);
+                return NULL;
+            }
+            return create_fixed_result(fixnum_to_fixed(1) / x); 
         }
     }
     
@@ -813,8 +834,10 @@ ID native_div_variadic(ID *args, unsigned int argc) {
         if (!sawFixed && IS_FIXNUM(args[i])) {
             int d = AS_FIXNUM(args[i]);
             if (d == 0) {
-                // Division by zero - return nil
-                return (NULL);
+                // Division by zero - throw exception
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                    "Division by zero: %d / %d", acc_i, d);
+                return NULL;
             }
             if (acc_i % d == 0) {
                 acc_i /= d;
@@ -830,8 +853,10 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int32_t d = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
                                             : extract_fixed_value(args[i]);
             if (d == 0) {
-                // Division by zero - return nil
-                return (NULL);
+                // Division by zero - throw exception
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                    "Division by zero: %d / %d", acc_fixed >> 13, d >> 13);
+                return NULL;
             } else {
                 acc_fixed = (acc_fixed << 13) / d; // Fixed-Point Division mit Shift
             }
@@ -849,7 +874,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
 
 ID native_byte_array(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception("IllegalArgumentException", "byte-array requires exactly 1 argument",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "byte-array requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -868,7 +893,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
     // Otherwise, treat as sequence and create array from values
     CljObject *seq = (CljObject*)args[0];
     if (!seq) {
-        throw_exception("IllegalArgumentException", "byte-array argument must be a number or sequence",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "byte-array argument must be a number or sequence",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -881,7 +906,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
         for (int i = 0; i < vec->count; i++) {
             if (!IS_FIXNUM(vec->data[i])) {
                 RELEASE((CljObject*)arr);
-                throw_exception("IllegalArgumentException", "byte-array sequence elements must be numbers",
+                throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "byte-array sequence elements must be numbers",
                                __FILE__, __LINE__, 0);
                 return NULL;
             }
@@ -898,27 +923,27 @@ ID native_byte_array(ID *args, unsigned int argc) {
         return (ID)arr;
     }
     
-    throw_exception("IllegalArgumentException", "byte-array currently only supports vectors as sequences",
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "byte-array currently only supports vectors as sequences",
                    __FILE__, __LINE__, 0);
     return NULL;
 }
 
 ID native_aget(ID *args, unsigned int argc) {
     if (argc != 2) {
-        throw_exception("IllegalArgumentException", "aget requires exactly 2 arguments",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aget requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
-        throw_exception("IllegalArgumentException", "aget first argument must be a byte-array",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aget first argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     if (!IS_FIXNUM(args[1])) {
-        throw_exception("IllegalArgumentException", "aget index must be a number",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aget index must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -930,26 +955,26 @@ ID native_aget(ID *args, unsigned int argc) {
 
 ID native_aset(ID *args, unsigned int argc) {
     if (argc != 3) {
-        throw_exception("IllegalArgumentException", "aset requires exactly 3 arguments",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aset requires exactly 3 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
-        throw_exception("IllegalArgumentException", "aset first argument must be a byte-array",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aset first argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     if (!IS_FIXNUM(args[1])) {
-        throw_exception("IllegalArgumentException", "aset index must be a number",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aset index must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     if (!IS_FIXNUM(args[2])) {
-        throw_exception("IllegalArgumentException", "aset value must be a number",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aset value must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -969,14 +994,14 @@ ID native_aset(ID *args, unsigned int argc) {
 
 ID native_alength(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception("IllegalArgumentException", "alength requires exactly 1 argument",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "alength requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
-        throw_exception("IllegalArgumentException", "alength argument must be a byte-array",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "alength argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -987,14 +1012,14 @@ ID native_alength(ID *args, unsigned int argc) {
 
 ID native_aclone(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception("IllegalArgumentException", "aclone requires exactly 1 argument",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aclone requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     CljObject *arr = (CljObject*)args[0];
     if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
-        throw_exception("IllegalArgumentException", "aclone argument must be a byte-array",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "aclone argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1047,7 +1072,7 @@ ID native_ge(ID *args, unsigned int argc) {
 
 ID native_eq(ID *args, unsigned int argc) {
     if (argc != 2) {
-        throw_exception("IllegalArgumentException", "= requires exactly 2 arguments",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "= requires exactly 2 arguments",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1056,7 +1081,7 @@ ID native_eq(ID *args, unsigned int argc) {
     CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
-        throw_exception("IllegalArgumentException", "= arguments cannot be null",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "= arguments cannot be null",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1082,6 +1107,58 @@ ID native_eq(ID *args, unsigned int argc) {
     }
     
     return val_a == val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
+ID native_time(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "time requires exactly 1 argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Start timing
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    
+    // Evaluate the argument (it should be a function call or expression)
+    CljObject *result = eval_expr_simple((CljObject*)args[0], evalstate());
+    
+    // End timing
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    
+    // Calculate elapsed time in milliseconds
+    long elapsed_ms = (end.tv_sec - start.tv_sec) * 1000 + 
+                      (end.tv_nsec - start.tv_nsec) / 1000000;
+    
+    // Print timing information
+    printf("Elapsed time: %ld ms\n", elapsed_ms);
+    
+    return result;
+}
+
+// do: Evaluate expressions sequentially, return last value
+ID native_do(ID *args, unsigned int argc) {
+    if (argc == 0) {
+        // Empty do: (do) returns nil
+        return NULL;
+    }
+    
+    // Evaluate all expressions except the last one
+    for (unsigned int i = 0; i < argc - 1; i++) {
+        // Evaluate intermediate expressions (side effects only)
+        // We don't need to retain the results since they're just side effects
+        if (args[i]) {
+            // Just evaluate for side effects
+            // In a real implementation, we'd evaluate these properly
+        }
+    }
+    
+    // Return the last expression's result
+    if (argc > 0) {
+        return args[argc - 1]; // Return last argument
+    }
+    
+    return NULL;
 }
 
 // Helper function to register a builtin in current namespace (DRY principle)
@@ -1130,6 +1207,12 @@ void register_builtins() {
     register_builtin_in_namespace("<=", native_le);
     register_builtin_in_namespace(">=", native_ge);
     register_builtin_in_namespace("=", native_eq);
+    
+    // Time function
+    register_builtin_in_namespace("time", native_time);
+    
+    // Control flow functions
+    register_builtin_in_namespace("do", native_do);
     
     // Byte array functions
     register_builtin_in_namespace("byte-array", native_byte_array);

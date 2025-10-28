@@ -22,6 +22,34 @@ CLJException *g_current_exception = NULL;
 GlobalExceptionStack global_exception_stack = {0};
 
 // ============================================================================
+// STATIC EXCEPTION TYPE CONSTANTS
+// ============================================================================
+
+/** @brief Static exception type: RuntimeException */
+const char *EXCEPTION_TYPE_RUNTIME = "RuntimeException";
+
+/** @brief Static exception type: ParseError */
+const char *EXCEPTION_TYPE_PARSE = "ParseError";
+
+/** @brief Static exception type: IllegalArgumentException */
+const char *EXCEPTION_TYPE_ILLEGAL_ARGUMENT = "IllegalArgumentException";
+
+/** @brief Static exception type: ArityException */
+const char *EXCEPTION_TYPE_ARITY = "ArityException";
+
+/** @brief Static exception type: TypeError */
+const char *EXCEPTION_TYPE_TYPE = "TypeError";
+
+/** @brief Static exception type: OutOfMemoryError */
+const char *EXCEPTION_TYPE_OUT_OF_MEMORY = "OutOfMemoryError";
+
+/** @brief Static exception type: StackOverflowError */
+const char *EXCEPTION_TYPE_STACK_OVERFLOW = "StackOverflowError";
+
+/** @brief Static exception type: DivisionByZeroError */
+const char *EXCEPTION_TYPE_DIVISION_BY_ZERO = "DivisionByZeroError";
+
+// ============================================================================
 // EXCEPTION THROWING FUNCTIONS
 // ============================================================================
 
@@ -58,7 +86,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
     }
     
     // Use generic RuntimeException if type is NULL
-    const char *exception_type = (type != NULL) ? type : "RuntimeException";
+    const char *exception_type = (type != NULL) ? type : EXCEPTION_TYPE_RUNTIME;
     
     // Create exception and use the unified function
     CLJException *exception = make_exception(exception_type, message, short_file, line, code);

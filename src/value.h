@@ -11,7 +11,7 @@
 // CljNamespace is already defined in namespace.h
 
 // Forward declarations for string functions
-extern CljObject* empty_string_singleton;
+extern struct CljString* empty_string_singleton;
 
 // Forward declarations for namespace functions
 extern struct CljNamespace* ns_get_or_create(const char *name, const char *file);

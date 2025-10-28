@@ -5,6 +5,7 @@
  */
 
 #include "tests_common.h"
+#include "exception.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -294,6 +295,54 @@ TEST(test_cljvalue_immediates_high_level) {
         
         CljValue nil_val = SPECIAL_NIL;
         TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
+    });
+}
+
+// Test division by zero exception
+TEST(test_division_by_zero_exception) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        if (!st) {
+            TEST_FAIL_MESSAGE("Failed to create EvalState");
+            return;
+        }
+        
+        CljObject *result = NULL;
+        bool exception_caught = false;
+        
+        TRY {
+            result = eval_string("(/ 1 0)", st);
+        } CATCH(ex) {
+            exception_caught = true;
+            result = NULL;
+        } END_TRY
+        
+        TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Division by zero should throw exception");
+        TEST_ASSERT_NULL(result);
+        
+        evalstate_free(st);
+    });
+}
+
+// Ein sehr einfacher Test für die Grundfunktionalität
+TEST(test_simple_arithmetic) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        if (!st) {
+            TEST_FAIL_MESSAGE("Failed to create EvalState");
+            return;
+        }
+        
+        // Test einfache Addition
+        CljObject *result = eval_string("(+ 1 2)", st);
+        TEST_ASSERT_NOT_NULL(result);
+        if (result && is_fixnum(result)) {
+            int val = as_fixnum(result);
+            TEST_ASSERT_EQUAL_INT(3, val);
+        }
+        if (result) RELEASE(result);
+        
+        evalstate_free(st);
     });
 }
 

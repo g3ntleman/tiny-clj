@@ -31,6 +31,8 @@
 #include "symbol.h"
 #include "vector.h"
 #include "byte_array.h"
+#include "value.h"  // For empty_string_singleton
+#include "strings.h"  // For CljString structure
 
 // Safe string copy helper (from strings.c)
 static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
@@ -161,11 +163,14 @@ char* to_string(CljObject *v) {
 
         case CLJ_STRING:
             {
-                // Return raw string WITHOUT quotes (for str function)
-                // String data is stored directly after CljObject header
-                char **str_ptr = (char**)((char*)v + sizeof(CljObject));
-                char *str = *str_ptr;
-                return strdup(str);
+                // Special handling for empty string singleton
+                if (v == (CljObject*)empty_string_singleton) {
+                    return strdup("");
+                }
+                
+                // Access string data directly from CljString structure
+                CljString *s = (CljString*)v;
+                return strdup(s->data);
             }
 
         case CLJ_SYMBOL:
@@ -527,12 +532,17 @@ bool clj_equal(CljValue a, CljValue b) {
             
         // Komplexe Typen - Inhalt-Vergleich
         case CLJ_STRING: {
-            char **str_a_ptr = (char**)((char*)a + sizeof(CljObject));
-            char **str_b_ptr = (char**)((char*)b + sizeof(CljObject));
-            char *str_a = *str_a_ptr;
-            char *str_b = *str_b_ptr;
+            CljString *str_a = (CljString*)a;
+            CljString *str_b = (CljString*)b;
             if (!str_a || !str_b) return false;
-            return strcmp(str_a, str_b) == 0;
+            
+            // Special case: empty string singleton comparison
+            if (str_a == empty_string_singleton && str_b == empty_string_singleton) {
+                return true;
+            }
+            
+            // Compare string data directly
+            return strcmp(str_a->data, str_b->data) == 0;
         }
         
         case CLJ_VECTOR: {

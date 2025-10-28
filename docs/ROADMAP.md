@@ -45,14 +45,14 @@ Active/Next
 
 Next Priority
 -------------
-- Core Control Flow: `(let)` Implementation
+- Core Control Flow: `(let)` Implementation: ✅ COMPLETED
   - Implement `(let)` special form for local variable binding
   - Support binding pairs: `(let [var1 val1 var2 val2 ...] body)`
   - Lexical scoping with shadowing support
   - Integration with existing special forms (if, do, fn, etc.)
   - Unit tests for let evaluation, scoping, and shadowing
   - Memory management for local bindings with autorelease pools
-- Core Control Flow: `(do)` Implementation
+- Core Control Flow: `(do)` Implementation: ✅ COMPLETED
   - Implement `(do)` special form for sequential evaluation
   - Support multiple expressions in sequence: `(do expr1 expr2 ... exprN)`
   - Return value of last expression, nil for empty do

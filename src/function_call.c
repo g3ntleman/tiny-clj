@@ -13,6 +13,7 @@
 #include "object.h"
 #include "function_call.h"
 #include "symbol.h"
+#include "exception.h"
 #include "function.h"
 
 #include "error_messages.h"
@@ -41,6 +42,7 @@ static _Thread_local bool g_recur_detected = false;
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 
 
 // Forward declarations  
@@ -830,6 +832,11 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(body != NULL);
     
+    // Handle immediate values (fixnums, chars, booleans, nil)
+    if (IS_IMMEDIATE(body)) {
+        return body; // Immediate values evaluate to themselves
+    }
+    
     // Simplified implementation - would normally evaluate the AST
     switch (((CljObject*)body)->type) {
         case CLJ_LIST: {
@@ -958,7 +965,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // First element is the operator
     CljObject *op = head;
     
-    
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     if (is_type(op, CLJ_LIST)) {
         op = eval_list(as_list((ID)op), env, st);
@@ -1045,7 +1051,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
             if (!arg) continue;
             
             result = eval_body(arg, env, st);
-            if (!clj_is_truthy(result)) {
+            if (!result || !clj_is_truthy(result)) {
                 return result; // Short-circuit on false
             }
         }
@@ -1107,9 +1113,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    // Tier 6: Loop operations
-    result = eval_loop_dispatch(list, env, original_op);
-    if (result) return result;
+    // Tier 6: Loop operations (for, doseq, dotimes)
+    if (original_op == SYM_FOR || original_op == SYM_DOSEQ || original_op == SYM_DOTIMES) {
+        result = eval_loop_dispatch(list, env, original_op);
+        return result; // Return even if NULL
+    }
     
     if (original_op == SYM_LIST) {
         return AUTORELEASE(eval_list_function(list, env));
@@ -1171,7 +1179,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // Error: first element is not a function
     if (IS_IMMEDIATE(op) || is_type(op, CLJ_STRING)) {
-        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_TYPE_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call %s as a function", clj_type_name(op->type));
         return NULL;
     }
@@ -1405,7 +1413,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             strcmp(name, "quote") == 0 || strcmp(name, "recur") == 0 || strcmp(name, "and") == 0 ||
             strcmp(name, "or") == 0 || strcmp(name, "ns") == 0 || strcmp(name, "try") == 0 ||
             strcmp(name, "catch") == 0 || strcmp(name, "throw") == 0 || strcmp(name, "finally") == 0 ||
-            strcmp(name, "do") == 0 || strcmp(name, "loop") == 0 || strcmp(name, "let") == 0 ||
+            strcmp(name, "loop") == 0 || strcmp(name, "let") == 0 ||
             strcmp(name, "+") == 0 || strcmp(name, "-") == 0 || strcmp(name, "*") == 0 ||
             strcmp(name, "/") == 0 || strcmp(name, "=") == 0 || strcmp(name, "<") == 0 ||
             strcmp(name, ">") == 0 || strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0 ||
@@ -1413,7 +1421,8 @@ ID eval_symbol(ID symbol, EvalState *st) {
             strcmp(name, "nth") == 0 || strcmp(name, "first") == 0 ||
             strcmp(name, "rest") == 0 || strcmp(name, "count") == 0 || strcmp(name, "cons") == 0 ||
             strcmp(name, "seq") == 0 || strcmp(name, "next") == 0 || strcmp(name, "list") == 0 ||
-            strcmp(name, "for") == 0 || strcmp(name, "doseq") == 0 || strcmp(name, "dotimes") == 0) {
+            strcmp(name, "for") == 0 || strcmp(name, "doseq") == 0 || strcmp(name, "dotimes") == 0 ||
+            strcmp(name, "time") == 0) {
             return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
     }

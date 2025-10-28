@@ -65,9 +65,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
     
     // CRITICAL: Release form after evaluation
     // value_by_parsing_expr returns object with rc=1
-    if (!IS_IMMEDIATE(form)) {
-      RELEASE((CljObject*)form);
-    }
+    RELEASE((CljObject*)form);
     
     // Don't RELEASE form here - it's already managed by the parser
     // RELEASE((CljObject*)form);

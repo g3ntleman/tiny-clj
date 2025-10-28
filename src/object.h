@@ -83,11 +83,8 @@ static inline bool is_singleton(CljObject *obj) {
     // Standard singleton types
     if (IS_SINGLETON_TYPE(obj->type)) return true;
     
-    // Special case: empty map singleton (rc == 0)
-    if (obj->type == CLJ_MAP && obj->rc == 0) return true;
-    
-    // Special case: empty list singleton (rc == 0)
-    if (obj->type == CLJ_LIST && obj->rc == 0) return true;
+    // Special case: empty collection singletons (rc == 0)
+    if (obj->rc == 0 && (obj->type == CLJ_MAP || obj->type == CLJ_LIST || obj->type == CLJ_STRING || obj->type == CLJ_VECTOR)) return true;
     
     return false;
 }

@@ -16,16 +16,22 @@ typedef void (*TestFunc)(void);
 
 // Test structure
 typedef struct {
-    const char *name;    // Test function name
-    TestFunc func;      // Test function pointer
+    const char *name;        // Test function name (e.g., "test_cljvalue_immediate_helpers")
+    const char *qualified_name; // Fully qualified name (e.g., "values/test_cljvalue_immediate_helpers")
+    TestFunc func;          // Test function pointer
+    const char *group;      // Test group (derived from filename)
 } Test;
 
 // Registry API
 void test_registry_add(const char *name, TestFunc func);
+void test_registry_add_with_group(const char *name, TestFunc func, const char *group);
 Test *test_registry_find(const char *name);
+Test *test_registry_find_by_qualified_name(const char *qualified_name);
 Test *test_registry_find_by_pattern(const char *pattern);
 Test *test_registry_get_all(size_t *count);
+Test *test_registry_get_by_group(const char *group, size_t *count);
 void test_registry_list_all(void);
+void test_registry_list_groups(void);
 void test_registry_clear(void);
 
 // Pattern matching helper

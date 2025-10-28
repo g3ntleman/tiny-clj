@@ -209,14 +209,14 @@ void eval_error(const char *msg, EvalState *st) {
     if (!st) return;
     
     // Use throw_exception which handles the exception_stack correctly
-    throw_exception("RuntimeException", msg, st->file, st->line, st->col);
+    throw_exception(EXCEPTION_TYPE_RUNTIME, msg, st->file, st->line, st->col);
 }
 
 void parse_error(const char *msg, EvalState *st) {
     if (!st) return;
     
     // Use throw_exception which handles the exception_stack correctly
-    throw_exception("ParseError", msg, st->file, st->line, st->col);
+    throw_exception(EXCEPTION_TYPE_PARSE, msg, st->file, st->line, st->col);
 }
 
 
@@ -272,6 +272,9 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
         result = eval_list(as_list(expr), (CljMap*)env, st);  // Bereits autoreleased
     } else {
         result = expr;  // Literal, bereits autoreleased von parse()
+        // For literals, we need to AUTORELEASE them since eval_expr_simple is called from eval_parsed
+        // which expects the result to be autoreleased
+        AUTORELEASE(result);
     }
     
     return result;
