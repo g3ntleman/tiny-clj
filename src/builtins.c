@@ -428,8 +428,36 @@ ID native_if(ID *args, unsigned int argc) {
 
 ID native_type(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "type")) return NULL;
-    CljObject *obj = (CljObject*)args[0];
-    if (!obj) return ((CljObject*)intern_symbol_global("nil"));
+    CljValue val = args[0];
+    if (!val) return ((CljObject*)intern_symbol_global("nil"));
+    
+    // Get the tag to determine immediate vs heap object
+    uint8_t tag = get_tag(val);
+    
+    // Switch on tag for immediate values
+    switch (tag) {
+        case TAG_FIXNUM:
+            return (CljObject*)intern_symbol_global("Number");
+        case TAG_CHAR:
+            return (CljObject*)intern_symbol_global("Character");
+        case TAG_SPECIAL: {
+            int special_type = as_special(val);
+            if (special_type == SPECIAL_TRUE || special_type == SPECIAL_FALSE) {
+                return (CljObject*)intern_symbol_global("Boolean");
+            }
+            return (CljObject*)intern_symbol_global("Special");
+        }
+        case TAG_FIXED:
+            return (CljObject*)intern_symbol_global("Number");
+        case TAG_POINTER:
+            // Heap object - continue to object type switch
+            break;
+        default:
+            return (CljObject*)intern_symbol_global("Unknown");
+    }
+    
+    // Handle heap objects
+    CljObject *obj = (CljObject*)val;
     
     // Check for keyword (symbol with ':' prefix)
     if (is_type(obj, CLJ_SYMBOL)) {
@@ -439,11 +467,10 @@ ID native_type(ID *args, unsigned int argc) {
         }
     }
     
-    // Return type name for other types
+    // Switch on object type for heap objects
     switch (obj->type) {
         case CLJ_SYMBOL:
             return (CljObject*)intern_symbol_global("Symbol");
-        // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
         case CLJ_STRING:
             return (CljObject*)intern_symbol_global("String");
         case CLJ_VECTOR:
