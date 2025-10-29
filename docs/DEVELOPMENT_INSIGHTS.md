@@ -916,7 +916,7 @@ return head ? (RETAIN(head), head) : clj_nil();  // RC+1
 ### Verification
 ```bash
 # Test build task
-cd /Users/theisen/Projects/tiny-clj && make
+cd "$(dirname "$0")/.." && make
 
 # Test executable path
 test -x tiny-clj-repl && echo "OK"
@@ -1102,7 +1102,7 @@ fi
 # Clear, immediate error with source location
 ./tiny-clj-repl -e '(add 1 2)'
 # Output: EXCEPTION: RuntimeException: Undefined variable: add 
-#         at /Users/.../src/function_call.c:552:0
+#         at src/function_call.c:552:0
 
 # Test error conditions explicitly
 ./tiny-clj-repl --no-core -e '(/ 10 0)'

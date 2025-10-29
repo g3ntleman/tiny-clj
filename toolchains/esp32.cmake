@@ -6,16 +6,12 @@ set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR xtensa)
 
 # ESP32 Toolchain Path (adjust as needed)
+# Must be set via environment variable ESP32_TOOLCHAIN_PATH
 set(ESP32_TOOLCHAIN_PATH "$ENV{ESP32_TOOLCHAIN_PATH}")
 if(NOT ESP32_TOOLCHAIN_PATH)
-    # Default ESP-IDF installation paths
-    if(APPLE)
-        set(ESP32_TOOLCHAIN_PATH "/Users/$ENV{USER}/esp/xtensa-esp32-elf-clang")
-    elseif(UNIX)
-        set(ESP32_TOOLCHAIN_PATH "/opt/esp/xtensa-esp32-elf-clang")
-    else()
-        set(ESP32_TOOLCHAIN_PATH "C:/esp/xtensa-esp32-elf-clang")
-    endif()
+    message(FATAL_ERROR "ESP32_TOOLCHAIN_PATH environment variable is not set. "
+            "Please set it to the path of your ESP32 toolchain installation. "
+            "Example: export ESP32_TOOLCHAIN_PATH=\$HOME/esp/xtensa-esp32-elf-clang")
 endif()
 
 # Set the cross compiler

@@ -75,3 +75,7 @@ test_assert.c
 
 # Generated files
 tags
+
+# CMake generated files with absolute paths
+DartConfiguration.tcl
+compile_commands.json
