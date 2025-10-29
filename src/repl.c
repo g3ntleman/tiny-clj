@@ -10,6 +10,7 @@
 #include "symbol.h"
 #include "clj_strings.h"
 #include "reader.h"
+#include "runtime.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -434,6 +435,7 @@ static bool run_interactive_repl(EvalState *st) {
 
 int main(int argc, char **argv) {
     platform_init();
+    runtime_init();
     init_special_symbols();  // Initialize special symbols like SYM_DEF
     EvalState *st = evalstate_new();
     if (!st) return 1;

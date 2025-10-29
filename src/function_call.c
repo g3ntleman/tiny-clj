@@ -15,6 +15,7 @@
 #include "symbol.h"
 #include "exception.h"
 #include "function.h"
+#include "validation.h"
 
 #include "error_messages.h"
 #include <limits.h>
@@ -43,11 +44,13 @@ static _Thread_local bool g_recur_detected = false;
 #include <stdlib.h>
 #include <stdbool.h>
 #include <time.h>
+#include <sys/time.h>
 
 
 // Forward declarations  
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
+ID eval_time(CljList *list, CljMap *env, EvalState *st);
 
 
 // Forward declarations for loop evaluation
@@ -1050,6 +1053,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return eval_cond(list, env, st);
     }
     
+    if (original_op == SYM_TIME) {
+        // (time expr)
+        return eval_time(list, env, st);
+    }
+    
     // Tier 3: Sequence operations
     result = eval_sequence_dispatch(list, env, original_op);
     if (result) return result;
@@ -1473,7 +1481,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             strcmp(name, "quote") == 0 || strcmp(name, "recur") == 0 || strcmp(name, "and") == 0 ||
             strcmp(name, "or") == 0 || strcmp(name, "ns") == 0 || strcmp(name, "try") == 0 ||
             strcmp(name, "catch") == 0 || strcmp(name, "throw") == 0 || strcmp(name, "finally") == 0 ||
-            strcmp(name, "loop") == 0 || strcmp(name, "let") == 0 ||
+            strcmp(name, "loop") == 0 || strcmp(name, "let") == 0 || strcmp(name, "time") == 0 ||
             strcmp(name, "+") == 0 || strcmp(name, "-") == 0 || strcmp(name, "*") == 0 ||
             strcmp(name, "/") == 0 || strcmp(name, "=") == 0 || strcmp(name, "<") == 0 ||
             strcmp(name, ">") == 0 || strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0 ||
@@ -2270,4 +2278,53 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     }
     
     return AUTORELEASE(NULL); // dotimes always returns nil
+}
+
+// ============================================================================
+// EVAL_TIME - Time measurement special form implementation
+// ============================================================================
+ID eval_time(CljList *list, CljMap *env, EvalState *st) {
+    // (time expr)
+    // Assertion: Environment must not be NULL when expected
+    CLJ_ASSERT(env != NULL);
+    
+    if (!list || !st) {
+        return NULL;
+    }
+    
+    // Validate arity: exactly 1 argument
+    int argc = list_count(list);
+    if (!validate_arity(argc - 1, 1, "time")) { // -1 because list includes the 'time' symbol
+        return NULL;
+    }
+    
+    // Get the expression to time (second element): (time expr)
+    CljObject *expr = list_get_element(list, 1);
+    if (!expr) {
+        throw_exception("IllegalArgumentException", 
+                       "time expression cannot be null",
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Start timing with gettimeofday (works on all Unix systems)
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    
+    // Evaluate the expression (this is the key difference from builtin!)
+    CljObject *result = eval_body(expr, env, st);
+    
+    // End timing
+    gettimeofday(&end, NULL);
+    
+    // Calculate elapsed time in milliseconds with microsecond precision
+    long long start_us = start.tv_sec * 1000000LL + start.tv_usec;
+    long long end_us = end.tv_sec * 1000000LL + end.tv_usec;
+    double elapsed_ms = (double)(end_us - start_us) / 1000.0;
+    
+    // Print timing information (Clojure-compatible: "msecs" format)
+    printf("Elapsed time: %.2f msecs\n", elapsed_ms);
+    
+    // Return the result of the evaluated expression (Clojure-compatible: return the value)
+    return result;
 }
