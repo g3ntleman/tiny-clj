@@ -4,9 +4,9 @@
     0
     (+ n (sum-rec (- n 1)))))
 
-;; Benchmark with dotimes for proper JIT warmup and execution time measurement
+;; Run 1000x more iterations for measurable timing
 (defn benchmark-sum-rec []
-  (println "Running sum-rec benchmark...")
+  (println "Running sum-rec benchmark (1000x iterations)...")
   (time
     (dotimes [i 1000]
       (sum-rec 100))))

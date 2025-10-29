@@ -13,7 +13,6 @@ ID eval_body(ID body, CljMap *env, EvalState *st);
 ID eval_list(CljList *list, CljMap *env, EvalState *st);
 
 ID eval_equal(CljList *list, CljMap *env);
-ID eval_println(CljList *list, CljMap *env);
 
 // Definition und Funktionen
 ID eval_def(CljList *list, CljMap *env, EvalState *st);
@@ -35,6 +34,7 @@ ID eval_seq(CljList *list, CljMap *env);
 // For-loop functions
 ID eval_for(CljList *list, CljMap *env);
 ID eval_doseq(CljList *list, CljMap *env);
+ID eval_dotimes(CljList *list, CljMap *env);
 
 // Let bindings
 ID eval_let(CljList *list, CljMap *env, EvalState *st);

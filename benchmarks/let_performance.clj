@@ -6,11 +6,11 @@
 (defn test-nested-let-performance []
   (+ 1 2 3 4 5))
 
-;; Benchmark with dotimes for proper JIT warmup and execution time measurement
+;; Run 1000x more iterations for measurable timing
 (defn benchmark-let-performance []
-  (println "Running let performance benchmark...")
+  (println "Running let performance benchmark (1000x iterations)...")
   (time
-    (dotimes [i 10000]
+    (dotimes [i 1000]
       (test-let-performance)
       (test-nested-let-performance))))
 

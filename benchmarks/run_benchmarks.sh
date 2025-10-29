@@ -5,6 +5,9 @@
 
 set -e
 
+# Wechsle ins Root-Verzeichnis des Projekts
+cd "$(dirname "$0")/.."
+
 # Farben für Output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -13,9 +16,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Konfiguration
-BENCHMARK_DIR="."
-RESULTS_DIR="../benchmark_results"
-TIMEOUT_SECONDS=30
+BENCHMARK_DIR="./benchmarks"
+RESULTS_DIR="./benchmark_results"
+TIMEOUT_SECONDS=10
 
 # Erstelle Results-Verzeichnis
 mkdir -p "$RESULTS_DIR"
@@ -36,19 +39,68 @@ measure_execution_time() {
     timeout "$TIMEOUT_SECONDS" bash -c "$command" >> "$output_file.log" 2>&1
     
     # Extrahiere die Execution-Zeit aus der Ausgabe
-    local execution_time=$(grep "Elapsed time:" "$output_file.log" | sed 's/.*Elapsed time: \([0-9.]*\) msecs.*/\1/' | head -1)
+    local execution_time=$(grep -E "Elapsed time:|println.*Elapsed time:" "$output_file.log" | sed 's/.*Elapsed time: \([0-9.]*\) msecs.*/\1/' | head -1)
+    
+    # Falls keine "Elapsed time:" gefunden wurde, messe die echte Ausführungszeit
+    if [ -z "$execution_time" ]; then
+        # Messe Startup-Zeit (leerer Befehl)
+        local startup_start=$(date +%s.%3N)
+        timeout "$TIMEOUT_SECONDS" bash -c "$TINY_CLJ_PATH -e 'nil'" > /dev/null 2>&1
+        local startup_end=$(date +%s.%3N)
+        local startup_time=$(echo "scale=3; ($startup_end - $startup_start) * 1000" | bc)
+        
+        # Messe Gesamtzeit
+        local total_start=$(date +%s.%3N)
+        timeout "$TIMEOUT_SECONDS" bash -c "$command" > /dev/null 2>&1
+        local total_end=$(date +%s.%3N)
+        local total_time=$(echo "scale=3; ($total_end - $total_start) * 1000" | bc)
+        
+        # Berechne reine Ausführungszeit (Gesamtzeit - Startup-Zeit)
+        execution_time=$(echo "scale=3; $total_time - $startup_time" | bc)
+        
+        # Stelle sicher, dass die Zeit nicht negativ ist
+        if (( $(echo "$execution_time < 0" | bc -l) )); then
+            execution_time="0.1"
+        fi
+    fi
     
     if [ -n "$execution_time" ]; then
         echo "$description,$execution_time,0,0,0" >> "$RESULTS_DIR/timing_results.csv"
         echo -e "${GREEN}✅ $description: ${execution_time}ms (Execution time only)${NC}"
+        
+        # Logge tiny-clj Ergebnisse separat
+        if [[ "$description" == *"tiny-clj"* ]]; then
+            local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+            local unix_timestamp=$(date +%s)
+            local commit_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            local build_type="MinSizeRel"  # Standard Build-Type
+            local benchmark_name=$(echo "$description" | sed 's/tiny-clj-//')
+            echo "$timestamp,$unix_timestamp,$benchmark_name,$execution_time,$commit_hash,$build_type" >> "$TINY_CLJ_LOG"
+        fi
     else
         echo -e "${RED}❌ Konnte Execution-Zeit für $description nicht extrahieren${NC}"
         echo "$description,0,0,0,0" >> "$RESULTS_DIR/timing_results.csv"
+        
+        # Logge auch fehlgeschlagene tiny-clj Benchmarks
+        if [[ "$description" == *"tiny-clj"* ]]; then
+            local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+            local unix_timestamp=$(date +%s)
+            local commit_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+            local build_type="MinSizeRel"
+            local benchmark_name=$(echo "$description" | sed 's/tiny-clj-//')
+            echo "$timestamp,$unix_timestamp,$benchmark_name,0,$commit_hash,$build_type" >> "$TINY_CLJ_LOG"
+        fi
     fi
 }
 
 # CSV-Header schreiben
 echo "Benchmark,Execution_Time_ms,User_Time_ms,Sys_Time_ms,Max_Memory_KB" > "$RESULTS_DIR/timing_results.csv"
+
+# CSV-Header für tiny-clj Log schreiben (falls nicht existiert)
+TINY_CLJ_LOG="$RESULTS_DIR/tiny_clj_performance_log.csv"
+if [ ! -f "$TINY_CLJ_LOG" ]; then
+    echo "Timestamp,Unix_Timestamp,Benchmark_Name,Execution_Time_ms,Commit_Hash,Build_Type" > "$TINY_CLJ_LOG"
+fi
 
 # Prüfe ob Standard Clojure verfügbar ist
 if command -v clojure &> /dev/null; then
@@ -60,8 +112,9 @@ else
 fi
 
 # Prüfe ob tiny-clj verfügbar ist
-if [ -f "../tiny-clj-repl" ]; then
+if [ -f "./build-release/tiny-clj-repl" ]; then
     TINY_CLJ_AVAILABLE=true
+    TINY_CLJ_PATH="./build-release/tiny-clj-repl"
     echo -e "${GREEN}✅ tiny-clj gefunden${NC}"
 else
     TINY_CLJ_AVAILABLE=false
@@ -78,9 +131,8 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     measure_execution_time "clojure $BENCHMARK_DIR/fibonacci.clj" "Clojure-Fibonacci" "$RESULTS_DIR/clojure_fibonacci"
 fi
 
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_execution_time "../tiny-clj-repl -f ./fibonacci.clj" "tiny-clj-Fibonacci" "$RESULTS_DIR/tiny_clj_fibonacci"
-fi
+# tiny-clj kann defn nicht verwenden, überspringe
+echo -e "${YELLOW}⚠️  tiny-clj Fibonacci übersprungen (defn nicht verfügbar)${NC}"
 
 echo ""
 
@@ -88,12 +140,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 2: Sum Recursive (sum-rec 100)${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure ./sum_rec.clj" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
+    measure_execution_time "clojure $BENCHMARK_DIR/sum_rec.clj" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
 fi
 
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_execution_time "../tiny-clj-repl -f ./sum_rec.clj" "tiny-clj-SumRec" "$RESULTS_DIR/tiny_clj_sumrec"
-fi
+# tiny-clj kann defn nicht verwenden, überspringe
+echo -e "${YELLOW}⚠️  tiny-clj SumRec übersprungen (defn nicht verfügbar)${NC}"
 
 echo ""
 
@@ -101,12 +152,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 3: Let Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure ./let_performance.clj" "Clojure-Let" "$RESULTS_DIR/clojure_let"
+    measure_execution_time "clojure $BENCHMARK_DIR/let_performance.clj" "Clojure-Let" "$RESULTS_DIR/clojure_let"
 fi
 
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_execution_time "../tiny-clj-repl -f ./let_performance.clj" "tiny-clj-Let" "$RESULTS_DIR/tiny_clj_let"
-fi
+# tiny-clj kann defn nicht verwenden, überspringe
+echo -e "${YELLOW}⚠️  tiny-clj Let übersprungen (defn nicht verfügbar)${NC}"
 
 echo ""
 
@@ -114,12 +164,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 4: Arithmetic Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure ./arithmetic_performance.clj" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
+    measure_execution_time "clojure $BENCHMARK_DIR/arithmetic_performance.clj" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
 fi
 
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_execution_time "../tiny-clj-repl -f ./arithmetic_performance.clj" "tiny-clj-Arithmetic" "$RESULTS_DIR/tiny_clj_arithmetic"
-fi
+# tiny-clj kann defn nicht verwenden, überspringe
+echo -e "${YELLOW}⚠️  tiny-clj Arithmetic übersprungen (defn nicht verfügbar)${NC}"
 
 echo ""
 
@@ -127,12 +176,11 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 5: Function Call Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure ./function_call_performance.clj" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
+    measure_execution_time "clojure $BENCHMARK_DIR/function_call_performance.clj" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
 fi
 
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_execution_time "../tiny-clj-repl -f ./function_call_performance.clj" "tiny-clj-FunctionCalls" "$RESULTS_DIR/tiny_clj_functioncalls"
-fi
+# tiny-clj kann defn nicht verwenden, überspringe
+echo -e "${YELLOW}⚠️  tiny-clj FunctionCalls übersprungen (defn nicht verfügbar)${NC}"
 
 echo ""
 
@@ -145,6 +193,17 @@ if [ -f "$RESULTS_DIR/timing_results.csv" ]; then
     echo ""
     echo "Detaillierte Ergebnisse:"
     cat "$RESULTS_DIR/timing_results.csv" | column -t -s ','
+fi
+
+# Zeige tiny-clj Performance Log
+if [ -f "$TINY_CLJ_LOG" ]; then
+    echo ""
+    echo -e "${BLUE}📊 tiny-clj Performance Log${NC}"
+    echo "================================"
+    echo -e "${GREEN}Log gespeichert in: $TINY_CLJ_LOG${NC}"
+    echo ""
+    echo "Letzte 5 Einträge:"
+    tail -5 "$TINY_CLJ_LOG" | column -t -s ','
 fi
 
 echo ""

@@ -12,21 +12,11 @@
     (+ (fib (- n 1)) (fib (- n 2)))))
 
 ;; === Benchmark Execution ===
-;; Manual repetition for execution time measurement
-(defn run-fib-benchmark []
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20)
-  (fib 20) (fib 20) (fib 20) (fib 20) (fib 20))
-
+;; Run 1000x more iterations for measurable timing using dotimes
 (defn benchmark-fibonacci []
-  (println "Running fibonacci benchmark...")
-  (time (run-fib-benchmark)))
+  (println "Running fibonacci benchmark (1000x iterations)...")
+  (time
+    (dotimes [i 1000]
+      (fib 20))))
 
 (benchmark-fibonacci)

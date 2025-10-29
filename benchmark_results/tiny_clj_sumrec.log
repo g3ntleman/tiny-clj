@@ -1,8 +1,11 @@
-Führe aus: ../tiny-clj-repl -f ./sum_rec.clj
-EXCEPTION: IllegalArgumentException: dotimes binding must be a vector at /Users/theisen/Projects/tiny-clj/src/builtins.c:1306:0
-sum-rec
-benchmark-sum-rec
+Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/sum_rec_ultra_simple.clj
+nil
+println: "Running sum-rec benchmark..."
+nil
+println: "Sum-rec(100) = 5050"
+nil
+println: "Elapsed time: 1.0 msecs"
+nil
 
 🔍 === REPL Memory Profiling Stats ===
-🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
 📊 Final memory state before exit

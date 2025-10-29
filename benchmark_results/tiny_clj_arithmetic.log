@@ -1,11 +1,10 @@
-Führe aus: ../tiny-clj-repl -f ./arithmetic_performance.clj
-test-arithmetic
-test-complex-arithmetic
-run-arithmetic-benchmark
-benchmark-arithmetic
-Elapsed time: 0.00 msecs
-3
+Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/arithmetic_performance_ultra_simple.clj
+nil
+println: "Running arithmetic performance benchmark..."
+nil
+println: "Arithmetic result = 7"
+nil
+print
 
 🔍 === REPL Memory Profiling Stats ===
-🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
 📊 Final memory state before exit

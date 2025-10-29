@@ -464,6 +464,17 @@ char* pr_str(CljObject *v) {
     return to_string(v);
 }
 
+char* print_str(CljObject *v) {
+    // Handle nil (represented as NULL)
+    if (!v) {
+        return strdup("nil");
+    }
+    
+    // print_str does NOT add quotes around strings (unlike pr_str)
+    // For all types including strings: delegate to to_string
+    return to_string(v);
+}
+
 // Konsolidierte Gleichheitsprüfung mit ID-Parametern
 // Unterstützt sowohl CljObject* (heap objects) als auch CljValue (immediate values)
 bool clj_equal_id(ID a, ID b) {

@@ -1,4 +1,4 @@
-Führe aus: clojure ./let_performance.clj
-WARNING: Implicit use of clojure.main with options is deprecated, use -M ./let_performance.clj
-Running let performance benchmark...
-"Elapsed time: 0.036542 msecs"
+Führe aus: clojure ./benchmarks/let_performance.clj
+WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/let_performance.clj
+Running let performance benchmark (1000x iterations)...
+"Elapsed time: 0.713667 msecs"

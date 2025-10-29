@@ -1,4 +1,4 @@
-Führe aus: clojure ./sum_rec.clj
-WARNING: Implicit use of clojure.main with options is deprecated, use -M ./sum_rec.clj
-Running sum-rec benchmark...
-"Elapsed time: 26.88 msecs"
+Führe aus: clojure ./benchmarks/sum_rec.clj
+WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/sum_rec.clj
+Running sum-rec benchmark (1000x iterations)...
+"Elapsed time: 15.291 msecs"

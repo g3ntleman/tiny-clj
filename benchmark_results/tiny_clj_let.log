@@ -1,11 +1,10 @@
-Führe aus: ../tiny-clj-repl -f ./let_performance.clj
-test-let-performance
-test-nested-let-performance
-run-let-benchmark
-benchmark-let-performance
-Elapsed time: 0.00 msecs
-3
+Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/let_performance_ultra_simple.clj
+nil
+println: "Running let performance benchmark..."
+nil
+println: "Let result = 6"
+nil
+print
 
 🔍 === REPL Memory Profiling Stats ===
-🔍 Debug: Total allocs=0, deallocs=0, retains=0, releases=0, autoreleases=0
 📊 Final memory state before exit

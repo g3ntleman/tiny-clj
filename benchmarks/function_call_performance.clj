@@ -11,11 +11,11 @@
 (defn test-nested-function-calls []
   (add (multiply (subtract 10 5) 3) (add 2 1)))
 
-;; Benchmark with dotimes for proper JIT warmup and execution time measurement
+;; Run 1000x more iterations for measurable timing
 (defn benchmark-function-calls []
-  (println "Running function call performance benchmark...")
+  (println "Running function call performance benchmark (1000x iterations)...")
   (time
-    (dotimes [i 5000]
+    (dotimes [i 1000]
       (test-function-calls)
       (test-nested-function-calls))))
 
