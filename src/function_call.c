@@ -49,7 +49,6 @@ static _Thread_local bool g_recur_detected = false;
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 
-CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
 
 // Forward declarations for loop evaluation
 CljObject* eval_body_with_env(CljObject *body, CljMap *env);
@@ -717,9 +716,6 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return NULL; // Signal to loop to continue
     }
     
-    if (op == SYM_PRINTLN) {
-        return eval_println(as_list((ID)list), NULL);  // Simplified - no parameter substitution for now
-    }
     
     // Handle maps as functions (for key lookup)
     if (is_type(op, CLJ_MAP)) {
@@ -846,8 +842,24 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
         }
         
         case CLJ_SYMBOL: {
-            // Resolve symbol
-            return (CljObject*)env_get_stack((CljObject*)env, body);
+            // Resolve symbol - first try local environment, then namespace
+            CljObject *result = (CljObject*)env_get_stack((CljObject*)env, body);
+            if (result) {
+                return result;
+            }
+            
+            // If not found in local environment, try namespace
+            if (st && st->current_ns && st->current_ns->mappings) {
+                result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body);
+                if (result) {
+                    return result;
+                }
+            }
+            
+            // Symbol not found - this should throw an exception
+            throw_exception(EXCEPTION_TYPE_RUNTIME, "Unable to resolve symbol in this context",
+                           __FILE__, __LINE__, 0);
+            return NULL;
         }
         
         default:
@@ -873,6 +885,27 @@ static CljObject* eval_map_lookup(CljList *list, CljMap *env, CljObject *map) {
     CljObject *result = (CljObject*)map_get((CljValue)map, (CljValue)key);
     RELEASE(key);
     return result ? AUTORELEASE(RETAIN(result)) : NULL;
+}
+
+static CljObject* eval_cond(CljList *list, CljMap *env, EvalState *st) {
+    int argc = list_count(list);
+    if (argc <= 1) return NULL; // (cond) => nil
+    
+    // Process pairs: test1 expr1 test2 expr2 ...
+    for (int i = 1; i < argc; i += 2) {
+        if (i + 1 >= argc) break; // Odd number of args
+        
+        CljObject *test = list_get_element(list, i);
+        CljObject *expr = list_get_element(list, i + 1);
+        
+        if (!test || !expr) continue;
+        
+        CljObject *test_result = eval_body(test, env, st);
+        if (clj_is_truthy(test_result)) {
+            return eval_body(expr, env, st);
+        }
+    }
+    return NULL; // No condition matched
 }
 
 static CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, EvalState *st, CljObject *op) {
@@ -923,6 +956,7 @@ static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *
 static CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
     if (op == SYM_FOR) return AUTORELEASE(eval_for(list, env));
     if (op == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
+    if (op == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(list, env));
     return NULL;
 }
 
@@ -1011,6 +1045,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return eval_body(branch, env, st);
     }
     
+    if (original_op == SYM_COND) {
+        // (cond test1 expr1 test2 expr2 ...)
+        return eval_cond(list, env, st);
+    }
+    
     // Tier 3: Sequence operations
     result = eval_sequence_dispatch(list, env, original_op);
     if (result) return result;
@@ -1038,9 +1077,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return result;
     }
     
-    if (original_op == SYM_PRINTLN) {
-        return eval_println(list, env);
-    }
     
     // Tier 4: Less frequent (10-30% of calls)
     if (original_op == SYM_AND) {
@@ -1095,6 +1131,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return eval_let(list, env, st);
     }
     
+    if (original_op == SYM_DOTIMES) {
+        // (dotimes [var n] body*)
+        return eval_dotimes(list, env);
+    }
+    
     if (original_op == SYM_VAR) {
         // (var symbol) - returns a var reference to the symbol
         return eval_var(list, env, st);
@@ -1114,7 +1155,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Tier 6: Loop operations (for, doseq, dotimes)
-    if (original_op == SYM_FOR || original_op == SYM_DOSEQ) {
+    if (original_op == SYM_FOR || original_op == SYM_DOSEQ || original_op == SYM_DOTIMES) {
         result = eval_loop_dispatch(list, env, original_op);
         return result; // Return even if NULL
     }
@@ -1202,29 +1243,6 @@ ID eval_equal(CljList *list, CljMap *env) {
 }
 
 
-CljObject* eval_println_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    CljObject *arg = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
-    if (arg) {
-        char *str = pr_str(arg);
-        printf("println: %s\n", str);
-        free(str);
-    }
-    return NULL;
-}
-
-
-ID eval_println(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    CljObject *arg = eval_arg_retained(list, 1, env);
-    if (arg) {
-        char *str = pr_str(arg);
-        printf("println: %s\n", str);
-        free(str);
-        RELEASE(arg); // Release after use
-    }
-    return NULL;
-}
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
@@ -1440,13 +1458,13 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_DIVIDE && symbol == SYM_DIVIDE) || (SYM_EQUALS && symbol == SYM_EQUALS) || 
             (SYM_LT && symbol == SYM_LT) || (SYM_GT && symbol == SYM_GT) || 
             (SYM_LE && symbol == SYM_LE) || (SYM_GE && symbol == SYM_GE) ||
-            (SYM_PRINTLN && symbol == SYM_PRINTLN) || (SYM_PRINT && symbol == SYM_PRINT) || 
+            (SYM_PRINT && symbol == SYM_PRINT) || 
             (SYM_STR && symbol == SYM_STR) || (SYM_NTH && symbol == SYM_NTH) || (SYM_FIRST && symbol == SYM_FIRST) || 
             (SYM_REST && symbol == SYM_REST) || (SYM_COUNT && symbol == SYM_COUNT) || 
             (SYM_CONS && symbol == SYM_CONS) || (SYM_SEQ && symbol == SYM_SEQ) || 
             (SYM_NEXT && symbol == SYM_NEXT) || (SYM_LIST && symbol == SYM_LIST) ||
             (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
-            false) {
+            (SYM_DOTIMES && symbol == SYM_DOTIMES)) {
             return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
         
@@ -1459,7 +1477,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             strcmp(name, "+") == 0 || strcmp(name, "-") == 0 || strcmp(name, "*") == 0 ||
             strcmp(name, "/") == 0 || strcmp(name, "=") == 0 || strcmp(name, "<") == 0 ||
             strcmp(name, ">") == 0 || strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0 ||
-            strcmp(name, "println") == 0 || strcmp(name, "print") == 0 || strcmp(name, "str") == 0 ||
+            strcmp(name, "print") == 0 || strcmp(name, "str") == 0 ||
             strcmp(name, "nth") == 0 || strcmp(name, "first") == 0 ||
             strcmp(name, "rest") == 0 || strcmp(name, "count") == 0 || strcmp(name, "cons") == 0 ||
             strcmp(name, "seq") == 0 || strcmp(name, "next") == 0 || strcmp(name, "list") == 0 ||
@@ -2141,6 +2159,14 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
             CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, element);
             if (resolved) return resolved;
         }
+        
+        // If not found in local environment, try namespace
+        EvalState *st = evalstate();
+        if (st && st->current_ns && st->current_ns->mappings) {
+            CljObject *resolved = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)element);
+            if (resolved) return resolved;
+        }
+        
         // If not found, return the symbol as-is
         return element;
     }
@@ -2170,3 +2196,78 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
 
 
 // is_symbol is already defined in namespace.c
+
+ID eval_dotimes(CljList *list, CljMap *env) {
+    // Assertion: Environment must not be NULL when expected
+    CLJ_ASSERT(env != NULL);
+    // (dotimes [var n] expr)
+    // Executes expr n times with var bound to 0, 1, ..., n-1
+    
+    if (!list) {
+        return NULL;
+    }
+    
+    // Parse arguments directly without evaluation
+    CljList *list_data = as_list((ID)list);
+    if (!list_data->rest) {
+        return NULL;
+    }
+    
+    CljObject *binding_list = list_data->rest && is_type(list_data->rest, CLJ_LIST) ? as_list(list_data->rest)->first : NULL;
+    CljObject *body = list_data->rest && is_type(list_data->rest, CLJ_LIST) && as_list(list_data->rest)->rest && is_type(as_list(list_data->rest)->rest, CLJ_LIST) ? as_list(as_list(list_data->rest)->rest)->first : NULL;
+    
+    if (!binding_list || !is_type(binding_list, CLJ_LIST)) {
+        return NULL;
+    }
+    
+    // Parse binding: [var n]
+    CljList *binding_data = as_list(binding_list);
+    if (!binding_data->first || !binding_data->rest) {
+        return NULL;
+    }
+    
+    CljObject *var = binding_data->first;
+    CljObject *n_expr = binding_data->rest;
+    
+    // Get number of iterations
+    CljList *n_data = as_list(n_expr);
+    if (!n_data->first) {
+        return NULL;
+    }
+    
+    CljObject *n_obj = n_data->first; // Simple: just use the expression directly
+    if (!is_fixnum((CljValue)n_obj)) {
+        RELEASE(n_obj);
+        return NULL;
+    }
+    
+    int n = as_fixnum((CljValue)n_obj);
+    RELEASE(n_obj);
+    
+    // Execute body n times
+    for (int i = 0; i < n; i++) {
+        // Create new environment with binding using map_assoc
+        CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
+        if (new_env) {
+            // Copy existing environment bindings
+            if (env) {
+                // For now, just use the existing environment
+                // TODO: Implement proper environment copying
+            }
+            // Add new binding
+            map_assoc((CljObject*)new_env, var, fixnum(i));
+            
+            // Evaluate body with new binding
+            EvalState *st = evalstate();
+            CljObject *body_result = eval_expr_simple(body, st);
+            if (body_result) {
+                RELEASE(body_result);
+            }
+            
+            // Clean up environment
+            RELEASE(new_env);
+        }
+    }
+    
+    return AUTORELEASE(NULL); // dotimes always returns nil
+}

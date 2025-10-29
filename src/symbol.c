@@ -6,6 +6,7 @@
 CljObject *SYM_TRY = NULL;
 CljObject *SYM_CATCH = NULL;
 CljObject *SYM_IF = NULL;
+CljObject *SYM_COND = NULL;
 CljObject *SYM_LET = NULL;
 CljObject *SYM_FN = NULL;
 CljObject *SYM_DEF = NULL;
@@ -70,6 +71,9 @@ static struct { CljSymbol sym; } sym_catch_data = {
 };
 static struct { CljSymbol sym; } sym_if_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "if" }
+};
+static struct { CljSymbol sym; } sym_cond_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "cond" }
 };
 static struct { CljSymbol sym; } sym_let_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "let" }
@@ -233,6 +237,9 @@ void init_special_symbols() {
     SYM_IF = (CljObject*)&sym_if_data;
     symbol_table_add(NULL, "if", SYM_IF);
     
+    SYM_COND = (CljObject*)&sym_cond_data;
+    symbol_table_add(NULL, "cond", SYM_COND);
+    
     SYM_LET = (CljObject*)&sym_let_data;
     symbol_table_add(NULL, "let", SYM_LET);
     
@@ -360,6 +367,8 @@ void init_special_symbols() {
     symbol_table_add(NULL, "doseq", SYM_DOSEQ);
     
     sym_dotimes_data.sym.name = strdup("dotimes");
+    SYM_DOTIMES = (CljObject*)&sym_dotimes_data;
+    symbol_table_add(NULL, "dotimes", SYM_DOTIMES);
     
     // Keywords - static structs with symbol table registration
     SYM_KW_LINE = (CljObject*)&sym_kw_line_data;

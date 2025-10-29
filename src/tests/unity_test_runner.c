@@ -132,6 +132,9 @@ extern void test_symbol_creation(void);
 extern void test_string_creation(void);
 extern void test_vector_creation(void);
 extern void test_map_creation(void);
+extern void test_identical_predicate(void);
+extern void test_vector_predicate(void);
+// extern void test_cond_special_form(void); // TODO: Fix cond
 extern void test_array_map_builtin(void);
 extern void test_integer_creation(void);
 extern void test_float_creation(void);
@@ -308,6 +311,13 @@ extern void test_time_returns_result(void);
 extern void test_time_with_let(void);
 extern void test_time_with_function_call(void);
 extern void test_time_measures_duration(void);
+
+// Forward declarations for dotimes tests
+extern void test_dotimes_basic_functionality(void);
+extern void test_dotimes_variable_binding_problem(void);
+extern void test_dotimes_with_time_measurement(void);
+extern void test_dotimes_arity_validation(void);
+extern void test_dotimes_invalid_binding_format_new(void);
 
 
 

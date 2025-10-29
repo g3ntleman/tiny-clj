@@ -50,6 +50,8 @@ ID native_gt(ID *args, unsigned int argc);
 ID native_le(ID *args, unsigned int argc);
 ID native_ge(ID *args, unsigned int argc);
 ID native_eq(ID *args, unsigned int argc);
+ID native_identical(ID *args, unsigned int argc);
+ID native_vector_p(ID *args, unsigned int argc);
 
 // Time functions
 ID native_time(ID *args, unsigned int argc);
@@ -60,7 +62,13 @@ ID native_sleep(ID *args, unsigned int argc);
 ID native_def(ID *args, unsigned int argc);
 ID native_ns(ID *args, unsigned int argc);
 
+// Print functions
+ID native_print(ID *args, unsigned int argc);
+ID native_println(ID *args, unsigned int argc);
+ID native_pr(ID *args, unsigned int argc);
+ID native_prn(ID *args, unsigned int argc);
+
 // Loop constructs converted to builtins
-ID native_dotimes(ID *args, unsigned int argc);
+// Note: dotimes is now implemented as a special form, not a builtin
 
 #endif

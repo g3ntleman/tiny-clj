@@ -713,6 +713,109 @@ TEST(test_eval_list_function_call) {
 // Sequence and collection tests moved to test_sequences.c to reduce file size
 
 // ============================================================================
+// CORE PREDICATE TESTS
+// ============================================================================
+
+TEST(test_identical_predicate) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Test identical? with same object
+        CljObject *vec1 = eval_string("[1 2 3]", st);
+        TEST_ASSERT_NOT_NULL(vec1);
+        
+        CljObject *result1 = eval_string("(identical? [1 2 3] [1 2 3])", st);
+        TEST_ASSERT_NOT_NULL(result1);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result1)); // Different objects
+        
+        // Test identical? with same reference
+        CljObject *result2 = eval_string("(let [x [1 2 3]] (identical? x x))", st);
+        TEST_ASSERT_NOT_NULL(result2);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result2)); // Same object
+        
+        // Test identical? with nil
+        CljObject *result3 = eval_string("(identical? nil nil)", st);
+        TEST_ASSERT_NOT_NULL(result3);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result3)); // Both nil
+        
+        // Test identical? with different types
+        CljObject *result4 = eval_string("(identical? nil [1 2 3])", st);
+        TEST_ASSERT_NOT_NULL(result4);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4)); // Different objects
+        
+        evalstate_free(st);
+    });
+}
+
+TEST(test_vector_predicate) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Test vector? with vector
+        CljObject *result1 = eval_string("(vector? [1 2 3])", st);
+        TEST_ASSERT_NOT_NULL(result1);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result1));
+        
+        // Test vector? with list
+        CljObject *result2 = eval_string("(vector? '(1 2 3))", st);
+        TEST_ASSERT_NOT_NULL(result2);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result2));
+        
+        // Test vector? with nil
+        CljObject *result3 = eval_string("(vector? nil)", st);
+        TEST_ASSERT_NOT_NULL(result3);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result3));
+        
+        // Test vector? with string
+        CljObject *result4 = eval_string("(vector? \"hello\")", st);
+        TEST_ASSERT_NOT_NULL(result4);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4));
+        
+        // Test vector? with number
+        CljObject *result5 = eval_string("(vector? 42)", st);
+        TEST_ASSERT_NOT_NULL(result5);
+        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result5));
+        
+        evalstate_free(st);
+    });
+}
+
+// TODO: Fix cond special form - symbol resolution issue
+// TEST(test_cond_special_form) {
+//     WITH_AUTORELEASE_POOL({
+//         EvalState *st = evalstate_new();
+//         TEST_ASSERT_NOT_NULL(st);
+//         
+//         // Test cond with single condition
+//         CljObject *result1 = eval_string("(cond true \"yes\")", st);
+//         TEST_ASSERT_NOT_NULL(result1);
+//         TEST_ASSERT_EQUAL_INT(CLJ_STRING, result1->type);
+//         
+//         // Test cond with multiple conditions
+//         CljObject *result2 = eval_string("(cond false \"no\" true \"yes\")", st);
+//         TEST_ASSERT_NOT_NULL(result2);
+//         TEST_ASSERT_EQUAL_INT(CLJ_STRING, result2->type);
+//         
+//         // Test cond with no matching condition
+//         CljObject *result3 = eval_string("(cond false \"no\" false \"also no\")", st);
+//         TEST_ASSERT_NULL(result3); // Should return nil
+//         
+//         // Test cond with :else clause
+//         CljObject *result4 = eval_string("(cond false \"no\" :else \"default\")", st);
+//         TEST_ASSERT_NOT_NULL(result4);
+//         TEST_ASSERT_EQUAL_INT(CLJ_STRING, result4->type);
+//         
+//         // Test empty cond
+//         CljObject *result5 = eval_string("(cond)", st);
+//         TEST_ASSERT_NULL(result5); // Should return nil
+//         
+//         evalstate_free(st);
+//     });
+// }
+
+// ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
 

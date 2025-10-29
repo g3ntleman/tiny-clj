@@ -26,6 +26,9 @@
 #include "strings.h"
 #include "parser.h"
 
+// Forward declaration for eval_body_with_env
+extern CljObject* eval_body_with_env(CljObject *body, CljMap *env);
+
 // Helper function to validate builtin arguments (DRY principle)
 static bool validate_builtin_args(unsigned int argc, unsigned int expected, const char *func_name) {
     if (argc != expected) {
@@ -519,14 +522,56 @@ ID make_named_func(BuiltinFn fn, void *env, const char *name) {
 
 // Arithmetic functions - native_*_variadic implement operations directly (no wrappers)
 
-ID native_println(ID *args, unsigned int argc) {
-    if (argc < 1) return (NULL);
-    if (args[0]) {
-        char *str = pr_str((CljObject*)args[0]);
-        printf("%s\n", str);
-        free(str);
+// ============================================================================
+// PRINT HELPER FUNCTION (DRY Principle)
+// ============================================================================
+
+// Common helper function for all print functions
+static void print_helper(ID *args, unsigned int argc, bool readable, bool newline) {
+    if (argc < 1) return;
+    
+    // Print all arguments separated by spaces
+    for (unsigned int i = 0; i < argc; i++) {
+        if (args[i]) {
+            char *str = readable ? pr_str((CljObject*)args[i]) : print_str((CljObject*)args[i]);
+            printf("%s", str);
+            free(str);
+            
+            // Add space between arguments (except for the last one)
+            if (i < argc - 1) {
+                printf(" ");
+            }
+        }
     }
-    return (NULL);
+    
+    // Add newline if requested
+    if (newline) {
+        printf("\n");
+    }
+}
+
+// ============================================================================
+// NATIVE PRINT FUNCTIONS (using print_helper)
+// ============================================================================
+
+ID native_print(ID *args, unsigned int argc) {
+    print_helper(args, argc, false, false);  // not readable, no newline
+    return NULL;
+}
+
+ID native_println(ID *args, unsigned int argc) {
+    print_helper(args, argc, false, true);   // not readable, with newline
+    return NULL;
+}
+
+ID native_pr(ID *args, unsigned int argc) {
+    print_helper(args, argc, true, false);   // readable, no newline
+    return NULL;
+}
+
+ID native_prn(ID *args, unsigned int argc) {
+    print_helper(args, argc, true, true);    // readable, with newline
+    return NULL;
 }
 
 // ============================================================================
@@ -1098,10 +1143,20 @@ ID native_eq(ID *args, unsigned int argc) {
     return val_a == val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
+ID native_identical(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "identical?")) return make_special(SPECIAL_FALSE);
+    return (args[0] == args[1]) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
+ID native_vector_p(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "vector?")) return make_special(SPECIAL_FALSE);
+    return is_type((CljObject*)args[0], CLJ_VECTOR) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+}
+
 ID native_time(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "time")) return NULL;
     
-    // Start timing (Clojure-compatible: capture start time)
+    // Start timing with gettimeofday (works on all Unix systems)
     struct timeval start, end;
     gettimeofday(&start, NULL);
     
@@ -1109,17 +1164,21 @@ ID native_time(ID *args, unsigned int argc) {
     EvalState *st = evalstate();
     CljObject *result = NULL;
     
-    // Use eval_expr_simple for proper evaluation
-    if (st && args[0]) {
+    // Use eval_list for proper evaluation of function calls
+    if (st && args[0] && is_type(args[0], CLJ_LIST)) {
+        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        result = eval_list(as_list(args[0]), (CljMap*)env, st);
+    } else if (st && args[0]) {
         result = eval_expr_simple(args[0], st);
     }
     
-    // End timing (Clojure-compatible: capture end time)
+    // End timing
     gettimeofday(&end, NULL);
     
-    // Calculate elapsed time in milliseconds (Clojure-compatible: precise calculation)
-    double elapsed_ms = (end.tv_sec - start.tv_sec) * 1000.0 + 
-                       (end.tv_usec - start.tv_usec) / 1000.0;
+    // Calculate elapsed time in milliseconds with microsecond precision
+    long long start_us = start.tv_sec * 1000000LL + start.tv_usec;
+    long long end_us = end.tv_sec * 1000000LL + end.tv_usec;
+    double elapsed_ms = (double)(end_us - start_us) / 1000.0;
     
     // Print timing information (Clojure-compatible: "msecs" format)
     printf("Elapsed time: %.2f msecs\n", elapsed_ms);
@@ -1181,7 +1240,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     // Use Unix sleep function
     sleep(duration);
     
-    // Return nil (but not NULL to avoid assertion failure)
+    // Return nil
     return NULL;
 }
 
@@ -1291,72 +1350,7 @@ ID native_do(ID *args, unsigned int argc) {
 }
 
 // dotimes: Execute expression n times with variable bound to 0, 1, ..., n-1
-ID native_dotimes(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 2, "dotimes")) {
-        return NULL;
-    }
-    
-    // args[0] should be the binding vector [var n]
-    // args[1] should be the body expression
-    CljObject *binding_vector = args[0];
-    CljObject *body = args[1];
-    
-    if (!binding_vector || !is_type(binding_vector, CLJ_LIST)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes binding must be a vector",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Parse binding vector: [var n]
-    CljList *binding_data = as_list(binding_vector);
-    if (!binding_data->first || !binding_data->rest) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes binding must have exactly 2 elements",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    CljObject *var = binding_data->first;
-    CljObject *n_obj = binding_data->rest;
-    
-    // Get the count from the second element of the binding vector
-    CljList *count_data = as_list(n_obj);
-    if (!count_data->first) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes count must be a number",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    CljObject *count_value = count_data->first;
-    if (!is_fixnum((CljValue)count_value)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "dotimes count must be a fixnum",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    int n = as_fixnum((CljValue)count_value);
-    
-    // Execute body n times
-    EvalState *st = evalstate();
-    for (int i = 0; i < n; i++) {
-        // Create new environment with binding
-        CljMap *new_env = (CljMap*)make_map(1);
-        if (new_env) {
-            // Add new binding: var -> i
-            map_assoc((CljObject*)new_env, var, fixnum(i));
-            
-            // Evaluate body with new binding
-            CljObject *body_result = eval_body(body, new_env, st);
-            if (body_result) {
-                RELEASE(body_result);
-            }
-            
-            // Clean up environment
-            RELEASE(new_env);
-        }
-    }
-    
-    return NULL; // dotimes always returns nil
-}
+// dotimes is now implemented as a special form, not a builtin
 
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
@@ -1402,12 +1396,19 @@ void register_builtins() {
     register_builtin_in_namespace("vals", native_vals);
     register_builtin_in_namespace("println", native_println);
     
+    // Register print functions
+    register_builtin_in_namespace("print", native_print);
+    register_builtin_in_namespace("pr", native_pr);
+    register_builtin_in_namespace("prn", native_prn);
+    
     // Register comparison operators as normal functions
     register_builtin_in_namespace("<", native_lt);
     register_builtin_in_namespace(">", native_gt);
     register_builtin_in_namespace("<=", native_le);
     register_builtin_in_namespace(">=", native_ge);
     register_builtin_in_namespace("=", native_eq);
+    register_builtin_in_namespace("identical?", native_identical);
+    register_builtin_in_namespace("vector?", native_vector_p);
     
     // Time function
     register_builtin_in_namespace("time", native_time);
@@ -1422,7 +1423,7 @@ void register_builtins() {
     register_builtin_in_namespace("do", native_do);
     
     // Loop constructs
-    register_builtin_in_namespace("dotimes", native_dotimes);
+    // dotimes is now implemented as a special form, not a builtin
     
     // Byte array functions
     register_builtin_in_namespace("byte-array", native_byte_array);
