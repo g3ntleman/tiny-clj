@@ -2249,7 +2249,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
             
             // Evaluate body with new binding
             EvalState *st = evalstate();
-            CljObject *body_result = eval_expr_simple(body, st);
+            CljObject *body_result = eval_body(body, new_env, st);
             if (body_result) {
                 RELEASE(body_result);
             }
