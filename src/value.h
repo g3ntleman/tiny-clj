@@ -79,8 +79,9 @@ static inline CljValue make_special(uint8_t special) {
 
 
 static inline CljValue fixnum(int32_t value) {
-    // Simplified implementation for debugging
-    // Just return a non-NULL pointer with the tag
+    // Create a tagged pointer with the value
+    // The value is stored in the upper bits, tag in the lower bits
+    // We need to shift the value left by TAG_BITS to make room for the tag
     return (CljValue)(((uintptr_t)value << TAG_BITS) | TAG_FIXNUM);
 }
 

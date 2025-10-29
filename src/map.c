@@ -65,11 +65,23 @@ ID map_get(CljValue map, CljValue key) {
     CljObject *stored_key = KV_KEY(map_data->data, i);
     // Fast path: pointer comparison first (for interned symbols)
     if (stored_key == key_obj) {
-      return KV_VALUE(map_data->data, i);
+      CljValue result = KV_VALUE(map_data->data, i);
+        // printf("DEBUG: map_get found key: %p -> %p\n", key_obj, result);
+        // printf("DEBUG: result is_fixnum: %d\n", is_fixnum(result));
+        // if (is_fixnum(result)) {
+        //     printf("DEBUG: result as_fixnum: %d\n", as_fixnum(result));
+        // }
+      return result;
     }
     // Fallback: structural comparison for non-interned objects
     if (clj_equal(stored_key, key_obj)) {
-      return KV_VALUE(map_data->data, i);
+      CljValue result = KV_VALUE(map_data->data, i);
+      // printf("DEBUG: map_get found key (structural): %p -> %p\n", key_obj, result);
+      // printf("DEBUG: result is_fixnum: %d\n", is_fixnum(result));
+      // if (is_fixnum(result)) {
+      //   printf("DEBUG: result as_fixnum: %d\n", as_fixnum(result));
+      // }
+      return result;
     }
   }
   return NULL;
@@ -101,11 +113,19 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
   }
   
   // Add new entry (if capacity allows)
+  // printf("DEBUG: map_assoc capacity check: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
   if (map_data->count < map_data->capacity) {
     int idx = map_data->count;
     map_data->data[2 * idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
     map_data->data[2 * idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
     map_data->count++;
+    // printf("DEBUG: map_assoc added: key=%p, value=%p, count=%d\n", key_obj, value_obj, map_data->count);
+    // printf("DEBUG: value is_fixnum: %d\n", is_fixnum((CljValue)value_obj));
+    // if (is_fixnum((CljValue)value_obj)) {
+    //   printf("DEBUG: value as_fixnum: %d\n", as_fixnum((CljValue)value_obj));
+    // }
+  } else {
+    // printf("DEBUG: map_assoc failed - capacity exceeded: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
   }
   // Note: No growth for in-place map_assoc (use map_assoc_cow for that)
 }

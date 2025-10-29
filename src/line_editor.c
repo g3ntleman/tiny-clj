@@ -1,6 +1,7 @@
 #include "line_editor.h"
 #include "vector.h"
 #include "clj_strings.h"
+#include "strings.h"
 #include "memory.h"
 #include "memory_profiler.h"
 #include "value.h"
@@ -447,9 +448,9 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     CljObject *line_obj = vec->data[index];
     if (!line_obj || !is_type(line_obj, CLJ_STRING)) return NULL;
     
-    // String data is stored directly after CljObject header
-    char **str_ptr = (char**)((char*)line_obj + sizeof(CljObject));
-    return (const char*)*str_ptr;
+    // String data is stored in CljString structure
+    CljString *str = (CljString*)line_obj;
+    return str->data;
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {

@@ -1180,7 +1180,18 @@ ID native_vector_p(ID *args, unsigned int argc) {
 }
 
 ID native_time(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 1, "time")) return NULL;
+    // Debug: Print arguments
+    printf("DEBUG: native_time called with argc=%d\n", argc);
+    if (argc > 0 && args[0]) {
+        printf("DEBUG: args[0] = %p\n", args[0]);
+    }
+    
+    if (!validate_builtin_args(argc, 1, "time")) {
+        printf("DEBUG: validate_builtin_args failed\n");
+        return NULL;
+    }
+    
+    printf("DEBUG: Starting timing\n");
     
     // Start timing with gettimeofday (works on all Unix systems)
     struct timeval start, end;
@@ -1320,113 +1331,6 @@ ID native_def(ID *args, unsigned int argc) {
     return symbol;
 }
 
-// Native defn implementation (converted from special form)
-ID native_defn(ID *args, unsigned int argc) {
-    if (argc < 3) {
-        throw_exception(EXCEPTION_TYPE_ARITY, "defn requires at least 3 arguments (name, params, body)",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    EvalState *st = evalstate();
-    if (!st) {
-        return NULL;
-    }
-    
-    // Parse arguments: (defn name [params] body...)
-    // args[0] = name symbol
-    // args[1] = params vector  
-    // args[2...argc-1] = body expressions
-    
-    // First argument should be a symbol (function name)
-    CljObject *name_sym = args[0];
-    if (!name_sym || !is_type(name_sym, CLJ_SYMBOL)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "defn requires a symbol for function name",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Second argument should be a vector (parameters)
-    CljObject *params_vec = args[1];
-    if (!params_vec || !is_type(params_vec, CLJ_VECTOR)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "defn requires a vector for parameters",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Extract parameters from vector
-    CljPersistentVector *params_vec_data = as_vector((ID)params_vec);
-    if (!params_vec_data) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "defn requires a valid parameter vector",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    int param_count = params_vec_data->count;
-    
-    // Validate parameters are symbols
-    for (int i = 0; i < param_count; i++) {
-        CljObject *param = params_vec_data->data[i];
-        if (!param || !is_type(param, CLJ_SYMBOL)) {
-            throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "defn parameters must be symbols",
-                           __FILE__, __LINE__, 0);
-            return NULL;
-        }
-    }
-    
-    // TODO: Create function with make_function() and bind with ns_define()
-    // For now, just return the name symbol to make tests pass partially
-    
-    // Create body list from args[2...argc-1]
-    CljObject *body = NULL;
-    if (argc > 2) {
-        // Single body expression
-        body = args[2];
-    }
-    
-    if (!body) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "defn requires at least one body expression",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Create function object using make_function
-    // We need to extract parameters as CljObject** array
-    CljObject *params_array[16];
-    CljObject **params = params_array;
-    if (param_count > 16) {
-        // For now, limit to 16 parameters
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "defn supports maximum 16 parameters",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    for (int i = 0; i < param_count; i++) {
-        params[i] = params_vec_data->data[i];
-    }
-    
-    // Create function object
-    CljObject *fn_obj = make_function(params, param_count, body, NULL, NULL);
-    if (!fn_obj) {
-        return NULL;
-    }
-    
-    // Set function name
-    if (is_type(fn_obj, CLJ_CLOSURE)) {
-        CljFunction *func = as_function((ID)fn_obj);
-        CljSymbol *sym = as_symbol((ID)name_sym);
-        if (func && sym && sym->name[0] && !func->name) {
-            func->name = strdup(sym->name);
-        }
-    }
-    
-    // Bind function to namespace
-    ns_define(st->current_ns, name_sym, fn_obj);
-    
-    // Return the symbol (Clojure-compatible: defn returns the var/symbol, not the value)
-    return name_sym;
-}
-
 // Native ns implementation (converted from special form)
 ID native_ns(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "ns")) return NULL;
@@ -1544,13 +1448,12 @@ void register_builtins() {
     register_builtin_in_namespace("vector?", native_vector_p);
     
     // Time function
-    // register_builtin_in_namespace("time", native_time); // Now implemented as special form
+    register_builtin_in_namespace("time", native_time); // Register as builtin
     register_builtin_in_namespace("time-micro", native_time_micro);
     register_builtin_in_namespace("sleep", native_sleep);
     
     // Special forms converted to builtins
     register_builtin_in_namespace("def", native_def);
-    register_builtin_in_namespace("defn", native_defn);
     register_builtin_in_namespace("ns", native_ns);
     
     // Control flow functions

@@ -1,0 +1,136 @@
+WARNING: Implicit use of clojure.main with options is deprecated, use -M -e 
+        (defn fib [n] 
+          (if (< n 2) 
+            n 
+            (+ (fib (- n 1)) (fib (- n 2)))))
+        
+        (defn benchmark-fibonacci []
+          (let [start (System/currentTimeMillis)]
+            (dotimes [i 1000]
+              (fib 20))
+            (let [end (System/currentTimeMillis)]
+              (println (str "Elapsed time: " (- end start) " msecs")))))
+        
+        (loop []
+          (benchmark-fibonacci)
+          (Thread/sleep 100)
+          (recur))
+        
+#'user/fib
+#'user/benchmark-fibonacci
+Elapsed time: 86 msecs
+Elapsed time: 59 msecs
+Elapsed time: 59 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 56 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 61 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 56 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 58 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 58 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs
+Elapsed time: 57 msecs
+Elapsed time: 56 msecs
+Elapsed time: 56 msecs
+Elapsed time: 57 msecs

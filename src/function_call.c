@@ -16,6 +16,7 @@
 #include "exception.h"
 #include "function.h"
 #include "validation.h"
+#include "builtins.h"
 
 #include "error_messages.h"
 #include <limits.h>
@@ -55,6 +56,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st);
 
 // Forward declarations for loop evaluation
 CljObject* eval_body_with_env(CljObject *body, CljMap *env);
+CljObject* eval_body_with_local_env(CljObject *body, CljMap *local_env, EvalState *st);
 CljObject* eval_list_with_env(CljList *list, CljMap *env);
 
 
@@ -502,6 +504,50 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env) {
             if (!is_type(body, CLJ_LIST)) return NULL;
             CljList *list_data = as_list((ID)body);
             return eval_list_with_env(list_data, env);
+        }
+        
+        default:
+            // Literal value
+            return AUTORELEASE(RETAIN(body));
+    }
+}
+
+// Evaluate body with local environment (for dotimes, doseq, etc.)
+CljObject* eval_body_with_local_env(CljObject *body, CljMap *local_env, EvalState *st) {
+    // Assertion: Environment and state must not be NULL when expected
+    CLJ_ASSERT(local_env != NULL);
+    CLJ_ASSERT(body != NULL);
+    CLJ_ASSERT(st != NULL);
+    
+    switch (body->type) {
+        case CLJ_SYMBOL: {
+            // First try local environment
+            CljObject *result = (CljObject*)env_get_stack((CljObject*)local_env, body);
+            if (result) {
+                return AUTORELEASE(RETAIN(result));
+            }
+            
+            // If not found in local environment, try namespace
+            if (st && st->current_ns && st->current_ns->mappings) {
+                result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body);
+                if (result) {
+                    return AUTORELEASE(RETAIN(result));
+                }
+            }
+            
+            // If still not found, try global symbol resolution
+            result = eval_symbol(body, st);
+            return AUTORELEASE(RETAIN(result));
+        }
+        
+        case CLJ_LIST: {
+            // Type check before calling
+            if (!is_type(body, CLJ_LIST)) return NULL;
+            CljList *list_data = as_list((ID)body);
+            
+            // Use eval_list for full evaluation with namespace access
+            // Pass local_env as the environment parameter
+            return eval_list(list_data, local_env, st);
         }
         
         default:
@@ -1024,9 +1070,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // BUT: Keep the original symbol for comparison before resolving
     CljObject *original_op = op;
     if (is_type(op, CLJ_SYMBOL)) {
-        CljObject *resolved = eval_symbol(op, st);
+        // First try local environment
+        CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, op);
         if (resolved) {
             op = resolved;
+        } else {
+            // Fallback to global namespace
+            resolved = eval_symbol(op, st);
+            if (resolved) {
+                op = resolved;
+            }
         }
     }
     
@@ -2147,7 +2200,14 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
     if (is_type(element, CLJ_SYMBOL)) {
         if (env) {
             CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, element);
-            if (resolved) return resolved;
+            if (resolved) {
+        // printf("DEBUG: Symbol resolved from env: %p -> %p\n", element, resolved);
+        // printf("DEBUG: Resolved value is_fixnum: %d\n", is_fixnum((CljValue)resolved));
+        // if (is_fixnum((CljValue)resolved)) {
+        //     printf("DEBUG: Resolved value as_fixnum: %d\n", as_fixnum((CljValue)resolved));
+        // }
+                return resolved;
+            }
         }
         
         // If not found in local environment, try namespace
@@ -2204,52 +2264,50 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     }
     
     CljObject *binding_list = list_data->rest && is_type(list_data->rest, CLJ_LIST) ? as_list(list_data->rest)->first : NULL;
-    CljObject *body = list_data->rest && is_type(list_data->rest, CLJ_LIST) && as_list(list_data->rest)->rest && is_type(as_list(list_data->rest)->rest, CLJ_LIST) ? as_list(as_list(list_data->rest)->rest)->first : NULL;
+    CljObject *body = list_data->rest && is_type(list_data->rest, CLJ_LIST) && as_list(list_data->rest)->rest ? as_list(as_list(list_data->rest)->rest)->first : NULL;
     
-    if (!binding_list || !is_type(binding_list, CLJ_LIST)) {
+    if (!binding_list || !body) {
         return NULL;
     }
     
-    // Parse binding: [var n]
-    CljList *binding_data = as_list(binding_list);
-    if (!binding_data->first || !binding_data->rest) {
+    // Parse binding: [var n] - support both vectors and lists
+    CljObject *var = NULL;
+    CljObject *n_obj = NULL;
+    
+    if (is_type(binding_list, CLJ_VECTOR)) {
+        // Use nth function to safely access vector elements
+        var = nth2((ID[]){binding_list, fixnum(0)}, 2);
+        n_obj = nth2((ID[]){binding_list, fixnum(1)}, 2);
+    } else if (is_type(binding_list, CLJ_LIST)) {
+        CljList *binding_data = as_list(binding_list);
+        if (!binding_data->first || !binding_data->rest) {
+            return NULL;
+        }
+        var = binding_data->first;
+        n_obj = binding_data->rest;
+    } else {
         return NULL;
     }
     
-    CljObject *var = binding_data->first;
-    CljObject *n_expr = binding_data->rest;
-    
-    // Get number of iterations
-    CljList *n_data = as_list(n_expr);
-    if (!n_data->first) {
-        return NULL;
-    }
-    
-    CljObject *n_obj = n_data->first; // Simple: just use the expression directly
-    if (!is_fixnum((CljValue)n_obj)) {
-        RELEASE(n_obj);
+    if (!var || !n_obj || !is_fixnum((CljValue)n_obj)) {
         return NULL;
     }
     
     int n = as_fixnum((CljValue)n_obj);
-    RELEASE(n_obj);
     
     // Execute body n times
     for (int i = 0; i < n; i++) {
         // Create new environment with binding using map_assoc
         CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
         if (new_env) {
-            // Copy existing environment bindings
-            if (env) {
-                // For now, just use the existing environment
-                // TODO: Implement proper environment copying
-            }
+            // Don't copy existing environment bindings - just add the loop variable
             // Add new binding
-            map_assoc((CljObject*)new_env, var, fixnum(i));
+            CljValue i_value = fixnum((int32_t)i);
+                    map_assoc((CljObject*)new_env, var, i_value);
             
             // Evaluate body with new binding
             EvalState *st = evalstate();
-            CljObject *body_result = eval_body(body, new_env, st);
+            CljObject *body_result = eval_list(as_list((ID)body), new_env, st);
             if (body_result) {
                 RELEASE(body_result);
             }
@@ -2259,7 +2317,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
         }
     }
     
-    return AUTORELEASE(NULL); // dotimes always returns nil
+    return AUTORELEASE(NULL); // dotimes always returns nil (Clojure-compatible)
 }
 
 // ============================================================================
@@ -2283,9 +2341,6 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     // Get the expression to time (second element): (time expr)
     CljObject *expr = list_get_element(list, 1);
     if (!expr) {
-        throw_exception("IllegalArgumentException", 
-                       "time expression cannot be null",
-                       NULL, 0, 0);
         return NULL;
     }
     
@@ -2294,7 +2349,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     gettimeofday(&start, NULL);
     
     // Evaluate the expression (this is the key difference from builtin!)
-    CljObject *result = eval_body(expr, env, st);
+    CljObject *result = eval_expr_simple(expr, st);
     
     // End timing
     gettimeofday(&end, NULL);

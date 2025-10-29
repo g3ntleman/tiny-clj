@@ -114,3 +114,26 @@ TEST(test_defn_recursive_function) {
         evalstate_free(st);
 }
 
+// ============================================================================
+// TEST: defn symbol resolution in REPL context (reproduces current bug)
+// ============================================================================
+TEST(test_defn_symbol_resolution_in_repl_context) {
+    EvalState *st = evalstate_new();
+    
+    // Simuliere REPL-Kontext: evaluiere defn wie im REPL
+    // Das sollte aktuell fehlschlagen mit "Unable to resolve symbol: defn"
+    const char *code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
+    CljValue result = eval_string(code, st);
+    
+    // Test sollte zeigen, dass defn funktioniert
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Funktion sollte aufrufbar sein
+    CljValue call = eval_string("(fib 5)", st);
+    TEST_ASSERT_NOT_NULL(call);
+    TEST_ASSERT_TRUE(is_fixnum(call));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(call));
+    
+    evalstate_free(st);
+}
+

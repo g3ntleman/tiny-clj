@@ -306,6 +306,7 @@ extern void test_defn_single_parameter(void);
 extern void test_defn_no_parameters(void);
 extern void test_defn_multiple_body_expressions(void);
 extern void test_defn_recursive_function(void);
+extern void test_defn_symbol_resolution_in_repl_context(void);
 
 extern void test_time_returns_result(void);
 extern void test_time_with_let(void);

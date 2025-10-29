@@ -60,7 +60,6 @@ ID native_sleep(ID *args, unsigned int argc);
 
 // Special forms converted to builtins
 ID native_def(ID *args, unsigned int argc);
-ID native_defn(ID *args, unsigned int argc);
 
 // Print functions
 ID native_print(ID *args, unsigned int argc);

@@ -1,13 +1,2 @@
-Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/fibonacci.clj
-EXCEPTION: RuntimeException: Unable to resolve symbol: defn in this context at src/function_call.c:1393:0
-nil
-nil
-nil
-nil
-nil
-nil
-nil
-nil
-
-🔍 === REPL Memory Profiling Stats ===
-📊 Final memory state before exit
+Führe aus: echo '(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)' | timeout 30 
+Try 'timeout --help' for more information.

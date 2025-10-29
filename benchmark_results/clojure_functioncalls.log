@@ -1,4 +1,4 @@
 Führe aus: clojure ./benchmarks/function_call_performance.clj
 WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/function_call_performance.clj
 Running function call performance benchmark (1000x iterations)...
-"Elapsed time: 2.033042 msecs"
+"Elapsed time: 1.899958 msecs"

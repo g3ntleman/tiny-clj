@@ -131,8 +131,12 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     measure_execution_time "clojure $BENCHMARK_DIR/fibonacci.clj" "Clojure-Fibonacci" "$RESULTS_DIR/clojure_fibonacci"
 fi
 
-# tiny-clj kann defn nicht verwenden, überspringe
-echo -e "${YELLOW}⚠️  tiny-clj Fibonacci übersprungen (defn nicht verfügbar)${NC}"
+# tiny-clj Fibonacci benchmark
+if [ "$TINY_CLJ_AVAILABLE" = true ]; then
+    measure_execution_time "echo '(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)' | timeout 30 $TINY_CLJ_REPL" "tiny-clj-Fibonacci" "$RESULTS_DIR/tiny_clj_fibonacci"
+else
+    echo -e "${YELLOW}⚠️  tiny-clj Fibonacci übersprungen (tiny-clj nicht verfügbar)${NC}"
+fi
 
 echo ""
 
@@ -143,8 +147,12 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     measure_execution_time "clojure $BENCHMARK_DIR/sum_rec.clj" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
 fi
 
-# tiny-clj kann defn nicht verwenden, überspringe
-echo -e "${YELLOW}⚠️  tiny-clj SumRec übersprungen (defn nicht verfügbar)${NC}"
+# tiny-clj SumRec benchmark
+if [ "$TINY_CLJ_AVAILABLE" = true ]; then
+    measure_execution_time "echo 'user=> (defn sum-rec [n] (if (= n 0) 0 (+ n (sum-rec (- n 1))))) (sum-rec 100)' | $TINY_CLJ_REPL" "tiny-clj-SumRec" "$RESULTS_DIR/tiny_clj_sumrec"
+else
+    echo -e "${YELLOW}⚠️  tiny-clj SumRec übersprungen (tiny-clj nicht verfügbar)${NC}"
+fi
 
 echo ""
 
@@ -155,8 +163,12 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     measure_execution_time "clojure $BENCHMARK_DIR/let_performance.clj" "Clojure-Let" "$RESULTS_DIR/clojure_let"
 fi
 
-# tiny-clj kann defn nicht verwenden, überspringe
-echo -e "${YELLOW}⚠️  tiny-clj Let übersprungen (defn nicht verfügbar)${NC}"
+# tiny-clj Let benchmark
+if [ "$TINY_CLJ_AVAILABLE" = true ]; then
+    measure_execution_time "echo 'user=> (defn test-let [] (let [a 1 b 2 c 3] (+ a b c))) (dotimes [i 1000] (test-let))' | $TINY_CLJ_REPL" "tiny-clj-Let" "$RESULTS_DIR/tiny_clj_let"
+else
+    echo -e "${YELLOW}⚠️  tiny-clj Let übersprungen (tiny-clj nicht verfügbar)${NC}"
+fi
 
 echo ""
 
@@ -167,8 +179,12 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     measure_execution_time "clojure $BENCHMARK_DIR/arithmetic_performance.clj" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
 fi
 
-# tiny-clj kann defn nicht verwenden, überspringe
-echo -e "${YELLOW}⚠️  tiny-clj Arithmetic übersprungen (defn nicht verfügbar)${NC}"
+# tiny-clj Arithmetic benchmark
+if [ "$TINY_CLJ_AVAILABLE" = true ]; then
+    measure_execution_time "echo 'user=> (defn test-arithmetic [] (let [a 1 b 2 c 3 d 4 e 5] (+ (* a b) (- c d) (/ e 2)))) (dotimes [i 1000] (test-arithmetic))' | $TINY_CLJ_REPL" "tiny-clj-Arithmetic" "$RESULTS_DIR/tiny_clj_arithmetic"
+else
+    echo -e "${YELLOW}⚠️  tiny-clj Arithmetic übersprungen (tiny-clj nicht verfügbar)${NC}"
+fi
 
 echo ""
 
@@ -179,8 +195,12 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     measure_execution_time "clojure $BENCHMARK_DIR/function_call_performance.clj" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
 fi
 
-# tiny-clj kann defn nicht verwenden, überspringe
-echo -e "${YELLOW}⚠️  tiny-clj FunctionCalls übersprungen (defn nicht verfügbar)${NC}"
+# tiny-clj FunctionCalls benchmark
+if [ "$TINY_CLJ_AVAILABLE" = true ]; then
+    measure_execution_time "echo 'user=> (defn add [a b] (+ a b)) (defn multiply [a b] (* a b)) (defn test-calls [] (add (multiply 2 3) (add 1 2))) (dotimes [i 1000] (test-calls))' | $TINY_CLJ_REPL" "tiny-clj-FunctionCalls" "$RESULTS_DIR/tiny_clj_functioncalls"
+else
+    echo -e "${YELLOW}⚠️  tiny-clj FunctionCalls übersprungen (tiny-clj nicht verfügbar)${NC}"
+fi
 
 echo ""
 
