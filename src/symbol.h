@@ -38,6 +38,7 @@ extern CljObject *SYM_RECUR;
 extern CljObject *SYM_THROW;
 extern CljObject *SYM_FINALLY;
 extern CljObject *SYM_NS;
+extern CljObject *SYM_TIME;
 
 // Globale Symbol-Pointer für Builtin-Funktionen
 extern CljObject *SYM_PLUS;
@@ -95,9 +96,5 @@ int symbol_count();
 
 // Initialisierung der globalen Symbole
 void init_special_symbols();
-
-// Hilfsfunktionen für Symbol-Vergleiche
-bool is_special_form(CljObject *symbol, CljObject *special_symbol);
-bool is_builtin_function(CljObject *symbol, CljObject *builtin_symbol);
 
 #endif

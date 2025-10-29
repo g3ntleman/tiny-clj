@@ -24,7 +24,6 @@
 #include "exception.h"
 #include "clj_strings.h"
 #include "strings.h"
-#include "parser.h"
 
 // Forward declaration for eval_body_with_env
 extern CljObject* eval_body_with_env(CljObject *body, CljMap *env);
@@ -1518,7 +1517,7 @@ void register_builtins() {
     register_builtin_in_namespace("vector?", native_vector_p);
     
     // Time function
-    register_builtin_in_namespace("time", native_time);
+    // register_builtin_in_namespace("time", native_time); // Now implemented as special form
     register_builtin_in_namespace("time-micro", native_time_micro);
     register_builtin_in_namespace("sleep", native_sleep);
     

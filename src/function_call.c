@@ -1449,7 +1449,6 @@ ID eval_symbol(ID symbol, EvalState *st) {
     
     // Fallback: Try global namespace lookup for special forms and builtins
     if (sym) {
-        const char *name = sym->name;
         
         // Check against cached symbol pointers for O(1) lookup (only if initialized)
         if ((SYM_IF && symbol == SYM_IF) || (SYM_DEF && symbol == SYM_DEF) || 
@@ -1472,24 +1471,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_CONS && symbol == SYM_CONS) || (SYM_SEQ && symbol == SYM_SEQ) || 
             (SYM_NEXT && symbol == SYM_NEXT) || (SYM_LIST && symbol == SYM_LIST) ||
             (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
-            (SYM_DOTIMES && symbol == SYM_DOTIMES)) {
-            return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
-        }
-        
-        // Fallback: String-based lookup for special forms (slower but works)
-        if (strcmp(name, "def") == 0 || strcmp(name, "if") == 0 || strcmp(name, "fn") == 0 ||
-            strcmp(name, "quote") == 0 || strcmp(name, "recur") == 0 || strcmp(name, "and") == 0 ||
-            strcmp(name, "or") == 0 || strcmp(name, "ns") == 0 || strcmp(name, "try") == 0 ||
-            strcmp(name, "catch") == 0 || strcmp(name, "throw") == 0 || strcmp(name, "finally") == 0 ||
-            strcmp(name, "loop") == 0 || strcmp(name, "let") == 0 || strcmp(name, "time") == 0 ||
-            strcmp(name, "+") == 0 || strcmp(name, "-") == 0 || strcmp(name, "*") == 0 ||
-            strcmp(name, "/") == 0 || strcmp(name, "=") == 0 || strcmp(name, "<") == 0 ||
-            strcmp(name, ">") == 0 || strcmp(name, "<=") == 0 || strcmp(name, ">=") == 0 ||
-            strcmp(name, "print") == 0 || strcmp(name, "str") == 0 ||
-            strcmp(name, "nth") == 0 || strcmp(name, "first") == 0 ||
-            strcmp(name, "rest") == 0 || strcmp(name, "count") == 0 || strcmp(name, "cons") == 0 ||
-            strcmp(name, "seq") == 0 || strcmp(name, "next") == 0 || strcmp(name, "list") == 0 ||
-            strcmp(name, "for") == 0 || strcmp(name, "doseq") == 0 || strcmp(name, "dotimes") == 0) {
+            (SYM_DOTIMES && symbol == SYM_DOTIMES) || (SYM_TIME && symbol == SYM_TIME)) {
             return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
         }
     }

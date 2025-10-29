@@ -22,6 +22,7 @@ CljObject *SYM_THROW = NULL;
 CljObject *SYM_FINALLY = NULL;
 CljObject *SYM_VAR = NULL;
 CljObject *SYM_NS = NULL;
+CljObject *SYM_TIME = NULL;
 
 // Builtin-Funktionen
 CljObject *SYM_PLUS = NULL;
@@ -119,6 +120,9 @@ static struct { CljSymbol sym; } sym_var_data = {
 };
 static struct { CljSymbol sym; } sym_ns_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "ns" }
+};
+static struct { CljSymbol sym; } sym_time_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "time" }
 };
 
 // Static symbol structs for built-in functions (compile-time initialization)
@@ -286,6 +290,9 @@ void init_special_symbols() {
     SYM_NS = (CljObject*)&sym_ns_data;
     symbol_table_add(NULL, "ns", SYM_NS);
     
+    SYM_TIME = (CljObject*)&sym_time_data;
+    symbol_table_add(NULL, "time", SYM_TIME);
+    
     SYM_PLUS = (CljObject*)&sym_plus_data;
     symbol_table_add(NULL, "+", SYM_PLUS);
     
@@ -387,11 +394,3 @@ void init_special_symbols() {
     symbol_table_add(NULL, ":stack", SYM_KW_STACK);
 }
 
-// Hilfsfunktionen für Symbol-Vergleiche
-bool is_special_form(CljObject *symbol, CljObject *special_symbol) {
-    return symbol == special_symbol;
-}
-
-bool is_builtin_function(CljObject *symbol, CljObject *builtin_symbol) {
-    return symbol == builtin_symbol;
-}
