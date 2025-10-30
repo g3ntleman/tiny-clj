@@ -266,8 +266,12 @@ static bool run_interactive_repl(EvalState *st) {
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
     
-    // Enable verbose memory mode for REPL
-    g_memory_verbose_mode = true;
+    // Default: quiet REPL memory logs; enable via env var
+    set_memory_verbose_mode(false);
+    const char *mem_verbose_env = getenv("TINYCLJ_MEM_VERBOSE");
+    if (mem_verbose_env && strcmp(mem_verbose_env, "1") == 0) {
+        set_memory_verbose_mode(true);
+    }
     
     // Memory profiling is now initialized and ready
     printf("🔍 Memory profiling initialized for REPL (Debug Build)\n");

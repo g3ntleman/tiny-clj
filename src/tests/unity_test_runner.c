@@ -574,6 +574,7 @@ static void print_new_usage(const char *program_name) {
     printf("  --filter <pattern>   Run tests matching pattern (supports * wildcard and exact names)\n");
     printf("  --list              List all available tests\n");
     printf("  --quiet             Run all tests with minimal memory leak output\n");
+    printf("  --mem-debug         Enable verbose memory-debug logs during tests\n");
     printf("  --help, -h          Show this help\n");
     printf("  (no args)           Run all tests\n\n");
     printf("Test Names:\n");
@@ -681,6 +682,13 @@ int main(int argc, char **argv) {
     // Enable memory profiling for tests (only in DEBUG builds)
 #ifdef ENABLE_MEMORY_PROFILING
     enable_memory_profiling(true);
+    // Optional verbose memory logs via CLI flag --mem-debug
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--mem-debug") == 0) {
+            set_memory_verbose_mode(true);
+            break;
+        }
+    }
 #endif
     
     // Parse command line arguments
@@ -694,6 +702,10 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[1], "--quiet") == 0) {
             // Reduce memory leak spam for cleaner output
             set_memory_leak_reporting_enabled(false);
+            run_all_tests();
+        } else if (strcmp(argv[1], "--mem-debug") == 0) {
+            // Enable verbose memory debugging and run all tests
+            set_memory_verbose_mode(true);
             run_all_tests();
         } else if (strcmp(argv[1], "--test") == 0) {
             if (argc < 3) {

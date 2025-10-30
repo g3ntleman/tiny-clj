@@ -332,7 +332,11 @@ int get_retain_count(CljObject *obj);
     static inline void logf_impl(FILE *stream, const char *fmt, ...) {
         va_list ap; va_start(ap, fmt); vfprintf(stream, fmt, ap); va_end(ap);
     }
-    #define LOGF(stream, fmt, ...) do { logf_impl((stream), (fmt), ##__VA_ARGS__); } while(0)
+    #define LOGF(stream, fmt, ...) do { \
+        if (memory_profiler_is_verbose()) { \
+            logf_impl((stream), (fmt), ##__VA_ARGS__); \
+        } \
+    } while(0)
 #else
     #define LOGF(stream, fmt, ...) do { } while(0)
 #endif

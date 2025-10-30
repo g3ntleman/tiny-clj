@@ -189,6 +189,10 @@ bool is_memory_leak_reporting_enabled(void);
  */
 void set_memory_verbose_mode(bool verbose);
 
+// Runtime verbosity API for logging control
+void memory_profiler_set_verbose(bool on);
+bool memory_profiler_is_verbose(void);
+
 /**
  * @brief Track a memory allocation
  * @param size Size of allocated memory in bytes

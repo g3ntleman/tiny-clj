@@ -300,7 +300,15 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
 
 void memory_profiler_print_stats(const char *test_name) {
     if (!g_memory_profiling_enabled) return;
-    print_memory_table(&g_memory_stats, test_name, false);
+    const MemoryStats *stats = &g_memory_stats;
+    // Always print a compact summary regardless of verbosity
+    fprintf(stdout, "📊 Memory: Alloc:%zu Dealloc:%zu Peak:%zu Current:%zu Leaks:%zu\n",
+            stats->total_allocations, stats->total_deallocations,
+            stats->peak_memory_usage, stats->current_memory_usage, stats->memory_leaks);
+    // If verbose, also print detailed table
+    if (g_memory_verbose_mode) {
+        print_memory_table(stats, test_name, false);
+    }
 }
 
 // ============================================================================
@@ -623,6 +631,23 @@ void set_memory_verbose_mode(bool verbose) {
     g_memory_verbose_mode = verbose;
 #else
     (void)verbose; // Suppress unused parameter warning
+#endif
+}
+
+// Verbosity control API used by logging macros and frontends
+void memory_profiler_set_verbose(bool on) {
+#ifdef ENABLE_MEMORY_PROFILING
+    g_memory_verbose_mode = on;
+#else
+    (void)on;
+#endif
+}
+
+bool memory_profiler_is_verbose(void) {
+#ifdef ENABLE_MEMORY_PROFILING
+    return g_memory_verbose_mode;
+#else
+    return false;
 #endif
 }
 
