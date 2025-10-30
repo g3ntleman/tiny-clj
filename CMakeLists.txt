@@ -78,6 +78,8 @@ list(APPEND SOURCES
     src/byte_array.c
     src/reader.c
     src/function_call.c
+    src/event_loop.c
+    src/channel.c
     src/list.c
     src/vector.c
     src/map.c
@@ -132,6 +134,8 @@ set(STM32_SOURCES
 add_executable(tiny-clj-esp32
     src/main_esp32.c
     src/platform_esp32_embedded.c
+    src/event_loop.c
+    src/channel.c
     src/clojure_core.c
     src/types.c
     src/object.c
@@ -267,6 +271,8 @@ add_executable(unity-tests
     src/parser.c
     src/reader.c
     src/function_call.c
+    src/event_loop.c
+    src/channel.c
     src/list.c
     src/seq.c
     src/clojure_core.c
