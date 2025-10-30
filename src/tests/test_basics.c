@@ -88,19 +88,12 @@ TEST(test_string_creation) {
     // Test direct string creation (bypassing eval_string)
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
-    
+
     // Test direct string creation
-    CljObject *str = make_string("hello world");
+    CljObject *str = AUTORELEASE(make_string("hello world"));
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
-    
-    // Debug: Check if str is a singleton
-    if (str && str->rc == 0) {
-        printf("🔍 Direct string is singleton (rc=0)\n");
-    } else if (str) {
-        printf("🔍 Direct string rc=%d\n", str->rc);
-    }
-    
+
     // Clean up
     evalstate_free(st);
 }
@@ -591,8 +584,6 @@ TEST(test_as_list_valid) {
     CljObject *first = LIST_FIRST(list_data);
     TEST_ASSERT_NOT_NULL(first);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
-    
-    RELEASE(list);
     evalstate_free(st);
 }
 
@@ -661,9 +652,6 @@ TEST(test_is_type_function) {
     TEST_ASSERT_TRUE(IS_IMMEDIATE(number));
     TEST_ASSERT_FALSE(is_type(number, CLJ_SYMBOL));
     
-    RELEASE(list);
-    RELEASE(symbol);
-    RELEASE(number);
     evalstate_free(st);
 }
 
