@@ -499,6 +499,12 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   (void)st;
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
+  // Validate that current position starts a symbol
+  uint32_t start_cp = reader_peek_codepoint(reader);
+  if (start_cp == READER_EOF || start_cp == READER_UTF8_ERROR || !utf8_is_symbol_char((int)start_cp)) {
+    throw_parser_exception("Expected symbol", reader);
+    return NULL;
+  }
   
   // Handle keyword prefix
   if (reader_peek_char(reader) == ':') {
@@ -508,8 +514,12 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   }
   
   while (!reader_eof(reader) && pos < MAX_STACK_STRING_SIZE - 1) {
-    int cp = reader_peek_codepoint(reader);
-    if (cp < 0) break;
+    uint32_t cp = reader_peek_codepoint(reader);
+    if (cp == READER_EOF) break;
+    if (cp == READER_UTF8_ERROR) {
+      throw_parser_exception("Invalid UTF-8 sequence", reader);
+      return NULL;
+    }
     
     if (utf8_is_symbol_char(cp)) {
       // Get the UTF-8 bytes for this codepoint

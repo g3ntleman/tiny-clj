@@ -1,3 +1,76 @@
+// Tests für History-Persistenz (Vector<String>) via to-string/Parser
+#include "tests_common.h"
+
+// Vorwärtsdeklarationen aus line_editor.c
+extern bool history_save_to_file(CljObject *vec, const char *path);
+extern CljObject* history_load_from_file(const char *path);
+extern CljObject* history_trim_last_n(CljObject *vec, int limit);
+
+static const char *tmp_hist_path = "/tmp/tiny_clj_history_test.edn";
+
+TEST(test_history_roundtrip_basic) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+
+        // Erzeuge Vector aus Strings
+        CljObject *vec = eval_string("[\"a\" \"b\" \"c\"]", st);
+        TEST_ASSERT_NOT_NULL(vec);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
+
+        // Speichern
+        bool ok = history_save_to_file(vec, tmp_hist_path);
+        TEST_ASSERT_TRUE(ok);
+
+        // Laden
+        CljObject *loaded = history_load_from_file(tmp_hist_path);
+        TEST_ASSERT_NOT_NULL(loaded);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, loaded->type);
+
+        // Vergleiche Count und Werte
+        CljObject *c = eval_string("(count [\"a\" \"b\" \"c\"])", st);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)c));
+        CljPersistentVector *v = as_vector(loaded);
+        TEST_ASSERT_NOT_NULL(v);
+        TEST_ASSERT_EQUAL_INT(as_fixnum((CljValue)c), v->count);
+        TEST_ASSERT_TRUE(is_type(v->data[0], CLJ_STRING));
+        TEST_ASSERT_TRUE(is_type(v->data[1], CLJ_STRING));
+        TEST_ASSERT_TRUE(is_type(v->data[2], CLJ_STRING));
+
+        evalstate_free(st);
+    });
+}
+
+TEST(test_history_trim_to_50) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+
+        // Baue Vector mit 75 Strings
+        CljObject *vec = eval_string("(vec (map str (range 75)))", st);
+        // Fallback falls (range/map/str) nicht verfügbar: ersetze mit Literal
+        if (!vec) vec = eval_string("[\"0\" \"1\" \"2\" \"3\" \"4\" \"5\" \"6\" \"7\" \"8\" \"9\" \"10\" \"11\" \"12\" \"13\" \"14\" \"15\" \"16\" \"17\" \"18\" \"19\" \"20\" \"21\" \"22\" \"23\" \"24\" \"25\" \"26\" \"27\" \"28\" \"29\" \"30\" \"31\" \"32\" \"33\" \"34\" \"35\" \"36\" \"37\" \"38\" \"39\" \"40\" \"41\" \"42\" \"43\" \"44\" \"45\" \"46\" \"47\" \"48\" \"49\" \"50\" \"51\" \"52\" \"53\" \"54\" \"55\" \"56\" \"57\" \"58\" \"59\" \"60\" \"61\" \"62\" \"63\" \"64\" \"65\" \"66\" \"67\" \"68\" \"69\" \"70\" \"71\" \"72\" \"73\" \"74\"]", st);
+        TEST_ASSERT_NOT_NULL(vec);
+
+        CljObject *trimmed = history_trim_last_n(vec, 50);
+        TEST_ASSERT_NOT_NULL(trimmed);
+        CljPersistentVector *tv = as_vector(trimmed);
+        TEST_ASSERT_NOT_NULL(tv);
+        TEST_ASSERT_EQUAL_INT(50, tv->count);
+
+        // Speichern und Laden, weiterhin 50
+        bool ok = history_save_to_file(trimmed, tmp_hist_path);
+        TEST_ASSERT_TRUE(ok);
+        CljObject *loaded = history_load_from_file(tmp_hist_path);
+        TEST_ASSERT_NOT_NULL(loaded);
+        CljPersistentVector *lv = as_vector(loaded);
+        TEST_ASSERT_NOT_NULL(lv);
+        TEST_ASSERT_EQUAL_INT(50, lv->count);
+
+        evalstate_free(st);
+    });
+}
+
 /*
  * Unit Tests for File I/O Functions (slurp)
  * 

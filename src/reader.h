@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "utf8.h"
 
 typedef struct {
@@ -12,6 +13,18 @@ typedef struct {
     int line;
     int column;
 } Reader;
+
+// Codepoint sentinel constants for reader functions (unsigned variant)
+// Return values:
+//  - 0..0x10FFFF: valid Unicode codepoints
+//  - READER_EOF: end of input
+//  - READER_UTF8_ERROR: invalid UTF-8 sequence
+#ifndef READER_EOF
+#define READER_EOF        ((uint32_t)UINT32_MAX)
+#endif
+#ifndef READER_UTF8_ERROR
+#define READER_UTF8_ERROR ((uint32_t)(UINT32_MAX - 1))
+#endif
 
 void reader_init(Reader *reader, const char *src);
 bool reader_eof(const Reader *reader);
@@ -31,8 +44,8 @@ bool reader_skip_ignorable(Reader *reader);
 bool reader_skip_all_including_newlines(Reader *reader);
 
 // UTF-8 codepoint functions
-int reader_peek_codepoint(const Reader *reader);
-int reader_next_codepoint(Reader *reader);
+uint32_t reader_peek_codepoint(const Reader *reader);
+uint32_t reader_next_codepoint(Reader *reader);
 bool reader_is_delimiter(const Reader *reader);
 bool reader_is_symbol_char(const Reader *reader);
 

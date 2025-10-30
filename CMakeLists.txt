@@ -116,6 +116,8 @@ set(STM32_SOURCES
     src/parser.c
     src/byte_array.c
     src/reader.c
+    src/event_loop.c
+    src/channel.c
     src/function_call.c
     src/list.c
     src/vector.c
@@ -194,6 +196,7 @@ endif()
 # REPL executable (with line editing support)
 add_executable(tiny-clj-repl
     src/repl.c
+    src/repl_history.c
     src/platform_macos.c
     src/line_editor.c
     ${SOURCES}
@@ -212,6 +215,7 @@ endif()
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
 add_executable(tiny-clj-esp32-repl
     src/repl.c
+    src/repl_history.c
     src/platform_stm32.c
     src/line_editor.c
     src/memory_profiler.c
@@ -285,6 +289,7 @@ add_executable(unity-tests
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
+    src/repl_history.c
 )
 
 # Debug parser target removed - file not found

@@ -1,5 +1,10 @@
 #include "line_editor.h"
 #include "vector.h"
+#include "parser.h"
+#include "reader.h"
+#include "exception.h"
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "clj_strings.h"
 #include "strings.h"
 #include "memory.h"
@@ -460,6 +465,45 @@ int line_editor_get_history_size(const LineEditor *editor) {
     return vec ? vec->count : 0;
 }
 
+CljObject* line_editor_get_history_vector(LineEditor *editor) {
+    if (!editor || !editor->history) return make_vector(0, 0);
+    CljPersistentVector *v = as_vector(editor->history);
+    int n = v ? v->count : 0;
+    CljValue out = make_vector(n, 0);
+    CljPersistentVector *o = as_vector((CljObject*)out);
+    for (int i = 0; i < n; i++) {
+        o->data[i] = (RETAIN(v->data[i]), v->data[i]);
+    }
+    o->count = n;
+    return (CljObject*)out;
+}
+
+void line_editor_clear_history(LineEditor *editor) {
+    if (!editor) return;
+    if (editor->history) {
+        RELEASE(editor->history);
+    }
+    CljValue persistent_vec = make_vector(50, 0);
+    editor->history = transient(persistent_vec);
+    RELEASE((CljObject*)persistent_vec);
+    editor->history_index = -1;
+}
+
+void line_editor_set_history_from_vector(LineEditor *editor, CljObject *vec) {
+    if (!editor || !vec || !is_type(vec, CLJ_VECTOR)) return;
+    line_editor_clear_history(editor);
+    CljPersistentVector *v = as_vector(vec);
+    for (int i = 0; v && i < v->count; i++) {
+        if (v->data[i] && is_type(v->data[i], CLJ_STRING)) {
+            char *plain = to_string(v->data[i]);
+            if (plain) {
+                line_editor_add_to_history(editor, plain);
+                free(plain);
+            }
+        }
+    }
+}
+
 // Global line editor management functions
 void set_line_editor(LineEditor *editor) {
     global_editor = editor;
@@ -482,6 +526,41 @@ void line_editor_reset_history_index(LineEditor *editor) {
         editor->history_index = -1;  // Reset to new line mode
     }
 }
+
+// Optional: Default-Persistenzpfad (~/.tiny-clj/history.edn)
+static void build_default_history_path(char *out, size_t out_sz) {
+    const char *home = getenv("HOME");
+    if (!home) home = ".";
+    snprintf(out, out_sz, "%s/.tiny-clj", home);
+    // Ensure directory exists
+    mkdir(out, 0700);
+    snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
+}
+
+// Externe Persistenz-Funktionen (in builtins.c definiert)
+extern CljObject* history_trim_last_n(CljObject *vec, int limit);
+extern bool history_save_to_file(CljObject *vec, const char *path);
+extern CljObject* history_load_from_file(const char *path);
+
+// Laden der History an Default-Pfad, Ergebnis als persistent Vector<String>
+CljObject* line_editor_history_load_default(void) {
+    char path[512];
+    build_default_history_path(path, sizeof(path));
+    return history_load_from_file(path);
+}
+
+// Speichern der History an Default-Pfad; akzeptiert Vector<String> (persistent/transient ok)
+bool line_editor_history_save_default(CljObject *vec) {
+    char path[512];
+    build_default_history_path(path, sizeof(path));
+    // Falls transient, in persistent umwandeln
+    if (vec && vec->type == CLJ_TRANSIENT_VECTOR) {
+        vec = (CljObject*)persistent((CljValue)vec);
+    }
+    return history_save_to_file(vec, path);
+}
+
+// (History-Persistenz jetzt in builtins.c für Test-Verfügbarkeit implementiert)
 
 #else
 // Stub implementations when line editing is disabled

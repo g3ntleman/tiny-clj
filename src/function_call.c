@@ -12,6 +12,10 @@
 #include "common.h"
 #include "object.h"
 #include "function_call.h"
+#include "builtins.h"
+
+// Forward decl for calling nth builtin from dotimes binding parsing
+ID native_nth(ID *args, unsigned int argc);
 #include "symbol.h"
 #include "exception.h"
 #include "function.h"
@@ -2416,8 +2420,8 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     
     if (is_type(binding_list, CLJ_VECTOR)) {
         // Use nth function to safely access vector elements
-        var = nth2((ID[]){binding_list, fixnum(0)}, 2);
-        n_obj = nth2((ID[]){binding_list, fixnum(1)}, 2);
+        var = native_nth((ID[]){binding_list, fixnum(0)}, 2);
+        n_obj = native_nth((ID[]){binding_list, fixnum(1)}, 2);
     } else if (is_type(binding_list, CLJ_LIST)) {
         CljList *binding_data = as_list(binding_list);
         if (!binding_data->first || !binding_data->rest) {

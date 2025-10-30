@@ -11,12 +11,25 @@
 #include "clj_strings.h"
 #include "reader.h"
 #include "runtime.h"
+#include "vector.h"
+#include "memory.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+// Forward decls for line editor history persistence helpers
+extern CljObject* line_editor_history_load_default(void);
+extern bool line_editor_history_save_default(CljObject *vec);
+extern void set_line_editor(LineEditor *editor);
+extern LineEditor* get_line_editor(void);
+extern CljObject* line_editor_get_history_vector(LineEditor *editor);
+extern int line_editor_get_history_size(const LineEditor *editor);
+extern void line_editor_clear_history(LineEditor *editor);
 
 /** @brief Check the balance of parentheses, brackets, and braces.
  *  @param s String to check for delimiter balance
@@ -164,6 +177,16 @@ static bool eval_multiline_string(const char *code, EvalState *st) {
                 // Print exception and continue with next expression
                 print_exception((CLJException*)ex);
                 result = false; // Mark as failed, but continue processing
+                // Auto-Save History on exception
+#ifdef ENABLE_LINE_EDITING
+                WITH_AUTORELEASE_POOL({
+                    LineEditor *ed = get_line_editor();
+                    if (ed) {
+                        CljObject *vec = line_editor_get_history_vector(ed);
+                        if (vec) { line_editor_history_save_default(vec); RELEASE(vec); }
+                    }
+                });
+#endif
                 
                 // Skip to next line to avoid infinite loop on same expression
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
@@ -188,6 +211,12 @@ static bool eval_string_repl(const char *code, EvalState *st) {
     // Use the new multiline evaluation function
     return eval_multiline_string(code, st);
 }
+
+// History-Persistenz Default-Helfer aus line_editor.c
+extern CljObject* history_load_from_file(const char *path);
+extern bool history_save_to_file(CljObject *vec, const char *path);
+
+// (Entfernt) REPL-History-Sonderkommandos
 
 
 
@@ -266,6 +295,20 @@ static bool run_interactive_repl(EvalState *st) {
         return false;
     }
     set_line_editor(editor);
+    // Lade History aus Default-Datei und fülle Editor-History (mit Autorelease-Pool)
+    WITH_AUTORELEASE_POOL({
+        TRY {
+            CljObject *loaded = line_editor_history_load_default();
+            if (loaded && is_type(loaded, CLJ_VECTOR)) {
+                line_editor_set_history_from_vector(editor, loaded);
+            } else {
+                line_editor_clear_history(editor);
+            }
+        } CATCH(ex) {
+            // Ignoriere Ladefehler: starte mit leerer History
+            line_editor_clear_history(editor);
+        } END_TRY
+    });
 #endif
 
     while (true) {
@@ -347,6 +390,8 @@ static bool run_interactive_repl(EvalState *st) {
         }
         // balance == 0: evaluate form
 
+        // (Entfernt) REPL interne History-Kommandos
+
         // Use eval_string_repl for proper exception handling
         bool success = eval_string_repl(acc, st);
         
@@ -409,6 +454,17 @@ static bool run_interactive_repl(EvalState *st) {
         acc[0] = '\0';
         prompt_shown = false; // show fresh prompt after evaluation
     }
+
+    // Auto-Save History on REPL exit
+#ifdef ENABLE_LINE_EDITING
+    WITH_AUTORELEASE_POOL({
+        LineEditor *ed = get_line_editor();
+        if (ed) {
+            CljObject *vec = line_editor_get_history_vector(ed);
+            if (vec) { line_editor_history_save_default(vec); RELEASE(vec); }
+        }
+    });
+#endif
 
     // Print memory profiling stats before exiting REPL
 #ifdef ENABLE_MEMORY_PROFILING
@@ -501,6 +557,9 @@ int main(int argc, char **argv) {
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);
+    } else {
+        // Nach dem Laden von clojure.core explizit zurück in den user-Namespace
+        evalstate_set_ns(st, "user");
     }
 
     if (file_arg) {

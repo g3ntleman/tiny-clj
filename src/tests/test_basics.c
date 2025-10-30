@@ -131,6 +131,7 @@ TEST(test_vector_creation) {
     evalstate_free(st);
 }
 
+
 TEST(test_map_creation) {
     // Test map creation using CljValue API
     CljObject *map = AUTORELEASE(make_map(16));

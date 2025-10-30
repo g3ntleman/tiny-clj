@@ -45,6 +45,11 @@ void line_editor_add_to_history(LineEditor *editor, const char *line);
 const char* line_editor_get_history_line(LineEditor *editor, int index);
 int line_editor_get_history_size(const LineEditor *editor);
 
+// History bulk operations
+CljObject* line_editor_get_history_vector(LineEditor *editor); // returns persistent vector (rc=1)
+void line_editor_set_history_from_vector(LineEditor *editor, CljObject *vec);
+void line_editor_clear_history(LineEditor *editor);
+
 // Global line editor management
 void set_line_editor(LineEditor *editor);
 LineEditor* get_line_editor(void);

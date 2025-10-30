@@ -44,14 +44,31 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
     return true;
 }
 
-ID nth2(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 2, "nth")) return NULL;
+// Flexible arity checker using compiler-provided function name (__func__)
+#define REQUIRE_ARITY(CONDITION) do { \
+    if (!(CONDITION)) { \
+        char error_msg[256]; \
+        snprintf(error_msg, sizeof(error_msg), \
+                "%s arity check failed: expected (%s), got %u", \
+                __func__, #CONDITION, (argc)); \
+        throw_exception(EXCEPTION_TYPE_ARITY, error_msg, __FILE__, __LINE__, 0); \
+        return NULL; \
+    } \
+} while(0)
+
+// nth with optional default: (nth v i) | (nth v i default)
+ID native_nth(ID *args, unsigned int argc) {
+    REQUIRE_ARITY(argc == 2 || argc == 3);
     ID vec = args[0];
     ID idx = args[1];
-    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return (NULL);
+    if (!vec || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return NULL;
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
-    if (!v || i < 0 || i >= v->count) return (NULL);
+    if (!v || i < 0 || i >= v->count) {
+        if (argc == 3) return args[2];
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "nth index out of bounds", __FILE__, __LINE__, 0);
+        return NULL;
+    }
     return (RETAIN(v->data[i]));
 }
 
@@ -141,7 +158,7 @@ ID native_conj(ID *args, unsigned int argc) {
 ID native_first(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (!validate_builtin_args(argc, 1, "first")) return NULL;
+    REQUIRE_ARITY(argc == 1);
     
     CljObject *coll = args[0];
     if (!coll) {
@@ -169,7 +186,7 @@ ID native_first(ID *args, unsigned int argc) {
 ID native_rest(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (!validate_builtin_args(argc, 1, "rest")) return NULL;
+    REQUIRE_ARITY(argc == 1);
     
     CljObject *coll = args[0];
     if (!coll) {
@@ -218,7 +235,7 @@ ID native_rest(ID *args, unsigned int argc) {
 ID native_cons(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (!validate_builtin_args(argc, 2, "cons")) return NULL;
+    REQUIRE_ARITY(argc == 2);
     
     CljObject *elem = args[0];
     CljObject *coll = args[1];
@@ -389,6 +406,93 @@ ID native_count(ID *args, unsigned int argc) {
     }
     
     return (fixnum(0)); // Default count for unsupported types
+}
+
+// Create vector from variadic args: (vector a b c)
+ID native_vector(ID *args, unsigned int argc) {
+    CljValue vec = make_vector((int)argc, 0);
+    CljPersistentVector *v = as_vector((CljObject*)vec);
+    if (!v) return NULL;
+    for (unsigned int i = 0; i < argc; i++) {
+        v->data[v->count++] = (RETAIN((CljObject*)args[i]), (CljObject*)args[i]);
+    }
+    return (CljObject*)vec;
+}
+
+// Convert collection to vector: (vec coll)
+ID native_vec(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "vec")) return NULL;
+    CljObject *coll = args[0];
+    if (!coll) return (CljObject*)make_vector(0, 0);
+    if (is_type(coll, CLJ_VECTOR)) return coll;
+    // Fallback: try seq view and accumulate
+    CljObject *seq = seq_create(coll);
+    if (!seq) return (CljObject*)make_vector(0, 0);
+    CljValue out = make_vector(0, 0);
+    CljObject *cur;
+    while ((cur = seq_first(seq)) != NULL) {
+        out = vector_conj(out, (CljValue)cur);
+        seq_next(seq);
+    }
+    seq_release(seq);
+    return (CljObject*)out;
+}
+
+// (peek v) -> last element or nil
+ID native_peek(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "peek")) return NULL;
+    CljObject *coll = args[0];
+    if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
+    CljPersistentVector *v = as_vector(coll);
+    if (!v || v->count == 0) return NULL;
+    return RETAIN(v->data[v->count - 1]);
+}
+
+// (pop v) -> vector without last element; error on empty
+ID native_pop(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "pop")) return NULL;
+    CljObject *coll = args[0];
+    if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
+    CljPersistentVector *v = as_vector(coll);
+    if (!v || v->count == 0) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "pop on empty vector", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    int new_count = v->count - 1;
+    CljValue out = make_vector(new_count, 0);
+    CljPersistentVector *o = as_vector((CljObject*)out);
+    for (int i = 0; i < new_count; i++) {
+        o->data[i] = (RETAIN(v->data[i]), v->data[i]);
+    }
+    o->count = new_count;
+    return (CljObject*)out;
+}
+
+// (subvec v start) | (subvec v start end)
+ID native_subvec(ID *args, unsigned int argc) {
+    if (argc != 2 && argc != 3) {
+        throw_exception(EXCEPTION_TYPE_ARITY, "subvec requires 2 or 3 args", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    CljObject *coll = args[0];
+    if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
+    if (!IS_FIXNUM(args[1])) return NULL;
+    int start = AS_FIXNUM(args[1]);
+    CljPersistentVector *v = as_vector(coll);
+    if (!v) return NULL;
+    int end = (argc == 3 && IS_FIXNUM(args[2])) ? AS_FIXNUM(args[2]) : v->count;
+    if (start < 0 || end < start || end > v->count) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "subvec index out of bounds", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    int len = end - start;
+    CljValue out = make_vector(len, 0);
+    CljPersistentVector *o = as_vector((CljObject*)out);
+    for (int i = 0; i < len; i++) {
+        o->data[i] = (RETAIN(v->data[start + i]), v->data[start + i]);
+    }
+    o->count = len;
+    return (CljObject*)out;
 }
 
 ID native_keys(ID *args, unsigned int argc) {
@@ -1682,7 +1786,12 @@ void register_builtins() {
 #endif
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
-    register_builtin_in_namespace("nth", nth2);
+    register_builtin_in_namespace("nth", native_nth);
+    register_builtin_in_namespace("vector", native_vector);
+    register_builtin_in_namespace("vec", native_vec);
+    register_builtin_in_namespace("peek", native_peek);
+    register_builtin_in_namespace("pop", native_pop);
+    register_builtin_in_namespace("subvec", native_subvec);
     register_builtin_in_namespace("conj", native_conj);
     register_builtin_in_namespace("first", native_first);
     register_builtin_in_namespace("rest", native_rest);
