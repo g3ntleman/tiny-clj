@@ -133,7 +133,7 @@ static inline bool utf8_is_symbol_char(int cp) {
     return (cp >= 'a' && cp <= 'z') ||
            (cp >= 'A' && cp <= 'Z') ||
            (cp >= '0' && cp <= '9') ||
-           cp == '-' || cp == '_' || cp == '?' || cp == '!' || cp == '/' ||
+           cp == '-' || cp == '_' || cp == '?' || cp == '!' || cp == '/' || cp == '.' ||
            cp == '+' || cp == '*' || cp == '=' || cp == '<' || cp == '>' ||
            cp == '&' || cp == '|' ||
            // Basic Unicode letters (most common ranges)

@@ -5,6 +5,8 @@
  */
 
 #include "tests_common.h"
+#include "../event_loop.h"
+#include "../channel.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -90,6 +92,116 @@ TEST(test_dotimes_with_environment) {
     RELEASE((CljObject*)dotimes_call);
     RETAIN(env);
     RELEASE(env);
+}
+
+TEST(test_go_enqueues_and_result_channel_receives_value) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    CljMap *env = (CljMap*)make_map(4);
+    
+    // Build (go (do 1 2 3))
+    CljList *form = (CljList*)make_list((CljObject*)SYM_GO, NULL);
+    CljList *tail = form;
+    tail->rest = (CljObject*)make_list((CljObject*)fixnum(1), NULL);
+    tail = as_list((ID)tail->rest);
+    tail->rest = (CljObject*)make_list((CljObject*)fixnum(2), NULL);
+    tail = as_list((ID)tail->rest);
+    tail->rest = (CljObject*)make_list((CljObject*)fixnum(3), NULL);
+    
+    // Evaluate to get result channel
+    CljObject *chan = eval_list(form, env, st);
+    TEST_ASSERT_NOT_NULL(chan);
+    
+    // Initially closed? should be false
+    CljObject *kw_closed = intern_symbol(NULL, ":closed");
+    CljObject *closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
+    TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_FALSE);
+    
+    // Run next task
+    // Variante mit Builtin
+    CljObject *run_sym = intern_symbol_global("run-next-task");
+    CljList *run_call = (CljList*)make_list(run_sym, NULL);
+    CljObject *ran_val = eval_list(run_call, env, st);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
+    int ran = as_special((CljValue)ran_val) == SPECIAL_TRUE;
+    TEST_ASSERT_EQUAL_INT(1, ran);
+    
+    // Channel should have value 3 and be closed
+    CljObject *kw_value = intern_symbol(NULL, ":value");
+    CljObject *val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_value);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)val));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)val));
+    closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
+    TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
+    
+    // Cleanup
+    evalstate_free(st);
+    RELEASE(env);
+    RELEASE((CljObject*)form);
+    RELEASE((CljObject*)run_call);
+}
+
+TEST(test_run_next_task_returns_false_when_empty) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    CljMap *env = (CljMap*)make_map(4);
+
+    // Call builtin (run-next-task) when no tasks are queued
+    CljObject *run_sym = intern_symbol_global("run-next-task");
+    CljList *run_call = (CljList*)make_list(run_sym, NULL);
+    CljObject *ran_val = eval_list(run_call, env, st);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
+    int ran = as_special((CljValue)ran_val) == SPECIAL_TRUE;
+    TEST_ASSERT_EQUAL_INT(0, ran);
+
+    // Cleanup
+    evalstate_free(st);
+    RELEASE(env);
+    RELEASE((CljObject*)run_call);
+}
+
+TEST(test_go_exception_closes_channel_without_value) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    CljMap *env = (CljMap*)make_map(4);
+
+    // Build (go (/ 1 0)) to force a division-by-zero exception in body
+    CljList *form = (CljList*)make_list((CljObject*)SYM_GO, NULL);
+    CljList *call = (CljList*)make_list((CljObject*)SYM_DIVIDE, NULL);
+    CljList *tail = call;
+    tail->rest = (CljObject*)make_list((CljObject*)fixnum(1), NULL);
+    tail = as_list((ID)tail->rest);
+    tail->rest = (CljObject*)make_list((CljObject*)fixnum(0), NULL);
+    form->rest = (CljObject*)call;
+
+    // Evaluate to get result channel
+    CljObject *chan = eval_list(form, env, st);
+    TEST_ASSERT_NOT_NULL(chan);
+
+    // Run next task
+    CljObject *run_sym = intern_symbol_global("run-next-task");
+    CljList *run_call = (CljList*)make_list(run_sym, NULL);
+    CljObject *ran_val = eval_list(run_call, env, st);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
+    int ran = as_special((CljValue)ran_val) == SPECIAL_TRUE;
+    TEST_ASSERT_EQUAL_INT(1, ran);
+
+    // Channel should be closed and have no value
+    CljObject *kw_closed = intern_symbol(NULL, ":closed");
+    CljObject *kw_value = intern_symbol(NULL, ":value");
+    CljObject *closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
+    TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
+    CljObject *val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_value);
+    TEST_ASSERT_TRUE(val == NULL);
+
+    // Cleanup
+    evalstate_free(st);
+    RELEASE(env);
+    RELEASE((CljObject*)form);
+    RELEASE((CljObject*)run_call);
 }
 
 // ============================================================================

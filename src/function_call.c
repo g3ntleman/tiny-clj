@@ -1656,7 +1656,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_THROW && symbol == SYM_THROW) || (SYM_FINALLY && symbol == SYM_FINALLY) ||
             (SYM_VAR && symbol == SYM_VAR) ||
             (SYM_DO && symbol == SYM_DO) || (SYM_LOOP && symbol == SYM_LOOP) || 
-            (SYM_LET && symbol == SYM_LET) || (SYM_PLUS && symbol == SYM_PLUS) || 
+            (SYM_LET && symbol == SYM_LET) || (SYM_GO && symbol == SYM_GO) || (SYM_PLUS && symbol == SYM_PLUS) || 
             (SYM_MINUS && symbol == SYM_MINUS) || (SYM_MULTIPLY && symbol == SYM_MULTIPLY) || 
             (SYM_DIVIDE && symbol == SYM_DIVIDE) || (SYM_EQUALS && symbol == SYM_EQUALS) || 
             (SYM_LT && symbol == SYM_LT) || (SYM_GT && symbol == SYM_GT) || 

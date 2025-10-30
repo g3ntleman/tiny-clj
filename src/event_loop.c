@@ -2,6 +2,7 @@
 #include "function_call.h"
 #include "symbol.h"
 #include "memory.h"
+#include "exception.h"
 
 typedef struct GoTask {
     CljObject *fn;            // zero-arity function to execute
@@ -53,12 +54,21 @@ int event_loop_run_next(CljMap *env, EvalState *st) {
     for (int i = 1; i < g_task_count; ++i) g_tasks[i - 1] = g_tasks[i];
     g_task_count--;
 
-    // Execute task
+    // Execute task with exception safety
     CljObject *result = NULL;
-    // zero-arity call
-    result = eval_function_call(task.fn, NULL, 0, env);
-    // Deliver to result channel and close
-    channel_put_and_close(task.result_chan, result);
+    bool ok = true;
+    TRY {
+        // zero-arity call
+        result = eval_function_call(task.fn, NULL, 0, env);
+    } CATCH(ex) {
+        // On error: do not deliver a value, just close the channel
+        ok = false;
+    } END_TRY
+    if (ok) {
+        channel_put_and_close(task.result_chan, result);
+    } else {
+        channel_put_and_close(task.result_chan, NULL);
+    }
 
     if (result && !IS_IMMEDIATE(result)) RELEASE(result);
     if (task.fn) RELEASE(task.fn);

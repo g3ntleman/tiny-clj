@@ -1,2 +1,2 @@
 (ns test.ns)
-(def v 42)
+(def v2 7)

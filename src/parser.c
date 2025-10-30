@@ -563,9 +563,15 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   }
   
   buffer[pos] = '\0';
-  // Notbremse: leere Symbole sind ungültig und führen zu Hängern
-  CLJ_ASSERT(pos > 0 || reader_eof(reader));
-  if (!utf8valid(buffer) || pos == 0)
+  // Leere Symbole sind ungültig – statt abzubrechen, sauber fehlschlagen
+  if (pos == 0) {
+    if (!reader_eof(reader)) {
+      // Ensure forward progress to avoid parser stalls
+      reader_next_codepoint(reader);
+    }
+    return NULL;
+  }
+  if (!utf8valid(buffer))
     return NULL;
   return intern_symbol_global(buffer);
 }

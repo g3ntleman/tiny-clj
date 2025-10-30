@@ -50,6 +50,9 @@ ID native_gt(ID *args, unsigned int argc);
 ID native_le(ID *args, unsigned int argc);
 ID native_ge(ID *args, unsigned int argc);
 ID native_eq(ID *args, unsigned int argc);
+
+// Event-loop builtins
+ID native_run_next_task(ID *args, unsigned int argc);
 ID native_identical(ID *args, unsigned int argc);
 ID native_vector_p(ID *args, unsigned int argc);
 
