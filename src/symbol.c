@@ -23,6 +23,7 @@ CljObject *SYM_FINALLY = NULL;
 CljObject *SYM_VAR = NULL;
 CljObject *SYM_NS = NULL;
 CljObject *SYM_TIME = NULL;
+CljObject *SYM_GO = NULL;
 
 // Builtin-Funktionen
 CljObject *SYM_PLUS = NULL;
@@ -123,6 +124,9 @@ static struct { CljSymbol sym; } sym_ns_data = {
 };
 static struct { CljSymbol sym; } sym_time_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "time" }
+};
+static struct { CljSymbol sym; } sym_go_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "go" }
 };
 
 // Static symbol structs for built-in functions (compile-time initialization)
@@ -292,6 +296,9 @@ void init_special_symbols() {
     
     SYM_TIME = (CljObject*)&sym_time_data;
     symbol_table_add(NULL, "time", SYM_TIME);
+    
+    SYM_GO = (CljObject*)&sym_go_data;
+    symbol_table_add(NULL, "go", SYM_GO);
     
     SYM_PLUS = (CljObject*)&sym_plus_data;
     symbol_table_add(NULL, "+", SYM_PLUS);

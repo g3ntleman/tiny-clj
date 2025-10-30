@@ -38,6 +38,7 @@ extern CljObject *SYM_RECUR;
 extern CljObject *SYM_THROW;
 extern CljObject *SYM_FINALLY;
 extern CljObject *SYM_NS;
+extern CljObject *SYM_GO;
 extern CljObject *SYM_TIME;
 
 // Globale Symbol-Pointer für Builtin-Funktionen

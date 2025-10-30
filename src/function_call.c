@@ -1110,6 +1110,57 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         // (time expr)
         return eval_time(list, env, st);
     }
+
+    if (original_op == SYM_GO) {
+        // (go body...)
+        // Minimal kompatible Semantik: Body auswerten und Result-Channel zurückgeben
+        // 1) Body in nullstellige Funktion wrappen: (fn [] last-expression)
+        //    Für die erste Iteration verwenden wir den letzten Ausdruck als Body
+        int argc = list_count(list);
+        CljObject *last_expr = NULL;
+        if (argc <= 1) {
+            last_expr = NULL; // leeres go => nil
+        } else {
+            last_expr = list_get_element(list, argc - 1);
+        }
+
+        // Erzeuge (fn [] last_expr)
+        CljObject *empty_params_vec = (CljObject*)make_vector(0, 0);
+        CljList *fn_list = (CljList*)make_list((CljObject*)SYM_FN, NULL);
+        if (!fn_list) return NULL;
+        fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
+        CljList *fn_rest = as_list((ID)fn_list->rest);
+        if (fn_rest) {
+            // Wenn kein Body, verwende nil
+            CljObject *body_expr = last_expr;
+            if (!body_expr) body_expr = NULL;
+            fn_rest->rest = (CljObject*)make_list(body_expr, NULL);
+        }
+        // Evaluiere (fn [] body)
+        CljObject *fn_obj = eval_fn(fn_list, env);
+        if (!fn_obj) {
+            RELEASE(fn_list);
+            return NULL;
+        }
+
+        // 2) Body jetzt ausführen (synchron) und Ergebnis in Result-Channel packen
+        CljObject *result = eval_function_call(fn_obj, NULL, 0, env);
+
+        // Erzeuge einfachen Result-Channel als Map {:value v :closed true}
+        CljMap *chan = (CljMap*)make_map(2);
+        CljObject *kw_value = intern_symbol(NULL, ":value");
+        CljObject *kw_closed = intern_symbol(NULL, ":closed");
+        if (result) {
+            map_assoc((CljObject*)chan, kw_value, result);
+        }
+        map_assoc((CljObject*)chan, kw_closed, make_special(SPECIAL_TRUE));
+
+        // Cleanup temporäre Objekte
+        RELEASE(fn_obj);
+        RELEASE(fn_list);
+
+        return (CljObject*)chan;
+    }
     
     // Tier 3: Sequence operations
     result = eval_sequence_dispatch(list, env, original_op);
