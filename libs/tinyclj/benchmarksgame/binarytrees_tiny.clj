@@ -21,25 +21,24 @@
     (iter-check (+ i 1) end depth (+ acc (check-tree (make-tree 1 depth))))))
 
 ;; depth loop from d to max_d step 2
-(defn depth-loop [d max_d min_d long_lived]
+(defn depth-loop [d max_d min_d]
   (if (> d max_d)
     nil
     (do
-      (def iters (pow2 (+ max_d min_d (- d))))
-      (def chk (iter-check 0 iters d 0))
-      (println (/ (* 2 iters) 1000) " trees of depth " d " check: " chk)
-      (depth-loop (+ d 2) max_d min_d long_lived))))
+      (println (/ (* 2 (pow2 (+ max_d min_d (- d)))) 1000)
+               " trees of depth " d " check: "
+               (iter-check 0 (pow2 (+ max_d min_d (- d))) d 0))
+      (depth-loop (+ d 2) max_d min_d))))
 
 (defn binary-trees-tiny [n]
-  (def min_depth 4)
-  (def max_depth (if (> (+ min_depth 2) n) (+ min_depth 2) n))
-  (def stretch_depth (+ max_depth 1))
-  (def stretch_tree (make-tree 0 stretch_depth))
-  (def stretch_check (check-tree stretch_tree))
-  (println "stretch tree of depth " stretch_depth " check: " stretch_check)
-  (def long_lived (make-tree 0 max_depth))
-  (depth-loop min_depth max_depth min_depth long_lived)
-  (println "long lived tree of depth " max_depth " check: " (check-tree long_lived)))
+  (if (< n 6)
+    (binary-trees-tiny 6) ; ensure reasonable depth
+    (do
+      (println "stretch tree of depth " (+ n 1)
+               " check: " (check-tree (make-tree 0 (+ n 1))))
+      (depth-loop 4 n 4)
+      (println "long lived tree of depth " n
+               " check: " (check-tree (make-tree 0 n))))))
 
 ;; Benchmark entry
 (time (binary-trees-tiny 10))
