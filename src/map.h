@@ -45,8 +45,8 @@ void map_foreach(CljObject *map, void (*func)(CljObject*, CljObject*));
 int map_contains(CljObject *map, CljObject *key);
 /** Remove key if present; releases removed items. */
 void map_remove(CljObject *map, CljObject *key);
-/** Create map from stack of key/value pairs. */
-CljObject* map_from_stack(CljObject **pairs, int pair_count);
+/** Construct map from stack of key/value pairs (rc=1). */
+CljObject* make_map_from_stack(CljObject **pairs, int pair_count);
 
 // === CljValue API (Phase 1: Parallel) ===
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
@@ -71,7 +71,6 @@ void map_foreach(CljValue map, void (*func)(CljValue, CljValue));
 int map_contains(CljValue map, CljValue key);
 /** Remove key if present (releases removed references). */
 void map_remove(CljValue map, CljValue key);
-CljValue map_from_stack(CljValue *pairs, int pair_count);
 
 // === Transient API (Phase 2) ===
 /** Convert persistent map to transient. */

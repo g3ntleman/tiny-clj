@@ -6,6 +6,7 @@
 #include "reader.h"
 #include "symbol.h"
 #include "value.h"  // For IS_IMMEDIATE macro
+#include "runtime.h" // For g_runtime
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -94,6 +95,15 @@ int load_clojure_core(EvalState *st) {
   if (!clojure_core_code && !g_core_quiet) {
     printf("[clojure.core] source string missing\n");
     return 0;
+  }
+
+  // Ensure clojure.core namespace exists and cache is set
+  // evalstate_set_ns will create the namespace if it doesn't exist
+  evalstate_set_ns(st, "clojure.core");
+  
+  // Explicitly set clojure.core cache to avoid search loop in ns_resolve
+  if (st->current_ns && !g_runtime.clojure_core_cache) {
+    g_runtime.clojure_core_cache = (void*)st->current_ns;
   }
 
   bool ok = eval_core_source(clojure_core_code, st);

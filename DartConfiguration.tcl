@@ -11,7 +11,7 @@ BuildDirectory: /Users/theisen/Projects/tiny-clj
 CostDataFile: 
 
 # Site is something like machine.domain, i.e. pragmatic.crd
-Site: MacBookPro.fritz.box
+Site: Fatboy.local
 
 # Build name is osname-revision-compiler, i.e. Linux-2.4.2-2smp-c++
 BuildName: Darwin-c++

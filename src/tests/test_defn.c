@@ -9,6 +9,7 @@
 #include "../memory.h"
 #include "../namespace.h"
 #include "../symbol.h"
+#include <sys/time.h>
 
 // ============================================================================
 // TEST: Basic defn function definition
@@ -133,6 +134,39 @@ TEST(test_defn_symbol_resolution_in_repl_context) {
     TEST_ASSERT_NOT_NULL(call);
     TEST_ASSERT_TRUE(is_fixnum(call));
     TEST_ASSERT_EQUAL_INT(5, as_fixnum(call));
+    
+    evalstate_free(st);
+}
+
+// ============================================================================
+// TEST: Parameter lookup optimization
+// ============================================================================
+TEST(test_parameter_lookup_optimization) {
+    EvalState *st = evalstate_new();
+    
+    // Define a function with 3 parameters to test lookup performance
+    eval_string("(defn test-lookup [a b c] (+ a (+ b c)))", st);
+    
+    // Measure time for 1000 parameter lookups
+    // This test establishes baseline for parameter lookup performance
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    
+    // Call function 1000 times - each call does parameter lookups
+    for (int i = 0; i < 1000; i++) {
+        char code[64];
+        snprintf(code, sizeof(code), "(test-lookup %d %d %d)", i, i+1, i+2);
+        CljValue result = eval_string(code, st);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(i + (i+1) + (i+2), as_fixnum(result));
+    }
+    
+    gettimeofday(&end, NULL);
+    double elapsed_ms = (end.tv_sec - start.tv_sec) * 1000.0 + 
+                       (end.tv_usec - start.tv_usec) / 1000.0;
+    
+    printf("Baseline: 1000 function calls with parameter lookups took %.2f ms\n", elapsed_ms);
     
     evalstate_free(st);
 }

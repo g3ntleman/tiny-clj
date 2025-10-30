@@ -132,7 +132,7 @@ int map_count(CljObject *map) {
     return 0;
 }
 
-CljObject *map_from_stack(CljObject **stack, int count) {
+CljObject *make_map_from_stack(CljObject **stack, int count) {
     (void)stack;
     (void)count;
     return make_list();

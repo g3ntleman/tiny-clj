@@ -31,9 +31,11 @@ void setUp(void) {
             g_runtime.builtins_registered = true;
         }
         
+#ifdef ENABLE_MEMORY_PROFILING
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
         set_memory_verbose_mode(false);
+#endif
 }
 
 void tearDown(void) {
@@ -676,8 +678,10 @@ static void run_filtered_tests(const char *pattern) {
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     
-    // Enable memory profiling for tests
+    // Enable memory profiling for tests (only in DEBUG builds)
+#ifdef ENABLE_MEMORY_PROFILING
     enable_memory_profiling(true);
+#endif
     
     // Parse command line arguments
     if (argc > 1) {

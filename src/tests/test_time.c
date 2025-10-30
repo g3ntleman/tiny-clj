@@ -33,11 +33,16 @@ TEST(test_time_basic_functionality) {
     // Create the expression: (+ 1 2) - use proper make_list syntax
     CljObject *expr = make_list((ID)plus_symbol, (CljList*)make_list((ID)one, (CljList*)make_list((ID)two, NULL)));
     
-    ID args[1];
-    args[0] = expr;
+    // Create a list for eval_time: (time (+ 1 2))
+    CljObject *time_symbol = SYM_TIME;
+    CljList *time_list = (CljList*)make_list((ID)time_symbol, (CljList*)make_list((ID)expr, NULL));
     
-    // Call native_time
-    CljObject *result = native_time(args, 1);
+    // Create environment and evalstate
+    EvalState *st = evalstate();
+    CljMap *env = make_map(16);
+    
+    // Call eval_time (time is now only a special form)
+    CljObject *result = eval_time(time_list, env, st);
 
     // The result should be 3
     TEST_ASSERT_NOT_NULL(result);
@@ -46,21 +51,31 @@ TEST(test_time_basic_functionality) {
     
     // Clean up
     RELEASE(expr);
+    RELEASE(time_list);
     RELEASE(result);
+    RELEASE(env);
 }
 
 TEST(test_time_arity_validation) {
     // Test that time function validates arity correctly
-    ID args[0];
+    // Create (time) with no arguments
+    CljObject *time_symbol = SYM_TIME;
+    CljList *time_list = (CljList*)make_list((ID)time_symbol, NULL);
+    
+    EvalState *st = evalstate();
+    CljMap *env = make_map(16);
     
     // This should throw an exception for insufficient arguments
     TRY {
-        CljObject *result = native_time(args, 0);
+        CljObject *result = eval_time(time_list, env, st);
         TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
     } CATCH(ex) {
         // Exception is expected - test passes
         TEST_ASSERT_TRUE(true);
     } END_TRY
+    
+    RELEASE(time_list);
+    RELEASE(env);
 }
 
 TEST(test_time_with_too_many_arguments) {
@@ -68,13 +83,18 @@ TEST(test_time_with_too_many_arguments) {
     CljObject *expr1 = fixnum(1);
     CljObject *expr2 = fixnum(2);
     
-    ID args[2];
-    args[0] = expr1;
-    args[1] = expr2;
+    // Create (time 1 2) with too many arguments
+    CljObject *time_symbol = SYM_TIME;
+    CljList *time_list = (CljList*)make_list((ID)time_symbol, 
+        (CljList*)make_list((ID)expr1, 
+        (CljList*)make_list((ID)expr2, NULL)));
+    
+    EvalState *st = evalstate();
+    CljMap *env = make_map(16);
     
     // This should throw an exception for too many arguments
     TRY {
-        CljObject *result = native_time(args, 2);
+        CljObject *result = eval_time(time_list, env, st);
         TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
     } CATCH(ex) {
         // Exception is expected - test passes
@@ -84,6 +104,8 @@ TEST(test_time_with_too_many_arguments) {
     // Clean up
     RELEASE(expr1);
     RELEASE(expr2);
+    RELEASE(time_list);
+    RELEASE(env);
 }
 
 TEST(test_time_with_sleep) {
@@ -95,17 +117,23 @@ TEST(test_time_with_sleep) {
     // Create the expression: (sleep 1)
     CljObject *expr = make_list((ID)sleep_symbol, (CljList*)make_list((ID)one_second, NULL));
     
-    ID args[1];
-    args[0] = expr;
+    // Create (time (sleep 1))
+    CljObject *time_symbol = SYM_TIME;
+    CljList *time_list = (CljList*)make_list((ID)time_symbol, (CljList*)make_list((ID)expr, NULL));
     
-    // Call native_time - this should take approximately 1000ms
-    CljObject *result = native_time(args, 1);
+    EvalState *st = evalstate();
+    CljMap *env = make_map(16);
+    
+    // Call eval_time - this should take approximately 1000ms
+    CljObject *result = eval_time(time_list, env, st);
     
     // The result should be nil (sleep returns nil)
     TEST_ASSERT_TRUE(result == NULL); // nil is NULL in our system
     
     // Clean up
     RELEASE(expr);
+    RELEASE(time_list);
+    RELEASE(env);
     // Don't release result since it's NULL (nil)
 }
 

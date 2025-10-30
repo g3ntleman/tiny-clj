@@ -102,12 +102,9 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
   
   // Check if key exists
   for (int i = 0; i < map_data->count; i++) {
-    CljObject *k = map_data->data[2 * i];
+    CljObject *k = KV_KEY(map_data->data, i);
     if (k && clj_equal(k, key_obj)) {
-      CljObject *old_value = map_data->data[2 * i + 1];
-      if (old_value)
-        RELEASE(old_value);
-      map_data->data[2 * i + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+      ASSIGN(KV_VALUE(map_data->data, i), value_obj);
       return;
     }
   }
@@ -116,8 +113,9 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
   // printf("DEBUG: map_assoc capacity check: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
   if (map_data->count < map_data->capacity) {
     int idx = map_data->count;
-    map_data->data[2 * idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
-    map_data->data[2 * idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+    KV_ASSIGN_PAIR(map_data->data, idx,
+                key_obj ? (RETAIN(key_obj), key_obj) : NULL,
+                value_obj ? (RETAIN(value_obj), value_obj) : NULL);
     map_data->count++;
     // printf("DEBUG: map_assoc added: key=%p, value=%p, count=%d\n", key_obj, value_obj, map_data->count);
     // printf("DEBUG: value is_fixnum: %d\n", is_fixnum((CljValue)value_obj));
@@ -149,12 +147,9 @@ CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
   if (map_data->base.rc == 1) {
     // Check if key exists - update value
     for (int i = 0; i < map_data->count; i++) {
-      CljObject *k = map_data->data[2 * i];
+      CljObject *k = KV_KEY(map_data->data, i);
       if (k && clj_equal(k, key_obj)) {
-        CljObject *old_value = map_data->data[2 * i + 1];
-        if (old_value)
-          RELEASE(old_value);
-        map_data->data[2 * i + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+        ASSIGN(KV_VALUE(map_data->data, i), value_obj);
         return map;  // Return SAME map
       }
     }
@@ -201,23 +196,23 @@ CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
   int new_idx = 0;
   
   for (int i = 0; i < map_data->count; i++) {
-    if (map_data->data[2 * i] && clj_equal(map_data->data[2 * i], key_obj)) {
+    if (KV_KEY(map_data->data, i) && clj_equal(KV_KEY(map_data->data, i), key_obj)) {
       // Key found - update value
-      new_map->data[2 * new_idx] = RETAIN(map_data->data[2 * i]);
-      new_map->data[2 * new_idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+      ASSIGN(KV_KEY(new_map->data, new_idx), KV_KEY(map_data->data, i));
+      ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
       key_found = true;
     } else {
       // Copy existing entry
-      new_map->data[2 * new_idx] = map_data->data[2 * i] ? (RETAIN(map_data->data[2 * i]), map_data->data[2 * i]) : NULL;
-      new_map->data[2 * new_idx + 1] = map_data->data[2 * i + 1] ? (RETAIN(map_data->data[2 * i + 1]), map_data->data[2 * i + 1]) : NULL;
+      ASSIGN(KV_KEY(new_map->data, new_idx), KV_KEY(map_data->data, i));
+      ASSIGN(KV_VALUE(new_map->data, new_idx), KV_VALUE(map_data->data, i));
     }
     new_idx++;
   }
   
   // Add new key if not found
   if (!key_found && new_idx < new_map->capacity) {
-    new_map->data[2 * new_idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
-    new_map->data[2 * new_idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;
+    ASSIGN(KV_KEY(new_map->data, new_idx), key_obj);
+    ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
     new_idx++;
   }
   
@@ -299,8 +294,7 @@ void map_put(CljValue map, CljValue key, CljValue value) {
     return;
   // Note: map_put() cannot grow embedded arrays - use map_assoc_cow() instead
   // This function is deprecated for embedded array approach
-  map_data->data[map_data->count * 2] = key_obj;
-  map_data->data[map_data->count * 2 + 1] = value_obj;
+  KV_ASSIGN_PAIR(map_data->data, map_data->count, key_obj, value_obj);
   map_data->count++;
   RETAIN(key_obj);
   RETAIN(value_obj);
@@ -348,30 +342,29 @@ void map_remove(CljValue map, CljValue key) {
     if (old_value)
       RELEASE(old_value);
     for (int j = index; j < map_data->count - 1; j++) {
-      KV_SET_PAIR(map_data->data, j, KV_KEY(map_data->data, j + 1),
-                  KV_VALUE(map_data->data, j + 1));
+      KV_ASSIGN_PAIR(map_data->data, j, KV_KEY(map_data->data, j + 1),
+                     KV_VALUE(map_data->data, j + 1));
     }
     map_data->count--;
   }
 }
 
-CljValue map_from_stack(CljValue *pairs, int pair_count) {
+CljObject* make_map_from_stack(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
-        return (CljValue)make_map(0);
+        return (CljObject*)make_map(0);
     }
     CljMap *map = (CljMap*)make_map(pair_count * 2);
     CljMap *map_data = as_map((CljObject*)map);
-    if (!map_data) return (CljValue)NULL;
-      for (int i = 0; i < pair_count; i++) {
-          CljObject *key = (CljObject*)pairs[i * 2];
-          CljObject *value = (CljObject*)pairs[i * 2 + 1];
-          map_data->data[i * 2] = key;
-          map_data->data[i * 2 + 1] = value;
-          if (key) RETAIN(key);
-          if (value) RETAIN(value);
-      }
-      map_data->count = pair_count;
-    return (CljValue)map;
+    if (!map_data) return NULL;
+    for (int i = 0; i < pair_count; i++) {
+        CljObject *key = KV_KEY(pairs, i);
+        CljObject *value = KV_VALUE(pairs, i);
+        KV_ASSIGN_PAIR(map_data->data, i, key, value);
+        if (key) RETAIN(key);
+        if (value) RETAIN(value);
+    }
+    map_data->count = pair_count;
+    return (CljObject*)map;
 }
 
 // === Transient API (Phase 2) ===

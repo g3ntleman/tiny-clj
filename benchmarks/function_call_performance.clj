@@ -11,11 +11,11 @@
 (defn test-nested-function-calls []
   (add (multiply (subtract 10 5) 3) (add 2 1)))
 
-;; Run 1000x more iterations for measurable timing
+;; Run 10000x more iterations for measurable timing
 (defn benchmark-function-calls []
-  (println "Running function call performance benchmark (1000x iterations)...")
+  (println "Running function call performance benchmark (10000x iterations)...")
   (time
-    (dotimes [i 1000]
+    (dotimes [i 10000]
       (test-function-calls)
       (test-nested-function-calls))))
 

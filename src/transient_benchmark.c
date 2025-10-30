@@ -164,8 +164,10 @@ int main() {
     printf("========================================\n\n");
     
     // Initialize memory profiling (debug only)
+#ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
+#endif
     
     // Run benchmarks
     benchmark_immediates();

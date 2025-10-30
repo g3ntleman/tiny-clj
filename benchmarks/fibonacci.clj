@@ -24,11 +24,11 @@
     (fib-helper 0 1 n)))
 
 ;; === Benchmark Execution ===
-;; Run 1000x more iterations for measurable timing using dotimes
+;; Run 10000x more iterations for measurable timing using dotimes
 (defn benchmark-fibonacci []
-  (println "Running fibonacci benchmark (1000x iterations)...")
+  (println "Running fibonacci benchmark (10000x iterations)...")
   (time
-    (dotimes [i 1000]
+    (dotimes [i 10000]
       (fib 20))))
 
 (benchmark-fibonacci)

@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <errno.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -24,6 +25,8 @@
 #include "exception.h"
 #include "clj_strings.h"
 #include "strings.h"
+#include "reader.h"
+#include "parser.h"
 
 // Forward declaration for eval_body_with_env
 extern CljObject* eval_body_with_env(CljObject *body, CljMap *env);
@@ -31,13 +34,11 @@ extern CljObject* eval_body_with_env(CljObject *body, CljMap *env);
 // Helper function to validate builtin arguments (DRY principle)
 static bool validate_builtin_args(unsigned int argc, unsigned int expected, const char *func_name) {
     if (argc != expected) {
-#ifdef DEBUG
-        char error_msg[128];
-        snprintf(error_msg, sizeof(error_msg), "%s requires exactly %u arguments", func_name, expected);
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "%s requires exactly %u argument%s, got %u", 
+                func_name, expected, expected == 1 ? "" : "s", argc);
         throw_exception(EXCEPTION_TYPE_ARITY, error_msg, __FILE__, __LINE__, 0);
-#else
-        (void)func_name; // Suppress unused parameter warning in release builds
-#endif
         return false;
     }
     return true;
@@ -694,6 +695,299 @@ ID native_str(ID *args, unsigned int argc) {
     return result;
 }
 
+// File I/O: slurp - read entire file as string
+#ifndef ESP32_BUILD
+ID native_slurp(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "slurp")) return NULL;
+    
+    // Convert argument to C-string
+    char *filename_str = to_string(args[0]);
+    if (!filename_str) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+                       "slurp requires a string or symbol argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Open file
+    FILE *fp = fopen(filename_str, "r");
+    if (!fp) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Cannot open file '%s': %s", filename_str, strerror(errno));
+        free(filename_str);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Get file size
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Cannot seek in file '%s': %s", filename_str, strerror(errno));
+        free(filename_str);
+        fclose(fp);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    long file_size = ftell(fp);
+    if (file_size < 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Cannot determine size of file '%s': %s", filename_str, strerror(errno));
+        free(filename_str);
+        fclose(fp);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Reset to beginning
+    rewind(fp);
+    
+    // Read file content
+    char *buffer = ALLOC(char, file_size + 1);
+    if (!buffer) {
+        free(filename_str);
+        fclose(fp);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+                       "Out of memory reading file",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    size_t bytes_read = fread(buffer, 1, (size_t)file_size, fp);
+    buffer[bytes_read] = '\0';  // Null-terminate
+    
+    // Check for read errors
+    if (bytes_read != (size_t)file_size && !feof(fp)) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Error reading file '%s': %s", filename_str, strerror(errno));
+        free(buffer);
+        free(filename_str);
+        fclose(fp);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Create Clojure string and cleanup
+    CljObject *result = make_string(buffer);
+    
+    free(buffer);
+    free(filename_str);
+    fclose(fp);
+    
+    // make_string returns object with rc=1 - caller takes ownership
+    return result;
+}
+#endif // ESP32_BUILD
+
+// ----------------------------------------------------------------------------
+// REQUIRE IMPLEMENTATION (Clojure-like namespace loader)
+// ----------------------------------------------------------------------------
+#ifndef ESP32_BUILD
+static char* namespace_to_relpath(const char *ns_name) {
+    if (!ns_name) return NULL;
+    size_t len = strlen(ns_name);
+    // Worst case: all chars + possible slashes + ".clj" + NUL
+    char *buf = (char*)malloc(len + 5);
+    if (!buf) return NULL;
+    for (size_t i = 0; i < len; i++) {
+        char c = ns_name[i];
+        if (c == '.') buf[i] = '/';
+        else if (c == '-') buf[i] = '_'; // Clojure file mapping: hyphen -> underscore
+        else buf[i] = c;
+    }
+    buf[len] = '\0';
+    strcat(buf, ".clj");
+    return buf;
+}
+
+static char* read_file_cstr(const char *path) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) return NULL;
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
+    long sz = ftell(fp);
+    if (sz < 0) { fclose(fp); return NULL; }
+    rewind(fp);
+    char *buffer = (char*)malloc((size_t)sz + 1);
+    if (!buffer) { fclose(fp); return NULL; }
+    size_t n = fread(buffer, 1, (size_t)sz, fp);
+    buffer[n] = '\0';
+    fclose(fp);
+    return buffer;
+}
+
+static bool eval_source_in_current_state(const char *src, EvalState *st) {
+    if (!src || !st) return false;
+    bool ok = true;
+    WITH_AUTORELEASE_POOL({
+        Reader reader;
+        reader_init(&reader, src);
+        while (!reader_is_eof(&reader)) {
+            reader_skip_all(&reader);
+            if (reader_is_eof(&reader)) break;
+            TRY {
+                CljValue form = value_by_parsing_expr(&reader, st);
+                if (!form) {
+                    if (reader_is_eof(&reader)) break; else { ok = false; break; }
+                }
+                (void)eval_expr_simple((CljObject*)form, st);
+                RELEASE((CljObject*)form);
+            } CATCH(ex) {
+                ok = false;
+                // Skip to next line to avoid infinite loop
+                while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
+                if (!reader_is_eof(&reader)) reader_next(&reader);
+            } END_TRY
+        }
+    });
+    return ok;
+}
+
+ID native_require(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "require")) return NULL;
+
+    // Accept symbol or string; convert to plain string
+    char *ns_name = to_string(args[0]);
+    if (!ns_name || ns_name[0] == '\0') {
+        if (ns_name) free(ns_name);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "require expects non-empty namespace name", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Idempotenz: Wenn Namespace bereits existiert, nichts tun
+    CljNamespace *existing = ns_find(ns_name);
+    if (existing) { free(ns_name); return NULL; }
+
+    // Convert namespace to relative path a.b -> a/b.clj (with '-' -> '_')
+    char *rel = namespace_to_relpath(ns_name);
+    if (!rel) { free(ns_name); return NULL; }
+
+    // Search order: libs/<rel>, then <rel> (project root)
+    char libs_path[512];
+    snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
+
+    char *source = read_file_cstr(libs_path);
+    if (!source) {
+        source = read_file_cstr(rel);
+    }
+
+    if (!source) {
+        char msg[512];
+        snprintf(msg, sizeof(msg), "Cannot open namespace file for '%s' (tried: %s and %s)", ns_name, libs_path, rel);
+        free(rel); free(ns_name);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Evaluate source in current state (file may contain (ns ...) to switch)
+    EvalState *st = evalstate();
+    const char *orig_ns = NULL;
+    if (st && st->current_ns && st->current_ns->name && is_type(st->current_ns->name, CLJ_SYMBOL)) {
+        orig_ns = as_symbol(st->current_ns->name)->name;
+    }
+
+    // Temporär in Ziel-NS wechseln wie Clojure-Ladeprozess; Datei (ns ...) kann überschreiben
+    if (st) evalstate_set_ns(st, ns_name);
+    bool ok = eval_source_in_current_state(source, st);
+    // Immer ursprüngliches *ns* wiederherstellen (Clojure-kompatibel: require ändert *ns* nicht)
+    if (st && orig_ns) evalstate_set_ns(st, orig_ns);
+
+    free(source);
+    free(rel);
+    free(ns_name);
+
+    if (!ok) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "Error while evaluating required namespace", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    return NULL; // Clojure-compatible: require returns nil
+}
+#endif // ESP32_BUILD
+
+// File I/O: spit - write string to file
+#ifndef ESP32_BUILD
+ID native_spit(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "spit")) return NULL;
+    
+    // Convert first argument (filename) to C-string
+    char *filename_str = to_string(args[0]);
+    if (!filename_str) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+                       "spit requires a string or symbol as first argument (filename)",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Convert second argument (content) to C-string
+    char *content_str = to_string(args[1]);
+    if (!content_str) {
+        free(filename_str);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+                       "spit requires a string or symbol as second argument (content)",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Open file for writing (overwrites if exists - Clojure-compatible)
+    FILE *fp = fopen(filename_str, "w");
+    if (!fp) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Cannot open file '%s' for writing: %s", filename_str, strerror(errno));
+        free(filename_str);
+        free(content_str);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Write content to file
+    size_t content_len = strlen(content_str);
+    size_t bytes_written = fwrite(content_str, 1, content_len, fp);
+    
+    // Check for write errors
+    if (bytes_written != content_len) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Error writing to file '%s': %s", filename_str, strerror(errno));
+        free(filename_str);
+        free(content_str);
+        fclose(fp);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Ensure file is flushed
+    if (fflush(fp) != 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Error flushing file '%s': %s", filename_str, strerror(errno));
+        free(filename_str);
+        free(content_str);
+        fclose(fp);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Cleanup
+    free(filename_str);
+    free(content_str);
+    fclose(fp);
+    
+    // Clojure-compatible: spit returns nil
+    return NULL;
+}
+#endif // ESP32_BUILD
+
 // Binary operations (inline for performance)
 // Variadische Number-Reducer mit Single-Pass und Float-Promotion
 ID native_add_variadic(ID *args, unsigned int argc) {
@@ -1179,50 +1473,8 @@ ID native_vector_p(ID *args, unsigned int argc) {
     return is_type((CljObject*)args[0], CLJ_VECTOR) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
 }
 
-ID native_time(ID *args, unsigned int argc) {
-    // Debug: Print arguments
-    printf("DEBUG: native_time called with argc=%d\n", argc);
-    if (argc > 0 && args[0]) {
-        printf("DEBUG: args[0] = %p\n", args[0]);
-    }
-    
-    if (!validate_builtin_args(argc, 1, "time")) {
-        printf("DEBUG: validate_builtin_args failed\n");
-        return NULL;
-    }
-    
-    printf("DEBUG: Starting timing\n");
-    
-    // Start timing with gettimeofday (works on all Unix systems)
-    struct timeval start, end;
-    gettimeofday(&start, NULL);
-    
-    // Evaluate the argument (it should be a function call or expression)
-    EvalState *st = evalstate();
-    CljObject *result = NULL;
-    
-    // Use eval_list for proper evaluation of function calls
-    if (st && args[0] && is_type(args[0], CLJ_LIST)) {
-        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        result = eval_list(as_list(args[0]), (CljMap*)env, st);
-    } else if (st && args[0]) {
-        result = eval_expr_simple(args[0], st);
-    }
-    
-    // End timing
-    gettimeofday(&end, NULL);
-    
-    // Calculate elapsed time in milliseconds with microsecond precision
-    long long start_us = start.tv_sec * 1000000LL + start.tv_usec;
-    long long end_us = end.tv_sec * 1000000LL + end.tv_usec;
-    double elapsed_ms = (double)(end_us - start_us) / 1000.0;
-    
-    // Print timing information (Clojure-compatible: "msecs" format)
-    printf("Elapsed time: %.2f msecs\n", elapsed_ms);
-    
-    // Return the result of the evaluated expression (Clojure-compatible: return the value)
-    return result;
-}
+// native_time removed: time is now only a special form (eval_time)
+// This ensures time can measure actual evaluation time, not pre-evaluated arguments
 
 // Native time-micro implementation with microsecond resolution
 ID native_time_micro(ID *args, unsigned int argc) {
@@ -1398,6 +1650,13 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
     if (!clojure_core) return;
     
+    // Explicitly set clojure.core cache if not already set
+    // This ensures cache is set even if register_builtins is called before load_clojure_core
+    extern TinyClJRuntime g_runtime;
+    if (!g_runtime.clojure_core_cache) {
+        g_runtime.clojure_core_cache = (void*)clojure_core;
+    }
+    
     // Register the builtin in clojure.core namespace
     CljObject *symbol = intern_symbol(NULL, name);
     CljObject *func_obj = make_named_func(func, NULL, name);
@@ -1416,6 +1675,11 @@ void register_builtins() {
     register_builtin_in_namespace("*", native_mul_variadic);
     register_builtin_in_namespace("/", native_div_variadic);
     register_builtin_in_namespace("str", native_str);
+#ifndef ESP32_BUILD
+    register_builtin_in_namespace("slurp", native_slurp);
+    register_builtin_in_namespace("spit", native_spit);
+    register_builtin_in_namespace("require", native_require);
+#endif
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
     register_builtin_in_namespace("nth", nth2);
@@ -1448,7 +1712,8 @@ void register_builtins() {
     register_builtin_in_namespace("vector?", native_vector_p);
     
     // Time function
-    register_builtin_in_namespace("time", native_time); // Register as builtin
+    // time is now only a special form (eval_time), not a builtin
+    // This ensures time can measure actual evaluation time, not pre-evaluated arguments
     register_builtin_in_namespace("time-micro", native_time_micro);
     register_builtin_in_namespace("sleep", native_sleep);
     

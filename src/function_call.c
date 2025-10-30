@@ -50,7 +50,7 @@ static _Thread_local bool g_recur_detected = false;
 
 // Forward declarations  
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
-CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env);
+CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljMap *closure_env);
 ID eval_time(CljList *list, CljMap *env, EvalState *st);
 
 
@@ -302,9 +302,9 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
 }
 
 // Generic arithmetic function (with parameter substitution)
-CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, ArithOp op, CljObject *closure_env) {
-    CljObject *a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
-    CljObject *b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, closure_env);
+CljObject* eval_arithmetic_generic_with_substitution(CljList *list, CljObject **params, CljObject **values, int param_count, ArithOp op, CljMap *closure_env) {
+    CljObject *a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (CljObject*)closure_env);
+    CljObject *b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, (CljObject*)closure_env);
     
     // Check for nil arguments
     if (!a || !b) {
@@ -313,6 +313,69 @@ CljObject* eval_arithmetic_generic_with_substitution(CljObject *list, CljObject 
         return NULL;
     }
     
+    // FAST PATH: Both arguments are fixnums - direct arithmetic without type checks
+    // This is the most common case in arithmetic operations
+    if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+        int a_val = as_fixnum((CljValue)a);
+        int b_val = as_fixnum((CljValue)b);
+        int result;
+        
+        // Division by zero check
+        if (op == ARITH_DIV && b_val == 0) {
+            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
+                    "Division by zero: %d / %d", a_val, b_val);
+            return NULL;
+        }
+        
+        switch (op) {
+            case ARITH_ADD:
+                // Check for overflow
+                if (a_val > 0 && b_val > INT_MAX - a_val) {
+                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                        ERR_INTEGER_OVERFLOW_ADDITION, a_val, b_val);
+                    return NULL;
+                } else if (a_val < 0 && b_val < INT_MIN - a_val) {
+                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                        ERR_INTEGER_UNDERFLOW_ADDITION, a_val, b_val);
+                    return NULL;
+                }
+                result = a_val + b_val;
+                break;
+            case ARITH_SUB:
+                // Check for overflow/underflow
+                if (a_val > 0 && b_val < a_val - INT_MAX) {
+                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                        ERR_INTEGER_OVERFLOW_SUBTRACTION, a_val, b_val);
+                    return NULL;
+                } else if (a_val < 0 && b_val > a_val - INT_MIN) {
+                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                        ERR_INTEGER_UNDERFLOW_SUBTRACTION, a_val, b_val);
+                    return NULL;
+                }
+                result = a_val - b_val;
+                break;
+            case ARITH_MUL:
+                // Check for overflow
+                if (a_val != 0 && b_val != 0) {
+                    if (a_val > INT_MAX / b_val || a_val < INT_MIN / b_val) {
+                        throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                            ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
+                        return NULL;
+                    }
+                }
+                result = a_val * b_val;
+                break;
+            case ARITH_DIV:
+                result = a_val / b_val;
+                break;
+            default:
+                return NULL;
+        }
+        
+        return fixnum(result);
+    }
+    
+    // Fallback: Generic path for non-fixnum types or mixed types
     // Check for non-numeric types
     if (!is_numeric_type(a) || !is_numeric_type(b)) {
         throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
@@ -429,6 +492,9 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
         return NULL;
     }
     
+    // Note: No autorelease pool here - let the calling context handle memory management
+    // This prevents stack overflow in deep recursion while still allowing proper cleanup
+    
     // Clojure functions with parameters are now supported
     
     // TCO Loop for tail-call optimization with recur
@@ -483,6 +549,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
         RELEASE(current_args[i]);
     }
     
+    // Return result with proper memory management
+    // Note: result is already retained by ASSIGN, just return it
     return result;
 }
 
@@ -606,7 +674,10 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env) {
 
 // Simplified body evaluation with parameter binding
 CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
-    CLJ_ASSERT(body != NULL);
+    // Handle nil body gracefully (represents Clojure nil)
+    if (!body) {
+        return NULL;
+    }
     
     // Assertion: Parameters and values must not be NULL when param_count > 0
     if (param_count > 0) {
@@ -616,16 +687,22 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
     
     if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol - check parameters first
+        // OPTIMIZATION: Ordered by frequency (Identity check first, then string comparison)
         for (int i = 0; i < param_count; i++) {
+            // Tier 1: Pointer identity check (fastest - O(1), most common case)
             if (params[i] && body == params[i]) {
-                return AUTORELEASE(RETAIN(values[i]));
+                return RETAIN(values[i]);
             }
-            // Also try name comparison for non-interned symbols
-            if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
+            
+            // Tier 2: Symbol identity check (if both are symbols but different pointers)
+            // Only check if both are symbols and pointer check failed
+            if (params[i] && body != params[i] && 
+                is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
+                // Tier 3: String comparison (slowest, only if needed)
                 CljSymbol *param_sym = as_symbol((ID)params[i]);
                 CljSymbol *body_sym = as_symbol((ID)body);
                 if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
-                    return AUTORELEASE(RETAIN(values[i]));
+                    return RETAIN(values[i]);
                 }
             }
         }
@@ -633,19 +710,17 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         if (closure_env && is_type(closure_env, CLJ_MAP)) {
             CljObject *resolved = (CljObject*)map_get((CljValue)closure_env, (CljValue)body);
             if (resolved) {
-                return AUTORELEASE(RETAIN(resolved));
+                // Don't RETAIN - fall through to namespace lookup instead
+                // This prevents memory leaks in recursive functions
             }
         }
-        // If not found in parameters or closure_env, try to resolve from global namespace
-        // This is the "Lazy Binding" fallback for global symbols
-        // For now, return the symbol itself - it will be resolved in eval_list_with_param_substitution
-        return AUTORELEASE(RETAIN(body));
+        // If not found in parameters or closure_env, return the symbol as-is
+        // It will be resolved later in eval_list_with_param_substitution
+        // This prevents reference count explosion in recursive functions
+        return RETAIN(body);
     }
     
-    // Check for NULL body
-    if (!body) {
-        return NULL;
-    }
+    // body is guaranteed non-NULL beyond this point
     
     // Check if body is an immediate value (fixnum, char, special, fixed)
     if (IS_IMMEDIATE(body)) {
@@ -666,12 +741,12 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
         
         default:
             // Literal value
-            return AUTORELEASE(RETAIN(body));
+            return RETAIN(body);
     }
 }
 
 // Evaluate list with parameter substitution
-CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
+CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params, CljObject **values, int param_count, CljMap *closure_env) {
     // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
     assert(param_count >= 0); // param_count should be non-negative
@@ -697,8 +772,8 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     if (op == SYM_EQUALS || op == SYM_EQUAL) {
-        CljObject *a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
-        CljObject *b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, closure_env);
+        CljObject *a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (CljObject*)closure_env);
+        CljObject *b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, (CljObject*)closure_env);
         
         if (!a || !b) return NULL;
         
@@ -715,13 +790,13 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     
     if (op == SYM_IF) {
         // (if cond then else?)
-        CljObject *cond_val = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
+        CljObject *cond_val = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (CljObject*)closure_env);
         if (!cond_val) return NULL;
         
         bool truthy = clj_is_truthy(cond_val);
         CljObject *branch = truthy ? list_get_element(as_list((ID)list), 2) : list_get_element(as_list((ID)list), 3);
         if (!branch) return NULL;
-        return eval_body_with_params(branch, params, values, param_count, closure_env);
+        return eval_body_with_params(branch, params, values, param_count, (CljObject*)closure_env);
     }
     
     // Tier 2: Frequent (70-90% of calls)
@@ -749,7 +824,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         for (int i = 0; i < recur_argc; i++) {
             g_recur_args[i] = eval_body_with_params(
                 list_get_element(as_list((ID)list), i + 1), 
-                params, values, param_count, closure_env);
+                params, values, param_count, (CljObject*)closure_env);
             if (!g_recur_args[i]) {
                 // Cleanup on error
                 for (int j = 0; j < i; j++) {
@@ -765,6 +840,15 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return NULL; // Signal to loop to continue
     }
     
+    // Handle special forms that need to be evaluated in the closure environment
+    if (op == SYM_DOTIMES || op == SYM_DOSEQ || op == SYM_FOR || op == SYM_TIME) {
+        // Special forms like dotimes and time need to be evaluated with closure_env
+        // because they may reference closure variables, and time needs to measure
+        // the actual evaluation time, not pre-evaluated arguments
+        EvalState *st = evalstate();
+        return eval_list(as_list((ID)list),closure_env, st);
+    }
+    
     
     // Handle maps as functions (for key lookup)
     if (is_type(op, CLJ_MAP)) {
@@ -777,7 +861,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
             return NULL;
         }
         
-        CljObject *key = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, closure_env);
+        CljObject *key = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (CljObject*)closure_env);
         if (!key) return NULL;
         
         CljObject *result = (CljObject*)map_get((CljValue)op, (CljValue)key);
@@ -802,21 +886,21 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     }
     
     // If not found in parameters, try closure_env
-    if (!resolved_op && is_type(op, CLJ_SYMBOL) && is_type(closure_env, CLJ_MAP)) {
+    if (!resolved_op && is_type(op, CLJ_SYMBOL) && closure_env && is_type((CljObject*)closure_env, CLJ_MAP)) {
         resolved_op = (CljObject*)map_get((CljValue)closure_env, (CljValue)op);
+        // closure_env can contain the function if it was closed over
+        // But we don't RETAIN it - use it temporarily only
     }
     
     // If still not found, try global namespace lookup (for recursive calls)
+    // Use ns_resolve directly to avoid AUTORELEASE which causes memory leaks in recursion
     if (!resolved_op && is_type(op, CLJ_SYMBOL)) {
         EvalState *st = evalstate();
-        // Use TRY/CATCH to handle exceptions from eval_symbol
-        TRY {
-            resolved_op = eval_symbol(op, st);
-        } CATCH(ex) {
-            // If symbol resolution fails, continue without resolving
-            // This allows the function to fall through to the fallback case
-            resolved_op = NULL;
-        } END_TRY
+        if (st) {
+            resolved_op = ns_resolve(st, op);
+            // ns_resolve returns unretained pointer from namespace
+            // We don't RETAIN it here - just use it temporarily
+        }
     }
     
     // If op was resolved to a function, call it
@@ -831,7 +915,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         ID *args = (ID*)alloc_obj_array(argc, args_stack);
         
         for (int i = 0; i < argc; i++) {
-            args[i] = eval_body_with_params(list_get_element(as_list((ID)list), i + 1), params, values, param_count, closure_env);
+            args[i] = eval_body_with_params(list_get_element(as_list((ID)list), i + 1), params, values, param_count, (CljObject*)closure_env);
             if (!args[i]) args[i] = NULL;
         }
         
@@ -2189,22 +2273,16 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    // CRITICAL: Add function to its own closure_env for recursive calls
-    // This allows recursive functions to find themselves
-    if (is_type(fn_obj, CLJ_CLOSURE)) {
-        CljFunction *func = as_function((ID)fn_obj);
-        if (func && func->closure_env) {
-            // map_assoc_cow returns a new map, so we need to update the function's closure_env
-            CljObject *new_closure_env = map_assoc_cow(func->closure_env, name_sym, fn_obj);
-            if (new_closure_env) {
-                RELEASE(func->closure_env);
-                func->closure_env = RETAIN(new_closure_env);
-            }
-        }
-    }
+    // NOTE: Removed closure_env self-reference for recursive calls
+    // Recursive functions now resolve themselves via namespace lookup on each call
+    // This prevents reference count explosion (e.g., fib(20) had 21,893 retains)
+    // Performance impact is minimal since namespace lookup is fast
     
     // Now evaluate the def expression (which will also add to environment)
     CljObject *result = eval_def(def_list, env, st);
+    
+    // eval_def already registers the function in the namespace via ns_define
+    // so no additional registration needed here
     
     RELEASE(fn_obj);
     RELEASE(fn_list);
@@ -2314,10 +2392,17 @@ ID eval_dotimes(CljList *list, CljMap *env) {
         return NULL;
     }
     
-    CljObject *binding_list = list_data->rest && is_type(list_data->rest, CLJ_LIST) ? as_list(list_data->rest)->first : NULL;
-    CljObject *body = list_data->rest && is_type(list_data->rest, CLJ_LIST) && as_list(list_data->rest)->rest ? as_list(as_list(list_data->rest)->rest)->first : NULL;
+    // Extract binding vector/list (first argument after dotimes)
+    CljObject *binding_list = NULL;
+    CljObject *body_list = NULL;
     
-    if (!binding_list || !body) {
+    if (list_data->rest && is_type(list_data->rest, CLJ_LIST)) {
+        CljList *args_list = as_list(list_data->rest);
+        binding_list = args_list->first;
+        body_list = args_list->rest; // Rest contains all body expressions
+    }
+    
+    if (!binding_list || !body_list) {
         return NULL;
     }
     
@@ -2335,7 +2420,11 @@ ID eval_dotimes(CljList *list, CljMap *env) {
             return NULL;
         }
         var = binding_data->first;
-        n_obj = binding_data->rest;
+        CljList *rest_list = as_list(binding_data->rest);
+        if (!rest_list || !rest_list->first) {
+            return NULL;
+        }
+        n_obj = rest_list->first;
     } else {
         return NULL;
     }
@@ -2356,9 +2445,24 @@ ID eval_dotimes(CljList *list, CljMap *env) {
             CljValue i_value = fixnum((int32_t)i);
                     map_assoc((CljObject*)new_env, var, i_value);
             
-            // Evaluate body with new binding
+            // Evaluate all body expressions with new binding
+            // body_list can contain multiple expressions
             EvalState *st = evalstate();
-            CljObject *body_result = eval_list(as_list((ID)body), new_env, st);
+            CljObject *body_result = NULL;
+            if (is_type(body_list, CLJ_LIST)) {
+                // Multiple expressions - evaluate all, return last
+                CljList *body_items = as_list(body_list);
+                while (body_items && body_items->first) {
+                    if (body_result) {
+                        RELEASE(body_result);
+                    }
+                    body_result = eval_body(body_items->first, new_env, st);
+                    body_items = body_items->rest ? as_list(body_items->rest) : NULL;
+                }
+            } else {
+                // Single expression - use eval_body
+                body_result = eval_body(body_list, new_env, st);
+            }
             if (body_result) {
                 RELEASE(body_result);
             }

@@ -130,13 +130,25 @@ static ID parse_symbol(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 // static CljObject* make_number_by_parsing_old(Reader *reader, EvalState *st); // Removed unused function
 
+// Ensure that every parse step advances the reader or hits EOF, otherwise throw
+static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
+  size_t before = reader_offset(reader);
+  ID val = parse_expr(reader, st);
+  size_t after = reader_offset(reader);
+  if (after <= before && !reader_eof(reader)) {
+    throw_parser_exception("Parser made no progress while reading expression", reader);
+    return NULL;
+  }
+  return val;
+}
+
 /**
  * @brief Create CljObject by parsing expression from Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @return New CljObject with RC=1 or NULL on error (caller must release)
  */
-ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
+ID parse_expr(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   if (reader_is_eof(reader))
     return NULL;
@@ -213,16 +225,22 @@ ID make_object_by_parsing_expr(Reader *reader, EvalState *st) {
   if (c == '\'') {
     reader_consume(reader); // consume '
     reader_skip_all(reader);
-    ID quoted = make_object_by_parsing_expr(reader, st);
+    size_t qb_before = reader_offset(reader);
+    ID quoted = parse_expr(reader, st);
+    size_t qb_after = reader_offset(reader);
+    if (qb_after <= qb_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after quote", reader);
+      return NULL;
+    }
     if (!quoted) return NULL;
     // Create (quote <expr>) list: (quote expr)
     // Build list using the same pattern as parse_list
     CljObject *quote_sym = intern_symbol_global("quote");
     ID elements[2] = {(CljValue)quote_sym, quoted};
-    return make_list_from_stack((CljValue*)elements, 2);
+    return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
   }
   
-  if (c == ':' || is_alphanumeric(c) || (unsigned char)c >= 0x80)
+  if (c == ':' || is_alphanumeric(c) || c == '.' || (unsigned char)c >= 0x80)
     return parse_symbol(reader, st);
   if (strchr("+*/=<>", c)) {
     // Check if next character is also a symbol character (e.g., *ns* not just *)
@@ -337,7 +355,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       if (count >= MAX_STACK_VECTOR_SIZE)
         return NULL;
-      ID value = make_object_by_parsing_expr(reader, st);
+      ID value = parse_expr(reader, st);
       if (!value)
         return NULL;
       stack[count++] = value;
@@ -380,11 +398,11 @@ static ID parse_map(Reader *reader, EvalState *st) {
   ID pairs[MAX_STACK_MAP_PAIRS * 2];
   int pair_count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
-    ID key = make_object_by_parsing_expr(reader, st);
+    ID key = parse_expr(reader, st);
     if (!key)
       return NULL;
     reader_skip_all(reader);
-    ID value = make_object_by_parsing_expr(reader, st);
+    ID value = parse_expr(reader, st);
     if (!value)
       return NULL;
     reader_skip_all(reader);
@@ -396,8 +414,8 @@ static ID parse_map(Reader *reader, EvalState *st) {
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
   }
-  // Use the new API for CljValue map parsing
-  return map_from_stack((CljObject**)pairs, pair_count);
+  // Use constructor API (owned) and return autoreleased
+  return AUTORELEASE(make_map_from_stack((CljObject**)pairs, pair_count));
 }
 
 /**
@@ -418,7 +436,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   }
   
   // Parse first element
-  ID first = make_object_by_parsing_expr(reader, st);
+  ID first = parse_expr_with_progress(reader, st);
   reader_skip_all(reader);
   
   // Parse rest of the list recursively
@@ -444,19 +462,29 @@ static ID parse_list(Reader *reader, EvalState *st) {
  */
 static ID parse_list_rest(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
-  
+
+  // If EOF reached before ')', this is an unclosed list
+  if (reader_eof(reader)) {
+    throw_parser_exception("Unclosed list - unexpected EOF before ')'", reader);
+    return NULL;
+  }
+
   // Check if we're at the end of the list
   if (reader_peek_char(reader) == ')') {
     return NULL; // Empty rest
   }
-  
-  // Parse next element
-  ID element = make_object_by_parsing_expr(reader, st);
-  reader_skip_all(reader);
-  
+
+  // Parse next element (ensure forward progress)
+  ID element = parse_expr_with_progress(reader, st);
+
+  // If next is ')', stop recursion early
+  if (reader_peek_char(reader) == ')') {
+    return AUTORELEASE(make_list(element, NULL));
+  }
+
   // Parse remaining elements recursively
   ID rest = parse_list_rest(reader, st);
-  
+
   // Build list node
   return AUTORELEASE(make_list(element, (CljList*)rest));
 }
@@ -487,7 +515,12 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       // Get the UTF-8 bytes for this codepoint
       const char *current = reader->src + reader->index;
       const char *next = utf8codepoint(current, NULL);
-      if (!next) break;
+      if (!next || next <= current) {
+        // Notbremse: Fortschritt sicherstellen
+        CLJ_ASSERT(next && next > current);
+        // Fallback: einen Byte voranschreiten, um Hänger zu vermeiden
+        next = current + 1;
+      }
       
       size_t bytes_to_copy = next - current;
       if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE) break;
@@ -498,14 +531,20 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       }
       
       // Advance reader by codepoint
+      size_t before = reader_offset(reader);
       reader_next_codepoint(reader);
+      size_t after = reader_offset(reader);
+      // Notbremse: Fortschritt garantiert
+      CLJ_ASSERT(after > before);
     } else {
       break;
     }
   }
   
   buffer[pos] = '\0';
-  if (!utf8valid(buffer))
+  // Notbremse: leere Symbole sind ungültig und führen zu Hängern
+  CLJ_ASSERT(pos > 0 || reader_eof(reader));
+  if (!utf8valid(buffer) || pos == 0)
     return NULL;
   return AUTORELEASE(intern_symbol_global(buffer));
 }
@@ -624,7 +663,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
 CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
   // Delegate to make_object_by_parsing_expr to avoid code duplication
   // Both functions do the same thing, just with different return types
-  return (CljValue)make_object_by_parsing_expr(reader, st);
+  return (CljValue)parse_expr(reader, st);
 }
 
 /**
@@ -681,11 +720,11 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   if (!reader_eof(reader) && reader_next(reader) != '^')
     return NULL;
   reader_skip_all(reader);
-  ID meta = make_object_by_parsing_expr(reader, st);
+  ID meta = parse_expr(reader, st);
   if (!meta)
     return NULL;
   reader_skip_all(reader);
-  ID obj = make_object_by_parsing_expr(reader, st);
+  ID obj = parse_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
     return NULL;
@@ -711,7 +750,7 @@ static ID parse_meta_map(Reader *reader,
   if (!meta)
     return NULL;
   reader_skip_all(reader);
-  ID obj = make_object_by_parsing_expr(reader, st);
+  ID obj = parse_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
     return NULL;

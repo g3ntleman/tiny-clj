@@ -54,7 +54,7 @@ ID native_identical(ID *args, unsigned int argc);
 ID native_vector_p(ID *args, unsigned int argc);
 
 // Time functions
-ID native_time(ID *args, unsigned int argc);
+// native_time removed: time is now only a special form
 ID native_time_micro(ID *args, unsigned int argc);
 ID native_sleep(ID *args, unsigned int argc);
 

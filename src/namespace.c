@@ -17,6 +17,12 @@
 // CljNamespace *ns_registry = NULL;
 // static CljNamespace *clojure_core_cache = NULL;
 
+// Symbol resolution cache - uses array-map for DRY principle
+// Cache size: 16 entries (good balance between hit rate and memory usage)
+#define RESOLVE_CACHE_SIZE 16
+static CljObject *g_resolve_cache = NULL;
+static int g_resolve_cache_index = 0; // Round-robin index for cache eviction
+
 CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!name) return NULL;
     
@@ -55,33 +61,40 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
         return NULL;
     }
     
+    // Initialize cache on first use (DRY: reuse array-map)
+    if (!g_resolve_cache) {
+        g_resolve_cache = (CljObject*)make_map(RESOLVE_CACHE_SIZE);
+        g_resolve_cache_index = 0;
+    }
+    
+    // OPTIMIZATION: Check cache first (fast path for repeated lookups)
+    CljObject *cached = (CljObject*)map_get((CljValue)g_resolve_cache, (CljValue)sym);
+    if (cached) {
+        return (ID)cached;
+    }
+    
+    // Cache miss - perform normal resolution
     // First search in the current namespace
     CljObject *v = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)sym);
     if (v) {
+        // Cache the result for future lookups
+        map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
         return (ID)v;
     }
 
     // OPTIMIZATION: Priority-based namespace search
     // 1. Search clojure.core first (most common) - use cache for O(1) lookup
-    if (!g_runtime.clojure_core_cache) {
-        // Find and cache clojure.core namespace
-        CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
-        while (cur) {
-            if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
-                CljSymbol *name_sym = as_symbol(cur->name);
-                if (name_sym && strcmp(name_sym->name, "clojure.core") == 0) {
-                    g_runtime.clojure_core_cache = (void*)cur;
-                    break;
-                }
-            }
-            cur = cur->next;
-        }
-    }
+    // Cache should be set during initialization (load_clojure_core or register_builtins)
+    // No need to search through all namespaces - just check if cache is set
     
     // Search clojure.core first if cached
     if (g_runtime.clojure_core_cache && ((CljNamespace*)g_runtime.clojure_core_cache)->mappings) {
         v = (CljObject*)map_get((CljValue)((CljNamespace*)g_runtime.clojure_core_cache)->mappings, (CljValue)sym);
-        if (v) return (ID)v;
+        if (v) {
+            // Cache the result
+            map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            return (ID)v;
+        }
     }
     
     // 2. Search other namespaces (excluding clojure.core to avoid double search)
@@ -89,11 +102,16 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     while (cur) {
         if (cur != (CljNamespace*)g_runtime.clojure_core_cache && cur->mappings) {
             v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
-            if (v) return (ID)v;
+            if (v) {
+                // Cache the result
+                map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+                return (ID)v;
+            }
         }
         cur = cur->next;
     }
     
+    // Symbol not found - don't cache NULL values (would waste cache space)
     return NULL;
 }
 

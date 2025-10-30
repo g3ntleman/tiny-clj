@@ -50,6 +50,15 @@ check_ipo_supported(RESULT ipo_supported OUTPUT ipo_msg)
 if(ipo_supported)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
+  message(STATUS "LTO (Link-Time Optimization) enabled for Release builds")
+else()
+  message(STATUS "LTO not supported by toolchain (ipo_supported=false)")
+  # Fallback: Try explicit LTO flags
+  if(APPLE)
+    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto")
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto")
+    message(STATUS "Using explicit -flto flags for LTO")
+  endif()
 endif()
 
 # Include directories
@@ -185,11 +194,16 @@ add_executable(tiny-clj-repl
     src/line_editor.c
     ${SOURCES}
 )
-# REPL Build - Always in Debug mode for development
-target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING)
-set_target_properties(tiny-clj-repl PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING"
-)
+# REPL Build - Debug in Debug mode, Release in Release mode
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)
+    # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
+else()
+    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
+    set_target_properties(tiny-clj-repl PROPERTIES
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING"
+    )
+endif()
 
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
 add_executable(tiny-clj-esp32-repl
@@ -231,6 +245,7 @@ add_executable(unity-tests
     src/tests/test_let.c
     src/tests/test_do.c
     src/tests/test_defn.c
+    src/tests/test_memory_leak_fibonacci.c
     src/tests/test_time.c
     src/tests/test_loops.c
     src/tests/test_fixed_point_legacy.c
@@ -238,6 +253,7 @@ add_executable(unity-tests
     src/tests/test_sequences.c
     src/tests/test_byte_array.c
     src/tests/test_cow.c
+    src/tests/test_file_io.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c

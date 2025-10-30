@@ -769,7 +769,7 @@ void meta_clear(CljObject *v) {
         
         // Shift following elements to the left
         for (int j = index; j < map->count - 1; j++) {
-            KV_SET_PAIR(map->data, j,
+            KV_ASSIGN_PAIR(map->data, j,
                        KV_KEY(map->data, j + 1),
                        KV_VALUE(map->data, j + 1));
         }

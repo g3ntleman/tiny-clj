@@ -56,12 +56,12 @@ ID eval_string(const char* expr_str, EvalState *eval_state);
 CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 /**
- * @brief Create CljValue by parsing expression from Reader
+ * @brief Parse Clojure expression from Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return New CljValue or NULL on error
+ * @return Autoreleased object or NULL on error (no manual RELEASE needed)
  */
-ID make_object_by_parsing_expr(Reader *reader, EvalState *st);
+ID parse_expr(Reader *reader, EvalState *st);
 
 /**
  * @brief Parse Clojure expression from Reader (CljValue API)

@@ -1,4 +1,4 @@
 Führe aus: clojure ./benchmarks/fibonacci.clj
 WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/fibonacci.clj
 Running fibonacci benchmark (1000x iterations)...
-"Elapsed time: 3.115417 msecs"
+"Elapsed time: 3.711791 msecs"
