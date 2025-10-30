@@ -29,7 +29,7 @@ static inline CljList* as_list(ID obj) {
         snprintf(error_msg, sizeof(error_msg), 
                 "Type mismatch: expected List, got %s", 
                 "List");
-        throw_exception("TypeError", error_msg, __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
     }
     return (CljList*)obj;
 }

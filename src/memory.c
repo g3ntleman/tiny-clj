@@ -609,6 +609,6 @@ bool is_pointer_on_stack(const void *ptr) {
 void throw_oom(CljType type) {
     char msg[128];
     snprintf(msg, sizeof(msg), "Failed to allocate %s", clj_type_name(type));
-    throw_exception("OutOfMemoryError", msg, __FILE__, __LINE__, 0);
+    throw_exception(EXCEPTION_OUT_OF_MEMORY, msg, __FILE__, __LINE__, 0);
     abort(); // Ensure no return
 }

@@ -66,7 +66,7 @@ ID native_nth(ID *args, unsigned int argc) {
     CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) {
         if (argc == 3) return args[2];
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "nth index out of bounds", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "nth index out of bounds", __FILE__, __LINE__, 0);
         return NULL;
     }
     return (RETAIN(v->data[i]));
@@ -148,7 +148,7 @@ ID native_conj(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type
-    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                     "conj not supported on this type", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -225,7 +225,7 @@ ID native_rest(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type
-    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                     "rest not supported on this type", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -315,7 +315,7 @@ ID native_transient(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                     "transient requires a persistent collection at position 1", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -337,7 +337,7 @@ ID native_persistent(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                     "persistent! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -363,7 +363,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                     "conj! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
     return NULL;
@@ -455,7 +455,7 @@ ID native_pop(ID *args, unsigned int argc) {
     if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
     CljPersistentVector *v = as_vector(coll);
     if (!v || v->count == 0) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "pop on empty vector", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "pop on empty vector", __FILE__, __LINE__, 0);
         return NULL;
     }
     int new_count = v->count - 1;
@@ -471,7 +471,7 @@ ID native_pop(ID *args, unsigned int argc) {
 // (subvec v start) | (subvec v start end)
 ID native_subvec(ID *args, unsigned int argc) {
     if (argc != 2 && argc != 3) {
-        throw_exception(EXCEPTION_TYPE_ARITY, "subvec requires 2 or 3 args", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ARITY, "subvec requires 2 or 3 args", __FILE__, __LINE__, 0);
         return NULL;
     }
     CljObject *coll = args[0];
@@ -482,7 +482,7 @@ ID native_subvec(ID *args, unsigned int argc) {
     if (!v) return NULL;
     int end = (argc == 3 && IS_FIXNUM(args[2])) ? AS_FIXNUM(args[2]) : v->count;
     if (start < 0 || end < start || end > v->count) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "subvec index out of bounds", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "subvec index out of bounds", __FILE__, __LINE__, 0);
         return NULL;
     }
     int len = end - start;
@@ -713,7 +713,7 @@ ID native_prn(ID *args, unsigned int argc) {
 static bool validate_numeric_args(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
         if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
-            throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
     }
@@ -807,7 +807,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     // Convert argument to C-string
     char *filename_str = to_string(args[0]);
     if (!filename_str) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "slurp requires a string or symbol argument",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -857,7 +857,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     if (!buffer) {
         free(filename_str);
         fclose(fp);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "Out of memory reading file",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -961,7 +961,7 @@ ID native_require(ID *args, unsigned int argc) {
     char *ns_name = to_string(args[0]);
     if (!ns_name || ns_name[0] == '\0') {
         if (ns_name) free(ns_name);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "require expects non-empty namespace name", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "require expects non-empty namespace name", __FILE__, __LINE__, 0);
         return NULL;
     }
 
@@ -986,7 +986,7 @@ ID native_require(ID *args, unsigned int argc) {
         char msg[512];
         snprintf(msg, sizeof(msg), "Cannot open namespace file for '%s' (tried: %s and %s)", ns_name, libs_path, rel);
         free(rel); free(ns_name);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, msg, __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, msg, __FILE__, __LINE__, 0);
         return NULL;
     }
 
@@ -1008,7 +1008,7 @@ ID native_require(ID *args, unsigned int argc) {
     free(ns_name);
 
     if (!ok) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "Error while evaluating required namespace", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Error while evaluating required namespace", __FILE__, __LINE__, 0);
         return NULL;
     }
     return NULL; // Clojure-compatible: require returns nil
@@ -1023,7 +1023,7 @@ ID native_spit(ID *args, unsigned int argc) {
     // Convert first argument (filename) to C-string
     char *filename_str = to_string(args[0]);
     if (!filename_str) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "spit requires a string or symbol as first argument (filename)",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -1047,7 +1047,7 @@ ID native_spit(ID *args, unsigned int argc) {
                 "Cannot open file '%s' for writing: %s", filename_str, strerror(errno));
         free(filename_str);
         free(content_str);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1064,7 +1064,7 @@ ID native_spit(ID *args, unsigned int argc) {
         free(filename_str);
         free(content_str);
         fclose(fp);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1077,7 +1077,7 @@ ID native_spit(ID *args, unsigned int argc) {
         free(filename_str);
         free(content_str);
         fclose(fp);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1277,7 +1277,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int x = AS_FIXNUM(args[0]); 
             if (x == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
                     "Division by zero: 1 / %d", x);
                 return NULL;
             }
@@ -1287,7 +1287,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int32_t x = extract_fixed_value(args[0]);
             if (x == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
                     "Division by zero: 1 / %d", x >> 13);
                 return NULL;
             }
@@ -1313,7 +1313,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int d = AS_FIXNUM(args[i]);
             if (d == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
                     "Division by zero: %d / %d", acc_i, d);
                 return NULL;
             }
@@ -1332,7 +1332,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
                                             : extract_fixed_value(args[i]);
             if (d == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
                     "Division by zero: %d / %d", acc_fixed >> 13, d >> 13);
                 return NULL;
             } else {
@@ -1490,7 +1490,7 @@ ID native_lt(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception("TypeError", "Expected number for < comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for < comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1501,7 +1501,7 @@ ID native_gt(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception("TypeError", "Expected number for > comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for > comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1512,7 +1512,7 @@ ID native_le(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception("TypeError", "Expected number for <= comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for <= comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1524,7 +1524,7 @@ ID native_ge(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception("TypeError", "Expected number for >= comparison",
+        throw_exception(EXCEPTION_TYPE, "Expected number for >= comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1539,7 +1539,7 @@ ID native_eq(ID *args, unsigned int argc) {
     CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "= arguments cannot be null",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "= arguments cannot be null",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1583,7 +1583,7 @@ ID native_vector_p(ID *args, unsigned int argc) {
 // Native time-micro implementation with microsecond resolution
 ID native_time_micro(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "time-micro requires exactly 1 argument",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "time-micro requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1622,7 +1622,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     // Get the sleep duration in seconds
     CljObject *duration_obj = args[0];
     if (!is_fixnum((CljValue)duration_obj)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "sleep duration must be a number",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1649,7 +1649,7 @@ ID native_def(ID *args, unsigned int argc) {
     // First argument should be a symbol (name)
     CljObject *symbol = args[0];
     if (!symbol || !is_type(symbol, CLJ_SYMBOL)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "def requires a symbol as first argument",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "def requires a symbol as first argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1699,14 +1699,14 @@ ID native_ns(ID *args, unsigned int argc) {
     // First argument should be a symbol (namespace name)
     CljObject *ns_name_obj = args[0];
     if (!ns_name_obj || !is_type(ns_name_obj, CLJ_SYMBOL)) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "ns expects a symbol",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "ns expects a symbol",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     CljSymbol *ns_sym = as_symbol((ID)ns_name_obj);
     if (!ns_sym || !ns_sym->name[0]) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "ns symbol has no name",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "ns symbol has no name",
                        __FILE__, __LINE__, 0);
         return NULL;
     }

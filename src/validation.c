@@ -21,7 +21,7 @@ bool validate_arity(unsigned int argc, unsigned int expected_arity, const char *
                 function_name, expected_arity, 
                 expected_arity == 1 ? "" : "s", argc);
         
-        throw_exception("IllegalArgumentException", error_msg,
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return false;
     }
@@ -47,7 +47,7 @@ bool validate_min_arity(unsigned int argc, unsigned int min_arity, const char *f
                 function_name, min_arity, 
                 min_arity == 1 ? "" : "s", argc);
         
-        throw_exception("IllegalArgumentException", error_msg,
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return false;
     }

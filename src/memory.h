@@ -14,6 +14,8 @@
 #include "object.h"
 #include "memory_profiler.h"
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 // ============================================================================
 // REFERENCE COUNTING FUNCTIONS
@@ -318,6 +320,21 @@ int get_retain_count(CljObject *obj);
     #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
     #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
     #define REFERENCE_COUNT(obj) get_retain_count(obj)
+#endif
+
+// =========================================================================
+// LOGGING MACROS (fprintf-Ersatz, eliminierbar bei Deaktivierung)
+// =========================================================================
+
+#if defined(ENABLE_MEMORY_PROFILING)
+    // Optional: Format-Check für Compiler
+    static inline void logf_impl(FILE *stream, const char *fmt, ...) __attribute__((format(printf,2,3)));
+    static inline void logf_impl(FILE *stream, const char *fmt, ...) {
+        va_list ap; va_start(ap, fmt); vfprintf(stream, fmt, ap); va_end(ap);
+    }
+    #define LOGF(stream, fmt, ...) do { logf_impl((stream), (fmt), ##__VA_ARGS__); } while(0)
+#else
+    #define LOGF(stream, fmt, ...) do { } while(0)
 #endif
 
 /** @brief Safe object assignment with automatic retain/release management.

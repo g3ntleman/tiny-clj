@@ -222,7 +222,7 @@ void memory_profiler_reset(void) {
  */
 void memory_profiler_cleanup(void) {
     if (g_memory_stats.memory_leaks > 0) {
-        printf("⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
+        LOGF(stdout, "⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
                g_memory_stats.memory_leaks);
     }
     // Memory profiler initialized
@@ -250,12 +250,12 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     
     // Compact output - only show essential information
     if (is_delta) {
-        printf("📊 Memory Delta: Alloc:%+ld Dealloc:%+ld Peak:%+ld Current:%+ld Leaks:%+ld\n", 
+        LOGF(stdout, "📊 Memory Delta: Alloc:%+ld Dealloc:%+ld Peak:%+ld Current:%+ld Leaks:%+ld\n", 
                (long)stats->total_allocations, (long)stats->total_deallocations, 
                (long)stats->peak_memory_usage, (long)stats->current_memory_usage, 
                (long)stats->memory_leaks);
     } else {
-        printf("📊 Memory: Alloc:%zu Dealloc:%zu Peak:%zu Current:%zu Leaks:%zu\n", 
+        LOGF(stdout, "📊 Memory: Alloc:%zu Dealloc:%zu Peak:%zu Current:%zu Leaks:%zu\n", 
                stats->total_allocations, stats->total_deallocations, 
                stats->peak_memory_usage, stats->current_memory_usage, stats->memory_leaks);
     }
@@ -272,21 +272,21 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
         if (allocs > 0 || deallocs > 0 || retains > 0 || releases > 0 || autoreleases > 0) {
             has_activity = true;
             const char* type_name = clj_type_name((CljType)i);
-            printf("📋 %s: A:%zu/%zu", type_name, allocs, deallocs);
+            LOGF(stdout, "📋 %s: A:%zu/%zu", type_name, allocs, deallocs);
             
             // Add retain/release/autorelease info if > 0
-            if (retains > 0) printf(" R:%zu", retains);
-            if (releases > 0) printf(" Rel:%zu", releases);
-            if (autoreleases > 0) printf(" AR:%zu", autoreleases);
+            if (retains > 0) LOGF(stdout, " R:%zu", retains);
+            if (releases > 0) LOGF(stdout, " Rel:%zu", releases);
+            if (autoreleases > 0) LOGF(stdout, " AR:%zu", autoreleases);
             
-            printf("\n");
+            LOGF(stdout, "\n");
         }
     }
     
     // Always show basic stats even if no activity
     if (!has_activity) {
-        printf("📋 Types: (no memory activity detected)\n");
-        printf("🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
+        LOGF(stdout, "📋 Types: (no memory activity detected)\n");
+        LOGF(stdout, "🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
                stats->total_allocations, stats->total_deallocations, 
                stats->retain_calls, stats->release_calls, stats->autorelease_calls);
     }
@@ -294,7 +294,7 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
     
     // Compact leak detection
     if (stats->memory_leaks > 0) {
-        printf("🚨 LEAK: %zu objects, %zu bytes\n", stats->memory_leaks, stats->current_memory_usage);
+        LOGF(stdout, "🚨 LEAK: %zu objects, %zu bytes\n", stats->memory_leaks, stats->current_memory_usage);
     }
 }
 
@@ -319,7 +319,7 @@ static void update_memory_leak_stats(void) {
         if (g_memory_stats.object_destructions > g_memory_stats.total_allocations + 2) {
             static bool double_free_warning_shown = false;
             if (!double_free_warning_shown) {
-                printf("⚠️  WARNING: Potential double-free detected! Object destructions (%zu) significantly exceed allocations (%zu).\n", 
+            LOGF(stdout, "⚠️  WARNING: Potential double-free detected! Object destructions (%zu) significantly exceed allocations (%zu).\n", 
                        g_memory_stats.object_destructions, g_memory_stats.total_allocations);
                 double_free_warning_shown = true;
             }

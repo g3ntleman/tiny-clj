@@ -471,7 +471,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
-        throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
+        throw_exception(EXCEPTION_TYPE, "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
     
@@ -480,7 +480,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
         // It's a native function (CljFunc)
         CljFunc *native_func = (CljFunc*)fn;
         if (!native_func || !native_func->fn) {
-            throw_exception("TypeError", "Invalid native function", NULL, 0, 0);
+            throw_exception(EXCEPTION_TYPE, "Invalid native function", NULL, 0, 0);
             return NULL;
         }
         return native_func->fn((CljObject**)args, argc);
@@ -494,7 +494,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
     
     // Arity check
     if (argc != func->param_count) {
-        throw_exception("ArityError", "Arity mismatch in function call", NULL, 0, 0);
+        throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
         return NULL;
     }
     
@@ -1354,7 +1354,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // recur is only valid inside function bodies, not in top-level lists
     if (original_op == SYM_RECUR) {
-        throw_exception("SyntaxError", "recur can only be used inside function bodies", NULL, 0, 0);
+        throw_exception(EXCEPTION_PARSE, "recur can only be used inside function bodies", NULL, 0, 0);
         return NULL;
     }
     

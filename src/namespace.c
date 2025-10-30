@@ -234,7 +234,7 @@ void parse_error(const char *msg, EvalState *st) {
     if (!st) return;
     
     // Use throw_exception which handles the exception_stack correctly
-    throw_exception(EXCEPTION_TYPE_PARSE, msg, st->file, st->line, st->col);
+    throw_exception(EXCEPTION_PARSE, msg, st->file, st->line, st->col);
 }
 
 

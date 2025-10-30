@@ -135,7 +135,7 @@ void byte_array_copy_from(CljValue dest, int dest_offset, const uint8_t *src, in
     assert(dest_offset + length <= ba->length && "Copy would exceed array bounds");
     
     if (!src || dest_offset < 0 || length < 0) {
-        throw_exception("IllegalArgumentException", "Invalid arguments to byte_array_copy_from",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Invalid arguments to byte_array_copy_from",
                        __FILE__, __LINE__, 0);
         return;
     }
@@ -163,7 +163,7 @@ void byte_array_copy_to(CljValue src, int src_offset, uint8_t *dest, int length)
     assert(src_offset + length <= ba->length && "Copy would exceed array bounds");
     
     if (!dest || src_offset < 0 || length < 0) {
-        throw_exception("IllegalArgumentException", "Invalid arguments to byte_array_copy_to",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Invalid arguments to byte_array_copy_to",
                        __FILE__, __LINE__, 0);
         return;
     }
@@ -196,7 +196,7 @@ void byte_array_copy(CljValue dest, int dest_offset, CljValue src, int src_offse
     assert(src_offset + length <= src_ba->length && "Copy would exceed source bounds");
     
     if (dest_offset < 0 || src_offset < 0 || length < 0) {
-        throw_exception("IllegalArgumentException", "Invalid arguments to byte_array_copy",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Invalid arguments to byte_array_copy",
                        __FILE__, __LINE__, 0);
         return;
     }
@@ -230,7 +230,7 @@ CljValue byte_array_slice(CljValue arr, int offset, int length) {
     assert(offset + length <= ba->length && "Slice would exceed array bounds");
     
     if (offset < 0 || length < 0) {
-        throw_exception("IllegalArgumentException", "Invalid arguments to byte_array_slice",
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Invalid arguments to byte_array_slice",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
