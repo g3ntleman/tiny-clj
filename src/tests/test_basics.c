@@ -36,52 +36,48 @@ TEST(test_list_count) {
 }
 
 TEST(test_list_creation) {
-    WITH_AUTORELEASE_POOL({
-        // High-level test using eval_string
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        
-        // Test empty list creation - (list) returns nil in Clojure
-        CljObject *list = eval_string("(list)", st);
-        TEST_ASSERT_NULL(list);  // (list) returns nil, not empty list
-        
-        // Test list with elements
-        CljObject *list_with_elements = eval_string("(list 1 2 3)", st);
-        TEST_ASSERT_NOT_NULL(list_with_elements);
-        TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_with_elements->type);
-        
-        // Test count function
-        CljObject *count_result = eval_string("(count (list 1 2 3))", st);
-        TEST_ASSERT_NOT_NULL(count_result);
-        if (count_result && is_fixnum(count_result)) {
-            TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
-        }
-        
-        // Clean up
-        evalstate_free(st);
-    });
+    // High-level test using eval_string
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    
+    // Test empty list creation - (list) returns nil in Clojure
+    CljObject *list = eval_string("(list)", st);
+    TEST_ASSERT_NULL(list);  // (list) returns nil, not empty list
+    
+    // Test list with elements
+    CljObject *list_with_elements = eval_string("(list 1 2 3)", st);
+    TEST_ASSERT_NOT_NULL(list_with_elements);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_with_elements->type);
+    
+    // Test count function
+    CljObject *count_result = eval_string("(count (list 1 2 3))", st);
+    TEST_ASSERT_NOT_NULL(count_result);
+    if (count_result && is_fixnum(count_result)) {
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
+    }
+    
+    // Clean up
+    evalstate_free(st);
 }
 
 TEST(test_symbol_creation) {
-    WITH_AUTORELEASE_POOL({
-        // High-level test using eval_string
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Test symbol creation (quoted symbol)
-        CljObject *sym = eval_string("'test-symbol", st);
-        TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
-        
-        // Test symbol with namespace
-        CljObject *ns_sym = eval_string("'user/test-symbol", st);
-        TEST_ASSERT_NOT_NULL(ns_sym);
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ns_sym->type);
-        
-        // Clean up
-        evalstate_free(st);
-    });
+    // High-level test using eval_string
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Test symbol creation (quoted symbol)
+    CljObject *sym = eval_string("'test-symbol", st);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
+    
+    // Test symbol with namespace
+    CljObject *ns_sym = eval_string("'user/test-symbol", st);
+    TEST_ASSERT_NOT_NULL(ns_sym);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ns_sym->type);
+    
+    // Clean up
+    evalstate_free(st);
 }
 
 TEST(test_string_creation) {
@@ -706,69 +702,65 @@ TEST(test_eval_list_function_call) {
 // ============================================================================
 
 TEST(test_identical_predicate) {
-    WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Test identical? with same object
-        CljObject *vec1 = eval_string("[1 2 3]", st);
-        TEST_ASSERT_NOT_NULL(vec1);
-        
-        CljObject *result1 = eval_string("(identical? [1 2 3] [1 2 3])", st);
-        TEST_ASSERT_NOT_NULL(result1);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result1)); // Different objects
-        
-        // Test identical? with same reference
-        CljObject *result2 = eval_string("(let [x [1 2 3]] (identical? x x))", st);
-        TEST_ASSERT_NOT_NULL(result2);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result2)); // Same object
-        
-        // Test identical? with nil
-        CljObject *result3 = eval_string("(identical? nil nil)", st);
-        TEST_ASSERT_NOT_NULL(result3);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result3)); // Both nil
-        
-        // Test identical? with different types
-        CljObject *result4 = eval_string("(identical? nil [1 2 3])", st);
-        TEST_ASSERT_NOT_NULL(result4);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4)); // Different objects
-        
-        evalstate_free(st);
-    });
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Test identical? with same object
+    CljObject *vec1 = eval_string("[1 2 3]", st);
+    TEST_ASSERT_NOT_NULL(vec1);
+    
+    CljObject *result1 = eval_string("(identical? [1 2 3] [1 2 3])", st);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result1)); // Different objects
+    
+    // Test identical? with same reference
+    CljObject *result2 = eval_string("(let [x [1 2 3]] (identical? x x))", st);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result2)); // Same object
+    
+    // Test identical? with nil
+    CljObject *result3 = eval_string("(identical? nil nil)", st);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result3)); // Both nil
+    
+    // Test identical? with different types
+    CljObject *result4 = eval_string("(identical? nil [1 2 3])", st);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4)); // Different objects
+    
+    evalstate_free(st);
 }
 
 TEST(test_vector_predicate) {
-    WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        
-        // Test vector? with vector
-        CljObject *result1 = eval_string("(vector? [1 2 3])", st);
-        TEST_ASSERT_NOT_NULL(result1);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result1));
-        
-        // Test vector? with list
-        CljObject *result2 = eval_string("(vector? '(1 2 3))", st);
-        TEST_ASSERT_NOT_NULL(result2);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result2));
-        
-        // Test vector? with nil
-        CljObject *result3 = eval_string("(vector? nil)", st);
-        TEST_ASSERT_NOT_NULL(result3);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result3));
-        
-        // Test vector? with string
-        CljObject *result4 = eval_string("(vector? \"hello\")", st);
-        TEST_ASSERT_NOT_NULL(result4);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4));
-        
-        // Test vector? with number
-        CljObject *result5 = eval_string("(vector? 42)", st);
-        TEST_ASSERT_NOT_NULL(result5);
-        TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result5));
-        
-        evalstate_free(st);
-    });
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Test vector? with vector
+    CljObject *result1 = eval_string("(vector? [1 2 3])", st);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result1));
+    
+    // Test vector? with list
+    CljObject *result2 = eval_string("(vector? '(1 2 3))", st);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result2));
+    
+    // Test vector? with nil
+    CljObject *result3 = eval_string("(vector? nil)", st);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result3));
+    
+    // Test vector? with string
+    CljObject *result4 = eval_string("(vector? \"hello\")", st);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4));
+    
+    // Test vector? with number
+    CljObject *result5 = eval_string("(vector? 42)", st);
+    TEST_ASSERT_NOT_NULL(result5);
+    TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result5));
+    
+    evalstate_free(st);
 }
 
 // TODO: Fix cond special form - symbol resolution issue

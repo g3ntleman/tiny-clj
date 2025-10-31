@@ -14,6 +14,7 @@
 #include "types.h"
 #include "exception.h"
 #include "map.h"
+#include "kv_macros.h"
 #include "list.h"
 #include "byte_array.h"
 #include <stdio.h>
@@ -524,12 +525,16 @@ static void release_object_deep(CljObject *v) {
             {
                 CljMap *map = as_map(v);
                 if (map) {
-                    // Release all key-value pairs
-                    for (int i = 0; i < map->count * 2; i += 2) {
-                        RELEASE(map->data[i]);     // key
-                        RELEASE(map->data[i+1]); // value
+                    // Release all key-value pairs (including parent if present)
+                    // Parent is identified by magic key __parent__
+                    for (int i = 0; i < map->count; i++) {
+                        CljObject *k = KV_KEY(map->data, i);
+                        CljObject *val = KV_VALUE(map->data, i);
+                        
+                        if (k) RELEASE(k);
+                        if (val) RELEASE(val);
                     }
-                    free(map->data);
+                    // Note: map->data is embedded array, no free() needed
                 }
             }
             break;

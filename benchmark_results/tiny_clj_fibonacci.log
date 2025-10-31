@@ -1,2 +1,41 @@
-Führe aus: echo '(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)' | timeout 30 
-Try 'timeout --help' for more information.
+Executing: timeout 30 ./build-release/tiny-clj-repl < ./benchmarks/fibonacci.clj
+=== Loading Clojure Core Functions ===
+[clojure.core] Loaded 20/20 expressions successfully
+🔍 Memory profiling disabled for REPL (Release Build)
+tiny-clj 0.1 REPL (platform = macOS). Ctrl-D to exit. 
+clojure.core=> ;; Computer Language Benchmarks Game - Fibonacci
+clojure.core=> ;; Original source: https://benchmarksgame-team.pages.debian.net/benchmarksgame/
+clojure.core=> ;; License: BSD-3-Clause
+clojure.core=> ;; Namespace: clojure.benchmarksgame.fibonacci
+clojure.core=> ;; TODO: Replace with (ns clojure.benchmarksgame.fibonacci) when require/use available
+clojure.core=> ;; === Benchmark Implementation ===
+clojure.core=> ;; Recursive version (causes memory issues in tiny-clj)
+clojure.core=> (defn fib-recursive [n]
+clojure.core...   (if (< n 2)
+clojure.core...     n
+clojure.core...     (+ (fib-recursive (- n 1)) (fib-recursive (- n 2)))))
+fib-recursive
+clojure.core=> ;; Tail-recursive version using recur (memory-efficient)
+clojure.core=> (defn fib-helper [a b i]
+clojure.core...   (if (= i 0)
+clojure.core...     a
+clojure.core...     (recur b (+ a b) (- i 1))))
+fib-helper
+clojure.core=> (defn fib [n]
+clojure.core...   (if (< n 2)
+clojure.core...     n
+clojure.core...     (fib-helper 0 1 n)))
+fib
+clojure.core=> ;; === Benchmark Execution ===
+clojure.core=> ;; Run 10000x more iterations for measurable timing using dotimes
+clojure.core=> (defn benchmark-fibonacci []
+clojure.core...   (println "Running fibonacci benchmark (10000x iterations)...")
+clojure.core...   (time
+clojure.core...     (dotimes [i 10000]
+clojure.core...       (fib 20))))
+benchmark-fibonacci
+clojure.core=> (benchmark-fibonacci)
+Elapsed time: 22.04 msecs
+nil
+clojure.core=> 
+🔍 Memory profiling disabled - no stats available

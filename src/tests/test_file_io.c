@@ -10,134 +10,130 @@ extern CljObject* history_trim_last_n(CljObject *vec, int limit);
 static const char *tmp_hist_path = "/tmp/tiny_clj_history_test.edn";
 
 TEST(test_history_roundtrip_basic) {
-    WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
 
-        // Erzeuge Vector aus Strings via Parser (ohne Evaluation)
-        ID vec = parse("[\"a\" \"b\" \"c\"]", st);
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec)->type);
+    // Erzeuge Vector aus Strings via Parser (ohne Evaluation)
+    ID vec = parse("[\"a\" \"b\" \"c\"]", st);
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec)->type);
 
-        // Speichern
-        bool ok = history_save_to_file((CljObject*)vec, tmp_hist_path);
-        TEST_ASSERT_TRUE(ok);
+    // Speichern
+    bool ok = history_save_to_file((CljObject*)vec, tmp_hist_path);
+    TEST_ASSERT_TRUE(ok);
 
-        // Laden
-        CljObject *loaded = history_load_from_file(tmp_hist_path);
-        TEST_ASSERT_NOT_NULL(loaded);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, loaded->type);
+    // Laden
+    CljObject *loaded = history_load_from_file(tmp_hist_path);
+    TEST_ASSERT_NOT_NULL(loaded);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, loaded->type);
 
-        // Vergleiche Count und Werte
-        CljPersistentVector *v = as_vector(loaded);
-        TEST_ASSERT_NOT_NULL(v);
-        TEST_ASSERT_EQUAL_INT(3, v->count);
-        TEST_ASSERT_TRUE(is_type(v->data[0], CLJ_STRING));
-        TEST_ASSERT_TRUE(is_type(v->data[1], CLJ_STRING));
-        TEST_ASSERT_TRUE(is_type(v->data[2], CLJ_STRING));
+    // Vergleiche Count und Werte
+    CljPersistentVector *v = as_vector(loaded);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_INT(3, v->count);
+    TEST_ASSERT_TRUE(is_type(v->data[0], CLJ_STRING));
+    TEST_ASSERT_TRUE(is_type(v->data[1], CLJ_STRING));
+    TEST_ASSERT_TRUE(is_type(v->data[2], CLJ_STRING));
 
-        evalstate_free(st);
-    });
+    evalstate_free(st);
 }
 
 TEST(test_history_trim_to_50) {
-    WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        TEST_ASSERT_NOT_NULL(st);
-        // Reset leak counters for this heavy test to avoid false positives
-        memory_profiler_reset();
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    // Reset leak counters for this heavy test to avoid false positives
+    memory_profiler_reset();
 
-        // Baue Vector mit 75 Strings deterministisch via Parser
-        char buf[4096];
-        size_t pos = 0;
-        pos += snprintf(buf + pos, sizeof(buf) - pos, "[");
-        for (int i = 0; i < 75; i++) {
-            pos += snprintf(buf + pos, sizeof(buf) - pos, "\"%d\"%s", i, (i < 74 ? " " : ""));
+    // Baue Vector mit 75 Strings deterministisch via Parser
+    char buf[4096];
+    size_t pos = 0;
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "[");
+    for (int i = 0; i < 75; i++) {
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "\"%d\"%s", i, (i < 74 ? " " : ""));
+    }
+    snprintf(buf + pos, sizeof(buf) - pos, "]");
+    ID vec = NULL;
+    TRY {
+        vec = parse(buf, st);
+        if (!vec) {
+            printf("DEBUG: parse() returned NULL (no exception)\n");
         }
-        snprintf(buf + pos, sizeof(buf) - pos, "]");
-        ID vec = NULL;
+    } CATCH(ex) {
+        // Exception caught during parsing - try eval_string as fallback
+        printf("DEBUG: Exception caught in parse(): %s: %s\n", 
+               ex ? ex->type : "NULL", ex ? ex->message : "NULL");
+        vec = NULL;
+    } END_TRY
+    if (!vec) {
+        // Try eval_string as fallback if parse failed
         TRY {
-            vec = parse(buf, st);
+            vec = eval_string(buf, st);
             if (!vec) {
-                printf("DEBUG: parse() returned NULL (no exception)\n");
+                printf("DEBUG: eval_string() returned NULL (no exception)\n");
             }
         } CATCH(ex) {
-            // Exception caught during parsing - try eval_string as fallback
-            printf("DEBUG: Exception caught in parse(): %s: %s\n", 
+            printf("DEBUG: Exception caught in eval_string(): %s: %s\n", 
                    ex ? ex->type : "NULL", ex ? ex->message : "NULL");
             vec = NULL;
         } END_TRY
-        if (!vec) {
-            // Try eval_string as fallback if parse failed
-            TRY {
-                vec = eval_string(buf, st);
-                if (!vec) {
-                    printf("DEBUG: eval_string() returned NULL (no exception)\n");
-                }
-            } CATCH(ex) {
-                printf("DEBUG: Exception caught in eval_string(): %s: %s\n", 
-                       ex ? ex->type : "NULL", ex ? ex->message : "NULL");
-                vec = NULL;
-            } END_TRY
-        }
-        TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec)->type);
+    }
+    TEST_ASSERT_NOT_NULL(vec);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec)->type);
 
-        CljObject *trimmed = history_trim_last_n((CljObject*)vec, 50);
-        TEST_ASSERT_NOT_NULL(trimmed);
-        CljPersistentVector *tv = as_vector(trimmed);
-        TEST_ASSERT_NOT_NULL(tv);
-        TEST_ASSERT_EQUAL_INT(50, tv->count);
+    CljObject *trimmed = history_trim_last_n((CljObject*)vec, 50);
+    TEST_ASSERT_NOT_NULL(trimmed);
+    CljPersistentVector *tv = as_vector(trimmed);
+    TEST_ASSERT_NOT_NULL(tv);
+    TEST_ASSERT_EQUAL_INT(50, tv->count);
 
-        // Speichern und Laden, weiterhin 50
-        bool ok = history_save_to_file(trimmed, tmp_hist_path);
-        TEST_ASSERT_TRUE(ok);
-        CljObject *loaded = history_load_from_file(tmp_hist_path);
-        TEST_ASSERT_NOT_NULL(loaded);
-        CljPersistentVector *lv = as_vector(loaded);
-        TEST_ASSERT_NOT_NULL(lv);
-        TEST_ASSERT_EQUAL_INT(50, lv->count);
+    // Speichern und Laden, weiterhin 50
+    bool ok = history_save_to_file(trimmed, tmp_hist_path);
+    TEST_ASSERT_TRUE(ok);
+    CljObject *loaded = history_load_from_file(tmp_hist_path);
+    TEST_ASSERT_NOT_NULL(loaded);
+    CljPersistentVector *lv = as_vector(loaded);
+    TEST_ASSERT_NOT_NULL(lv);
+    TEST_ASSERT_EQUAL_INT(50, lv->count);
 
-        // Cleanup explicit heap objects to avoid leaks in this test
-        // Since vectors may not release contained elements, release items explicitly
-        if (loaded) {
-            CljPersistentVector *lv2 = as_vector(loaded);
-            if (lv2) {
-                for (int i = 0; i < lv2->count; i++) {
-                    if (lv2->data[i] && !IS_IMMEDIATE(lv2->data[i])) {
-                        RELEASE(lv2->data[i]);
-                    }
+    // Cleanup explicit heap objects to avoid leaks in this test
+    // Since vectors may not release contained elements, release items explicitly
+    if (loaded) {
+        CljPersistentVector *lv2 = as_vector(loaded);
+        if (lv2) {
+            for (int i = 0; i < lv2->count; i++) {
+                if (lv2->data[i] && !IS_IMMEDIATE(lv2->data[i])) {
+                    RELEASE(lv2->data[i]);
                 }
             }
-            RELEASE(loaded);
         }
-        if (trimmed) {
-            CljPersistentVector *tv2 = as_vector(trimmed);
-            if (tv2) {
-                for (int i = 0; i < tv2->count; i++) {
-                    if (tv2->data[i] && !IS_IMMEDIATE(tv2->data[i])) {
-                        RELEASE(tv2->data[i]);
-                    }
+        RELEASE(loaded);
+    }
+    if (trimmed) {
+        CljPersistentVector *tv2 = as_vector(trimmed);
+        if (tv2) {
+            for (int i = 0; i < tv2->count; i++) {
+                if (tv2->data[i] && !IS_IMMEDIATE(tv2->data[i])) {
+                    RELEASE(tv2->data[i]);
                 }
             }
-            RELEASE(trimmed);
         }
-        if (vec) {
-            CljPersistentVector *vv2 = as_vector((CljObject*)vec);
-            if (vv2) {
-                for (int i = 0; i < vv2->count; i++) {
-                    if (vv2->data[i] && !IS_IMMEDIATE(vv2->data[i])) {
-                        RELEASE(vv2->data[i]);
-                    }
+        RELEASE(trimmed);
+    }
+    if (vec) {
+        CljPersistentVector *vv2 = as_vector((CljObject*)vec);
+        if (vv2) {
+            for (int i = 0; i < vv2->count; i++) {
+                if (vv2->data[i] && !IS_IMMEDIATE(vv2->data[i])) {
+                    RELEASE(vv2->data[i]);
                 }
             }
-            RELEASE((CljObject*)vec);
         }
+        RELEASE((CljObject*)vec);
+    }
 
-        // Reset again to clear allocations made solely for this test
-        memory_profiler_reset();
-        evalstate_free(st);
-    });
+    // Reset again to clear allocations made solely for this test
+    memory_profiler_reset();
+    evalstate_free(st);
 }
 
 /*
@@ -455,6 +451,92 @@ TEST(test_spit_slurp_roundtrip) {
     
     CljString *str = as_clj_string(read_result);
     TEST_ASSERT_EQUAL_STRING(original_content, clj_string_data(str));
+    
+    // Cleanup
+    cleanup_test_file(test_file);
+    evalstate_free(st);
+}
+
+// ============================================================================
+// FILE-EXISTS? TESTS
+// ============================================================================
+
+TEST(test_file_exists_returns_true) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create test file with content
+    char* test_file = create_test_file("Test content");
+    TEST_ASSERT_NOT_NULL(test_file);
+    
+    // Test file-exists? with existing file
+    char expr[256];
+    snprintf(expr, sizeof(expr), "(file-exists? \"%s\")", test_file);
+    CljObject *result = eval_string(expr, st);
+    
+    // Verify result is true
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_true((CljValue)result));
+    
+    // Cleanup
+    cleanup_test_file(test_file);
+    evalstate_free(st);
+}
+
+TEST(test_file_exists_returns_false) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Test file-exists? with non-existent file
+    char expr[256];
+    snprintf(expr, sizeof(expr), "(file-exists? \"/nonexistent/file/that/does/not/exist.txt\")");
+    CljObject *result = eval_string(expr, st);
+    
+    // Verify result is false
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_false((CljValue)result));
+    
+    evalstate_free(st);
+}
+
+TEST(test_file_exists_returns_boolean_type) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create test file
+    char* test_file = create_test_file("Test content");
+    TEST_ASSERT_NOT_NULL(test_file);
+    
+    // Test file-exists? returns boolean type
+    char expr[256];
+    snprintf(expr, sizeof(expr), "(file-exists? \"%s\")", test_file);
+    CljObject *result = eval_string(expr, st);
+    
+    // Verify return type is boolean
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_bool((CljValue)result));
+    
+    // Cleanup
+    cleanup_test_file(test_file);
+    evalstate_free(st);
+}
+
+TEST(test_file_exists_empty_file) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create empty test file
+    char* test_file = create_test_file("");
+    TEST_ASSERT_NOT_NULL(test_file);
+    
+    // Test file-exists? on empty file (should return true - file exists)
+    char expr[256];
+    snprintf(expr, sizeof(expr), "(file-exists? \"%s\")", test_file);
+    CljObject *result = eval_string(expr, st);
+    
+    // Verify result is true (file exists, even if empty)
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_true((CljValue)result));
     
     // Cleanup
     cleanup_test_file(test_file);

@@ -25,5 +25,10 @@ int map_contains(CljObject *map, CljObject *key);
 void map_remove(CljObject *map, CljObject *key);
 CljObject* map_from_stack(CljObject **pairs, int pair_count);
 
+// === Parent Environment Chaining ===
+// Use map_assoc(map, g_magic_parent_key, parent) to set parent environment.
+// Parent is stored as a key-value pair with magic key __parent__.
+extern CljObject *g_magic_parent_key;
+
 #endif
 

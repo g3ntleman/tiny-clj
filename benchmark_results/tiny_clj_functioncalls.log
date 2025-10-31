@@ -1,10 +1,15 @@
-Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/function_call_performance_ultra_simple.clj
+Executing: ./build-release/tiny-clj-repl < /tmp/tiny_clj_functioncalls_benchmark.XXXXXX.clj
+=== Loading Clojure Core Functions ===
+[clojure.core] Loaded 20/20 expressions successfully
+🔍 Memory profiling disabled for REPL (Release Build)
+tiny-clj 0.1 REPL (platform = macOS). Ctrl-D to exit. 
+clojure.core=> (defn add [a b] (+ a b))
+add
+clojure.core=> (defn multiply [a b] (* a b))
+multiply
+clojure.core=> (defn test-calls [] (add (multiply 2 3) (add 1 2)))
+test-calls
+clojure.core=> (dotimes [i 1000] (test-calls))
 nil
-println: "Running function call performance benchmark..."
-nil
-println: "Function call result = 8"
-nil
-print
-
-🔍 === REPL Memory Profiling Stats ===
-📊 Final memory state before exit
+clojure.core=> 
+🔍 Memory profiling disabled - no stats available

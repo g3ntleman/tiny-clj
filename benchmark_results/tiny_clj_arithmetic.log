@@ -1,10 +1,11 @@
-Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/arithmetic_performance_ultra_simple.clj
-nil
-println: "Running arithmetic performance benchmark..."
-nil
-println: "Arithmetic result = 7"
-nil
-print
-
-🔍 === REPL Memory Profiling Stats ===
-📊 Final memory state before exit
+Executing: ./build-release/tiny-clj-repl < /tmp/tiny_clj_arithmetic_benchmark.XXXXXX.clj
+=== Loading Clojure Core Functions ===
+[clojure.core] Loaded 20/20 expressions successfully
+🔍 Memory profiling disabled for REPL (Release Build)
+tiny-clj 0.1 REPL (platform = macOS). Ctrl-D to exit. 
+clojure.core=> (defn test-arithmetic [] (let [a 1 b 2 c 3 d 4 e 5] (+ (* a b) (- c d) (/ e 2))))
+test-arithmetic
+clojure.core=> (dotimes [i 1000] (test-arithmetic))
+EXCEPTION: UndefinedFunctionError: Function not found: let at src/function_call.c:949:0
+clojure.core=> 
+🔍 Memory profiling disabled - no stats available

@@ -1,4 +1,4 @@
-Führe aus: clojure ./benchmarks/let_performance.clj
+Executing: clojure ./benchmarks/let_performance.clj
 WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/let_performance.clj
 Running let performance benchmark (1000x iterations)...
-"Elapsed time: 0.594792 msecs"
+"Elapsed time: 0.67475 msecs"
