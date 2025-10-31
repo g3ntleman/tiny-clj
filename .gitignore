@@ -1,32 +1,46 @@
-/tiny-clj
-/build/
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-tiny-cli.txt
-**/*.o
-**/*.d
-.vscode/
-# Build artifacts
+# Build directories
 build/
-CMakeCache.txt
+bin/
+
+# CMake generated files
 CMakeFiles/
-Makefile
+CMakeCache.txt
 cmake_install.cmake
+Makefile
+CTestTestfile.cmake
 Testing/
-*.dSYM/
+
+# Build artifacts
 *.o
+*.d
+*.dSYM/
 *.a
+*.dylib
+*.so
+
+# IDE directories
+.vscode/
+
 # Generated benchmarks
 benchmark_results.csv
 benchmark_report.csv
 benchmark_history.csv
+*.csv
+
 # Local outputs
 benchmark_output.txt
 progress.marks
-*.csv
-# Test binaries
+
+# Executables (all in bin/)
+tiny-clj
+tiny-clj-repl
 test-*
+unity-tests
 run-tests
-CTestTestfile.cmake
+
+# ESP32 binaries
+tiny-clj-esp32*
+*.bin
+
+# Generated files
+tags

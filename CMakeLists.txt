@@ -5,6 +5,13 @@ project(tiny-clj)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# Set output directories - all executables go to bin/
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
+
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0")
@@ -64,46 +71,8 @@ target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
 
-# Unified Test Runner (all MinUnit tests in one executable - STM32 compatible)
-add_executable(run-tests
-    src/tests/run_tests_main.c
-    src/tests/test_unit.c
-    src/tests/test_parser.c
-    src/tests/test-namespace.c
-    src/tests/test_seq.c
-    src/tests/test_for_loops.c
-    src/tests/test_eval_string_api.c
-    src/tests/test_memory.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/clojure_core.c
-    src/exception.c
-    src/memory_profiler.c
-    src/memory_hooks.c
-)
-target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG)
-# Regular tests WITH memory profiling for early leak detection
-
-# ============================================================================
-# REDUNDANT TARGETS REMOVED - Now in run-tests unified executable
-# ============================================================================
-# The following targets were removed (all now accessible via run-tests):
-#   - test-unit            → run-tests --test unit
-#   - test-parser          → run-tests --test parser
-#   - test-seq             → run-tests --test seq
-#   - test-for-loops       → run-tests --test for_loops
-#   - test-eval-string-api → run-tests --test eval_string_api
-# ============================================================================
+# Note: All tests have been migrated to Unity Test Framework
+# Use unity-tests executable (if built) instead of run-tests
 
 # Exception Handling Tests (TRY/CATCH nested exception handling)
 add_executable(test-exception-handling
@@ -147,7 +116,7 @@ add_executable(test-integration
     src/seq.c)
 
 # Legacy Benchmark Tests (Unity-based, kept for compatibility)
-# Note: For performance testing use test-performance (MinUnit-based)
+# Note: All tests now use Unity Test Framework
 add_executable(test-benchmark EXCLUDE_FROM_ALL
     src/tests/test_integration_main.c
     src/unity.c
@@ -168,86 +137,7 @@ add_executable(test-benchmark EXCLUDE_FROM_ALL
     src/list_operations.c)
 target_compile_definitions(test-benchmark PRIVATE ENABLE_META)
 
-# Performance & Benchmark Tests (consolidated)
-add_executable(test-performance EXCLUDE_FROM_ALL
-    src/tests/test_performance.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/clojure_core.c
-    src/exception.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
-# Performance tests WITHOUT memory profiling for clean benchmarks
-target_compile_definitions(test-performance PRIVATE ENABLE_META)
-target_compile_options(test-performance PRIVATE -O2)
-
-# Test executable for seq debugging
-# EXCLUDE_FROM_ALL: These debug tests access internal SeqIterator details
-# Build manually: make test-seq-debug test-performance test-memory-profiling
-add_executable(test-seq-debug EXCLUDE_FROM_ALL
-    src/tests/test_seq_debug.c
-    src/tests/minunit.h
-    src/object.c
-    src/object.h
-    src/types.c
-    src/vector.c
-    src/vector.h
-    src/list_operations.c
-    src/list_operations.h
-    src/function_call.c
-    src/function_call.h
-    src/namespace.c
-    src/namespace.h
-    src/clj_symbols.c
-    src/clj_symbols.h
-    src/memory_profiler.c
-    src/memory_profiler.h
-    src/memory_hooks.c
-    src/memory_hooks.h
-    src/seq.c
-    src/seq.h
-    src/map.c
-    src/map.h
-    src/string.c
-    src/clj_string.h
-    src/clj_parser.c
-    src/clj_parser.h
-    src/reader.c
-    src/reader.h
-    src/unity.c
-    src/unity.h
-)
-
-target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
-
-# Memory Profiling Tests (Debug only)
-add_executable(test-memory-profiling EXCLUDE_FROM_ALL
-    src/tests/test_memory_profiling.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/map.c
-    src/string.c
-    src/clj_error.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/list_operations.c
-    src/seq.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
+# Note: test-performance, test-seq-debug, and test-memory-profiling removed - MinUnit tests have been migrated to Unity
 
 
 
@@ -268,44 +158,13 @@ target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 # ============================================================================
 # CUSTOM TARGETS
 # ============================================================================
-
-# Test targets for easy execution
-add_custom_target(run-unit-tests
-    COMMAND test-unit
-    DEPENDS test-unit
-    COMMENT "Running unit tests"
-)
-
-add_custom_target(run-integration-tests
-    COMMAND test-integration
-    DEPENDS test-integration
-    COMMENT "Running integration tests"
-)
-
-add_custom_target(run-benchmark-tests
-    COMMAND test-benchmark
-    DEPENDS test-benchmark
-    COMMENT "Running benchmark tests"
-)
-
-add_custom_target(run-all-tests
-    COMMAND test-all
-    DEPENDS test-all
-    COMMENT "Running all tests"
-)
-
-# Quick test target (unit + integration)
-add_custom_target(run-quick-tests
-    COMMAND test-all --quick
-    DEPENDS test-all
-    COMMENT "Running quick tests (unit + integration)"
-)
+# Note: Old test targets removed - use test executables directly from bin/
 
 # ============================================================================
 # INSTALLATION
 # ============================================================================
 
-install(TARGETS tiny-clj run-tests test-integration test-benchmark
+install(TARGETS tiny-clj tiny-clj-repl test-exception-handling test-integration test-benchmark
     RUNTIME DESTINATION bin
 )
 
@@ -315,9 +174,8 @@ install(TARGETS tiny-clj run-tests test-integration test-benchmark
 include(CTest)
 enable_testing()
 
-# Note: unit and parser tests now in run-tests unified executable
-# To run: ./run-tests --suite core  (runs both unit and parser)
-# Keeping CTest integration for backward compatibility - use old binaries if they exist
+# Note: All tests have been migrated to Unity Test Framework
+# Use unity-tests executable for all tests
 add_test(NAME integration COMMAND test-integration --all)
 set_tests_properties(integration PROPERTIES WORKING_DIRECTORY ${CMAKE_BINARY_DIR} LABELS "integration")
 
@@ -334,22 +192,4 @@ set_tests_properties(repl-ns-eval PROPERTIES PASS_REGULAR_EXPRESSION "4\n" LABEL
 add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
-# Seq Benchmark (Optimization Test)
-add_executable(test-seq-benchmark EXCLUDE_FROM_ALL
-    src/tests/test_seq_fast_benchmark.c
-    src/seq.c
-    src/object.c
-    src/types.c
-    src/vector.c
-    src/list_operations.c
-    src/string.c
-    src/map.c
-    src/clj_symbols.c
-    src/namespace.c
-    src/clj_parser.c
-    src/reader.c
-    src/function_call.c
-    src/exception.c
-    src/memory_profiler.c
-    src/memory_hooks.c)
-target_compile_definitions(test-seq-benchmark PRIVATE ENABLE_META DEBUG)
+# Note: test-seq-benchmark removed - test_seq_fast_benchmark.c was a MinUnit test that has been migrated to Unity

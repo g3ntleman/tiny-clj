@@ -1,7 +1,7 @@
 /*
  * Unit Tests using Unity Framework
  * 
- * Basic unit tests for Tiny-Clj core functionality migrated from MinUnit.
+ * Basic unit tests for Tiny-Clj core functionality using Unity Test Framework.
  */
 
 #include "tests_common.h"
