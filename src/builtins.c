@@ -5,8 +5,6 @@
 #include "builtins.h"
 #include "runtime.h"
 #include "memory_hooks.h"
-#include "clj_symbols.h"
-#include "namespace.h"
 
 CljObject* nth2(CljObject *vec, CljObject *idx) {
     if (!vec || !idx || vec->type != CLJ_VECTOR || idx->type != CLJ_INT) return NULL;
@@ -73,7 +71,7 @@ CljObject* assoc3(CljObject *vec, CljObject *idx, CljObject *val) {
 CljObject* native_if(CljObject **args, int argc) {
     if (argc < 2) return clj_nil();
     CljObject *cond = args[0];
-    if (clj_is_truthy(cond)) {
+    if (cond == clj_true()) {
         return (RETAIN(args[1]), args[1]);
     } else if (argc > 2) {
         return (RETAIN(args[2]), args[2]);
@@ -83,24 +81,13 @@ CljObject* native_if(CljObject **args, int argc) {
 }
 
 CljObject* make_func(CljObject* (*fn)(CljObject **args, int argc), void *env) {
-    return make_named_func(fn, env, NULL);
-}
-
-CljObject* make_named_func(CljObject* (*fn)(CljObject **args, int argc), void *env, const char *name) {
-    CljFunc *func = ALLOC(CljFunc, 1);
-    if (!func) return NULL;
-    
-    func->base.type = CLJ_FUNC;
-    func->base.rc = 1;
-    func->fn = fn;
-    func->env = env;
-#ifdef DEBUG
-    func->name = name;  // Direkter Zeiger auf String-Literal in Debug-Builds
-#else
-    func->name = NULL;  // Kein Name in Release-Builds
-#endif
-    
-    return (CljObject*)func;
+    CljObject *v = ALLOC(CljObject, 1);
+    if (!v) return NULL;
+    v->type = CLJ_FUNC;
+    v->rc = 1;
+    ((CljFunc*)v->as.data)->fn = fn;
+    ((CljFunc*)v->as.data)->env = env;
+    return v;
 }
 
 static const BuiltinEntry builtins[] = {
@@ -130,18 +117,5 @@ CljObject* apply_builtin(const BuiltinEntry *entry, CljObject **args, int argc) 
 void register_builtins() {
     for (size_t i = 0; i < sizeof(builtins)/sizeof(builtins[0]); ++i) {
         register_builtin(builtins[i].name, (BuiltinFn)builtins[i].u.generic /* placeholder */);
-    }
-    
-    // Register a test native function to demonstrate the difference
-    register_builtin("test-native", (BuiltinFn)native_if);
-    
-    // Also register it as a symbol in the current namespace
-    EvalState *st = evalstate();
-    if (st) {
-        CljObject *symbol = intern_symbol(NULL, "test-native");
-        CljObject *func = make_named_func(native_if, NULL, "test-native");
-        if (symbol && func) {
-            ns_define(st, symbol, func);
-        }
     }
 }

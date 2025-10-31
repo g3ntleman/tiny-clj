@@ -71,6 +71,7 @@ extern CljObject* clj_false(void);
 // ============================================================================
 
 static char* test_zero_predicate(void) {
+    printf("\n=== Testing zero? ===\n");
     test_setup();
     
     assert_clj_true("(zero? 0) should return true", eval_code("(zero? 0)"));
@@ -81,6 +82,7 @@ static char* test_zero_predicate(void) {
 }
 
 static char* test_pos_predicate(void) {
+    printf("\n=== Testing pos? ===\n");
     test_setup();
     
     assert_clj_true("(pos? 5) should return true", eval_code("(pos? 5)"));
@@ -92,6 +94,7 @@ static char* test_pos_predicate(void) {
 }
 
 static char* test_neg_predicate(void) {
+    printf("\n=== Testing neg? ===\n");
     test_setup();
     
     assert_clj_true("(neg? -5) should return true", eval_code("(neg? -5)"));
@@ -107,6 +110,7 @@ static char* test_neg_predicate(void) {
 // ============================================================================
 
 static char* test_not_function(void) {
+    printf("\n=== Testing not ===\n");
     test_setup();
     
     assert_clj_false("(not true) should return false", eval_code("(not true)"));
@@ -122,6 +126,7 @@ static char* test_not_function(void) {
 // ============================================================================
 
 static char* test_max_function(void) {
+    printf("\n=== Testing max ===\n");
     test_setup();
     
     assert_number("(max 10 20) should return 20", eval_code("(max 10 20)"), 20);
@@ -133,6 +138,7 @@ static char* test_max_function(void) {
 }
 
 static char* test_min_function(void) {
+    printf("\n=== Testing min ===\n");
     test_setup();
     
     assert_number("(min 10 20) should return 10", eval_code("(min 10 20)"), 10);
@@ -148,6 +154,7 @@ static char* test_min_function(void) {
 // ============================================================================
 
 static char* test_second_function(void) {
+    printf("\n=== Testing second ===\n");
     test_setup();
     
     assert_number("(second [1 2 3]) should return 2", eval_code("(second [1 2 3])"), 2);
@@ -158,6 +165,7 @@ static char* test_second_function(void) {
 }
 
 static char* test_empty_predicate(void) {
+    printf("\n=== Testing empty? ===\n");
     test_setup();
     
     assert_clj_true("(empty? []) should return true", eval_code("(empty? [])"));
@@ -172,6 +180,7 @@ static char* test_empty_predicate(void) {
 // ============================================================================
 
 static char* test_identity_function(void) {
+    printf("\n=== Testing identity ===\n");
     test_setup();
     
     assert_number("(identity 42) should return 42", eval_code("(identity 42)"), 42);
@@ -182,6 +191,7 @@ static char* test_identity_function(void) {
 }
 
 static char* test_constantly_function(void) {
+    printf("\n=== Testing constantly ===\n");
     test_setup();
     
     // constantly returns a function that always returns the same value

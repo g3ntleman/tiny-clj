@@ -207,10 +207,10 @@ CljObject* seq_create(CljObject *obj) {
     if (!obj) return clj_nil();
     
     // Check if collection is empty
-    if (is_type(obj, CLJ_VECTOR)) {
+    if (obj->type == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector(obj);
         if (vec && vec->count == 0) return clj_nil();
-    } else if (is_type(obj, CLJ_LIST)) {
+    } else if (obj->type == CLJ_LIST) {
         CljList *list = as_list(obj);
         if (!list || !list->head) return clj_nil();
     }
@@ -283,7 +283,7 @@ int seq_count(CljObject *obj) {
     if (!obj) return 0;
     
     // If it's already a seq wrapper, count from iterator state
-    if (is_type(obj, CLJ_SEQ)) {
+    if (obj->type == CLJ_SEQ) {
         CljSeqIterator *seq = as_seq(obj);
         if (!seq) return 0;
         
@@ -302,7 +302,7 @@ int seq_count(CljObject *obj) {
     }
     
     // Fast path for vectors - O(1)
-    if (is_type(obj, CLJ_VECTOR)) {
+    if (obj->type == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector(obj);
         return vec ? vec->count : 0;
     }

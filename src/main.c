@@ -34,7 +34,7 @@ int main() {
     
     // Initialize global structures
     meta_registry_init(); // Enable meta functionality
-    // Singletons are automatically initialized on first call
+    // Singletons werden automatisch bei erstem Aufruf initialisiert
     
     // Demo output removed; everything should be covered by unit tests
     platform_print("=== Tiny-Clj started (tests passed) ===");

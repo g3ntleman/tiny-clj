@@ -95,7 +95,7 @@ CljNamespace* ns_find(const char *name) {
     
     CljNamespace *cur = ns_registry;
     while (cur) {
-        if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
+        if (cur->name && cur->name->type == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(cur->name);
             if (strcmp(sym->name, name) == 0) {
                 return cur;
@@ -241,27 +241,18 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
 CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     if (!expr) return NULL;
     
-    CljObject *result = NULL;
+    if (expr->type == CLJ_SYMBOL) {
+        CljObject *result = eval_symbol(expr, st);
+        return result ? AUTORELEASE(result) : NULL;
+    }
     
-    // Use TRY/CATCH to handle exceptions
-    TRY {
-        if (is_type(expr, CLJ_SYMBOL)) {
-            result = eval_symbol(expr, st);
-            if (result) result = AUTORELEASE(result);
-        } else if (is_type(expr, CLJ_LIST)) {
-            CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-            result = eval_list(expr, env, st);
-            if (result) result = AUTORELEASE(result);
-        } else {
-            result = AUTORELEASE(expr);
-        }
-    } CATCH(ex) {
-        // Exception caught - re-throw to let caller handle it
-        throw_exception_formatted(ex->type, ex->file, ex->line, ex->col, "%s", ex->message);
-        result = NULL;
-    } END_TRY
+    if (expr->type == CLJ_LIST) {
+        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        CljObject *result = eval_list(expr, env, st);
+        return result ? AUTORELEASE(result) : NULL;
+    }
     
-    return result;
+    return AUTORELEASE(expr);
 }
 
 /**

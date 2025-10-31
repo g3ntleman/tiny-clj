@@ -6,7 +6,6 @@
 #include "object.h"
 #include "function_call.h"
 #include "exception.h"
-#include "builtins.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -51,7 +50,7 @@ static void print_result(CljObject *v) {
     if (!v) return;
     
     // For symbols, print their name directly (not as code)
-    if (is_type(v, CLJ_SYMBOL)) {
+    if (v->type == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->name) {
             printf("%s\n", sym->name);
@@ -65,7 +64,7 @@ static void print_result(CljObject *v) {
 
 static void print_exception(CLJException *ex) {
     if (!ex) return;
-    DEBUG_FPRINTF(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
+    fprintf(stderr, "EXCEPTION: %s: %s at %s:%d:%d\n",
         ex->type ? ex->type : "Error",
         ex->message ? ex->message : "Unknown error",
         ex->file ? ex->file : "?",
@@ -76,24 +75,16 @@ static int eval_string_repl(const char *code, EvalState *st) {
     const char *p = code;
     CljObject *ast = parse(p, st);
     if (!ast) return 0;
-    
-    // Use TRY/CATCH to handle exceptions in REPL
-    TRY {
-        CljObject *res = NULL;
-        if (is_type(ast, CLJ_LIST)) {
-            CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-            res = eval_list(ast, env, st);
-        } else {
-            res = eval_expr_simple(ast, st);
-        }
-        if (!res) return 0;
-        print_result(res);
-        return 1;
-    } CATCH(ex) {
-        // Exception caught - print and continue REPL
-        print_exception(ex);
-        return 0;
-    } END_TRY
+    CljObject *res = NULL;
+    if (ast->type == CLJ_LIST) {
+        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
+        res = eval_list(ast, env, st);
+    } else {
+        res = eval_expr_simple(ast, st);
+    }
+    if (!res) return 0;
+    print_result(res);
+    return 1;
 }
 
 static void usage(const char *prog) {
@@ -157,9 +148,6 @@ int main(int argc, char **argv) {
     if (!no_core) {
         load_clojure_core(st);
     }
-    
-    // Register builtin functions
-    register_builtins();
 
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);
@@ -255,13 +243,7 @@ int main(int argc, char **argv) {
                 const char *p = acc;
                 CljObject *ast = parse(p, st);
                 if (ast) {
-                    CljObject *res = NULL;
-                    if (is_type(ast, CLJ_LIST)) {
-                        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-                        res = eval_list(ast, env, st);
-                    } else {
-                        res = eval_expr_simple(ast, st);
-                    }
+                    CljObject *res = eval_expr_simple(ast, st);
                     if (res) print_result(res);
                 }
             }

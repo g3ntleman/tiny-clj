@@ -25,7 +25,7 @@ MemoryStats g_memory_stats = {0};
 
 void memory_profiler_init(void) {
     memset(&g_memory_stats, 0, sizeof(MemoryStats));
-    // Memory profiler initialized
+    // Debug prints removed for production
 }
 
 void memory_profiler_reset(void) {
@@ -37,7 +37,7 @@ void memory_profiler_cleanup(void) {
         printf("⚠️  Memory Profiler: %zu potential memory leaks detected!\n", 
                g_memory_stats.memory_leaks);
     }
-    // Memory profiler initialized
+    // Debug prints removed for production
 }
 
 MemoryStats memory_profiler_get_stats(void) {

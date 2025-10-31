@@ -71,17 +71,18 @@ static CljObject* make_dotimes_call(CljObject *var, int n, CljObject *body) {
 // ============================================================================
 
 static char *test_dotimes_basic(void) {
+    printf("\n=== Testing dotimes Basic Functionality ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a simple test: (dotimes [i 3] (println i))
         // For now, we'll just test that it doesn't crash
         
         // Create binding list: [i 3]
-        CljObject *binding_list = make_list();
+        CljObject *binding_list = AUTORELEASE(make_list());
         CljList *binding_data = as_list(binding_list);
         if (binding_data) {
             binding_data->head = intern_symbol_global("i");
-            binding_data->tail = make_list();
+            binding_data->tail = AUTORELEASE(make_list());
             CljList *tail_data = as_list(binding_data->tail);
             if (tail_data) {
                 tail_data->head = make_int(3);
@@ -90,11 +91,11 @@ static char *test_dotimes_basic(void) {
         }
         
         // Create body: (println i)
-        CljObject *body = make_list();
+        CljObject *body = AUTORELEASE(make_list());
         CljList *body_data = as_list(body);
         if (body_data) {
             body_data->head = intern_symbol_global("println");
-            body_data->tail = make_list();
+            body_data->tail = AUTORELEASE(make_list());
             CljList *body_tail = as_list(body_data->tail);
             if (body_tail) {
                 body_tail->head = intern_symbol_global("i");
@@ -103,15 +104,15 @@ static char *test_dotimes_basic(void) {
         }
         
         // Create function call: (dotimes [i 3] (println i))
-        CljObject *dotimes_call = make_list();
+        CljObject *dotimes_call = AUTORELEASE(make_list());
         CljList *call_data = as_list(dotimes_call);
         if (call_data) {
             call_data->head = intern_symbol_global("dotimes");
-            call_data->tail = make_list();
+            call_data->tail = AUTORELEASE(make_list());
             CljList *call_tail = as_list(call_data->tail);
             if (call_tail) {
                 call_tail->head = binding_list;
-                call_tail->tail = make_list();
+                call_tail->tail = AUTORELEASE(make_list());
                 CljList *call_tail2 = as_list(call_tail->tail);
                 if (call_tail2) {
                     call_tail2->head = body;
@@ -124,55 +125,15 @@ static char *test_dotimes_basic(void) {
         CljObject *result = eval_dotimes(dotimes_call, NULL);
         mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
         
-        // Clean up all objects - need to free nested structures
-        // Free binding_list and its nested tail
-        if (binding_list) {
-            CljList *binding_data = as_list(binding_list);
-            if (binding_data) {
-                if (binding_data->tail) {
-                    CljList *tail_data = as_list(binding_data->tail);
-                    if (tail_data && tail_data->head) {
-                        RELEASE(tail_data->head); // make_int(3)
-                    }
-                    RELEASE(binding_data->tail);
-                }
-                RELEASE(binding_list);
-            }
-        }
-        
-        // Free body and its nested tail
-        if (body) {
-            CljList *body_data = as_list(body);
-            if (body_data) {
-                if (body_data->tail) {
-                    RELEASE(body_data->tail);
-                }
-                RELEASE(body);
-            }
-        }
-        
-        // Free dotimes_call and its nested structures
-        if (dotimes_call) {
-            CljList *call_data = as_list(dotimes_call);
-            if (call_data) {
-                if (call_data->tail) {
-                    CljList *call_tail = as_list(call_data->tail);
-                    if (call_tail) {
-                        if (call_tail->tail) {
-                            RELEASE(call_tail->tail);
-                        }
-                        RELEASE(call_data->tail);
-                    }
-                }
-                RELEASE(dotimes_call);
-            }
-        }
+        RELEASE(dotimes_call);
     });
     
+    printf("✓ dotimes basic test passed\n");
     return 0;
 }
 
 static char *test_doseq_basic(void) {
+    printf("\n=== Testing doseq Basic Functionality ===\n");
     
     WITH_MEMORY_PROFILING({
         // Create a test vector
@@ -236,10 +197,12 @@ static char *test_doseq_basic(void) {
         // Memory balance is automatically checked by WITH_MEMORY_PROFILING after pool cleanup
     });
     
+    printf("✓ doseq basic test passed\n");
     return 0;
 }
 
 static char *test_for_basic(void) {
+    printf("\n=== Testing for Basic Functionality ===\n");
     
     WITH_MEMORY_PROFILING_EVAL({
         // Test for evaluation using parse_string + eval_parsed
@@ -249,10 +212,12 @@ static char *test_for_basic(void) {
         mu_assert("for should return a result", result != NULL);
     });
     
+    printf("✓ for basic test passed\n");
     return 0;
 }
 
 static char *test_dotimes_with_variable(void) {
+    printf("\n=== Testing dotimes with Variable Binding ===\n");
     
     WITH_MEMORY_PROFILING_EVAL({
         // Test dotimes evaluation using parse_string + eval_parsed
@@ -262,10 +227,12 @@ static char *test_dotimes_with_variable(void) {
         mu_assert("dotimes should return nil", result == NULL || result->type == CLJ_NIL);
     });
     
+    printf("✓ dotimes with variable binding test passed\n");
     return 0;
 }
 
 static char *test_for_with_simple_expression(void) {
+    printf("\n=== Testing for with Simple Expression ===\n");
     
     WITH_MEMORY_PROFILING_EVAL({
         // Test for evaluation using parse_string + eval_parsed
@@ -275,6 +242,7 @@ static char *test_for_with_simple_expression(void) {
         mu_assert("for with simple expression should return a result", result != NULL);
     });
     
+    printf("✓ for with simple expression test passed\n");
     return 0;
 }
 
@@ -283,11 +251,11 @@ static char *test_for_with_simple_expression(void) {
 // ============================================================================
 
 static char *all_for_loop_tests(void) {
-    // mu_run_test(test_dotimes_basic);  // TEMPORARY: Disabled due to symbol resolution issues
-    // mu_run_test(test_doseq_basic);  // TEMPORARY: Disabled due to symbol resolution issues
-    // mu_run_test(test_for_basic);  // TEMPORARY: Disabled due to symbol resolution issues
-    // mu_run_test(test_dotimes_with_variable);  // TEMPORARY: Disabled due to symbol resolution issues
-    // mu_run_test(test_for_with_simple_expression);  // TEMPORARY: Disabled due to symbol resolution issues
+    mu_run_test(test_dotimes_basic);
+    mu_run_test(test_doseq_basic);
+    mu_run_test(test_for_basic);
+    mu_run_test(test_dotimes_with_variable);
+    mu_run_test(test_for_with_simple_expression);
     
     return 0;
 }

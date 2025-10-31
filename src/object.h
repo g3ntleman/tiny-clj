@@ -83,7 +83,6 @@ typedef struct {
     CljObject base;         // Embedded base object
     CljObject* (*fn)(CljObject **args, int argc);
     void *env;
-    const char *name;       // Optional function name (for debugging/printing)
 } CljFunc;
 
 typedef struct {
@@ -277,29 +276,6 @@ void retain_object(CljObject *obj);
 void release_object(CljObject *obj);
 /** Free object memory immediately (no rc checks). */
 void free_object(CljObject *obj);
-
-// Type checking helper
-static inline bool is_type(CljObject *obj, CljType expected_type) {
-    return obj && obj->type == expected_type;
-}
-
-// Debug macros - only include debug code in debug builds
-#ifdef DEBUG
-    #define DEBUG_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
-    #define DEBUG_FPRINTF(stream, fmt, ...) fprintf(stream, fmt, ##__VA_ARGS__)
-#else
-    #define DEBUG_PRINTF(fmt, ...) ((void)0)
-    #define DEBUG_FPRINTF(stream, fmt, ...) ((void)0)
-#endif
-
-// STM32-optimized: Remove test code in STM32 builds
-#ifdef STM32_BUILD
-    #define STM32_PRINTF(fmt, ...) ((void)0)
-    #define STM32_FPRINTF(stream, fmt, ...) ((void)0)
-#else
-    #define STM32_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
-    #define STM32_FPRINTF(stream, fmt, ...) fprintf(stream, fmt, ##__VA_ARGS__)
-#endif
 
 // Type-safe casting (static inline for performance)
 static inline CljSymbol* as_symbol(CljObject *obj) {

@@ -7,7 +7,6 @@ R"CLOJURE(
 (def sub (fn [a b] (- a b)))
 (def mul (fn [a b] (* a b)))
 (def div (fn [a b] (/ a b)))
-(def mod (fn [a b] (- a (* b (/ a b)))))
 (def inc (fn [x] (+ x 1)))
 (def dec (fn [x] (- x 1)))
 (def square (fn [x] (* x x)))
@@ -18,8 +17,6 @@ R"CLOJURE(
 (def zero? (fn [x] (= x 0)))
 (def pos? (fn [x] (> x 0)))
 (def neg? (fn [x] (< x 0)))
-(def even? (fn [x] (= (mod x 2) 0)))
-(def odd? (fn [x] (not (even? x))))
 
 ; ============================================================================
 ; Comparison & Logic
@@ -33,14 +30,6 @@ R"CLOJURE(
 ; ============================================================================
 (def second (fn [coll] (first (rest coll))))
 (def empty? (fn [coll] (= (count coll) 0)))
-
-; ============================================================================
-; Functional Programming Core
-; ============================================================================
-(def map (fn [f coll]
-  (if (empty? coll)
-    '()
-    (cons (f (first coll)) (map f (rest coll))))))
 
 ; ============================================================================
 ; Utility Functions
