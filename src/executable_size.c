@@ -199,4 +199,3 @@ void detect_size_regressions(void) {
         printf("   Consider investigating recent changes that increased binary size.\n");
     }
 }
-int main() { measure_executable_sizes(); print_size_analysis(); return 0; }

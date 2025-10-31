@@ -17,93 +17,568 @@
 #include <assert.h>
 #include <stdarg.h>
 #include "object.h"
-#include "memory.h"
-#include "runtime.h"
+#include <string.h>
+#include "vector.h"
 #include "seq.h"
+#include "memory_hooks.h"
 #include "runtime.h"
 #include "map.h"
 #include "kv_macros.h"
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
-#include "clj_strings.h"
-#include "function.h"
-#include "list.h"
-#include "symbol.h"
-#include "vector.h"
-#include "byte_array.h"
-#include "value.h"  // For empty_string_singleton
-#include "strings.h"  // For CljString structure
-#include "numeric_utils.h"
+#include "memory_profiler.h"
 
-// Safe string copy helper (from strings.c)
-static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
-    if (!dest || !src || dest_size == 0) return;
-    strncpy(dest, src, dest_size - 1);
-    dest[dest_size - 1] = '\0';
+static void release_object_deep(CljObject *v);
+
+/** @brief Release all elements in an array */
+static inline void release_array(CljObject **array, int count) {
+    for (int i = 0; i < count; i++) {
+        if (array[i]) release(array[i]);
+    }
 }
 
-// release_object_deep() function moved to memory.c
+/**
+ * Convenience function for throwing exceptions with printf-style formatting
+ * 
+ * @param type Exception type (NULL for generic "RuntimeException")
+ * @param file Source file name (use __FILE__)
+ * @param line Line number (use __LINE__)
+ * @param code Error code (use 0 for most cases)
+ * @param format printf-style format string
+ * @param ... Variable arguments for formatting
+ */
+void throw_exception_formatted(const char *type, const char *file, int line, int code, 
+                              const char *format, ...) {
+    char message[512];  // Increased buffer size for longer messages
+    va_list args;
+    
+    va_start(args, format);
+    int result = vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
+    
+    // Additional safety: ensure null termination if message was truncated
+    if (result >= (int)sizeof(message)) {
+        // Message was truncated - ensure null termination
+        message[sizeof(message)-1] = '\0';
+    }
+    
+    // Use generic RuntimeException if type is NULL
+    const char *exception_type = (type != NULL) ? type : "RuntimeException";
+    throw_exception(exception_type, message, file, line, code);
+}
 
-
-// Memory management functions moved to memory.c
+// Autorelease pool backed by a weak vector for locality and fewer allocations
+struct CljObjectPool { CljObject *backing; struct CljObjectPool *prev; };
+static CljObjectPool *g_cv_pool_top = NULL;
+static int g_pool_push_count = 0;  // Track push/pop balance
 
 // Helper functions for optimized structure
 // Note: is_primitive_type function replaced by IS_PRIMITIVE_TYPE macro in header
 
+// Global exception for runtime errors
+static CLJException *global_exception = NULL;
+static EvalState *global_eval_state = NULL;
 
-// Note: set_global_eval_state() removed - Exception handling now independent of EvalState
+// Exception throwing (compatible with try/catch system)
+// Ownership/RC:
+// - create_exception returns rc=1 (no autorelease)
+// - Ownership is transferred to EvalState->last_error before longjmp
+// - Catch handler must set last_error=NULL and release_exception(ex)
+/** @brief Throw an exception with type, message, and location */
+void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
+    if (global_exception) {
+        release_exception(global_exception);
+    }
+    global_exception = create_exception(type, message, file, line, col, NULL);
+    
+    if (global_eval_state) {
+        // Use TRY/CATCH stack system (Objective-C style)
+        if (global_eval_state->exception_stack) {
+            // Transfer exception to handler and unwind stack
+            global_eval_state->exception_stack->exception = global_exception;
+            global_eval_state->last_error = (CljObject*)global_exception;  // backward compat
+            longjmp(global_eval_state->exception_stack->jump_state, 1);
+        } else {
+            // No handler on stack - unhandled exception
+            global_eval_state->last_error = (CljObject*)global_exception;
+            printf("UNHANDLED EXCEPTION: %s: %s at %s:%d:%d\n", 
+                   type, message, file ? file : "<unknown>", line, col);
+            release_exception(global_exception);
+            global_exception = NULL;
+            exit(1);
+        }
+    } else {
+        // Fallback: printf and exit if no EvalState available
+        printf("EXCEPTION: %s: %s at %s:%d:%d\n", type, message, file ? file : "<unknown>", line, col);
+        // No catch → avoid leak
+        release_exception(global_exception);
+        global_exception = NULL;
+        exit(1);
+    }
+}
+
+// Set EvalState for try/catch
+/** @brief Set global evaluation state */
+void set_global_eval_state(void *state) {
+    global_eval_state = (EvalState*)state;
+}
 
 
 // Exception management with reference counting (analogous to CljVector)
 /** @brief Create exception with reference counting */
-CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col) {
+CLJException* create_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
     if (!type || !message) return NULL;
     
     CLJException *exc = ALLOC(CLJException, 1);
     if (!exc) return NULL;
     
-    // Initialize base object
-    exc->base.type = CLJ_EXCEPTION;
-    exc->base.rc = 1;  // Start with reference count 1
-    // exc->base.as.data = NULL;  // Not used for exceptions - Union removed
-    
-    // Copy strings directly into the structure (no strdup needed)
-    safe_strncpy(exc->type, type, sizeof(exc->type));
-    safe_strncpy(exc->message, message, sizeof(exc->message));
-    safe_strncpy(exc->file, file ? file : "", sizeof(exc->file));
-    
+    exc->rc = 1;  // Start with reference count 1
+    exc->type = strdup(type);
+    exc->message = strdup(message);
+    exc->file = file ? strdup(file) : NULL;
     exc->line = line;
     exc->col = col;
+    exc->data = data ? (retain(data), data) : NULL;
     
     return exc;
 }
 
+void retain_exception(CLJException *exception) {
+    if (!exception) return;
+    exception->rc++;
+}
 
+void release_exception(CLJException *exception) {
+    if (!exception) return;
+    exception->rc--;
+    if (exception->rc == 0) {
+        // Free exception
+        if (exception->type) free((void*)exception->type);
+        if (exception->message) free((void*)exception->message);
+        if (exception->file) free((void*)exception->file);
+        if (exception->data) release(exception->data);
+        free(exception);
+    }
+}
 
+/** @brief Create integer object */
+CljObject* make_int(int x) {
+    CljObject *v = ALLOC(CljObject, 1);
+    if (!v) return NULL;
+    v->type = CLJ_INT;
+    v->rc = 1;
+    v->as.i = x;
+    
+    CREATE(v);
+    return v;
+}
 
+CljObject* make_float(double x) {
+    CljObject *v = ALLOC(CljObject, 1);
+    if (!v) return NULL;
+    v->type = CLJ_FLOAT;
+    v->rc = 1;
+    v->as.f = x;
+    
+    CREATE(v);
+    return v;
+}
+
+/** @brief Increment reference count
+ * 
+ * @param v Pointer to CljObject to retain (NULL parameters are safely ignored)
+ * 
+ * This function safely handles NULL parameters by returning early without
+ * performing any operations. This prevents crashes and follows defensive
+ * programming practices.
+ */
+void retain(CljObject *v) {
+    if (!v) return;
+    
+    
+    // Singletons have no reference counting
+    if (IS_PRIMITIVE_TYPE(v->type)) return;
+    // Guard: empty vector/map singletons must not be retained
+    if (is_type(v, CLJ_VECTOR)) {
+        CljPersistentVector *vec = as_vector(v);
+        if (vec && vec->base.rc == 0 && vec->data == NULL) return;
+    }
+    if (is_type(v, CLJ_MAP)) {
+        CljMap *map = as_map(v);
+        if (map && map->base.rc == 0 && map->data == NULL) return;
+    }
+    v->rc++;
+    
+    // RETAIN(v); // Hook now called via RELEASE macro
+}
+
+/** @brief Decrement reference count and free if zero
+ * 
+ * @param v Pointer to CljObject to release (NULL parameters are safely ignored)
+ * 
+ * This function safely handles NULL parameters by returning early without
+ * performing any operations. This prevents crashes and follows defensive
+ * programming practices.
+ */
+void release(CljObject *v) {
+    if (!v) return;
+    
+    // Singletons have no reference counting
+    if (IS_PRIMITIVE_TYPE(v->type)) {
+        // Primitive types are never actually freed, so don't track as deallocation
+        return;
+    }
+    // Guard: empty vector/map singletons must not be released
+    if (is_type(v, CLJ_VECTOR)) {
+        CljPersistentVector *vec = as_vector(v);
+        if (vec && vec->base.rc == 0 && vec->data == NULL) return;
+    }
+    if (is_type(v, CLJ_MAP)) {
+        CljMap *map = as_map(v);
+        if (map && map->base.rc == 0 && map->data == NULL) return;
+    }
+    v->rc--;
+    
+    // Check for double-free after decrement
+    if (v->rc < 0) {
+        throw_exception_formatted("DoubleFreeError", __FILE__, __LINE__, 0,
+                "Double free detected! Object %p (type=%d, rc=%d) was freed twice. "
+                "Object type: %s. This indicates a memory management bug.", 
+                v, v->type, v->rc, clj_type_name(v->type));
+    }
+    
+    // RELEASE(v); // Hook now called via RELEASE macro
+    
+    if (v->rc == 0) { 
+        DEALLOC(v); // Hook for memory profiling
+        release_object_deep(v); 
+        free(v); 
+    }
+}
+
+// Helper function to check if autorelease pool is active
+bool is_autorelease_pool_active(void) {
+    return g_cv_pool_top != NULL;
+}
+
+/** @brief Add object to autorelease pool for deferred cleanup
+ * 
+ * @param v Pointer to CljObject to autorelease (NULL parameters are safely ignored)
+ * @return The same object pointer, or NULL if input was NULL
+ * 
+ * This function safely handles NULL parameters by returning NULL without
+ * performing any operations. This prevents crashes and follows defensive
+ * programming practices.
+ */
+CljObject *autorelease(CljObject *v) {
+    if (!v) return NULL;
+    
+    // 🚨 ASSERTION: Autorelease pool must exist
+    if (!g_cv_pool_top) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
+                "This indicates missing cljvalue_pool_push() or premature cljvalue_pool_pop().", 
+                v, v ? v->type : -1);
+    }
+    
+    // Weak vector push: does not retain the item
+    vector_push_inplace(g_cv_pool_top->backing, v);
+    
+    // Memory profiling
+    MEMORY_PROFILER_TRACK_AUTORELEASE(v);
+    
+    return v;
+}
+
+CljObjectPool *cljvalue_pool_push() {
+    CljObjectPool *p = ALLOC(CljObjectPool, 1);
+    if (!p) return NULL;
+    p->backing = make_weak_vector(16);
+    p->prev = g_cv_pool_top;
+    g_cv_pool_top = p;
+    g_pool_push_count++;  // Increment push counter
+    return p;
+}
+
+// Internal implementation
+static void cljvalue_pool_pop_internal(CljObjectPool *pool) {
+    // 🚨 ASSERTION: Check for pop/push imbalance (before early return)
+    if (g_pool_push_count <= 0) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "cljvalue_pool_pop() called more times than cljvalue_pool_push()! "
+                "Push count: %d, attempting to pop pool %p. "
+                "This indicates unbalanced pool operations.", 
+                g_pool_push_count, pool);
+    }
+    
+    // If no pool specified or pool doesn't match current top, pop current top
+    if (!pool) {
+        pool = g_cv_pool_top;
+    }
+    if (!pool || g_cv_pool_top != pool) return;
+    
+    CljPersistentVector *vec = as_vector(pool->backing);
+    if (vec) {
+        for (int i = vec->count - 1; i >= 0; --i) {
+            CljObject *obj = vec->data[i];
+            vec->data[i] = NULL;  // First set to NULL to prevent double-free
+            release(obj);         // Then release (NULL-safe)
+        }
+        vec->count = 0;
+    }
+    g_cv_pool_top = pool->prev;
+    g_pool_push_count--;  // Decrement push counter
+    
+    // Assertion: Check for negative push count (imbalance)
+    if (g_pool_push_count < 0) {
+        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
+                "Pool push/pop imbalance! Push count: %d. "
+                "This indicates more pop() calls than push() calls.", g_pool_push_count);
+    }
+    // Weak vector is not released - it only contains weak references
+    // The objects were already released in the loop above
+    free(pool);
+}
+
+// Public API: Pop current pool (most common usage)
+void cljvalue_pool_pop(void) {
+    cljvalue_pool_pop_internal(NULL);
+}
+
+// Public API: Pop specific pool (for advanced usage)
+void cljvalue_pool_pop_specific(CljObjectPool *pool) {
+    cljvalue_pool_pop_internal(pool);
+}
+
+// Legacy API: Keep for backward compatibility
+void cljvalue_pool_pop_legacy(CljObjectPool *pool) {
+    cljvalue_pool_pop_internal(pool);
+}
+
+// Global cleanup function for all autorelease pools
+void cljvalue_pool_cleanup_all() {
+    while (g_cv_pool_top) {
+        cljvalue_pool_pop_internal(g_cv_pool_top);
+    }
+}
+// Central dispatcher for finalizers based on type tag
+static void release_object_deep(CljObject *v) {
+    if (!v) return;
+    
+    // Primitive values need no finalizer
+    if (IS_PRIMITIVE_TYPE(v->type)) {
+        return;
+    }
+    
+    // Dispatcher: Decide based on type tag whether finalizer is needed
+    switch (v->type) {
+        case CLJ_STRING:
+            // String finalizer: free memory
+            if (v->as.data) free(v->as.data);
+            break;
+            
+        case CLJ_SYMBOL:
+            // Symbols are embedded; nothing to free here (interned / no RC)
+            break;
+            
+        case CLJ_VECTOR:
+            // Vector finalizer: embedded object; free backing store and elements only
+            {
+                CljPersistentVector *vec = as_vector(v);
+                if (vec) {
+                    release_array(vec->data, vec->count);
+                    free(vec->data);
+                }
+            }
+            break;
+        case CLJ_WEAK_VECTOR:
+            // Weak vector finalizer: does not retain on push; releasing elements here is still required
+            {
+                CljPersistentVector *vec = as_vector(v);
+                if (vec) {
+                    release_array(vec->data, vec->count);
+                    free(vec->data);
+                }
+            }
+            break;
+            
+        case CLJ_MAP:
+            // Map finalizer: separate struct in as.data; free pairs and struct
+            {
+                CljMap *map = as_map(v);
+                if (map) {
+                    release_array(map->data, map->count * 2);
+                    free(map->data);
+                    free(map);
+                }
+            }
+            break;
+            
+        case CLJ_LIST:
+            // List finalizer: separate struct in as.data; walk and free
+            {
+                CljList *list = as_list(v);
+                if (list) {
+                    CljObject *node = list->head;
+                    while (node) {
+                        CljList *node_list = as_list(node);
+                        CljObject *next = node_list ? node_list->tail : NULL;
+                        release(node);
+                        node = next;
+                    }
+                    free(list);
+                }
+            }
+            break;
+            
+        case CLJ_FUNC:
+            // Function finalizer: embedded; free internals only
+            {
+                // Check if it's a CljFunction or CljFunc
+                CljFunction *clj_func = (CljFunction*)v;
+                if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                    // It's a CljFunction
+                    if (clj_func->params) {
+                        release_array(clj_func->params, clj_func->param_count);
+                        free(clj_func->params);
+                    }
+                    if (clj_func->body) release(clj_func->body);
+                    if (clj_func->closure_env) release(clj_func->closure_env);
+                    if (clj_func->name) free((void*)clj_func->name);
+                } else {
+                    // It's a CljFunc (native function)
+                    CljFunc *native_func = (CljFunc*)v;
+#ifdef DEBUG
+                    if (native_func && native_func->name) {
+                        // In Debug-Builds ist name ein String-Literal, kein malloc'd String
+                        // Daher kein free() nötig
+                    }
+#endif
+                }
+            }
+            break;
+            
+        case CLJ_EXCEPTION:
+            // Exception finalizer: use exception RC management
+            {
+                CLJException *exc = (CLJException*)v->as.data;
+                if (exc) {
+                    release_exception(exc);
+                }
+            }
+            break;
+            
+        case CLJ_INT:
+        case CLJ_FLOAT:
+        case CLJ_BOOL:
+        case CLJ_NIL:
+            // Primitive types: no finalizer needed
+            break;
+            
+        default:
+            // Unknown type: no finalizer
+            break;
+    }
+}
+
+// moved to string.c
+
+// make_nil() and make_bool() functions removed - use clj_nil(), clj_true(), clj_false() instead
+
+// vector functions moved to vector.c
+
+// Forward declarations for early use
+static void init_static_singletons(void);
+// empty map singleton moved to map.c
+
+// Forward declaration to allow early use
+static void init_static_singletons(void);
+
+// map functions moved to map.c
+
+CljObject* make_symbol(const char *name, const char *ns) {
+    if (!name) {
+        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
+                "make_symbol: name cannot be NULL");
+    }
+    
+    // Range check for name length
+    if (strlen(name) >= SYMBOL_NAME_MAX_LEN) {
+        throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
+                "Symbol name '%s' exceeds maximum length of %d characters", 
+                name, SYMBOL_NAME_MAX_LEN - 1);
+    }
+    
+    CljSymbol *sym = malloc(sizeof(CljSymbol));
+    if (!sym) {
+        throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
+                "Failed to allocate memory for symbol '%s'", name);
+    }
+    
+    sym->base.type = CLJ_SYMBOL;
+    sym->base.rc = 1;
+    
+    // Copy name to fixed buffer
+    strncpy(sym->name, name, SYMBOL_NAME_MAX_LEN - 1);
+    sym->name[SYMBOL_NAME_MAX_LEN - 1] = '\0';  // Ensure null termination
+    
+    // Get or create namespace object
+    if (ns) {
+        sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
+        if (!sym->ns) {
+            free(sym);
+            throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
+                    "Failed to create namespace '%s' for symbol '%s'", ns, name);
+        }
+        // Namespace is already retained by ns_get_or_create
+    } else {
+        sym->ns = NULL;  // No namespace
+    }
+    
+    return (CljObject*)sym;
+}
+
+CljObject* make_error(const char *message, const char *file, int line, int col) {
+    return make_exception("Error", message, file, line, col, NULL);
+}
+
+CljObject* make_exception(const char *type, const char *message, const char *file, int line, int col, CljObject *data) {
+    if (!type || !message) return NULL;
+    CljObject *v = ALLOC(CljObject, 1);
+    if (!v) return NULL;
+    
+    CLJException *exc = create_exception(type, message, file, line, col, data);
+    if (!exc) { free(v); return NULL; }
+    
+    v->type = CLJ_EXCEPTION;
+    v->rc = 1;
+    v->as.data = exc;
+    
+    return v;
+}
 
 CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
-    CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
-    if (!func) throw_oom(CLJ_CLOSURE);
+    CljFunction *func = ALLOC(CljFunction, 1);
+    if (!func) return NULL;
     
-    func->base.type = CLJ_CLOSURE;  // Interpreted functions use CLJ_CLOSURE type
+    func->base.type = CLJ_FUNC;  // Both CljFunc and CljFunction use CLJ_FUNC type
     func->base.rc = 1;
     func->param_count = param_count;
-    func->body = RETAIN(body);
-    func->closure_env = RETAIN(closure_env);
+    func->body = body ? (retain(body), body) : NULL;
+    func->closure_env = closure_env ? (retain(closure_env), closure_env) : NULL;
     func->name = name ? strdup(name) : NULL;
     
     // Parameter-Array kopieren
     if (param_count > 0 && params) {
-        func->params = (CljObject**)malloc(sizeof(CljObject*) * param_count);
+        func->params = ALLOC(CljObject*, param_count);
         if (!func->params) {
-            DEALLOC(func);
-            throw_oom(CLJ_CLOSURE);
+            free(func);
+            return NULL;
         }
         for (int i = 0; i < param_count; i++) {
-            func->params[i] = RETAIN(params[i]);
+            func->params[i] = params[i] ? (retain(params[i]), params[i]) : NULL;
         }
     } else {
         func->params = NULL;
@@ -112,75 +587,61 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     return (CljObject*)func;
 }
 
-CljObject* make_list(ID first, CljList *rest) {
+CljObject* make_list() {
     CljList *list = ALLOC(CljList, 1);
-    if (!list) throw_oom(CLJ_LIST);
+    if (!list) return NULL;
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;
-    list->first = RETAIN((CljObject*)first);
-    list->rest = RETAIN((CljObject*)rest);
+    list->head = NULL;
+    list->tail = NULL;
     
-    return (CljObject*)list;
+    CljObject *obj = ALLOC(CljObject, 1);
+    if (!obj) {
+        free(list);
+        return NULL;
+    }
+    
+    obj->type = CLJ_LIST;
+    obj->rc = 1;
+    obj->as.data = (void*)list;
+    
+    CREATE(obj);
+    return obj;
 }
 
-char* to_string(CljObject *v) {
-    // Handle nil (represented as NULL)
-    if (!v) {
-        return strdup("nil");
-    }
+char* pr_str(CljObject *v) {
+    if (!v) return strdup("nil");
 
-    // Handle immediates (CljValue tagged pointers)
-    if (is_immediate(v)) {
-        if (is_fixnum(v)) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%d", as_fixnum(v));
-            return strdup(buf);
-        }
-        if (is_fixed(v)) {
-            char buf[48];
-            int32_t raw = (int32_t)((intptr_t)v >> TAG_BITS);
-            // Format with up to 6 fractional digits, trimming trailing zeros
-            format_fixed_q16_13(buf, sizeof(buf), raw, 6u, true);
-            return strdup(buf);
-        }
-        if (is_special(v)) {
-            uint8_t special = as_special(v);
-            switch (special) {
-                case SPECIAL_TRUE: return strdup("true");
-                case SPECIAL_FALSE: return strdup("false");
-                default: return strdup("unknown");
-            }
-        }
-        if (is_character(v)) {
-            char buf[8];
-            snprintf(buf, sizeof(buf), "%c", (char)as_character(v));
-            return strdup(buf);
-        }
-    }
-
-    // char buf[64]; // Unused variable removed
+    char buf[64];
     switch(v->type) {
-        // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
+        case CLJ_NIL:
+            return strdup("nil");
+
+        case CLJ_INT:
+            snprintf(buf, sizeof(buf), "%d", v->as.i);
+            return strdup(buf);
+
+        case CLJ_FLOAT:
+            snprintf(buf, sizeof(buf), "%g", v->as.f);
+            return strdup(buf);
+
+        case CLJ_BOOL:
+            return strdup(v->as.b ? "true" : "false");
 
         case CLJ_STRING:
             {
-                // Special handling for empty string singleton
-                if (v == (CljObject*)empty_string_singleton) {
-                    return strdup("");
-                }
-                
-                // Access string data directly from CljString structure
-                CljString *s = (CljString*)v;
-                return strdup(s->data);
+                char *str = (char*)v->as.data;
+                size_t len = strlen(str) + 3;
+                char *s = ALLOC(char, len);
+                snprintf(s, len, "\"%s\"", str);
+                return s;
             }
 
         case CLJ_SYMBOL:
             {
                 CljSymbol *sym = as_symbol(v);
                 if (!sym) return strdup("nil");
-                
-                // Handle namespace-qualified symbols
                 if (sym->ns) {  // Check if namespace exists
                     // Get namespace name from the namespace object
                     CljSymbol *ns_sym = as_symbol(sym->ns->name);
@@ -195,7 +656,6 @@ char* to_string(CljObject *v) {
             }
 
         case CLJ_VECTOR:
-        case CLJ_TRANSIENT_VECTOR:
             {
                 CljPersistentVector *vec = as_vector(v);
                 if (!vec) return strdup("[]");
@@ -214,39 +674,31 @@ char* to_string(CljObject *v) {
                     free(el);
                 }
                 strcat(s, "]");
-                
-                // Mark transient vectors for debugging
-                if (v->type == CLJ_TRANSIENT_VECTOR) {
-                    char *result = ALLOC(char, strlen(s) + 20);
-                    snprintf(result, strlen(s) + 20, "<transient %s>", s);
-                    free(s);
-                    return result;
-                }
-                
                 return s;
             }
 
         case CLJ_LIST:
             {
                 CljList *list = as_list(v);
+                if (!list) return strdup("()");
                 
                 // Sammle alle Elemente in einem Array
                 CljObject *elements[1000]; // Max 1000 Elemente
                 int count = 0;
                 
                 // Head hinzufügen
-                if (list->first) {
-                    elements[count++] = list->first;
+                if (list->head) {
+                    elements[count++] = list->head;
                 }
                 
                 // Tail-Elemente hinzufügen
-                CljObject *current = LIST_REST(list);
-                while (current && is_type(current, CLJ_LIST) && count < 1000) {
+                CljObject *current = list->tail;
+                while (current && count < 1000) {
                     CljList *current_list = as_list(current);
-                    if (current_list && current_list->first) {
-                        elements[count++] = current_list->first;
+                    if (current_list && current_list->head) {
+                        elements[count++] = current_list->head;
                     }
-                    current = current_list ? current_list->rest : NULL;
+                    current = current_list ? current_list->tail : NULL;
                 }
                 
                 // Berechne benötigte Kapazität
@@ -271,7 +723,6 @@ char* to_string(CljObject *v) {
             }
 
         case CLJ_MAP:
-        case CLJ_TRANSIENT_MAP:
             {
                 CljMap *map = as_map(v);
                 if (!map) return strdup("{}");
@@ -282,7 +733,7 @@ char* to_string(CljObject *v) {
                     if (!k) continue;
                     char *ks = pr_str(k);
                     char *vs = pr_str(val);
-                    cap += strlen(ks) + strlen(vs) + 3; // +1 space, +1 comma, +1 space = +3
+                    cap += strlen(ks) + strlen(vs) + 2;
                     free(ks); free(vs);
                 }
                 char *s = ALLOC(char, cap+1);
@@ -292,7 +743,7 @@ char* to_string(CljObject *v) {
                     CljObject *k = KV_KEY(map->data, i);
                     CljObject *val = KV_VALUE(map->data, i);
                     if (!k) continue;
-                    if (!first) strcat(s, ", ");
+                    if (!first) strcat(s, " ");
                     char *ks = pr_str(k);
                     char *vs = pr_str(val);
                     strcat(s, ks);
@@ -302,47 +753,42 @@ char* to_string(CljObject *v) {
                     first = false;
                 }
                 strcat(s, "}");
-                
-                // Mark transient maps for debugging
-                if (v->type == CLJ_TRANSIENT_MAP) {
-                    char *result = ALLOC(char, strlen(s) + 20);
-                    snprintf(result, strlen(s) + 20, "<transient %s>", s);
-                    free(s);
-                    return result;
-                }
-                
                 return s;
             }
 
-
         case CLJ_FUNC:
             {
-                // Native C function (CljFunc)
-                CljFunc *native_func = (CljFunc*)v;
-                if (native_func->name) {
-                    char buf[256];
-                    snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);
-                    return strdup(buf);
-                }
-                return strdup("#<native function>");
-            }
-        
-        case CLJ_CLOSURE:
-            {
-                // Interpreted Clojure function (CljFunction)
+                // Check if it's a CljFunction (Clojure function) or CljFunc (native function)
                 CljFunction *clj_func = (CljFunction*)v;
-                if (clj_func && clj_func->name) {
-                    char buf[256];
-                    snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
-                    return strdup(buf);
+                CljFunc *native_func = (CljFunc*)v;
+                
+                // First check if it's a native function (has fn pointer and no params/body)
+                if (native_func && native_func->fn && !clj_func->params && !clj_func->body) {
+                    // It's a native function (CljFunc)
+                    if (native_func->name) {
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);
+                        return strdup(buf);
+                    }
+                    return strdup("#<native function>");
+                } else if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                    // It's a Clojure function (CljFunction)
+                    if (clj_func->name) {
+                        char buf[256];
+                        snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
+                        return strdup(buf);
+                    } else {
+                        return strdup("#<function>");
+                    }
                 } else {
+                    // Fallback: unknown function type
                     return strdup("#<function>");
                 }
             }
 
         case CLJ_SEQ:
             {
-                CljSeqIterator *seq = as_seq((ID)v);
+                CljSeqIterator *seq = as_seq(v);
                 if (!seq) return strdup("()");
                 
                 // Direktes Drucken ohne Umkopieren
@@ -350,18 +796,22 @@ char* to_string(CljObject *v) {
                 if (!result) return strdup("()");
                 
                 bool first = true;
-                // Use the existing iterator instead of creating a new seq
-                SeqIterator temp_iter = seq->iter;
-                while (!seq_iter_empty(&temp_iter)) {
-                    CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
+                CljObject *temp_seq = seq_create(seq->iter.container);
+                if (!temp_seq) {
+                    free(result);
+                    return strdup("()");
+                }
+                
+                while (!seq_empty(temp_seq)) {
+                    CljObject *element = seq_first(temp_seq);
                     if (!element) {
-                        seq_iter_next(&temp_iter);
+                        seq_next(temp_seq);
                         continue;
                     }
                     
                     char *el_str = pr_str(element);
                     if (!el_str) {
-                        seq_iter_next(&temp_iter);
+                        seq_next(temp_seq);
                         continue;
                     }
                     
@@ -374,6 +824,7 @@ char* to_string(CljObject *v) {
                     if (!new_result) {
                         free(result);
                         free(el_str);
+                        release(temp_seq);
                         return strdup("()");
                     }
                     result = new_result;
@@ -385,18 +836,19 @@ char* to_string(CljObject *v) {
                     first = false;
                     
                     free(el_str);
-                    seq_iter_next(&temp_iter);
+                    seq_next(temp_seq);
                 }
                 
                 strcat(result, ")");
+                release(temp_seq);
                 return result;
             }
 
         case CLJ_EXCEPTION:
             {
-                CLJException *exc = (CLJException*)v;
+                CLJException *exc = (CLJException*)v->as.data;
                 char *result;
-                if (exc->file[0] != '\0') {
+                if (exc->file) {
                     char buf[1024];
                     snprintf(buf, sizeof(buf), "%s: %s at %s:%d:%d", 
                             exc->type, exc->message, 
@@ -412,160 +864,42 @@ char* to_string(CljObject *v) {
                 return result;
             }
 
-        case CLJ_BYTE_ARRAY:
-            {
-                CljByteArray *ba = as_byte_array(v);
-                if (!ba) return strdup("#<byte-array>");
-                
-                // Show first few bytes in hex format
-                char buf[256];
-                int preview_len = ba->length < 8 ? ba->length : 8;
-                int offset = snprintf(buf, sizeof(buf), "#<byte-array [");
-                
-                for (int i = 0; i < preview_len; i++) {
-                    offset += snprintf(buf + offset, sizeof(buf) - offset, 
-                                      "0x%02x", ba->data[i]);
-                    if (i < preview_len - 1) {
-                        offset += snprintf(buf + offset, sizeof(buf) - offset, " ");
-                    }
-                }
-                
-                if (ba->length > 8) {
-                    snprintf(buf + offset, sizeof(buf) - offset, " ...]>");
-                } else {
-                    snprintf(buf + offset, sizeof(buf) - offset, "]>");
-                }
-                
-                return strdup(buf);
-            }
-
         default:
             return strdup("#<unknown>");
     }
 }
 
-char* pr_str(CljObject *v) {
-    // Handle nil (represented as NULL)
-    if (!v) {
-        return strdup("nil");
-    }
-    
-    // pr_str adds quotes around strings
-    if (is_type(v, CLJ_STRING)) {
-        char *raw = to_string(v);
-        if (!raw) return strdup("\"\"");
-        
-        size_t len = strlen(raw) + 3;  // +2 for quotes, +1 for \0
-        char *result = ALLOC(char, len);
-        snprintf(result, len, "\"%s\"", raw);
-        free(raw);
-        return result;
-    }
-    
-    // For all other types: delegate to to_string
-    return to_string(v);
-}
-
-char* print_str(CljObject *v) {
-    // Handle nil (represented as NULL)
-    if (!v) {
-        return strdup("nil");
-    }
-    
-    // print_str does NOT add quotes around strings (unlike pr_str)
-    // For all types including strings: delegate to to_string
-    return to_string(v);
-}
-
-// Konsolidierte Gleichheitsprüfung mit ID-Parametern
-// Unterstützt sowohl CljObject* (heap objects) als auch CljValue (immediate values)
-bool clj_equal_id(ID a, ID b) {
-    // Schneller == Check funktioniert für beide Typen
-    if (a == b) return true;
-    if (!a || !b) return false;
-    
-    // Beide sind immediate values (CljValue)
-    if (is_immediate(a) && is_immediate(b)) {
-        if (is_fixnum(a) && is_fixnum(b)) {
-            return as_fixnum(a) == as_fixnum(b);
-        }
-        if (is_character(a) && is_character(b)) {
-            return as_character(a) == as_character(b);
-        }
-        if (is_fixed(a) && is_fixed(b)) {
-            return as_fixed(a) == as_fixed(b);
-        }
-        if (is_special(a) && is_special(b)) {
-            return as_special(a) == as_special(b);
-        }
-        return false; // Verschiedene immediate value Typen
-    }
-    
-    // Beide sind CljObject* (heap objects)
-    if (!is_immediate(a) && !is_immediate(b)) {
-        return clj_equal(a, b);
-    }
-    
-    // Gemischte Typen (ein immediate, ein heap object)
-    return false;
-}
-
-
 // Korrekte Gleichheitsprüfung mit Inhalt-Vergleich
-bool clj_equal(CljValue a, CljValue b) {
+bool clj_equal(CljObject *a, CljObject *b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
     if (!a || !b) return false;
-    
-    // Handle tagged integers (fixnums) - most common case
-    if (is_fixnum(a) || is_fixnum(b)) {
-        if (is_fixnum(a) && is_fixnum(b)) {
-            return as_fixnum(a) == as_fixnum(b);
-        }
-        return false;  // Different types
-    }
-    
-    // Handle other immediate types (bool, etc.)
-    if (is_immediate(a) || is_immediate(b)) {
-        if (is_immediate(a) && is_immediate(b)) {
-            return a == b;  // For immediates, pointer equality is sufficient
-        }
-        return false;  // Different types
-    }
-    
-    // Handle CljObject* types
-    CljObject *a_obj = (CljObject*)a;
-    CljObject *b_obj = (CljObject*)b;
-    
-    if (!is_type(a_obj, b_obj->type)) return false;
+    if (a->type != b->type) return false;
     
     // Inhalt-Vergleich basierend auf Typ
-    // Hinweis: CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
+    // Hinweis: CLJ_NIL, CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
     switch (a->type) {
-        // CLJ_INT, CLJ_FLOAT removed - handled as immediates
+        // Primitive Typen - direkter Vergleich
+        case CLJ_INT:
+            return a->as.i == b->as.i;
+            
+        case CLJ_FLOAT:
+            return a->as.f == b->as.f;
             
         // Komplexe Typen - Inhalt-Vergleich
         case CLJ_STRING: {
-            CljString *str_a = (CljString*)a;
-            CljString *str_b = (CljString*)b;
+            char *str_a = (char*)a->as.data;
+            char *str_b = (char*)b->as.data;
             if (!str_a || !str_b) return false;
-            
-            // Special case: empty string singleton comparison
-            if (str_a == empty_string_singleton && str_b == empty_string_singleton) {
-                return true;
-            }
-            
-            // Compare string data directly
-            return strcmp(str_a->data, str_b->data) == 0;
+            return strcmp(str_a, str_b) == 0;
         }
         
         case CLJ_VECTOR: {
-            CljPersistentVector *vec_a = (CljPersistentVector*)a;
-            CljPersistentVector *vec_b = (CljPersistentVector*)b;
+            CljPersistentVector *vec_a = (CljPersistentVector*)a->as.data;
+            CljPersistentVector *vec_b = (CljPersistentVector*)b->as.data;
             if (!vec_a || !vec_b) return false;
             if (vec_a->count != vec_b->count) return false;
             for (int i = 0; i < vec_a->count; i++) {
-                // Vektorelemente können CljValue (immediate values) oder CljObject* sein
-                if (!clj_equal_id(vec_a->data[i], vec_b->data[i])) return false;
+                if (!clj_equal(vec_a->data[i], vec_b->data[i])) return false;
             }
             return true;
         }
@@ -576,11 +910,10 @@ bool clj_equal(CljValue a, CljValue b) {
             if (!map_a || !map_b) return false;
             if (map_a->count != map_b->count) return false;
             for (int i = 0; i < map_a->count; i++) {
-                CljValue key_a = KV_KEY(map_a->data, i);
-                CljValue val_a = KV_VALUE(map_a->data, i);
-                CljValue val_b = map_get(b, key_a);
-                // Map-Werte können CljValue (immediate values) oder CljObject* sein
-                if (!clj_equal_id(val_a, val_b)) return false;
+                CljObject *key_a = KV_KEY(map_a->data, i);
+                CljObject *val_a = KV_VALUE(map_a->data, i);
+                CljObject *val_b = map_get(b, key_a);
+                if (!clj_equal(val_a, val_b)) return false;
             }
             return true;
         }
@@ -605,8 +938,8 @@ bool clj_equal(CljValue a, CljValue b) {
         // Referenz-Typen - nur Pointer-Vergleich (bereits durch a == b abgefangen)
         case CLJ_LIST:
         case CLJ_FUNC:
-        case CLJ_CLOSURE:
-            // Functions are only equal if they're the same instance
+            // Diese Cases sollten nie erreicht werden, da sie bereits durch Pointer-Vergleich abgefangen werden
+            // Aber falls doch, sind sie nur bei gleicher Instanz gleich
             return a == b;
         
         // Unbekannte oder nicht unterstützte Typen
@@ -617,16 +950,15 @@ bool clj_equal(CljValue a, CljValue b) {
 
 // Map functions are implemented in map.c
 
-// Symbol table for real interning - jetzt in g_runtime
-// SymbolEntry *symbol_table = NULL;
-// #define symbol_table ((SymbolEntry*)g_runtime.symbol_table)
+// Symbol table for real interning
+SymbolEntry *symbol_table = NULL;
 
 // Hash function for symbol names (unused)
 // Removed to silence unused-function warnings
 
 // Find symbol in the table
 static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
-    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    SymbolEntry *entry = symbol_table;
     while (entry) {
         if (entry->ns && ns) {
             if (strcmp(entry->ns, ns) == 0 && strcmp(entry->name, name) == 0) {
@@ -643,25 +975,15 @@ static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
 }
 
 // Add symbol to the table
-SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
-    SymbolEntry *entry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
+static SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
+    SymbolEntry *entry = ALLOC(SymbolEntry, 1);
     if (!entry) return NULL;
     
     entry->ns = ns ? strdup(ns) : NULL;
-    
-    // Use tagged pointer system to detect heap vs static symbols
-    // Heap symbols (TAG_POINTER) need strdup, static symbols use string literals
-    if (symbol && get_tag((CljValue)symbol) == TAG_POINTER) {
-        // This is a heap-allocated symbol, strdup the name
-        entry->name = strdup(name);
-    } else {
-        // This is a static symbol with string literal, don't strdup
-        entry->name = (char*)name;
-    }
-    
+    entry->name = strdup(name);
     entry->symbol = symbol;
-    entry->next = (SymbolEntry*)g_runtime.symbol_table;
-    g_runtime.symbol_table = (void*)entry;
+    entry->next = symbol_table;
+    symbol_table = entry;
     
     return entry;
 }
@@ -677,7 +999,7 @@ CljObject* intern_symbol(const char *ns, const char *name) {
     }
     
     // Symbol nicht gefunden, erstelle neues
-    CljObject *symbol = make_symbol_impl(name, ns);
+    CljObject *symbol = make_symbol(name, ns);
     if (!symbol) return NULL;
     
     // Füge zur Symbol-Table hinzu
@@ -692,30 +1014,28 @@ CljObject* intern_symbol_global(const char *name) {
 }
 
 // Clean up symbol table (ONLY for test cleanup, not regular symbols)
-// This function will be eliminated by dead-code-elimination in production builds
-// since it's only called from test files
 void symbol_table_cleanup() {
-    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+// Symbols should live until program end!
+// Free only SymbolEntry structures, NOT the symbols themselves
+    SymbolEntry *entry = symbol_table;
     while (entry) {
         SymbolEntry *next = entry->next;
+        
         if (entry->ns) free(entry->ns);
-        
-        // Only free entry->name if it was strdup'd (heap symbols)
-        // Static symbols use string literals that shouldn't be freed
-        if (entry->name && entry->symbol && get_tag((CljValue)entry->symbol) == TAG_POINTER) {
-            free(entry->name);
-        }
-        
+        if (entry->name) free(entry->name);
+        // NICHT: if (entry->symbol) release(entry->symbol);
+        // Symbole bleiben im Speicher bis zum Programmende
         free(entry);
+        
         entry = next;
     }
-    g_runtime.symbol_table = NULL;
+    symbol_table = NULL;
 }
 
 // Number of symbols in the table
 int symbol_count() {
     int count = 0;
-    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    SymbolEntry *entry = symbol_table;
     while (entry) {
         count++;
         entry = entry->next;
@@ -724,59 +1044,57 @@ int symbol_count() {
 }
 
 #ifdef ENABLE_META
-// Meta registry for metadata - jetzt in g_runtime
-// CljObject *meta_registry = NULL;
-// #define meta_registry ((CljObject*)g_runtime.meta_registry)
+// Meta registry for metadata
+CljObject *meta_registry = NULL;
 
 void meta_registry_init() {
     {
-        g_runtime.meta_registry = (void*)make_map(32); // Initial capacity for metadata entries
+        meta_registry = make_map(32); // Initial capacity for metadata entries
     }
 }
 
 void meta_registry_cleanup() {
-    if (g_runtime.meta_registry) {
-        RELEASE((CljObject*)g_runtime.meta_registry);  // ADDED
-    }
-    g_runtime.meta_registry = NULL;
+    // Meta registry should live until program end!
+    // DO NOT: release(meta_registry);
+    // Meta registry stays allocated until program end
+    meta_registry = NULL;
 }
 
 void meta_set(CljObject *v, CljObject *meta) {
     if (!v) return;
     
     meta_registry_init();
-    if (!g_runtime.meta_registry) return;
+    if (!meta_registry) return;
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    map_assoc((CljValue)g_runtime.meta_registry, v, meta);
+    map_assoc(meta_registry, v, meta);
 }
 
-ID meta_get(CljObject *v) {
-    if (!v || !g_runtime.meta_registry) return NULL;
+CljObject* meta_get(CljObject *v) {
+    if (!v || !meta_registry) return NULL;
     
-    return (ID)map_get((CljValue)g_runtime.meta_registry, (CljValue)v);
+    return map_get(meta_registry, v);
 }
 
 void meta_clear(CljObject *v) {
-    if (!v || !g_runtime.meta_registry) return;
+    if (!v || !meta_registry) return;
     
     // Find the entry and remove it using KV macros
-    CljMap *map = (CljMap*)g_runtime.meta_registry;
-    int index = KV_FIND_INDEX(map->data, map->count, v);
+    int index = KV_FIND_INDEX(((CljMap*)meta_registry->as.data)->data, ((CljMap*)meta_registry->as.data)->count, v);
     if (index >= 0) {
         // Entry found; remove it
-        CljObject *old_value = KV_VALUE(map->data, index);
-        RELEASE(old_value);
+        CljObject *old_value = KV_VALUE(((CljMap*)meta_registry->as.data)->data, index);
+        if (old_value) release(old_value);
         
         // Shift following elements to the left
-        for (int j = index; j < map->count - 1; j++) {
-            KV_ASSIGN_PAIR(map->data, j,
-                       KV_KEY(map->data, j + 1),
-                       KV_VALUE(map->data, j + 1));
+        for (int j = index; j < ((CljMap*)meta_registry->as.data)->count - 1; j++) {
+            KV_SET_PAIR(((CljMap*)meta_registry->as.data)->data, j,
+                       KV_KEY(((CljMap*)meta_registry->as.data)->data, j + 1),
+                       KV_VALUE(((CljMap*)meta_registry->as.data)->data, j + 1));
         }
         
-        map->count--;
+        ((CljMap*)meta_registry->as.data)->count--;
     }
 }
 
@@ -784,20 +1102,67 @@ void meta_clear(CljObject *v) {
 #endif
 
 // Static singletons - these live forever and are never freed
-// Note: nil is now represented as NULL, true/false as immediate values
-// empty_map, empty_vector, and empty_string singletons are now statically initialized
-// in their respective source files (map.c, vector.c, strings.c)
+static CljObject clj_nil_singleton;
+static CljObject clj_true_singleton;
+static CljObject clj_false_singleton;
+static CljObject clj_empty_map_singleton;
+
+// Initialize static singletons
+static void init_static_singletons() {
+    // Initialize NIL singleton
+    clj_nil_singleton.type = CLJ_NIL;
+    clj_nil_singleton.rc = 0; // Singletons do not use reference counting
+    clj_nil_singleton.as.i = 0;
+    
+    // Initialize TRUE singleton
+    clj_true_singleton.type = CLJ_BOOL;
+    clj_true_singleton.rc = 0; // Singletons do not use reference counting
+    clj_true_singleton.as.b = true;
+    
+    // Initialize FALSE singleton
+    clj_false_singleton.type = CLJ_BOOL;
+    clj_false_singleton.rc = 0; // Singletons do not use reference counting
+    clj_false_singleton.as.b = false;
+    
+
+    // Initialize empty map singleton
+    clj_empty_map_singleton.type = CLJ_MAP;
+    clj_empty_map_singleton.rc = 0; // Singletons do not use reference counting
+    clj_empty_map_singleton.as.data = NULL; // No pairs = empty map
+}
 
 // Singleton access functions
-// Function wrappers moved to object.h as macros
+CljObject* clj_nil() {
+    static bool initialized = false;
+    if (!initialized) {
+        init_static_singletons();
+        initialized = true;
+    }
+    return &clj_nil_singleton;
+}
 
-// clj_false() removed - use make_special(SPECIAL_FALSE) instead
+CljObject* clj_true() {
+    static bool initialized = false;
+    if (!initialized) {
+        init_static_singletons();
+        initialized = true;
+    }
+    return &clj_true_singleton;
+}
+
+CljObject* clj_false() {
+    static bool initialized = false;
+    if (!initialized) {
+        init_static_singletons();
+        initialized = true;
+    }
+    return &clj_false_singleton;
+}
 
 // clj_empty_vector moved to vector.c
 
-// clj_empty_map() no longer part of public API; make_map_old(0) returns singleton
+// clj_empty_map() no longer part of public API; make_map(0) returns singleton
 
-#define id CljObject*
 
 // Stack-based environment helpers (outside of #ifdef)
 CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject **values, int count) {
@@ -806,16 +1171,17 @@ CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject
     
     // Simplified implementation: just return an empty map
     // Parameter binding skipped for this stage
-    CljMap *new_env = make_map(4);
+    CljObject *new_env = make_map(4);
+    if (!new_env) return NULL;
     
-    return (id)new_env;
+    return new_env;
 }
 
-ID env_get_stack(CljObject *env, CljObject *key) {
+CljObject* env_get_stack(CljObject *env, CljObject *key) {
     if (!env || !key) return NULL;
     
     // Direct map lookup
-    return (ID)map_get((CljValue)env, (CljValue)key);
+    return map_get(env, key);
 }
 
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
@@ -826,54 +1192,187 @@ void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
 
 // Function call implementation using stack allocation
 CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
-    if (!is_type(fn, CLJ_FUNC)) return NULL;
+    if (!fn || fn->type != CLJ_FUNC) return NULL;
     
     // Arity check
     CljFunction *func = as_function(fn);
     if (!func) {
-        return (CljObject*)make_exception("Error", "Invalid function object", NULL, 0, 0);
+        return make_error("Invalid function object", NULL, 0, 0);
     }
     if (argc != func->param_count) {
-        return (CljObject*)make_exception("Error", "Arity mismatch in function call", NULL, 0, 0);
+        return make_error("Arity mismatch in function call", NULL, 0, 0);
     }
     
     // Heap-allocated parameter array
-    CljObject **heap_params = (CljObject**)malloc(sizeof(CljObject*) * argc);
+    CljObject **heap_params = ALLOC(CljObject*, argc);
     for (int i = 0; i < argc; i++) {
-        heap_params[i] = RETAIN(argv[i]);
+        heap_params[i] = argv[i] ? (retain(argv[i]), argv[i]) : NULL;
     }
     
     // Extend environment with parameters
     CljObject *call_env = env_extend_stack(func->closure_env, func->params, heap_params, argc);
     if (!call_env) {
-        DEALLOC(heap_params);
-        return (CljObject*)make_exception("Error", "Failed to create function environment", NULL, 0, 0);
+        free(heap_params);
+        return make_error("Failed to create function environment", NULL, 0, 0);
     }
     
     // Evaluate function body (simplified; would normally call eval())
-    CljObject *result = func->body ? RETAIN(func->body) : NULL;
+    CljObject *result = func->body ? (retain(func->body), func->body) : clj_nil();
     
     // Release environment and parameter array
-    RELEASE(call_env);
-    DEALLOC(heap_params);
+    release(call_env);
+    free(heap_params);
     
     return result;
 }
 
 CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObject *env) {
-    if (!is_type(fn, CLJ_FUNC)) return NULL;
+    if (!fn || fn->type != CLJ_FUNC) return NULL;
     (void)env;
     
     // Evaluate arguments (simplified; would normally call eval())
     CljObject **eval_args = STACK_ALLOC(CljObject*, argc);
     for (int i = 0; i < argc; i++) {
-        eval_args[i] = RETAIN(args[i]);
+        eval_args[i] = args[i] ? (retain(args[i]), args[i]) : NULL;
     }
     
     return clj_call_function(fn, argc, eval_args);
 }
 
+// Polymorphe Funktionen für Subtyping
+CljObject* create_object(CljType type) {
+    CljObject *obj = ALLOC(CljObject, 1);
+    if (!obj) return NULL;
+    
+    obj->type = type;
+    obj->rc = 1;
+    
+    // Initialisiere je nach Typ
+    switch (type) {
+        case CLJ_INT:
+            obj->as.i = 0;
+            break;
+        case CLJ_FLOAT:
+            obj->as.f = 0.0;
+            break;
+        case CLJ_BOOL:
+            obj->as.b = 0;
+            break;
+        case CLJ_NIL:
+            obj->as.i = 0;
+            break;
+        default:
+            obj->as.data = NULL;
+            break;
+    }
+    
+    return obj;
+}
 
-// Old memory management functions removed - use RETAIN/RELEASE macros instead
+void retain_object(CljObject *obj) {
+    if (!obj) return;
+    obj->rc++;
+}
+
+void release_object(CljObject *obj) {
+    if (!obj) return;
+    obj->rc--;
+    if (obj->rc == 0) {
+        free_object(obj);
+    }
+}
+
+void free_object(CljObject *obj) {
+    if (!obj) return;
+
+    // Type-spezifische Freigabe
+    switch (obj->type) {
+        case CLJ_STRING:
+            if (obj->as.data) free(obj->as.data);
+            free(obj);
+            break;
+        case CLJ_SYMBOL:
+            {
+                CljSymbol *sym = (CljSymbol*)obj;
+                // Note: CljNamespace doesn't have reference counting yet
+                // TODO: Implement reference counting for CljNamespace
+                free(sym);
+            }
+            break;
+        case CLJ_VECTOR:
+            {
+                CljPersistentVector *vec = (CljPersistentVector*)obj;
+                if (vec->data) {
+                    for (int i = 0; i < vec->count; i++) {
+                        if (vec->data[i]) release_object(vec->data[i]);
+                    }
+                    free(vec->data);
+                }
+                free(vec);
+            }
+            break;
+        case CLJ_MAP:
+            {
+                CljMap *map = (CljMap*)obj;
+                if (map->data) {
+                    for (int i = 0; i < map->count * 2; i++) {
+                        if (map->data[i]) release_object(map->data[i]);
+                    }
+                    free(map->data);
+                }
+                free(map);
+            }
+            break;
+        case CLJ_LIST:
+            {
+                CljList *list = (CljList*)obj;
+                if (list->head) release_object(list->head);
+                if (list->tail) release_object(list->tail);
+                free(list);
+            }
+            break;
+        case CLJ_FUNC:
+            {
+                // Check if it's a CljFunction or CljFunc
+                CljFunction *clj_func = (CljFunction*)obj;
+                if (clj_func && (clj_func->params != NULL || clj_func->body != NULL || clj_func->closure_env != NULL)) {
+                    // It's a CljFunction
+                    if (clj_func->params) {
+                        for (int i = 0; i < clj_func->param_count; i++) {
+                            if (clj_func->params[i]) release_object(clj_func->params[i]);
+                        }
+                        free(clj_func->params);
+                    }
+                    if (clj_func->body) release_object(clj_func->body);
+                    if (clj_func->closure_env) release_object(clj_func->closure_env);
+                    if (clj_func->name) free((void*)clj_func->name);
+                } else {
+                    // It's a CljFunc (native function)
+                    CljFunc *native_func = (CljFunc*)obj;
+#ifdef DEBUG
+                    if (native_func && native_func->name) {
+                        // In Debug-Builds ist name ein String-Literal, kein malloc'd String
+                        // Daher kein free() nötig
+                    }
+#endif
+                }
+                free(obj);
+            }
+            break;
+        case CLJ_EXCEPTION:
+            {
+                CLJException *exc = (CLJException*)obj->as.data;
+                if (exc) {
+                    release_exception(exc);
+                }
+                free(obj);
+            }
+            break;
+        default:
+            // Primitive Typen brauchen keine Freigabe
+            free(obj);
+            break;
+    }
+}
 
 // Type-safe Casting now provided as static inline in header

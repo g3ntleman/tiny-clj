@@ -1,40 +1,43 @@
 /*
- * Test Registry for Tiny-CLJ
+ * Test Registry for MinUnit Tests
  * 
- * Dynamic test registration system that allows tests to register themselves
- * at program startup using GCC constructor attributes.
+ * Central registry for all MinUnit tests to enable single executable runner.
+ * Pure C - no POSIX dependencies for STM32 compatibility.
  */
 
 #ifndef TEST_REGISTRY_H
 #define TEST_REGISTRY_H
 
-#include <stddef.h>
-#include <stdbool.h>
-
-// Test function pointer type
-typedef void (*TestFunc)(void);
-
-// Test structure
 typedef struct {
-    const char *name;        // Test function name (e.g., "test_cljvalue_immediate_helpers")
-    const char *qualified_name; // Fully qualified name (e.g., "values/test_cljvalue_immediate_helpers")
-    TestFunc func;          // Test function pointer
-    const char *group;      // Test group (derived from filename)
-} Test;
+    const char *name;         // Test suite name
+    const char *suite;        // Suite category
+    char *(*test_func)(void); // Test runner function
+} TestEntry;
 
-// Registry API
-void test_registry_add(const char *name, TestFunc func);
-void test_registry_add_with_group(const char *name, TestFunc func, const char *group);
-Test *test_registry_find(const char *name);
-Test *test_registry_find_by_qualified_name(const char *qualified_name);
-Test *test_registry_find_by_pattern(const char *pattern);
-Test *test_registry_get_all(size_t *count);
-Test *test_registry_get_by_group(const char *group, size_t *count);
-void test_registry_list_all(void);
-void test_registry_list_groups(void);
-void test_registry_clear(void);
+// Forward declarations for all MinUnit test suite runners
+extern char *run_unit_tests(void);
+extern char *run_parser_tests(void);
+extern char *run_namespace_tests(void);
+extern char *run_seq_tests(void);
+extern char *run_for_loop_tests(void);
+extern char *run_eval_string_api_tests(void);
+extern char *run_memory_tests(void);
+extern char *run_exception_handling_tests(void);
+extern char *run_function_types_tests(void);
 
-// Pattern matching helper
-bool test_name_matches_pattern(const char *name, const char *pattern);
+// Global test registry (compile-time, no dlsym needed)
+static TestEntry all_minunit_tests[] = {
+    {"unit",            "core",    run_unit_tests},
+    {"parser",          "core",    run_parser_tests},
+    {"namespace",       "core",    run_namespace_tests},
+    {"seq",             "data",    run_seq_tests},
+    {"for_loops",       "control", run_for_loop_tests},
+    {"eval_string_api", "api",     run_eval_string_api_tests},
+    {"memory",          "memory",  run_memory_tests},
+    {"exception",       "error",   run_exception_handling_tests},
+    {"function_types",  "core",    run_function_types_tests},
+};
+
+static const int minunit_test_count = sizeof(all_minunit_tests) / sizeof(all_minunit_tests[0]);
 
 #endif // TEST_REGISTRY_H

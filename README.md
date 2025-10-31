@@ -1,51 +1,16 @@
 # Tiny-CLJ
 
-An **embedded-first Clojure interpreter** for microcontrollers (ESP32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
-
-## Status: Not usable, yet. Pre-alpha. Embedded target not functional, yet.
-
-## Prerequisites
-
-### Required Tools
-- **C Compiler**: GCC 4.9+ or Clang 3.5+ (C99/C11 support)
-- **CMake**: 3.10+ for build system
-- **Make**: GNU Make or compatible
-- **Git**: For version control and cloning
-
-### Platform-Specific Requirements
-
-#### macOS
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
-
-# Or install via Homebrew
-brew install cmake
-```
-
-
-### Optional Tools
-- **ESP32CubeIDE**: For ESP32 development and debugging
-- **OpenOCD**: For ESP32 flashing and debugging
-- **GDB**: For debugging (usually included with compiler toolchain)
+An **embedded-first Clojure interpreter** for microcontrollers (STM32, ARM Cortex-M) and desktop platforms (macOS, Linux). Written in pure C99/C11 for maximum portability and minimal resource usage.
 
 ## Primary Objective
-**Follow the Clojure language as good as possible.** Maximum compatibility with standard [Clojure](https://clojure.org) features, syntax, and behavior.
+**Follow the Clojure language as good as possible.** Maximum compatibility with standard Clojure features, syntax, and behavior.
 
 ## Key Features
-
-### Core Language Features
-- **Basic UTF-8 Support:** Unicode character handling for international text
-- **REPL Line Editing:** Interactive command-line editing with arrow keys (aka linereader)
-- **Error Messages with Source References:** Detailed error reporting with line numbers and context
-- **Persistent Collections:** Inefficient, partially implemented vectors, maps, and sequences
-- **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
-
-### Technical Features
-- **Embedded Target:** ESP32, ESP32, ARM Cortex-M microcontrollers
+- **Embedded Target:** STM32, ESP32, ARM Cortex-M microcontrollers
 - **Pure C99/C11:** No POSIX-only features for embedded compatibility
 - **Manual Reference Counting:** Predictable memory behavior on embedded systems
-- **Small Binary:** Target <150KB for embedded deployment
+- **Small Binary:** Target <200KB for embedded deployment
+- **Clojure-Compatible:** Standard Clojure syntax (`*ns*`, `def`, `fn`, etc)
 
 ## Quick Start
 
@@ -72,16 +37,12 @@ ctest --output-on-failure
 - **REPL:** Supports `--no-core`, `-e/--eval`, and `-f/--file` for scripted evaluation
 
 ## Documentation
-See `docs/` directory for detailed documentation:
+See `Guides/` directory for detailed documentation:
 - **`ROADMAP.md`** - Planned work and status
 - **`DEVELOPMENT_INSIGHTS.md`** - API design and memory management
 - **`MEMORY_POLICY.md`** - Memory management guidelines
 - **`PERFORMANCE_GUIDE.md`** - Performance optimization
 - **`ERROR_HANDLING_GUIDE.md`** - Exception handling
-- **`TESTING_GUIDE.md`** - Unity test framework and debugging
-- **`RELEASE_NOTES.md`** - Version history and changes
-- **`RC-COW.md`** - Reference counting and copy-on-write implementation
-- **`MEMORY_PROFILER.md`** - Memory profiling and leak detection
 
 ## Contributing
 - Keep the core small and clean

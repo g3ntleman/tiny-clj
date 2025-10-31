@@ -2,10 +2,8 @@
 #define TINY_CLJ_NAMESPACE_H
 
 #include "object.h"
-#include "memory.h"
 #include <stdbool.h>
-
-// Use CljObject* instead of specific types to avoid circular dependencies
+#include <setjmp.h>
 
 // Namespace structure
 typedef struct CljNamespace {
@@ -24,11 +22,13 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    struct CljObjectPool *pool;
+    CljObjectPool *pool;
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
     
-    // Note: Exception handling moved to global exception stack (independent of EvalState)
+    // Exception-Handling (TRY/CATCH stack-based)
+    struct ExceptionHandler *exception_stack;  // Stack of nested exception handlers
+    CljObject *last_error;    // last occurred error (backward compat)
     const char *file;         // current file
     int line;                 // current line
     int col;                  // current column
@@ -39,22 +39,18 @@ extern CljNamespace *ns_registry;
 
 // Namespace functions
 CljNamespace* ns_get_or_create(const char *name, const char *file);
-ID ns_resolve(EvalState *st, CljObject *sym);
+CljObject* ns_resolve(EvalState *st, CljObject *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
-void ns_define(CljNamespace *ns, ID symbol, ID value);
-void ns_cleanup(void);
+void ns_define(EvalState *st, CljObject *symbol, CljObject *value);
+void ns_cleanup();
 
 // EvalState functions
 EvalState* evalstate();
 EvalState* evalstate_new();
 void evalstate_free(EvalState *st);
 void evalstate_set_ns(EvalState *st, const char *ns_name);
-
-// Optimized EvalState functions
-EvalState* evalstate_new_lazy();
-void evalstate_ensure_initialized(EvalState *st);
 
 // Exception handling
 void eval_error(const char *msg, EvalState *st);
@@ -63,6 +59,11 @@ CljObject* eval_try(CljObject *form, EvalState *st);
 CljObject* eval_catch(CljObject *form, EvalState *st);
 CljObject* eval_expr_simple(CljObject *expr, EvalState *st);
 
-// List helpers moved to list.h
+// List helpers for try/catch
+CljObject* list_first(CljObject *list);
+CljObject* list_nth(CljObject *list, int n);
+int list_count(CljObject *list);
+bool is_list(CljObject *v);
+bool is_symbol(CljObject *v, const char *name);
 
 #endif

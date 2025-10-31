@@ -1,16 +1,16 @@
 // clojure.core.c
 
+#include "clj_parser.h"
 #include "exception.h"
+#include "function_call.h"
 #include "namespace.h"
+#include "runtime.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include "symbol.h"
-#include "value.h"  // For IS_IMMEDIATE macro
-#include "runtime.h" // For g_runtime
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
+#include <setjmp.h>
 
 static bool g_core_quiet = false;
 
@@ -22,16 +22,14 @@ const char *clojure_core_code =
 
     ;
 
-// Forward declaration for value_by_parsing_expr
-extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
+// Forward declaration for parse_expr_internal
+extern CljObject *parse_expr_internal(Reader *reader, EvalState *st);
 
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
     return false;
-  
-  // Switch to clojure.core namespace for loading core functions
-  const char *original_ns = st->current_ns ? st->current_ns->name ? as_symbol(st->current_ns->name)->name : NULL : NULL;
-  evalstate_set_ns(st, "clojure.core");
+  DEBUG_PRINTF("[clojure.core] eval_core_source src=%p first=%d\n", (void *)src,
+           (int)(unsigned char)src[0]);
   
   // Use Reader to parse multiple expressions
   Reader reader;
@@ -45,37 +43,28 @@ static bool eval_core_source(const char *src, EvalState *st) {
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
     
-    CljValue form = value_by_parsing_expr(&reader, st);
+    CljObject *form = parse_expr_internal(&reader, st);
     if (!form) {
-      // Continue to next expression instead of breaking
-      expr_count++;
-      continue;
+      DEBUG_PRINTF("[clojure.core] Failed to parse expression #%d\n", expr_count + 1);
+      break;
     }
     
     // Evaluate with exception handling using TRY/CATCH
     TRY {
-      CljValue result = eval_expr_simple((CljObject*)form, st);
-      // Don't RELEASE result - eval_expr_simple already returns AUTORELEASE
-      if (result) {
-        success_count++;
-      }
+      CljObject *result = eval_expr_simple(form, st);
+      if (result) release(result);
+      success_count++;
     } CATCH(ex) {
       // Exception occurred during evaluation
-      // Don't call pr_str on exception to avoid potential double free
+      DEBUG_PRINTF("[clojure.core] Exception in expression #%d\n", expr_count + 1);
+      char *err_str = pr_str((CljObject*)ex);
+      if (err_str) {
+        DEBUG_PRINTF("[clojure.core] Error: %s\n", err_str);
+        free(err_str);
+      }
     } END_TRY
     
-    // CRITICAL: Release form after evaluation
-    // value_by_parsing_expr returns object with rc=1
-    RELEASE((CljObject*)form);
-    
-    // Don't RELEASE form here - it's already managed by the parser
-    // RELEASE((CljObject*)form);
     expr_count++;
-  }
-  
-  // Switch back to original namespace
-  if (original_ns) {
-    evalstate_set_ns(st, original_ns);
   }
   
   if (!g_core_quiet) {
@@ -90,6 +79,11 @@ int load_clojure_core(EvalState *st) {
   if (!st) return 0;
   
   if (!g_core_quiet) {
+    printf("[clojure.core] load_clojure_core start src=%p\n",
+           (void *)clojure_core_code);
+    if (clojure_core_code) {
+      printf("[clojure.core] first chars: %.32s\n", clojure_core_code);
+    }
     printf("=== Loading Clojure Core Functions ===\n");
   }
   if (!clojure_core_code && !g_core_quiet) {
@@ -97,20 +91,19 @@ int load_clojure_core(EvalState *st) {
     return 0;
   }
 
-  // Ensure clojure.core namespace exists and cache is set
-  // evalstate_set_ns will create the namespace if it doesn't exist
-  evalstate_set_ns(st, "clojure.core");
-  
-  // Explicitly set clojure.core cache to avoid search loop in ns_resolve
-  if (st->current_ns && !g_runtime.clojure_core_cache) {
-    g_runtime.clojure_core_cache = (void*)st->current_ns;
-  }
-
   bool ok = eval_core_source(clojure_core_code, st);
 
   if (!ok) {
-    // Note: last_error removed - Exception handling now uses global exception stack
-    printf("[clojure.core] load error: Exception occurred during core loading\n");
+    CljObject *err = st->last_error;
+    if (err) {
+      char *msg = pr_str(err);
+      if (msg) {
+        printf("[clojure.core] load error: %s\n", msg);
+        free(msg);
+      }
+      st->last_error = NULL;
+      release(err);
+    }
   }
 
   return ok ? 1 : 0;

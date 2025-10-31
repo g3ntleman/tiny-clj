@@ -6,9 +6,10 @@ void platform_init() {
 }
 
 void platform_print(const char *message) {
-    if (!message) return;
-    fputs(message, stdout);
-    fputc('\n', stdout);
+    if (message == NULL) {
+        return;
+    }
+    printf("%s\n", message);
 }
 
 const char *platform_name() {
@@ -23,27 +24,4 @@ int platform_set_stdin_nonblocking(int enable) {
 int platform_readline_nb(char *buf, int max) {
     (void)buf; (void)max;
     return 0; // Stub: no input by default
-}
-
-// Line editor platform functions (stub implementations for STM32)
-int platform_get_char(void) {
-    return -1; // No input available on STM32 by default
-}
-
-void platform_put_char(char c) {
-    putchar(c);
-}
-
-void platform_put_string(const char *s) {
-    if (s) fputs(s, stdout);
-}
-
-// Line editor cleanup function for STM32
-// Note: This function is also defined in line_editor.c
-// The linker will use the one from line_editor.c
-
-// Raw mode support (stub for STM32)
-void platform_set_raw_mode(int enable) {
-    (void)enable;
-    // Nothing to do for STM32
 }

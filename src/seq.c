@@ -6,12 +6,11 @@
  */
 
 #include "seq.h"
-#include "value.h"
-#include "list.h"
+#include "list_operations.h"
 #include "vector.h"
-#include "strings.h"
-#include <string.h>
+#include "string.h"
 #include <stdlib.h>
+#include <string.h>
 
 // ============================================================================
 // FAST SEQ IMPLEMENTATION
@@ -23,9 +22,9 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     // Initialize to empty
     memset(iter, 0, sizeof(SeqIterator));
     
-    // Handle nil (now represented as NULL)
+    // Handle nil
     if (!obj) {
-        iter->seq_type = CLJ_UNKNOWN; // Use UNKNOWN for empty sequence
+        iter->seq_type = CLJ_NIL;
         return true;  // Empty sequence, but valid
     }
     
@@ -34,12 +33,12 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     switch (obj->type) {
         case CLJ_LIST: {
             CljList *list_data = as_list(obj);
-            if (!LIST_FIRST(list_data)) {
-                iter->seq_type = CLJ_UNKNOWN;
+            if (!list_data || !list_data->head) {
+                iter->seq_type = CLJ_NIL;
                 return true;  // Empty list
             }
             
-            iter->state.list.current = LIST_FIRST(list_data);
+            iter->state.list.current = list_data->head;
             iter->state.list.index = 0;
             iter->seq_type = CLJ_LIST;
             return true;
@@ -48,7 +47,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(obj);
             if (!vec || vec->count == 0) {
-                iter->seq_type = CLJ_UNKNOWN;
+                iter->seq_type = CLJ_NIL;
                 return true;  // Empty vector
             }
             
@@ -61,62 +60,60 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         }
         
         case CLJ_STRING: {
-            CljString *str = (CljString*)obj;
-            
-            // Special case: empty string singleton
-            if (str == empty_string_singleton) {
-                iter->seq_type = CLJ_UNKNOWN;
+            const char *str_data = (const char*)obj->as.data;
+            if (!str_data || str_data[0] == '\0') {
+                iter->seq_type = CLJ_NIL;
                 return true;  // Empty string
             }
             
-            // Access string data directly
-            iter->state.str.data = str->data;
+            iter->state.str.data = str_data;
             iter->state.str.index = 0;
-            iter->state.str.length = str->length;
+            iter->state.str.length = strlen(str_data);
             iter->seq_type = CLJ_STRING;
             return true;
         }
         
-        // Note: nil is now represented as NULL, handled above
-        return true;
+        case CLJ_NIL:
+            iter->seq_type = CLJ_NIL;
+            return true;
         
         default:
             return false;  // Not seqable
     }
 }
 
-ID seq_iter_first(const SeqIterator *iter) {
+CljObject* seq_iter_first(const SeqIterator *iter) {
     if (!iter || seq_iter_empty(iter)) {
-        return NULL;
+        return clj_nil();
     }
     
     switch (iter->seq_type) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                return (ID)LIST_FIRST(node);
+                return node ? node->head : clj_nil();
             }
-            return NULL;
+            return clj_nil();
         }
         
         case CLJ_VECTOR: {
             if (iter->state.vec.index < iter->state.vec.count) {
-                return (ID)iter->state.vec.data[iter->state.vec.index];
+                return iter->state.vec.data[iter->state.vec.index];
             }
-            return NULL;
+            return clj_nil();
         }
         
         case CLJ_STRING: {
             if (iter->state.str.index < iter->state.str.length) {
                 // Return character as integer
                 char c = iter->state.str.data[iter->state.str.index];
-                return (ID)fixnum((int)c);
+                return make_int((int)c);
             }
-            return NULL;
+            return clj_nil();
         }
         
         default:
-            return NULL;
+            return clj_nil();
     }
 }
 
@@ -129,8 +126,8 @@ bool seq_iter_next(SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                if (node->rest) {
-                    iter->state.list.current = node->rest;
+                if (node && node->tail) {
+                    iter->state.list.current = node->tail;
                     iter->state.list.index++;
                     return true;
                 }
@@ -178,6 +175,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
         case CLJ_STRING:
             return iter->state.str.index >= iter->state.str.length;
         
+        case CLJ_NIL:
+            return true;
+        
         default:
             return true;
     }
@@ -202,17 +202,17 @@ int seq_iter_position(const SeqIterator *iter) {
 // COMPATIBILITY LAYER (Heap-based API)
 // ============================================================================
 
-CljObject* seq_create(ID obj) {
+CljObject* seq_create(CljObject *obj) {
     // Handle nil and empty collections - return nil singleton
-    if (!obj) return NULL;
+    if (!obj) return clj_nil();
     
     // Check if collection is empty
-    if (is_type((CljObject*)obj, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector((CljObject*)obj);
-        if (vec && vec->count == 0) return NULL;
-    } else if (is_type((CljObject*)obj, CLJ_LIST)) {
-        CljList *list = as_list((CljObject*)obj);
-        if (!LIST_FIRST(list)) return NULL;
+    if (is_type(obj, CLJ_VECTOR)) {
+        CljPersistentVector *vec = as_vector(obj);
+        if (vec && vec->count == 0) return clj_nil();
+    } else if (is_type(obj, CLJ_LIST)) {
+        CljList *list = as_list(obj);
+        if (!list || !list->head) return clj_nil();
     }
     
     // Allocate heap wrapper
@@ -223,40 +223,34 @@ CljObject* seq_create(ID obj) {
     heap_seq->base.rc = 1;
     
     // Initialize embedded stack iterator
-    if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
+    if (!seq_iter_init(&heap_seq->iter, obj)) {
         free(heap_seq);
-        return NULL;  // Empty or not seqable
-    }
-    
-    // If iterator is empty (seq_type == CLJ_UNKNOWN), return nil (NULL)
-    if (heap_seq->iter.seq_type == CLJ_UNKNOWN) {
-        free(heap_seq);
-        return NULL;
+        return clj_nil();  // Empty or not seqable
     }
     
     return (CljObject*)heap_seq;
 }
 
-void seq_release(ID seq_obj) {
+void seq_release(CljObject *seq_obj) {
     if (!seq_obj) return;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return;
     
     // Stack iterator doesn't need cleanup
     free(seq);
 }
 
-ID seq_first(ID seq_obj) {
-    if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
-    if (!seq) return NULL;
+CljObject* seq_first(CljObject *seq_obj) {
+    if (!seq_obj) return clj_nil();
+    CljSeqIterator *seq = as_seq(seq_obj);
+    if (!seq) return clj_nil();
     
     return seq_iter_first(&seq->iter);
 }
 
-ID seq_rest(ID seq_obj) {
+CljObject* seq_rest(CljObject *seq_obj) {
     if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
     // Create new heap wrapper with advanced iterator
@@ -270,27 +264,27 @@ ID seq_rest(ID seq_obj) {
     rest_seq->iter = seq->iter;  // Struct copy
     seq_iter_next(&rest_seq->iter);
     
-    return (ID)(CljObject*)rest_seq;
+    return (CljObject*)rest_seq;
 }
 
-ID seq_next(ID seq_obj) {
+CljObject* seq_next(CljObject *seq_obj) {
     return seq_rest(seq_obj);
 }
 
-bool seq_empty(ID seq_obj) {
+bool seq_empty(CljObject *seq_obj) {
     if (!seq_obj) return true;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return true;
     
     return seq_iter_empty(&seq->iter);
 }
 
-int seq_count(ID obj) {
+int seq_count(CljObject *obj) {
     if (!obj) return 0;
     
     // If it's already a seq wrapper, count from iterator state
-    if (is_type((CljObject*)obj, CLJ_SEQ)) {
-        CljSeqIterator *seq = as_seq((ID)obj);
+    if (is_type(obj, CLJ_SEQ)) {
+        CljSeqIterator *seq = as_seq(obj);
         if (!seq) return 0;
         
         // Get count from embedded iterator state
@@ -308,14 +302,14 @@ int seq_count(ID obj) {
     }
     
     // Fast path for vectors - O(1)
-    if (is_type((CljObject*)obj, CLJ_VECTOR)) {
-        CljPersistentVector *vec = as_vector((CljObject*)obj);
+    if (is_type(obj, CLJ_VECTOR)) {
+        CljPersistentVector *vec = as_vector(obj);
         return vec ? vec->count : 0;
     }
     
     // Fallback: iterate and count - O(n)
     SeqIterator iter;
-    if (!seq_iter_init(&iter, (CljObject*)obj)) return 0;
+    if (!seq_iter_init(&iter, obj)) return 0;
     
     int count = 0;
     while (!seq_iter_empty(&iter)) {
@@ -329,22 +323,22 @@ int seq_count(ID obj) {
 // SEQABLE PREDICATES (Compatibility)
 // ============================================================================
 
-bool is_seqable(ID obj) {
+bool is_seqable(CljObject *obj) {
     if (!obj) return true; // nil is seqable
     
-    switch (((CljObject*)obj)->type) {
+    switch (obj->type) {
         case CLJ_LIST:
         case CLJ_VECTOR:
         case CLJ_MAP:
         case CLJ_STRING:
-        // Note: nil is now represented as NULL
+        case CLJ_NIL:
             return true;
         default:
             return false;
     }
 }
 
-bool is_seq(ID obj) {
-    return TYPE((CljObject*)obj) == CLJ_SEQ || TYPE((CljObject*)obj) == CLJ_LIST;
+bool is_seq(CljObject *obj) {
+    return type(obj) == CLJ_SEQ || type(obj) == CLJ_LIST;
 }
 

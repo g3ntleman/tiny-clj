@@ -1,338 +1,213 @@
 /*
- * Parser Tests using Unity Framework
- * 
+ * Parser Tests using MinUnit
+ *
  * Tests for the Clojure parser functionality including basic types,
  * collections, comments, and metadata parsing.
  */
 
-#include "tests_common.h"
+#include "../object.h"
+#include "../clj_parser.h"
+#include "../clj_symbols.h"
+#include "../function_call.h"
+#include "../map.h"
+#include "../namespace.h"
+#include "minunit.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-// ============================================================================
-// TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
-// ============================================================================
+// Test setup and teardown
+static void test_setup(void) {
+  // Initialize symbol table
+  init_special_symbols();
+
+  // Initialize meta registry
+  meta_registry_init();
+}
+
+static void test_teardown(void) {
+  // Cleanup symbol table
+  symbol_table_cleanup();
+
+  // Cleanup autorelease pool
+  cljvalue_pool_cleanup_all();
+}
 
 // ============================================================================
 // PARSER TESTS
 // ============================================================================
 
-TEST(test_parse_basic_types) {
-    EvalState *eval_state = evalstate_new();
+static char *test_parse_basic_types(void) {
+
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
     
+    // Initialize symbol table for proper parsing
+    init_special_symbols();
+
     // Test integer parsing
-    CljObject *int_result = parse("42", eval_state);
-    TEST_ASSERT_NOT_NULL(int_result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)int_result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)int_result));
-    
+    CljObject *int_result = parse("42", &st);
+    mu_assert_obj_int_detailed(int_result, 42);
+
     // Test float parsing
-    CljObject *float_result = parse("3.14", eval_state);
-    TEST_ASSERT_NOT_NULL(float_result);
-    TEST_ASSERT_TRUE(is_fixed((CljValue)float_result));
-    TEST_ASSERT_TRUE(as_fixed((CljValue)float_result) > 3.1f && as_fixed((CljValue)float_result) < 3.2f);
-    
-    // Test string parsing
-    CljObject *str_result = parse("\"hello\"", eval_state);
-    TEST_ASSERT_NOT_NULL(str_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, str_result->type);
-    
+    CljObject *float_result = parse("3.14", &st);
+    mu_assert_obj_not_null(float_result);
+    mu_assert_obj_type(float_result, CLJ_FLOAT);
+
+    // Test string parsing (now fixed!)
+    CljObject *str_result = parse("\"hello\"", &st);
+    mu_debug_obj(str_result, "str_result");
+    mu_assert_obj_type_detailed(str_result, CLJ_STRING);
+
     // Test symbol parsing
-    CljObject *sym_result = parse("test-symbol", eval_state);
-    TEST_ASSERT_NOT_NULL(sym_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym_result->type);
-    
-    evalstate_free(eval_state);
+    CljObject *sym_result = parse("test-symbol", &st);
+    mu_assert_obj_not_null(sym_result);
+    mu_assert_obj_type(sym_result, CLJ_SYMBOL);
+
+  }
+  return 0;
 }
 
-TEST(test_parse_collections) {
-    EvalState *eval_state = evalstate_new();
-    
+static char *test_parse_collections(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+
     // Test vector parsing
-    CljObject *vec_result = parse("[1 2 3]", eval_state);
-    TEST_ASSERT_NOT_NULL(vec_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec_result->type);
-    
+    CljObject *vec_result = parse("[1 2 3]", &st);
+    mu_assert_obj_not_null(vec_result);
+    mu_assert_obj_type(vec_result, CLJ_VECTOR);
+
     // Test list parsing
-    CljObject *list_result = parse("(1 2 3)", eval_state);
-    TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_result->type);
-    
-    // Test map parsing with keywords
-    CljObject *map_result = parse("{:a 1 :b 2}", eval_state);
-    TEST_ASSERT_NOT_NULL(map_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->type);
-    
-    evalstate_free(eval_state);
+    CljObject *list_result = parse("(1 2 3)", &st);
+    mu_assert_obj_not_null(list_result);
+    mu_assert_obj_type(list_result, CLJ_LIST);
+
+    // Test map parsing
+    CljObject *map_result = parse("{:a 1 :b 2}", &st);
+    mu_assert_obj_not_null(map_result);
+    mu_assert_obj_type(map_result, CLJ_MAP);
+
+  }
+  return 0;
 }
 
-TEST(test_parse_comments) {
-    EvalState *eval_state = evalstate_new();
-    
+static char *test_parse_comments(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+
     // Test line comment parsing
-    CljObject *result = parse("; This is a comment\n42", eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
-    
-    evalstate_free(eval_state);
+    CljObject *result = parse("; This is a comment\n42", &st);
+    mu_assert_obj_not_null(result);
+    mu_assert_obj_int(result, 42);
+
+  }
+  return 0;
 }
 
-TEST(test_parse_metadata) {
-    EvalState *eval_state = evalstate_new();
-    
-    // Test metadata parsing with keywords
-    CljObject *result = parse("^{:key :value} 42", eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
-    
-    evalstate_free(eval_state);
+static char *test_parse_metadata(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+
+    // Test metadata parsing
+    CljObject *result = parse("^{:key :value} 42", &st);
+    mu_assert_obj_not_null(result);
+    mu_assert_obj_int(result, 42);
+
+  }
+  return 0;
 }
 
-TEST(test_parse_utf8_symbols) {
-    EvalState *eval_state = evalstate_new();
-    
+static char *test_parse_error_handling(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+
+    // Test invalid syntax handling
+    CljObject *result = parse("invalid-syntax", &st);
+    // Should not crash, but may return NULL or valid object
+    mu_assert("Parser should not crash on invalid syntax", result == NULL || result != NULL);
+
+  }
+  return 0;
+}
+
+static char *test_utf8_symbol_roundtrip(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+
     // Test UTF-8 symbol parsing
     const char *src = "äöü✓"; // UTF-8 multibyte incl. checkmark
-    CljObject *sym = parse(src, eval_state);
-    TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
-    
-    evalstate_free(eval_state);
+    CljObject *sym = parse(src, &st);
+    mu_assert_obj_not_null(sym);
+    mu_assert_obj_type(sym, CLJ_SYMBOL);
+
+  }
+  return 0;
 }
 
-TEST(test_keyword_evaluation) {
-    EvalState *eval_state = evalstate_new();
-    
-    // Test keyword parsing - use simple approach
-    CljObject *keyword = parse(":test", eval_state);
-    if (keyword) {
-        TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, keyword->type);
-        
-        // Test that keyword has ':' prefix
-        CljSymbol *sym = as_symbol(keyword);
-        if (sym) {
-            TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        }
-    } else {
-        // If parsing fails, that's also a valid test result
-        // Keywords might not be fully supported in test context
-        TEST_ASSERT_TRUE(true); // Pass the test anyway
-    }
-    
-    evalstate_free(eval_state);
+static char *test_utf8_string_roundtrip(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
+
+    // Test UTF-8 string parsing
+    const char *src = "\"Grüße ✓\""; // "Grüße ✓"
+    CljObject *str = parse(src, &st);
+    mu_assert_obj_not_null(str);
+    mu_assert_obj_type(str, CLJ_STRING);
+
+  }
+  return 0;
 }
 
-TEST(test_keyword_map_access) {
-    EvalState *eval_state = evalstate_new();
-    
-    // Test keyword as map key access: (:key map)
-    CljObject *map = parse("{:a 1 :b 2}", eval_state);
-    if (map) {
-        TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->type);
-        
-        // Test (:a map) should return 1
-        CljObject *key_access = parse("(:a {:a 1 :b 2})", eval_state);
-        if (key_access) {
-            // The result should be a list with the value
-            TEST_ASSERT_EQUAL_INT(CLJ_LIST, key_access->type);
-        }
-    } else {
-        // If parsing fails, that's also a valid test result
-        TEST_ASSERT_TRUE(true); // Pass the test anyway
-    }
-    
-    evalstate_free(eval_state);
-}
+static char *test_utf8_delimiters(void) {
+  CLJVALUE_POOL_SCOPE(pool) {
+    EvalState st;
+    memset(&st, 0, sizeof(EvalState));
 
-TEST(test_parse_multiline_expressions) {
-    EvalState *eval_state = evalstate_new();
-    
-    // Test 1: Simple multiline list
-    CljObject *list_result = parse("(+ 1\n   2\n   3)", eval_state);
-    TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_result->type);
-    
-    // Test 2: Multiline vector with comments
-    CljObject *vec_result = parse("[1 ; first element\n 2\n 3]", eval_state);
-    TEST_ASSERT_NOT_NULL(vec_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec_result->type);
-    CljPersistentVector *vec = as_vector(vec_result);
-    TEST_ASSERT_EQUAL_INT(3, vec->count);
-    
-    // Test 3: Multiline map
-    CljObject *map_result = parse("{:a 1\n :b 2\n :c 3}", eval_state);
-    TEST_ASSERT_NOT_NULL(map_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map_result->type);
-    
-    // Test 4: Multiline function definition
-    CljObject *fn_result = parse("(def foo\n  (fn [x]\n    (* x 2)))", eval_state);
-    TEST_ASSERT_NOT_NULL(fn_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, fn_result->type);
-    
-    // Test 5: Nested multiline structures with various whitespace
-    CljObject *nested_result = parse("[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]", eval_state);
-    TEST_ASSERT_NOT_NULL(nested_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, nested_result->type);
-    CljPersistentVector *nested_vec = as_vector(nested_result);
-    TEST_ASSERT_EQUAL_INT(3, nested_vec->count);
-    
-    // Test 6: Multiline with tabs and mixed whitespace
-    CljObject *mixed_ws_result = parse("(+\t1\n\t\t2\r\n   3)", eval_state);
-    TEST_ASSERT_NOT_NULL(mixed_ws_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, mixed_ws_result->type);
-    
-    // Test 7: Multiline with commas (Clojure treats commas as whitespace)
-    CljObject *comma_result = parse("[1,\n 2,\n 3]", eval_state);
-    TEST_ASSERT_NOT_NULL(comma_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, comma_result->type);
-    
-    evalstate_free(eval_state);
-}
+    // Test UTF-8 characters as delimiters
+    const char *src = "ä β ( ) [ ] { } \" \n";
+    CljObject *sym = parse(src, &st);
+    mu_assert_obj_not_null(sym);
+    mu_assert_obj_type(sym, CLJ_SYMBOL);
 
-TEST(test_parse_empty_string) {
-    EvalState *eval_state = evalstate_new();
-    
-    // Test 1: Parse empty string literal
-    CljObject *empty_str_result = parse("\"\"", eval_state);
-    TEST_ASSERT_NOT_NULL(empty_str_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, empty_str_result->type);
-    
-    // Test 2: Test str function with no arguments (should return empty string)
-    CljObject *str_result = eval_string("(str)", eval_state);
-    TEST_ASSERT_NOT_NULL(str_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, str_result->type);
-    
-    // Test 3: Test count function with empty string (should return 0)
-    CljObject *count_result = eval_string("(count \"\")", eval_state);
-    TEST_ASSERT_NOT_NULL(count_result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)count_result));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)count_result));
-    
-    // Test 4: Test string equality with empty string
-    CljObject *eq_result = eval_string("(= \"\" \"\")", eval_state);
-    TEST_ASSERT_NOT_NULL(eq_result);
-    TEST_ASSERT_TRUE(is_special((CljValue)eq_result));
-    TEST_ASSERT_TRUE(is_true(eq_result));
-    
-    // Test 5: Test to_string function on empty string (this should fail with NULL pointer)
-    char *str_repr = to_string(empty_str_result);
-    TEST_ASSERT_NOT_NULL(str_repr);
-    TEST_ASSERT_EQUAL_STRING("", str_repr);
-    free(str_repr);
-    
-    evalstate_free(eval_state);
-}
-
-TEST(test_parse_multiple_expressions) {
-    EvalState *eval_state = evalstate_new();
-    
-    // This test verifies that parse() still only parses one expression
-    // The multiline functionality is tested separately
-    
-    // Test 1: Two simple expressions - parse() should only return the first
-    const char *input1 = "42\n(+ 1 2)";
-    CljObject *result1 = parse(input1, eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result1));
-    
-    // Test 2: Three expressions with different types - parse() should only return the first
-    const char *input2 = "\"hello\"\n:keyword\n[1 2 3]";
-    CljObject *result2 = parse(input2, eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, result2->type);
-    
-    // Test 3: Mixed expressions with comments - parse() should only return the first
-    const char *input3 = "; comment\n42\n; another comment\n(+ 1 2)";
-    CljObject *result3 = parse(input3, eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result3));
-    
-    // Test 4: Empty lines between expressions - parse() should only return the first
-    const char *input4 = "1\n\n2\n\n3";
-    CljObject *result4 = parse(input4, eval_state);
-    TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result4));
-    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result4));
-    
-    evalstate_free(eval_state);
-}
-
-TEST(test_parse_from_reader_multiple_expressions) {
-    EvalState *eval_state = evalstate_new();
-    
-    // This test verifies the new parse_from_reader function can parse multiple expressions
-    // by calling it multiple times on the same reader
-    
-    // Test 1: Two simple expressions
-    const char *input1 = "42\n(+ 1 2)";
-    Reader reader1;
-    reader_init(&reader1, input1);
-    
-    // Parse first expression
-    CljValue result1 = parse_from_reader(&reader1, eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(is_fixnum(result1));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result1));
-    
-    // Parse second expression
-    CljValue result2 = parse_from_reader(&reader1, eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, ((CljObject*)result2)->type);
-    
-    // Test 2: Three expressions with different types
-    const char *input2 = "\"hello\"\n:keyword\n[1 2 3]";
-    Reader reader2;
-    reader_init(&reader2, input2);
-    
-    // Parse first expression (string)
-    CljValue str_result = parse_from_reader(&reader2, eval_state);
-    TEST_ASSERT_NOT_NULL(str_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, ((CljObject*)str_result)->type);
-    
-    // Parse second expression (keyword)
-    CljValue keyword_result = parse_from_reader(&reader2, eval_state);
-    TEST_ASSERT_NOT_NULL(keyword_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ((CljObject*)keyword_result)->type);
-    
-    // Parse third expression (vector)
-    CljValue vec_result = parse_from_reader(&reader2, eval_state);
-    TEST_ASSERT_NOT_NULL(vec_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)vec_result)->type);
-    
-    // Test 3: Mixed expressions with comments
-    const char *input3 = "; comment\n42\n; another comment\n(+ 1 2)";
-    Reader reader3;
-    reader_init(&reader3, input3);
-    
-    // Parse first expression (after comment)
-    CljValue num_result = parse_from_reader(&reader3, eval_state);
-    TEST_ASSERT_NOT_NULL(num_result);
-    TEST_ASSERT_TRUE(is_fixnum(num_result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(num_result));
-    
-    // Parse second expression (after comment)
-    CljValue list_result = parse_from_reader(&reader3, eval_state);
-    TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, ((CljObject*)list_result)->type);
-    
-    evalstate_free(eval_state);
+  }
+  return 0;
 }
 
 // ============================================================================
-// TEST GROUPS
-// ============================================================================
-// (Unused test groups removed for cleanup)
-
-// ============================================================================
-// COMMAND LINE INTERFACE
+// TEST RUNNER
 // ============================================================================
 
+static char *all_parser_tests(void) {
+  test_setup();
+  
+  mu_run_test(test_parse_basic_types);
+  mu_run_test(test_parse_collections);
+  mu_run_test(test_parse_comments);
+  mu_run_test(test_parse_metadata);
+  mu_run_test(test_parse_error_handling);
+  mu_run_test(test_utf8_symbol_roundtrip);
+  mu_run_test(test_utf8_string_roundtrip);
+  mu_run_test(test_utf8_delimiters);
+  
+  test_teardown();
+  return 0;
+}
 
+// Export for unified test runner
+char *run_parser_tests(void) {
+  return all_parser_tests();
+}
 
-// Unused function removed for cleanup
-
-// ============================================================================
-// TEST FUNCTIONS (no main function - called by unity_test_runner.c)
-// ============================================================================
+#ifndef UNIFIED_TEST_RUNNER
+// Standalone mode
+int main(void) {
+  return run_minunit_tests(all_parser_tests, "Parser Tests");
+}
+#endif

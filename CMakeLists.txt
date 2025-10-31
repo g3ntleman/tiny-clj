@@ -1,64 +1,29 @@
 cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
 
-# Include common paths configuration
-include(cmake_include_paths.cmake)
-
 # Set C standard
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING")
-# Disable Unity's setjmp/longjmp to avoid conflict with our exception system
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNITY_EXCLUDE_SETJMP")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0")
 # Production/Release: platform-specific optimization policy
 if(APPLE)
-  # macOS: favor size for benchmarks, speed for general release
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,-dead_strip -Wl,-S")
+  # macOS: favor speed with dead code elimination
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -DNDEBUG -ffunction-sections -fdata-sections")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,-dead_strip")
 else()
-  # Embedded/other: favor size with aggressive stripping
-  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden")
-  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
+  # Embedded/other: favor size
+  set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Os -DNDEBUG -ffunction-sections -fdata-sections")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -Wl,--gc-sections")
 endif()
 
-# Benchmark-specific optimization (size-optimized)
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden")
-if(APPLE)
-  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,-dead_strip -Wl,-S")
-else()
-  set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -Wl,--gc-sections -Wl,--strip-all -Wl,-S")
-endif()
-
-# Ultra-compact build for <150KB target (embedded deployment)
-# Target: ARM Cortex-M (32-bit) for ESP32
-set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
-if(APPLE)
-  # For macOS testing: use size-optimized build (simulate embedded constraints)
-  set(CMAKE_EXE_LINKER_FLAGS_EMBEDDED "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED} -Wl,-dead_strip -Wl,-S -Wl,-x")
-else()
-  # For embedded: ESP32 toolchain (when using cross-compiler)
-  set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -mlongcalls")
-  set(CMAKE_EXE_LINKER_FLAGS_EMBEDDED "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED} -Wl,--gc-sections -Wl,--strip-all -Wl,-S -Wl,--strip-debug -Wl,--no-export-dynamic -Wl,--build-id=none -mlongcalls")
-endif()
-
-# Enable LTO if the toolchain supports it (Release and MinSizeRel)
+# Enable LTO if the toolchain supports it (Release only)
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_msg)
 if(ipo_supported)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
-  message(STATUS "LTO (Link-Time Optimization) enabled for Release builds")
-else()
-  message(STATUS "LTO not supported by toolchain (ipo_supported=false)")
-  # Fallback: Try explicit LTO flags
-  if(APPLE)
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto")
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto")
-    message(STATUS "Using explicit -flto flags for LTO")
-  endif()
 endif()
 
 # Include directories
@@ -72,159 +37,49 @@ list(APPEND SOURCES
     src/builtins.c
     src/runtime.c
     src/namespace.c
-    src/symbol.c
+    src/clj_symbols.c
     src/exception.c
-    src/parser.c
-    src/byte_array.c
+    src/clj_parser.c
     src/reader.c
     src/function_call.c
-    src/event_loop.c
-    src/channel.c
-    src/list.c
+    src/list_operations.c
     src/vector.c
     src/map.c
-    src/strings.c
+    src/string.c
     src/seq.c
-    src/memory.c
-    src/memory_profiler.c
-    src/value.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
 )
 
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL ${SOURCES})
-# Main Build - Meta only in Debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj PRIVATE)
-else()
-    target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
-endif()
 
-# STM32-optimized sources (no memory profiling for embedded)
-set(STM32_SOURCES
-    src/clojure_core.c
-    src/types.c
-    src/object.c
-    src/builtins.c
-    src/runtime.c
-    src/namespace.c
-    src/symbol.c
-    src/exception.c
-    src/parser.c
-    src/byte_array.c
-    src/reader.c
-    src/event_loop.c
-    src/channel.c
-    src/function_call.c
-    src/list.c
-    src/vector.c
-    src/map.c
-    src/strings.c
-    src/seq.c
-    src/memory.c
-    src/value.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
-)
-
-# ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
-add_executable(tiny-clj-esp32
-    src/main_esp32.c
-    src/platform_esp32_embedded.c
-    src/event_loop.c
-    src/channel.c
-    src/clojure_core.c
-    src/types.c
-    src/object.c
-    src/builtins.c
-    src/runtime.c
-    src/namespace.c
-    src/symbol.c
-    src/exception.c
-    src/parser.c
-    src/byte_array.c
-    src/reader.c
-    src/function_call.c
-    src/list.c
-    src/vector.c
-    src/map.c
-    src/strings.c
-    src/seq.c
-    src/memory.c
-    src/memory_profiler.c
-    src/value.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
-)
-
-
-# ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
-# This target has linker issues on macOS and is not needed for development
-
-# ESP32 Production Build - No Meta, Optimized
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS DISABLE_ERROR_MESSAGES DISABLE_STRING_FORMATTING)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Embedded")
-    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS DISABLE_ERROR_MESSAGES DISABLE_STRING_FORMATTING DISABLE_META DISABLE_COMPLEX_PARSING DISABLE_VECTOR_OPERATIONS DISABLE_MAP_OPERATIONS)
-else()
-    target_compile_definitions(tiny-clj-esp32 PRIVATE ENABLE_META ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
-endif()
-set_target_properties(tiny-clj-esp32 PROPERTIES
-    COMPILE_FLAGS "${CMAKE_C_FLAGS_EMBEDDED}"
-    LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED}"
-)
-
-
-# ESP32 Ultra-Minimal Build Configuration - DISABLED
-# This target has linker issues on macOS and is not needed for development
-
-# ESP32 Cross-Compilation Support
-if(CMAKE_TOOLCHAIN_FILE MATCHES "esp32.cmake")
-    message(STATUS "🔧 Using ESP32 cross-compilation toolchain")
-    message(STATUS "📱 Target: ESP32 (Xtensa LX6)")
-    message(STATUS "💾 Flash: 4MB, RAM: 520KB")
-    message(STATUS "🎯 Binary Size Target: <150KB")
-endif()
-
-# REPL executable (with line editing support)
-add_executable(tiny-clj-repl
-    src/repl.c
-    src/repl_history.c
-    src/platform_macos.c
-    src/line_editor.c
+# STM32-optimized main (no test code)
+add_executable(tiny-clj-stm32-main
+    src/main_stm32.c
+    src/platform_stm32.c
     ${SOURCES}
 )
-# REPL Build - Debug in Debug mode, Release in Release mode
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)
-    # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
-else()
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
-    set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING"
-    )
-endif()
-
-# STM32-optimized REPL (no test code, includes memory profiling for REPL)
-add_executable(tiny-clj-esp32-repl
-    src/repl.c
-    src/repl_history.c
-    src/platform_stm32.c
-    src/line_editor.c
-    src/memory_profiler.c
-    ${STM32_SOURCES}
+target_compile_definitions(tiny-clj-stm32-main PRIVATE ENABLE_META STM32_BUILD)
+set_target_properties(tiny-clj-stm32-main PROPERTIES
+    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
+    LINK_FLAGS "-Wl,-dead_strip"
 )
-# STM32 REPL Build - No Meta in Release, Optimized
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-esp32-repl PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
-else()
-    target_compile_definitions(tiny-clj-esp32-repl PRIVATE ENABLE_META ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
-endif()
-set_target_properties(tiny-clj-esp32-repl PROPERTIES
+
+# REPL executable
+add_executable(tiny-clj-repl
+    src/repl.c
+    src/platform_macos.c
+    ${SOURCES}
+)
+target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META)
+
+# STM32-optimized REPL (no test code, minimal size)
+add_executable(tiny-clj-stm32
+    src/repl.c
+    src/platform_stm32.c
+    ${SOURCES}
+)
+target_compile_definitions(tiny-clj-stm32 PRIVATE ENABLE_META STM32_BUILD)
+set_target_properties(tiny-clj-stm32 PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
 )
@@ -233,130 +88,156 @@ set_target_properties(tiny-clj-esp32-repl PROPERTIES
 # CATEGORIZED TEST EXECUTABLES
 # ============================================================================
 
-# Unity Test Framework (central runner with separate test files)
-add_executable(unity-tests
-    src/tests/unity_test_runner.c
-    src/tests/test_registry.c
-    src/tests/test_memory.c
+# Unified Test Runner (all MinUnit tests in one executable - STM32 compatible)
+add_executable(run-tests
+    src/tests/run_tests_main.c
+    src/tests/test_unit.c
     src/tests/test_parser.c
-    src/tests/test_exception.c
-    src/tests/test_basics.c
-    src/tests/test_namespace_legacy.c
-    src/tests/test_namespace.c
-    src/tests/test_equal.c
+    src/tests/test-namespace.c
     src/tests/test_seq.c
-    src/tests/test_values.c
-    src/tests/test_recur.c
-    src/tests/test_let.c
-    src/tests/test_do.c
-    src/tests/test_defn.c
-    src/tests/test_memory_leak_fibonacci.c
-    src/tests/test_time.c
-    src/tests/test_loops.c
-    src/tests/test_fixed_point_legacy.c
-    src/tests/test_fixed_point.c
-    src/tests/test_sequences.c
-    src/tests/test_byte_array.c
-    src/tests/test_cow.c
-    src/tests/test_file_io.c
-    external/unity/src/unity.c
+    src/tests/test_for_loops.c
+    src/tests/test_eval_string_api.c
+    src/tests/test_memory.c
+    src/tests/test-exception-handling.c
+    src/tests/test-utils.c
+    src/tests/test_function_types.c
     src/builtins.c
-    src/byte_array.c
     src/object.c
     src/types.c
     src/vector.c
     src/map.c
-    src/strings.c
-    src/symbol.c
+    src/string.c
+    src/clj_symbols.c
     src/namespace.c
-    src/parser.c
+    src/clj_parser.c
     src/reader.c
     src/function_call.c
-    src/event_loop.c
-    src/channel.c
-    src/list.c
+    src/list_operations.c
     src/seq.c
     src/clojure_core.c
     src/exception.c
     src/memory_profiler.c
-    src/memory.c
-    src/runtime.c
-    src/value.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
-    src/repl_history.c
+    src/memory_hooks.c
 )
-
-# Debug parser target removed - file not found
-# Unity Tests - Always in Debug mode for comprehensive testing
-apply_common_settings(unity-tests)
-set_target_properties(unity-tests PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG -fsanitize=address -fno-omit-frame-pointer"
-    LINK_FLAGS "-fsanitize=address"
-)
-
-# Copy-on-Write Assumptions Tests are now integrated into cow_tests.c
-
-
-# Utility tests removed - no main function available
-# target_compile_options(run-tests PRIVATE -fsanitize=address -g)
-# target_link_options(run-tests PRIVATE -fsanitize=address)
+target_compile_definitions(run-tests PRIVATE ENABLE_META UNIFIED_TEST_RUNNER ENABLE_MEMORY_PROFILING DEBUG)
 # Regular tests WITH memory profiling for early leak detection
 
 # ============================================================================
 # REDUNDANT TARGETS REMOVED - Now in run-tests unified executable
 # ============================================================================
-# UNIFIED TEST SUITES (v2.0)
-# ============================================================================
-# Consolidated test structure with 4 main test suites:
-# - test-core: Unit tests, parser, functions, API
-# - test-memory: Memory profiling, AUTORELEASE, leak detection  
-# - test-integration: Exception handling, REPL, namespaces
-# - test-performance: Benchmarks, speed tests, efficiency
+# The following targets were removed (all now accessible via run-tests):
+#   - test-unit            → run-tests --test unit
+#   - test-parser          → run-tests --test parser
+#   - test-seq             → run-tests --test seq
+#   - test-for-loops       → run-tests --test for_loops
+#   - test-eval-string-api → run-tests --test eval_string_api
 # ============================================================================
 
-# Common source files for all test suites
-set(COMMON_TEST_SOURCES
+# Exception Handling Tests (TRY/CATCH nested exception handling)
+add_executable(test-exception-handling EXCLUDE_FROM_ALL
+    src/tests/test-exception-handling.c
+    src/tests/minunit.h
     src/object.c
     src/types.c
     src/vector.c
     src/map.c
-    src/strings.c
-    src/symbol.c
+    src/string.c
+    src/clj_symbols.c
     src/namespace.c
-    src/parser.c
+    src/clj_parser.c
     src/reader.c
     src/function_call.c
-    src/list.c
+    src/list_operations.c
     src/seq.c
     src/exception.c
-    src/memory.c
-    src/memory_profiler.c
     src/runtime.c
-    src/clojure_core.c
-    src/line_editor.c
 )
+target_compile_definitions(test-exception-handling PRIVATE ENABLE_META)
+# Now using MinUnit instead of Unity
 
-# ============================================================================
-# UNIFIED TEST SUITES (DEPRECATED - Use run-tests instead)
-# ============================================================================
-# These test suites are deprecated. Use the unified run-tests executable instead.
-# ============================================================================
+# Integration Tests (component interaction tests)
+# Unity-based targets removed - all tests now use MinUnit
+# Use test-performance for benchmarks, run-tests for all other tests
 
-# ============================================================================
-# LEGACY TEST TARGETS (DEPRECATED - Use unified test suites above)
-# ============================================================================
-# These targets are kept for backward compatibility but are deprecated.
-# Use the new unified test suites: test-core, test-memory, test-integration, test-performance
-# ============================================================================
+# Performance & Benchmark Tests (consolidated)
+add_executable(test-performance EXCLUDE_FROM_ALL
+    src/tests/test_performance.c
+    src/object.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/clojure_core.c
+    src/exception.c
+    src/memory_profiler.c
+    src/memory_hooks.c)
+# Performance tests WITHOUT memory profiling for clean benchmarks
+target_compile_definitions(test-performance PRIVATE ENABLE_META)
+target_compile_options(test-performance PRIVATE -O2)
 
-# ============================================================================
-# LEGACY TEST TARGETS (REMOVED - Files no longer exist)
-# ============================================================================
-# These targets have been removed as the files no longer exist.
-# Use the unified run-tests executable instead.
-# ============================================================================
+# Test executable for seq debugging
+# EXCLUDE_FROM_ALL: These debug tests access internal SeqIterator details
+# Build manually: make test-seq-debug test-performance test-memory-profiling
+add_executable(test-seq-debug EXCLUDE_FROM_ALL
+    src/tests/test_seq_debug.c
+    src/tests/minunit.h
+    src/object.c
+    src/object.h
+    src/types.c
+    src/vector.c
+    src/vector.h
+    src/list_operations.c
+    src/list_operations.h
+    src/function_call.c
+    src/function_call.h
+    src/namespace.c
+    src/namespace.h
+    src/clj_symbols.c
+    src/clj_symbols.h
+    src/memory_profiler.c
+    src/memory_profiler.h
+    src/memory_hooks.c
+    src/memory_hooks.h
+    src/seq.c
+    src/seq.h
+    src/map.c
+    src/map.h
+    src/string.c
+    src/clj_string.h
+    src/clj_parser.c
+    src/clj_parser.h
+    src/reader.c
+    src/reader.h
+    src/clojure_core.c
+    src/exception.c
+    src/runtime.c)
+target_compile_definitions(test-seq-debug PRIVATE DEBUG=1)
+
+# Memory Profiling Tests (Debug only)
+add_executable(test-memory-profiling EXCLUDE_FROM_ALL
+    src/tests/test_memory_profiling.c
+    src/object.c
+    src/types.c
+    src/vector.c
+    src/map.c
+    src/string.c
+    src/clj_error.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/list_operations.c
+    src/seq.c
+    src/memory_profiler.c
+    src/memory_hooks.c)
 
 
 
@@ -364,9 +245,11 @@ set(COMMON_TEST_SOURCES
 # COMPILE DEFINITIONS
 # ============================================================================
 
-# Meta-Funktionalität wird jetzt pro-Target basierend auf Build-Type konfiguriert
-# Release builds: ENABLE_META deaktiviert (kleinere Binaries, bessere Performance)
-# Debug builds: ENABLE_META aktiviert (für Development/Debugging)
+# Meta-Funktionalität aktivieren
+target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
+
+# Meta-Funktionalität für Test-Executables aktivieren
+target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 
 # ============================================================================
 # CUSTOM TARGETS
@@ -374,42 +257,9 @@ set(COMMON_TEST_SOURCES
 
 # Test targets for easy execution
 add_custom_target(run-unit-tests
-    COMMAND unity-tests
-    DEPENDS unity-tests
+    COMMAND test-unit
+    DEPENDS test-unit
     COMMENT "Running unit tests"
-)
-
-# Benchmark targets (integrated from Makefile.benchmark)
-add_custom_target(benchmark
-    COMMAND ${CMAKE_COMMAND} -E echo "=== All Tests Passed! Running Performance Benchmarks with Analysis ==="
-    COMMAND ./scripts/benchmark_with_analysis.sh
-    DEPENDS unity-tests
-    COMMENT "Running all tests first, then benchmarks with change analysis"
-)
-
-add_custom_target(benchmark-analyze
-    COMMAND ${CMAKE_COMMAND} -E echo "=== Running Enhanced Benchmark Analysis ==="
-    COMMAND ./scripts/benchmark_with_analysis.sh --update-baseline
-    DEPENDS unity-tests
-    COMMENT "Running enhanced benchmark analysis"
-)
-
-add_custom_target(benchmark-baseline
-    COMMAND ${CMAKE_COMMAND} -E echo "=== Creating Performance Baseline ==="
-    COMMAND ${CMAKE_COMMAND} -E copy benchmark_results.csv benchmark_baseline.csv
-    COMMAND ${CMAKE_COMMAND} -E echo "✓ Baseline created from current benchmark results"
-    COMMAND ${CMAKE_COMMAND} -E echo "Run 'make benchmark-compare' to compare future runs"
-    DEPENDS benchmark
-    COMMENT "Creating performance baseline"
-)
-
-add_custom_target(benchmark-compare
-    COMMAND ${CMAKE_COMMAND} -E echo "=== Running Performance Change Analysis ==="
-    COMMAND make test-benchmark-simple > /dev/null 2>&1
-    COMMAND ./test-benchmark-simple > benchmark_output.txt
-    COMMAND ./scripts/benchmark_with_analysis.sh
-    DEPENDS unity-tests
-    COMMENT "Running performance change analysis"
 )
 
 # Custom targets for legacy test-integration and test-benchmark removed
@@ -432,7 +282,7 @@ add_custom_target(run-quick-tests
 # INSTALLATION
 # ============================================================================
 
-install(TARGETS tiny-clj
+install(TARGETS tiny-clj run-tests
     RUNTIME DESTINATION bin
 )
 
@@ -458,9 +308,22 @@ set_tests_properties(repl-ns-eval PROPERTIES PASS_REGULAR_EXPRESSION "4\n" LABEL
 add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
-# History test (test that REPL can handle multiple commands)
-add_test(NAME repl-history-multiple COMMAND bash -c "printf '(+ 1 2)\\n(* 3 4)\\n(str \"test\")\\n' | ./tiny-clj-repl")
-set_tests_properties(repl-history-multiple PROPERTIES TIMEOUT 5 PASS_REGULAR_EXPRESSION "3.*12.*test" LABELS "repl;history")
-
-# Seq Benchmark (REMOVED - File no longer exists)
-# Use run-tests for sequence testing instead
+# Seq Benchmark (Optimization Test)
+add_executable(test-seq-benchmark EXCLUDE_FROM_ALL
+    src/tests/test_seq_fast_benchmark.c
+    src/seq.c
+    src/object.c
+    src/types.c
+    src/vector.c
+    src/list_operations.c
+    src/string.c
+    src/map.c
+    src/clj_symbols.c
+    src/namespace.c
+    src/clj_parser.c
+    src/reader.c
+    src/function_call.c
+    src/exception.c
+    src/memory_profiler.c
+    src/memory_hooks.c)
+target_compile_definitions(test-seq-benchmark PRIVATE ENABLE_META DEBUG)

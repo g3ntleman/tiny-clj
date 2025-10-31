@@ -1,0 +1,439 @@
+# Tiny-Clj Developer Insights
+
+## Evaluation System Overview
+
+Tiny-Clj implements a complete Lisp evaluation system with the following key components:
+
+### 1. Core Evaluation Flow
+
+```
+Input String → Parser → AST → Evaluator → Result
+```
+
+#### 1.1 Parser (`src/clj_parser.c`)
+- **Input**: Clojure source code as string
+- **Output**: Abstract Syntax Tree (AST) as `CljObject*`
+- **Key Functions**:
+  - `parse()`: Main entry point, handles string input
+  - `parse_form()`: Recursive descent parser for individual forms
+  - `parse_list()`: Handles parentheses `(form1 form2 ...)`
+  - `parse_vector()`: Handles square brackets `[item1 item2 ...]`
+  - `parse_map()`: Handles curly braces `{key1 val1 key2 val2}`
+  - `parse_string()`: Handles string literals `"hello"`
+  - `parse_number()`: Handles integers and floats
+  - `parse_symbol()`: Handles symbols and keywords
+
+#### 1.2 AST Structure
+All AST nodes are `CljObject*` with different types:
+- `CLJ_LIST`: `(form1 form2 ...)`
+- `CLJ_VECTOR`: `[item1 item2 ...]`
+- `CLJ_MAP`: `{key1 val1 key2 val2}`
+- `CLJ_SYMBOL`: `symbol-name`
+- `CLJ_STRING`: `"string"`
+- `CLJ_INT`: `42`
+- `CLJ_FLOAT`: `3.14`
+- `CLJ_FUNC`: Function objects (native or Clojure)
+
+### 2. Evaluation Engine
+
+#### 2.1 Main Evaluator (`src/function_call.c`)
+
+**Entry Point**: `eval_list(CljObject *list, CljObject *env, EvalState *st)`
+
+The evaluator follows this strategy:
+
+1. **Special Forms First**: Built-in operations like `if`, `def`, `fn`, `+`, `-`, etc.
+2. **Function Calls**: Resolve symbol to function, evaluate arguments, call function
+3. **Fallback**: Return the first element
+
+```c
+CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st) {
+    // 1. Extract operator (first element)
+    CljObject *op = list_data->head;
+    
+    // 2. Check special forms
+    if (sym_is(op, "if")) return eval_if(list, env, st);
+    if (sym_is(op, "def")) return eval_def(list, env, st);
+    if (sym_is(op, "fn")) return eval_fn(list, env);
+    if (sym_is(op, "+")) return eval_add(list, env);
+    // ... more special forms
+    
+    // 3. Function call fallback
+    if (is_type(op, CLJ_SYMBOL)) {
+        CljObject *fn = eval_symbol(op, st);  // Resolve symbol
+        if (is_type(fn, CLJ_FUNC)) {
+            // Evaluate arguments
+            CljObject **args = alloc_obj_array(argc, args_stack);
+            for (int i = 0; i < argc; i++) {
+                args[i] = eval_arg(list, i + 1, env);
+            }
+            // Call function
+            return eval_function_call(fn, args, argc, env);
+        }
+    }
+}
+```
+
+#### 2.2 Function Call System
+
+**Two Types of Functions**:
+
+1. **Native Functions** (`CljFunc`): C functions with function pointer
+2. **Clojure Functions** (`CljFunction`): User-defined functions with parameters and body
+
+```c
+CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObject *env) {
+    // Check if it's a native function (CljFunc)
+    CljFunc *native_func = (CljFunc*)fn;
+    if (native_func && native_func->fn) {
+        return native_func->fn(args, argc);  // Direct C call
+    }
+    
+    // It's a Clojure function (CljFunction)
+    CljFunction *func = (CljFunction*)fn;
+    // Parameter binding and body evaluation
+    return eval_body_with_params(func->body, func->params, args, argc, func->closure_env);
+}
+```
+
+#### 2.3 Parameter Binding
+
+For Clojure functions, parameters are bound to argument values:
+
+```c
+CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject **values, int param_count, CljObject *closure_env) {
+    if (is_type(body, CLJ_SYMBOL)) {
+        // Check if symbol matches a parameter
+        for (int i = 0; i < param_count; i++) {
+            if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
+                CljSymbol *param_sym = as_symbol(params[i]);
+                CljSymbol *body_sym = as_symbol(body);
+                if (strcmp(param_sym->name, body_sym->name) == 0) {
+                    return values[i];  // Return bound value
+                }
+            }
+        }
+        // Try to resolve from closure environment
+        if (closure_env && is_type(closure_env, CLJ_MAP)) {
+            return map_get(closure_env, body);
+        }
+    }
+    // ... handle other body types
+}
+```
+
+### 3. Namespace System
+
+#### 3.1 Namespace Structure (`src/namespace.c`)
+
+```c
+typedef struct CljNamespace {
+    CljObject *name;          // e.g., 'user', 'clojure.core'
+    CljObject *mappings;      // Map: Symbol → CljObject (definitions)
+    const char *filename;     // optional: associated file
+    struct CljNamespace *next;
+} CljNamespace;
+```
+
+#### 3.2 Symbol Resolution
+
+```c
+CljObject* ns_resolve(EvalState *st, CljObject *sym) {
+    // 1. Search current namespace
+    CljObject *v = map_get(st->current_ns->mappings, sym);
+    if (v) return v;
+    
+    // 2. Search global namespaces (e.g., clojure.core)
+    CljNamespace *cur = ns_registry;
+    while (cur) {
+        v = map_get(cur->mappings, sym);
+        if (v) return v;
+        cur = cur->next;
+    }
+    return NULL;
+}
+```
+
+#### 3.3 Symbol Definition
+
+```c
+void ns_define(EvalState *st, CljObject *symbol, CljObject *value) {
+    // Get current namespace
+    CljNamespace *ns = st->current_ns;
+    if (!ns) {
+        ns = ns_get_or_create("user", NULL);
+        st->current_ns = ns;
+    }
+    
+    // Store symbol-value binding
+    map_assoc(ns->mappings, symbol, value);
+}
+```
+
+### 4. Memory Management
+
+#### 4.1 Reference Counting
+
+All `CljObject*` use reference counting:
+- `RETAIN(obj)`: Increment reference count
+- `RELEASE(obj)`: Decrement reference count, free when count reaches 0
+- `AUTORELEASE(obj)`: Add to autorelease pool for automatic cleanup
+
+#### 4.2 Autorelease Pools
+
+```c
+CLJVALUE_POOL_SCOPE(pool) {
+    // Objects created here are automatically released
+    CljObject *result = eval_list(ast, env, st);
+    return result;  // Pool is popped, objects released
+}
+```
+
+### 5. Exception Handling
+
+#### 5.1 TRY/CATCH System
+
+```c
+TRY {
+    CljObject *result = eval_list(ast, env, st);
+    return result;
+} CATCH(ex) {
+    // Handle exception
+    print_exception(ex);
+    return NULL;
+} END_TRY
+```
+
+#### 5.2 Exception Propagation
+
+Exceptions are thrown with `throw_exception_formatted()` and caught at the REPL level:
+
+```c
+// In REPL
+TRY {
+    CljObject *res = eval_list(ast, env, st);
+    if (res) print_result(res);
+} CATCH(ex) {
+    print_exception(ex);
+} END_TRY
+```
+
+### 6. Special Forms
+
+#### 6.1 Control Flow
+
+- **`if`**: `(if condition then else?)`
+- **`def`**: `(def symbol value)` - Define symbol in current namespace
+- **`fn`**: `(fn [params] body)` - Create function
+- **`let`**: `(let [bindings] body)` - Local bindings
+
+#### 6.2 Arithmetic
+
+- **`+`**: `(+ a b ...)` - Addition
+- **`-`**: `(- a b ...)` - Subtraction  
+- **`*`**: `(* a b ...)` - Multiplication
+- **`/`**: `(/ a b ...)` - Division
+
+#### 6.3 Comparison
+
+- **`=`**: `(= a b)` - Equality
+- **`<`**: `(< a b)` - Less than
+- **`>`**: `(> a b)` - Greater than
+
+### 7. REPL (Read-Eval-Print Loop)
+
+#### 7.1 Main Loop (`src/repl.c`)
+
+```c
+int main(int argc, char **argv) {
+    // Initialize platform and evaluation state
+    platform_init();
+    EvalState *st = evalstate_new();
+    load_clojure_core(st);
+    register_builtins();
+    
+    // Handle command line arguments
+    if (file_arg) {
+        // Load and evaluate file
+    }
+    
+    if (eval_args) {
+        // Evaluate -e expressions
+        for (int i = 0; i < eval_count; i++) {
+            eval_string_repl(eval_args[i], st);
+        }
+    }
+    
+    // Interactive REPL
+    for (;;) {
+        char *input = readline();
+        if (is_balanced_form(input)) {
+            eval_string_repl(input, st);
+        }
+    }
+}
+```
+
+#### 7.2 Evaluation with Exception Handling
+
+```c
+static int eval_string_repl(const char *code, EvalState *st) {
+    CljObject *ast = parse(code, st);
+    if (!ast) return 0;
+    
+    TRY {
+        CljObject *res = NULL;
+        if (is_type(ast, CLJ_LIST)) {
+            CljObject *env = st->current_ns->mappings;
+            res = eval_list(ast, env, st);
+        } else {
+            res = eval_expr_simple(ast, st);
+        }
+        if (res) print_result(res);
+        return 1;
+    } CATCH(ex) {
+        print_exception(ex);
+        return 0;
+    } END_TRY
+}
+```
+
+### 8. Clojure Core Functions
+
+#### 8.1 Core Library (`src/clojure.core.clj`)
+
+Defines essential Clojure functions:
+
+```clojure
+; Arithmetic
+(def add (fn [a b] (+ a b)))
+(def mod (fn [a b] (- a (* b (/ a b)))))
+
+; Predicates  
+(def even? (fn [x] (= (mod x 2) 0)))
+(def odd? (fn [x] (not (even? x))))
+
+; Collections
+(def map (fn [f coll]
+  (if (empty? coll)
+    '()
+    (cons (f (first coll)) (map f (rest coll))))))
+```
+
+#### 8.2 Loading Process
+
+```c
+void load_clojure_core(EvalState *st) {
+    const char *core_source = clojure_core_source();
+    eval_core_source(core_source, st);
+}
+```
+
+### 9. Debugging and Development
+
+#### 9.1 Debug Prints
+
+Use `DEBUG_PRINTF` for conditional debug output:
+
+```c
+#ifdef DEBUG
+    #define DEBUG_PRINTF(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#else
+    #define DEBUG_PRINTF(fmt, ...) ((void)0)
+#endif
+```
+
+#### 9.2 Memory Profiling
+
+```c
+WITH_MEMORY_PROFILING {
+    // Code to profile
+    CljObject *result = eval_list(ast, env, st);
+}
+```
+
+### 10. Common Issues and Solutions
+
+#### 10.1 Symbol Resolution
+
+**Problem**: Symbol not found
+**Solution**: Check namespace mappings and symbol interning
+
+#### 10.2 Memory Leaks
+
+**Problem**: Objects not released
+**Solution**: Use `AUTORELEASE` and proper `RELEASE` calls
+
+#### 10.3 Function Calls
+
+**Problem**: Clojure functions crash with parameters
+**Solution**: Check `eval_body_with_params` and parameter binding
+
+#### 10.4 Exception Handling
+
+**Problem**: Exceptions not caught
+**Solution**: Ensure `TRY/CATCH` blocks are properly nested
+
+### 11. Performance Considerations
+
+#### 11.1 Symbol Interning
+
+Symbols are interned to avoid duplicate string comparisons:
+```c
+CljObject* intern_symbol(const char *ns, const char *name);
+```
+
+#### 11.2 Map Operations
+
+Maps use structural equality for keys:
+```c
+bool clj_equal(CljObject *a, CljObject *b);
+```
+
+#### 11.3 Memory Optimization
+
+- Use `AUTORELEASE` for temporary objects
+- Implement proper reference counting
+- Clean up autorelease pools
+
+### 12. Testing
+
+#### 12.1 Unit Tests
+
+```c
+static char *test_function_call(void) {
+    CljObject *func = make_named_func(native_if, NULL, "if");
+    CljObject *args[3] = {make_int(1), make_int(42), make_int(0)};
+    CljObject *result = eval_function_call(func, args, 3, NULL);
+    
+    mu_assert("Function call should work", result != NULL);
+    mu_assert("Should return 42", is_type(result, CLJ_INT) && result->as.i == 42);
+    
+    RELEASE(func);
+    RELEASE(result);
+    return 0;
+}
+```
+
+#### 12.2 Integration Tests
+
+```bash
+./tiny-clj-repl -e "(def test-func (fn [x] (+ x 1)))" -e "(test-func 5)"
+```
+
+### 13. Architecture Summary
+
+The evaluation system follows a clean separation of concerns:
+
+1. **Parser**: String → AST
+2. **Evaluator**: AST → Value  
+3. **Namespace**: Symbol resolution and definition
+4. **Memory**: Reference counting and cleanup
+5. **REPL**: User interaction and exception handling
+
+This design allows for:
+- Easy extension with new special forms
+- Clean separation between native and Clojure functions
+- Proper memory management
+- Robust exception handling
+- Interactive development experience

@@ -1,55 +1,31 @@
 #include "platform.h"
 #include "object.h"
-#include "parser.h"
+#include "exception.h"
+#include "clj_parser.h"
 #include "namespace.h"
-#include "builtins.h"
-#include "memory.h"
-#include "reader.h"
-#include "symbol.h"
+#include "clj_symbols.h"
+#include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-// Embedded startup code (like clojure_core.c pattern)
-static const char *startup_code = 
-#include "startup-code.clj"
-    ;
-
-// Forward declaration
-extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
-
+// STM32-optimized main - no test code, minimal size
 int main() {
     platform_init();
-    platform_print("Tiny-Clj STM32 - Embedded Execution");
     
-    // Initialize interpreter
+    const char *name = platform_name();
+    char message[64];  // Smaller buffer for STM32
+    snprintf(message, sizeof(message), "Tiny-Clj STM32 v1.0");
+    platform_print(message);
+    
+    // Initialize only essential structures
     meta_registry_init();
-    init_special_symbols();
-    register_builtins();
     
-    // Create evaluation state
-    EvalState *state = evalstate_new();
-    if (!state) {
-        platform_print("ERROR: Failed to create eval state");
-        return 1;
-    }
-    
-    // Load and execute startup code
-    platform_print("Loading startup code...");
-    CljObject *result = eval_string(startup_code, state);
-    if (!result) {
-        platform_print("ERROR: Failed to load startup code");
-        evalstate_free(state);
-        return 1;
-    }
-    RELEASE(result);
-    platform_print("Startup code executed successfully");
+    // Minimal startup message
+    platform_print("Ready");
     
     // Cleanup
-    platform_print("Done");
-    evalstate_free(state);
-    symbol_table_cleanup();
     meta_registry_cleanup();
-    autorelease_pool_cleanup_all();
+    cljvalue_pool_cleanup_all();
     
     return 0;
 }

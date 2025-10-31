@@ -1,0 +1,83 @@
+
+🚀 === Performance & Benchmark Tests ===
+
+🧪 === Performance & Benchmark Tests ===
+
+=== Benchmarking Primitive Object Creation (with Memory Management) ===
+  Total time: 8.906 ms
+  Per iteration: 0.000089 ms
+  Operations/sec (alloc+free): 22456771
+
+=== Benchmarking Collection Creation (with Memory Management) ===
+  Total time: 18.557 ms
+  Per iteration: 0.001856 ms
+  Per operation (alloc+free): 0.000109 ms
+
+=== Benchmarking dotimes Performance ===
+[clojure.core] load_clojure_core start src=0x1003316d6
+[clojure.core] first chars: 
+; =============================
+=== Loading Clojure Core Functions ===
+[clojure.core] eval_core_source src=0x1003316d6 first=10
+[clojure.core] Loaded 17/17 expressions successfully
+  Total time: 0.276 ms (100 iterations)
+  Per iteration: 0.002760 ms
+
+=== Benchmarking doseq Performance ===
+[clojure.core] load_clojure_core start src=0x1003316d6
+[clojure.core] first chars: 
+; =============================
+=== Loading Clojure Core Functions ===
+[clojure.core] eval_core_source src=0x1003316d6 first=10
+[clojure.core] Loaded 17/17 expressions successfully
+  Total time: 0.352 ms (100 iterations)
+  Per iteration: 0.003520 ms
+
+=== Benchmarking for Performance ===
+[clojure.core] load_clojure_core start src=0x1003316d6
+[clojure.core] first chars: 
+; =============================
+=== Loading Clojure Core Functions ===
+[clojure.core] eval_core_source src=0x1003316d6 first=10
+[clojure.core] Loaded 17/17 expressions successfully
+  Total time: 0.342 ms (100 iterations)
+  Per iteration: 0.003420 ms
+
+=== Benchmarking doseq vs Direct Iteration ===
+[clojure.core] load_clojure_core start src=0x1003316d6
+[clojure.core] first chars: 
+; =============================
+=== Loading Clojure Core Functions ===
+[clojure.core] eval_core_source src=0x1003316d6 first=10
+[clojure.core] Loaded 17/17 expressions successfully
+  doseq:  3.985 ms (0.003985 ms/iter)
+  direct: 0.015 ms (0.000015 ms/iter)
+  Overhead: 265.7x
+
+=== Benchmarking Direct Vector Iteration ===
+  Total time: 198.720 ms
+  Per iteration: 0.001987 ms
+  Sum (check): 49950000000
+
+=== Benchmarking Seq-based Vector Iteration ===
+  Total time: 3172.799 ms
+  Per iteration: 0.031728 ms
+  Sum (check): 12475000000
+
+=== Benchmarking Integer Parsing ===
+  Total time: 9.998 ms
+  Per parse: 0.000100 ms
+
+=== Benchmarking Expression Parsing ===
+  Total time: 9.007 ms
+  Per parse: 0.000901 ms
+
+=== Benchmarking Memory Allocation/Deallocation (Strings) ===
+  Total time: 6.705 ms
+  Per cycle (alloc+free): 0.000067 ms
+  Cycles/sec: 14914243
+
+✅ SUITE PASSED: All 16 tests passed
+
+✅ Performance benchmarks completed
+   Tests run: 16

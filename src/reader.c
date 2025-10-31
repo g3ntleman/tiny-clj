@@ -65,13 +65,12 @@ int reader_column(const Reader *reader) {
 bool reader_skip_whitespace(Reader *reader) {
     bool skipped = false;
     while (!reader_eof(reader)) {
-        uint32_t cp = reader_peek_codepoint(reader);
+        int cp = reader_peek_codepoint(reader);
         if (cp < 0) break;
         
         // Check if codepoint is whitespace
         // Note: utf8_is_delimiter includes quotes which are NOT whitespace for parsing
-        // In Clojure, commas are treated as whitespace
-        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == ',');
+        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r');
         
         if (!is_whitespace) break;
         
@@ -128,47 +127,22 @@ bool reader_skip_ignorable(Reader *reader) {
     return any;
 }
 
-// Skip whitespace including newlines for multi-line expressions
-bool reader_skip_whitespace_including_newlines(Reader *reader) {
-    bool skipped = false;
-    while (!reader_eof(reader)) {
-        uint32_t cp = reader_peek_codepoint(reader);
-        if (cp < 0) break;
-        
-        // Check if codepoint is whitespace (including newlines)
-        bool is_whitespace = (cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == ',');
-        
-        if (!is_whitespace) break;
-        
-        reader_next_codepoint(reader);
-        skipped = true;
-    }
-    return skipped;
+// UTF-8 codepoint functions
+int reader_peek_codepoint(const Reader *reader) {
+    if (reader_eof(reader)) return -1;
+    int cp;
+    const char *next = utf8codepoint(reader->src + reader->index, &cp);
+    return next ? cp : -1;
 }
 
-// Skip all ignorable content including newlines for multi-line expressions
-bool reader_skip_all_including_newlines(Reader *reader) {
-    bool any = false;
-    while (!reader_eof(reader)) {
-        if (reader_skip_whitespace_including_newlines(reader)) {
-            any = true;
-            continue;
-        }
-        if (reader_skip_line_comment(reader)) {
-            any = true;
-            continue;
-        }
-        if (reader_skip_block_comment(reader)) {
-            any = true;
-            continue;
-        }
-        break;
-    }
-    return any;
-}
-
-// Helper function to update line/column tracking for UTF-8 bytes
-static void update_position_tracking(Reader *reader, size_t bytes_consumed) {
+int reader_next_codepoint(Reader *reader) {
+    if (reader_eof(reader)) return -1;
+    int cp;
+    const char *next = utf8codepoint(reader->src + reader->index, &cp);
+    if (!next) return -1;
+    
+    // Update line and column tracking
+    size_t bytes_consumed = next - (reader->src + reader->index);
     for (size_t i = 0; i < bytes_consumed; i++) {
         char c = reader->src[reader->index + i];
         if (c == '\n') {
@@ -178,41 +152,18 @@ static void update_position_tracking(Reader *reader, size_t bytes_consumed) {
             reader->column++;
         }
     }
-}
-
-// UTF-8 codepoint functions
-uint32_t reader_peek_codepoint(const Reader *reader) {
-    if (reader_eof(reader)) return -1;
-    int cp;
-    const char *next = utf8codepoint(reader->src + reader->index, &cp);
-    return next ? cp : -1;
-}
-
-uint32_t reader_next_codepoint(Reader *reader) {
-    if (reader_eof(reader)) return -1;
-    int cp;
-    const char *next = utf8codepoint(reader->src + reader->index, &cp);
-    if (!next) return -1;
-    
-    // Update line and column tracking
-    size_t bytes_consumed = next - (reader->src + reader->index);
-    update_position_tracking(reader, bytes_consumed);
     
     reader->index += bytes_consumed;
     return cp;
 }
 
-// Generic function to check codepoint properties
-static bool reader_check_codepoint_property(const Reader *reader, bool (*check_func)(int)) {
-    uint32_t cp = reader_peek_codepoint(reader);
-    return cp >= 0 && check_func(cp);
-}
-
 bool reader_is_delimiter(const Reader *reader) {
-    return reader_check_codepoint_property(reader, utf8_is_delimiter);
+    int cp = reader_peek_codepoint(reader);
+    return cp >= 0 && utf8_is_delimiter(cp);
 }
 
 bool reader_is_symbol_char(const Reader *reader) {
-    return reader_check_codepoint_property(reader, utf8_is_symbol_char);
+    int cp = reader_peek_codepoint(reader);
+    return cp >= 0 && utf8_is_symbol_char(cp);
 }
 

@@ -12,10 +12,4 @@ int platform_set_stdin_nonblocking(int enable);
 // 0 if no complete line available yet, -1 on error. Max includes space for terminator.
 int platform_readline_nb(char *buf, int max);
 
-// Line editor platform functions
-int platform_get_char(void);
-void platform_put_char(char c);
-void platform_put_string(const char *s);
-void platform_set_raw_mode(int enable);
-
 #endif // TINY_CLJ_PLATFORM_H

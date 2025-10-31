@@ -3,48 +3,43 @@
 
 #include "object.h"
 #include "namespace.h"
-#include "map.h"
-#include "list.h"
 
 
 // Erweiterte Funktionsaufruf-Funktionen
-ID eval_function_call(ID fn, ID *args, int argc, CljMap *env);
-ID eval_body(ID body, CljMap *env, EvalState *st);
-ID eval_list(CljList *list, CljMap *env, EvalState *st);
+CljObject* eval_function_call(CljObject *fn, CljObject **args, int argc, CljObject *env);
+CljObject* eval_body(CljObject *body, CljObject *env, EvalState *st);
+CljObject* eval_list(CljObject *list, CljObject *env, EvalState *st);
 
-ID eval_equal(CljList *list, CljMap *env);
+// Arithmetische Operationen
+CljObject* eval_add(CljObject *list, CljObject *env);
+CljObject* eval_sub(CljObject *list, CljObject *env);
+CljObject* eval_mul(CljObject *list, CljObject *env);
+CljObject* eval_div(CljObject *list, CljObject *env);
+CljObject* eval_equal(CljObject *list, CljObject *env);
+CljObject* eval_println(CljObject *list, CljObject *env);
 
 // Definition und Funktionen
-ID eval_def(CljList *list, CljMap *env, EvalState *st);
-ID eval_ns(CljList *list, CljMap *env, EvalState *st);
-ID eval_var(CljList *list, CljMap *env, EvalState *st);
-ID eval_list_function(CljList *list, CljMap *env);
-ID eval_fn(CljList *list, CljMap *env);
-ID eval_symbol(ID symbol, EvalState *st);
+CljObject* eval_def(CljObject *list, CljObject *env, EvalState *st);
+CljObject* eval_ns(CljObject *list, CljObject *env, EvalState *st);
+CljObject* eval_list_function(CljObject *list, CljObject *env);
+CljObject* eval_fn(CljObject *list, CljObject *env);
+CljObject* eval_symbol(CljObject *symbol, EvalState *st);
 
 // Weitere Built-in Funktionen
-ID eval_str(CljList *list, CljMap *env);
-ID eval_prn(CljList *list, CljMap *env);
-ID eval_count(CljList *list, CljMap *env);
-ID eval_first(CljList *list, CljMap *env);
-ID eval_rest(CljList *list, CljMap *env);
-ID eval_cons(CljList *list, CljMap *env);
-ID eval_seq(CljList *list, CljMap *env);
+CljObject* eval_str(CljObject *list, CljObject *env);
+CljObject* eval_prn(CljObject *list, CljObject *env);
+CljObject* eval_count(CljObject *list, CljObject *env);
+CljObject* eval_first(CljObject *list, CljObject *env);
+CljObject* eval_rest(CljObject *list, CljObject *env);
+CljObject* eval_seq(CljObject *list, CljObject *env);
 
 // For-loop functions
-ID eval_for(CljList *list, CljMap *env);
-ID eval_doseq(CljList *list, CljMap *env);
-ID eval_dotimes(CljList *list, CljMap *env);
-
-// Let bindings
-ID eval_let(CljList *list, CljMap *env, EvalState *st);
-
-// Function definition macro
-ID eval_defn(CljList *list, CljMap *env, EvalState *st);
+CljObject* eval_for(CljObject *list, CljObject *env);
+CljObject* eval_doseq(CljObject *list, CljObject *env);
+CljObject* eval_dotimes(CljObject *list, CljObject *env);
 
 // Hilfsfunktionen
-ID eval_arg(CljList *list, int index, CljMap *env);
-ID eval_arg_retained(CljList *list, int index, CljMap *env);
-bool is_symbol(ID v, const char *name);
+CljObject* eval_arg(CljObject *list, int index, CljObject *env);
+bool is_symbol(CljObject *v, const char *name);
 
 #endif

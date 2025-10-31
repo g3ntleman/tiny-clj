@@ -13,8 +13,6 @@
 #ifndef KV_MACROS_H
 #define KV_MACROS_H
 
-#include "memory.h"
-
 // Access the key at index i in an interleaved key-value array
 #define KV_KEY(kv_array, i)   ((kv_array)[2*(i)])
 
@@ -25,10 +23,10 @@
 #define KV_SET_KEY(kv_array, i, key)   ((kv_array)[2*(i)] = (key))
 #define KV_SET_VALUE(kv_array, i, value) ((kv_array)[2*(i) + 1] = (value))
 
-// Set both key and value at index i using ASSIGN on each element
-#define KV_ASSIGN_PAIR(kv_array, i, key, value) do { \
-    ASSIGN(KV_KEY(kv_array, i), (key)); \
-    ASSIGN(KV_VALUE(kv_array, i), (value)); \
+// Set both key and value at index i
+#define KV_SET_PAIR(kv_array, i, key, value) do { \
+    (kv_array)[2*(i)] = (key); \
+    (kv_array)[2*(i) + 1] = (value); \
 } while(0)
 
 // Iterate over all key-value pairs in an interleaved array

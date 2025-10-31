@@ -1,12 +1,11 @@
 #include "platform.h"
 #include "object.h"
 #include "exception.h"
-#include "parser.h"
+#include "clj_parser.h"
 #include "namespace.h"
-#include "symbol.h"
+#include "clj_symbols.h"
 #include "runtime.h"
 #include "tests/test_api.h"
-#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -44,7 +43,7 @@ int main() {
     
     // Cleanup
     meta_registry_cleanup(); // Cleanup meta functionality
-    autorelease_pool_cleanup_all(); // Cleanup alle Autorelease-Pools
+    cljvalue_pool_cleanup_all(); // Cleanup alle Autorelease-Pools
     
     return 0;
 }
