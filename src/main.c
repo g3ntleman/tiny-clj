@@ -11,7 +11,8 @@
 
 static int run_all_tests_main(void) {
     platform_print("[main] Running unit tests...");
-    if (run_unit_tests() != 0) return -1;
+    // Unit tests now in Unity (test_basics.c) - use ./unity-tests instead
+    // if (run_unit_tests() != 0) return -1;
     platform_print("[main] Running integration tests...");
     if (run_integration_tests() != 0) return -1;
     platform_print("[main] Running parser tests...");

@@ -58,6 +58,55 @@ Next Priority
   - Return value of last expression, nil for empty do
   - Integration with existing special forms (if, let, fn, etc.)
   - Unit tests for do evaluation and return values
+- Control Flow: `(and)` and `(or)` Special Forms: ✅ COMPLETED
+  - Implement `(and)` and `(or)` special forms with short-circuit evaluation
+  - Clojure-compatible: and returns first falsy value or last truthy value
+  - Clojure-compatible: or returns first truthy value or last falsy value
+  - Lazy evaluation of remaining arguments when result is determined
+- Control Flow: `(cond)` Special Form: ✅ COMPLETED (WIP)
+  - Implement `(cond)` special form for multi-branch conditionals
+  - Support test/expression pairs: `(cond test1 expr1 test2 expr2 ... :else default)`
+  - Integration with existing special forms
+- File I/O Functions: ✅ COMPLETED
+  - `slurp` - Read entire file as string
+  - `spit` - Write string to file (overwrites if exists)
+  - `file-exists?` - Check if file exists using POSIX access()
+  - Graceful error handling (nil on missing file, exceptions on errors)
+- Namespace Management: ✅ COMPLETED
+  - `require` - Load namespace from file (clojure.core namespace loader)
+  - `ns` - Namespace switching function
+  - `def` and `defn` - Variable and function definition
+  - Support for libs/ directory and project root namespace lookup
+- Time and Sleep Functions: ✅ COMPLETED
+  - `time-micro` - Microsecond-precision timing with expression evaluation
+  - `sleep` - Sleep for specified number of seconds
+  - Clojure-compatible: time-micro prints elapsed time and returns expression result
+- Predicate Functions: ✅ COMPLETED
+  - `identical?` - Pointer equality comparison
+  - `vector?` - Type predicate for vectors
+  - `even?` and `odd?` - Number predicates
+- Keyword Functions: ✅ COMPLETED
+  - Keywords usable as functions (lookup in maps)
+  - Keyword resolution: `:key map` returns `(get map :key)`
+- REPL Enhancements: ✅ COMPLETED
+  - REPL History with CljVector storage
+  - Line editor with arrow key support (up/down for history, left/right for navigation)
+  - Multiline input support for REPL and Clojure files
+  - History duplicate prevention
+  - Namespace-aware prompt (user=> style)
+- Data Structure Singletons: ✅ COMPLETED
+  - Empty list singleton pattern
+  - Empty vector and map singletons
+  - Memory-efficient singleton reuse
+- Byte Array Functions: ✅ COMPLETED
+  - `byte-array` - Create byte array from size or sequence
+  - `aget` - Get byte array element
+  - `aset` - Set byte array element
+  - `alength` - Get byte array length
+  - `aclone` - Clone byte array
+- Event Loop Support: ✅ COMPLETED
+  - `run-next-task` - Run next task from event loop queue
+  - Async task processing support
 - Test Framework Enhancements:
   - Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
   - Implement individual test execution: `./unity-tests memory allocation`
