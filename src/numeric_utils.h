@@ -3,6 +3,8 @@
 
 #include "value.h"
 #include "object.h"
+#include <stddef.h>
+#include <stdbool.h>
 
 /**
  * @brief Extract numeric values from two CljObjects and promote them to float
@@ -35,5 +37,21 @@ typedef enum {
  * @return true if both objects are numeric, false otherwise
  */
 bool compare_numeric_values(CljObject *a, CljObject *b, CompareResult *result);
+
+/**
+ * @brief Format Q16.13 fixed-point raw value as decimal string using integer math.
+ *
+ * The function prints "-<int>.<frac>" with the requested number of fractional
+ * digits. If trim_trailing_zeros is true, trailing zeros in the fractional part
+ * are removed, and the decimal point is omitted if no fractional digits remain.
+ *
+ * @param buf Output buffer
+ * @param n   Buffer size
+ * @param raw Q16.13 raw value (scaled by 8192)
+ * @param digits Requested fractional digits
+ * @param trim_trailing_zeros Whether to trim trailing zeros
+ * @return number of characters written (excluding NUL) or negative on error
+ */
+int format_fixed_q16_13(char *buf, size_t n, int32_t raw, unsigned digits, bool trim_trailing_zeros);
 
 #endif // NUMERIC_UTILS_H

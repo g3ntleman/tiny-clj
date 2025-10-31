@@ -10,7 +10,6 @@
 #include "object.h"
 #include "symbol.h"
 #include "vector.h"
-#include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "memory_profiler.h"
 #include "types.h"
 #include "exception.h"
@@ -21,7 +20,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
 
 // External reference to verbose mode
 extern bool g_memory_verbose_mode;
@@ -79,6 +77,8 @@ void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
     
     return result;
 }
+
+// (removed) alloc_id_array; use ALLOC_RAW/REALLOC_RAW instead
 
 
 // ============================================================================

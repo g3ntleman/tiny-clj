@@ -28,10 +28,10 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     
     // First, look for an existing namespace
     CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
+    CljObject *name_sym_interned = intern_symbol(NULL, name);
     while (cur) {
         if (cur->name) {
-            CljSymbol *name_sym = as_symbol(cur->name);
-            if (name_sym && strcmp(name_sym->name, name) == 0) {
+            if (cur->name == name_sym_interned) {
                 return cur;
             }
         }
@@ -146,10 +146,10 @@ CljNamespace* ns_find(const char *name) {
     if (!name) return NULL;
     
     CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
+    CljObject *wanted = intern_symbol(NULL, name);
     while (cur) {
         if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
-            CljSymbol *sym = as_symbol(cur->name);
-            if (strcmp(sym->name, name) == 0) {
+            if (cur->name == wanted) {
                 return cur;
             }
         }

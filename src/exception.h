@@ -220,6 +220,9 @@ extern const char *EXCEPTION_TYPE_STACK_OVERFLOW;
 /** @brief Static exception type: DivisionByZeroError */
 extern const char *EXCEPTION_TYPE_DIVISION_BY_ZERO;
 
+/** @brief Static exception type: ArithmeticException */
+extern const char *EXCEPTION_ARITHMETIC;
+
 // Short aliases (drop _TYPE_ for brevity)
 #define EXCEPTION_RUNTIME EXCEPTION_TYPE_RUNTIME
 #define EXCEPTION_PARSE EXCEPTION_TYPE_PARSE
@@ -229,5 +232,39 @@ extern const char *EXCEPTION_TYPE_DIVISION_BY_ZERO;
 #define EXCEPTION_OUT_OF_MEMORY EXCEPTION_TYPE_OUT_OF_MEMORY
 #define EXCEPTION_STACK_OVERFLOW EXCEPTION_TYPE_STACK_OVERFLOW
 #define EXCEPTION_DIVISION_BY_ZERO EXCEPTION_TYPE_DIVISION_BY_ZERO
+
+// ============================================================================
+// ERROR MESSAGE CONSTANTS (moved from error_messages.h)
+// ============================================================================
+
+/** @brief Error message: Expected number */
+extern const char *ERR_EXPECTED_NUMBER;
+
+/** @brief Error message: Wrong number of args: 0 */
+extern const char *ERR_WRONG_ARITY_ZERO;
+
+/** @brief Error message: Divide by zero */
+extern const char *ERR_DIVIDE_BY_ZERO;
+
+/** @brief Error message: Integer overflow in addition */
+extern const char *ERR_INTEGER_OVERFLOW_ADDITION;
+
+/** @brief Error message: Integer underflow in addition */
+extern const char *ERR_INTEGER_UNDERFLOW_ADDITION;
+
+/** @brief Error message: Integer overflow in subtraction */
+extern const char *ERR_INTEGER_OVERFLOW_SUBTRACTION;
+
+/** @brief Error message: Integer underflow in subtraction */
+extern const char *ERR_INTEGER_UNDERFLOW_SUBTRACTION;
+
+/** @brief Error message: Integer overflow in multiplication */
+extern const char *ERR_INTEGER_OVERFLOW_MULTIPLICATION;
+
+/** @brief Error message: Fixed-point overflow in multiplication */
+extern const char *ERR_FIXED_OVERFLOW_MULTIPLICATION;
+
+/** @brief Error message: Fixed-point overflow in addition */
+extern const char *ERR_FIXED_OVERFLOW_ADDITION;
 
 #endif

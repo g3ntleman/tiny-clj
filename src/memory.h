@@ -116,6 +116,20 @@ int get_retain_count(CljObject *obj);
  */
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 
+/** @brief Allocate raw memory for non-object types (no profiling/type tag).
+ *  @param type Plain C type (e.g., ID, char, int)
+ *  @param count Number of elements
+ *  @return Pointer to allocated memory or NULL on OOM
+ */
+#define ALLOC_RAW(type, count) ((type*) malloc(sizeof(type) * (size_t)(count)))
+
+/** @brief Reallocate raw memory for non-object types (no profiling/type tag).
+ *  @param ptr Existing pointer
+ *  @param type Plain C type
+ *  @param count New element count
+ */
+#define REALLOC_RAW(ptr, type, count) ((type*) realloc((ptr), sizeof(type) * (size_t)(count)))
+
 /** @brief Allocate and zero-initialize `count` objects of type `type` on the heap.
  *  @param type Type to allocate (must be CljObject subtype)
  *  @param count Number of objects to allocate
@@ -131,7 +145,8 @@ int get_retain_count(CljObject *obj);
  */
 #define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
 
-// ============================================================================
+// (removed) Neutral allocation helper; use ALLOC_RAW/REALLOC_RAW for non-object arrays
+
 // MEMORY MANAGEMENT MACROS
 // ============================================================================
 

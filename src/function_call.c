@@ -22,7 +22,6 @@ ID native_nth(ID *args, unsigned int argc);
 #include "validation.h"
 #include "builtins.h"
 
-#include "error_messages.h"
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
@@ -30,7 +29,6 @@ ID native_nth(ID *args, unsigned int argc);
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
-#include "error_messages.h"
 #include "list.h"
 #include "builtins.h"
 #include "value.h"
@@ -39,6 +37,9 @@ ID native_nth(ID *args, unsigned int argc);
 #include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
+
+// Forward decl for fixed-point formatter (implemented in numeric_utils.c)
+int format_fixed_q16_13(char *buf, size_t n, int32_t raw, unsigned digits, bool trim_trailing_zeros);
 
 // Global state for stack-based recur implementation - statically initialized
 static _Thread_local CljObject* g_recur_args[16] = {0};  // Max 16 arguments, initialized to NULL
@@ -65,6 +66,16 @@ CljObject* eval_body_with_env(CljObject *body, CljMap *env);
 CljObject* eval_body_with_local_env(CljObject *body, CljMap *local_env, EvalState *st);
 CljObject* eval_list_with_env(CljList *list, CljMap *env);
 
+
+// Small helper to split qualified symbols like "ns/name" without allocation
+static inline bool split_qualified_symbol(const CljSymbol *sym, const char **out_ns, const char **out_name) {
+    if (!sym || !sym->name) return false;
+    const char *slash = strchr(sym->name, '/');
+    if (!slash || slash == sym->name || *(slash + 1) == '\0') return false;
+    if (out_ns) *out_ns = sym->name; // points to start of ns in the same buffer
+    if (out_name) *out_name = slash + 1; // points to name after '/'
+    return true;
+}
 
 // ============================================================================
 // COMPARISON OPERATORS REFACTORING - Type Promotion and Generic Functions
@@ -397,8 +408,14 @@ CljObject* eval_arithmetic_generic_with_substitution(CljList *list, CljObject **
             return NULL;
         }
         if (is_fixed((CljValue)b) && as_fixed((CljValue)b) == 0.0) {
+            char a_buf[48];
+            char b_buf[48];
+            int32_t a_raw = (int32_t)((intptr_t)(CljValue)a >> TAG_BITS);
+            int32_t b_raw = (int32_t)((intptr_t)(CljValue)b >> TAG_BITS);
+            format_fixed_q16_13(a_buf, sizeof(a_buf), a_raw, 6u, true);
+            format_fixed_q16_13(b_buf, sizeof(b_buf), b_raw, 6u, true);
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %f / %f", as_fixed((CljValue)a), as_fixed((CljValue)b));
+                    "Division by zero: %s / %s", a_buf, b_buf);
             return NULL;
         }
     }
@@ -704,10 +721,10 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
             // Only check if both are symbols and pointer check failed
             if (params[i] && body != params[i] && 
                 is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
-                // Tier 3: String comparison (slowest, only if needed)
+                // Pointer comparison of interned symbols (O(1))
                 CljSymbol *param_sym = as_symbol((ID)params[i]);
                 CljSymbol *body_sym = as_symbol((ID)body);
-                if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
+                if (param_sym && body_sym && param_sym == body_sym) {
                     return RETAIN(values[i]);
                 }
             }
@@ -742,7 +759,7 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
     // For lists, evaluate them with parameter substitution
     switch (body->type) {
         case CLJ_LIST: {
-            return eval_list_with_param_substitution(body, params, values, param_count, closure_env);
+            return eval_list_with_param_substitution(body, params, values, param_count, (CljMap*)closure_env);
         }
         
         default:
@@ -770,11 +787,11 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     // OPTIMIZED: Ordered by frequency (Tier 1: Most common operations first)
     // Tier 1: Very frequent (90%+ of calls)
     if (op == SYM_PLUS) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_ADD, closure_env);
+        return eval_arithmetic_generic_with_substitution(as_list((ID)list), params, values, param_count, ARITH_ADD, closure_env);
     }
     
     if (op == SYM_MINUS) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_SUB, closure_env);
+        return eval_arithmetic_generic_with_substitution(as_list((ID)list), params, values, param_count, ARITH_SUB, closure_env);
     }
     
     if (op == SYM_EQUALS || op == SYM_EQUAL) {
@@ -807,11 +824,11 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     
     // Tier 2: Frequent (70-90% of calls)
     if (op == SYM_MULTIPLY) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_MUL, closure_env);
+        return eval_arithmetic_generic_with_substitution(as_list((ID)list), params, values, param_count, ARITH_MUL, closure_env);
     }
     
     if (op == SYM_DIVIDE) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_DIV, closure_env);
+        return eval_arithmetic_generic_with_substitution(as_list((ID)list), params, values, param_count, ARITH_DIV, closure_env);
     }
     
     if (op == SYM_RECUR) {
@@ -884,7 +901,7 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(op, CLJ_SYMBOL)) {
             CljSymbol *param_sym = as_symbol((ID)params[i]);
             CljSymbol *op_sym = as_symbol((ID)op);
-            if (param_sym && op_sym && strcmp(param_sym->name, op_sym->name) == 0) {
+            if (param_sym && op_sym && param_sym == op_sym) {
                 resolved_op = values[i];
                 break;
             }
@@ -1160,19 +1177,43 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // BUT: Keep the original symbol for comparison before resolving
     CljObject *original_op = op;
     if (is_type(op, CLJ_SYMBOL)) {
-        // First try local environment
-        CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, op);
-        if (resolved) {
-            op = resolved;
-        } else {
-            // Fallback to global namespace
-            resolved = eval_symbol(op, st);
+        bool skip_resolution = false;
+        CljSymbol *sym_op = as_symbol((ID)op);
+        if (sym_op && g_runtime.clojure_core_cache && sym_op->ns == (CljNamespace*)g_runtime.clojure_core_cache) {
+            // Defer resolution so that special-form/builtin dispatch can handle it
+            skip_resolution = true;
+        }
+        // Also defer resolution for unqualified core literals that we normalize later (e.g., 'list')
+        if (sym_op && sym_op->name && strcmp(sym_op->name, "list") == 0) {
+            skip_resolution = true;
+        }
+        if (!skip_resolution) {
+            // First try local environment
+            CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, op);
             if (resolved) {
                 op = resolved;
+            } else {
+                // Fallback to global namespace
+                resolved = eval_symbol(op, st);
+                if (resolved) {
+                    op = resolved;
+                }
             }
         }
     }
     
+    // Normalize operator symbol for dispatch
+    if (is_type(original_op, CLJ_SYMBOL)) {
+        CljSymbol *sym = as_symbol((ID)original_op);
+        if (sym && g_runtime.clojure_core_cache && sym->ns == (CljNamespace*)g_runtime.clojure_core_cache) {
+            // Map to canonical unqualified symbol (returns SYM_* where applicable)
+            original_op = intern_symbol(NULL, sym->name);
+        } else if (original_op == SYM_LIST) {
+            // Already the canonical list symbol
+            original_op = SYM_LIST;
+        }
+    }
+
     // OPTIMIZED: Dispatch to helper functions for common patterns
     // Tier 1: Arithmetic operations (most frequent)
     CljObject *result = eval_arithmetic_dispatch(list, env, st, original_op);
@@ -1319,6 +1360,19 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
             }
         }
         return result; // Return last value
+    }
+
+    if (original_op == SYM_DO) {
+        // (do expr*) - evaluate sequentially, return last value
+        int argc = list_count(list);
+        if (argc <= 1) return NULL; // (do) => nil
+        CljObject *result = NULL;
+        for (int i = 1; i < argc; i++) {
+            CljObject *arg = list_get_element(list, i);
+            if (!arg) { result = NULL; continue; }
+            result = eval_body(arg, env, st);
+        }
+        return result; // last value (may be NULL)
     }
     
     // Tier 5: Special forms and definitions
@@ -1617,65 +1671,77 @@ ID eval_fn(CljList *list, CljMap *env) {
 }
 
 ID eval_symbol(ID symbol, EvalState *st) {
+    ID result = NULL;
+    
     if (!symbol) {
-        return NULL;
+        return result;
     }
     
     CljSymbol *sym = as_symbol((ID)symbol);
     
     // Keywords evaluate to themselves
     if (sym && sym->name[0] == ':') {
-        return AUTORELEASE(RETAIN(symbol));
+        result = AUTORELEASE(RETAIN(symbol));
+        return result;
+    }
+    
+    // Normalize to canonical interned symbol and handle core literal 'list'
+    if (sym && sym->name) {
+        CljObject *canon = intern_symbol(NULL, sym->name);
+        if (canon == SYM_LIST) {
+            result = AUTORELEASE(RETAIN(SYM_LIST));
+            return result;
+        }
     }
     
     // Special handling for *ns* - return current namespace name as symbol
-    if (sym && strcmp(sym->name, "*ns*") == 0) {
+    if (sym && sym == (CljSymbol*)intern_symbol(NULL, "*ns*")) {
         if (st && st->current_ns && st->current_ns->name) {
-            return st->current_ns->name;  // Return the namespace symbol (e.g., 'user')
+            result = st->current_ns->name;  // Return the namespace symbol (e.g., 'user')
+        } else {
+            result = intern_symbol(NULL, "user");  // Default namespace
         }
-        return intern_symbol(NULL, "user");  // Default namespace
+        return result;
     }
     
     // Lookup im aktuellen Namespace
     CljObject *value = ns_resolve(st, symbol);
     if (value) {
-        return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
+        result = AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
+        return result;
     }
-    
-    
-    // Fallback: Try global namespace lookup for special forms and builtins
+
+    // Qualified symbol lookup: ns/name
     if (sym) {
-        
-        // Check against cached symbol pointers for O(1) lookup (only if initialized)
-        if ((SYM_IF && symbol == SYM_IF) || (SYM_DEF && symbol == SYM_DEF) || 
-            (SYM_DEFN && symbol == SYM_DEFN) || (SYM_FN && symbol == SYM_FN) || 
-            (SYM_QUOTE && symbol == SYM_QUOTE) || 
-            (SYM_RECUR && symbol == SYM_RECUR) || (SYM_AND && symbol == SYM_AND) || 
-            (SYM_OR && symbol == SYM_OR) || (SYM_NS && symbol == SYM_NS) || 
-            (SYM_TRY && symbol == SYM_TRY) || (SYM_CATCH && symbol == SYM_CATCH) || 
-            (SYM_THROW && symbol == SYM_THROW) || (SYM_FINALLY && symbol == SYM_FINALLY) ||
-            (SYM_VAR && symbol == SYM_VAR) ||
-            (SYM_DO && symbol == SYM_DO) || (SYM_LOOP && symbol == SYM_LOOP) || 
-            (SYM_LET && symbol == SYM_LET) || (SYM_GO && symbol == SYM_GO) || (SYM_PLUS && symbol == SYM_PLUS) || 
-            (SYM_MINUS && symbol == SYM_MINUS) || (SYM_MULTIPLY && symbol == SYM_MULTIPLY) || 
-            (SYM_DIVIDE && symbol == SYM_DIVIDE) || (SYM_EQUALS && symbol == SYM_EQUALS) || 
-            (SYM_LT && symbol == SYM_LT) || (SYM_GT && symbol == SYM_GT) || 
-            (SYM_LE && symbol == SYM_LE) || (SYM_GE && symbol == SYM_GE) ||
-            (SYM_PRINT && symbol == SYM_PRINT) || 
-            (SYM_STR && symbol == SYM_STR) || (SYM_NTH && symbol == SYM_NTH) || (SYM_FIRST && symbol == SYM_FIRST) || 
-            (SYM_REST && symbol == SYM_REST) || (SYM_COUNT && symbol == SYM_COUNT) || 
-            (SYM_CONS && symbol == SYM_CONS) || (SYM_SEQ && symbol == SYM_SEQ) || 
-            (SYM_NEXT && symbol == SYM_NEXT) || (SYM_LIST && symbol == SYM_LIST) ||
-            (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
-            (SYM_DOTIMES && symbol == SYM_DOTIMES) || (SYM_TIME && symbol == SYM_TIME)) {
-            return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
+        const char *ns = NULL; const char *name = NULL;
+        if (split_qualified_symbol(sym, &ns, &name)) {
+            // Direct namespace lookup without allocation
+            CljNamespace *target = ns_find(ns);
+            if (target && target->mappings) {
+                CljObject *key = intern_symbol(NULL, name);
+                CljObject *val = (CljObject*)map_get((CljValue)target->mappings, (CljValue)key);
+                if (val) {
+                    result = AUTORELEASE(RETAIN(val));
+                    return result;
+                }
+            }
         }
+    }
+
+    // Allow special forms to evaluate to themselves (used by macro-like builders)
+    if (symbol == SYM_FN || symbol == SYM_DEFN || symbol == SYM_IF ||
+        symbol == SYM_LET || symbol == SYM_DO || symbol == SYM_QUOTE ||
+        symbol == SYM_VAR || symbol == SYM_LIST || symbol == SYM_TIME ||
+        symbol == SYM_DOTIMES || symbol == SYM_AND || symbol == SYM_OR ||
+        symbol == SYM_GO) {
+        result = AUTORELEASE(RETAIN(symbol));
+        return result;
     }
     
     // Fehler: Symbol kann nicht aufgelöst werden
     const char *name = sym ? sym->name : "unknown";
     throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
-    return NULL;
+    return result;
 }
 
 ID eval_str(CljList *list, CljMap *env) {

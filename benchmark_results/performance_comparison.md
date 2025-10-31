@@ -79,3 +79,4 @@ tiny-clj zeigt beeindruckende Performance-Vorteile gegenüber Standard Clojure:
 
 *Benchmark durchgeführt am: $(date)*
 *Commit: $(git rev-parse --short HEAD)*
+

@@ -3,7 +3,6 @@
 #include "memory.h"
 #include "exception.h"
 #include "symbol.h"
-#include "error_messages.h"
 #include "strings.h"
 #include <stdlib.h>
 #include <string.h>

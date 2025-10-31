@@ -33,6 +33,7 @@
 #include "byte_array.h"
 #include "value.h"  // For empty_string_singleton
 #include "strings.h"  // For CljString structure
+#include "numeric_utils.h"
 
 // Safe string copy helper (from strings.c)
 static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
@@ -137,9 +138,10 @@ char* to_string(CljObject *v) {
             return strdup(buf);
         }
         if (is_fixed(v)) {
-            char buf[32];
-            double val = as_fixed(v);
-            snprintf(buf, sizeof(buf), "%.4g", val);
+            char buf[48];
+            int32_t raw = (int32_t)((intptr_t)v >> TAG_BITS);
+            // Format with up to 6 fractional digits, trimming trailing zeros
+            format_fixed_q16_13(buf, sizeof(buf), raw, 6u, true);
             return strdup(buf);
         }
         if (is_special(v)) {

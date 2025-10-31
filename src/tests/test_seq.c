@@ -28,15 +28,10 @@ TEST(test_seq_create_list) {
 TEST(test_seq_create_vector) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
-        // Create a test vector
-        CljValue vec = make_vector(TEST_VECTOR_SIZE, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = TEST_VECTOR_SIZE;
+        // Create a test vector via Parser
+        EvalState *st = evalstate();
+        ID vec = parse("[1 2 3]", st);
+        TEST_ASSERT_NOT_NULL(vec);
         
         // Create sequence iterator
         CljObject *seq = seq_create((CljObject*)vec);
@@ -91,15 +86,10 @@ TEST(test_seq_create_map) {
 TEST(test_seq_first) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
-        // Create a test vector
-        CljValue vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(42);
-        vec_data->data[1] = fixnum(43);
-        vec_data->data[2] = fixnum(44);
-        vec_data->count = 3;
+        // Create a test vector via Parser
+        EvalState *st = evalstate();
+        ID vec = parse("[42 43 44]", st);
+        TEST_ASSERT_NOT_NULL(vec);
         
         // Create sequence and test first
         CljObject *seq = seq_create((CljObject*)vec);
@@ -113,15 +103,10 @@ TEST(test_seq_first) {
 TEST(test_seq_rest) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
-        // Create a test vector
-        CljValue vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(42);
-        vec_data->data[1] = fixnum(43);
-        vec_data->data[2] = fixnum(44);
-        vec_data->count = 3;
+        // Create a test vector via Parser
+        EvalState *st = evalstate();
+        ID vec = parse("[42 43 44]", st);
+        TEST_ASSERT_NOT_NULL(vec);
         
         // Create sequence and test rest
         CljObject *seq = seq_create((CljObject*)vec);
@@ -134,15 +119,10 @@ TEST(test_seq_rest) {
 TEST(test_seq_next) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
-        // Create a test vector
-        CljValue vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(42);
-        vec_data->data[1] = fixnum(43);
-        vec_data->data[2] = fixnum(44);
-        vec_data->count = 3;
+        // Create a test vector via Parser
+        EvalState *st = evalstate();
+        ID vec = parse("[42 43 44]", st);
+        TEST_ASSERT_NOT_NULL(vec);
         
         // Create sequence and test next
         CljObject *seq = seq_create((CljObject*)vec);
@@ -159,23 +139,12 @@ TEST(test_seq_next) {
 TEST(test_seq_equality) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
-        // Create two identical vectors
-        CljValue vec1 = make_vector(2, 1);
-        CljValue vec2 = make_vector(2, 1);
-        
-        CljPersistentVector *vec1_data = as_vector((CljObject*)vec1);
-        CljPersistentVector *vec2_data = as_vector((CljObject*)vec2);
-        
-        TEST_ASSERT_NOT_NULL(vec1_data);
-        TEST_ASSERT_NOT_NULL(vec2_data);
-        
-        vec1_data->data[0] = fixnum(1);
-        vec1_data->data[1] = fixnum(2);
-        vec1_data->count = 2;
-        
-        vec2_data->data[0] = fixnum(1);
-        vec2_data->data[1] = fixnum(2);
-        vec2_data->count = 2;
+        // Create two identical vectors via Parser
+        EvalState *st = evalstate();
+        ID vec1 = parse("[1 2]", st);
+        ID vec2 = parse("[1 2]", st);
+        TEST_ASSERT_NOT_NULL(vec1);
+        TEST_ASSERT_NOT_NULL(vec2);
         
         // Create sequences
         CljObject *seq1 = seq_create((CljObject*)vec1);

@@ -178,9 +178,6 @@ bool seq_iter_empty(const SeqIterator *iter) {
         case CLJ_STRING:
             return iter->state.str.index >= iter->state.str.length;
         
-        // Note: nil is now represented as NULL
-            return true;
-        
         default:
             return true;
     }

@@ -83,3 +83,4 @@ Nach der JIT-Compilation zeigt Clojure deutlich bessere Performance:
 *Clojure Version: 1.12.3*
 *tiny-clj Version: 0.1*
 *Commit: $(git rev-parse --short HEAD)*
+

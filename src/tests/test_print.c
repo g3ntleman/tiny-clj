@@ -68,18 +68,16 @@ TEST(test_print_str_vs_pr_str_difference) {
 // ============================================================================
 TEST(test_print_str_different_types) {
     WITH_AUTORELEASE_POOL({
-        // Test with vector
-        CljObject *vec = make_vector(2, true);
-        CljPersistentVector *vec_data = as_vector(vec);
-        vec_data->data[0] = (CljObject*)fixnum(1);
-        vec_data->data[1] = (CljObject*)fixnum(2);
-        vec_data->count = 2;
+        // Test with vector (via Parser, kein manueller Aufbau)
+        EvalState *st = evalstate();
+        ID vec = parse("[1 2]", st);
+        TEST_ASSERT_NOT_NULL(vec);
         
-        char *result = print_str(vec);
+        char *result = print_str((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_STRING("[1 2]", result);
         free(result);
-        RELEASE(vec);
+        RELEASE((CljObject*)vec);
         
         // Test with map (simplified - just test basic functionality)
         CljMap *map = (CljMap*)make_map(2);
@@ -174,4 +172,40 @@ TEST(test_native_print_multiple_args) {
         
         evalstate_free(st);
     });
+}
+
+// ============================================================================
+// TEST: to_string() formatting for fixed-point (Q16.13) without float printf
+// ============================================================================
+TEST(test_to_string_fixed_format) {
+    // Exact representable values in Q16.13
+    CljValue f0 = fixed(0.0f);
+    CljValue f1 = fixed(1.0f);
+    CljValue fneg = fixed(-2.5f);   // -2.5 = -2 - 1/2
+    CljValue f075 = fixed(0.75f);   // 0.75 = 3/4
+    CljValue f3125 = fixed(3.125f); // 3 + 1/8
+
+    char *s0 = to_string((CljObject*)f0);
+    char *s1 = to_string((CljObject*)f1);
+    char *sneg = to_string((CljObject*)fneg);
+    char *s075 = to_string((CljObject*)f075);
+    char *s3125 = to_string((CljObject*)f3125);
+
+    TEST_ASSERT_NOT_NULL(s0);
+    TEST_ASSERT_NOT_NULL(s1);
+    TEST_ASSERT_NOT_NULL(sneg);
+    TEST_ASSERT_NOT_NULL(s075);
+    TEST_ASSERT_NOT_NULL(s3125);
+
+    TEST_ASSERT_EQUAL_STRING("0", s0);
+    TEST_ASSERT_EQUAL_STRING("1", s1);
+    TEST_ASSERT_EQUAL_STRING("-2.5", sneg);
+    TEST_ASSERT_EQUAL_STRING("0.75", s075);
+    TEST_ASSERT_EQUAL_STRING("3.125", s3125);
+
+    free(s0);
+    free(s1);
+    free(sneg);
+    free(s075);
+    free(s3125);
 }

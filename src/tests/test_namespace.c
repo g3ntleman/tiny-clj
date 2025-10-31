@@ -476,3 +476,32 @@ TEST(test_require_nested_path) {
     evalstate_free(st);
 }
 
+TEST(test_qualified_defn_in_clojure_core_and_invoke) {
+    // Define a function via qualified defn and invoke it
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    CljObject *res_defn = eval_string("(clojure.core/defn qf [] 7)", st);
+    (void)res_defn; // defn returns var/nil; we only care about side effect
+
+    CljObject *res_call = eval_string("(qf)", st);
+    TEST_ASSERT_NOT_NULL(res_call);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)res_call));
+    TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)res_call));
+
+    evalstate_free(st);
+}
+
+TEST(test_qualified_builtin_plus_in_clojure_core) {
+    // Call a builtin via qualified name
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    CljObject *res = eval_string("(clojure.core/+ 1 2)", st);
+    TEST_ASSERT_NOT_NULL(res);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)res));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)res));
+
+    evalstate_free(st);
+}
+

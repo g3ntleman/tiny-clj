@@ -19,25 +19,26 @@
 #include <stdbool.h>
 #include "memory.h"
 #include "utf8.h"
-#include "error_messages.h"
 #include "vector.h"
 #include "value.h"
 #include "symbol.h"
 #include "meta.h"
+#include "exception.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+
 // Helper function for parser exceptions
 static void throw_parser_exception(const char *message, Reader *reader) {
-    throw_exception(EXCEPTION_PARSE, message, "parser", reader->line, reader->column);
+    throw_exception(EXCEPTION_TYPE_PARSE, message, "parser", reader->line, reader->column);
 }
 
 // Stack-based parser constants
-#define MAX_STACK_VECTOR_SIZE 64
+#define MAX_STACK_VECTOR_SIZE 256
 #define MAX_STACK_MAP_PAIRS 32
 #define MAX_STACK_LIST_SIZE 64
-#define MAX_STACK_STRING_SIZE 256
+#define MAX_STACK_STRING_SIZE 4096
 
 // Global jump buffer for parse errors
 
@@ -126,10 +127,9 @@ static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st);
-static ID parse_string_internal(Reader *reader, EvalState *st);
+static ID parse_string(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
-static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
-// static CljObject* make_number_by_parsing_old(Reader *reader, EvalState *st); // Removed unused function
+static CljObject* parse_number(Reader *reader, EvalState *st);
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
 static ID parse_expr_owned(Reader *reader, EvalState *st); // forward
@@ -139,7 +139,7 @@ static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
   ID val = parse_expr_owned(reader, st);
   size_t after = reader_offset(reader);
   if (after <= before && !reader_eof(reader)) {
-    throw_parser_exception("Parser made no progress while reading expression", reader);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   return val;
@@ -153,8 +153,10 @@ static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
  */
 static ID parse_expr_owned(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
-  if (reader_is_eof(reader))
+  if (reader_is_eof(reader)) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   char c = reader_current(reader);
   if (c == '^')
     return parse_meta(reader, st);
@@ -167,11 +169,11 @@ static ID parse_expr_owned(Reader *reader, EvalState *st) {
   if (c == '(')
     return parse_list(reader, st);
   if (c == '"')
-    return parse_string_internal(reader, st);
+    return parse_string(reader, st);
   if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing(reader, st);
+    return parse_number(reader, st);
   if (isdigit(c))
-    return make_number_by_parsing(reader, st);
+    return parse_number(reader, st);
   // Check for invalid decimal syntax like .01 (should be 0.01)
   if (c == '.' && isdigit(reader_peek_ahead(reader, 1))) {
     // Read the full invalid decimal to include in error message
@@ -184,7 +186,7 @@ static ID parse_expr_owned(Reader *reader, EvalState *st) {
     }
     invalid_decimal[pos] = '\0';
     
-    throw_exception_formatted(EXCEPTION_PARSE, __FILE__, __LINE__, 0, 
+    throw_exception_formatted(EXCEPTION_TYPE_PARSE, __FILE__, __LINE__, 0, 
         "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
     return NULL;
   }
@@ -232,14 +234,23 @@ static ID parse_expr_owned(Reader *reader, EvalState *st) {
     ID quoted = parse_expr_owned(reader, st);
     size_t qb_after = reader_offset(reader);
     if (qb_after <= qb_before && !reader_eof(reader)) {
-      throw_parser_exception("Parser made no progress after quote", reader);
+      throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
       return NULL;
     }
-    if (!quoted) return NULL;
     // Create (quote <expr>) list: (quote expr)
     // Build list using the same pattern as parse_list
     CljObject *quote_sym = intern_symbol_global("quote");
-    ID elements[2] = {(CljValue)quote_sym, quoted};
+    ID quoted_val = quoted;
+    if (!quoted) {
+      // Check if quoted is nil
+      if (reader_eof(reader)) {
+        throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+        return NULL;
+      }
+      // If quoted is NULL, it should be nil - create (quote nil)
+      // nil is represented as NULL, so quoted_val stays NULL
+    }
+    ID elements[2] = {(CljValue)quote_sym, quoted_val};
     return make_list_from_stack((CljValue*)elements, 2);
   }
   
@@ -333,8 +344,10 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
             return NULL; // nil is represented as NULL in our system
         }
         
-        // Otherwise, this is a parsing error
-        throw_exception("ParseError", "Failed to parse expression", __FILE__, __LINE__, 0);
+        // Otherwise, this is a parsing error - throw exception
+        throw_exception(EXCEPTION_TYPE_PARSE, ERROR_INVALID_SYNTAX, __FILE__, __LINE__, 0);
+        // Execution continues after longjmp, so we never reach here in normal flow
+        // But for safety, we still return NULL (though it shouldn't be used)
         return NULL;
     }
     
@@ -352,47 +365,121 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     return result;
 }
 
+#define MAX_VECTOR_RECURSION_DEPTH 1000
+
 /**
- * @brief Parse vector literal [a b c] using Reader
- * @param reader Reader instance for input
+ * @brief Recursively parse vector elements: parse, count, and create vector in one step
+ * @param reader Reader instance
+ * @param st Evaluation state
+ * @param count Total element count (output parameter)
+ * @param depth Current recursion depth
+ * @return Vector with parsed elements, or NULL on error
+ */
+static ID parse_vector_elements(Reader *reader, EvalState *st, int *count, int depth) {
+  if (depth > MAX_VECTOR_RECURSION_DEPTH) {
+    throw_parser_exception(ERROR_STACK_OVERFLOW, reader);
+    return NULL;
+  }
+  
+  reader_skip_all(reader);
+  if (reader_eof(reader) || reader_peek_char(reader) == ']') {
+    *count = 0;
+    return make_vector(0, false);
+  }
+  
+  ID value = parse_expr_owned(reader, st);
+  if (!value) {
+    reader_skip_all(reader);
+    if (reader_eof(reader) || reader_peek_char(reader) == ']') {
+      *count = 0;
+      return make_vector(0, false);
+    }
+    // If we couldn't parse an element and we're not at EOF or ']', this is an error
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+    return NULL;
+  }
+  
+  reader_skip_all(reader);
+  int remaining_count = 0;
+  ID remaining_vec = parse_vector_elements(reader, st, &remaining_count, depth + 1);
+  
+  if (!remaining_vec) {
+    RELEASE(value);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+    return NULL;
+  }
+  
+  int total_count = remaining_count + 1;
+  CljValue vec = make_vector((unsigned int)total_count, false);
+  if (!vec) {
+    RELEASE(value);
+    RELEASE(remaining_vec);
+    throw_oom(CLJ_VECTOR);
+    return NULL;
+  }
+  
+  CljPersistentVector *v = as_vector((CljObject*)vec);
+  if (!v) {
+    RELEASE(value);
+    RELEASE(remaining_vec);
+    RELEASE(vec);
+    return NULL;
+  }
+  
+  // First element goes at index 0, rest follows at indices 1..remaining_count
+  v->data[0] = (CljObject*)value;
+  
+  if (remaining_count > 0) {
+    CljPersistentVector *remaining_v = as_vector((CljObject*)remaining_vec);
+    for (int i = 0; i < remaining_count; i++) {
+      v->data[i + 1] = remaining_v->data[i];
+      RETAIN(v->data[i + 1]);
+    }
+    for (int i = 0; i < remaining_count; i++) {
+      RELEASE(remaining_v->data[i]);
+    }
+    RELEASE(remaining_vec);
+  }
+  
+  v->count = total_count;
+  *count = total_count;
+  
+  return vec;
+}
+
+/**
+ * @brief Parse vector using single recursive function: parse, count, and fill in one step
+ * @param reader Reader instance
  * @param st Evaluation state
  * @return Parsed vector CljObject or NULL on error
  */
 static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
-    ID stack[MAX_STACK_VECTOR_SIZE];
+    
+    if (reader_peek_char(reader) == ']') {
+      reader_next(reader);
+      return make_vector(0, false);
+    }
+    
     int count = 0;
-    while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
-      if (count >= MAX_STACK_VECTOR_SIZE)
-        return NULL;
-      ID value = parse_expr_owned(reader, st);
-      if (!value)
-        return NULL;
-      stack[count++] = value;
-      reader_skip_all(reader);
-    }
-  if (reader_eof(reader) || !reader_match(reader, ']')) {
-    throw_parser_exception("Unclosed vector - missing closing ']'", reader);
-    return NULL;
-  }
-    // Create mutable vector for efficient parsing with expected capacity
-    unsigned int expected_capacity = count > 0 ? count : 5;  // Default capacity for empty vectors
-    CljValue vec = make_vector(expected_capacity, true);  // mutable = true
-    CljPersistentVector *v = as_vector((CljObject*)vec);
+    ID vec = parse_vector_elements(reader, st, &count, 0);
     
-    // Add elements directly to mutable vector (O(1) per element)
-    for (int i = 0; i < count; i++) {
-      v->data[i] = (CljObject*)stack[i];
-      RETAIN(stack[i]);  // Retain the element
+    if (!vec) {
+      throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+      return NULL;
     }
-    v->count = count;
     
-    // Convert to immutable at the end
-    v->mutable_flag = false;
+    if (reader_peek_char(reader) != ']') {
+      RELEASE(vec);
+      throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+      return NULL;
+    }
+    reader_next(reader);
     
     return vec;
   }
+  // Not a vector - return NULL (parser will try other types)
   return NULL;
 }
 
@@ -404,25 +491,39 @@ static ID parse_vector(Reader *reader, EvalState *st) {
  */
 static ID parse_map(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '{'))
-    return NULL;
+    return NULL; // Not a map - let other parsers try
   reader_skip_all(reader);
   ID pairs[MAX_STACK_MAP_PAIRS * 2];
   int pair_count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     ID key = parse_expr_owned(reader, st);
-    if (!key)
-      return NULL;
+    if (!key) {
+      // Only allow NULL if it's nil
+      reader_skip_all(reader);
+      if (!reader_eof(reader) && reader_peek_char(reader) != '}') {
+        throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+        return NULL;
+      }
+      // If at EOF or '}', key was nil - that's OK for map keys
+    }
     reader_skip_all(reader);
     ID value = parse_expr_owned(reader, st);
-    if (!value)
-      return NULL;
+    if (!value) {
+      // value can be nil - that's OK for map values
+      // But if we're not at '}', it's an error
+      reader_skip_all(reader);
+      if (!reader_eof(reader) && reader_peek_char(reader) != '}') {
+        throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+        return NULL;
+      }
+    }
     reader_skip_all(reader);
     pairs[pair_count * 2] = (key);
     pairs[pair_count * 2 + 1] = (value);
     pair_count++;
   }
   if (reader_eof(reader) || !reader_match(reader, '}')) {
-    throw_parser_exception("Unclosed map - missing closing '}'", reader);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   // Use constructor API (owned) and return autoreleased
@@ -437,7 +538,7 @@ static ID parse_map(Reader *reader, EvalState *st) {
  */
 static ID parse_list(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '('))
-    return NULL;
+    return NULL; // Not a list - let other parsers try
   reader_skip_all(reader);
   
   // Handle empty list
@@ -458,7 +559,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
-    throw_parser_exception("Unclosed list - missing closing ')'", reader);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   
@@ -476,7 +577,7 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
 
   // If EOF reached before ')', this is an unclosed list
   if (reader_eof(reader)) {
-    throw_parser_exception("Unclosed list - unexpected EOF before ')'", reader);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
 
@@ -510,10 +611,12 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   (void)st;
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
-  // Validate that current position starts a symbol
+  // Validate that current position starts a symbol (allow ':' for keywords)
   uint32_t start_cp = reader_peek_codepoint(reader);
-  if (start_cp == READER_EOF || start_cp == READER_UTF8_ERROR || !utf8_is_symbol_char((int)start_cp)) {
-    throw_parser_exception("Expected symbol", reader);
+  char start_ch = reader_current(reader);
+  if (start_cp == READER_EOF || start_cp == READER_UTF8_ERROR || 
+      !(start_ch == ':' || utf8_is_symbol_char((int)start_cp))) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   
@@ -528,7 +631,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     uint32_t cp = reader_peek_codepoint(reader);
     if (cp == READER_EOF) break;
     if (cp == READER_UTF8_ERROR) {
-      throw_parser_exception("Invalid UTF-8 sequence", reader);
+      throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
       return NULL;
     }
     
@@ -563,16 +666,29 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   }
   
   buffer[pos] = '\0';
-  // Leere Symbole sind ungültig – statt abzubrechen, sauber fehlschlagen
+  // Leere Symbole sind ungültig – Exception werfen
   if (pos == 0) {
     if (!reader_eof(reader)) {
       // Ensure forward progress to avoid parser stalls
       reader_next_codepoint(reader);
     }
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
-  if (!utf8valid(buffer))
+  if (!utf8valid(buffer)) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
+  // Qualified symbol split: ns/name → intern with namespace
+  if (buffer[0] != ':') {
+    char *slash = strchr(buffer, '/');
+    if (slash && slash != buffer && *(slash + 1) != '\0') {
+      *slash = '\0';
+      const char *ns_part = buffer;
+      const char *name_part = slash + 1;
+      return intern_symbol(ns_part, name_part);
+    }
+  }
   return intern_symbol_global(buffer);
 }
 
@@ -582,10 +698,12 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed string CljObject or NULL on error
  */
-static ID parse_string_internal(Reader *reader, EvalState *st) {
+static ID parse_string(Reader *reader, EvalState *st) {
   (void)st;
-  if (reader_next(reader) != '"')
+  if (reader_next(reader) != '"') {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '"' &&
@@ -617,13 +735,23 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
       buf[pos++] = c;
     }
   }
-  if (reader_eof(reader) || reader_next(reader) != '"') {
-    throw_parser_exception("Unclosed string - missing closing '\"'", reader);
+  // After loop, we should be at closing quote or EOF
+  if (reader_eof(reader)) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
+    return NULL;
+  }
+  // Consume closing quote
+  if (reader_peek_char(reader) == '"') {
+    reader_next(reader); // consume closing quote
+  } else {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   buf[pos] = '\0';
-  if (!utf8valid(buf))
+  if (!utf8valid(buf)) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   ID result = make_string(buf);
   return result;
 }
@@ -634,7 +762,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljObject or NULL on error
  */
-static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
+static CljObject* parse_number(Reader *reader, EvalState *st) {
   (void)st;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
@@ -648,6 +776,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
       throw_parser_exception("Syntax error compiling at (REPL:1:1).\nUnable to resolve symbol: .01 in this context", reader);
       return NULL;
     }
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   while (isdigit(reader_peek_char(reader)) && pos < MAX_STACK_STRING_SIZE - 1) {
@@ -679,7 +808,6 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed number CljValue or NULL on error
  */
-// Removed unused function make_number_by_parsing_v
 
 /**
  * @brief Create CljValue by parsing expression from Reader (Phase 1: Immediates)
@@ -700,22 +828,21 @@ CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
  * @return Parsed CljValue or NULL on error
  */
 CljValue parse_from_reader(Reader *reader, EvalState *st) {
-  if (!reader || !st) return NULL;
+  if (!reader || !st) {
+    throw_exception(EXCEPTION_TYPE_PARSE, "Invalid arguments to parse_from_reader", __FILE__, __LINE__, 0);
+    return NULL;
+  }
   
   CljValue result = NULL;
   
-  // Create autorelease pool for parse operations
   WITH_AUTORELEASE_POOL({
-    // Don't catch exceptions - let them propagate
     result = value_by_parsing_expr(reader, st);
     
-    // RETAIN to prevent inner pool from releasing the result
     if (result && !IS_IMMEDIATE(result)) {
       RETAIN(result);
     }
   });
   
-  // AUTORELEASE to transfer ownership to outer pool
   return AUTORELEASE(result);
 }
 
@@ -726,13 +853,14 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
  * @return Parsed CljValue or NULL on error
  */
 CljValue parse(const char *input, EvalState *st) {
-  if (!input || !st) return NULL;
+  if (!input || !st) {
+    throw_exception(EXCEPTION_TYPE_PARSE, "Invalid arguments to parse - input or state is NULL", __FILE__, __LINE__, 0);
+    return NULL;
+  }
   
   Reader reader;
   reader_init(&reader, input);
   
-  // Delegate to parse_from_reader (DRY principle)
-  // Don't create autorelease pool here - let caller manage memory
   return parse_from_reader(&reader, st);
 }
 
@@ -744,16 +872,21 @@ CljValue parse(const char *input, EvalState *st) {
  * @return Object with applied metadata or NULL on error
  */
 static ID parse_meta(Reader *reader, EvalState *st) {
-  if (!reader_eof(reader) && reader_next(reader) != '^')
+  if (!reader_eof(reader) && reader_next(reader) != '^') {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   reader_skip_all(reader);
   ID meta = parse_expr_owned(reader, st);
-  if (!meta)
+  if (!meta) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   reader_skip_all(reader);
   ID obj = parse_expr_owned(reader, st);
   if (!obj) {
     RELEASE(meta);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   meta_set(obj, meta);
@@ -769,17 +902,24 @@ static ID parse_meta(Reader *reader, EvalState *st) {
  */
 static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
-  if (reader_next(reader) != '#')
+  if (reader_next(reader) != '#') {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
-  if (reader_next(reader) != '^')
+  }
+  if (reader_next(reader) != '^') {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   ID meta = parse_map(reader, st);
-  if (!meta)
+  if (!meta) {
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
+  }
   reader_skip_all(reader);
   ID obj = parse_expr_owned(reader, st);
   if (!obj) {
     RELEASE(meta);
+    throw_parser_exception(ERROR_INVALID_SYNTAX, reader);
     return NULL;
   }
   meta_set(obj, meta);

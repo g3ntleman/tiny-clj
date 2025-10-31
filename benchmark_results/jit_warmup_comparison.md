@@ -66,3 +66,4 @@ Nach der JIT-Compilation zeigt Clojure deutlich bessere Performance:
 *Benchmark mit JIT-Warmup durchgeführt am: $(date)*
 *Clojure Version: 1.12.3*
 *tiny-clj Version: 0.1*
+

@@ -86,7 +86,6 @@ list(APPEND SOURCES
     src/strings.c
     src/seq.c
     src/memory.c
-    src/error_messages.c
     src/memory_profiler.c
     src/value.c
     src/numeric_utils.c
@@ -125,7 +124,6 @@ set(STM32_SOURCES
     src/strings.c
     src/seq.c
     src/memory.c
-    src/error_messages.c
     src/value.c
     src/numeric_utils.c
     src/validation.c
@@ -156,7 +154,6 @@ add_executable(tiny-clj-esp32
     src/strings.c
     src/seq.c
     src/memory.c
-    src/error_messages.c
     src/memory_profiler.c
     src/value.c
     src/numeric_utils.c
@@ -284,7 +281,6 @@ add_executable(unity-tests
     src/memory_profiler.c
     src/memory.c
     src/runtime.c
-    src/error_messages.c
     src/value.c
     src/numeric_utils.c
     src/validation.c

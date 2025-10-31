@@ -63,10 +63,21 @@ int event_loop_run_next(CljMap *env, EvalState *st) {
     } CATCH(ex) {
         // On error: do not deliver a value, just close the channel
         ok = false;
+        // Close immediately to guarantee channel state in error path
+        channel_put_and_close(task.result_chan, NULL);
+        // Debug: verify channel state in error path
+        CljObject *kw_value_dbg = intern_symbol(NULL, ":value");
+        CljObject *dbg_val = (CljObject*)map_get((CljValue)task.result_chan, (CljValue)kw_value_dbg);
+        if (dbg_val) {
+            printf("[DEBUG] go-exception: value present type=%s\n", clj_type_name(dbg_val->type));
+        } else {
+            printf("[DEBUG] go-exception: no value set\n");
+        }
     } END_TRY
     if (ok) {
         channel_put_and_close(task.result_chan, result);
     } else {
+        // Already closed in CATCH for robustness; keep idempotent close here
         channel_put_and_close(task.result_chan, NULL);
     }
 
