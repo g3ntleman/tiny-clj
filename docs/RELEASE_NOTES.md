@@ -2,6 +2,15 @@
 
 ## Latest Updates (Recent Commits)
 
+### High-Level Test Refactoring & Vector Functions (2025-01-26)
+- **Test Refactoring**: All go-block tests now use high-level `eval_string()` API instead of low-level `eval_list()`
+- **Vector Functions**: Implemented `peek` and `pop` functions for vectors
+- **COW Optimization**: `pop` now uses Copy-on-Write - O(1) for RC=1, O(n) for RC>1
+- **nth Enhancement**: `nth` now supports 3 arguments (with default value for out-of-bounds access)
+- **Event Loop Fix**: Fixed double RELEASE bug in `event_loop_run_next` that caused premature channel deallocation
+- **Code Cleanup**: Removed debug output, duplicate tests, and simplified comments
+- **Test Coverage**: All 196 tests passing (0 failures)
+
 ### Documentation Cleanup & Testing Improvements
 - **Documentation Consolidation**: Removed 25 unused markdown files, keeping only documented files
 - **Testing Framework**: Enhanced TESTING_GUIDE.md with efficient debugging workflows
