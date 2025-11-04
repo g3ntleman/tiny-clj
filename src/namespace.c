@@ -313,8 +313,15 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     }
     
     // Store symbol-value binding (overwrites existing)
-    // NOTE: (void)map_assoc_cow() already does RETAIN(value) and RETAIN(symbol) internally
+    // NOTE: map_assoc_cow() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
-    // Use CljValue API (ID = CljValue)
-    (void)map_assoc_cow((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
+    // CRITICAL: map_assoc_cow may return a new map (COW), so we must update ns->mappings
+    CljValue new_mappings = map_assoc_cow((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
+    if (new_mappings != (CljValue)ns->mappings) {
+        // Map was copied (COW) - update reference
+        RELEASE((CljObject*)ns->mappings);
+        ns->mappings = (CljObject*)new_mappings;
+        // new_mappings is already retained by map_assoc_cow
+    }
+    // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
 }

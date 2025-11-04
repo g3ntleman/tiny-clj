@@ -108,8 +108,16 @@ CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
   // HOT-PATH: RC=1 → check for in-place mutation (most common case)
   if (map_data->base.rc == 1) {
     // Check if key exists - update value (linear search necessary)
+    // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
     for (int i = 0; i < map_data->count; i++) {
       CljObject *k = KV_KEY(map_data->data, i);
+      // Fast path: pointer comparison first (for interned symbols/keywords)
+      if (k == key_obj) {
+        // Key found: update in-place (no branches after this)
+        ASSIGN(KV_VALUE(map_data->data, i), value_obj);
+        return map;  // Return SAME map
+      }
+      // Fallback: structural comparison for non-interned objects
       if (k && clj_equal(k, key_obj)) {
         // Key found: update in-place (no branches after this)
         ASSIGN(KV_VALUE(map_data->data, i), value_obj);

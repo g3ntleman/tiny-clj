@@ -3,6 +3,7 @@
 #include "symbol.h"
 #include "memory.h"
 #include "exception.h"
+#include <stdbool.h>
 
 typedef struct GoTask {
     CljObject *fn;            // zero-arity function to execute
@@ -36,19 +37,23 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljObject *result_channel) {
     g_task_count++;
 }
 
-// Helper: put result into simple map-based result channel {:value v :closed true}
-static void channel_put_and_close(CljObject *chan, CljObject *value) {
-    if (!chan) return;
-    CljObject *kw_value = intern_symbol(NULL, ":value");
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    if (value) {
-        (void)map_assoc_cow(chan, kw_value, value);
-    }
-    (void)map_assoc_cow(chan, kw_closed, (CljValue)clj_true);
-}
 
-int event_loop_run_next(CljMap *env, EvalState *st) {
-    if (g_task_count <= 0) return 0;
+/**
+ * @brief Execute the next enqueued go-block task
+ * @param env Environment map (currently unused, may be NULL)
+ * @param st Evaluation state for exception handling
+ * @return true if a task was executed, false if queue is empty
+ * 
+ * This function processes one go-block task from the queue (FIFO order):
+ * 1. Executes the zero-arity function with exception safety
+ * 2. Puts the result (or NULL on error) into the result channel
+ * 3. Closes the channel by setting :closed to true
+ * 4. Releases all task resources
+ */
+bool event_loop_run_next(CljMap *env, EvalState *st) {
+    (void)env;  // Currently unused, kept for future use
+    (void)st;   // Currently unused, kept for future use
+    if (g_task_count <= 0) return false;
     // Pop front (order is FIFO)
     GoTask task = g_tasks[0];
     for (int i = 1; i < g_task_count; ++i) g_tasks[i - 1] = g_tasks[i];
@@ -64,16 +69,49 @@ int event_loop_run_next(CljMap *env, EvalState *st) {
         // On error: do not deliver a value, just close the channel
         ok = false;
     } END_TRY
-    if (ok) {
-        channel_put_and_close(task.result_chan, result);
-    } else {
-        channel_put_and_close(task.result_chan, NULL);
+    
+    // Channel handling: reduce RC to 1 for in-place mutation
+    // The channel is referenced by both the caller (via return value) and the queue.
+    // To ensure map_assoc_cow mutates in-place (RC=1), we release the queue's reference
+    // before calling map_assoc_cow. This ensures the caller's reference sees the updates.
+    
+    bool released_queue_ref = false;
+    
+    if (task.result_chan) {
+        CljMap *map_data = as_map(task.result_chan);
+        // Reduce RC to 1 by releasing the queue's reference
+        // The caller's reference remains, so the channel won't be freed
+        if (map_data && map_data->base.rc > 1) {
+            RELEASE(task.result_chan);
+            released_queue_ref = true;
+        }
+        
+        CljObject *kw_value = intern_symbol(NULL, ":value");
+        CljObject *kw_closed = intern_symbol(NULL, ":closed");
+        
+        if (ok && result) {
+            // Put value into channel (will mutate in-place since RC=1)
+            (void)map_assoc_cow((CljValue)task.result_chan, (CljValue)kw_value, (CljValue)result);
+        }
+        
+        // Close channel (will mutate in-place since RC=1)
+        CljValue new_chan = map_assoc_cow((CljValue)task.result_chan, (CljValue)kw_closed, (CljValue)clj_true);
+        // Handle COW if it occurred (shouldn't happen with RC=1 for existing key)
+        if (new_chan != (CljValue)task.result_chan) {
+            if (!released_queue_ref) {
+                RELEASE((CljObject*)task.result_chan);
+            }
+            task.result_chan = (CljObject*)new_chan;
+        }
     }
 
-    if (result && !IS_IMMEDIATE(result)) RELEASE(result);
-    if (task.fn) RELEASE(task.fn);
-    if (task.result_chan) RELEASE(task.result_chan);
-    return 1;
+    if (!IS_IMMEDIATE(result)) RELEASE(result);
+    RELEASE(task.fn);
+    // Only release queue's reference if we didn't already release it above
+    if (!released_queue_ref) {
+        RELEASE(task.result_chan);
+    }
+    return true;
 }
 
 

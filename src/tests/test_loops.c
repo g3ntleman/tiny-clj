@@ -94,38 +94,44 @@ TEST(test_dotimes_with_environment) {
     RELEASE(env);
 }
 
+// Test that go-block enqueues task and result channel receives value
+// High-level test using eval_string
 TEST(test_go_enqueues_and_result_channel_receives_value) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
-    CljMap *env = (CljMap*)make_map(4);
     
-    // Build (go (do 1 2 3))
-    CljList *form = (CljList*)make_list((CljObject*)SYM_GO, NULL);
-    CljList *tail = form;
-    tail->rest = (CljObject*)make_list((CljObject*)fixnum(1), NULL);
-    tail = as_list((ID)tail->rest);
-    tail->rest = (CljObject*)make_list((CljObject*)fixnum(2), NULL);
-    tail = as_list((ID)tail->rest);
-    tail->rest = (CljObject*)make_list((CljObject*)fixnum(3), NULL);
+    // Use eval_string to evaluate (go (do 1 2 3)) - high-level approach
+    CljObject *chan = NULL;
+    TRY {
+        chan = eval_string("(go (do 1 2 3))", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
+        evalstate_free(st);
+        return;
+    } END_TRY
     
-    // Evaluate to get result channel
-    CljObject *chan = eval_list(form, env, st);
     TEST_ASSERT_NOT_NULL(chan);
     
-    // Initially closed? should be false
+    // Initially closed should be false
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
     CljObject *closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_FALSE);
     
-    // Run next task
-    // Variante mit Builtin
-    CljObject *run_sym = intern_symbol_global("run-next-task");
-    CljList *run_call = (CljList*)make_list(run_sym, NULL);
-    CljObject *ran_val = eval_list(run_call, env, st);
+    // Run next task using eval_string - high-level approach
+    CljObject *ran_val = NULL;
+    TRY {
+        ran_val = eval_string("(run-next-task)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        evalstate_free(st);
+        RELEASE(chan);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(ran_val);
     TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
-    int ran = as_special((CljValue)ran_val) == SPECIAL_TRUE;
-    TEST_ASSERT_EQUAL_INT(1, ran);
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_val) == SPECIAL_TRUE);
     
     // Channel should have value 3 and be closed
     CljObject *kw_value = intern_symbol(NULL, ":value");
@@ -138,55 +144,65 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     
     // Cleanup
     evalstate_free(st);
-    RELEASE(env);
-    RELEASE((CljObject*)form);
-    RELEASE((CljObject*)run_call);
+    RELEASE(chan);
 }
 
+// Test that run-next-task returns false when no tasks are queued
+// High-level test using eval_string
 TEST(test_run_next_task_returns_false_when_empty) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
-    CljMap *env = (CljMap*)make_map(4);
 
-    // Call builtin (run-next-task) when no tasks are queued
-    CljObject *run_sym = intern_symbol_global("run-next-task");
-    CljList *run_call = (CljList*)make_list(run_sym, NULL);
-    CljObject *ran_val = eval_list(run_call, env, st);
+    // Call run-next-task when no tasks are queued using eval_string - high-level approach
+    CljObject *ran_val = NULL;
+    TRY {
+        ran_val = eval_string("(run-next-task)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        evalstate_free(st);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(ran_val);
     TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
-    int ran = as_special((CljValue)ran_val) == SPECIAL_TRUE;
-    TEST_ASSERT_EQUAL_INT(0, ran);
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_val) == SPECIAL_FALSE);  // Should return false
 
     // Cleanup
     evalstate_free(st);
-    RELEASE(env);
-    RELEASE((CljObject*)run_call);
 }
 
+// Test that go-block with exception closes channel without value
+// High-level test using eval_string
 TEST(test_go_exception_closes_channel_without_value) {
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
-    CljMap *env = (CljMap*)make_map(4);
 
-    // Build (go (/ 1 0)) to force a division-by-zero exception in body
-    CljList *form = (CljList*)make_list((CljObject*)SYM_GO, NULL);
-    CljList *call = (CljList*)make_list((CljObject*)SYM_DIVIDE, NULL);
-    CljList *tail = call;
-    tail->rest = (CljObject*)make_list((CljObject*)fixnum(1), NULL);
-    tail = as_list((ID)tail->rest);
-    tail->rest = (CljObject*)make_list((CljObject*)fixnum(0), NULL);
-    form->rest = (CljObject*)call;
+    // Use eval_string to evaluate (go (/ 1 0)) - high-level approach
+    CljObject *chan = NULL;
+    TRY {
+        chan = eval_string("(go (/ 1 0))", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
+        evalstate_free(st);
+        return;
+    } END_TRY
 
-    // Evaluate to get result channel
-    CljObject *chan = eval_list(form, env, st);
     TEST_ASSERT_NOT_NULL(chan);
 
-    // Run next task
-    CljObject *run_sym = intern_symbol_global("run-next-task");
-    CljList *run_call = (CljList*)make_list(run_sym, NULL);
-    CljObject *ran_val = eval_list(run_call, env, st);
+    // Run next task using eval_string - high-level approach
+    CljObject *ran_val = NULL;
+    TRY {
+        ran_val = eval_string("(run-next-task)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        evalstate_free(st);
+        RELEASE(chan);
+        return;
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL(ran_val);
     TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
-    int ran = as_special((CljValue)ran_val) == SPECIAL_TRUE;
-    TEST_ASSERT_EQUAL_INT(1, ran);
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_val) == SPECIAL_TRUE);  // Task should have run
 
     // Channel should be closed and have no value
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
@@ -195,14 +211,65 @@ TEST(test_go_exception_closes_channel_without_value) {
     TEST_ASSERT_NOT_NULL(closed_val);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
-    CljObject *val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_value);
-    TEST_ASSERT_TRUE(val == NULL);
+    CljValue val = map_get((CljValue)chan, (CljValue)kw_value);
+    // When no value is set (error case), :value key exists but value is NULL
+    // make_result_channel sets :value to NULL, so map_get returns NULL
+    // After error, we don't update :value, so it remains NULL
+    TEST_ASSERT_NULL(val);
 
     // Cleanup
     evalstate_free(st);
-    RELEASE(env);
-    RELEASE((CljObject*)form);
-    RELEASE((CljObject*)run_call);
+    RELEASE(chan);
+}
+
+// High-level test: Test that go-block with successful execution puts value
+TEST(test_go_success_puts_value_high_level) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create channel with go-block that succeeds
+    CljObject *chan = NULL;
+    TRY {
+        chan = eval_string("(go (+ 1 2))", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
+        evalstate_free(st);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(chan);
+    
+    // Run next task
+    CljObject *ran_result = NULL;
+    TRY {
+        ran_result = eval_string("(run-next-task)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        evalstate_free(st);
+        RELEASE(chan);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(ran_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_result) == SPECIAL_TRUE);
+    
+    // After successful execution, channel should have value 3 and be closed
+    CljObject *kw_value = intern_symbol(NULL, ":value");
+    CljObject *kw_closed = intern_symbol(NULL, ":closed");
+    CljValue val = map_get((CljValue)chan, (CljValue)kw_value);
+    CljValue closed_val = map_get((CljValue)chan, (CljValue)kw_closed);
+    
+    TEST_ASSERT_NOT_NULL((CljObject*)val);
+    TEST_ASSERT_TRUE(is_fixnum(val));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(val));  // Should have value 3
+    TEST_ASSERT_NOT_NULL((CljObject*)closed_val);
+    TEST_ASSERT_TRUE(is_special(closed_val));
+    TEST_ASSERT_TRUE(as_special(closed_val) == SPECIAL_TRUE);  // Should be closed
+    
+    // Cleanup
+    evalstate_free(st);
+    RELEASE(chan);
 }
 
 // ============================================================================

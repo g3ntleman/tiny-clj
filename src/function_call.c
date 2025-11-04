@@ -1322,6 +1322,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return AUTORELEASE(eval_fn(list, env));
     }
     
+    if (original_op == SYM_DEF) {
+        return eval_def(list, env, st);
+    }
+    
     if (original_op == SYM_DEFN) {
         return eval_defn(list, env, st);
     }

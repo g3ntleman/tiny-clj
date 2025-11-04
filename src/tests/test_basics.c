@@ -678,16 +678,217 @@ TEST(test_eval_list_function_call) {
     }
     
     // Define a simple function
-    CljObject *def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
+    CljObject *def_result = NULL;
+    TRY {
+        def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Failed to define function");
+        evalstate_free(st);
+        return;
+    } END_TRY
+    
     TEST_ASSERT_NOT_NULL(def_result);
     // No RELEASE needed - eval_string returns autoreleased object
     
     // Call the function
-    CljObject *result = eval_string("(test-fn 5)", st);
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(test-fn 5)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Failed to call function - symbol not resolved");
+        evalstate_free(st);
+        return;
+    } END_TRY
+    
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
     
     // No RELEASE needed - eval_string returns autoreleased object
+    evalstate_free(st);
+}
+
+// ============================================================================
+// ISOLATED TEST FOR DEF PROBLEM
+// ============================================================================
+
+// Test that isolates the def problem: checks if def stores symbol correctly
+TEST(test_def_isolated_problem) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Step 1: Verify namespace is initialized
+    TEST_ASSERT_NOT_NULL(st->current_ns);
+    // Note: mappings will be created on demand by ns_define
+    
+    // Step 2: Define a simple value using def
+    CljObject *def_result = NULL;
+    TRY {
+        def_result = eval_string("(def test-value 42)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("def should not throw exception");
+        evalstate_free(st);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(def_result);
+    
+    // Step 3: Check if namespace mappings exist after def
+    TEST_ASSERT_NOT_NULL_MESSAGE(st->current_ns->mappings, "Namespace mappings should exist after def");
+    
+    // Step 4: Use the symbol returned by def (should be the same as what was stored)
+    CljObject *test_value_sym = def_result;  // def returns the symbol
+    TEST_ASSERT_NOT_NULL(test_value_sym);
+    TEST_ASSERT_TRUE(is_type(test_value_sym, CLJ_SYMBOL));
+    
+    CljObject *resolved = ns_resolve(st, test_value_sym);
+    if (resolved) {
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "Resolved value should be a fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)resolved), "Resolved value should be 42");
+        RELEASE(resolved);
+    } else {
+        TEST_FAIL_MESSAGE("ns_resolve should find test-value after def");
+    }
+    
+    // Step 5: Try to resolve via eval_symbol (what eval_string uses)
+    CljObject *eval_resolved = NULL;
+    TRY {
+        eval_resolved = eval_symbol(test_value_sym, st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined symbol");
+        evalstate_free(st);
+        RELEASE(test_value_sym);
+        return;
+    } END_TRY
+    
+    if (eval_resolved) {
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)eval_resolved), "eval_symbol result should be a fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)eval_resolved), "eval_symbol result should be 42");
+    } else {
+        TEST_FAIL_MESSAGE("eval_symbol should find test-value after def");
+    }
+    
+    // Step 6: Try to use the symbol in eval_string
+    CljObject *eval_string_result = NULL;
+    TRY {
+        eval_string_result = eval_string("test-value", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("eval_string should resolve test-value without exception");
+        evalstate_free(st);
+        RELEASE(test_value_sym);
+        if (eval_resolved) RELEASE(eval_resolved);
+        return;
+    } END_TRY
+    
+    if (eval_string_result) {
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)eval_string_result), "eval_string result should be a fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)eval_string_result), "eval_string result should be 42");
+    } else {
+        TEST_FAIL_MESSAGE("eval_string should return 42 for test-value");
+    }
+    
+    // Cleanup
+    RELEASE(test_value_sym);
+    if (eval_resolved) RELEASE(eval_resolved);
+    evalstate_free(st);
+}
+
+// Test that isolates the def problem with functions: checks if def stores function correctly
+TEST(test_def_function_isolated_problem) {
+    EvalState *st = evalstate_new();
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Step 1: Define a function using def and fn
+    CljObject *def_result = NULL;
+    TRY {
+        def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("def with fn should not throw exception");
+        evalstate_free(st);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(def_result);
+    
+    // Step 2: Check if namespace mappings exist after def
+    TEST_ASSERT_NOT_NULL_MESSAGE(st->current_ns->mappings, "Namespace mappings should exist after def");
+    
+    // Step 3: Use the symbol returned by def (should be the same as what was stored)
+    CljObject *test_fn_sym = def_result;  // def returns the symbol
+    TEST_ASSERT_NOT_NULL(test_fn_sym);
+    TEST_ASSERT_TRUE(is_type(test_fn_sym, CLJ_SYMBOL));
+    
+    // Step 4: Check if mappings map exists and has entries
+    if (!st->current_ns->mappings) {
+        TEST_FAIL_MESSAGE("Namespace mappings should exist after def");
+        evalstate_free(st);
+        RELEASE(test_fn_sym);
+        return;
+    }
+    
+    // Step 5: Try to get the value directly from the map
+    CljObject *direct_map_value = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)test_fn_sym);
+    if (direct_map_value) {
+        TEST_ASSERT_TRUE_MESSAGE(is_type(direct_map_value, CLJ_FUNC) || is_type(direct_map_value, CLJ_CLOSURE), 
+                                 "Direct map lookup should return a function");
+    } else {
+        TEST_FAIL_MESSAGE("Direct map_get should find test-fn after def");
+    }
+    
+    // Step 6: Try to resolve the symbol directly via ns_resolve
+    CljObject *resolved = ns_resolve(st, test_fn_sym);
+    if (resolved) {
+        TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_FUNC) || is_type(resolved, CLJ_CLOSURE), 
+                                 "Resolved value should be a function");
+    } else {
+        TEST_FAIL_MESSAGE("ns_resolve should find test-fn after def (direct map lookup succeeded)");
+    }
+    
+    // Step 4: Try to resolve via eval_symbol
+    CljObject *eval_resolved = NULL;
+    TRY {
+        eval_resolved = eval_symbol(test_fn_sym, st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined function");
+        evalstate_free(st);
+        RELEASE(test_fn_sym);
+        if (resolved) RELEASE(resolved);
+        return;
+    } END_TRY
+    
+    if (!eval_resolved) {
+        TEST_FAIL_MESSAGE("eval_symbol should find test-fn after def");
+    }
+    
+    // Step 7: Try to call the function via eval_string
+    CljObject *call_result = NULL;
+    TRY {
+        call_result = eval_string("(test-fn 5)", st);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Calling test-fn should not throw exception");
+        evalstate_free(st);
+        RELEASE(test_fn_sym);
+        if (resolved) RELEASE(resolved);
+        if (eval_resolved) RELEASE(eval_resolved);
+        return;
+    } END_TRY
+    
+    if (call_result) {
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)call_result), "Function call result should be a fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(10, as_fixnum((CljValue)call_result), "Function call result should be 10");
+    } else {
+        TEST_FAIL_MESSAGE("Function call should return 10");
+    }
+    
+    // Cleanup
+    RELEASE(test_fn_sym);
+    if (resolved) RELEASE(resolved);
+    if (eval_resolved) RELEASE(eval_resolved);
     evalstate_free(st);
 }
 

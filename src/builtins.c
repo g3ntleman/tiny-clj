@@ -46,14 +46,80 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
 }
 
 ID nth2(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 2, "nth")) return NULL;
+    // nth accepts 2 or 3 arguments: (nth coll index) or (nth coll index not-found)
+    if (argc != 2 && argc != 3) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "nth requires exactly 2 or 3 argument%s, got %u", 
+                argc == 1 ? "" : "s", argc);
+        throw_exception(EXCEPTION_TYPE_ARITY, error_msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
     ID vec = args[0];
     ID idx = args[1];
+    ID not_found = argc == 3 ? args[2] : NULL;
     if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return (NULL);
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
-    if (!v || i < 0 || i >= v->count) return (NULL);
+    if (!v || i < 0 || i >= v->count) {
+        // Index out of bounds: return not-found if provided, otherwise NULL
+        if (not_found) {
+            return RETAIN(not_found);
+        }
+        return NULL;
+    }
     return (RETAIN(v->data[i]));
+}
+
+// peek: returns last element of vector, or nil if empty
+ID native_peek(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "peek")) return NULL;
+    ID vec = args[0];
+    if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
+    CljPersistentVector *v = as_vector(vec);
+    if (!v || v->count == 0) return NULL;  // nil for empty vector
+    return RETAIN(v->data[v->count - 1]);  // Return last element
+}
+
+// pop: returns new vector without last element, or empty vector if empty
+// Uses Copy-on-Write: RC=1 → in-place mutation (O(1)), RC>1 → COW (O(n))
+ID native_pop(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "pop")) return NULL;
+    ID vec = args[0];
+    if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
+    CljPersistentVector *v = as_vector(vec);
+    if (!v || v->count == 0) {
+        // Return empty vector
+        CljValue empty = make_vector(0, false);
+        return empty;
+    }
+    
+    // OPTIMIZATION: If RC=1, mutate in-place (O(1))
+    // This is the hot path - most common case when vector is not shared
+    if (v->base.rc == 1) {
+        // Release last element
+        if (v->data[v->count - 1]) {
+            RELEASE(v->data[v->count - 1]);
+        }
+        v->count--;
+        return (ID)vec;  // Return same vector (in-place mutation)
+    }
+    
+    // RC>1: Copy-on-Write (O(n))
+    // Original vector is shared, so we must create a new copy
+    CljValue new_vec = make_vector(v->count - 1, false);
+    CljPersistentVector *new_v = as_vector((CljObject*)new_vec);
+    if (!new_v) return NULL;
+    
+    // Copy all elements except the last one
+    for (int i = 0; i < v->count - 1; i++) {
+        if (v->data[i]) {
+            new_v->data[i] = RETAIN(v->data[i]);
+            new_v->count++;
+        }
+    }
+    
+    return new_vec;
 }
 
 // Forward declaration
@@ -542,7 +608,7 @@ ID native_run_next_task(ID *args, unsigned int argc) {
     if (argc != 0) return NULL;
     EvalState *st = evalstate();
     CljMap *env = NULL;
-    int ran = event_loop_run_next(env, st);
+    bool ran = event_loop_run_next(env, st);
     return ran ? clj_true : clj_false;
 }
 
@@ -1680,6 +1746,8 @@ void register_builtins() {
     register_builtin_in_namespace("array-map", native_array_map);
     register_builtin_in_namespace("vector", native_vector);
     register_builtin_in_namespace("nth", nth2);
+    register_builtin_in_namespace("peek", native_peek);
+    register_builtin_in_namespace("pop", native_pop);
     register_builtin_in_namespace("conj", native_conj);
     register_builtin_in_namespace("first", native_first);
     register_builtin_in_namespace("rest", native_rest);

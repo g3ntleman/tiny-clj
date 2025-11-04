@@ -512,7 +512,11 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
  * @brief Parse symbol literal (identifier) using Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return Parsed symbol CljObject or NULL on error
+ * @return Parsed symbol CljObject (interned via intern_symbol_global) or NULL on error
+ * 
+ * IMPORTANT: All symbols returned by the parser (directly or indirectly) are interned.
+ * This ensures pointer equality for the same symbol names, which is critical for
+ * map lookups and namespace resolution.
  */
 static ID parse_symbol(Reader *reader, EvalState *st) {
   (void)st;
