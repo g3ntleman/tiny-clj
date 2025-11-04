@@ -253,6 +253,7 @@ add_executable(unity-tests
     src/tests/test_time.c
     src/tests/test_loops.c
     src/tests/test_map.c
+    src/tests/test_vector.c
     src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
     src/tests/test_sequences.c

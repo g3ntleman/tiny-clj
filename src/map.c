@@ -74,7 +74,7 @@ ID map_get(CljValue map, CljValue key) {
       return result;
     }
     // Fallback: structural comparison for non-interned objects
-    if (clj_equal(stored_key, key_obj)) {
+    if (stored_key && clj_equal(stored_key, key_obj)) {
       CljValue result = KV_VALUE(map_data->data, i);
       // printf("DEBUG: map_get found key (structural): %p -> %p\n", key_obj, result);
       // printf("DEBUG: result is_fixnum: %d\n", is_fixnum(result));
@@ -99,16 +99,9 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
     return;
   }
   
-  // Check if key exists
+  // Check if key exists (clj_equal() already does == check first)
   for (int i = 0; i < map_data->count; i++) {
     CljObject *k = KV_KEY(map_data->data, i);
-    // Fast path: pointer comparison first (for interned symbols)
-    if (k == key_obj) {
-      // ASSIGN handles both Immediates and heap objects
-      ASSIGN(KV_VALUE(map_data->data, i), (CljObject*)value);
-      return;
-    }
-    // Fallback: structural comparison for non-interned objects
     if (k && clj_equal(k, key_obj)) {
       // ASSIGN handles both Immediates and heap objects
       ASSIGN(KV_VALUE(map_data->data, i), (CljObject*)value);
@@ -116,14 +109,7 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
     }
   }
   
-  // Key not found - this should not happen for existing keys
-  // If we reach here, the key was not found, which means either:
-  // 1. The key pointer is different (intern_symbol issue)
-  // 2. clj_equal is not working correctly for symbols
-  // 3. The map capacity is full and we can't add the key
-  
-  // Add new entry (if capacity allows)
-  // printf("DEBUG: map_assoc capacity check: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
+  // Key not found - add new entry (if capacity allows)
   if (map_data->count < map_data->capacity) {
     int idx = map_data->count;
     KV_KEY(map_data->data, idx) = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
@@ -131,8 +117,6 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
     KV_VALUE(map_data->data, idx) = NULL; // Initialize to NULL before ASSIGN
     ASSIGN(KV_VALUE(map_data->data, idx), (CljObject*)value);
     map_data->count++;
-  } else {
-    // printf("DEBUG: map_assoc failed - capacity exceeded: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
   }
   // Note: No growth for in-place map_assoc (use map_assoc_cow for that)
 }

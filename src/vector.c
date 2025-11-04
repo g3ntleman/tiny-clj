@@ -12,7 +12,6 @@ static struct {
         .base = { .type = CLJ_VECTOR, .rc = 0 },
         .count = 0,
         .capacity = 0,
-        .mutable_flag = 0,
         .data = NULL
     }
 };
@@ -51,7 +50,7 @@ CljValue make_vector(unsigned int capacity, bool is_mutable) {
     vec->base.rc = 1;
     vec->count = 0;
     vec->capacity = capacity;
-    vec->mutable_flag = is_mutable;
+    // mutable_flag removed: COW (RC-based) handles mutability automatically
     if (capacity > 0) {
         vec->data = (CljObject **)calloc((size_t)capacity, sizeof(CljObject *));
         if (!vec->data) {
@@ -65,7 +64,9 @@ CljValue make_vector(unsigned int capacity, bool is_mutable) {
     return (CljValue)vec;
 }
 
-/** Return a new vector with item appended; original vector remains unchanged. */
+/** Return a new vector with item appended; original vector remains unchanged.
+ * Uses Copy-on-Write: RC=1 → in-place mutation, RC>1 → COW.
+ */
 CljValue vector_conj(CljValue vec, CljValue item) {
     if (!vec || ((CljObject*)vec)->type != CLJ_VECTOR || !item)
         return NULL;
@@ -74,26 +75,91 @@ CljValue vector_conj(CljValue vec, CljValue item) {
     if (!old_vec)
         return NULL;
 
-    int new_capacity = old_vec->capacity + 1;
-    if (new_capacity < 4)
-        new_capacity = 4;
+    // Empty vector singleton (RC=0): Always create new vector
+    if (old_vec->base.rc == 0) {
+        CljValue new_vec_obj = make_vector(4, false);
+        CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
+        if (!new_vec)
+            return vec;  // Return original vector on OOM
+        new_vec->data[0] = RETAIN(item);
+        new_vec->count = 1;
+        return new_vec_obj;
+    }
 
-    CljValue new_vec_obj = make_vector(new_capacity, 0);
+    // OPTIMIZATION: If RC=1 and capacity allows, mutate in-place
+    if (old_vec->base.rc == 1 && old_vec->count < old_vec->capacity) {
+        old_vec->data[old_vec->count++] = RETAIN(item);
+        return vec;  // Return same vector (in-place mutation)
+    }
+
+    // RC>1 or out of capacity: Copy-on-Write with optional growth
+    int new_capacity = old_vec->capacity;
+    if (old_vec->count >= old_vec->capacity) {
+        new_capacity = old_vec->capacity * 2;
+        if (new_capacity < 4) new_capacity = 4;
+    }
+
+    CljValue new_vec_obj = make_vector(new_capacity, false);
     CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
+    if (!new_vec)
+        return vec;  // Return original vector on OOM
 
+    // Copy existing elements with RETAIN
     for (int i = 0; i < old_vec->count; i++) {
         if (old_vec->data[i]) {
             new_vec->data[i] = old_vec->data[i];
             RETAIN(old_vec->data[i]);
         }
     }
-    // set count for existing elements (including possible NULL holes)
     new_vec->count = old_vec->count;
-    // append the new item
-    new_vec->data[new_vec->count++] = (CljObject*)item;
-    RETAIN((CljObject*)item);
 
-    return new_vec_obj;
+    // Append new item
+    new_vec->data[new_vec->count++] = RETAIN(item);
+
+    return new_vec_obj;  // Return new vector (COW)
+}
+
+/** Update element at index with COW: RC=1 → in-place, RC>1 → COW. */
+CljVector vector_assoc(CljVector vec, int index, ID value) {
+    if (!vec || vec->base.type != CLJ_VECTOR || !value)
+        return NULL;
+
+    CljPersistentVector *old_vec = as_vector((ID)vec);
+    if (!old_vec || index < 0 || index >= old_vec->count)
+        return NULL;
+
+    // Empty vector singleton (RC=0): Not applicable (index >= count)
+    if (old_vec->base.rc == 0) {
+        return NULL;
+    }
+
+    // OPTIMIZATION: If RC=1, mutate in-place
+    if (old_vec->base.rc == 1) {
+        RELEASE(old_vec->data[index]);
+        old_vec->data[index] = RETAIN(value);
+        return vec;  // Return same vector (in-place mutation)
+    }
+
+    // RC>1: Copy-on-Write
+    CljValue new_vec_obj = make_vector(old_vec->capacity, false);
+    CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
+    if (!new_vec)
+        return vec;  // Return original vector on OOM
+
+    // Copy existing elements with RETAIN
+    for (int i = 0; i < old_vec->count; i++) {
+        if (old_vec->data[i]) {
+            if (i == index) {
+                new_vec->data[i] = RETAIN(value);  // New value
+            } else {
+                new_vec->data[i] = old_vec->data[i];
+                RETAIN(old_vec->data[i]);
+            }
+        }
+    }
+    new_vec->count = old_vec->count;
+
+    return new_vec;  // Return new vector (COW)
 }
 
 // === Transient API (Phase 2) ===
@@ -115,7 +181,7 @@ CljValue transient(CljValue vec) {
     tvec->base.rc = 1;
     tvec->count = v->count;
     tvec->capacity = v->capacity;
-    tvec->mutable_flag = 1; // Transients sind immer mutable
+    // mutable_flag removed: Transients identified by CLJ_TRANSIENT_VECTOR type
     
     // Kopiere data array
     if (v->capacity > 0) {

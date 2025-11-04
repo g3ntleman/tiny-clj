@@ -8,9 +8,12 @@ typedef struct {
     CljObject base;
     int count;
     int capacity;
-    int mutable_flag;
+    // mutable_flag removed: COW (RC-based) handles mutability automatically
     CljObject **data;
 } CljPersistentVector;
+
+// Type alias for convenience
+typedef CljPersistentVector* CljVector;
 
 // Type-safe casting
 static inline CljPersistentVector* as_vector(ID obj) {
@@ -27,11 +30,15 @@ static inline CljPersistentVector* as_vector(ID obj) {
 
 // === Legacy API removed - use CljValue API instead ===
 
-// === Neue CljValue API (Phase 1: Parallel) ===
+// === CljValue API ===
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
 CljValue make_vector(unsigned int capacity, bool is_mutable);
-/** Return a new vector with item appended; original vector remains unchanged. */
+/** Return a new vector with item appended; original vector remains unchanged.
+ * Uses Copy-on-Write: RC=1 → in-place mutation, RC>1 → COW.
+ */
 CljValue vector_conj(CljValue vec, CljValue item);
+/** Update element at index with COW: RC=1 → in-place mutation, RC>1 → COW. */
+CljVector vector_assoc(CljVector vec, int index, ID value);
 
 // === Transient API (Phase 2) ===
 /** Convert persistent vector to transient. */

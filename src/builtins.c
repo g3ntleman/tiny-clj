@@ -66,32 +66,10 @@ ID conj2_wrapper(ID *args, int argc) {
 
 ID conj2(ID vec, ID val) {
     if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
-    CljPersistentVector *v = as_vector(vec);
-    int is_mutable = v ? v->mutable_flag : 0;
-    if (is_mutable) {
-        if (v->count >= v->capacity) {
-            int newcap = v->capacity > 0 ? v->capacity * 2 : 1;
-            void *newmem = realloc(v->data, sizeof(CljObject*) * (size_t)newcap);
-            if (!newmem) return NULL;
-            v->data = (CljObject**)newmem;
-            v->capacity = newcap;
-        }
-        v->data[v->count++] = (RETAIN(val), val);
-        return (ID)RETAIN(vec);
-    } else {
-        int need = v->count + 1;
-        int newcap = v->capacity;
-        if (need > newcap) newcap = newcap > 0 ? newcap * 2 : 1;
-        CljValue copy_val = make_vector(newcap, 0);
-        CljObject *copy = copy_val;
-        CljPersistentVector *c = as_vector(copy);
-        for (int i = 0; i < v->count; ++i) {
-            c->data[i] = (RETAIN(v->data[i]), v->data[i]);
-        }
-        c->count = v->count;
-        c->data[c->count++] = (RETAIN(val), val);
-        return (ID)copy;
-    }
+    // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
+    CljValue result = vector_conj((CljValue)vec, (CljValue)val);
+    if (!result) return NULL;
+    return (ID)RETAIN(result);
 }
 
 // Generic conj function that works with BuiltinFn signature
@@ -263,23 +241,10 @@ ID assoc3(ID *args, unsigned int argc) {
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) return (NULL);
-    int is_mutable = v->mutable_flag;
-    if (is_mutable) {
-        RELEASE(v->data[i]);
-        v->data[i] = (RETAIN(val), val);
-        return (RETAIN(vec));
-    } else {
-        CljValue copy_val = make_vector(v->capacity, 0);
-        CljObject *copy = (CljObject*)copy_val;
-        CljPersistentVector *c = as_vector(copy);
-        for (int j = 0; j < v->count; ++j) {
-            c->data[j] = (RETAIN(v->data[j]), v->data[j]);
-        }
-        c->count = v->count;
-        RELEASE(c->data[i]);
-        c->data[i] = (RETAIN(val), val);
-        return (copy);
-    }
+    // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
+    CljVector result = vector_assoc((CljVector)vec, i, val);
+    if (!result) return NULL;
+    return (ID)RETAIN(result);
 }
 
 // Transient functions
@@ -442,7 +407,7 @@ ID native_type(ID *args, unsigned int argc) {
             return (CljObject*)intern_symbol_global("Number");
         case TAG_CHAR:
             return (CljObject*)intern_symbol_global("Character");
-        case TAG_SPECIAL: {
+        case TAG_BOOL: {
             int special_type = as_special(val);
             if (special_type == SPECIAL_TRUE || special_type == SPECIAL_FALSE) {
                 return (CljObject*)intern_symbol_global("Boolean");
