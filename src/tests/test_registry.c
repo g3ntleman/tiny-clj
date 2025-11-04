@@ -65,11 +65,21 @@ void test_registry_add_with_group(const char *name, TestFunc func, const char *g
         return;
     }
     
+    // Copy group name to ensure it's permanently stored
+    size_t group_len = strlen(group);
+    char *group_copy = malloc(group_len + 1);
+    if (!group_copy) {
+        fprintf(stderr, "Error: Failed to allocate memory for group name\n");
+        free(qualified_name);
+        return;
+    }
+    strcpy(group_copy, group);
+    
     // Add test to registry
     test_registry[test_count].name = name;
     test_registry[test_count].qualified_name = qualified_name;
     test_registry[test_count].func = func;
-    test_registry[test_count].group = group;
+    test_registry[test_count].group = group_copy;
     test_count++;
 }
 
@@ -93,15 +103,11 @@ Test *test_registry_find_by_qualified_name(const char *qualified_name) {
     return NULL;
 }
 
-// Find a test by pattern (supports both simple names and qualified names)
+// Find a test by pattern (matches against qualified name: group/testname)
 Test *test_registry_find_by_pattern(const char *pattern) {
     for (size_t i = 0; i < test_count; i++) {
-        // Try matching against qualified name first
+        // Match against qualified name (group/testname format)
         if (test_name_matches_pattern(test_registry[i].qualified_name, pattern)) {
-            return &test_registry[i];
-        }
-        // Fallback to simple name matching
-        if (test_name_matches_pattern(test_registry[i].name, pattern)) {
             return &test_registry[i];
         }
     }
@@ -194,10 +200,49 @@ void test_registry_list_groups(void) {
 
 // Clear the registry (for cleanup)
 void test_registry_clear(void) {
+    // Free all allocated strings (qualified_name and group)
+    for (size_t i = 0; i < test_count; i++) {
+        free((void*)test_registry[i].qualified_name);
+        free((void*)test_registry[i].group);
+    }
     free(test_registry);
     test_registry = NULL;
     test_count = 0;
     test_capacity = 0;
+}
+
+// Helper function to extract filename from __FILE__ (without path and extension)
+const char *test_extract_filename_from_path(const char *file_path) {
+    if (!file_path) return "unknown";
+    
+    // Find the last path separator (Unix '/' or Windows '\')
+    const char *last_sep = strrchr(file_path, '/');
+    const char *last_sep_win = strrchr(file_path, '\\');
+    if (last_sep_win && (!last_sep || last_sep_win > last_sep)) {
+        last_sep = last_sep_win;
+    }
+    
+    // Start from after the last separator, or from the beginning if no separator found
+    const char *filename = last_sep ? last_sep + 1 : file_path;
+    
+    // Find the extension (last dot)
+    const char *last_dot = strrchr(filename, '.');
+    if (last_dot) {
+        // Allocate a static buffer to hold the filename without extension
+        // Note: This is per-call, so each call gets its own buffer
+        // For registration, we'll copy this string anyway
+        static char buffer[256];
+        size_t len = last_dot - filename;
+        if (len >= sizeof(buffer)) {
+            len = sizeof(buffer) - 1;
+        }
+        strncpy(buffer, filename, len);
+        buffer[len] = '\0';
+        return buffer;
+    }
+    
+    // No extension found, return filename as-is
+    return filename;
 }
 
 // Simple pattern matching with * wildcard

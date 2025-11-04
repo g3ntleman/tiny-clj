@@ -40,10 +40,8 @@
 #include "../clj_strings.h"
 #include "../tiny_clj.h"
 
-// Test Registry (will be implemented in next step)
-// Forward declaration for now
-void test_registry_add(const char *name, void (*func)(void));
-void test_registry_add_with_group(const char *name, void (*func)(void), const char *group);
+// Test Registry
+#include "test_registry.h"
 
 // Registration macro for automatic test discovery
 #define REGISTER_TEST(func) \
@@ -54,6 +52,7 @@ void test_registry_add_with_group(const char *name, void (*func)(void), const ch
 
 // Simple TEST macro that defines and registers a test function
 // Automatically wraps test in WITH_AUTORELEASE_POOL for memory management
+// Extracts filename from __FILE__ to use as group name
 #define TEST(name) \
     static void name##_body(void); \
     void name(void) { \
@@ -63,7 +62,8 @@ void test_registry_add_with_group(const char *name, void (*func)(void), const ch
     } \
     static void register_##name(void) __attribute__((constructor)); \
     static void register_##name(void) { \
-        test_registry_add_with_group(#name, name, "test"); \
+        const char *filename = test_extract_filename_from_path(__FILE__); \
+        test_registry_add_with_group(#name, name, filename); \
     } \
     static void name##_body(void)
 

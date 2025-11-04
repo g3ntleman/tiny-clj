@@ -801,6 +801,40 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return eval_body_with_params(branch, params, values, param_count, (CljObject*)closure_env);
     }
     
+    if (op == SYM_WHEN) {
+        // (when condition body...)
+        CljObject *cond_val = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (CljObject*)closure_env);
+        if (!cond_val) return NULL;
+        
+        bool truthy = clj_is_truthy(cond_val);
+        if (!truthy) {
+            RELEASE(cond_val);
+            return NULL; // nil
+        }
+        RELEASE(cond_val);
+        
+        // Evaluate all body expressions, return last one
+        CljList *list_data = as_list((ID)list);
+        int list_len = list_count(list_data);
+        CljObject *result = NULL;
+        
+        for (int i = 2; i < list_len; i++) {
+            CljObject *body_expr = list_get_element(list_data, i);
+            if (body_expr) {
+                if (result) {
+                    RELEASE(result);
+                }
+                result = eval_body_with_params(body_expr, params, values, param_count, (CljObject*)closure_env);
+                if (!result && i < list_len - 1) {
+                    // Error in body evaluation
+                    return NULL;
+                }
+            }
+        }
+        
+        return result;
+    }
+    
     // Tier 2: Frequent (70-90% of calls)
     if (op == SYM_MULTIPLY) {
         return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_MUL, closure_env);
@@ -1185,6 +1219,39 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
         if (!branch) return NULL;
         return eval_body(branch, env, st);
+    }
+    
+    if (original_op == SYM_WHEN) {
+        // (when condition body...)
+        CljObject *cond_val = eval_arg_retained(list, 1, env);
+        if (!cond_val) return NULL;
+        
+        bool truthy = clj_is_truthy(cond_val);
+        RELEASE(cond_val);
+        
+        if (!truthy) {
+            return NULL; // nil
+        }
+        
+        // Evaluate all body expressions, return last one
+        int list_len = list_count(list);
+        CljObject *result = NULL;
+        
+        for (int i = 2; i < list_len; i++) {
+            CljObject *body_expr = list_get_element(list, i);
+            if (body_expr) {
+                if (result) {
+                    RELEASE(result);
+                }
+                result = eval_body(body_expr, env, st);
+                if (!result && i < list_len - 1) {
+                    // Error in body evaluation
+                    return NULL;
+                }
+            }
+        }
+        
+        return result;
     }
     
     if (original_op == SYM_COND) {
@@ -1647,7 +1714,8 @@ ID eval_symbol(ID symbol, EvalState *st) {
     if (sym) {
         
         // Check against cached symbol pointers for O(1) lookup (only if initialized)
-        if ((SYM_IF && symbol == SYM_IF) || (SYM_DEF && symbol == SYM_DEF) || 
+        if ((SYM_IF && symbol == SYM_IF) || (SYM_COND && symbol == SYM_COND) || 
+            (SYM_WHEN && symbol == SYM_WHEN) || (SYM_DEF && symbol == SYM_DEF) || 
             (SYM_DEFN && symbol == SYM_DEFN) || (SYM_FN && symbol == SYM_FN) || 
             (SYM_QUOTE && symbol == SYM_QUOTE) || 
             (SYM_RECUR && symbol == SYM_RECUR) || (SYM_AND && symbol == SYM_AND) || 

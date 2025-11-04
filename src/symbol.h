@@ -23,6 +23,7 @@ extern CljObject *SYM_TRY;
 extern CljObject *SYM_CATCH;
 extern CljObject *SYM_IF;
 extern CljObject *SYM_COND;
+extern CljObject *SYM_WHEN;
 extern CljObject *SYM_LET;
 extern CljObject *SYM_FN;
 extern CljObject *SYM_DEF;

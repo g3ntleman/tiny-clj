@@ -37,4 +37,8 @@ void test_registry_clear(void);
 // Pattern matching helper
 bool test_name_matches_pattern(const char *name, const char *pattern);
 
+// Helper function to extract filename from __FILE__ (without path and extension)
+// Returns a statically allocated string that should be copied if needed
+const char *test_extract_filename_from_path(const char *file_path);
+
 #endif // TEST_REGISTRY_H

@@ -122,6 +122,101 @@ ID native_pop(ID *args, unsigned int argc) {
     return new_vec;
 }
 
+// subvec: returns sub-vector from start (inclusive) to end (exclusive)
+// (subvec v start) → sub-vector from start to end of vector
+// (subvec v start end) → sub-vector from start (inclusive) to end (exclusive)
+// Clojure-compatible: always creates new immutable vector (O(n) operation)
+ID native_subvec(ID *args, unsigned int argc) {
+    // subvec accepts 2 or 3 arguments: (subvec v start) or (subvec v start end)
+    if (argc != 2 && argc != 3) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                "subvec requires exactly 2 or 3 argument%s, got %u",
+                argc == 1 ? "" : "s", argc);
+        throw_exception(EXCEPTION_TYPE_ARITY, error_msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    ID vec = args[0];
+    ID start_idx = args[1];
+    ID end_idx = argc == 3 ? args[2] : NULL;
+    
+    // Type validation
+    if (!vec || !is_type(vec, CLJ_VECTOR)) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "subvec requires a vector as first argument");
+        return NULL;
+    }
+    
+    if (!start_idx || !IS_FIXNUM(start_idx)) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "subvec requires a number as start index");
+        return NULL;
+    }
+    
+    CljPersistentVector *v = as_vector(vec);
+    if (!v) return NULL;
+    
+    int start = AS_FIXNUM(start_idx);
+    int end;
+    
+    // Determine end index: if not provided, use vector count
+    if (end_idx) {
+        if (!IS_FIXNUM(end_idx)) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "subvec requires a number as end index");
+            return NULL;
+        }
+        end = AS_FIXNUM(end_idx);
+    } else {
+        end = v->count;
+    }
+    
+    // Bounds validation
+    if (start < 0) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "subvec start index %d is negative", start);
+        return NULL;
+    }
+    
+    if (end > v->count) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "subvec end index %d is greater than vector count %d", end, v->count);
+        return NULL;
+    }
+    
+    if (start > end) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "subvec start index %d is greater than end index %d", start, end);
+        return NULL;
+    }
+    
+    // Calculate sub-vector size
+    int subvec_count = end - start;
+    
+    // Special case: empty sub-vector (start == end)
+    if (subvec_count == 0) {
+        return make_vector(0, false);  // Returns empty-vector singleton
+    }
+    
+    // Create new vector with exact capacity needed
+    CljValue new_vec_obj = make_vector(subvec_count, false);
+    CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
+    if (!new_vec) return NULL;
+    
+    // Copy elements from start to end with RETAIN
+    for (int i = 0; i < subvec_count; i++) {
+        if (v->data[start + i]) {
+            new_vec->data[i] = RETAIN(v->data[start + i]);
+        } else {
+            new_vec->data[i] = NULL;  // nil elements
+        }
+        new_vec->count++;
+    }
+    
+    return new_vec_obj;
+}
+
 // Forward declaration
 ID conj2(ID vec, ID val);
 
@@ -1772,6 +1867,7 @@ void register_builtins() {
     register_builtin_in_namespace("nth", nth2);
     register_builtin_in_namespace("peek", native_peek);
     register_builtin_in_namespace("pop", native_pop);
+    register_builtin_in_namespace("subvec", native_subvec);
     register_builtin_in_namespace("conj", native_conj);
     register_builtin_in_namespace("first", native_first);
     register_builtin_in_namespace("rest", native_rest);

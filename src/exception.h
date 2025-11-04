@@ -44,6 +44,7 @@ void throw_exception_object(CLJException *ex);
 // Global storage for current exception (defined in exception.c)
 extern CLJException *g_current_exception;
 
+
 // Forward declaration to avoid circular dependency with memory.h
 // Note: CljObjectPool is typedef'd in memory.h
 struct CljObjectPool;

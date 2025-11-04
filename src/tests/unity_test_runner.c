@@ -13,6 +13,7 @@ extern MemoryStats g_memory_stats;
 extern bool g_memory_verbose_mode;
 
 
+
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
 // ============================================================================
@@ -39,9 +40,12 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-    if (g_memory_stats.memory_leaks > 0 || g_memory_verbose_mode) {
+    // JUnit-style: Only print memory stats if verbose mode is enabled
+    // (memory_profiler_check_leaks already handles leak reporting)
+    if (g_memory_verbose_mode) {
         memory_profiler_print_stats("Test Complete");
     }
+    // Check for leaks silently (only prints if leaks detected and reporting enabled)
     memory_profiler_check_leaks("Test Complete");
     
     runtime_free();
@@ -101,6 +105,7 @@ static void print_new_usage(const char *program_name) {
     printf("  %s\n", program_name);
 }
 
+// JUnit-style test runner: simple progress indicator (. for pass, F for fail, I for ignore)
 static void run_tests_by_registry(void) {
     size_t test_count;
     Test *all_tests = test_registry_get_all(&test_count);
@@ -110,13 +115,44 @@ static void run_tests_by_registry(void) {
         return;
     }
     
-    printf("Running %zu registered tests...\n", test_count);
-    
+    // JUnit-style: Simple progress indicator
     for (size_t i = 0; i < test_count; i++) {
-        printf("🧪 Running test: %s\n", all_tests[i].name);
-        RUN_TEST(all_tests[i].func);
-        printf("✅ Test completed: %s\n\n", all_tests[i].name);
+        // Capture Unity test state before running
+        int failures_before = Unity.TestFailures;
+        int ignores_before = Unity.TestIgnores;
+        
+        // Wrap test in TRY/CATCH to catch unhandled exceptions
+        TRY {
+            RUN_TEST(all_tests[i].func);
+        } CATCH(ex) {
+            // Unhandled exception caught - mark test as failed
+            printf("\nUNHANDLED EXCEPTION in %s: %s\n", 
+                   all_tests[i].qualified_name, ex->message);
+            // Mark test as failed using Unity's internal state
+            Unity.TestFailures++;
+            Unity.CurrentTestFailed = 1;
+        } END_TRY
+        
+        // Check if test failed
+        int failures_after = Unity.TestFailures;
+        int ignores_after = Unity.TestIgnores;
+        
+        if (failures_after > failures_before) {
+            // Test failed - print name immediately (JUnit-style)
+            printf("FAILURE: %s\n", all_tests[i].qualified_name);
+        } else if (ignores_after > ignores_before) {
+            // Test ignored
+            printf("I");
+        } else {
+            // Test passed
+            printf(".");
+        }
+        
+        // Flush output for progress indicator
+        fflush(stdout);
     }
+    
+    printf("\n");
 }
 
 static bool contains_wildcard(const char *pattern) {
@@ -149,25 +185,45 @@ static void run_specific_test(const char *test_name_or_pattern) {
             return;
         }
         
-        printf("🔍 Running %d test(s) matching pattern: %s\n", found, test_name_or_pattern);
-        
-        // Second pass: run matching tests
+        // JUnit-style: Simple progress indicator for pattern matching
+        printf("Running %d test(s)...\n", found);
         for (size_t i = 0; i < test_count; i++) {
-            // Try matching against qualified name first
+            // Match against qualified name (group/testname format)
             if (test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern)) {
-                printf("🧪 Running: %s\n", all_tests[i].qualified_name);
-                RUN_TEST(all_tests[i].func);
-                printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
-            }
-            // Fallback to simple name matching for backward compatibility
-            else if (test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
-                printf("🧪 Running: %s\n", all_tests[i].qualified_name);
-                RUN_TEST(all_tests[i].func);
-                printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
+                // Capture Unity test state before running
+                int failures_before = Unity.TestFailures;
+                int ignores_before = Unity.TestIgnores;
+                
+                // Wrap test in TRY/CATCH to catch unhandled exceptions
+                TRY {
+                    RUN_TEST(all_tests[i].func);
+                } CATCH(ex) {
+                    // Unhandled exception caught - mark test as failed
+                    printf("\nUNHANDLED EXCEPTION in %s: %s\n", 
+                           all_tests[i].qualified_name, ex->message);
+                    // Mark test as failed using Unity's internal state
+                    Unity.TestFailures++;
+                    Unity.CurrentTestFailed = 1;
+                } END_TRY
+                
+                // Check if test failed
+                int failures_after = Unity.TestFailures;
+                int ignores_after = Unity.TestIgnores;
+                
+                if (failures_after > failures_before) {
+                    // Test failed - print name immediately (JUnit-style)
+                    printf("FAILURE: %s\n", all_tests[i].qualified_name);
+                } else if (ignores_after > ignores_before) {
+                    // Test ignored
+                    printf("I");
+                } else {
+                    // Test passed
+                    printf(".");
+                }
+                fflush(stdout);
             }
         }
-        
-        printf("✅ Ran %d test(s) matching pattern\n", found);
+        printf("\n");
     } else {
         // Exact name match (existing logic)
         Test *test = NULL;
@@ -181,9 +237,9 @@ static void run_specific_test(const char *test_name_or_pattern) {
         }
         
         if (test) {
-            printf("🧪 Running specific test: %s\n", test->qualified_name);
+            printf("Running: %s\n", test->qualified_name);
             RUN_TEST(test->func);
-            printf("✅ Test completed: %s\n", test->qualified_name);
+            // Unity will print the result
         } else {
             printf("❌ Test not found: %s\n", test_name_or_pattern);
             printf("Use --list to see available tests\n");
@@ -230,14 +286,15 @@ int main(int argc, char **argv) {
         run_tests_by_registry();
     }
     
-    // Final memory leak summary after all tests
-    printf("\n");
-    printf("================================================================================\n");
-    printf("🔍 FINAL MEMORY LEAK SUMMARY\n");
-    printf("================================================================================\n");
-    memory_profiler_check_leaks("All Tests Complete");
-    printf("================================================================================\n\n");
+    // Memory leak summary only if there are leaks (JUnit-style: minimal output)
+#ifdef ENABLE_MEMORY_PROFILING
+    if (g_memory_stats.memory_leaks > 0) {
+        printf("\nMemory Leak Summary:\n");
+        memory_profiler_check_leaks("All Tests Complete");
+    }
+#endif
     
+    // Unity will print its own summary (Tests X Failures Y Ignored Z)
     return UNITY_END();
 }
 

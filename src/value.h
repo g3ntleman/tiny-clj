@@ -96,7 +96,7 @@ static inline bool is_fixnum(CljValue val) {
 }
 
 static inline int32_t as_fixnum(CljValue val) {
-    if (!is_fixnum(val)) return 0;
+    CLJ_ASSERT(is_fixnum(val));
     // Extract value: right shift by TAG_BITS (arithmetic shift preserves sign)
     return (int32_t)((intptr_t)val >> TAG_BITS);
 }

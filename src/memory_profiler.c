@@ -587,9 +587,9 @@ void enable_memory_profiling(bool enabled) {
     if (enabled) {
         // Reset statistics when enabling profiling
         memset(&g_memory_stats, 0, sizeof(MemoryStats));
-        printf("🔍 Memory profiling enabled (statistics reset)\n");
+        // Silent: Don't print message on every test (JUnit-style output)
     } else {
-        printf("🔍 Memory profiling disabled\n");
+        // Silent: Don't print message on disable
     }
 #else
     // In release builds, this is a no-op

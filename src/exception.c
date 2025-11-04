@@ -130,6 +130,9 @@ void throw_exception_object(CLJException *ex) {
         fprintf(stderr, "UNHANDLED: %s\n", str ? str : "<null>");
         free(str);
 #endif
+        
+        // No handler - unhandled exception (exit as before)
+        // Tests should use TRY/CATCH to catch exceptions
         free(ex); exit(1);
     }
     
