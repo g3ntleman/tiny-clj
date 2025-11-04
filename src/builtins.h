@@ -15,6 +15,7 @@ ID assoc3(ID *args, unsigned int argc);
 ID native_if(ID *args, unsigned int argc);
 ID native_type(ID *args, unsigned int argc);
 ID native_array_map(ID *args, unsigned int argc);
+ID native_vector(ID *args, unsigned int argc);
 
 // Function value constructors
 ID make_named_func(BuiltinFn fn, void *env, const char *name);

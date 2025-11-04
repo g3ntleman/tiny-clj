@@ -486,6 +486,32 @@ ID native_array_map(ID *args, unsigned int argc) {
     return ((CljObject*)map);
 }
 
+ID native_vector(ID *args, unsigned int argc) {
+    // Clojure-compatible: (vector) returns empty vector singleton
+    // This is the same singleton returned by make_vector(0, false)
+    if (argc == 0) {
+        return make_vector(0, false);  // Returns empty-vector singleton
+    }
+    
+    // Create vector with exact capacity (no growth needed)
+    CljValue vec = make_vector(argc, false);
+    CljPersistentVector *v = as_vector((CljObject*)vec);
+    if (!v) return NULL;
+    
+    // Add all elements with RETAIN (Clojure-compatible: all args are retained)
+    for (unsigned int i = 0; i < argc; i++) {
+        CljObject *elem = (CljObject*)args[i];
+        if (elem) {
+            v->data[i] = RETAIN(elem);
+        } else {
+            v->data[i] = NULL;  // nil is represented as NULL
+        }
+        v->count++;
+    }
+    
+    return vec;
+}
+
 // make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
 
 ID make_named_func(BuiltinFn fn, void *env, const char *name) {
@@ -1652,6 +1678,7 @@ void register_builtins() {
 #endif
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
+    register_builtin_in_namespace("vector", native_vector);
     register_builtin_in_namespace("nth", nth2);
     register_builtin_in_namespace("conj", native_conj);
     register_builtin_in_namespace("first", native_first);
