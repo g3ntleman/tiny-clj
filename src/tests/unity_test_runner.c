@@ -129,6 +129,8 @@ static void run_tests_by_registry(void) {
             printf("\nUNHANDLED EXCEPTION in %s: %s\n", 
                    all_tests[i].qualified_name, ex->message);
             // Mark test as failed using Unity's internal state
+            // Also increment test count since RUN_TEST might not have been fully executed
+            Unity.NumberOfTests++;
             Unity.TestFailures++;
             Unity.CurrentTestFailed = 1;
         } END_TRY
@@ -202,6 +204,8 @@ static void run_specific_test(const char *test_name_or_pattern) {
                     printf("\nUNHANDLED EXCEPTION in %s: %s\n", 
                            all_tests[i].qualified_name, ex->message);
                     // Mark test as failed using Unity's internal state
+                    // Also increment test count since RUN_TEST might not have been fully executed
+                    Unity.NumberOfTests++;
                     Unity.TestFailures++;
                     Unity.CurrentTestFailed = 1;
                 } END_TRY
