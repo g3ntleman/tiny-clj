@@ -116,8 +116,6 @@ set(STM32_SOURCES
     src/parser.c
     src/byte_array.c
     src/reader.c
-    src/event_loop.c
-    src/channel.c
     src/function_call.c
     src/list.c
     src/vector.c
@@ -196,7 +194,6 @@ endif()
 # REPL executable (with line editing support)
 add_executable(tiny-clj-repl
     src/repl.c
-    src/repl_history.c
     src/platform_macos.c
     src/line_editor.c
     ${SOURCES}
@@ -215,7 +212,6 @@ endif()
 # STM32-optimized REPL (no test code, includes memory profiling for REPL)
 add_executable(tiny-clj-esp32-repl
     src/repl.c
-    src/repl_history.c
     src/platform_stm32.c
     src/line_editor.c
     src/memory_profiler.c
@@ -256,6 +252,7 @@ add_executable(unity-tests
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_time.c
     src/tests/test_loops.c
+    src/tests/test_map.c
     src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
     src/tests/test_sequences.c
@@ -289,14 +286,16 @@ add_executable(unity-tests
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
-    src/repl_history.c
+    src/repl.c
+    src/platform_macos.c
+    src/line_editor.c
 )
 
 # Debug parser target removed - file not found
 # Unity Tests - Always in Debug mode for comprehensive testing
 apply_common_settings(unity-tests)
 set_target_properties(unity-tests PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG -fsanitize=address -fno-omit-frame-pointer"
+    COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fsanitize=address -fno-omit-frame-pointer"
     LINK_FLAGS "-fsanitize=address"
 )
 
@@ -463,8 +462,8 @@ add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
 # History test (test that REPL can handle multiple commands)
-add_test(NAME repl-history-multiple COMMAND bash -c "printf '(+ 1 2)\\n(* 3 4)\\n(str \"test\")\\n' | ./tiny-clj-repl")
-set_tests_properties(repl-history-multiple PROPERTIES TIMEOUT 5 PASS_REGULAR_EXPRESSION "3.*12.*test" LABELS "repl;history")
+add_test(NAME repl-history-multiple COMMAND bash -c "echo -e '(+ 1 2)\n(* 3 4)\n(str \"test\")' | timeout 5s ./tiny-clj-repl")
+set_tests_properties(repl-history-multiple PROPERTIES PASS_REGULAR_EXPRESSION "3.*12.*test" LABELS "repl;history")
 
 # Seq Benchmark (REMOVED - File no longer exists)
 # Use run-tests for sequence testing instead

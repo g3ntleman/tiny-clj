@@ -353,34 +353,45 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
 static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
-    ID stack[MAX_STACK_VECTOR_SIZE];
-    int count = 0;
-    while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
-      if (count >= MAX_STACK_VECTOR_SIZE)
-        return NULL;
-      ID value = parse_expr(reader, st);
-      if (!value)
-        return NULL;
-      stack[count++] = value;
-      reader_skip_all(reader);
-    }
-  if (reader_eof(reader) || !reader_match(reader, ']')) {
-    throw_parser_exception("Unclosed vector - missing closing ']'", reader);
-    return NULL;
-  }
-    // Create mutable vector for efficient parsing with expected capacity
-    unsigned int expected_capacity = count > 0 ? count : 5;  // Default capacity for empty vectors
-    CljValue vec = make_vector(expected_capacity, true);  // mutable = true
+    
+    // Vector mit initialer Kapazität erstellen (mutable)
+    CljValue vec = make_vector(6, true);  // mutable_flag = true
     CljPersistentVector *v = as_vector((CljObject*)vec);
     
-    // Add elements directly to mutable vector (O(1) per element)
-    for (int i = 0; i < count; i++) {
-      v->data[i] = (CljObject*)stack[i];
-      RETAIN(stack[i]);  // Retain the element
+    while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
+      ID value = parse_expr(reader, st);
+      if (!value) {
+        // Cleanup: Vector freigeben
+        RELEASE((CljObject*)vec);
+        return NULL;
+      }
+      
+      // Manuelles Wachstum bei Bedarf
+      if (v->count >= v->capacity) {
+        int newcap = v->capacity ? v->capacity * 2 : 4;
+        void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject*));
+        if (!p) {
+          RELEASE(value);
+          RELEASE((CljObject*)vec);
+          throw_parser_exception("Out of memory while parsing vector", reader);
+          return NULL;
+        }
+        v->data = (CljObject**)p;
+        v->capacity = newcap;
+      }
+      
+      // Direktes Einfügen
+      v->data[v->count++] = RETAIN(value);
+      reader_skip_all(reader);
     }
-    v->count = count;
     
-    // Convert to immutable at the end
+    if (reader_eof(reader) || !reader_match(reader, ']')) {
+      RELEASE((CljObject*)vec);
+      throw_parser_exception("Unclosed vector - missing closing ']'", reader);
+      return NULL;
+    }
+    
+    // Immutable machen
     v->mutable_flag = false;
     
     return AUTORELEASE(vec);

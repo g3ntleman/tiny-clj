@@ -339,16 +339,22 @@ int get_retain_count(CljObject *obj);
 
 /** @brief Safe object assignment with automatic retain/release management.
  *  @param var Variable to assign to
- *  @param new_obj New object to assign (can be NULL)
+ *  @param new_obj New object to assign (can be NULL or Immediate)
  *  Follows classic Objective-C pattern: retains new object, releases old one.
+ *  Works with both heap objects and Immediates (clj_true, clj_false, fixnums).
  *  Works in both DEBUG and RELEASE builds using RETAIN/RELEASE macros.
  */
 #define ASSIGN(var, new_obj) do { \
-    CljObject *_tmp = (new_obj); \
-    if (_tmp != (var)) { \
-        RETAIN(_tmp); \
-        RELEASE(var); \
-        (var) = _tmp; \
+    CljValue _new_val = (CljValue)(new_obj); \
+    CljValue _old_val = (CljValue)(var); \
+    if (_new_val != _old_val) { \
+        if (!IS_IMMEDIATE(_new_val) && (CljObject*)_new_val) { \
+            RETAIN((CljObject*)_new_val); \
+        } \
+        if (!IS_IMMEDIATE(_old_val) && (CljObject*)_old_val) { \
+            RELEASE((CljObject*)_old_val); \
+        } \
+        (var) = (CljObject*)_new_val; \
     } \
 } while(0)
 

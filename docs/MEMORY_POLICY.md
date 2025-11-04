@@ -465,6 +465,32 @@ if (!is_immediate(value)) {
 
 ## Autorelease Pool Management
 
+### Autorelease Pool Behavior
+
+#### Object Duplicates in Pool
+
+**It is normal and expected for the same object to appear multiple times in an autorelease pool.** This happens when:
+
+1. **Multiple `AUTORELEASE()` calls on the same object** - An object can be autoreleased multiple times
+2. **Object returned from nested functions** - Each function may autorelease the same object before returning it
+3. **Reference counting safety** - Each `AUTORELEASE()` call adds the object to the pool, but the object's reference count determines when it's actually freed
+
+```c
+// ✅ NORMAL: Same object autoreleased multiple times
+CljObject *obj = make_vector(10, 0);
+AUTORELEASE(obj);  // Added to pool
+AUTORELEASE(obj);  // Added to pool again - this is normal!
+// Pool will release obj when popped, but only once per reference count
+
+// ✅ NORMAL: Object passed through multiple functions
+CljObject *parse_and_return(const char *input) {
+    CljObject *result = parse_expr(input);  // Returns AUTORELEASEd object
+    return AUTORELEASE(result);  // Added to pool again - normal!
+}
+```
+
+**Important:** The pool tracks objects by pointer, not by uniqueness. When the pool is popped, each object is released according to its reference count, ensuring correct memory management even with duplicates.
+
 ### Exception-Safe Memory Cleanup
 
 **`WITH_AUTORELEASE_POOL` provides exception-safe memory cleanup** that automatically handles both normal execution and exception scenarios:

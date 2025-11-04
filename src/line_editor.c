@@ -537,7 +537,7 @@ static void build_default_history_path(char *out, size_t out_sz) {
     snprintf(out, out_sz, "%s/.tiny-clj/history.edn", home);
 }
 
-// Externe Persistenz-Funktionen (in builtins.c definiert)
+// Externe Persistenz-Funktionen (in repl.c definiert)
 extern CljObject* history_trim_last_n(CljObject *vec, int limit);
 extern bool history_save_to_file(CljObject *vec, const char *path);
 extern CljObject* history_load_from_file(const char *path);

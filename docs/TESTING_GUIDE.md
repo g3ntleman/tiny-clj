@@ -33,10 +33,10 @@ Vollständige Unterstützung für `*`-Wildcards mit voll-qualifizierten Namen:
 # Einzelner Test mit voll-qualifiziertem Namen
 ./unity-tests --test values/cljvalue_immediate_helpers
 
-# Pattern-Matching mit Wildcards (ersetzt --group)
-./unity-tests --filter "values/*"
-./unity-tests --filter "*/cljvalue_*"
-./unity-tests --filter "*cljvalue_immediate*"
+# Pattern-Matching mit Wildcards über --test
+./unity-tests --test "values/*"
+./unity-tests --test "*/cljvalue_*"
+./unity-tests --test "*cljvalue_immediate*"
 
 # Alle Tests auflisten (zeigt voll-qualifizierte Namen)
 ./unity-tests --list
@@ -124,9 +124,9 @@ TEST(test_new_feature) {
 
 | Option | Beschreibung | Beispiel |
 |--------|-------------|----------|
-| `--test <name>` | Einzelner Test (voll-qualifiziert) | `--test values/cljvalue_immediate_helpers` |
-| `--filter <pattern>` | Pattern-Matching mit Wildcards oder exakte Namen | `--filter "values/*"` |
+| `--test <name>` | Einzelner Test oder Pattern mit Wildcards | `--test values/cljvalue_immediate_helpers` oder `--test "values/*"` |
 | `--list` | Alle Tests auflisten | `--list` |
+| `--quiet` | Alle Tests mit minimaler Memory-Leak-Ausgabe | `--quiet` |
 | `--help, -h` | Hilfe anzeigen | `--help` |
 | *(keine Args)* | Alle Tests | *(default)* |
 
@@ -146,27 +146,27 @@ Tests verwenden jetzt das Schema `<group>/<test>`:
 
 ### Erweiterte Wildcard-Patterns
 
-Unterstützt komplexe Wildcard-Patterns mit voll-qualifizierten Namen (ersetzt --group):
+Unterstützt komplexe Wildcard-Patterns mit voll-qualifizierten Namen über `--test`:
 
 ```bash
-# Alle Tests einer Gruppe (ersetzt --group)
-./unity-tests --filter "values/*"
-./unity-tests --filter "basics/*"
+# Alle Tests einer Gruppe
+./unity-tests --test "values/*"
+./unity-tests --test "basics/*"
 
 # Tests mit bestimmten Namen in beliebiger Gruppe
-./unity-tests --filter "*/cljvalue_*"
-./unity-tests --filter "*/parse_*"
+./unity-tests --test "*/cljvalue_*"
+./unity-tests --test "*/parse_*"
 
 # Tests mit bestimmten Teilen im Namen
-./unity-tests --filter "*cljvalue_immediate*"
-./unity-tests --filter "*cow*"
+./unity-tests --test "*cljvalue_immediate*"
+./unity-tests --test "*cow*"
 
 # Kombinierte Patterns
-./unity-tests --filter "values/*immediate*"
-./unity-tests --filter "*/*basic*"
+./unity-tests --test "values/*immediate*"
+./unity-tests --test "*/*basic*"
 
 # Exakte Test-Namen (ohne Wildcards)
-./unity-tests --filter "values/cljvalue_immediate_helpers"
+./unity-tests --test values/cljvalue_immediate_helpers
 ```
 
 ### Beispiele
@@ -175,21 +175,24 @@ Unterstützt komplexe Wildcard-Patterns mit voll-qualifizierten Namen (ersetzt -
 # Einzelner Test für schnelles Debugging
 ./unity-tests --test values/cljvalue_immediate_helpers
 
-# Alle Tests einer Gruppe (ersetzt --group)
-./unity-tests --filter "values/*"
-./unity-tests --filter "fixed_point/*"
+# Alle Tests einer Gruppe mit Wildcard
+./unity-tests --test "values/*"
+./unity-tests --test "fixed_point/*"
 
 # Tests mit bestimmten Namen in beliebiger Gruppe
-./unity-tests --filter "*/cljvalue_*"
+./unity-tests --test "*/cljvalue_*"
 
 # Tests mit bestimmten Teilen im Namen
-./unity-tests --filter "*cljvalue_immediate*"
+./unity-tests --test "*cljvalue_immediate*"
 
 # Verfügbare Tests anzeigen (voll-qualifizierte Namen)
 ./unity-tests --list
 
 # Alle Tests (wie bisher)
 ./unity-tests
+
+# Alle Tests mit minimaler Ausgabe
+./unity-tests --quiet
 ```
 
 ## 🔧 Build-System
@@ -392,10 +395,10 @@ TEST(test_with_memory) {
 ./unity-tests --test values/cljvalue_memory_efficiency
 
 # Test-Gruppe ausführen (um Bereich einzugrenzen)
-./unity-tests --filter "values/*"
+./unity-tests --test "values/*"
 
 # Tests mit Wildcard-Pattern ausführen
-./unity-tests --filter "values/*memory*"
+./unity-tests --test "values/*memory*"
 ```
 
 #### 3. Debugging-Workflow
@@ -411,10 +414,10 @@ TEST(test_with_memory) {
 ./unity-tests --test values/test_name
 
 # 3b. Oder Test-Gruppe isolieren
-./unity-tests --filter "values/*"
+./unity-tests --test "values/*"
 
 # 3c. Oder Tests mit Wildcard isolieren
-./unity-tests --filter "values/*test_name*"
+./unity-tests --test "values/*test_name*"
 
 # 4. Test reparieren und erneut testen
 ./unity-tests --test values/test_name
@@ -480,10 +483,10 @@ TEST(test_my_function) {
 ./unity-tests --test values/cljvalue_immediate_helpers
 
 # Pattern mit Details
-./unity-tests --filter "values/*"
+./unity-tests --test "values/*"
 
 # Gruppe mit Details
-./unity-tests --filter "values/*"
+./unity-tests --test "values/*"
 ```
 
 ## 📚 Weiterführende Dokumentation
@@ -500,8 +503,8 @@ Das **Unity Dynamic Test Runner System** bietet:
 - ✅ **Automatische Test-Discovery** - Keine manuelle Wartung
 - ✅ **Voll-qualifizierte Test-Namen** - Schema `<group>/<test>` für bessere Übersicht
 - ✅ **Automatische Test-Gruppen** - Gruppierung nach Dateiname
-- ✅ **Erweiterte Wildcard-Unterstützung** - Flexible Pattern-Matching mit `*` (ersetzt --group)
-- ✅ **Flexible Test-Ausführung** - Einzelne Tests, Pattern-Matching, exakte Namen
+- ✅ **Erweiterte Wildcard-Unterstützung** - Flexible Pattern-Matching mit `*` über `--test`
+- ✅ **Flexible Test-Ausführung** - Einzelne Tests, Pattern-Matching, exakte Namen - alles über `--test`
 - ✅ **Schnelleres Debugging** - Isolierte Test-Ausführung
 - ✅ **Sauberer Code** - Zentrale Includes, weniger Boilerplate
 - ✅ **Automatisches Memory-Management** - WITH_AUTORELEASE_POOL Integration

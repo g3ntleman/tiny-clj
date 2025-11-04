@@ -192,6 +192,7 @@ TEST(test_go_exception_closes_channel_without_value) {
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
     CljObject *kw_value = intern_symbol(NULL, ":value");
     CljObject *closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    TEST_ASSERT_NOT_NULL(closed_val);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
     CljObject *val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_value);
@@ -364,48 +365,45 @@ TEST(test_dotimes_simple_iteration_count) {
 }
 
 TEST(test_doseq_with_environment) {
-    // Use WITH_AUTORELEASE_POOL for eval_doseq which uses autorelease()
-    WITH_AUTORELEASE_POOL({
-        // Test doseq with environment binding
-        EvalState *eval_state = evalstate_new();
-        TEST_ASSERT_NOT_NULL(eval_state);
-        
-        // Create vector: [1 2 3]
-        CljValue vec = make_vector(3, 1);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-        TEST_ASSERT_NOT_NULL(vec_data);
-        
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = 3;
-        
-        // Create binding list: [x [1 2 3]]
-        CljObject *binding_list = make_list((ID)intern_symbol_global("x"), (CljList*)make_list((ID)vec, NULL));
-        
-        // Create body: x - symbol reference
-        CljObject *body = intern_symbol_global("x");
-        
-        // Create function call: (doseq [x [1 2 3]] x)
-        CljObject *doseq_call = make_list((ID)intern_symbol_global("doseq"), (CljList*)make_list((ID)binding_list, (CljList*)make_list((ID)body, NULL)));
-        
-        // Create a simple environment
-        CljMap *env = (CljMap*)make_map(4);
-        
-        // Test doseq evaluation with environment
-        CljObject *result = eval_doseq((CljList*)(CljObject*)doseq_call, env);
-        TEST_ASSERT_TRUE(result == NULL);
-        
-        // Clean up environment
-        RETAIN(env);
-        RELEASE(env);
-        
-        // Clean up
-        evalstate_free(eval_state);
-        RELEASE((CljObject*)binding_list);
-        RELEASE(body);
-        RELEASE((CljObject*)doseq_call);
-    });
+    // Test doseq with environment binding
+    EvalState *eval_state = evalstate_new();
+    TEST_ASSERT_NOT_NULL(eval_state);
+    
+    // Create vector: [1 2 3]
+    CljValue vec = make_vector(3, 1);
+    CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+    TEST_ASSERT_NOT_NULL(vec_data);
+    
+    vec_data->data[0] = fixnum(1);
+    vec_data->data[1] = fixnum(2);
+    vec_data->data[2] = fixnum(3);
+    vec_data->count = 3;
+    
+    // Create binding list: [x [1 2 3]]
+    CljObject *binding_list = make_list((ID)intern_symbol_global("x"), (CljList*)make_list((ID)vec, NULL));
+    
+    // Create body: x - symbol reference
+    CljObject *body = intern_symbol_global("x");
+    
+    // Create function call: (doseq [x [1 2 3]] x)
+    CljObject *doseq_call = make_list((ID)intern_symbol_global("doseq"), (CljList*)make_list((ID)binding_list, (CljList*)make_list((ID)body, NULL)));
+    
+    // Create a simple environment
+    CljMap *env = (CljMap*)make_map(4);
+    
+    // Test doseq evaluation with environment
+    CljObject *result = eval_doseq((CljList*)(CljObject*)doseq_call, env);
+    TEST_ASSERT_TRUE(result == NULL);
+    
+    // Clean up environment
+    RETAIN(env);
+    RELEASE(env);
+    
+    // Clean up
+    evalstate_free(eval_state);
+    RELEASE((CljObject*)binding_list);
+    RELEASE(body);
+    RELEASE((CljObject*)doseq_call);
 }
 
 // ============================================================================

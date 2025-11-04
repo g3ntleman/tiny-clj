@@ -91,7 +91,6 @@ ID map_get(CljValue map, CljValue key) {
 void map_assoc(CljValue map, CljValue key, CljValue value) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
-  CljObject *value_obj = (CljObject*)value;
   if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj) {
     return;
   }
@@ -103,25 +102,35 @@ void map_assoc(CljValue map, CljValue key, CljValue value) {
   // Check if key exists
   for (int i = 0; i < map_data->count; i++) {
     CljObject *k = KV_KEY(map_data->data, i);
+    // Fast path: pointer comparison first (for interned symbols)
+    if (k == key_obj) {
+      // ASSIGN handles both Immediates and heap objects
+      ASSIGN(KV_VALUE(map_data->data, i), (CljObject*)value);
+      return;
+    }
+    // Fallback: structural comparison for non-interned objects
     if (k && clj_equal(k, key_obj)) {
-      ASSIGN(KV_VALUE(map_data->data, i), value_obj);
+      // ASSIGN handles both Immediates and heap objects
+      ASSIGN(KV_VALUE(map_data->data, i), (CljObject*)value);
       return;
     }
   }
+  
+  // Key not found - this should not happen for existing keys
+  // If we reach here, the key was not found, which means either:
+  // 1. The key pointer is different (intern_symbol issue)
+  // 2. clj_equal is not working correctly for symbols
+  // 3. The map capacity is full and we can't add the key
   
   // Add new entry (if capacity allows)
   // printf("DEBUG: map_assoc capacity check: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
   if (map_data->count < map_data->capacity) {
     int idx = map_data->count;
-    KV_ASSIGN_PAIR(map_data->data, idx,
-                key_obj ? (RETAIN(key_obj), key_obj) : NULL,
-                value_obj ? (RETAIN(value_obj), value_obj) : NULL);
+    KV_KEY(map_data->data, idx) = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
+    // ASSIGN handles both Immediates and heap objects
+    KV_VALUE(map_data->data, idx) = NULL; // Initialize to NULL before ASSIGN
+    ASSIGN(KV_VALUE(map_data->data, idx), (CljObject*)value);
     map_data->count++;
-    // printf("DEBUG: map_assoc added: key=%p, value=%p, count=%d\n", key_obj, value_obj, map_data->count);
-    // printf("DEBUG: value is_fixnum: %d\n", is_fixnum((CljValue)value_obj));
-    // if (is_fixnum((CljValue)value_obj)) {
-    //   printf("DEBUG: value as_fixnum: %d\n", as_fixnum((CljValue)value_obj));
-    // }
   } else {
     // printf("DEBUG: map_assoc failed - capacity exceeded: count=%d, capacity=%d\n", map_data->count, map_data->capacity);
   }

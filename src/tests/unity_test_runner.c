@@ -570,8 +570,7 @@ static void print_new_usage(const char *program_name) {
     printf("Unity Test Runner for Tiny-CLJ (Dynamic Registry)\n");
     printf("Usage: %s [options]\n\n", program_name);
     printf("Options:\n");
-    printf("  --test <name>        Run specific test by name (supports qualified names)\n");
-    printf("  --filter <pattern>   Run tests matching pattern (supports * wildcard and exact names)\n");
+    printf("  --test <name>        Run specific test by name or pattern (supports * wildcard)\n");
     printf("  --list              List all available tests\n");
     printf("  --quiet             Run all tests with minimal memory leak output\n");
     printf("  --help, -h          Show this help\n");
@@ -583,9 +582,9 @@ static void print_new_usage(const char *program_name) {
     printf("           fixed_point/fixed_creation_and_conversion\n\n");
     printf("Examples:\n");
     printf("  %s --test values/cljvalue_immediate_helpers\n", program_name);
-    printf("  %s --filter \"values/*\"\n", program_name);
-    printf("  %s --filter \"*/cljvalue_*\"\n", program_name);
-    printf("  %s --filter \"*cow*\"\n", program_name);
+    printf("  %s --test \"values/*\"\n", program_name);
+    printf("  %s --test \"*/cljvalue_*\"\n", program_name);
+    printf("  %s --test \"*cow*\"\n", program_name);
     printf("  %s --quiet\n", program_name);
     printf("  %s --list\n", program_name);
     printf("  %s\n", program_name);
@@ -609,71 +608,77 @@ static void run_tests_by_registry(void) {
     }
 }
 
-static void run_specific_test(const char *test_name) {
-    Test *test = NULL;
-    
-    // First try to find by qualified name
-    test = test_registry_find_by_qualified_name(test_name);
-    
-    // If not found, try by simple name (backward compatibility)
-    if (!test) {
-        test = test_registry_find(test_name);
-    }
-    
-    if (test) {
-        printf("🧪 Running specific test: %s\n", test->qualified_name);
-        RUN_TEST(test->func);
-        printf("✅ Test completed: %s\n", test->qualified_name);
+static bool contains_wildcard(const char *pattern) {
+    return strchr(pattern, '*') != NULL;
+}
+
+static void run_specific_test(const char *test_name_or_pattern) {
+    // Check if it's a wildcard pattern
+    if (contains_wildcard(test_name_or_pattern)) {
+        // Use pattern matching logic
+        size_t test_count;
+        Test *all_tests = test_registry_get_all(&test_count);
+        int found = 0;
+        
+        // First pass: count matching tests
+        for (size_t i = 0; i < test_count; i++) {
+            // Try matching against qualified name first
+            if (test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern)) {
+                found++;
+            }
+            // Fallback to simple name matching for backward compatibility
+            else if (test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
+                found++;
+            }
+        }
+        
+        if (found == 0) {
+            printf("❌ No tests found matching pattern: %s\n", test_name_or_pattern);
+            printf("Use --list to see available tests\n");
+            return;
+        }
+        
+        printf("🔍 Running %d test(s) matching pattern: %s\n", found, test_name_or_pattern);
+        
+        // Second pass: run matching tests
+        for (size_t i = 0; i < test_count; i++) {
+            // Try matching against qualified name first
+            if (test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern)) {
+                printf("🧪 Running: %s\n", all_tests[i].qualified_name);
+                RUN_TEST(all_tests[i].func);
+                printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
+            }
+            // Fallback to simple name matching for backward compatibility
+            else if (test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
+                printf("🧪 Running: %s\n", all_tests[i].qualified_name);
+                RUN_TEST(all_tests[i].func);
+                printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
+            }
+        }
+        
+        printf("✅ Ran %d test(s) matching pattern\n", found);
     } else {
-        printf("❌ Test not found: %s\n", test_name);
-        printf("Use --list to see available tests\n");
+        // Exact name match (existing logic)
+        Test *test = NULL;
+        
+        // First try to find by qualified name
+        test = test_registry_find_by_qualified_name(test_name_or_pattern);
+        
+        // If not found, try by simple name (backward compatibility)
+        if (!test) {
+            test = test_registry_find(test_name_or_pattern);
+        }
+        
+        if (test) {
+            printf("🧪 Running specific test: %s\n", test->qualified_name);
+            RUN_TEST(test->func);
+            printf("✅ Test completed: %s\n", test->qualified_name);
+        } else {
+            printf("❌ Test not found: %s\n", test_name_or_pattern);
+            printf("Use --list to see available tests\n");
+        }
     }
 }
-
-static void run_filtered_tests(const char *pattern) {
-    size_t test_count;
-    Test *all_tests = test_registry_get_all(&test_count);
-    int found = 0;
-    
-    // First pass: count matching tests
-    for (size_t i = 0; i < test_count; i++) {
-        // Try matching against qualified name first
-        if (test_name_matches_pattern(all_tests[i].qualified_name, pattern)) {
-            found++;
-        }
-        // Fallback to simple name matching for backward compatibility
-        else if (test_name_matches_pattern(all_tests[i].name, pattern)) {
-            found++;
-        }
-    }
-    
-    if (found == 0) {
-        printf("❌ No tests found matching pattern: %s\n", pattern);
-        printf("Use --list to see available tests\n");
-        return;
-    }
-    
-    printf("🔍 Running %d test(s) matching pattern: %s\n", found, pattern);
-    
-    // Second pass: run matching tests
-    for (size_t i = 0; i < test_count; i++) {
-        // Try matching against qualified name first
-        if (test_name_matches_pattern(all_tests[i].qualified_name, pattern)) {
-            printf("🧪 Running: %s\n", all_tests[i].qualified_name);
-            RUN_TEST(all_tests[i].func);
-            printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
-        }
-        // Fallback to simple name matching for backward compatibility
-        else if (test_name_matches_pattern(all_tests[i].name, pattern)) {
-            printf("🧪 Running: %s\n", all_tests[i].qualified_name);
-            RUN_TEST(all_tests[i].func);
-            printf("✅ Completed: %s\n\n", all_tests[i].qualified_name);
-        }
-    }
-    
-    printf("✅ Ran %d test(s) matching pattern\n", found);
-}
-
 
 int main(int argc, char **argv) {
     UNITY_BEGIN();
@@ -697,18 +702,11 @@ int main(int argc, char **argv) {
             run_all_tests();
         } else if (strcmp(argv[1], "--test") == 0) {
             if (argc < 3) {
-                printf("Error: --test requires a test name\n");
+                printf("Error: --test requires a test name or pattern\n");
                 printf("Use --list to see available tests\n");
                 return 1;
             }
             run_specific_test(argv[2]);
-        } else if (strcmp(argv[1], "--filter") == 0) {
-            if (argc < 3) {
-                printf("Error: --filter requires a pattern\n");
-                printf("Use --list to see available tests\n");
-                return 1;
-            }
-            run_filtered_tests(argv[2]);
         } else {
             // Legacy suite-based interface for backward compatibility
             if (strcmp(argv[1], "memory") == 0) {
