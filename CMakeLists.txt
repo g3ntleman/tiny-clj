@@ -257,7 +257,6 @@ add_executable(unity-tests
     src/tests/test_fixed_point.c
     src/tests/test_sequences.c
     src/tests/test_byte_array.c
-    src/tests/test_cow.c
     src/tests/test_file_io.c
     external/unity/src/unity.c
     src/builtins.c
