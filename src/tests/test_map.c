@@ -8,11 +8,11 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
     CljObject *kw = intern_symbol(NULL, ":closed");
     
     // Set initial value
-    map_assoc((CljObject*)map, kw, (CljValue)clj_false);
+    (void)map_assoc_cow((CljObject*)map, kw, (CljValue)clj_false);
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljValue)map, (CljValue)kw)) == SPECIAL_FALSE);
     
     // Update value (should update, not add)
-    map_assoc((CljObject*)map, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
+    (void)map_assoc_cow((CljObject*)map, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljValue)map, (CljValue)kw)) == SPECIAL_TRUE);
     TEST_ASSERT_EQUAL_INT(1, map->count); // Should update, not add
     
@@ -26,11 +26,11 @@ TEST(test_map_assoc_channel_pattern) {
     
     // Create channel like make_result_channel
     CljMap *chan = (CljMap*)make_map(2);
-    map_assoc((CljObject*)chan, intern_symbol(NULL, ":value"), NULL);
-    map_assoc((CljObject*)chan, intern_symbol(NULL, ":closed"), (CljValue)clj_false);
+    (void)map_assoc_cow((CljObject*)chan, intern_symbol(NULL, ":value"), NULL);
+    (void)map_assoc_cow((CljObject*)chan, intern_symbol(NULL, ":closed"), (CljValue)clj_false);
     
     // Update like channel_put_and_close does
-    map_assoc((CljObject*)chan, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
+    (void)map_assoc_cow((CljObject*)chan, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
     
     // Verify closed is true
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
@@ -78,25 +78,25 @@ TEST(test_assign_immediates_in_map) {
     CljObject *kw = intern_symbol(NULL, ":test");
     
     // Add immediate values using ASSIGN pattern
-    map_assoc((CljObject*)map, kw, (CljValue)clj_false);
+    (void)map_assoc_cow((CljObject*)map, kw, (CljValue)clj_false);
     CljValue val1 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(is_special(val1));
     TEST_ASSERT_TRUE(as_special(val1) == SPECIAL_FALSE);
     
     // Update to clj_true
-    map_assoc((CljObject*)map, kw, (CljValue)clj_true);
+    (void)map_assoc_cow((CljObject*)map, kw, (CljValue)clj_true);
     CljValue val2 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(is_special(val2));
     TEST_ASSERT_TRUE(as_special(val2) == SPECIAL_TRUE);
     
     // Update to fixnum
-    map_assoc((CljObject*)map, kw, fixnum(123));
+    (void)map_assoc_cow((CljObject*)map, kw, fixnum(123));
     CljValue val3 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(is_fixnum(val3));
     TEST_ASSERT_EQUAL_INT(123, as_fixnum(val3));
     
     // Update back to clj_false
-    map_assoc((CljObject*)map, kw, (CljValue)clj_false);
+    (void)map_assoc_cow((CljObject*)map, kw, (CljValue)clj_false);
     CljValue val4 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(is_special(val4));
     TEST_ASSERT_TRUE(as_special(val4) == SPECIAL_FALSE);
@@ -132,8 +132,8 @@ TEST(test_map_assoc_with_different_intern_calls) {
     // Create channel like make_result_channel does
     CljObject *kw_value = intern_symbol(NULL, ":value");
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    map_assoc((CljObject*)map, kw_value, NULL);
-    map_assoc((CljObject*)map, kw_closed, (CljValue)clj_false);
+    (void)map_assoc_cow((CljObject*)map, kw_value, NULL);
+    (void)map_assoc_cow((CljObject*)map, kw_closed, (CljValue)clj_false);
     
     // Verify initial state
     CljValue closed_val1 = (CljValue)map_get((CljValue)map, (CljValue)kw_closed);
@@ -143,7 +143,7 @@ TEST(test_map_assoc_with_different_intern_calls) {
     
     // Now update like channel_put_and_close does (with new intern_symbol call)
     CljObject *kw_closed_new = intern_symbol(NULL, ":closed");
-    map_assoc((CljObject*)map, kw_closed_new, (CljValue)clj_true);
+    (void)map_assoc_cow((CljObject*)map, kw_closed_new, (CljValue)clj_true);
     
     // Verify update worked
     CljValue closed_val2 = (CljValue)map_get((CljValue)map, (CljValue)kw_closed);
@@ -165,18 +165,18 @@ TEST(test_map_assoc_with_null_value) {
     CljObject *kw = intern_symbol(NULL, ":value");
     
     // Set NULL value
-    map_assoc((CljObject*)map, kw, NULL);
+    (void)map_assoc_cow((CljObject*)map, kw, NULL);
     CljValue val1 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(val1 == NULL);
     
     // Update to non-NULL
-    map_assoc((CljObject*)map, kw, fixnum(42));
+    (void)map_assoc_cow((CljObject*)map, kw, fixnum(42));
     CljValue val2 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(is_fixnum(val2));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val2));
     
     // Update back to NULL
-    map_assoc((CljObject*)map, kw, NULL);
+    (void)map_assoc_cow((CljObject*)map, kw, NULL);
     CljValue val3 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_TRUE(val3 == NULL);
     
@@ -194,8 +194,8 @@ TEST(test_exact_channel_pattern) {
     CljMap *chan = (CljMap*)make_map(4);
     CljObject *kw_value = intern_symbol(NULL, ":value");
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    map_assoc((CljObject*)chan, kw_value, NULL);
-    map_assoc((CljObject*)chan, kw_closed, (CljValue)clj_false);
+    (void)map_assoc_cow((CljObject*)chan, kw_value, NULL);
+    (void)map_assoc_cow((CljObject*)chan, kw_closed, (CljValue)clj_false);
     
     // Verify initial state
     CljValue closed_initial = (CljValue)map_get((CljValue)chan, (CljValue)kw_closed);
@@ -205,8 +205,8 @@ TEST(test_exact_channel_pattern) {
     
     // Exact replication of channel_put_and_close with NULL value
     CljObject *kw_closed_new = intern_symbol(NULL, ":closed");
-    // if (value) { map_assoc(chan, kw_value, value); } - skipped for NULL
-    map_assoc(chan, kw_closed_new, (CljValue)clj_true);
+    // if (value) { (void)map_assoc_cow(chan, kw_value, value); } - skipped for NULL
+    (void)map_assoc_cow(chan, kw_closed_new, (CljValue)clj_true);
     
     // Verify final state
     CljValue closed_final = (CljValue)map_get((CljValue)chan, (CljValue)kw_closed);
@@ -238,7 +238,7 @@ TEST(test_channel_object_identity) {
     TEST_ASSERT_TRUE(as_special(closed_initial) == SPECIAL_FALSE);
     
     // Update it like channel_put_and_close would
-    map_assoc(chan1, kw_closed, (CljValue)clj_true);
+    (void)map_assoc_cow(chan1, kw_closed, (CljValue)clj_true);
     
     // Verify update worked
     CljValue closed_final = (CljValue)map_get((CljValue)chan1, (CljValue)kw_closed);
@@ -252,7 +252,7 @@ TEST(test_channel_object_identity) {
 }
 
 // ============================================================================
-// Tests for map_assoc() refactoring - remove redundant fast-path
+// Tests for (void)map_assoc_cow() refactoring - remove redundant fast-path
 // ============================================================================
 
 // Test that map_assoc works with pointer equality via clj_equal()
@@ -263,13 +263,13 @@ TEST(test_map_assoc_with_pointer_equality) {
     CljObject *kw = intern_symbol(NULL, ":test");
     
     // Set initial value
-    map_assoc((CljObject*)map, kw, fixnum(42));
+    (void)map_assoc_cow((CljObject*)map, kw, fixnum(42));
     CljValue val1 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_NOT_NULL(val1);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
     
     // Update with same pointer (should work via clj_equal() == check)
-    map_assoc((CljObject*)map, kw, fixnum(100));
+    (void)map_assoc_cow((CljObject*)map, kw, fixnum(100));
     CljValue val2 = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_NOT_NULL(val2);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val2));
@@ -291,13 +291,13 @@ TEST(test_map_assoc_with_structural_equality) {
     CljObject *str2 = make_string("test-key");
     
     // Set initial value with str1
-    map_assoc((CljObject*)map, str1, fixnum(42));
+    (void)map_assoc_cow((CljObject*)map, str1, fixnum(42));
     CljValue val1 = (CljValue)map_get((CljValue)map, (CljValue)str1);
     TEST_ASSERT_NOT_NULL(val1);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
     
     // Update with str2 (different pointer, same content) - should work via clj_equal()
-    map_assoc((CljObject*)map, str2, fixnum(100));
+    (void)map_assoc_cow((CljObject*)map, str2, fixnum(100));
     CljValue val2 = (CljValue)map_get((CljValue)map, (CljValue)str1);
     TEST_ASSERT_NOT_NULL(val2);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val2));
@@ -320,11 +320,11 @@ TEST(test_map_assoc_performance_unchanged) {
     // Fill map with many entries
     for (int i = 0; i < 50; i++) {
         CljObject *key = intern_symbol(NULL, ":key");
-        map_assoc((CljObject*)map, key, fixnum(i));
+        (void)map_assoc_cow((CljObject*)map, key, fixnum(i));
     }
     
     // Update existing key - should be fast (clj_equal() does == check first)
-    map_assoc((CljObject*)map, kw, fixnum(42));
+    (void)map_assoc_cow((CljObject*)map, kw, fixnum(42));
     CljValue val = (CljValue)map_get((CljValue)map, (CljValue)kw);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));

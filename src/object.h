@@ -103,8 +103,7 @@ static inline bool is_type(CljObject *obj, CljType expected_type) {
 
 // Equality comparison
 /** Structural equality for collections; pointer equality fast path. */
-bool clj_equal(CljValue a, CljValue b);
-bool clj_equal_id(ID a, ID b);
+bool clj_equal(ID a, ID b);
 static inline bool clj_is_truthy(CljObject *v) {
     // Ultra-schneller Bit-Trick: nil(0) und false(5) haben Byte < 8
     return ((uintptr_t)v & 0xFF) >= 8;

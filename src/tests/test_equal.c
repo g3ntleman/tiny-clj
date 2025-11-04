@@ -99,13 +99,13 @@ TEST(test_vector_equal_same_vectors) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = vector_conj(vec1_val, val1);
-    vec1_val = vector_conj(vec1_val, val2);
-    vec1_val = vector_conj(vec1_val, val3);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val1);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val2);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val3);
     
-    vec2_val = vector_conj(vec2_val, val1);
-    vec2_val = vector_conj(vec2_val, val2);
-    vec2_val = vector_conj(vec2_val, val3);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val1);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val2);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -134,12 +134,12 @@ TEST(test_vector_equal_different_lengths) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = vector_conj(vec1_val, val1);
-    vec1_val = vector_conj(vec1_val, val2);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val1);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val2);
     
-    vec2_val = vector_conj(vec2_val, val1);
-    vec2_val = vector_conj(vec2_val, val2);
-    vec2_val = vector_conj(vec2_val, val3);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val1);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val2);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -167,10 +167,10 @@ TEST(test_vector_equal_different_values) {
     CljValue int4 = fixnum(4);
     
     // Build vectors with different values using conj
-    vec1_val = vector_conj(vec1_val, int1);
-    vec1_val = vector_conj(vec1_val, int2);
-    vec2_val = vector_conj(vec2_val, int3);
-    vec2_val = vector_conj(vec2_val, int4);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)int1);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)int2);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)int3);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)int4);
     
     // Verify vectors were created successfully
     TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
@@ -193,9 +193,9 @@ TEST(test_clj_equal_id_function) {
     CljValue fix3 = fixnum(43);
     
     // Test same immediate values
-    TEST_ASSERT_TRUE(clj_equal_id((ID)fix1, (ID)fix2));
+    TEST_ASSERT_TRUE(clj_equal((ID)fix1, (ID)fix2));
     // Test different immediate values
-    TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)fix3));
+    TEST_ASSERT_FALSE(clj_equal((ID)fix1, (ID)fix3));
     
     // Test heap objects (CljObject*)
     CljObject *str1 = make_string("hello");
@@ -203,19 +203,19 @@ TEST(test_clj_equal_id_function) {
     CljObject *str3 = make_string("world");
     
     // Test same heap objects (pointer equality)
-    TEST_ASSERT_TRUE(clj_equal_id((ID)str1, (ID)str1));
+    TEST_ASSERT_TRUE(clj_equal((ID)str1, (ID)str1));
     // Test different heap objects with same content
-    TEST_ASSERT_TRUE(clj_equal_id((ID)str1, (ID)str2));
+    TEST_ASSERT_TRUE(clj_equal((ID)str1, (ID)str2));
     // Test different heap objects with different content
-    TEST_ASSERT_FALSE(clj_equal_id((ID)str1, (ID)str3));
+    TEST_ASSERT_FALSE(clj_equal((ID)str1, (ID)str3));
     
     // Test mixed types (immediate vs heap)
-    TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)str1));
+    TEST_ASSERT_FALSE(clj_equal((ID)fix1, (ID)str1));
     
     // Test NULL values
-    TEST_ASSERT_TRUE(clj_equal_id((ID)NULL, (ID)NULL));
-    TEST_ASSERT_FALSE(clj_equal_id((ID)fix1, (ID)NULL));
-    TEST_ASSERT_FALSE(clj_equal_id((ID)NULL, (ID)str1));
+    TEST_ASSERT_TRUE(clj_equal((ID)NULL, (ID)NULL));
+    TEST_ASSERT_FALSE(clj_equal((ID)fix1, (ID)NULL));
+    TEST_ASSERT_FALSE(clj_equal((ID)NULL, (ID)str1));
     
     // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
@@ -239,11 +239,11 @@ TEST(test_vector_equal_with_strings) {
     CljObject *str4 = make_string("world");
     
     // Fill vectors with strings
-    vec1_val = vector_conj(vec1_val, (CljValue)str1);
-    vec1_val = vector_conj(vec1_val, (CljValue)str2);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)str1);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)str2);
     
-    vec2_val = vector_conj(vec2_val, (CljValue)str3);
-    vec2_val = vector_conj(vec2_val, (CljValue)str4);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)str3);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)str4);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -276,11 +276,11 @@ TEST(test_map_equal_same_maps) {
     CljObject *val2 = make_string("value2");
     
     // Add same key-value pairs to both maps
-    map_assoc((CljObject*)map1, key1, val1);
-    map_assoc((CljObject*)map1, key2, val2);
+    (void)map_assoc_cow((CljValue)map1, key1, val1);
+    (void)map_assoc_cow((CljValue)map1, key2, val2);
     
-    map_assoc((CljObject*)map2, key1, val1);
-    map_assoc((CljObject*)map2, key2, val2);
+    (void)map_assoc_cow((CljValue)map2, key1, val1);
+    (void)map_assoc_cow((CljValue)map2, key2, val2);
     
     // Test equality
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -310,11 +310,11 @@ TEST(test_map_equal_different_keys) {
     CljObject *val2 = make_string("value2");
     
     // Add different key-value pairs
-    map_assoc((CljObject*)map1, key1, val1);
-    map_assoc((CljObject*)map1, key2, val2);
+    (void)map_assoc_cow((CljValue)map1, key1, val1);
+    (void)map_assoc_cow((CljValue)map1, key2, val2);
     
-    map_assoc((CljObject*)map2, key1, val1);
-    map_assoc((CljObject*)map2, key3, val2); // Different key
+    (void)map_assoc_cow((CljValue)map2, key1, val1);
+    (void)map_assoc_cow((CljValue)map2, key3, val2); // Different key
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -345,11 +345,11 @@ TEST(test_map_equal_different_values) {
     CljObject *val3 = make_string("value3");
     
     // Add same keys but different values
-    map_assoc((CljObject*)map1, key1, val1);
-    map_assoc((CljObject*)map1, key2, val2);
+    (void)map_assoc_cow((CljValue)map1, key1, val1);
+    (void)map_assoc_cow((CljValue)map1, key2, val2);
     
-    map_assoc((CljObject*)map2, key1, val1);
-    map_assoc((CljObject*)map2, key2, val3); // Different value
+    (void)map_assoc_cow((CljValue)map2, key1, val1);
+    (void)map_assoc_cow((CljValue)map2, key2, val3); // Different value
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -379,10 +379,10 @@ TEST(test_map_equal_different_sizes) {
     CljObject *val2 = make_string("value2");
     
     // Add different number of entries
-    map_assoc((CljObject*)map1, key1, val1);
-    map_assoc((CljObject*)map1, key2, val2);
+    (void)map_assoc_cow((CljValue)map1, key1, val1);
+    (void)map_assoc_cow((CljValue)map1, key2, val2);
     
-    map_assoc((CljObject*)map2, key1, val1);
+    (void)map_assoc_cow((CljValue)map2, key1, val1);
     // map2 has only one entry
     
     // Test inequality
@@ -412,11 +412,11 @@ TEST(test_map_equal_with_nested_vectors) {
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);
     
-    vec1_val = vector_conj(vec1_val, val1);
-    vec1_val = vector_conj(vec1_val, val2);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val1);
+    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val2);
     
-    vec2_val = vector_conj(vec2_val, val1);
-    vec2_val = vector_conj(vec2_val, val2);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val1);
+    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val2);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;
@@ -426,11 +426,11 @@ TEST(test_map_equal_with_nested_vectors) {
     CljObject *val_str = make_string("value");
     
     // Add to maps
-    map_assoc((CljObject*)map1, key1, vec1);
-    map_assoc((CljObject*)map1, val_str, val_str);
+    (void)map_assoc_cow((CljValue)map1, key1, vec1);
+    (void)map_assoc_cow((CljValue)map1, val_str, val_str);
     
-    map_assoc((CljObject*)map2, key1, vec2);
-    map_assoc((CljObject*)map2, val_str, val_str);
+    (void)map_assoc_cow((CljValue)map2, key1, vec2);
+    (void)map_assoc_cow((CljValue)map2, val_str, val_str);
     
     // Test equality (should be true due to structural equality of vectors)
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));

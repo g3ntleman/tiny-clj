@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 // CljSymbol struct definition
-#define SYMBOL_NAME_MAX_LEN 128
+#define SYMBOL_NAME_MAX_LEN 64
 
 typedef struct {
     CljObject base;

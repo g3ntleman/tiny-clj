@@ -349,13 +349,18 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @return Parsed vector CljObject or NULL on error
+ * 
+ * Note: Vector size is limited by available heap memory (ESP32: ~520KB total RAM).
+ * Nesting depth is limited by stack size (typically several KB).
  */
 static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
     
-    // Vector mit initialer Kapazität erstellen (mutable)
-    CljValue vec = make_vector(6, true);  // mutable_flag = true
+    // Vector mit initialer Kapazität erstellen
+    // Heap-limitiert: auf ESP32 durch verfügbaren RAM begrenzt
+    // Note: mutable_flag removed - Parser uses direct access (optimized)
+    CljValue vec = make_vector(6, false);  // is_mutable parameter deprecated
     CljPersistentVector *v = as_vector((CljObject*)vec);
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -391,8 +396,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       return NULL;
     }
     
-    // Immutable machen
-    v->mutable_flag = false;
+    // Note: mutable_flag removed - vector is ready for use
+    // COW (RC-based) will automatically handle immutability when shared
     
     return AUTORELEASE(vec);
   }

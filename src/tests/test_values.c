@@ -28,7 +28,7 @@ TEST(test_cljvalue_immediate_helpers) {
         
         CljValue bool_val = make_special(SPECIAL_TRUE);
         TEST_ASSERT_TRUE(is_bool(bool_val));
-        TEST_ASSERT_TRUE(is_true(bool_val));
+        TEST_ASSERT_TRUE(bool_val == clj_true);
         
         CljValue nil_val = SPECIAL_NIL;
         TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
@@ -113,7 +113,7 @@ TEST(test_cljvalue_wrapper_functions) {
         
         CljValue bool_val = make_special(SPECIAL_FALSE);
         TEST_ASSERT_TRUE(is_bool(bool_val));
-        TEST_ASSERT_TRUE(is_false(bool_val));
+        TEST_ASSERT_TRUE(bool_val == clj_false);
     });
 }
 
@@ -168,11 +168,11 @@ TEST(test_cljvalue_immediates_special) {
         
         CljValue true_val = make_special(SPECIAL_TRUE);
         TEST_ASSERT_TRUE(is_bool(true_val));
-        TEST_ASSERT_TRUE(is_true(true_val));
+        TEST_ASSERT_TRUE(true_val == clj_true);
         
         CljValue false_val = make_special(SPECIAL_FALSE);
         TEST_ASSERT_TRUE(is_bool(false_val));
-        TEST_ASSERT_TRUE(is_false(false_val));
+        TEST_ASSERT_TRUE(false_val == clj_false);
         
         // Test nil is not equal to false
         TEST_ASSERT_FALSE(is_bool(nil_val));
@@ -217,12 +217,12 @@ TEST(test_cljvalue_parser_immediates) {
         CljObject *true_obj = eval_string("true", st);
         TEST_ASSERT_NOT_NULL(true_obj);
         TEST_ASSERT_TRUE(is_bool(true_obj));
-        TEST_ASSERT_TRUE(is_true(true_obj));
+        TEST_ASSERT_TRUE((CljValue)true_obj == clj_true);
         
         CljObject *false_obj = eval_string("false", st);
         TEST_ASSERT_NOT_NULL(false_obj);
         TEST_ASSERT_TRUE(is_bool(false_obj));
-        TEST_ASSERT_TRUE(is_false(false_obj));
+        TEST_ASSERT_TRUE((CljValue)false_obj == clj_false);
         
         // Test parsing nil
         CljObject *nil_obj = eval_string("nil", st);
@@ -291,7 +291,7 @@ TEST(test_cljvalue_immediates_high_level) {
         
         CljValue bool_val = make_special(SPECIAL_TRUE);
         TEST_ASSERT_TRUE(is_bool(bool_val));
-        TEST_ASSERT_TRUE(is_true(bool_val));
+        TEST_ASSERT_TRUE(bool_val == clj_true);
         
         CljValue nil_val = SPECIAL_NIL;
         TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system

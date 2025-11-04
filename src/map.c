@@ -87,41 +87,10 @@ ID map_get(CljValue map, CljValue key) {
   return NULL;
 }
 
-/** Associate key->value (replace if key exists; retains value). */
-void map_assoc(CljValue map, CljValue key, CljValue value) {
-  CljObject *map_obj = (CljObject*)map;
-  CljObject *key_obj = (CljObject*)key;
-  if (!map_obj || !is_type(map_obj, CLJ_MAP) || !key_obj) {
-    return;
-  }
-  CljMap *map_data = as_map(map_obj);
-  if (!map_data) {
-    return;
-  }
-  
-  // Check if key exists (clj_equal() already does == check first)
-  for (int i = 0; i < map_data->count; i++) {
-    CljObject *k = KV_KEY(map_data->data, i);
-    if (k && clj_equal(k, key_obj)) {
-      // ASSIGN handles both Immediates and heap objects
-      ASSIGN(KV_VALUE(map_data->data, i), (CljObject*)value);
-      return;
-    }
-  }
-  
-  // Key not found - add new entry (if capacity allows)
-  if (map_data->count < map_data->capacity) {
-    int idx = map_data->count;
-    KV_KEY(map_data->data, idx) = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
-    // ASSIGN handles both Immediates and heap objects
-    KV_VALUE(map_data->data, idx) = NULL; // Initialize to NULL before ASSIGN
-    ASSIGN(KV_VALUE(map_data->data, idx), (CljObject*)value);
-    map_data->count++;
-  }
-  // Note: No growth for in-place map_assoc (use map_assoc_cow for that)
-}
 
-/** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
+/** Associate key->value with Copy-on-Write - returns same or new map depending on RC.
+ * Hot-path (RC=1, key not found, capacity OK): Minimal branches, direct in-place mutation.
+ */
 CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
@@ -136,19 +105,21 @@ CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
     return map;  // Return original map on error
   }
   
-  // OPTIMIZATION: If RC=1, we're the only owner - mutate in-place
+  // HOT-PATH: RC=1 → check for in-place mutation (most common case)
   if (map_data->base.rc == 1) {
-    // Check if key exists - update value
+    // Check if key exists - update value (linear search necessary)
     for (int i = 0; i < map_data->count; i++) {
       CljObject *k = KV_KEY(map_data->data, i);
       if (k && clj_equal(k, key_obj)) {
+        // Key found: update in-place (no branches after this)
         ASSIGN(KV_VALUE(map_data->data, i), value_obj);
         return map;  // Return SAME map
       }
     }
     
-    // Add new entry (if capacity allows)
+    // Key not found: add new entry if capacity allows
     if (map_data->count < map_data->capacity) {
+      // Direct in-place mutation (no branches after this)
       int idx = map_data->count;
       map_data->data[2 * idx] = key_obj ? (RETAIN(key_obj), key_obj) : NULL;
       map_data->data[2 * idx + 1] = value_obj ? (RETAIN(value_obj), value_obj) : NULL;

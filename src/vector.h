@@ -36,7 +36,7 @@ CljValue make_vector(unsigned int capacity, bool is_mutable);
 /** Return a new vector with item appended; original vector remains unchanged.
  * Uses Copy-on-Write: RC=1 → in-place mutation, RC>1 → COW.
  */
-CljValue vector_conj(CljValue vec, CljValue item);
+CljVector vector_conj(CljVector vec, ID item);
 /** Update element at index with COW: RC=1 → in-place mutation, RC>1 → COW. */
 CljVector vector_assoc(CljVector vec, int index, ID value);
 

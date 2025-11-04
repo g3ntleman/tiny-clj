@@ -42,9 +42,9 @@ static void channel_put_and_close(CljObject *chan, CljObject *value) {
     CljObject *kw_value = intern_symbol(NULL, ":value");
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
     if (value) {
-        map_assoc(chan, kw_value, value);
+        (void)map_assoc_cow(chan, kw_value, value);
     }
-    map_assoc(chan, kw_closed, (CljValue)clj_true);
+    (void)map_assoc_cow(chan, kw_closed, (CljValue)clj_true);
 }
 
 int event_loop_run_next(CljMap *env, EvalState *st) {

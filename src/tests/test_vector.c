@@ -115,13 +115,13 @@ TEST(test_vector_conj_cow_rc_one_inplace) {
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         
         // First conj should be in-place (RC=1, capacity allows)
-        CljValue new_vec1 = vector_conj((CljValue)vec, fixnum(10));
+        CljValue new_vec1 = (CljValue)vector_conj((CljVector)vec, (ID)fixnum(10));
         TEST_ASSERT_EQUAL((CljValue)vec, new_vec1); // Same pointer!
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         TEST_ASSERT_EQUAL_INT(1, vec->count);
         
         // Second conj should also be in-place
-        CljValue new_vec2 = vector_conj((CljValue)vec, fixnum(20));
+        CljValue new_vec2 = (CljValue)vector_conj((CljVector)vec, (ID)fixnum(20));
         TEST_ASSERT_EQUAL((CljValue)vec, new_vec2); // Same pointer!
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         TEST_ASSERT_EQUAL_INT(2, vec->count);
@@ -139,14 +139,14 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         
         // Add some entries
-        vector_conj((CljValue)vec, fixnum(10));
+        vector_conj((CljVector)vec, (ID)fixnum(10));
         
         // RETAIN to increase RC
         RETAIN((CljValue)vec);
         TEST_ASSERT_EQUAL(2, vec->base.rc);
         
         // Now COW should trigger
-        CljValue new_vec = vector_conj((CljValue)vec, fixnum(20));
+        CljValue new_vec = (CljValue)vector_conj((CljVector)vec, (ID)fixnum(20));
         TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, vec->base.rc); // Original RC unchanged
         
@@ -173,8 +173,8 @@ TEST(test_vector_conj_cow_capacity_growth) {
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         
         // Fill capacity
-        vector_conj((CljValue)vec, fixnum(10));
-        vector_conj((CljValue)vec, fixnum(20));
+        vector_conj((CljVector)vec, (ID)fixnum(10));
+        vector_conj((CljVector)vec, (ID)fixnum(20));
         TEST_ASSERT_EQUAL_INT(2, vec->count);
         TEST_ASSERT_EQUAL_INT(2, vec->capacity);
         
@@ -182,7 +182,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
         RETAIN((CljValue)vec);
         
         // Add more - should trigger COW with growth
-        CljValue new_vec = vector_conj((CljValue)vec, fixnum(30));
+        CljValue new_vec = (CljValue)vector_conj((CljVector)vec, (ID)fixnum(30));
         TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
         
         CljPersistentVector *new_vec_data = as_vector(new_vec);
@@ -211,13 +211,13 @@ TEST(test_vector_conj_cow_original_unchanged) {
         CljPersistentVector *vec = (CljPersistentVector*)make_vector(4, false);
         
         // Add entries
-        vector_conj((CljValue)vec, fixnum(10));
-        vector_conj((CljValue)vec, fixnum(20));
+        vector_conj((CljVector)vec, (ID)fixnum(10));
+        vector_conj((CljVector)vec, (ID)fixnum(20));
         TEST_ASSERT_EQUAL_INT(2, vec->count);
         
         // RETAIN to trigger COW
         RETAIN((CljValue)vec);
-        CljValue new_vec = vector_conj((CljValue)vec, fixnum(30));
+        CljValue new_vec = (CljValue)vector_conj((CljVector)vec, (ID)fixnum(30));
         
         // Original should be unchanged
         TEST_ASSERT_EQUAL_INT(2, vec->count);
@@ -243,13 +243,13 @@ TEST(test_vector_conj_cow_memory_leak) {
         CljPersistentVector *vec = (CljPersistentVector*)make_vector(4, false);
         
         // Add entries
-        vector_conj((CljValue)vec, fixnum(10));
-        vector_conj((CljValue)vec, fixnum(20));
-        vector_conj((CljValue)vec, fixnum(30));
+        vector_conj((CljVector)vec, (ID)fixnum(10));
+        vector_conj((CljVector)vec, (ID)fixnum(20));
+        vector_conj((CljVector)vec, (ID)fixnum(30));
         
         // RETAIN to trigger COW
         RETAIN((CljValue)vec);
-        CljValue new_vec = vector_conj((CljValue)vec, fixnum(40));
+        CljValue new_vec = (CljValue)vector_conj((CljVector)vec, (ID)fixnum(40));
         
         // Cleanup
         RELEASE((CljValue)vec);

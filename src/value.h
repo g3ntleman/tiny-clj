@@ -33,7 +33,7 @@ extern struct CljNamespace* ns_get_or_create(const char *name, const char *file)
 // === Immediate Types (ungerade Tags 1, 3, 5, 7) ===
 #define TAG_FIXNUM   1   // 29-bit signed integer
 #define TAG_CHAR     3   // 21-bit Unicode character
-#define TAG_SPECIAL  5   // true, false (nil ist NULL)
+#define TAG_BOOL     5   // true, false (nil ist NULL)
 #define TAG_FIXED    7   // 29-bit Q16.13 fixed-point
 
 // === Heap Types (gerade Tags 0, 2, 4, 6) ===
@@ -59,7 +59,6 @@ static inline uint8_t get_tag(CljValue val) {
 
 // SPECIAL sub-types: false nutzt 0 für Bit-Trick
 #define SPECIAL_FALSE 0   // encoded: (0 << 3) | 5 = 5
-#define SPECIAL_TRUE  8   // encoded: (8 << 3) | 5 = 69
 #define SPECIAL_NIL   NULL 
 
 // Falsy-Werte: nil(0) und false(5) haben niedrigstes Byte < 8
@@ -69,15 +68,20 @@ static inline uint8_t get_tag(CljValue val) {
 
 // Immediate-Helpers (Phase 1: 32-bit Tagged Pointer)
 static inline CljValue make_special(uint8_t special) {
-    return (CljValue)(((uintptr_t)special << TAG_BITS) | TAG_SPECIAL);
+    return (CljValue)(((uintptr_t)special << TAG_BITS) | TAG_BOOL);
 }
 
 // make_nil() removed - nil ist NULL
 
 // Direct access to constants (Phase 8: use immediates directly)
 // nil ist NULL, true/false sind constants
-#define clj_true  ((CljValue)(((uintptr_t)SPECIAL_TRUE << TAG_BITS) | TAG_SPECIAL))
-#define clj_false ((CljValue)(((uintptr_t)SPECIAL_FALSE << TAG_BITS) | TAG_SPECIAL))
+// clj_true is the source of truth - SPECIAL_TRUE is derived from it
+#define clj_true  ((CljValue)(((uintptr_t)8 << TAG_BITS) | TAG_BOOL))  // 8 << 3 | 5 = 69
+#define clj_false ((CljValue)(((uintptr_t)SPECIAL_FALSE << TAG_BITS) | TAG_BOOL))
+
+// SPECIAL_TRUE is now derived from clj_true (consolidation)
+// For switch cases, we need the integer constant 8 directly
+#define SPECIAL_TRUE  8  // Same as: as_special(clj_true), but constant for switch cases
 
 
 static inline CljValue fixnum(int32_t value) {
@@ -127,7 +131,7 @@ static inline uint32_t as_char(CljValue val) {
 }
 
 static inline bool is_special(CljValue val) {
-    return get_tag(val) == TAG_SPECIAL;
+    return get_tag(val) == TAG_BOOL;
 }
 
 static inline uint8_t as_special(CljValue val) {
@@ -175,13 +179,6 @@ static inline bool is_bool(CljValue val) {
     return special == SPECIAL_TRUE || special == SPECIAL_FALSE;
 }
 
-static inline bool is_true(CljValue val) {
-    return is_special(val) && as_special(val) == SPECIAL_TRUE;
-}
-
-static inline bool is_false(CljValue val) {
-    return is_special(val) && as_special(val) == SPECIAL_FALSE;
-}
 
 // Ultra-schneller Bit-Trick für Truthy/Falsy
 // clj_is_truthy() ist in object.h definiert

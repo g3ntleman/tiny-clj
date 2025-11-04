@@ -212,7 +212,7 @@ TEST(test_parse_empty_string) {
     CljObject *eq_result = eval_string("(= \"\" \"\")", eval_state);
     TEST_ASSERT_NOT_NULL(eq_result);
     TEST_ASSERT_TRUE(is_special((CljValue)eq_result));
-    TEST_ASSERT_TRUE(is_true(eq_result));
+    TEST_ASSERT_TRUE(eq_result == clj_true);
     
     // Test 5: Test to_string function on empty string (this should fail with NULL pointer)
     char *str_repr = to_string(empty_str_result);

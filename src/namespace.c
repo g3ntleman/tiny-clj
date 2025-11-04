@@ -78,7 +78,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     CljObject *v = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)sym);
     if (v) {
         // Cache the result for future lookups
-        map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+        (void)map_assoc_cow((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
         return (ID)v;
     }
 
@@ -92,7 +92,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
         v = (CljObject*)map_get((CljValue)((CljNamespace*)g_runtime.clojure_core_cache)->mappings, (CljValue)sym);
         if (v) {
             // Cache the result
-            map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            (void)map_assoc_cow((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
             return (ID)v;
         }
     }
@@ -104,7 +104,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
             v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
             if (v) {
                 // Cache the result
-                map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+                (void)map_assoc_cow((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
                 return (ID)v;
             }
         }
@@ -258,7 +258,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 CljObject *body = (CljObject*)list_nth(as_list(clause), 2);
                 
                 // Bind variable (sym = err) - simplified
-                map_assoc((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);
+                (void)map_assoc_cow((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);
                 result = eval_expr_simple(body, st);
                 return result;
             }
@@ -313,8 +313,8 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     }
     
     // Store symbol-value binding (overwrites existing)
-    // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
+    // NOTE: (void)map_assoc_cow() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
     // Use CljValue API (ID = CljValue)
-    map_assoc((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
+    (void)map_assoc_cow((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
 }

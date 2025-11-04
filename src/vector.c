@@ -66,33 +66,36 @@ CljValue make_vector(unsigned int capacity, bool is_mutable) {
 
 /** Return a new vector with item appended; original vector remains unchanged.
  * Uses Copy-on-Write: RC=1 → in-place mutation, RC>1 → COW.
+ * Hot-path (RC=1, capacity OK): No branches, direct in-place mutation.
  */
-CljValue vector_conj(CljValue vec, CljValue item) {
-    if (!vec || ((CljObject*)vec)->type != CLJ_VECTOR || !item)
+CljVector vector_conj(CljVector vec, ID item) {
+    if (!vec || vec->base.type != CLJ_VECTOR || !item)
         return NULL;
 
-    CljPersistentVector *old_vec = as_vector((CljObject*)vec);
+    CljPersistentVector *old_vec = as_vector((ID)vec);
     if (!old_vec)
         return NULL;
 
-    // Empty vector singleton (RC=0): Always create new vector
-    if (old_vec->base.rc == 0) {
-        CljValue new_vec_obj = make_vector(4, false);
-        CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
-        if (!new_vec)
-            return vec;  // Return original vector on OOM
-        new_vec->data[0] = RETAIN(item);
-        new_vec->count = 1;
-        return new_vec_obj;
-    }
-
-    // OPTIMIZATION: If RC=1 and capacity allows, mutate in-place
+    // HOT-PATH: RC=1 && capacity OK → direct in-place mutation (no branches)
+    // Most common case: single owner, enough capacity
     if (old_vec->base.rc == 1 && old_vec->count < old_vec->capacity) {
         old_vec->data[old_vec->count++] = RETAIN(item);
         return vec;  // Return same vector (in-place mutation)
     }
 
-    // RC>1 or out of capacity: Copy-on-Write with optional growth
+    // Early returns for uncommon cases
+    if (old_vec->base.rc == 0) {
+        // Empty vector singleton: create new vector
+        CljValue new_vec_obj = make_vector(4, false);
+        CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
+        if (!new_vec)
+            return vec;
+        new_vec->data[0] = RETAIN(item);
+        new_vec->count = 1;
+        return new_vec;
+    }
+
+    // COW path: RC>1 or out of capacity
     int new_capacity = old_vec->capacity;
     if (old_vec->count >= old_vec->capacity) {
         new_capacity = old_vec->capacity * 2;
@@ -100,9 +103,9 @@ CljValue vector_conj(CljValue vec, CljValue item) {
     }
 
     CljValue new_vec_obj = make_vector(new_capacity, false);
-    CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
+    CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
     if (!new_vec)
-        return vec;  // Return original vector on OOM
+        return vec;
 
     // Copy existing elements with RETAIN
     for (int i = 0; i < old_vec->count; i++) {
@@ -116,7 +119,7 @@ CljValue vector_conj(CljValue vec, CljValue item) {
     // Append new item
     new_vec->data[new_vec->count++] = RETAIN(item);
 
-    return new_vec_obj;  // Return new vector (COW)
+    return new_vec;  // Return new vector (COW)
 }
 
 /** Update element at index with COW: RC=1 → in-place, RC>1 → COW. */

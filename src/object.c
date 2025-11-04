@@ -475,42 +475,10 @@ char* print_str(CljObject *v) {
     return to_string(v);
 }
 
-// Konsolidierte Gleichheitsprüfung mit ID-Parametern
-// Unterstützt sowohl CljObject* (heap objects) als auch CljValue (immediate values)
-bool clj_equal_id(ID a, ID b) {
-    // Schneller == Check funktioniert für beide Typen
-    if (a == b) return true;
-    if (!a || !b) return false;
-    
-    // Beide sind immediate values (CljValue)
-    if (is_immediate(a) && is_immediate(b)) {
-        if (is_fixnum(a) && is_fixnum(b)) {
-            return as_fixnum(a) == as_fixnum(b);
-        }
-        if (is_character(a) && is_character(b)) {
-            return as_character(a) == as_character(b);
-        }
-        if (is_fixed(a) && is_fixed(b)) {
-            return as_fixed(a) == as_fixed(b);
-        }
-        if (is_special(a) && is_special(b)) {
-            return as_special(a) == as_special(b);
-        }
-        return false; // Verschiedene immediate value Typen
-    }
-    
-    // Beide sind CljObject* (heap objects)
-    if (!is_immediate(a) && !is_immediate(b)) {
-        return clj_equal(a, b);
-    }
-    
-    // Gemischte Typen (ein immediate, ein heap object)
-    return false;
-}
 
 
 // Korrekte Gleichheitsprüfung mit Inhalt-Vergleich
-bool clj_equal(CljValue a, CljValue b) {
+bool clj_equal(ID a, ID b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
     if (!a || !b) return false;
     
@@ -534,11 +502,12 @@ bool clj_equal(CljValue a, CljValue b) {
     CljObject *a_obj = (CljObject*)a;
     CljObject *b_obj = (CljObject*)b;
     
-    if (!is_type(a_obj, b_obj->type)) return false;
+    // Check that both objects have the same type
+    if (!a_obj || !b_obj || a_obj->type != b_obj->type) return false;
     
     // Inhalt-Vergleich basierend auf Typ
     // Hinweis: CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
-    switch (a->type) {
+    switch (a_obj->type) {
         // CLJ_INT, CLJ_FLOAT removed - handled as immediates
             
         // Komplexe Typen - Inhalt-Vergleich
@@ -562,8 +531,8 @@ bool clj_equal(CljValue a, CljValue b) {
             if (!vec_a || !vec_b) return false;
             if (vec_a->count != vec_b->count) return false;
             for (int i = 0; i < vec_a->count; i++) {
-                // Vektorelemente können CljValue (immediate values) oder CljObject* sein
-                if (!clj_equal_id(vec_a->data[i], vec_b->data[i])) return false;
+                // Vektorelemente können immediates oder heap objects sein
+                if (!clj_equal(vec_a->data[i], vec_b->data[i])) return false;
             }
             return true;
         }
@@ -577,8 +546,8 @@ bool clj_equal(CljValue a, CljValue b) {
                 CljValue key_a = KV_KEY(map_a->data, i);
                 CljValue val_a = KV_VALUE(map_a->data, i);
                 CljValue val_b = map_get(b, key_a);
-                // Map-Werte können CljValue (immediate values) oder CljObject* sein
-                if (!clj_equal_id(val_a, val_b)) return false;
+                // Map-Werte können immediates oder heap objects sein
+                if (!clj_equal(val_a, val_b)) return false;
             }
             return true;
         }
@@ -587,6 +556,8 @@ bool clj_equal(CljValue a, CljValue b) {
             // Symbol comparison: name and namespace must match
             CljSymbol *sym_a = as_symbol(a);
             CljSymbol *sym_b = as_symbol(b);
+            if (!sym_a || !sym_b) return false;
+            if (!sym_a->name || !sym_b->name) return false;
             if (strcmp(sym_a->name, sym_b->name) != 0) return false;
             
             // Compare namespaces (both NULL or both same object)
@@ -747,7 +718,7 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    map_assoc((CljValue)g_runtime.meta_registry, v, meta);
+    (void)map_assoc_cow((CljValue)g_runtime.meta_registry, v, meta);
 }
 
 ID meta_get(CljObject *v) {
@@ -819,7 +790,7 @@ ID env_get_stack(CljObject *env, CljObject *key) {
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
     if (!env || !key) return;
     
-    map_assoc(env, key, value);
+    (void)map_assoc_cow(env, key, value);
 }
 
 // Function call implementation using stack allocation

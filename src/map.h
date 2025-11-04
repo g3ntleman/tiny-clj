@@ -27,8 +27,6 @@ static inline CljMap* as_map(ID obj) {
 
 // Map operations (optimized with pointer fast paths)
 /** Get value for key or NULL (structural key equality). */
-/** Associate key->value (replaces existing; retains value). */
-void map_assoc(CljObject *map, CljObject *key, CljObject *value);
 /** Vector of keys (retained elements). */
 CljObject* map_keys(CljObject *map);
 /** Vector of values (retained elements). */
@@ -53,8 +51,6 @@ CljObject* make_map_from_stack(CljObject **pairs, int pair_count);
 CljMap* make_map(int capacity);
 /** Get value for key or NULL if absent (structural key equality). */
 ID map_get(CljValue map, CljValue key);
-/** Associate key->value (replace if key exists; retains value). */
-void map_assoc(CljValue map, CljValue key, CljValue value);
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
 CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value);
 /** Return a vector of keys (retained). */
