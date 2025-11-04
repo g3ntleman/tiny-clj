@@ -45,31 +45,14 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
     return true;
 }
 
-// Flexible arity checker using compiler-provided function name (__func__)
-#define REQUIRE_ARITY(CONDITION) do { \
-    if (!(CONDITION)) { \
-        char error_msg[256]; \
-        snprintf(error_msg, sizeof(error_msg), \
-                "%s arity check failed: expected (%s), got %u", \
-                __func__, #CONDITION, (argc)); \
-        throw_exception(EXCEPTION_TYPE_ARITY, error_msg, __FILE__, __LINE__, 0); \
-        return NULL; \
-    } \
-} while(0)
-
-// nth with optional default: (nth v i) | (nth v i default)
-ID native_nth(ID *args, unsigned int argc) {
-    REQUIRE_ARITY(argc == 2 || argc == 3);
+ID nth2(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "nth")) return NULL;
     ID vec = args[0];
     ID idx = args[1];
-    if (!vec || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return NULL;
+    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return (NULL);
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
-    if (!v || i < 0 || i >= v->count) {
-        if (argc == 3) return args[2];
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "nth index out of bounds", __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    if (!v || i < 0 || i >= v->count) return (NULL);
     return (RETAIN(v->data[i]));
 }
 
@@ -149,7 +132,7 @@ ID native_conj(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "conj not supported on this type", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -159,7 +142,7 @@ ID native_conj(ID *args, unsigned int argc) {
 ID native_first(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    REQUIRE_ARITY(argc == 1);
+    if (!validate_builtin_args(argc, 1, "first")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) {
@@ -187,7 +170,7 @@ ID native_first(ID *args, unsigned int argc) {
 ID native_rest(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    REQUIRE_ARITY(argc == 1);
+    if (!validate_builtin_args(argc, 1, "rest")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) {
@@ -226,7 +209,7 @@ ID native_rest(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "rest not supported on this type", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -236,7 +219,7 @@ ID native_rest(ID *args, unsigned int argc) {
 ID native_cons(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    REQUIRE_ARITY(argc == 2);
+    if (!validate_builtin_args(argc, 2, "cons")) return NULL;
     
     CljObject *elem = args[0];
     CljObject *coll = args[1];
@@ -316,7 +299,7 @@ ID native_transient(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "transient requires a persistent collection at position 1", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -338,7 +321,7 @@ ID native_persistent(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "persistent! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
     return (NULL);
@@ -364,7 +347,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
-    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                     "conj! requires a transient collection at position 1", 
                     __FILE__, __LINE__, 0);
     return NULL;
@@ -407,93 +390,6 @@ ID native_count(ID *args, unsigned int argc) {
     }
     
     return (fixnum(0)); // Default count for unsupported types
-}
-
-// Create vector from variadic args: (vector a b c)
-ID native_vector(ID *args, unsigned int argc) {
-    CljValue vec = make_vector((int)argc, 0);
-    CljPersistentVector *v = as_vector((CljObject*)vec);
-    if (!v) return NULL;
-    for (unsigned int i = 0; i < argc; i++) {
-        v->data[v->count++] = (RETAIN((CljObject*)args[i]), (CljObject*)args[i]);
-    }
-    return (CljObject*)vec;
-}
-
-// Convert collection to vector: (vec coll)
-ID native_vec(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 1, "vec")) return NULL;
-    CljObject *coll = args[0];
-    if (!coll) return (CljObject*)make_vector(0, 0);
-    if (is_type(coll, CLJ_VECTOR)) return coll;
-    // Fallback: try seq view and accumulate
-    CljObject *seq = seq_create(coll);
-    if (!seq) return (CljObject*)make_vector(0, 0);
-    CljValue out = make_vector(0, 0);
-    CljObject *cur;
-    while ((cur = seq_first(seq)) != NULL) {
-        out = vector_conj(out, (CljValue)cur);
-        seq_next(seq);
-    }
-    seq_release(seq);
-    return (CljObject*)out;
-}
-
-// (peek v) -> last element or nil
-ID native_peek(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 1, "peek")) return NULL;
-    CljObject *coll = args[0];
-    if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
-    CljPersistentVector *v = as_vector(coll);
-    if (!v || v->count == 0) return NULL;
-    return RETAIN(v->data[v->count - 1]);
-}
-
-// (pop v) -> vector without last element; error on empty
-ID native_pop(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 1, "pop")) return NULL;
-    CljObject *coll = args[0];
-    if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
-    CljPersistentVector *v = as_vector(coll);
-    if (!v || v->count == 0) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "pop on empty vector", __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    int new_count = v->count - 1;
-    CljValue out = make_vector(new_count, 0);
-    CljPersistentVector *o = as_vector((CljObject*)out);
-    for (int i = 0; i < new_count; i++) {
-        o->data[i] = (RETAIN(v->data[i]), v->data[i]);
-    }
-    o->count = new_count;
-    return (CljObject*)out;
-}
-
-// (subvec v start) | (subvec v start end)
-ID native_subvec(ID *args, unsigned int argc) {
-    if (argc != 2 && argc != 3) {
-        throw_exception(EXCEPTION_ARITY, "subvec requires 2 or 3 args", __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    CljObject *coll = args[0];
-    if (!coll || !is_type(coll, CLJ_VECTOR)) return NULL;
-    if (!IS_FIXNUM(args[1])) return NULL;
-    int start = AS_FIXNUM(args[1]);
-    CljPersistentVector *v = as_vector(coll);
-    if (!v) return NULL;
-    int end = (argc == 3 && IS_FIXNUM(args[2])) ? AS_FIXNUM(args[2]) : v->count;
-    if (start < 0 || end < start || end > v->count) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "subvec index out of bounds", __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    int len = end - start;
-    CljValue out = make_vector(len, 0);
-    CljPersistentVector *o = as_vector((CljObject*)out);
-    for (int i = 0; i < len; i++) {
-        o->data[i] = (RETAIN(v->data[start + i]), v->data[start + i]);
-    }
-    o->count = len;
-    return (CljObject*)out;
 }
 
 ID native_keys(ID *args, unsigned int argc) {
@@ -656,7 +552,7 @@ ID native_run_next_task(ID *args, unsigned int argc) {
     EvalState *st = evalstate();
     CljMap *env = NULL;
     int ran = event_loop_run_next(env, st);
-    return ran ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return ran ? clj_true : clj_false;
 }
 
 
@@ -724,7 +620,7 @@ ID native_prn(ID *args, unsigned int argc) {
 static bool validate_numeric_args(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
         if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+            throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
     }
@@ -818,7 +714,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     // Convert argument to C-string
     char *filename_str = to_string(args[0]);
     if (!filename_str) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                        "slurp requires a string or symbol argument",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -864,7 +760,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     if (!buffer) {
         free(filename_str);
         fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                        "Out of memory reading file",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -968,7 +864,7 @@ ID native_require(ID *args, unsigned int argc) {
     char *ns_name = to_string(args[0]);
     if (!ns_name || ns_name[0] == '\0') {
         if (ns_name) free(ns_name);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "require expects non-empty namespace name", __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "require expects non-empty namespace name", __FILE__, __LINE__, 0);
         return NULL;
     }
 
@@ -1028,7 +924,7 @@ ID native_spit(ID *args, unsigned int argc) {
     // Convert first argument (filename) to C-string
     char *filename_str = to_string(args[0]);
     if (!filename_str) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
                        "spit requires a string or symbol as first argument (filename)",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -1052,7 +948,7 @@ ID native_spit(ID *args, unsigned int argc) {
                 "Cannot open file '%s' for writing: %s", filename_str, strerror(errno));
         free(filename_str);
         free(content_str);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1069,7 +965,7 @@ ID native_spit(ID *args, unsigned int argc) {
         free(filename_str);
         free(content_str);
         fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1082,7 +978,7 @@ ID native_spit(ID *args, unsigned int argc) {
         free(filename_str);
         free(content_str);
         fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1282,7 +1178,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int x = AS_FIXNUM(args[0]); 
             if (x == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
                     "Division by zero: 1 / %d", x);
                 return NULL;
             }
@@ -1292,7 +1188,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int32_t x = extract_fixed_value(args[0]);
             if (x == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
                     "Division by zero: 1 / %d", x >> 13);
                 return NULL;
             }
@@ -1318,7 +1214,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             int d = AS_FIXNUM(args[i]);
             if (d == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
                     "Division by zero: %d / %d", acc_i, d);
                 return NULL;
             }
@@ -1337,7 +1233,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
                                             : extract_fixed_value(args[i]);
             if (d == 0) {
                 // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+                throw_exception_formatted(EXCEPTION_TYPE_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
                     "Division by zero: %d / %d", acc_fixed >> 13, d >> 13);
                 return NULL;
             } else {
@@ -1495,46 +1391,46 @@ ID native_lt(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception(EXCEPTION_TYPE, "Expected number for < comparison",
+        throw_exception("TypeError", "Expected number for < comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    return (result == COMPARE_LESS) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return (result == COMPARE_LESS) ? clj_true : clj_false;
 }
 
 ID native_gt(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception(EXCEPTION_TYPE, "Expected number for > comparison",
+        throw_exception("TypeError", "Expected number for > comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    return (result == COMPARE_GREATER) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return (result == COMPARE_GREATER) ? clj_true : clj_false;
 }
 
 ID native_le(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception(EXCEPTION_TYPE, "Expected number for <= comparison",
+        throw_exception("TypeError", "Expected number for <= comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     return (result == COMPARE_LESS || result == COMPARE_EQUAL) ? 
-           make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+           clj_true : clj_false;
 }
 
 ID native_ge(ID *args, unsigned int argc) {
     (void)argc; // Suppress unused parameter warning
     CompareResult result;
     if (!compare_numeric_values((CljObject*)args[0], (CljObject*)args[1], &result)) {
-        throw_exception(EXCEPTION_TYPE, "Expected number for >= comparison",
+        throw_exception("TypeError", "Expected number for >= comparison",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     return (result == COMPARE_GREATER || result == COMPARE_EQUAL) ? 
-           make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+           clj_true : clj_false;
 }
 
 ID native_eq(ID *args, unsigned int argc) {
@@ -1544,7 +1440,7 @@ ID native_eq(ID *args, unsigned int argc) {
     CljObject *b = (CljObject*)args[1];
     
     if (!a || !b) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "= arguments cannot be null",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "= arguments cannot be null",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1557,7 +1453,7 @@ ID native_eq(ID *args, unsigned int argc) {
         val_a = as_fixed((CljValue)a);
     } else {
         // Not numeric, use general equality
-        return clj_equal(a, b) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+        return clj_equal(a, b) ? clj_true : clj_false;
     }
     
     if (is_fixnum((CljValue)b)) {
@@ -1566,20 +1462,20 @@ ID native_eq(ID *args, unsigned int argc) {
         val_b = as_fixed((CljValue)b);
     } else {
         // Not numeric, use general equality
-        return clj_equal(a, b) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+        return clj_equal(a, b) ? clj_true : clj_false;
     }
     
-    return val_a == val_b ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return val_a == val_b ? clj_true : clj_false;
 }
 
 ID native_identical(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 2, "identical?")) return make_special(SPECIAL_FALSE);
-    return (args[0] == args[1]) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    if (!validate_builtin_args(argc, 2, "identical?")) return clj_false;
+    return (args[0] == args[1]) ? clj_true : clj_false;
 }
 
 ID native_vector_p(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 1, "vector?")) return make_special(SPECIAL_FALSE);
-    return is_type((CljObject*)args[0], CLJ_VECTOR) ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    if (!validate_builtin_args(argc, 1, "vector?")) return clj_false;
+    return is_type((CljObject*)args[0], CLJ_VECTOR) ? clj_true : clj_false;
 }
 
 // native_time removed: time is now only a special form (eval_time)
@@ -1588,7 +1484,7 @@ ID native_vector_p(ID *args, unsigned int argc) {
 // Native time-micro implementation with microsecond resolution
 ID native_time_micro(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "time-micro requires exactly 1 argument",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "time-micro requires exactly 1 argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1627,7 +1523,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     // Get the sleep duration in seconds
     CljObject *duration_obj = args[0];
     if (!is_fixnum((CljValue)duration_obj)) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "sleep duration must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1654,7 +1550,7 @@ ID native_def(ID *args, unsigned int argc) {
     // First argument should be a symbol (name)
     CljObject *symbol = args[0];
     if (!symbol || !is_type(symbol, CLJ_SYMBOL)) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "def requires a symbol as first argument",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "def requires a symbol as first argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1704,14 +1600,14 @@ ID native_ns(ID *args, unsigned int argc) {
     // First argument should be a symbol (namespace name)
     CljObject *ns_name_obj = args[0];
     if (!ns_name_obj || !is_type(ns_name_obj, CLJ_SYMBOL)) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "ns expects a symbol",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "ns expects a symbol",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     CljSymbol *ns_sym = as_symbol((ID)ns_name_obj);
     if (!ns_sym || !ns_sym->name[0]) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "ns symbol has no name",
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "ns symbol has no name",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -1791,12 +1687,7 @@ void register_builtins() {
 #endif
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
-    register_builtin_in_namespace("nth", native_nth);
-    register_builtin_in_namespace("vector", native_vector);
-    register_builtin_in_namespace("vec", native_vec);
-    register_builtin_in_namespace("peek", native_peek);
-    register_builtin_in_namespace("pop", native_pop);
-    register_builtin_in_namespace("subvec", native_subvec);
+    register_builtin_in_namespace("nth", nth2);
     register_builtin_in_namespace("conj", native_conj);
     register_builtin_in_namespace("first", native_first);
     register_builtin_in_namespace("rest", native_rest);

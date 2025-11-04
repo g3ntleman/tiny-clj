@@ -75,7 +75,9 @@ static inline CljValue make_special(uint8_t special) {
 // make_nil() removed - nil ist NULL
 
 // Direct access to constants (Phase 8: use immediates directly)
-// nil ist NULL, true/false sind make_special(SPECIAL_TRUE/FALSE)
+// nil ist NULL, true/false sind constants
+#define clj_true  ((CljValue)(((uintptr_t)SPECIAL_TRUE << TAG_BITS) | TAG_SPECIAL))
+#define clj_false ((CljValue)(((uintptr_t)SPECIAL_FALSE << TAG_BITS) | TAG_SPECIAL))
 
 
 static inline CljValue fixnum(int32_t value) {

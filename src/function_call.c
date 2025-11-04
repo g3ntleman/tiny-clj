@@ -12,10 +12,6 @@
 #include "common.h"
 #include "object.h"
 #include "function_call.h"
-#include "builtins.h"
-
-// Forward decl for calling nth builtin from dotimes binding parsing
-ID native_nth(ID *args, unsigned int argc);
 #include "symbol.h"
 #include "exception.h"
 #include "function.h"
@@ -178,7 +174,7 @@ static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, Comparison
     }
     
     RELEASE_TWO_ARGS(a, b);
-    return result ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return result ? clj_true : clj_false;
 }
 
 /** @brief Compare symbol name directly (works for non-interned symbols) */
@@ -471,7 +467,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
-        throw_exception(EXCEPTION_TYPE, "Attempt to call non-function value", NULL, 0, 0);
+        throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
     
@@ -480,7 +476,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
         // It's a native function (CljFunc)
         CljFunc *native_func = (CljFunc*)fn;
         if (!native_func || !native_func->fn) {
-            throw_exception(EXCEPTION_TYPE, "Invalid native function", NULL, 0, 0);
+            throw_exception("TypeError", "Invalid native function", NULL, 0, 0);
             return NULL;
         }
         return native_func->fn((CljObject**)args, argc);
@@ -494,7 +490,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
     
     // Arity check
     if (argc != func->param_count) {
-        throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+        throw_exception("ArityError", "Arity mismatch in function call", NULL, 0, 0);
         return NULL;
     }
     
@@ -786,12 +782,12 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         // Simple equality check for numbers (immediate values)
         if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
             bool equal = (as_fixnum((CljValue)a) == as_fixnum((CljValue)b));
-            return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+            return equal ? clj_true : clj_false;
         }
         
         // For other types, use clj_equal
         bool equal = clj_equal(a, b);
-        return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+        return equal ? clj_true : clj_false;
     }
     
     if (op == SYM_IF) {
@@ -1062,18 +1058,18 @@ static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject
         
         if (compare_numeric_values(a, b, COMP_EQ)) {
             RELEASE_TWO_ARGS(a, b);
-            return make_special(SPECIAL_TRUE);
+            return clj_true;
         }
         
         float val_a, val_b;
         if (extract_numeric_values(a, b, &val_a, &val_b)) {
             RELEASE_TWO_ARGS(a, b);
-            return make_special(SPECIAL_FALSE);
+            return clj_false;
         }
         
         bool equal = clj_equal(a, b);
         RELEASE_TWO_ARGS(a, b);
-        return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+        return equal ? clj_true : clj_false;
     }
     if (op == SYM_LT) return eval_numeric_comparison(list, env, COMP_LT);
     if (op == SYM_GT) return eval_numeric_comparison(list, env, COMP_GT);
@@ -1287,9 +1283,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         // (and expr1 expr2 ...) - short circuit evaluation
         // Returns first falsy value or last value
         int argc = list_count(list);
-        if (argc <= 1) return make_special(SPECIAL_TRUE); // (and) => true
+        if (argc <= 1) return clj_true; // (and) => true
         
-        CljObject *result = make_special(SPECIAL_TRUE);
+        CljObject *result = clj_true;
         for (int i = 1; i < argc; i++) {
             CljObject *arg = list_get_element(list, i);
             if (!arg) continue;
@@ -1354,7 +1350,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // recur is only valid inside function bodies, not in top-level lists
     if (original_op == SYM_RECUR) {
-        throw_exception(EXCEPTION_PARSE, "recur can only be used inside function bodies", NULL, 0, 0);
+        throw_exception("SyntaxError", "recur can only be used inside function bodies", NULL, 0, 0);
         return NULL;
     }
     
@@ -1443,7 +1439,7 @@ ID eval_equal(CljList *list, CljMap *env) {
     if (!a || !b) return NULL;
     
     bool equal = clj_equal(a, b);
-    return equal ? make_special(SPECIAL_TRUE) : make_special(SPECIAL_FALSE);
+    return equal ? clj_true : clj_false;
 }
 
 
@@ -2420,8 +2416,8 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     
     if (is_type(binding_list, CLJ_VECTOR)) {
         // Use nth function to safely access vector elements
-        var = native_nth((ID[]){binding_list, fixnum(0)}, 2);
-        n_obj = native_nth((ID[]){binding_list, fixnum(1)}, 2);
+        var = nth2((ID[]){binding_list, fixnum(0)}, 2);
+        n_obj = nth2((ID[]){binding_list, fixnum(1)}, 2);
     } else if (is_type(binding_list, CLJ_LIST)) {
         CljList *binding_data = as_list(binding_list);
         if (!binding_data->first || !binding_data->rest) {
