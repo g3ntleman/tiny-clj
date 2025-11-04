@@ -280,16 +280,43 @@ CljObjectPool *autorelease_pool_push() {
 
 
 void autorelease_pool_pop(CljObjectPool *pool) {
+    // Use current pool if none specified
+    if (!pool) {
+        // Check for stack underflow first
+        if (g_pool_stack_top < 0) {
+            printf("WARNING: autorelease_pool_pop() called on empty stack! "
+                   "This indicates more pop() calls than push() calls.\n");
+            return; // Safe return instead of throwing exception
+        }
+        pool = g_pool_stack[g_pool_stack_top];
+    }
+    
+#ifdef DEBUG
+    // Check if pool is still on the stack (may have been popped by longjmp from exception)
+    // This check is only in debug mode to avoid performance impact in release builds
+    bool pool_on_stack = false;
+    if (pool && g_pool_stack_top >= 0) {
+        for (int i = 0; i <= g_pool_stack_top; i++) {
+            if (g_pool_stack[i] == pool) {
+                pool_on_stack = true;
+                break;
+            }
+        }
+    }
+    
+    // If pool was already popped (likely by longjmp from exception), just return silently
+    if (pool && !pool_on_stack) {
+        // Pool was already popped (likely by longjmp from exception)
+        // This is safe - just return without warning
+        return;
+    }
+#endif
+    
     // Check for stack underflow
     if (g_pool_stack_top < 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
                "This indicates more pop() calls than push() calls.\n");
         return; // Safe return instead of throwing exception
-    }
-    
-    // Use current pool if none specified
-    if (!pool) {
-        pool = g_pool_stack[g_pool_stack_top];
     }
     
     // Verify pool is at top of stack (LIFO principle - Last In, First Out)
