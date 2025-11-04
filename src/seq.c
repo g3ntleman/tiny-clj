@@ -277,7 +277,20 @@ ID seq_rest(ID seq_obj) {
 }
 
 ID seq_next(ID seq_obj) {
-    return seq_rest(seq_obj);
+    if (!seq_obj) return NULL;
+    
+    // Get rest sequence (DRY: reuse seq_rest implementation)
+    ID rest_seq = seq_rest(seq_obj);
+    if (!rest_seq) return NULL;
+    
+    // Check if rest is empty - if so, return nil (Clojure-compatible)
+    if (seq_empty(rest_seq)) {
+        seq_release(rest_seq);
+        return NULL;  // nil
+    }
+    
+    // Rest is non-empty, return it
+    return rest_seq;
 }
 
 bool seq_empty(ID seq_obj) {

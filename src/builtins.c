@@ -194,69 +194,93 @@ ID native_first(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    // Direct access for lists (already a seq) - no allocation needed
-    if (is_type(coll, CLJ_LIST)) {
-        CljObject *first = LIST_FIRST((CljList*)coll);
-        return first;  // Return existing object directly - no memory management needed
+    // Switch on collection type (DRY: consistent pattern)
+    switch (coll->type) {
+        case CLJ_LIST: {
+            // Direct access for lists (already a seq) - no allocation needed
+            CljObject *first = LIST_FIRST((CljList*)coll);
+            return first;  // Return existing object directly - no memory management needed
+        }
+        
+        default: {
+            // Use seq implementation for other types (vectors, maps, strings)
+            CljObject *seq = seq_create(coll);
+            if (!seq) return NULL;
+            
+            CljObject *result = seq_first(seq);
+            seq_release(seq);
+            
+            return result;
+        }
     }
-    
-    // Use seq implementation for other types (vectors, maps, strings)
-    CljObject *seq = seq_create(coll);
-    if (!seq) return NULL;
-    
-    CljObject *result = seq_first(seq);
-    seq_release(seq);
-    
-    return result;
 }
 
-// Rest function that works with BuiltinFn signature
-ID native_rest(ID *args, unsigned int argc) {
+// Next function that works with BuiltinFn signature
+// Clojure-compatible: returns nil if sequence is empty, otherwise rest sequence
+ID native_next(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
-    if (!validate_builtin_args(argc, 1, "rest")) return NULL;
+    if (!validate_builtin_args(argc, 1, "next/rest")) return NULL;
     
     CljObject *coll = args[0];
     if (!coll) {
-        // rest of nil returns empty list
-        return empty_list();
+        // next of nil returns nil
+        return NULL;
     }
     
-    // Direct access for lists (already a seq) - no allocation needed
-    if (is_type(coll, CLJ_LIST)) {
-        CljObject *rest = LIST_REST((CljList*)coll);
-        return rest ? rest : empty_list();  // No AUTORELEASE needed for singleton
-    }
-    
-    if (is_type(coll, CLJ_VECTOR)) {
-        CljPersistentVector *v = as_vector(coll);
-        if (!v || v->count <= 1) {
-            return empty_list();
+    // Switch on collection type (DRY: consistent pattern)
+    switch (coll->type) {
+        case CLJ_LIST: {
+            // Direct access for lists (already a seq) - no allocation needed
+            CljObject *rest = LIST_REST((CljList*)coll);
+            // next returns nil if rest is empty, otherwise rest
+            return rest ? rest : NULL;  // nil
         }
         
-        // Use CljSeqIterator (existing!) instead of copying
-        CljObject *seq = seq_create(coll);
-        if (!seq) return empty_list();
+        case CLJ_VECTOR: {
+            CljPersistentVector *v = as_vector(coll);
+            if (!v || v->count <= 1) {
+                // Empty or single-element vector: next returns nil
+                return NULL;
+            }
+            
+            // Use CljSeqIterator (existing!) instead of copying
+            CljObject *seq = seq_create(coll);
+            if (!seq) return NULL;
+            
+            // Return next of sequence (DRY: uses seq_next which handles empty case)
+            CljObject *next_seq = seq_next(seq);
+            
+            // Free the intermediate seq object to prevent memory leak
+            seq_release(seq);
+            
+            return next_seq;  // May be NULL if empty
+        }
         
-        // Return rest of sequence (O(1) operation!)
-        CljObject *rest_seq = seq_rest(seq);
+        case CLJ_SEQ: {
+            // Already a sequence - just call seq_next (DRY)
+            return seq_next(coll);
+        }
         
-        // Free the intermediate seq object to prevent memory leak
-        seq_release(seq);
-        
-        return rest_seq;
+        default: {
+            // Throw exception for unsupported collection type
+            throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
+                            "next not supported on this type", 
+                            __FILE__, __LINE__, 0);
+            return (NULL);
+        }
     }
-    
-    if (is_type(coll, CLJ_SEQ)) {
-        // Already a sequence - just call seq_rest
-        return seq_rest(coll);
-    }
-    
-    // Throw exception for unsupported collection type
-    throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, 
-                    "rest not supported on this type", 
-                    __FILE__, __LINE__, 0);
-    return (NULL);
+}
+
+// Rest function that works with BuiltinFn signature
+// DRY: Simply calls native_next and converts nil to empty_list()
+ID native_rest(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+        
+    // Call native_next (it will validate again, but that's fine for robustness)
+    // If it returns nil, convert to empty_list()
+    ID next_result = native_next(args, argc);
+    return next_result ? next_result : empty_list();
 }
 
 // Cons function that works with BuiltinFn signature
@@ -1751,6 +1775,7 @@ void register_builtins() {
     register_builtin_in_namespace("conj", native_conj);
     register_builtin_in_namespace("first", native_first);
     register_builtin_in_namespace("rest", native_rest);
+    register_builtin_in_namespace("next", native_next);
     register_builtin_in_namespace("cons", native_cons);
     register_builtin_in_namespace("count", native_count);
     register_builtin_in_namespace("assoc", assoc3);

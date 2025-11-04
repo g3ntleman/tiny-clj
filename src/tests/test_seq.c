@@ -152,6 +152,61 @@ TEST(test_seq_next) {
     }
 }
 
+TEST(test_seq_rest_vs_next_difference) {
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
+        // Test 1: Non-empty sequence - both should return non-empty sequences
+        {
+            CljValue vec = make_vector(2, 1);
+            CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+            vec_data->data[0] = fixnum(1);
+            vec_data->data[1] = fixnum(2);
+            vec_data->count = 2;
+            
+            CljObject *seq = seq_create((CljObject*)vec);
+            
+            // rest should return a sequence (even if empty later)
+            CljObject *rest_seq = (CljObject*)seq_rest(seq);
+            TEST_ASSERT_NOT_NULL(rest_seq);
+            TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
+            
+            // next should return a sequence (non-empty)
+            CljObject *next_seq = (CljObject*)seq_next(seq);
+            TEST_ASSERT_NOT_NULL(next_seq);
+            TEST_ASSERT_EQUAL_INT(CLJ_SEQ, next_seq->type);
+            
+            seq_release(seq);
+            seq_release(rest_seq);
+            seq_release(next_seq);
+        }
+        
+        // Test 2: Single-element sequence - rest should return empty sequence, next should return nil
+        {
+            CljValue vec = make_vector(1, 1);
+            CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+            vec_data->data[0] = fixnum(42);
+            vec_data->count = 1;
+            
+            CljObject *seq = seq_create((CljObject*)vec);
+            
+            // rest should return empty sequence (not nil!)
+            CljObject *rest_seq = (CljObject*)seq_rest(seq);
+            TEST_ASSERT_NOT_NULL(rest_seq);
+            TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
+            TEST_ASSERT_TRUE(seq_empty(rest_seq));  // Should be empty sequence
+            
+            // next should return nil (not empty sequence!)
+            CljObject *next_seq = (CljObject*)seq_next(seq);
+            TEST_ASSERT_EQUAL_PTR(NULL, next_seq);  // nil = NULL
+            
+            seq_release(seq);
+            seq_release(rest_seq);
+            // next_seq is NULL, no need to release
+        }
+        
+    }
+}
+
 // ============================================================================
 // SEQ EQUALITY TESTS
 // ============================================================================

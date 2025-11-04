@@ -1083,7 +1083,7 @@ static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *
     if (op == SYM_REST) return eval_rest(list, env);
     if (op == SYM_CONS) return eval_cons(list, env);
     if (op == SYM_SEQ) return eval_seq(list, env);
-    if (op == SYM_NEXT) return eval_rest(list, env); // next is alias for rest
+    if (op == SYM_NEXT) return eval_next(list, env); // Clojure-compatible: next returns nil if empty
     if (op == SYM_COUNT) return eval_count(list, env);
     return NULL;
 }
@@ -1756,6 +1756,20 @@ ID eval_first(CljList *list, CljMap *env) {
  */
 ID eval_rest(CljList *list, CljMap *env) {
     return eval_and_call_native(list, env, native_rest, 1);
+}
+
+/**
+ * @brief Evaluate the next of a sequence (nil if empty, otherwise rest sequence)
+ * @param list The function call list containing the argument
+ * @param env The environment for variable lookup
+ * @return The next of the sequence (nil if empty, otherwise rest sequence) (autoreleased)
+ * 
+ * Memory Policy:
+ * - Returns autoreleased objects to prevent memory leaks
+ * - Delegates to native_next for validation and execution (DRY principle)
+ */
+ID eval_next(CljList *list, CljMap *env) {
+    return eval_and_call_native(list, env, native_next, 1);
 }
 
 ID eval_cons(CljList *list, CljMap *env) {
