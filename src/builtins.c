@@ -740,17 +740,22 @@ ID native_vec(ID *args, unsigned int argc) {
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
     CljVector vec = (CljVector)make_vector(4, false);
+    if (!vec) {
+        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+                "Failed to create vector");
+        return NULL;
+    }
     
     // Iterate through sequence and add elements using vector_conj (reuse existing logic)
     // This avoids code duplication and reuses COW-based vector_conj
+    // Note: nil (NULL) is a valid value in Clojure collections
     while (!seq_iter_empty(&iter)) {
         ID elem_id = seq_iter_first(&iter);
-        if (elem_id) {
-            // Use vector_conj to add element (handles growth automatically via COW)
-            // vector_conj may return a new vector if capacity was exceeded (COW)
-            // Use ASSIGN to safely update vec (handles retain/release automatically)
-            ASSIGN(vec, vector_conj(vec, elem_id));
-        }
+        // Use vector_conj to add element (handles growth automatically via COW)
+        // vector_conj may return a new vector if capacity was exceeded (COW)
+        // Note: vector_conj accepts NULL (nil) as valid element
+        // Use ASSIGN to safely update vec (handles retain/release automatically)
+        ASSIGN(vec, vector_conj(vec, elem_id));
         
         // Move to next element (reuse existing seq_iter_next API)
         seq_iter_next(&iter);

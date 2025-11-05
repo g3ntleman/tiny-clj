@@ -74,8 +74,9 @@ CljValue make_vector(unsigned int capacity, bool is_mutable) {
  * Hot-path (RC=1, capacity OK): No branches, direct in-place mutation.
  */
 CljVector vector_conj(CljVector vec, ID item) {
-    if (!vec || vec->base.type != CLJ_VECTOR || !item)
+    if (!vec || vec->base.type != CLJ_VECTOR)
         return NULL;
+    // Note: item can be NULL (nil) - it's a valid value in Clojure collections
 
     CljPersistentVector *old_vec = as_vector((ID)vec);
     if (!old_vec)
@@ -84,7 +85,8 @@ CljVector vector_conj(CljVector vec, ID item) {
     // HOT-PATH: RC=1 && capacity OK → direct in-place mutation (no branches)
     // Most common case: single owner, enough capacity
     if (old_vec->base.rc == 1 && old_vec->count < old_vec->capacity) {
-        old_vec->data[old_vec->count++] = RETAIN(item);
+        // NULL (nil) is a valid value - store directly without RETAIN
+        old_vec->data[old_vec->count++] = item ? RETAIN(item) : NULL;
         return vec;  // Return same vector (in-place mutation)
     }
 
@@ -95,7 +97,8 @@ CljVector vector_conj(CljVector vec, ID item) {
         CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
         if (!new_vec)
             return vec;
-        new_vec->data[0] = RETAIN(item);
+        // NULL (nil) is a valid value - store directly without RETAIN
+        new_vec->data[0] = item ? RETAIN(item) : NULL;
         new_vec->count = 1;
         return new_vec;
     }
@@ -117,12 +120,14 @@ CljVector vector_conj(CljVector vec, ID item) {
         if (old_vec->data[i]) {
             new_vec->data[i] = old_vec->data[i];
             RETAIN(old_vec->data[i]);
+        } else {
+            new_vec->data[i] = NULL;  // nil elements
         }
     }
     new_vec->count = old_vec->count;
 
-    // Append new item
-    new_vec->data[new_vec->count++] = RETAIN(item);
+    // Append new item (NULL/nil is a valid value)
+    new_vec->data[new_vec->count++] = item ? RETAIN(item) : NULL;
 
     return new_vec;  // Return new vector (COW)
 }

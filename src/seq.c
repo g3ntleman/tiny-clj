@@ -34,12 +34,16 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     switch (obj->type) {
         case CLJ_LIST: {
             CljList *list_data = as_list(obj);
-            if (!LIST_FIRST(list_data)) {
+            // Note: LIST_FIRST can be NULL (nil) - it's a valid value in Clojure lists
+            // A list is only empty if list_data itself is NULL or the list structure is invalid
+            // We check if list_data is valid and has a structure (even if first element is nil)
+            if (!list_data) {
                 iter->seq_type = CLJ_UNKNOWN;
                 return true;  // Empty list
             }
             
             // Store the list node itself, not the first element
+            // Note: LIST_FIRST(list_data) can be NULL (nil) - this is valid
             iter->state.list.current = (CljObject*)list_data;
             iter->state.list.index = 0;
             iter->seq_type = CLJ_LIST;

@@ -300,6 +300,63 @@ TEST(test_vec_from_list_and_vector_id) {
     evalstate_free(st);
 }
 
+TEST(test_vec_with_nil_elements) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Test: vec converts list with nil element to vector
+    // (vec '(1 nil 3)) => [1 nil 3]
+    CljObject *v = eval_string("(vec '(1 nil 3))", st);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v->type);
+    
+    // Check count
+    CljObject *c = eval_string("(count (vec '(1 nil 3)))", st);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)c));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)c));
+    
+    // Check first element (should be 1)
+    CljObject *first = eval_string("(nth (vec '(1 nil 3)) 0)", st);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)first));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)first));
+    
+    // Check second element (should be nil)
+    CljObject *second = eval_string("(nth (vec '(1 nil 3)) 1)", st);
+    TEST_ASSERT_NULL(second);  // nil is represented as NULL
+    
+    // Check third element (should be 3)
+    CljObject *third = eval_string("(nth (vec '(1 nil 3)) 2)", st);
+    TEST_ASSERT_NOT_NULL(third);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)third));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)third));
+    
+    // Test: vec on vector with nil element (using list syntax since vector literal may not parse nil correctly)
+    // (vec '(nil 2 nil)) => [nil 2 nil]
+    CljObject *v2 = eval_string("(vec '(nil 2 nil))", st);
+    TEST_ASSERT_NOT_NULL(v2);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v2->type);
+    CljObject *c2 = eval_string("(count (vec '(nil 2 nil)))", st);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)c2));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)c2));
+    
+    // Check first element (should be nil)
+    CljObject *first2 = eval_string("(nth (vec '(nil 2 nil)) 0)", st);
+    TEST_ASSERT_NULL(first2);  // nil is represented as NULL
+    
+    // Check second element (should be 2)
+    CljObject *second2 = eval_string("(nth (vec '(nil 2 nil)) 1)", st);
+    TEST_ASSERT_NOT_NULL(second2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)second2));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)second2));
+    
+    // Check third element (should be nil)
+    CljObject *third2 = eval_string("(nth (vec '(nil 2 nil)) 2)", st);
+    TEST_ASSERT_NULL(third2);  // nil is represented as NULL
+
+    evalstate_free(st);
+}
+
 // ============================================================================
 // Tests for vector_conj() COW implementation
 // ============================================================================
