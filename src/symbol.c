@@ -1,6 +1,10 @@
 #include "symbol.h"
 #include "object.h"
+#include "runtime.h"
+#include "value.h"
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Globale Symbol-Pointer Definitionen
 CljObject *SYM_TRY = NULL;
@@ -406,5 +410,104 @@ void init_special_symbols() {
     
     SYM_KW_STACK = (CljObject*)&sym_kw_stack_data;
     symbol_table_add(NULL, ":stack", SYM_KW_STACK);
+}
+
+// Find symbol in the table
+static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
+    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    while (entry) {
+        if (entry->ns && ns) {
+            if (strcmp(entry->ns, ns) == 0 && strcmp(entry->name, name) == 0) {
+                return entry;
+            }
+        } else if (!entry->ns && !ns) {
+            if (strcmp(entry->name, name) == 0) {
+                return entry;
+            }
+        }
+        entry = entry->next;
+    }
+    return NULL;
+}
+
+// Add symbol to the table
+SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
+    SymbolEntry *entry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
+    if (!entry) return NULL;
+    
+    entry->ns = ns ? strdup(ns) : NULL;
+    
+    // Use tagged pointer system to detect heap vs static symbols
+    // Heap symbols (TAG_POINTER) need strdup, static symbols use string literals
+    if (symbol && get_tag((CljValue)symbol) == TAG_POINTER) {
+        // This is a heap-allocated symbol, strdup the name
+        entry->name = strdup(name);
+    } else {
+        // This is a static symbol with string literal, don't strdup
+        entry->name = (char*)name;
+    }
+    
+    entry->symbol = symbol;
+    entry->next = (SymbolEntry*)g_runtime.symbol_table;
+    g_runtime.symbol_table = (void*)entry;
+    
+    return entry;
+}
+
+// Actual symbol interning
+CljObject* intern_symbol(const char *ns, const char *name) {
+    if (!name) return NULL;
+    
+    // Suche zuerst in der Symbol-Table
+    SymbolEntry *existing = symbol_table_find(ns, name);
+    if (existing) {
+        return existing->symbol;  // Gleicher Pointer!
+    }
+    
+    // Symbol nicht gefunden, erstelle neues
+    CljObject *symbol = make_symbol_impl(name, ns);
+    if (!symbol) return NULL;
+    
+    // Füge zur Symbol-Table hinzu
+    symbol_table_add(ns, name, symbol);
+    
+    return symbol;
+}
+
+// Global symbols (without namespace)
+CljObject* intern_symbol_global(const char *name) {
+    return intern_symbol(NULL, name);
+}
+
+// Clean up symbol table (ONLY for test cleanup, not regular symbols)
+// This function will be eliminated by dead-code-elimination in production builds
+// since it's only called from test files
+void symbol_table_cleanup() {
+    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    while (entry) {
+        SymbolEntry *next = entry->next;
+        if (entry->ns) free(entry->ns);
+        
+        // Only free entry->name if it was strdup'd (heap symbols)
+        // Static symbols use string literals that shouldn't be freed
+        if (entry->name && entry->symbol && get_tag((CljValue)entry->symbol) == TAG_POINTER) {
+            free(entry->name);
+        }
+        
+        free(entry);
+        entry = next;
+    }
+    g_runtime.symbol_table = NULL;
+}
+
+// Number of symbols in the table
+int symbol_count() {
+    int count = 0;
+    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    while (entry) {
+        count++;
+        entry = entry->next;
+    }
+    return count;
 }
 
