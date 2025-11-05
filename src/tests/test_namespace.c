@@ -476,3 +476,154 @@ TEST(test_require_nested_path) {
     evalstate_free(st);
 }
 
+TEST(test_require_with_alias) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Prepare libs/test/alias.clj with a simple namespace and var
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    const char *file_path = "libs/test/alias.clj";
+    const char *src = "(ns test.alias)\n(def func 100)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // (require '[test.alias :as ta])
+    CljObject *req_result = eval_string("(require '[test.alias :as ta])", st);
+    (void)req_result; // require returns nil
+
+    // Verify alias was stored in current namespace
+    CljObject *ta_alias = intern_symbol_global("ta");
+    TEST_ASSERT_NOT_NULL(ta_alias);
+    CljObject *ns_name = ns_get_alias(st->current_ns, ta_alias);
+    TEST_ASSERT_NOT_NULL(ns_name);
+    TEST_ASSERT_TRUE(is_type(ns_name, CLJ_SYMBOL));
+    CljSymbol *ns_sym = as_symbol(ns_name);
+    TEST_ASSERT_EQUAL_STRING("test.alias", ns_sym->name);
+
+    evalstate_free(st);
+}
+
+TEST(test_require_with_refer) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Prepare libs/test/refer.clj with a namespace and function
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    const char *file_path = "libs/test/refer.clj";
+    const char *src = "(ns test.refer)\n(def func 200)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // (require '[test.refer :refer [func]])
+    CljObject *req_result = eval_string("(require '[test.refer :refer [func]])", st);
+    (void)req_result; // require returns nil
+
+    // Verify func was copied to current namespace
+    CljObject *func_sym = intern_symbol_global("func");
+    TEST_ASSERT_NOT_NULL(func_sym);
+    CljObject *func_val = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)func_sym);
+    TEST_ASSERT_NOT_NULL(func_val);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
+    TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
+
+    evalstate_free(st);
+}
+
+TEST(test_require_with_refer_all) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Prepare libs/test/referall.clj with a namespace and multiple vars
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    const char *file_path = "libs/test/referall.clj";
+    const char *src = "(ns test.referall)\n(def var1 300)\n(def var2 400)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // (require '[test.referall :refer :all])
+    CljObject *req_result = eval_string("(require '[test.referall :refer :all])", st);
+    (void)req_result; // require returns nil
+
+    // Verify both vars were copied to current namespace
+    CljObject *var1_sym = intern_symbol_global("var1");
+    CljObject *var2_sym = intern_symbol_global("var2");
+    TEST_ASSERT_NOT_NULL(var1_sym);
+    TEST_ASSERT_NOT_NULL(var2_sym);
+    
+    CljObject *var1_val = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)var1_sym);
+    CljObject *var2_val = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)var2_sym);
+    TEST_ASSERT_NOT_NULL(var1_val);
+    TEST_ASSERT_NOT_NULL(var2_val);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)var2_val));
+    TEST_ASSERT_EQUAL(300, as_fixnum((CljValue)var1_val));
+    TEST_ASSERT_EQUAL(400, as_fixnum((CljValue)var2_val));
+
+    evalstate_free(st);
+}
+
+TEST(test_require_multiple_namespaces) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Prepare two namespaces
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    const char *file1 = "libs/test/multi1.clj";
+    const char *file2 = "libs/test/multi2.clj";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file1, "(ns test.multi1)\n(def x 500)\n"));
+    TEST_ASSERT_EQUAL_INT(0, write_file(file2, "(ns test.multi2)\n(def y 600)\n"));
+
+    // (require '[test.multi1 :as m1] '[test.multi2 :as m2])
+    CljObject *req_result = eval_string("(require '[test.multi1 :as m1] '[test.multi2 :as m2])", st);
+    (void)req_result; // require returns nil
+
+    // Verify both aliases were stored
+    CljObject *m1_alias = intern_symbol_global("m1");
+    CljObject *m2_alias = intern_symbol_global("m2");
+    TEST_ASSERT_NOT_NULL(m1_alias);
+    TEST_ASSERT_NOT_NULL(m2_alias);
+    
+    CljObject *m1_ns = ns_get_alias(st->current_ns, m1_alias);
+    CljObject *m2_ns = ns_get_alias(st->current_ns, m2_alias);
+    TEST_ASSERT_NOT_NULL(m1_ns);
+    TEST_ASSERT_NOT_NULL(m2_ns);
+    TEST_ASSERT_TRUE(is_type(m1_ns, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE(is_type(m2_ns, CLJ_SYMBOL));
+    CljSymbol *m1_sym = as_symbol(m1_ns);
+    CljSymbol *m2_sym = as_symbol(m2_ns);
+    TEST_ASSERT_EQUAL_STRING("test.multi1", m1_sym->name);
+    TEST_ASSERT_EQUAL_STRING("test.multi2", m2_sym->name);
+
+    evalstate_free(st);
+}
+
+TEST(test_require_alias_resolution) {
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+
+    // Prepare libs/test/aliasres.clj with a namespace and var
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    const char *file_path = "libs/test/aliasres.clj";
+    const char *src = "(ns test.aliasres)\n(def resvar 700)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // (require '[test.aliasres :as tar])
+    CljObject *req_result = eval_string("(require '[test.aliasres :as tar])", st);
+    (void)req_result; // require returns nil
+
+    // Verify alias was stored
+    CljObject *tar_alias = intern_symbol_global("tar");
+    TEST_ASSERT_NOT_NULL(tar_alias);
+    CljObject *ns_name = ns_get_alias(st->current_ns, tar_alias);
+    TEST_ASSERT_NOT_NULL(ns_name);
+    
+    // Test namespace-qualified symbol resolution: tar/resvar
+    // This will be tested once parser supports alias/symbol syntax
+    // For now, just verify the alias exists
+    TEST_ASSERT_TRUE(is_type(ns_name, CLJ_SYMBOL));
+
+    evalstate_free(st);
+}
+

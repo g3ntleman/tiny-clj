@@ -9,6 +9,7 @@
 #include "object.h"
 #include "vector.h"
 #include "map.h"
+#include "kv_macros.h"
 #include "numeric_utils.h"
 #include "runtime.h"
 #include "memory.h"
@@ -1100,61 +1101,246 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
     return ok;
 }
 
-ID native_require(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 1, "require")) return NULL;
-
-    // Accept symbol or string; convert to plain string
-    char *ns_name = to_string(args[0]);
-    if (!ns_name || ns_name[0] == '\0') {
-        if (ns_name) free(ns_name);
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "require expects non-empty namespace name", __FILE__, __LINE__, 0);
-        return NULL;
+/**
+ * @brief Copy symbols from source namespace to target namespace
+ * @param source_ns Source namespace
+ * @param target_ns Target namespace
+ * @param symbols Vector of symbols to copy
+ */
+static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *target_ns, CljObject *symbols) {
+    if (!source_ns || !target_ns || !symbols) return;
+    
+    if (!is_type(symbols, CLJ_VECTOR)) return;
+    
+    CljPersistentVector *vec = as_vector(symbols);
+    for (int i = 0; i < vec->count; i++) {
+        CljObject *sym = vec->data[i];
+        if (!sym || !is_type(sym, CLJ_SYMBOL)) continue;
+        
+        // Look up symbol in source namespace
+        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)sym);
+        if (val) {
+            // Copy to target namespace
+            ns_define(target_ns, sym, val);
+        }
     }
+}
 
-    // Idempotenz: Wenn Namespace bereits existiert, nichts tun
+/**
+ * @brief Copy all symbols from source namespace to target namespace
+ * @param source_ns Source namespace
+ * @param target_ns Target namespace
+ */
+static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *target_ns) {
+    if (!source_ns || !target_ns || !source_ns->mappings) return;
+    
+    CljMap *map = as_map(source_ns->mappings);
+    if (!map) return;
+    
+    // Iterate through all mappings in source namespace
+    for (int i = 0; i < map->count; i++) {
+        CljObject *key = KV_KEY(map->data, i);
+        CljObject *val = (CljObject*)KV_VALUE(map->data, i);
+        if (key && val) {
+            // Copy to target namespace
+            ns_define(target_ns, key, val);
+        }
+    }
+}
+
+/**
+ * @brief Process a single require spec (Symbol or Vector)
+ * @param spec Require spec (Symbol or Vector [namespace :as alias] or [namespace :refer ...])
+ * @param st Evaluation state
+ * @return true on success, false on error
+ */
+static bool process_require_spec(CljObject *spec, EvalState *st) {
+    if (!spec || !st) return false;
+    
+    const char *ns_name = NULL;
+    CljObject *alias_sym = NULL;
+    CljObject *refer_syms = NULL;
+    bool refer_all = false;
+    
+    CljPersistentVector *vec = NULL;
+    bool ns_name_allocated = false;
+    
+    // Handle simple Symbol case: (require 'namespace)
+    if (is_type(spec, CLJ_SYMBOL)) {
+        CljSymbol *sym = as_symbol(spec);
+        if (!sym || !sym->name) return false;
+        ns_name = sym->name;
+    }
+    // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
+    else if (is_type(spec, CLJ_VECTOR)) {
+        vec = as_vector(spec);
+        if (vec->count < 1) return false;
+        
+        // First element should be namespace name (Symbol or String)
+        CljObject *ns_obj = vec->data[0];
+        if (!ns_obj) return false;
+        
+        if (is_type(ns_obj, CLJ_SYMBOL)) {
+            CljSymbol *ns_sym = as_symbol(ns_obj);
+            if (!ns_sym || !ns_sym->name) return false;
+            ns_name = ns_sym->name;
+        } else {
+            char *ns_str = to_string(ns_obj);
+            if (!ns_str) return false;
+            ns_name = ns_str;
+            ns_name_allocated = true;
+        }
+        
+        // Parse keywords: :as, :refer
+        for (int i = 1; i < vec->count; i++) {
+            CljObject *elem = vec->data[i];
+            if (!elem) continue;
+            
+            // Check if it's a keyword (Symbol starting with :)
+            if (is_type(elem, CLJ_SYMBOL)) {
+                CljSymbol *kw = as_symbol(elem);
+                if (!kw || !kw->name) continue;
+                
+                if (kw->name[0] == ':' && strcmp(kw->name, ":as") == 0) {
+                    // :as alias
+                    if (i + 1 < vec->count) {
+                        alias_sym = vec->data[i + 1];
+                        i++; // Skip next element
+                    }
+                } else if (kw->name[0] == ':' && strcmp(kw->name, ":refer") == 0) {
+                    // :refer [symbols] or :refer :all
+                    if (i + 1 < vec->count) {
+                        CljObject *refer_arg = vec->data[i + 1];
+                        if (is_type(refer_arg, CLJ_SYMBOL)) {
+                            CljSymbol *refer_sym = as_symbol(refer_arg);
+                            if (refer_sym && refer_sym->name && strcmp(refer_sym->name, ":all") == 0) {
+                                refer_all = true;
+                            }
+                        } else if (is_type(refer_arg, CLJ_VECTOR)) {
+                            refer_syms = refer_arg;
+                        }
+                        i++; // Skip next element
+                    }
+                }
+            }
+        }
+    } else {
+        return false;
+    }
+    
+    if (!ns_name) return false;
+    
+    // Load namespace (existing logic)
     CljNamespace *existing = ns_find(ns_name);
-    if (existing) { free(ns_name); return NULL; }
-
-    // Convert namespace to relative path a.b -> a/b.clj (with '-' -> '_')
+    if (existing) {
+        // Namespace already loaded - just set alias/refer if needed
+        if (alias_sym && is_type(alias_sym, CLJ_SYMBOL)) {
+            CljObject *ns_name_sym = intern_symbol(NULL, ns_name);
+            if (ns_name_sym) {
+                ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+            }
+        }
+        if (refer_all) {
+            copy_all_symbols_to_namespace(existing, st->current_ns);
+        } else if (refer_syms) {
+            copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
+        }
+        if (ns_name_allocated) {
+            free((char*)ns_name);
+        }
+        return true;
+    }
+    
+    // Convert namespace to relative path
     char *rel = namespace_to_relpath(ns_name);
-    if (!rel) { free(ns_name); return NULL; }
-
+    if (!rel) {
+        if (ns_name_allocated) {
+            free((char*)ns_name);
+        }
+        return false;
+    }
+    
     // Search order: libs/<rel>, then <rel> (project root)
     char libs_path[512];
     snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
-
+    
     char *source = read_file_cstr(libs_path);
     if (!source) {
         source = read_file_cstr(rel);
     }
-
+    
     if (!source) {
-        // Graceful failure: return nil to indicate missing namespace without throwing
-        free(rel); free(ns_name);
-        return NULL;
+        free(rel);
+        if (ns_name_allocated) {
+            free((char*)ns_name);
+        }
+        return false;
     }
-
-    // Evaluate source in current state (file may contain (ns ...) to switch)
-    EvalState *st = evalstate();
+    
+    // Evaluate source in current state
     const char *orig_ns = NULL;
     if (st && st->current_ns && st->current_ns->name && is_type(st->current_ns->name, CLJ_SYMBOL)) {
         orig_ns = as_symbol(st->current_ns->name)->name;
     }
-
-    // Temporär in Ziel-NS wechseln wie Clojure-Ladeprozess; Datei (ns ...) kann überschreiben
+    
+    // Temporarily switch to target namespace
     if (st) evalstate_set_ns(st, ns_name);
     bool ok = eval_source_in_current_state(source, st);
-    // Immer ursprüngliches *ns* wiederherstellen (Clojure-kompatibel: require ändert *ns* nicht)
+    // Restore original namespace
     if (st && orig_ns) evalstate_set_ns(st, orig_ns);
-
+    
     free(source);
     free(rel);
-    free(ns_name);
-
+    
     if (!ok) {
-        // Graceful failure without exception to keep tests non-fatal
+        if (ns_name_allocated) {
+            free((char*)ns_name);
+        }
+        return false;
+    }
+    
+    // Now that namespace is loaded, set alias/refer if needed
+    CljNamespace *loaded_ns = ns_find(ns_name);
+    if (loaded_ns) {
+        if (alias_sym && is_type(alias_sym, CLJ_SYMBOL)) {
+            CljObject *ns_name_sym = intern_symbol(NULL, ns_name);
+            if (ns_name_sym) {
+                ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+            }
+        }
+        if (refer_all) {
+            copy_all_symbols_to_namespace(loaded_ns, st->current_ns);
+        } else if (refer_syms) {
+            copy_symbols_to_namespace(loaded_ns, st->current_ns, refer_syms);
+        }
+    }
+    
+    // Free ns_name if it was allocated
+    if (ns_name_allocated) {
+        free((char*)ns_name);
+    }
+    
+    return true;
+}
+
+ID native_require(ID *args, unsigned int argc) {
+    if (argc == 0) {
+        throw_exception(EXCEPTION_TYPE_ARITY, "require requires at least 1 argument", __FILE__, __LINE__, 0);
         return NULL;
     }
+
+    EvalState *st = evalstate();
+    if (!st) return NULL;
+
+    // Process each require spec (support multiple specs: (require '[ns1 :as n1] '[ns2 :as n2]))
+    for (unsigned int i = 0; i < argc; i++) {
+        if (!process_require_spec(args[i], st)) {
+            // Graceful failure: continue with next spec instead of throwing
+            // This allows partial success (e.g., one namespace loads, another fails)
+            continue;
+        }
+    }
+
     return NULL; // Clojure-compatible: require returns nil
 }
 #endif // ESP32_BUILD

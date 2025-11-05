@@ -44,6 +44,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     
     ns->name = intern_symbol(NULL, name);
     ns->mappings = (CljObject*)make_map(64); // Increased capacity for clojure.core // Initial capacity
+    ns->aliases = (CljObject*)make_map(16); // Initial capacity for aliases
     ns->filename = file ? strdup(file) : NULL;
     ns->next = (CljNamespace*)g_runtime.ns_registry;
     g_runtime.ns_registry = (void*)ns;
@@ -165,6 +166,8 @@ void ns_cleanup() {
         if (cur->filename) free((void*)cur->filename);
         // ADDED: Freigebe mappings
         if (cur->mappings) RELEASE((CljObject*)cur->mappings);
+        // ADDED: Freigebe aliases
+        if (cur->aliases) RELEASE((CljObject*)cur->aliases);
         free(cur);
         cur = next;
     }
@@ -324,4 +327,46 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         // new_mappings is already retained by map_assoc_cow
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
+}
+
+/**
+ * @brief Get namespace name for an alias
+ * @param ns Namespace to search in
+ * @param alias Alias symbol to look up
+ * @return Namespace name symbol or NULL if not found
+ */
+CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
+    if (!ns || !alias || !ns->aliases) return NULL;
+    
+    // Look up alias in aliases map
+    CljObject *ns_name = (CljObject*)map_get((CljValue)ns->aliases, (CljValue)alias);
+    return ns_name;
+}
+
+/**
+ * @brief Set namespace alias
+ * @param ns Namespace to set alias in
+ * @param alias Alias symbol
+ * @param ns_name Namespace name symbol
+ */
+void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
+    if (!ns || !alias || !ns_name) return;
+    
+    // Create or update aliases map
+    if (!ns->aliases) {
+        ns->aliases = (CljObject*)make_map(16);
+    }
+    
+    // Store alias-namespace binding (overwrites existing)
+    // NOTE: map_assoc_cow() already does RETAIN(ns_name) and RETAIN(alias) internally
+    // See src/map.c:98 and src/map.c:106-107
+    // CRITICAL: map_assoc_cow may return a new map (COW), so we must update ns->aliases
+    CljValue new_aliases = map_assoc_cow((CljValue)ns->aliases, (CljValue)alias, (CljValue)ns_name);
+    if (new_aliases != (CljValue)ns->aliases) {
+        // Map was copied (COW) - update reference
+        RELEASE((CljObject*)ns->aliases);
+        ns->aliases = (CljObject*)new_aliases;
+        // new_aliases is already retained by map_assoc_cow
+    }
+    // If new_aliases == ns->aliases, it was in-place mutation (RC=1), no update needed
 }

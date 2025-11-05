@@ -11,6 +11,7 @@
 typedef struct CljNamespace {
     CljObject *name;          // z.B. 'user', 'math'
     CljObject *mappings;      // Map: Symbol → CljObject (def, defn, vars)
+    CljObject *aliases;       // Map: Symbol → Symbol (Alias → vollständiger Namespace-Name)
     const char *filename;    // optional: zugeordnetes File
     struct CljNamespace *next;
 } CljNamespace;
@@ -45,6 +46,10 @@ void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
 void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_cleanup(void);
+
+// Namespace alias functions
+CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias);
+void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name);
 
 // EvalState functions
 EvalState* evalstate();

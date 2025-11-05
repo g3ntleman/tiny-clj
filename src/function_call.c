@@ -738,7 +738,8 @@ CljObject* eval_body_with_params(CljObject *body, CljObject **params, CljObject 
     // For lists, evaluate them with parameter substitution
     switch (body->type) {
         case CLJ_LIST: {
-            return eval_list_with_param_substitution(body, params, values, param_count, closure_env);
+            CljMap *env_map = (closure_env && is_type(closure_env, CLJ_MAP)) ? (CljMap*)closure_env : NULL;
+            return eval_list_with_param_substitution(body, params, values, param_count, env_map);
         }
         
         default:
@@ -766,11 +767,11 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     // OPTIMIZED: Ordered by frequency (Tier 1: Most common operations first)
     // Tier 1: Very frequent (90%+ of calls)
     if (op == SYM_PLUS) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_ADD, closure_env);
+        return eval_arithmetic_generic_with_substitution(list_data, params, values, param_count, ARITH_ADD, closure_env);
     }
     
     if (op == SYM_MINUS) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_SUB, closure_env);
+        return eval_arithmetic_generic_with_substitution(list_data, params, values, param_count, ARITH_SUB, closure_env);
     }
     
     if (op == SYM_EQUALS || op == SYM_EQUAL) {
@@ -837,11 +838,11 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
     
     // Tier 2: Frequent (70-90% of calls)
     if (op == SYM_MULTIPLY) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_MUL, closure_env);
+        return eval_arithmetic_generic_with_substitution(list_data, params, values, param_count, ARITH_MUL, closure_env);
     }
     
     if (op == SYM_DIVIDE) {
-        return eval_arithmetic_generic_with_substitution(list, params, values, param_count, ARITH_DIV, closure_env);
+        return eval_arithmetic_generic_with_substitution(list_data, params, values, param_count, ARITH_DIV, closure_env);
     }
     
     if (op == SYM_RECUR) {

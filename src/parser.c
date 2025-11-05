@@ -510,9 +510,9 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
  * map lookups and namespace resolution.
  */
 static ID parse_symbol(Reader *reader, EvalState *st) {
-  (void)st;
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
+  int slash_pos = -1;
   
   // Handle keyword prefix
   if (reader_peek_char(reader) == ':') {
@@ -526,6 +526,11 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     if (cp < 0) break;
     
     if (utf8_is_symbol_char(cp)) {
+      // Track position of '/' for namespace-qualified symbols
+      if (cp == '/') {
+        slash_pos = pos;
+      }
+      
       // Get the UTF-8 bytes for this codepoint
       const char *current = reader->src + reader->index;
       const char *next = utf8codepoint(current, NULL);
@@ -572,6 +577,55 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   }
   if (!utf8valid(buffer))
     return NULL;
+  
+  // Check for namespace-qualified symbol: alias/symbol
+  if (slash_pos > 0 && slash_pos < pos - 1 && st && st->current_ns) {
+    // Save original buffer for fallback
+    char original_buffer[MAX_STACK_STRING_SIZE];
+    strncpy(original_buffer, buffer, sizeof(original_buffer));
+    original_buffer[sizeof(original_buffer) - 1] = '\0';
+    
+    // Split buffer at '/': alias and symbol
+    buffer[slash_pos] = '\0';
+    const char *alias_str = buffer;
+    const char *symbol_str = buffer + slash_pos + 1;
+    
+    if (alias_str[0] != '\0' && symbol_str[0] != '\0') {
+      // Create alias symbol
+      CljObject *alias_sym = intern_symbol_global(alias_str);
+      if (!alias_sym) {
+        // Restore original buffer and return original symbol
+        return AUTORELEASE(intern_symbol_global(original_buffer));
+      }
+      
+      // Look up alias in current namespace
+      CljObject *ns_name_sym = ns_get_alias(st->current_ns, alias_sym);
+      if (ns_name_sym && is_type(ns_name_sym, CLJ_SYMBOL)) {
+        // Get namespace name from symbol
+        CljSymbol *ns_sym = as_symbol(ns_name_sym);
+        if (ns_sym && ns_sym->name) {
+          // Find namespace object
+          CljNamespace *target_ns = ns_find(ns_sym->name);
+          if (target_ns && target_ns->mappings) {
+            // Create symbol symbol
+            CljObject *symbol_sym = intern_symbol_global(symbol_str);
+            if (symbol_sym) {
+              // Look up symbol in target namespace
+              CljObject *resolved = (CljObject*)map_get((CljValue)target_ns->mappings, (CljValue)symbol_sym);
+              if (resolved) {
+                // Return resolved value (already retained by map_get)
+                return AUTORELEASE(RETAIN(resolved));
+              }
+            }
+          }
+        }
+      }
+      // If resolution fails, return original symbol (alias/symbol)
+      // This allows partial failures without breaking parsing
+      return AUTORELEASE(intern_symbol_global(original_buffer));
+    }
+  }
+  
   return AUTORELEASE(intern_symbol_global(buffer));
 }
 
