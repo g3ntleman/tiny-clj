@@ -31,6 +31,8 @@ static inline CljPersistentVector* as_vector(ID obj) {
 // === Legacy API removed - use CljValue API instead ===
 
 // === CljValue API ===
+/** Return empty vector singleton (rc=0, do not retain/release). */
+CljValue empty_vector(void);
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
 CljValue make_vector(unsigned int capacity, bool is_mutable);
 /** Return a new vector with item appended; original vector remains unchanged.
@@ -39,6 +41,11 @@ CljValue make_vector(unsigned int capacity, bool is_mutable);
 CljVector vector_conj(CljVector vec, ID item);
 /** Update element at index with COW: RC=1 → in-place mutation, RC>1 → COW. */
 CljVector vector_assoc(CljVector vec, int index, ID value);
+/** Grow vector capacity in-place (for RC=1 or transient vectors).
+ * @param v Vector to grow
+ * @note Throws exception on OOM
+ */
+void vector_grow_capacity(CljPersistentVector *v);
 
 // === Transient API (Phase 2) ===
 /** Convert persistent vector to transient. */

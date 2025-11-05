@@ -345,8 +345,8 @@ int get_retain_count(CljObject *obj);
  *  Works in both DEBUG and RELEASE builds using RETAIN/RELEASE macros.
  */
 #define ASSIGN(var, new_obj) do { \
-    CljValue _new_val = (CljValue)(new_obj); \
-    CljValue _old_val = (CljValue)(var); \
+    ID _new_val = (ID)(new_obj); \
+    ID _old_val = (ID)(var); \
     if (_new_val != _old_val) { \
         if (!IS_IMMEDIATE(_new_val) && (CljObject*)_new_val) { \
             RETAIN((CljObject*)_new_val); \
@@ -354,7 +354,7 @@ int get_retain_count(CljObject *obj);
         if (!IS_IMMEDIATE(_old_val) && (CljObject*)_old_val) { \
             RELEASE((CljObject*)_old_val); \
         } \
-        (var) = (CljObject*)_new_val; \
+        (var) = (ID)_new_val; \
     } \
 } while(0)
 

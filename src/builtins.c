@@ -697,6 +697,68 @@ ID native_vector(ID *args, unsigned int argc) {
     return vec;
 }
 
+// vec: converts a sequence to a vector
+// (vec coll) => vector with elements from coll
+// Clojure-compatible: if coll is already a vector, returns same vector (No-Op)
+ID native_vec(ID *args, unsigned int argc) {
+    // Arity check: vec accepts exactly 1 argument
+    if (!validate_builtin_args(argc, 1, "vec")) return NULL;
+    
+    CljObject *coll = args[0];
+    
+    // If nil, return empty vector (Clojure behavior: '() is nil, (vec '()) => [])
+    if (!coll) {
+        return empty_vector();
+    }
+    
+    // If already a vector, return same object (No-Op - Clojure behavior)
+    // Note: No RETAIN needed - we're not storing coll, just returning it
+    if (is_type(coll, CLJ_VECTOR)) {
+        return coll;
+    }
+    
+    // Check if collection is seqable
+    if (!is_seqable(coll)) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "vec requires a seqable collection");
+        return NULL;
+    }
+    
+    // Use stack-based iterator to iterate through collection (avoid code duplication)
+    // This is more efficient than heap-based seq_create and avoids memory leaks
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, coll)) {
+        // Empty collection - return empty vector (Clojure behavior: (vec '()) => [])
+        return empty_vector();
+    }
+    
+    // Check if iterator is empty (seq_type == CLJ_UNKNOWN means empty)
+    if (iter.seq_type == CLJ_UNKNOWN) {
+        return empty_vector();
+    }
+    
+    // Create vector with default capacity (vector_conj will grow automatically)
+    // make_vector throws OOM exception or returns valid object
+    CljVector vec = (CljVector)make_vector(4, false);
+    
+    // Iterate through sequence and add elements using vector_conj (reuse existing logic)
+    // This avoids code duplication and reuses COW-based vector_conj
+    while (!seq_iter_empty(&iter)) {
+        ID elem_id = seq_iter_first(&iter);
+        if (elem_id) {
+            // Use vector_conj to add element (handles growth automatically via COW)
+            // vector_conj may return a new vector if capacity was exceeded (COW)
+            // Use ASSIGN to safely update vec (handles retain/release automatically)
+            ASSIGN(vec, vector_conj(vec, elem_id));
+        }
+        
+        // Move to next element (reuse existing seq_iter_next API)
+        seq_iter_next(&iter);
+    }
+    
+    return AUTORELEASE(vec);
+}
+
 // make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
 
 ID make_named_func(BuiltinFn fn, void *env, const char *name) {
@@ -1864,6 +1926,7 @@ void register_builtins() {
     register_builtin_in_namespace("type", native_type);
     register_builtin_in_namespace("array-map", native_array_map);
     register_builtin_in_namespace("vector", native_vector);
+    register_builtin_in_namespace("vec", native_vec);
     register_builtin_in_namespace("nth", nth2);
     register_builtin_in_namespace("peek", native_peek);
     register_builtin_in_namespace("pop", native_pop);

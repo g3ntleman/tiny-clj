@@ -17,6 +17,11 @@ static struct {
 };
 static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singleton_data.vec;
 
+/** Return empty vector singleton (rc=0, do not retain/release). */
+CljValue empty_vector(void) {
+    return (CljValue)clj_empty_vector_singleton;
+}
+
 // Creates a CljVector.
 // Notes:
 // - When capacity <= 0, returns empty-vector singleton (rc=0, data=NULL); do
@@ -206,6 +211,30 @@ CljValue transient(CljValue vec) {
     return (CljValue)tvec;
 }
 
+/** Grow vector capacity in-place (for RC=1 or transient vectors).
+ * @param v Vector to grow
+ * @note Throws exception on OOM
+ */
+void vector_grow_capacity(CljPersistentVector *v) {
+    if (!v) {
+        throw_oom(CLJ_VECTOR);
+        return;
+    }
+    
+    int newcap = v->capacity ? v->capacity * 2 : 4;
+    void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject *));
+    if (!p) {
+        throw_oom(CLJ_VECTOR);
+        return;
+    }
+    
+    v->data = (CljObject **)p;
+    // Initialize new slots to NULL
+    for (int i = v->capacity; i < newcap; ++i)
+        v->data[i] = NULL;
+    v->capacity = newcap;
+}
+
 /** Append to transient vector (guaranteed in-place). */
 CljValue clj_conj(CljValue tvec, CljValue item) {
     if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR || !item) {
@@ -217,13 +246,7 @@ CljValue clj_conj(CljValue tvec, CljValue item) {
     
     // Garantiert in-place für Transients
     if (v->count >= v->capacity) {
-        int newcap = v->capacity ? v->capacity * 2 : 4;
-        void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject *));
-        if (!p) return NULL;
-        v->data = (CljObject **)p;
-        for (int i = v->capacity; i < newcap; ++i)
-            v->data[i] = NULL;
-        v->capacity = newcap;
+        vector_grow_capacity(v);
     }
     
     v->data[v->count++] = RETAIN(item);

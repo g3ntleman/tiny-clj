@@ -263,18 +263,39 @@ TEST(test_subvec_error_cases) {
 }
 
 TEST(test_vec_from_list_and_vector_id) {
-    TEST_IGNORE_MESSAGE("vec function is not yet implemented");
     EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
-    // Note: vec function is not yet implemented
-    // Test that vec throws unhandled exception (should be caught by test runner)
-    // This test intentionally triggers an unhandled exception to test the test runner's
-    // ability to handle unhandled exceptions and continue with other tests
-    CljObject *result = eval_string("(vec '(1 2 3))", st);
-    // This should never be reached - vec is not implemented and will throw unhandled exception
-    // The test runner will catch the unhandled exception and mark this test as failed
-    TEST_ASSERT_NULL(result);
+    // Test: vec converts list to vector
+    // (vec '(1 2 3)) => [1 2 3]
+    CljObject *v = eval_string("(vec '(1 2 3))", st);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v->type);
+    CljObject *c = eval_string("(count (vec '(1 2 3)))", st);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)c));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)c));
+    
+    // Test: vec on vector is No-Op (returns same vector)
+    // (vec [1 2 3]) => [1 2 3] (same object)
+    CljObject *v1 = eval_string("(vec [1 2 3])", st);
+    CljObject *v2 = eval_string("(vec [1 2 3])", st);
+    TEST_ASSERT_NOT_NULL(v1);
+    TEST_ASSERT_NOT_NULL(v2);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v1->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, v2->type);
+    // Note: They might be different objects (new evaluation), but same content
+    CljObject *c1 = eval_string("(count (vec [1 2 3]))", st);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)c1));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)c1));
+    
+    // Test: vec on empty list => empty vector
+    // (vec '()) => []
+    CljObject *empty = eval_string("(vec '())", st);
+    TEST_ASSERT_NOT_NULL(empty);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, empty->type);
+    CljObject *empty_count = eval_string("(count (vec '()))", st);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)empty_count));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)empty_count));
 
     evalstate_free(st);
 }

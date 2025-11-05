@@ -371,18 +371,9 @@ static ID parse_vector(Reader *reader, EvalState *st) {
         return NULL;
       }
       
-      // Manuelles Wachstum bei Bedarf
+      // Wachstum bei Bedarf (reuse vector_grow_capacity helper)
       if (v->count >= v->capacity) {
-        int newcap = v->capacity ? v->capacity * 2 : 4;
-        void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject*));
-        if (!p) {
-          RELEASE(value);
-          RELEASE((CljObject*)vec);
-          throw_parser_exception("Out of memory while parsing vector", reader);
-          return NULL;
-        }
-        v->data = (CljObject**)p;
-        v->capacity = newcap;
+        vector_grow_capacity(v);
       }
       
       // Direktes Einfügen

@@ -39,7 +39,8 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
                 return true;  // Empty list
             }
             
-            iter->state.list.current = LIST_FIRST(list_data);
+            // Store the list node itself, not the first element
+            iter->state.list.current = (CljObject*)list_data;
             iter->state.list.index = 0;
             iter->seq_type = CLJ_LIST;
             return true;
@@ -129,8 +130,9 @@ bool seq_iter_next(SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                if (node->rest) {
-                    iter->state.list.current = node->rest;
+                CljObject *rest = LIST_REST(node);
+                if (rest && is_type(rest, CLJ_LIST)) {
+                    iter->state.list.current = rest;
                     iter->state.list.index++;
                     return true;
                 }
