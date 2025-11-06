@@ -7,12 +7,19 @@
 #include "tests_common.h"
 #include "test_registry.h"
 #include "memory_profiler.h"
+#include "../tiny_clj.h"
 
 // Access to global memory stats for leak checking
 extern MemoryStats g_memory_stats;
 extern bool g_memory_verbose_mode;
 
+// Forward declaration for load_clojure_core
+int load_clojure_core(EvalState *st);
 
+// Static flags to ensure initialization happens only once
+static bool g_clojure_core_loaded = false;
+static EvalState *g_test_eval_state = NULL;
+static bool g_special_symbols_initialized = false;
 
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
@@ -25,18 +32,52 @@ void setUp(void) {
     
     runtime_init();
     
-    if (!g_runtime.builtins_registered) {
+    // Initialize special symbols only once (they should persist across tests)
+    if (!g_special_symbols_initialized) {
         init_special_symbols();
+        g_special_symbols_initialized = true;
+    }
+    
+    if (!g_runtime.builtins_registered) {
         meta_registry_init();
-            register_builtins();
-            g_runtime.builtins_registered = true;
-        }
+        register_builtins();
+        g_runtime.builtins_registered = true;
+    }
         
 #ifdef ENABLE_MEMORY_PROFILING
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
         set_memory_verbose_mode(false);
 #endif
+    
+    // Load clojure.core for each test (refresh state between tests)
+    // Use autorelease pool for load_clojure_core to handle AUTORELEASE calls
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        if (st) {
+            // Set quiet mode to avoid output during tests
+            clojure_core_set_quiet(true);
+            load_clojure_core(st);
+            clojure_core_set_quiet(false);
+            
+            // CRITICAL: Create/update global evalState for all tests with inc available
+            // This ensures all tests can access clojure.core functions
+            if (!g_test_eval_state) {
+                g_test_eval_state = evalstate_new();
+            }
+            if (g_test_eval_state && g_runtime.clojure_core_cache) {
+                g_test_eval_state->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
+            }
+            
+            evalstate_free(st);
+            g_clojure_core_loaded = true; // Mark as loaded for first time
+        }
+    });
+}
+
+// Get the global test evalState (with inc available)
+EvalState* test_get_eval_state(void) {
+    return g_test_eval_state;
 }
 
 void tearDown(void) {

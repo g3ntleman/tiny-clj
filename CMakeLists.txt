@@ -83,6 +83,7 @@ list(APPEND SOURCES
     src/list.c
     src/vector.c
     src/map.c
+    src/atom.c
     src/strings.c
     src/seq.c
     src/memory.c
@@ -120,6 +121,7 @@ set(STM32_SOURCES
     src/list.c
     src/vector.c
     src/map.c
+    src/atom.c
     src/strings.c
     src/seq.c
     src/memory.c
@@ -151,6 +153,7 @@ add_executable(tiny-clj-esp32
     src/list.c
     src/vector.c
     src/map.c
+    src/atom.c
     src/strings.c
     src/seq.c
     src/memory.c
@@ -242,6 +245,10 @@ add_executable(unity-tests
     src/tests/test_basics.c
     src/tests/test_namespace_legacy.c
     src/tests/test_namespace.c
+    src/tests/test_symbol_interning.c
+    src/tests/test_def_inc_evaluation.c
+    src/tests/test_clojure_core_load.c
+    src/tests/test_core_initialization.c
     src/tests/test_equal.c
     src/tests/test_seq.c
     src/tests/test_values.c
@@ -259,6 +266,8 @@ add_executable(unity-tests
     src/tests/test_sequences.c
     src/tests/test_byte_array.c
     src/tests/test_file_io.c
+    src/tests/test_atom.c
+    src/tests/test_atom_all.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c
@@ -266,6 +275,7 @@ add_executable(unity-tests
     src/types.c
     src/vector.c
     src/map.c
+    src/atom.c
     src/strings.c
     src/symbol.c
     src/namespace.c
@@ -325,6 +335,7 @@ set(COMMON_TEST_SOURCES
     src/types.c
     src/vector.c
     src/map.c
+    src/atom.c
     src/strings.c
     src/symbol.c
     src/namespace.c

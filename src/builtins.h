@@ -72,6 +72,12 @@ ID native_println(ID *args, unsigned int argc);
 ID native_pr(ID *args, unsigned int argc);
 ID native_prn(ID *args, unsigned int argc);
 
+// Atom functions
+ID native_atom(ID *args, unsigned int argc);
+ID native_deref(ID *args, unsigned int argc);
+ID native_reset_bang(ID *args, unsigned int argc);
+ID native_swap_bang(ID *args, unsigned int argc);
+
 // Loop constructs converted to builtins
 // Note: dotimes is now implemented as a special form, not a builtin
 

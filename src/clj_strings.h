@@ -5,8 +5,8 @@
 
 // String representation of CljObject
 /** Return newly allocated C-string representation (caller frees). */
-char* pr_str(CljObject *v);
-char* print_str(CljObject *v);
-char* to_string(CljObject *v);
+const char* pr_str(CljObject *v);
+const char* print_str(CljObject *v);
+const char* to_string(CljObject *v);
 
 #endif

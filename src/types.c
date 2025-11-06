@@ -7,6 +7,10 @@ const char* clj_type_name(CljType type) {
     }
     
     switch (type) {
+        case CLJ_INT: return "Integer";
+        case CLJ_CHAR: return "Character";
+        case CLJ_BOOL: return "Boolean";
+        case CLJ_FLOAT: return "Float";
         case CLJ_STRING: return "String";
         case CLJ_SYMBOL: return "Symbol";
         case CLJ_VECTOR: return "Vector";
@@ -17,6 +21,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_CLOSURE: return "Closure";
         case CLJ_EXCEPTION: return "Exception";
         case CLJ_BYTE_ARRAY: return "ByteArray";
+        case CLJ_ATOM: return "Atom";
         case CLJ_SEQ: return "Sequence";
         case CLJ_TRANSIENT_VECTOR: return "TransientVector";
         case CLJ_TRANSIENT_MAP: return "TransientMap";

@@ -22,6 +22,7 @@
 #include "seq.h"
 #include "runtime.h"
 #include "map.h"
+#include "atom.h"
 #include "kv_macros.h"
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
@@ -123,7 +124,7 @@ CljObject* make_list(ID first, CljList *rest) {
     return (CljObject*)list;
 }
 
-char* to_string(CljObject *v) {
+const char* to_string(CljObject *v) {
     // Handle nil (represented as NULL)
     if (!v) {
         return strdup("nil");
@@ -410,6 +411,18 @@ char* to_string(CljObject *v) {
                 return result;
             }
 
+        case CLJ_ATOM:
+            {
+                CljAtom *atom = as_atom(v);  // as_atom() already checks for NULL and aborts
+                
+                // Format: #<Atom@<address>: <value>>
+                char *value_str = atom->value ? pr_str(atom->value) : strdup("nil");
+                char buf[256];
+                snprintf(buf, sizeof(buf), "#<Atom@%p: %s>", (void*)atom, value_str);
+                free(value_str);
+                return strdup(buf);  // strdup() required: to_string() must return allocated string
+            }
+
         case CLJ_BYTE_ARRAY:
             {
                 CljByteArray *ba = as_byte_array(v);
@@ -442,7 +455,7 @@ char* to_string(CljObject *v) {
     }
 }
 
-char* pr_str(CljObject *v) {
+const char* pr_str(CljObject *v) {
     // Handle nil (represented as NULL)
     if (!v) {
         return strdup("nil");
@@ -464,7 +477,7 @@ char* pr_str(CljObject *v) {
     return to_string(v);
 }
 
-char* print_str(CljObject *v) {
+const char* print_str(CljObject *v) {
     // Handle nil (represented as NULL)
     if (!v) {
         return strdup("nil");

@@ -160,19 +160,28 @@ CljNamespace* ns_find(const char *name) {
 }
 
 void ns_cleanup() {
+    // Preserve clojure.core cache if set (important for tests)
+    // clojure.core should persist across cleanup calls
+    CljNamespace *preserved_clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    
     CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
         CljNamespace *next = cur->next;
-        if (cur->filename) free((void*)cur->filename);
-        // ADDED: Freigebe mappings
-        if (cur->mappings) RELEASE((CljObject*)cur->mappings);
-        // ADDED: Freigebe aliases
-        if (cur->aliases) RELEASE((CljObject*)cur->aliases);
-        free(cur);
+        // Don't free clojure.core namespace if it's cached (preserve for tests)
+        if (cur != preserved_clojure_core) {
+            if (cur->filename) free((void*)cur->filename);
+            // ADDED: Freigebe mappings
+            if (cur->mappings) RELEASE((CljObject*)cur->mappings);
+            // ADDED: Freigebe aliases
+            if (cur->aliases) RELEASE((CljObject*)cur->aliases);
+            free(cur);
+        }
         cur = next;
     }
     g_runtime.ns_registry = NULL;
-    g_runtime.clojure_core_cache = NULL;
+    
+    // Restore clojure.core cache if it was set (preserve for tests)
+    g_runtime.clojure_core_cache = (void*)preserved_clojure_core;
 }
 
 // EvalState functions
@@ -214,6 +223,14 @@ void evalstate_free(EvalState *st) {
 
 void evalstate_set_ns(EvalState *st, const char *ns_name) {
     if (!st || !ns_name) return;
+    
+    // CRITICAL: Check if this is clojure.core and use cached version if available
+    // This prevents creating a new clojure.core namespace when one already exists in cache
+    // This is important for tests where runtime_init() clears the registry but preserves cache
+    if (strcmp(ns_name, "clojure.core") == 0 && g_runtime.clojure_core_cache) {
+        st->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
+        return;
+    }
     
     CljNamespace *ns = ns_find(ns_name);
     if (!ns) {
@@ -308,7 +325,9 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
  * @param value Value to bind to symbol
  */
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
-    if (!ns || !symbol || !value) return;
+    // Allow NULL value (nil) - it's a legitimate case
+    // Only check for NULL ns and symbol
+    if (!ns || !symbol) return;
     
     // Create or update mappings
     if (!ns->mappings) {

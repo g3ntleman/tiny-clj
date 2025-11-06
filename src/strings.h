@@ -65,7 +65,7 @@ static inline const char* clj_string_data(CljString *str) {
 
 // String representation functions
 /** Return newly allocated C-string representation (caller frees). */
-char* pr_str(CljObject *v);
-char* to_string(CljObject *v);
+const char* pr_str(CljObject *v);
+const char* to_string(CljObject *v);
 
 #endif // TINY_CLJ_STRINGS_H

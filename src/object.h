@@ -21,7 +21,7 @@ typedef struct CljObject* CljValue;
 
 
 // Type optimization constants
-#define LAST_SINGLETON_TYPE CLJ_SYMBOL  // Last singleton type (0-2)
+#define LAST_SINGLETON_TYPE CLJ_SYMBOL  // Last singleton type (CLJ_SYMBOL, after immediate types)
 
 // Type checking macros for performance
 #define IS_SINGLETON_TYPE(type) ((type) <= LAST_SINGLETON_TYPE)
@@ -45,6 +45,7 @@ typedef struct CljObject* CljValue;
 #define TYPE_OF_CLJException CLJ_EXCEPTION
 #define TYPE_OF_CljSeqIterator CLJ_SEQ
 #define TYPE_OF_CljByteArray CLJ_BYTE_ARRAY
+#define TYPE_OF_CljAtom CLJ_ATOM
 // Für primitive Typen die nicht als Struct existieren
 #define TYPE_OF_int CLJ_INT
 #define TYPE_OF_double CLJ_FLOAT
@@ -59,9 +60,6 @@ typedef struct CljObject* CljValue;
 #define TYPE_OF(struct_type) TYPE_OF_##struct_type
 
 typedef struct CljObject CljObject;
-// Macro: safe type extraction (returns CLJ_UNKNOWN for NULL objects)
-#define TYPE(object) ((object) ? (object)->type : CLJ_UNKNOWN)
-
 
 // Optimized CljObject structure (no union - primitives are immediates)
 // 4-byte header for 32-bit architectures: 2 bytes type + 2 bytes rc
@@ -70,6 +68,26 @@ struct CljObject {
     uint16_t rc;    // Reference Count (reduced from int)
     // Keine Union! Daten in Substrukturen (CljString, CljVector, etc.)
 };
+
+// Macro: safe type extraction (handles NULL, immediates, and heap objects)
+static inline CljType TYPE_impl(ID obj) {
+    if (!obj) return CLJ_UNKNOWN;
+    // Check if it's an immediate (tagged pointer with odd tag)
+    if ((uintptr_t)obj & 0x1) {
+        // It's an immediate - extract tag and map to CljType
+        uint8_t tag = (uint8_t)((uintptr_t)obj & 0x7);
+        switch (tag) {
+            case 1: return CLJ_INT;    // TAG_FIXNUM
+            case 3: return CLJ_CHAR;   // TAG_CHAR
+            case 5: return CLJ_BOOL;   // TAG_BOOL
+            case 7: return CLJ_FLOAT;  // TAG_FIXED
+            default: return CLJ_UNKNOWN;
+        }
+    }
+    // It's a heap object - use the type field
+    return ((CljObject*)obj)->type;
+}
+#define TYPE(object) TYPE_impl(object)
 
 // Check if an object is a singleton (should not be reference counted)
 static inline bool is_singleton(CljObject *obj) {
@@ -92,8 +110,8 @@ static inline bool is_singleton(CljObject *obj) {
 // - CljByteArray -> byte_array.h
 // - CLJException -> exception.h
 
-// Type checking helper
-static inline bool is_type(CljObject *obj, CljType expected_type) {
+// Type checking helper (accepts ID for convenience)
+static inline bool is_type(ID obj, CljType expected_type) {
     if (!obj) return false;
     // Check if it's an immediate value (CljValue) being passed as CljObject*
     // Immediate values have odd addresses (tagged pointers)

@@ -17,6 +17,7 @@
 #include "map.h"
 #include "list.h"
 #include "byte_array.h"
+#include "atom.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -592,6 +593,16 @@ static void release_object_deep(CljObject *v) {
                 CljByteArray *ba = as_byte_array(v);
                 if (ba && ba->data) {
                     free(ba->data);
+                }
+            }
+            break;
+            
+        case CLJ_ATOM:
+            {
+                CljAtom *atom = as_atom(v);
+                if (atom) {
+                    // Release the atom's value (RELEASE handles nil and immediates safely)
+                    RELEASE(atom->value);
                 }
             }
             break;

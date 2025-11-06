@@ -240,6 +240,25 @@ ID parse_expr(Reader *reader, EvalState *st) {
     return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
   }
   
+  // Handle deref @x => (deref x)
+  if (c == '@') {
+    reader_consume(reader); // consume @
+    reader_skip_all(reader);
+    size_t db_before = reader_offset(reader);
+    ID atom_expr = parse_expr(reader, st);
+    size_t db_after = reader_offset(reader);
+    if (db_after <= db_before && !reader_eof(reader)) {
+      throw_parser_exception("Parser made no progress after @", reader);
+      return NULL;
+    }
+    if (!atom_expr) return NULL;
+    // Create (deref <expr>) list: (deref expr)
+    // Build list using the same pattern as parse_list
+    CljObject *deref_sym = intern_symbol_global("deref");
+    ID elements[2] = {(CljValue)deref_sym, atom_expr};
+    return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
+  }
+  
   if (c == ':' || is_alphanumeric(c) || c == '.' || (unsigned char)c >= 0x80) {
     // For colon, we need to ensure parse_symbol sees it correctly
     // reader_current already peeked the character, so parse_symbol should see the same

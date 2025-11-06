@@ -467,7 +467,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
     (void)env; // Suppress unused parameter warning
     
     if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
-        throw_exception("TypeError", "Attempt to call non-function value", NULL, 0, 0);
+        throw_exception(EXCEPTION_TYPE, "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
     
@@ -476,7 +476,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
         // It's a native function (CljFunc)
         CljFunc *native_func = (CljFunc*)fn;
         if (!native_func || !native_func->fn) {
-            throw_exception("TypeError", "Invalid native function", NULL, 0, 0);
+            throw_exception(EXCEPTION_TYPE, "Invalid native function", NULL, 0, 0);
             return NULL;
         }
         return native_func->fn((CljObject**)args, argc);
@@ -485,12 +485,12 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env) {
     // It's a Clojure function (CljFunction)
     CljFunction *func = (CljFunction*)fn;
     if (!func) {
-        return make_exception("Error", "Invalid function object", NULL, 0, 0);
+        return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
     }
     
     // Arity check
     if (argc != func->param_count) {
-        throw_exception("ArityError", "Arity mismatch in function call", NULL, 0, 0);
+        throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
         return NULL;
     }
     
@@ -1387,7 +1387,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // Tier 5: Special forms and definitions
     if (original_op == SYM_FN) {
-        return AUTORELEASE(eval_fn(list, env));
+        // Use current namespace mappings as environment for fn evaluation
+        // This ensures that builtin functions like + are available in closures
+        CljMap *fn_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
+        return AUTORELEASE(eval_fn(list, fn_env));
     }
     
     if (original_op == SYM_DEF) {
@@ -1422,7 +1425,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // recur is only valid inside function bodies, not in top-level lists
     if (original_op == SYM_RECUR) {
-        throw_exception("SyntaxError", "recur can only be used inside function bodies", NULL, 0, 0);
+        throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies", NULL, 0, 0);
         return NULL;
     }
     
@@ -1524,25 +1527,39 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Get the symbol name (second argument) - don't evaluate it, just get the symbol
     CljObject *symbol = list_get_element(list, 1);
     if (!symbol || !is_type(symbol, CLJ_SYMBOL)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "def requires a symbol as first argument", 
+                       NULL, 0, 0);
         return NULL;
     }
     
     // Get the value (third argument) - evaluate this
+    // Note: value_expr can be NULL if nil was parsed (nil is represented as NULL)
     CljObject *value_expr = list_get_element(list, 2);
-    if (!value_expr) {
+    // Check if list has at least 3 elements (def, symbol, value)
+    // If value_expr is NULL, it might be nil (valid) or missing (invalid)
+    // We need to check if there are actually 3 elements in the list
+    int list_len = list_count(list);
+    if (list_len < 3) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "def requires a value expression as second argument", 
+                       NULL, 0, 0);
         return NULL;
     }
+    // If list_len >= 3 but value_expr is NULL, it's nil (valid case)
     
     // Evaluate the value expression
+    // Use current namespace mappings as environment for evaluation
+    // This ensures that builtin functions like + are available during evaluation
+    CljMap *eval_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
     CljObject *value = NULL;
     if (is_type(value_expr, CLJ_LIST)) {
-        value = eval_list(as_list((ID)value_expr), env, st);
+        value = eval_list(as_list((ID)value_expr), eval_env, st);
     } else {
         value = eval_expr_simple(value_expr, st);
     }
-    if (!value) {
-        return NULL;
-    }
+    // value can be NULL if nil was evaluated (legitimate case)
+    // If evaluation failed, eval_list/eval_expr_simple should have thrown an exception
     
     // If the value is a function, set its name
     if (is_type(value, CLJ_FUNC)) {
@@ -1554,10 +1571,22 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Store the symbol-value binding in the environment
-    if (st) {
-        // Store in namespace
-        ns_define(st->current_ns, symbol, value);
+    if (!st) {
+        throw_exception(EXCEPTION_RUNTIME, 
+                       "def requires an evaluation state", 
+                       NULL, 0, 0);
+        return NULL;
     }
+    
+    if (!st->current_ns) {
+        throw_exception(EXCEPTION_RUNTIME, 
+                       "def requires a current namespace", 
+                       NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Store in namespace (value can be NULL/nil - legitimate case)
+    ns_define(st->current_ns, symbol, value);
     
     // Return the symbol (Clojure-compatible: def returns the var/symbol, not the value)
     return symbol;
@@ -2079,7 +2108,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
     // Get bindings vector (second element): (let [x 10 y 20] ...)
     CljObject *bindings_vec = list_get_element(list, 1);
     if (!bindings_vec || !is_type(bindings_vec, CLJ_VECTOR)) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "let requires a vector for bindings", 
                        NULL, 0, 0);
         return NULL;
@@ -2087,7 +2116,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
     
     CljPersistentVector *bindings = as_vector((CljValue)bindings_vec);
     if (!bindings) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "let bindings must be a valid vector", 
                        NULL, 0, 0);
         return NULL;
@@ -2096,7 +2125,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
     
     // Bindings must come in pairs (symbol value symbol value ...)
     if (binding_count % 2 != 0) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "let requires an even number of forms in binding vector", 
                        NULL, 0, 0);
         return NULL;
@@ -2134,7 +2163,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
         
         if (!sym_val || !is_type((CljObject*)sym_val, CLJ_SYMBOL)) {
             RELEASE(let_env);
-            throw_exception("IllegalArgumentException", 
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                            "let binding must be a symbol", 
                            NULL, 0, 0);
             return NULL;
@@ -2142,7 +2171,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
         
         if (!init_val) {
             RELEASE(let_env);
-            throw_exception("IllegalArgumentException", 
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                            "let binding init expression cannot be null", 
                            NULL, 0, 0);
             return NULL;
@@ -2228,7 +2257,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     CljObject *rest_obj = list->rest;
     CljList *rest = as_list((ID)rest_obj);
     if (!rest) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires function name", 
                        NULL, 0, 0);
         return NULL;
@@ -2237,7 +2266,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Get function name (first element after defn)
     CljObject *name_sym = rest->first;
     if (!name_sym || !is_type(name_sym, CLJ_SYMBOL)) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires a symbol for function name", 
                        NULL, 0, 0);
         return NULL;
@@ -2247,7 +2276,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     rest_obj = rest->rest;
     rest = as_list((ID)rest_obj);
     if (!rest) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires parameter vector", 
                        NULL, 0, 0);
         return NULL;
@@ -2255,7 +2284,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     CljObject *params_vec = rest->first;
     if (!params_vec || !is_type(params_vec, CLJ_VECTOR)) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires a vector for parameters", 
                        NULL, 0, 0);
         return NULL;
@@ -2265,7 +2294,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     rest_obj = rest->rest;
     rest = as_list((ID)rest_obj);
     if (!rest) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires at least one body expression", 
                        NULL, 0, 0);
         return NULL;
@@ -2274,7 +2303,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Extract parameters from vector
     CljPersistentVector *params_vec_data = as_vector((CljValue)params_vec);
     if (!params_vec_data) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires a valid parameter vector", 
                        NULL, 0, 0);
         return NULL;
@@ -2288,7 +2317,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         params[i] = params_vec_data->data[i];
         if (!params[i] || !is_type(params[i], CLJ_SYMBOL)) {
             free_obj_array(params, params_stack);
-            throw_exception("IllegalArgumentException", 
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                            "defn parameters must be symbols", 
                            NULL, 0, 0);
             return NULL;
@@ -2325,7 +2354,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
     
     if (!body_list) {
-        throw_exception("IllegalArgumentException", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn body cannot be empty", 
                        NULL, 0, 0);
         return NULL;
@@ -2445,7 +2474,7 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
     if (is_type(element, CLJ_LIST)) {
         // Check recursion depth
         if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
-            throw_exception("StackOverflowError", 
+            throw_exception(EXCEPTION_STACK_OVERFLOW, 
                           "Maximum evaluation depth exceeded in nested function calls", 
                           __FILE__, __LINE__, 0);
             return NULL;

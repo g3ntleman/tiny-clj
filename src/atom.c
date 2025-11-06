@@ -1,0 +1,152 @@
+#include "atom.h"
+#include "memory.h"
+#include "value.h"
+#include "function_call.h"
+#include "exception.h"
+#include "runtime.h"
+#include "namespace.h"
+#include <stdlib.h>
+#include <stdbool.h>
+
+/** Create an atom with initial value.
+ * @param value Initial value (can be NULL/nil or immediate)
+ * @return New atom object with RC=1 (caller must release)
+ */
+CljAtom* make_atom(ID value) {
+    CljAtom *atom = ALLOC(CljAtom, 1);
+    if (!atom) {
+        throw_oom(CLJ_ATOM);
+        return NULL;
+    }
+    
+    atom->base.type = CLJ_ATOM;
+    atom->base.rc = 1;
+    // RETAIN handles nil and immediates safely (ignores them)
+    atom->value = RETAIN(value);
+    
+    return atom;
+}
+
+/** Get the current value of an atom.
+ * @param atom Atom object
+ * @return Current value (caller must release if not immediate)
+ */
+ID atom_deref(CljAtom *atom) {
+    if (!atom) return NULL;
+    // RETAIN handles nil and immediates safely (ignores them)
+    return RETAIN(atom->value);
+}
+
+/** Set the value of an atom directly.
+ * @param atom Atom object
+ * @param new_value New value (can be NULL/nil or immediate)
+ * @return New value (caller must release if not immediate)
+ */
+ID atom_reset(CljAtom *atom, ID new_value) {
+    if (!atom) return NULL;
+    
+    // RELEASE handles nil and immediates safely (ignores them)
+    RELEASE(atom->value);
+    
+    // Set new value (RETAIN handles nil and immediates safely)
+    atom->value = RETAIN(new_value);
+    
+    // Return new value (RETAIN handles nil and immediates safely)
+    return RETAIN(new_value);
+}
+
+/** Apply a function to the atom's value and update it.
+ * @param atom Atom object
+ * @param fn Function to apply
+ * @param args Additional arguments (can be NULL)
+ * @param argc Number of additional arguments
+ * @return New value (caller must release if not immediate)
+ */
+ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
+    // Validate arguments (Clojure/JVM behavior: throw IllegalArgumentException)
+    if (!atom) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "swap! requires an atom", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Resolve symbol to function if necessary (Clojure/JVM behavior)
+    // Use a minimal EvalState that points to clojure.core namespace for resolution
+    if (is_type(fn, CLJ_SYMBOL)) {
+        EvalState *st = evalstate();
+        if (st) {
+            // Set current_ns to clojure.core if available, otherwise use user namespace
+            // ns_resolve will search in clojure.core even if current_ns is different
+            if (g_runtime.clojure_core_cache) {
+                st->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
+            }
+            ID resolved = ns_resolve(st, fn);
+            if (resolved) {
+                fn = resolved;
+            }
+            evalstate_free(st);
+        }
+    }
+    
+    // Validate that fn is a valid function (Clojure/JVM throws IllegalArgumentException/ClassCastException)
+    if (!fn || (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE))) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "swap! requires a function", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Get current value (RETAIN handles nil and immediates safely)
+    ID current_value = RETAIN(atom->value);
+    
+    // Prepare function call arguments: [current_value, ...args]
+    ID *fn_args = (ID*)calloc(argc + 1, sizeof(ID));
+    if (!fn_args) {
+        RELEASE(current_value);
+        throw_oom(CLJ_ATOM);
+        return NULL;
+    }
+    
+    fn_args[0] = current_value;  // First argument is current atom value
+    for (unsigned int i = 0; i < argc; i++) {
+        // RETAIN handles nil and immediates safely (ignores them)
+        fn_args[i + 1] = RETAIN(args[i]);
+    }
+    
+    // Call function with current value and additional args
+    EvalState *st = evalstate();
+    CljMap *env = st ? (CljMap*)st->current_ns->mappings : NULL;
+    
+    ID new_value = NULL;
+    TRY {
+        new_value = eval_function_call(fn, fn_args, argc + 1, env);
+    } CATCH(ex) {
+        // Cleanup on exception (RELEASE handles nil and immediates safely)
+        for (unsigned int i = 0; i < argc + 1; i++) {
+            RELEASE(fn_args[i]);
+        }
+        free(fn_args);
+        RELEASE(current_value);
+        return NULL;
+    } END_TRY
+    
+    // Cleanup function arguments (RELEASE handles nil and immediates safely)
+    for (unsigned int i = 0; i < argc + 1; i++) {
+        RELEASE(fn_args[i]);
+    }
+    free(fn_args);
+    
+    RELEASE(current_value);
+    
+    if (!new_value) {
+        // Function returned nil or error
+        return NULL;
+    }
+    
+    // Update atom with new value
+    atom_reset(atom, new_value);
+    
+    // Return new value (already retained by atom_reset, but we need another retain for caller)
+    // RETAIN handles nil and immediates safely (ignores them)
+    return RETAIN(new_value);
+}
+

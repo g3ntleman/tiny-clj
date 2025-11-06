@@ -4,6 +4,11 @@
 #include <stdint.h>
 
 typedef enum {
+    // Immediate types (for tagged pointers, not used in heap objects)
+    CLJ_INT,     // Immediate integer (fixnum)
+    CLJ_CHAR,    // Immediate character
+    CLJ_BOOL,    // Immediate boolean (true/false)
+    CLJ_FLOAT,   // Immediate float (fixed-point)
     // Singletons (0-1) - no reference counting needed, can use simple range check
     CLJ_SYMBOL,  // Interned symbols - no reference counting needed
     // Complex types (2+) - require individual checks, have reference counting
@@ -17,6 +22,7 @@ typedef enum {
     CLJ_CLOSURE,     // Interpreted Clojure functions (CljFunction)
     CLJ_EXCEPTION,
     CLJ_BYTE_ARRAY,  // Mutable byte array (Clojure-compatible)
+    CLJ_ATOM,         // Mutable atom container (Clojure-compatible)
     // Transient types (Clojure-kompatibel: nur Vector und Map)
     CLJ_TRANSIENT_VECTOR,
     CLJ_TRANSIENT_MAP,

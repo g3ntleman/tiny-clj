@@ -9,6 +9,13 @@
 #include "../memory.h"
 #include "../namespace.h"
 #include "../symbol.h"
+#include "../reader.h"
+#include "../function_call.h"
+#include "../list.h"
+#include "../map.h"
+#include "../kv_macros.h"
+#include "../runtime.h"
+#include "../object.h"
 #include <sys/time.h>
 
 // ============================================================================
@@ -169,5 +176,141 @@ TEST(test_parameter_lookup_optimization) {
     printf("Baseline: 1000 function calls with parameter lookups took %.2f ms\n", elapsed_ms);
     
     evalstate_free(st);
+}
+
+// ============================================================================
+// TEST: defn Special Form Recognition and Parsing Tests
+// ============================================================================
+
+// Test: Verify that defn is recognized as special form
+TEST(test_defn_symbol_recognized) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Get 'defn' symbol from parser
+        Reader reader;
+        reader_init(&reader, "(defn test-fn [x] (+ x 1))");
+        ID form = value_by_parsing_expr(&reader, st);
+        TEST_ASSERT_NOT_NULL(form);
+        
+        // Extract the 'defn' symbol from the list
+        CljList *list = as_list(form);
+        TEST_ASSERT_NOT_NULL(list);
+        CljObject *defn_sym = LIST_FIRST(list);
+        TEST_ASSERT_NOT_NULL(defn_sym);
+        TEST_ASSERT_TRUE_MESSAGE(is_type(defn_sym, CLJ_SYMBOL), 
+                                 "first element should be a symbol");
+        
+        // Check if defn_sym matches SYM_DEFN
+        extern CljObject *SYM_DEFN;
+        TEST_ASSERT_NOT_NULL(SYM_DEFN);
+        
+        // Check pointer equality
+        bool pointer_match = (defn_sym == SYM_DEFN);
+        
+        // If pointer doesn't match, check if they're the same symbol via symbol table
+        if (!pointer_match) {
+            CljSymbol *parsed_sym = as_symbol(defn_sym);
+            CljSymbol *special_sym = as_symbol(SYM_DEFN);
+            if (parsed_sym && special_sym && parsed_sym->name && special_sym->name) {
+                bool name_match = (strcmp(parsed_sym->name, special_sym->name) == 0);
+                TEST_FAIL_MESSAGE("defn symbol pointer mismatch - parsed symbol has different pointer than SYM_DEFN (symbol interning issue)");
+            } else {
+                TEST_FAIL_MESSAGE("defn symbol pointer mismatch and cannot compare names");
+            }
+        }
+        
+        RELEASE((CljObject*)form);
+        evalstate_free(st);
+    });
+}
+
+// Test: Verify that (defn test-fn ...) is parsed correctly
+TEST(test_defn_test_fn_parsed) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Parse (defn test-fn [x] (+ x 1))
+        Reader reader;
+        reader_init(&reader, "(defn test-fn [x] (+ x 1))");
+        ID form = value_by_parsing_expr(&reader, st);
+        TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (defn test-fn ...)");
+        
+        // Verify it's a list
+        CljList *list = as_list(form);
+        TEST_ASSERT_NOT_NULL_MESSAGE(list, "parsed form should be a list");
+        
+        // Verify first element is 'defn'
+        CljObject *defn_sym = LIST_FIRST(list);
+        TEST_ASSERT_NOT_NULL_MESSAGE(defn_sym, "first element should be 'defn' symbol");
+        TEST_ASSERT_TRUE_MESSAGE(is_type(defn_sym, CLJ_SYMBOL), 
+                                "first element should be a symbol");
+        
+        // Verify second element is 'test-fn'
+        CljList *rest = as_list((ID)list->rest);
+        CljObject *test_fn_sym = rest ? LIST_FIRST(rest) : NULL;
+        TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_sym, "second element should be 'test-fn' symbol");
+        TEST_ASSERT_TRUE_MESSAGE(is_type(test_fn_sym, CLJ_SYMBOL), 
+                                "second element should be a symbol");
+        
+        CljSymbol *test_fn = as_symbol(test_fn_sym);
+        TEST_ASSERT_NOT_NULL(test_fn);
+        TEST_ASSERT_NOT_NULL(test_fn->name);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("test-fn", test_fn->name, 
+                                        "second element should be 'test-fn' symbol");
+        
+        RELEASE((CljObject*)form);
+        evalstate_free(st);
+    });
+}
+
+// Test: Verify that eval_defn is called when (defn test-fn ...) is evaluated
+TEST(test_defn_test_fn_evaluated) {
+    WITH_AUTORELEASE_POOL({
+        EvalState *st = evalstate_new();
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Set current namespace to clojure.core
+        evalstate_set_ns(st, "clojure.core");
+        
+        // Ensure clojure.core cache is set
+        if (st->current_ns && !g_runtime.clojure_core_cache) {
+            g_runtime.clojure_core_cache = (void*)st->current_ns;
+        }
+        
+        // Parse and evaluate (defn test-fn [x] (+ x 1))
+        Reader reader;
+        reader_init(&reader, "(defn test-fn [x] (+ x 1))");
+        ID form = value_by_parsing_expr(&reader, st);
+        TEST_ASSERT_NOT_NULL(form);
+        
+        // Evaluate the form
+        CljMap *env = st->current_ns ? (CljMap*)st->current_ns->mappings : NULL;
+        ID result = eval_list(as_list(form), env, st);
+        
+        // Should return the symbol 'test-fn'
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_defn should return the symbol");
+        TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_SYMBOL), 
+                                "eval_defn should return a symbol");
+        
+        // Verify 'test-fn' is now in the namespace mappings
+        CljNamespace *ns = st->current_ns;
+        TEST_ASSERT_NOT_NULL(ns);
+        TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
+        
+        CljObject *test_fn_sym = intern_symbol_global("test-fn");
+        ID test_fn_value = map_get((CljValue)ns->mappings, (CljValue)test_fn_sym);
+        TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_value, 
+                                     "'test-fn' should be in namespace mappings after eval_defn");
+        
+        // Verify that test-fn_value is a function (CLJ_CLOSURE)
+        TEST_ASSERT_TRUE_MESSAGE(is_type(test_fn_value, CLJ_CLOSURE) || is_type(test_fn_value, CLJ_FUNC),
+                                 "test-fn should be a function");
+        
+        RELEASE((CljObject*)form);
+        evalstate_free(st);
+    });
 }
 

@@ -9,6 +9,7 @@
 #include "object.h"
 #include "vector.h"
 #include "map.h"
+#include "atom.h"
 #include "kv_macros.h"
 #include "numeric_utils.h"
 #include "runtime.h"
@@ -1967,6 +1968,106 @@ ID native_sleep(ID *args, unsigned int argc) {
     return NULL;
 }
 
+// ============================================================================
+// ATOM FUNCTIONS
+// ============================================================================
+
+// Native atom implementation
+ID native_atom(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "atom")) return NULL;
+    
+    ID value = args[0];  // Can be NULL (nil) or immediate
+    CljAtom *atom = make_atom(value);
+    
+    return (CljObject*)atom;
+}
+
+// Native deref implementation
+ID native_deref(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "deref")) return NULL;
+    
+    ID obj = args[0];
+    if (!obj || !is_type((CljObject*)obj, CLJ_ATOM)) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "deref requires an atom", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljAtom *atom = as_atom(obj);
+    ID value = atom_deref(atom);
+    
+    return value;  // Can be NULL (nil) or immediate
+}
+
+// Native reset! implementation
+ID native_reset_bang(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "reset!")) return NULL;
+    
+    ID obj = args[0];
+    if (!obj || !is_type((CljObject*)obj, CLJ_ATOM)) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "reset! requires an atom", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljAtom *atom = as_atom(obj);
+    ID new_value = args[1];  // Can be NULL (nil) or immediate
+    
+    ID result = atom_reset(atom, new_value);
+    
+    return result;  // Returns new value (can be NULL/nil or immediate)
+}
+
+// Native swap! implementation
+ID native_swap_bang(ID *args, unsigned int argc) {
+    if (argc < 2) {
+        throw_exception(EXCEPTION_TYPE_ARITY, "swap! requires at least 2 arguments (atom and function)", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *obj = args[0];
+    if (!obj || !is_type(obj, CLJ_ATOM)) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "swap! requires an atom", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljAtom *atom = as_atom(obj);
+    ID fn = args[1];
+    
+    if (!fn) {
+        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "swap! requires a function", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Prepare additional arguments (if any)
+    ID *fn_args = NULL;
+    unsigned int fn_argc = 0;
+    
+    if (argc > 2) {
+        fn_argc = argc - 2;
+        fn_args = (ID*)calloc(fn_argc, sizeof(ID));
+        if (!fn_args) {
+            throw_oom(CLJ_ATOM);
+            return NULL;
+        }
+        
+        for (unsigned int i = 0; i < fn_argc; i++) {
+            fn_args[i] = args[i + 2];
+        }
+    }
+    
+    ID result = atom_swap(atom, fn, fn_args, fn_argc);
+    
+    if (fn_args) {
+        free(fn_args);
+    }
+    
+    return result;  // Returns new value (can be NULL/nil or immediate)
+}
+
 // Native def implementation (converted from special form)
 ID native_def(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "def")) return NULL;
@@ -2175,4 +2276,10 @@ void register_builtins() {
     register_builtin_in_namespace("aclone", native_aclone);
     // Event-loop builtin
     register_builtin_in_namespace("run-next-task", native_run_next_task);
+    
+    // Atom functions
+    register_builtin_in_namespace("atom", native_atom);
+    register_builtin_in_namespace("deref", native_deref);
+    register_builtin_in_namespace("reset!", native_reset_bang);
+    register_builtin_in_namespace("swap!", native_swap_bang);
 }
