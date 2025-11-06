@@ -23,13 +23,6 @@ ID eval_fn(CljList *list, CljMap *env);
 ID eval_symbol(ID symbol, EvalState *st);
 
 // Weitere Built-in Funktionen
-ID eval_str(CljList *list, CljMap *env);
-ID eval_prn(CljList *list, CljMap *env);
-ID eval_count(CljList *list, CljMap *env);
-ID eval_first(CljList *list, CljMap *env);
-ID eval_rest(CljList *list, CljMap *env);
-ID eval_next(CljList *list, CljMap *env);
-ID eval_cons(CljList *list, CljMap *env);
 ID eval_seq(CljList *list, CljMap *env);
 
 // For-loop functions

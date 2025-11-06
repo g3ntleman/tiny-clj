@@ -474,6 +474,93 @@ TEST(test_doseq_with_environment) {
 }
 
 // ============================================================================
+// WHILE LOOP TESTS
+// ============================================================================
+
+TEST(test_while_basic_true) {
+    // Test while with true condition that becomes false
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // (let [i (atom 0)] (while (< @i 1) (swap! i inc)) @i) => 1
+    // Executes once, then condition becomes false
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 1) (swap! i inc)) @i)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+    
+    evalstate_free(st);
+}
+
+TEST(test_while_loop_multiple) {
+    // Test while with loop that executes multiple times
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // (while (< @i 3) (swap! i inc)) where i starts at 0
+    // This should execute 3 times (i: 0 -> 1 -> 2 -> 3)
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 3) (swap! i inc)) @i)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+    
+    evalstate_free(st);
+}
+
+TEST(test_while_false_condition) {
+    // Test while with false condition - should not execute
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // (while false 42) => nil (does not execute)
+    ID result = eval_string("(while false 42)", st);
+    TEST_ASSERT_NULL(result);
+    
+    evalstate_free(st);
+}
+
+TEST(test_while_nil_condition) {
+    // Test while with nil condition - should not execute
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // (while nil 42) => nil (does not execute)
+    ID result = eval_string("(while nil 42)", st);
+    TEST_ASSERT_NULL(result);
+    
+    evalstate_free(st);
+}
+
+TEST(test_while_with_atom) {
+    // Test while with atom (like in mandelbrot.clj)
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // (let [i (atom 0)] (while (< @i 5) (swap! i inc)) @i) => 5
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 5) (swap! i inc)) @i)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result));
+    
+    evalstate_free(st);
+}
+
+TEST(test_while_multiple_body_exprs) {
+    // Test while with multiple body expressions
+    EvalState *st = evalstate_new();
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // (let [i (atom 0)] (while (< @i 2) (swap! i inc) (+ @i 10)) @i) => 2
+    // Last expression in body is evaluated, but while always returns nil
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 2) (swap! i inc) (+ @i 10)) @i)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+    
+    evalstate_free(st);
+}
+
+// ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
 

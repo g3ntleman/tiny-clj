@@ -12,6 +12,7 @@ CljObject *SYM_CATCH = NULL;
 CljObject *SYM_IF = NULL;
 CljObject *SYM_COND = NULL;
 CljObject *SYM_WHEN = NULL;
+CljObject *SYM_WHILE = NULL;
 CljObject *SYM_LET = NULL;
 CljObject *SYM_FN = NULL;
 CljObject *SYM_DEF = NULL;
@@ -84,6 +85,9 @@ static struct { CljSymbol sym; } sym_cond_data = {
 };
 static struct { CljSymbol sym; } sym_when_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "when" }
+};
+static struct { CljSymbol sym; } sym_while_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "while" }
 };
 static struct { CljSymbol sym; } sym_let_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "let" }
@@ -258,6 +262,9 @@ void init_special_symbols() {
     
     SYM_WHEN = (CljObject*)&sym_when_data;
     symbol_table_add(NULL, "when", SYM_WHEN);
+    
+    SYM_WHILE = (CljObject*)&sym_while_data;
+    symbol_table_add(NULL, "while", SYM_WHILE);
     
     SYM_LET = (CljObject*)&sym_let_data;
     symbol_table_add(NULL, "let", SYM_LET);

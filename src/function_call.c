@@ -836,6 +836,39 @@ CljObject* eval_list_with_param_substitution(CljObject *list, CljObject **params
         return result;
     }
     
+    if (op == SYM_WHILE) {
+        // (while condition body...)
+        // Loop: while condition is true, evaluate body expressions
+        CljList *list_data = as_list((ID)list);
+        int list_len = list_count(list_data);
+        
+        while (true) {
+            // Evaluate condition
+            CljObject *cond_val = eval_body_with_params(list_get_element(list_data, 1), params, values, param_count, (CljObject*)closure_env);
+            if (!cond_val || !clj_is_truthy(cond_val)) {
+                // Condition is nil/false, exit loop
+                if (cond_val) RELEASE(cond_val);
+                return NULL; // nil
+            }
+            RELEASE(cond_val);
+            
+            // Evaluate all body expressions
+            CljObject *result = NULL;
+            for (int i = 2; i < list_len; i++) {
+                CljObject *body_expr = list_get_element(list_data, i);
+                if (body_expr) {
+                    if (result) RELEASE(result);
+                    result = eval_body_with_params(body_expr, params, values, param_count, (CljObject*)closure_env);
+                    if (!result && i < list_len - 1) {
+                        return NULL; // Error in body evaluation
+                    }
+                }
+            }
+            // Release result from this iteration (will evaluate again in next iteration)
+            if (result) RELEASE(result);
+        }
+    }
+    
     // Tier 2: Frequent (70-90% of calls)
     if (op == SYM_MULTIPLY) {
         return eval_arithmetic_generic_with_substitution(list_data, params, values, param_count, ARITH_MUL, closure_env);
@@ -1113,13 +1146,16 @@ static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject
     return NULL;
 }
 
+// Forward declaration for eval_and_call_native
+static ID eval_and_call_native(CljList *list, CljMap *env, ID (*native_func)(ID*, unsigned int), int max_args);
+
 static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *op) {
-    if (op == SYM_FIRST) return eval_first(list, env);
-    if (op == SYM_REST) return eval_rest(list, env);
-    if (op == SYM_CONS) return eval_cons(list, env);
+    if (op == SYM_FIRST) return eval_and_call_native(list, env, native_first, 1);
+    if (op == SYM_REST) return eval_and_call_native(list, env, native_rest, 1);
+    if (op == SYM_CONS) return eval_and_call_native(list, env, native_cons, 2);
     if (op == SYM_SEQ) return eval_seq(list, env);
-    if (op == SYM_NEXT) return eval_next(list, env); // Clojure-compatible: next returns nil if empty
-    if (op == SYM_COUNT) return eval_count(list, env);
+    if (op == SYM_NEXT) return eval_and_call_native(list, env, native_next, 1); // Clojure-compatible: next returns nil if empty
+    if (op == SYM_COUNT) return eval_and_call_native(list, env, native_count, 1);
     return NULL;
 }
 
@@ -1253,6 +1289,38 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         }
         
         return result;
+    }
+    
+    if (original_op == SYM_WHILE) {
+        // (while condition body...)
+        // Loop: while condition is true, evaluate body expressions
+        int list_len = list_count(list);
+        
+        while (true) {
+            // Evaluate condition
+            CljObject *cond_val = eval_arg_retained(list, 1, env);
+            if (!cond_val || !clj_is_truthy(cond_val)) {
+                // Condition is nil/false, exit loop
+                if (cond_val) RELEASE(cond_val);
+                return NULL; // nil
+            }
+            RELEASE(cond_val);
+            
+            // Evaluate all body expressions
+            CljObject *result = NULL;
+            for (int i = 2; i < list_len; i++) {
+                CljObject *body_expr = list_get_element(list, i);
+                if (body_expr) {
+                    if (result) RELEASE(result);
+                    result = eval_body(body_expr, env, st);
+                    if (!result && i < list_len - 1) {
+                        return NULL; // Error in body evaluation
+                    }
+                }
+            }
+            // Release result from this iteration (will evaluate again in next iteration)
+            if (result) RELEASE(result);
+        }
     }
     
     if (original_op == SYM_COND) {
@@ -1720,9 +1788,9 @@ ID eval_symbol(ID symbol, EvalState *st) {
     
     CljSymbol *sym = as_symbol((ID)symbol);
     
-    // Keywords evaluate to themselves
+    // Keywords evaluate to themselves (singletons need no memory management)
     if (sym && sym->name[0] == ':') {
-        return AUTORELEASE(RETAIN(symbol));
+        return symbol;
     }
     
     // Special handling for *ns* - return current namespace name as symbol
@@ -1735,9 +1803,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
     
     // Lookup im aktuellen Namespace
     CljObject *value = ns_resolve(st, symbol);
-    if (value) {
-        return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
-    }
+    return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
     
     
     // Fallback: Try global namespace lookup for special forms and builtins
@@ -1745,7 +1811,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
         
         // Check against cached symbol pointers for O(1) lookup (only if initialized)
         if ((SYM_IF && symbol == SYM_IF) || (SYM_COND && symbol == SYM_COND) || 
-            (SYM_WHEN && symbol == SYM_WHEN) || (SYM_DEF && symbol == SYM_DEF) || 
+            (SYM_WHEN && symbol == SYM_WHEN) || (SYM_WHILE && symbol == SYM_WHILE) || (SYM_DEF && symbol == SYM_DEF) || 
             (SYM_DEFN && symbol == SYM_DEFN) || (SYM_FN && symbol == SYM_FN) || 
             (SYM_QUOTE && symbol == SYM_QUOTE) || 
             (SYM_RECUR && symbol == SYM_RECUR) || (SYM_AND && symbol == SYM_AND) || 
@@ -1766,37 +1832,13 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_NEXT && symbol == SYM_NEXT) || (SYM_LIST && symbol == SYM_LIST) ||
             (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
             (SYM_DOTIMES && symbol == SYM_DOTIMES) || (SYM_TIME && symbol == SYM_TIME)) {
-            return AUTORELEASE(RETAIN(symbol));  // Return the symbol itself for special forms
+            return symbol;  // Return the symbol itself for special forms (singletons need no memory management)
         }
     }
     
     // Fehler: Symbol kann nicht aufgelöst werden
     const char *name = sym ? sym->name : "unknown";
     throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
-    return NULL;
-}
-
-ID eval_str(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    CljObject *arg = eval_arg_retained(list, 1, env);
-    if (!arg) return AUTORELEASE(make_string(""));
-    
-    char *str = pr_str(arg);
-    CljObject *result = AUTORELEASE(make_string(str));
-    free(str);
-    return result;
-}
-
-ID eval_prn(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    CljObject *arg = eval_arg_retained(list, 1, env);
-    if (arg) {
-        char *str = pr_str(arg);
-        printf("%s\n", str);
-        free(str);
-    }
     return NULL;
 }
 
@@ -1832,46 +1874,6 @@ static ID eval_and_call_native(CljList *list, CljMap *env, ID (*native_func)(ID*
     // Native functions return mixed results: some already AUTORELEASE, some not
     // For now, return as-is and let caller handle AUTORELEASE
     return result;
-}
-
-ID eval_count(CljList *list, CljMap *env) {
-    return eval_and_call_native(list, env, native_count, 1);
-}
-
-ID eval_first(CljList *list, CljMap *env) {
-    return eval_and_call_native(list, env, native_first, 1);
-}
-
-/**
- * @brief Evaluate the rest of a sequence (everything except the first element)
- * @param list The function call list containing the argument
- * @param env The environment for variable lookup
- * @return The rest of the sequence as a SeqIterator (autoreleased) or empty list if no rest
- * 
- * Memory Policy:
- * - Returns autoreleased objects to prevent memory leaks
- * - Delegates to native_rest for validation and execution (DRY principle)
- */
-ID eval_rest(CljList *list, CljMap *env) {
-    return eval_and_call_native(list, env, native_rest, 1);
-}
-
-/**
- * @brief Evaluate the next of a sequence (nil if empty, otherwise rest sequence)
- * @param list The function call list containing the argument
- * @param env The environment for variable lookup
- * @return The next of the sequence (nil if empty, otherwise rest sequence) (autoreleased)
- * 
- * Memory Policy:
- * - Returns autoreleased objects to prevent memory leaks
- * - Delegates to native_next for validation and execution (DRY principle)
- */
-ID eval_next(CljList *list, CljMap *env) {
-    return eval_and_call_native(list, env, native_next, 1);
-}
-
-ID eval_cons(CljList *list, CljMap *env) {
-    return eval_and_call_native(list, env, native_cons, 2);
 }
 
 ID eval_seq(CljList *list, CljMap *env) {
@@ -1998,7 +2000,7 @@ ID eval_for(CljList *list, CljMap *env) {
     }
     
     RELEASE(collection);
-    return AUTORELEASE((CljObject*)result);
+    return AUTORELEASE(result);
 }
 
 ID eval_doseq(CljList *list, CljMap *env) {
