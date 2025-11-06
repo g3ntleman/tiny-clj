@@ -21,6 +21,9 @@ Active/Next
   - Centralized error message constants
   - Memory safety improvements for immediate value handling
   - Release target optimization for embedded deployment
+  - Auslagerung von Funktionen aus object.c in thematische Dateien (strings.c, exception.c, function.c, environment.c, equality.c, meta.c)
+  - Entfernung redundanter eval-Funktionen und Memory-Management-Optimierungen
+  - Symbol-Tabellen-Funktionen nach symbol.c verschoben
 
 - UTF-8 (Phase 1): ✅ COMPLETED
   - Vendor sheredom/utf8.h (done)
@@ -58,11 +61,31 @@ Next Priority
   - Return value of last expression, nil for empty do
   - Integration with existing special forms (if, let, fn, etc.)
   - Unit tests for do evaluation and return values
-- Test Framework Enhancements:
-  - Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
-  - Implement individual test execution: `./unity-tests memory allocation`
-  - Add CTest integration for CI/CD pipeline
-  - Performance benchmarks for test execution time
+- Atom Implementation: ✅ COMPLETED
+  - Clojure-Atom Datentyp mit Test-First-Ansatz implementiert
+  - Vollständige Atom-API mit Tests
+  - Korrekte Reference Counting für Atoms
+- Vector Functions: ✅ COMPLETED
+  - vec-Funktion implementiert
+  - COW (Copy-on-Write) für Vektoren implementiert
+  - mutable_flag entfernt, COW-Implementierung
+  - Vector-Parser optimiert ohne temporäre Buffer
+- Namespace & Module System: ✅ COMPLETED
+  - Clojure-kompatible require-Funktion mit Namespace-Aliases
+  - refer und refer-all Funktionalität
+  - Verbesserte Clojure-Kompatibilität
+- Clojure Compatibility: ✅ COMPLETED
+  - next und rest sind Clojure-kompatibel
+  - Native vector für Clojure-kompatible (vector) Builtin
+- Test Framework Enhancements: ✅ COMPLETED (Partially)
+  - JUnit-Style Test-Output mit TRY/CATCH Exception-Handling
+  - Test-Counting bei unhandled Exceptions gefixt
+  - High-Level API statt Low-Level eval_list()
+  - 330 Tests, 0 Failures, 0 Ignored
+  - Remaining: Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
+  - Remaining: Implement individual test execution: `./unity-tests memory allocation`
+  - Remaining: Add CTest integration for CI/CD pipeline
+  - Remaining: Performance benchmarks for test execution time
 
 Planned
 -------

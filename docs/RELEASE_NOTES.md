@@ -1,6 +1,51 @@
-# Tiny-CLJ Release Notes (2025-01-26)
+# Tiny-CLJ Release Notes (2025-11-06)
 
 ## Latest Updates (Recent Commits)
+
+### Code Refactoring & Architecture Improvements (Latest)
+- **Object.c Refactoring**: Auslagerung von Funktionen aus object.c in thematische Dateien
+  - String-Formatierung (to_string, pr_str, print_str) nach strings.c
+  - Exception-Erstellung (make_exception) nach exception.c
+  - Object-Erstellung: make_list nach list.c, make_function nach function.c
+  - Environment-Funktionen nach environment.c
+  - Function-Call-Funktionen nach function_call.c
+  - Equality-Funktion (clj_equal) nach equality.c
+  - Metadata-Funktionen nach meta.c
+  - CMakeLists.txt aktualisiert für neue Dateien
+  - Alle Warnungen behoben (const char* statt char*)
+- **Code Quality**: Entfernung redundanter eval-Funktionen und Memory-Management-Optimierungen
+- **Symbol Refactoring**: Symbol-Tabellen-Funktionen von object.c nach symbol.c verschoben
+- **Test Coverage**: 330 Tests, 0 Failures, 0 Ignored
+
+### Atom Implementation & Clojure Compatibility (Recent)
+- **Atom Data Type**: Implementierung von Clojure-Atom mit Test-First-Ansatz
+- **Atom Functions**: Vollständige Atom-API mit Tests
+- **Memory Management**: Korrekte Reference Counting für Atoms
+- **Test Coverage**: Atom-Tests erfolgreich integriert
+
+### Namespace & Module System (Recent)
+- **Require Function**: Clojure-kompatible require-Funktion implementiert
+- **Namespace Aliases**: Unterstützung für Namespace-Aliases
+- **Refer Mechanisms**: refer und refer-all Funktionalität
+- **Clojure Compatibility**: Verbesserte Kompatibilität mit Clojure-Namespace-System
+
+### Vector Functions & COW Optimization (Recent)
+- **vec Function**: Implementierung der vec-Funktion mit Test-First-Ansatz
+- **COW for Vectors**: Copy-on-Write für Vektoren implementiert
+- **Mutable Flag Removal**: Entfernung von mutable_flag, Implementierung von COW
+- **Vector Parser**: Optimierung des Vector-Parsers ohne temporäre Buffer
+- **nil Handling**: Korrekte Behandlung von nil-Werten in vec und list Iteration
+
+### Test Framework Improvements (Recent)
+- **JUnit-Style Output**: JUnit-ähnliche Test-Ausgabe mit TRY/CATCH Exception-Handling
+- **Test Counting**: Fix für Test-Counting bei unhandled Exceptions
+- **Test Refactoring**: High-Level API statt Low-Level eval_list()
+- **Test Consolidation**: Konsolidierung von COW-Tests und Test-Runner-Cleanup
+
+### Clojure Compatibility Improvements (Recent)
+- **next/rest Functions**: next und rest sind jetzt Clojure-kompatibel
+- **Function Cleanup**: Entfernung von map_assoc und clj_equal_id Funktionen
+- **Native Vector**: Implementierung von native_vector für Clojure-kompatible (vector) Builtin
 
 ### High-Level Test Refactoring & Vector Functions (2025-01-26)
 - **Test Refactoring**: All go-block tests now use high-level `eval_string()` API instead of low-level `eval_list()`
@@ -73,3 +118,5 @@
 ## Notes
 - UTF-8 support: validation & iteration only; normalization intentionally omitted.
 - Singletons are never autoreleased; exceptions follow explicit ownership rules.
+- Code architecture: object.c wurde deutlich reduziert durch Auslagerung in thematische Dateien (strings.c, exception.c, function.c, environment.c, equality.c, meta.c).
+- Test coverage: 330 Tests, 0 Failures, 0 Ignored - alle Tests bestehen nach Refactoring.
