@@ -85,6 +85,22 @@ TEST(test_parse_metadata) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
     
+#ifdef ENABLE_META
+    // Test that metadata is stored
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE(is_type((CljObject*)meta, CLJ_MAP));
+    
+    // Test that metadata contains the key-value pair
+    CljObject *kw_key = intern_symbol_global(":key");
+    CljObject *kw_value = intern_symbol_global(":value");
+    if (kw_key && kw_value) {
+        CljValue meta_value = map_get((CljValue)meta, (CljValue)kw_key);
+        TEST_ASSERT_NOT_NULL(meta_value);
+        TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
+    }
+#endif // ENABLE_META
+    
     evalstate_free(eval_state);
 }
 
@@ -319,6 +335,214 @@ TEST(test_parse_from_reader_multiple_expressions) {
     
     evalstate_free(eval_state);
 }
+
+// ============================================================================
+// META INFORMATION TESTS
+// ============================================================================
+
+#ifdef ENABLE_META
+
+TEST(test_meta_set_and_get) {
+    EvalState *eval_state = evalstate_new();
+    
+    // Create a test object
+    CljObject *obj = (CljObject*)make_string("test");
+    TEST_ASSERT_NOT_NULL(obj);
+    
+    // Create metadata map
+    CljMap *meta_map = make_map(2);
+    TEST_ASSERT_NOT_NULL(meta_map);
+    
+    CljObject *kw_doc = intern_symbol_global(":doc");
+    CljObject *doc_str = (CljObject*)make_string("Test documentation");
+    if (kw_doc && doc_str) {
+        (void)map_assoc((CljValue)meta_map, (CljValue)kw_doc, (CljValue)doc_str);
+        RELEASE(doc_str);
+    }
+    
+    // Set metadata
+    meta_set(obj, (CljObject*)meta_map);
+    RELEASE((CljObject*)meta_map);
+    
+    // Get metadata
+    ID retrieved_meta = meta_get(obj);
+    TEST_ASSERT_NOT_NULL(retrieved_meta);
+    TEST_ASSERT_TRUE(is_type((CljObject*)retrieved_meta, CLJ_MAP));
+    
+    // Verify metadata content
+    if (kw_doc) {
+        CljValue doc_value = map_get((CljValue)retrieved_meta, (CljValue)kw_doc);
+        TEST_ASSERT_NOT_NULL(doc_value);
+        TEST_ASSERT_TRUE(is_type((CljObject*)doc_value, CLJ_STRING));
+    }
+    
+    RELEASE(obj);
+    evalstate_free(eval_state);
+}
+
+TEST(test_meta_automatic_sourcecode_references) {
+    EvalState *eval_state = evalstate_new();
+    
+    // Set file and namespace for source code references
+    eval_state->file = "test.clj";
+    eval_state->current_ns = ns_get_or_create("test", "test.clj");
+    
+    // Parse metadata - should automatically add :line, :column, :file, :ns
+    Reader reader;
+    reader_init(&reader, "^{:key :value} 42");
+    CljObject *result = (CljObject*)parse_from_reader(&reader, eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    
+    // Get metadata
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE(is_type((CljObject*)meta, CLJ_MAP));
+    
+    // Check for automatic source code references
+    if (SYM_KW_LINE) {
+        CljValue line_value = map_get((CljValue)meta, (CljValue)SYM_KW_LINE);
+        TEST_ASSERT_NOT_NULL(line_value);
+        TEST_ASSERT_TRUE(is_fixnum(line_value));
+        TEST_ASSERT_TRUE(as_fixnum(line_value) > 0);
+    }
+    
+    // Check :column (not a special symbol, use intern_symbol_global)
+    CljObject *kw_column = intern_symbol_global(":column");
+    if (kw_column) {
+        CljValue column_value = map_get((CljValue)meta, (CljValue)kw_column);
+        TEST_ASSERT_NOT_NULL(column_value);
+        TEST_ASSERT_TRUE(is_fixnum(column_value));
+        TEST_ASSERT_TRUE(as_fixnum(column_value) > 0);
+    }
+    
+    if (SYM_KW_FILE && eval_state->file) {
+        CljValue file_value = map_get((CljValue)meta, (CljValue)SYM_KW_FILE);
+        TEST_ASSERT_NOT_NULL(file_value);
+        TEST_ASSERT_TRUE(is_type((CljObject*)file_value, CLJ_STRING));
+    }
+    
+    if (SYM_KW_NS && eval_state->current_ns && eval_state->current_ns->name) {
+        CljValue ns_value = map_get((CljValue)meta, (CljValue)SYM_KW_NS);
+        TEST_ASSERT_NOT_NULL(ns_value);
+        // Namespace name should be a symbol
+        TEST_ASSERT_TRUE(is_type((CljObject*)ns_value, CLJ_SYMBOL));
+    }
+    
+    RELEASE(result);
+    evalstate_free(eval_state);
+}
+
+TEST(test_meta_merge_does_not_overwrite) {
+    EvalState *eval_state = evalstate_new();
+    
+    // Create existing metadata with :line
+    CljMap *existing_meta = make_map(2);
+    TEST_ASSERT_NOT_NULL(existing_meta);
+    
+    if (SYM_KW_LINE) {
+        (void)map_assoc((CljValue)existing_meta, (CljValue)SYM_KW_LINE, fixnum(100));
+    }
+    
+    // Create location metadata with :line
+    Reader reader;
+    reader_init(&reader, "test");
+    CljObject *location_meta = make_location_meta(&reader, eval_state);
+    TEST_ASSERT_NOT_NULL(location_meta);
+    
+    // Merge - existing :line should not be overwritten
+    CljObject *merged = meta_merge((CljObject*)existing_meta, location_meta);
+    TEST_ASSERT_NOT_NULL(merged);
+    
+    // Check that existing :line is preserved
+    if (SYM_KW_LINE) {
+        CljValue line_value = map_get((CljValue)merged, (CljValue)SYM_KW_LINE);
+        TEST_ASSERT_NOT_NULL(line_value);
+        TEST_ASSERT_TRUE(is_fixnum(line_value));
+        TEST_ASSERT_EQUAL_INT(100, as_fixnum(line_value)); // Should be original value, not location value
+    }
+    
+    RELEASE((CljObject*)existing_meta);
+    RELEASE(location_meta);
+    if (merged != (CljObject*)existing_meta) {
+        RELEASE(merged);
+    }
+    evalstate_free(eval_state);
+}
+
+TEST(test_meta_clojure_compatible_keys) {
+    EvalState *eval_state = evalstate_new();
+    
+    // Ensure special symbols are initialized
+    init_special_symbols();
+    
+    // Test that Clojure-compatible keys exist
+    TEST_ASSERT_NOT_NULL(SYM_KW_LINE);
+    TEST_ASSERT_NOT_NULL(SYM_KW_FILE);
+    TEST_ASSERT_NOT_NULL(SYM_KW_NS);
+    
+    // Test :column keyword
+    CljObject *kw_column = intern_symbol_global(":column");
+    TEST_ASSERT_NOT_NULL(kw_column);
+    
+    // Create location metadata
+    Reader reader;
+    reader_init(&reader, "test");
+    CljObject *location_meta = make_location_meta(&reader, eval_state);
+    TEST_ASSERT_NOT_NULL(location_meta);
+    
+    // Verify all Clojure-compatible keys are present
+    if (SYM_KW_LINE) {
+        CljValue line_value = map_get((CljValue)location_meta, (CljValue)SYM_KW_LINE);
+        TEST_ASSERT_NOT_NULL(line_value);
+        TEST_ASSERT_TRUE(is_fixnum(line_value));
+    }
+    
+    if (kw_column) {
+        CljValue column_value = map_get((CljValue)location_meta, (CljValue)kw_column);
+        TEST_ASSERT_NOT_NULL(column_value);
+        TEST_ASSERT_TRUE(is_fixnum(column_value));
+    }
+    
+    RELEASE(location_meta);
+    evalstate_free(eval_state);
+}
+
+TEST(test_meta_clear) {
+    EvalState *eval_state = evalstate_new();
+    
+    // Create a test object
+    CljObject *obj = (CljObject*)make_string("test");
+    TEST_ASSERT_NOT_NULL(obj);
+    
+    // Create and set metadata
+    CljMap *meta_map = make_map(1);
+    CljObject *kw_doc = intern_symbol_global(":doc");
+    CljObject *doc_str = (CljObject*)make_string("Test");
+    if (kw_doc && doc_str) {
+        (void)map_assoc((CljValue)meta_map, (CljValue)kw_doc, (CljValue)doc_str);
+        RELEASE(doc_str);
+    }
+    
+    meta_set(obj, (CljObject*)meta_map);
+    RELEASE((CljObject*)meta_map);
+    
+    // Verify metadata exists
+    ID meta = meta_get(obj);
+    TEST_ASSERT_NOT_NULL(meta);
+    
+    // Clear metadata
+    meta_clear(obj);
+    
+    // Verify metadata is cleared
+    ID cleared_meta = meta_get(obj);
+    TEST_ASSERT_NULL(cleared_meta);
+    
+    RELEASE(obj);
+    evalstate_free(eval_state);
+}
+
+#endif // ENABLE_META
 
 // ============================================================================
 // TEST GROUPS
