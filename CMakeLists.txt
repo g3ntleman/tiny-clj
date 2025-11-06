@@ -78,6 +78,9 @@ list(APPEND SOURCES
     src/byte_array.c
     src/reader.c
     src/function_call.c
+    src/function.c
+    src/environment.c
+    src/equality.c
     src/event_loop.c
     src/channel.c
     src/list.c
@@ -93,6 +96,7 @@ list(APPEND SOURCES
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
+    src/meta.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -118,6 +122,9 @@ set(STM32_SOURCES
     src/byte_array.c
     src/reader.c
     src/function_call.c
+    src/function.c
+    src/environment.c
+    src/equality.c
     src/list.c
     src/vector.c
     src/map.c
@@ -130,6 +137,7 @@ set(STM32_SOURCES
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
+    src/meta.c
 )
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -150,6 +158,9 @@ add_executable(tiny-clj-esp32
     src/byte_array.c
     src/reader.c
     src/function_call.c
+    src/function.c
+    src/environment.c
+    src/equality.c
     src/list.c
     src/vector.c
     src/map.c
@@ -163,6 +174,7 @@ add_executable(tiny-clj-esp32
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
+    src/meta.c
 )
 
 
@@ -281,6 +293,9 @@ add_executable(unity-tests
     src/parser.c
     src/reader.c
     src/function_call.c
+    src/function.c
+    src/environment.c
+    src/equality.c
     src/event_loop.c
     src/channel.c
     src/list.c
@@ -295,6 +310,7 @@ add_executable(unity-tests
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
+    src/meta.c
     src/repl.c
     src/platform_macos.c
     src/line_editor.c
@@ -341,6 +357,9 @@ set(COMMON_TEST_SOURCES
     src/parser.c
     src/reader.c
     src/function_call.c
+    src/function.c
+    src/environment.c
+    src/equality.c
     src/list.c
     src/seq.c
     src/exception.c
@@ -349,6 +368,7 @@ set(COMMON_TEST_SOURCES
     src/runtime.c
     src/clojure_core.c
     src/line_editor.c
+    src/meta.c
 )
 
 # ============================================================================

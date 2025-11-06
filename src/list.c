@@ -2,6 +2,8 @@
 #include "memory.h"
 #include "value.h"
 #include "symbol.h"
+#include "object.h"
+#include "exception.h"
 #include <stdarg.h>
 
 // Empty-list singleton: CLJ_LIST with rc=0, statically initialized
@@ -19,6 +21,18 @@ static CljList *clj_empty_list_singleton = &clj_empty_list_singleton_data.list;
 /** Return empty-list singleton (rc=0, do not retain/release). */
 CljObject* empty_list(void) {
     return (CljObject*)clj_empty_list_singleton;
+}
+
+CljObject* make_list(ID first, CljList *rest) {
+    CljList *list = ALLOC(CljList, 1);
+    if (!list) throw_oom(CLJ_LIST);
+    
+    list->base.type = CLJ_LIST;
+    list->base.rc = 1;
+    list->first = RETAIN((CljObject*)first);
+    list->rest = RETAIN((CljObject*)rest);
+    
+    return (CljObject*)list;
 }
 
 // List-Operationen für try/catch

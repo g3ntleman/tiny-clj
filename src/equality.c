@@ -1,0 +1,125 @@
+/*
+ * Equality Comparison
+ * 
+ * Structural equality comparison for Clojure values.
+ * Implements clj_equal() for comparing Clojure objects by value.
+ */
+
+#include <string.h>
+#include "object.h"
+#include "value.h"
+#include "symbol.h"
+#include "vector.h"
+#include "map.h"
+#include "strings.h"
+#include "kv_macros.h"
+
+// Forward declaration for empty_string_singleton
+extern CljString* empty_string_singleton;
+
+bool clj_equal(ID a, ID b) {
+    if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
+    if (!a || !b) return false;
+    
+    // Handle tagged integers (fixnums) - most common case
+    if (is_fixnum(a) || is_fixnum(b)) {
+        if (is_fixnum(a) && is_fixnum(b)) {
+            return as_fixnum(a) == as_fixnum(b);
+        }
+        return false;  // Different types
+    }
+    
+    // Handle other immediate types (bool, etc.)
+    if (is_immediate(a) || is_immediate(b)) {
+        if (is_immediate(a) && is_immediate(b)) {
+            return a == b;  // For immediates, pointer equality is sufficient
+        }
+        return false;  // Different types
+    }
+    
+    // Handle CljObject* types
+    CljObject *a_obj = (CljObject*)a;
+    CljObject *b_obj = (CljObject*)b;
+    
+    // Check that both objects have the same type
+    if (!a_obj || !b_obj || a_obj->type != b_obj->type) return false;
+    
+    // Inhalt-Vergleich basierend auf Typ
+    // Hinweis: CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
+    switch (a_obj->type) {
+        // CLJ_INT, CLJ_FLOAT removed - handled as immediates
+            
+        // Komplexe Typen - Inhalt-Vergleich
+        case CLJ_STRING: {
+            CljString *str_a = (CljString*)a;
+            CljString *str_b = (CljString*)b;
+            if (!str_a || !str_b) return false;
+            
+            // Special case: empty string singleton comparison
+            if (str_a == empty_string_singleton && str_b == empty_string_singleton) {
+                return true;
+            }
+            
+            // Compare string data directly
+            return strcmp(str_a->data, str_b->data) == 0;
+        }
+        
+        case CLJ_VECTOR: {
+            CljPersistentVector *vec_a = (CljPersistentVector*)a;
+            CljPersistentVector *vec_b = (CljPersistentVector*)b;
+            if (!vec_a || !vec_b) return false;
+            if (vec_a->count != vec_b->count) return false;
+            for (int i = 0; i < vec_a->count; i++) {
+                // Vektorelemente können immediates oder heap objects sein
+                if (!clj_equal(vec_a->data[i], vec_b->data[i])) return false;
+            }
+            return true;
+        }
+        
+        case CLJ_MAP: {
+            CljMap *map_a = as_map(a);
+            CljMap *map_b = as_map(b);
+            if (!map_a || !map_b) return false;
+            if (map_a->count != map_b->count) return false;
+            for (int i = 0; i < map_a->count; i++) {
+                CljValue key_a = KV_KEY(map_a->data, i);
+                CljValue val_a = KV_VALUE(map_a->data, i);
+                CljValue val_b = map_get(b, key_a);
+                // Map-Werte können immediates oder heap objects sein
+                if (!clj_equal(val_a, val_b)) return false;
+            }
+            return true;
+        }
+        
+        case CLJ_SYMBOL: {
+            // Symbol comparison: name and namespace must match
+            CljSymbol *sym_a = as_symbol(a);
+            CljSymbol *sym_b = as_symbol(b);
+            if (!sym_a || !sym_b) return false;
+            if (!sym_a->name || !sym_b->name) return false;
+            if (strcmp(sym_a->name, sym_b->name) != 0) return false;
+            
+            // Compare namespaces (both NULL or both same object)
+            if (sym_a->ns == sym_b->ns) return true;
+            if (!sym_a->ns || !sym_b->ns) return false;
+            
+            // Both have namespaces - compare their names
+            CljSymbol *ns_a = as_symbol(sym_a->ns->name);
+            CljSymbol *ns_b = as_symbol(sym_b->ns->name);
+            if (!ns_a || !ns_b) return false;
+            return strcmp(ns_a->name, ns_b->name) == 0;
+        }
+        
+        // Referenz-Typen - nur Pointer-Vergleich (bereits durch a == b abgefangen)
+        case CLJ_LIST:
+        case CLJ_FUNC:
+        case CLJ_CLOSURE:
+            // Functions are only equal if they're the same instance
+            return a == b;
+        
+        // Unbekannte oder nicht unterstützte Typen
+        default:
+            return false;
+    }
+}
+

@@ -1,0 +1,38 @@
+/*
+ * Environment Management
+ * 
+ * Functions for managing execution environments (variable bindings).
+ * Stack-based environment implementation for function calls.
+ */
+
+#include <stdlib.h>
+#include "environment.h"
+#include "object.h"
+#include "map.h"
+#include "memory.h"
+#include "runtime.h"
+
+CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject **values, int count) {
+    if (count > MAX_FUNCTION_PARAMS) return NULL;
+    (void)parent_env; (void)params; (void)values;
+    
+    // Simplified implementation: just return an empty map
+    // Parameter binding skipped for this stage
+    CljMap *new_env = make_map(4);
+    
+    return (CljObject*)new_env;
+}
+
+ID env_get_stack(CljObject *env, CljObject *key) {
+    if (!env || !key) return NULL;
+    
+    // Direct map lookup
+    return (ID)map_get((CljValue)env, (CljValue)key);
+}
+
+void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
+    if (!env || !key) return;
+    
+    (void)map_assoc_cow(env, key, value);
+}
+

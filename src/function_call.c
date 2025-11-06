@@ -2628,3 +2628,55 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     // Return the result of the evaluated expression (Clojure-compatible: return the value)
     return result;
 }
+
+// ============================================================================
+// FUNCTION CALL IMPLEMENTATION
+// ============================================================================
+
+CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv) {
+    if (!is_type(fn, CLJ_FUNC)) return NULL;
+    
+    // Arity check
+    CljFunction *func = as_function(fn);
+    if (!func) {
+        return (CljObject*)make_exception("Error", "Invalid function object", NULL, 0, 0);
+    }
+    if (argc != func->param_count) {
+        return (CljObject*)make_exception("Error", "Arity mismatch in function call", NULL, 0, 0);
+    }
+    
+    // Heap-allocated parameter array
+    CljObject **heap_params = (CljObject**)malloc(sizeof(CljObject*) * argc);
+    for (int i = 0; i < argc; i++) {
+        heap_params[i] = RETAIN(argv[i]);
+    }
+    
+    // Extend environment with parameters
+    CljObject *call_env = env_extend_stack(func->closure_env, func->params, heap_params, argc);
+    if (!call_env) {
+        DEALLOC(heap_params);
+        return (CljObject*)make_exception("Error", "Failed to create function environment", NULL, 0, 0);
+    }
+    
+    // Evaluate function body (simplified; would normally call eval())
+    CljObject *result = func->body ? RETAIN(func->body) : NULL;
+    
+    // Release environment and parameter array
+    RELEASE(call_env);
+    DEALLOC(heap_params);
+    
+    return result;
+}
+
+CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObject *env) {
+    if (!is_type(fn, CLJ_FUNC)) return NULL;
+    (void)env;
+    
+    // Evaluate arguments (simplified; would normally call eval())
+    CljObject **eval_args = STACK_ALLOC(CljObject*, argc);
+    for (int i = 0; i < argc; i++) {
+        eval_args[i] = RETAIN(args[i]);
+    }
+    
+    return clj_call_function(fn, argc, eval_args);
+}

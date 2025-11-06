@@ -12,14 +12,48 @@
 #include "exception.h"
 #include "error_messages.h"
 #include "runtime.h"
-#include "object.h"  // For make_exception
+#include "object.h"
+#include "memory.h"
 #include "clj_strings.h"  // For to_string
+
+// Safe string copy helper
+static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
+    if (!dest || !src || dest_size == 0) return;
+    strncpy(dest, src, dest_size - 1);
+    dest[dest_size - 1] = '\0';
+}
 
 // Global storage for current exception
 CLJException *g_current_exception = NULL;
 
 // Global exception stack (independent of EvalState)
 GlobalExceptionStack global_exception_stack = {0};
+
+// ============================================================================
+// EXCEPTION CREATION
+// ============================================================================
+
+/** @brief Create exception with reference counting */
+CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col) {
+    if (!type || !message) return NULL;
+    
+    CLJException *exc = ALLOC(CLJException, 1);
+    if (!exc) return NULL;
+    
+    // Initialize base object
+    exc->base.type = CLJ_EXCEPTION;
+    exc->base.rc = 1;  // Start with reference count 1
+    
+    // Copy strings directly into the structure (no strdup needed)
+    safe_strncpy(exc->type, type, sizeof(exc->type));
+    safe_strncpy(exc->message, message, sizeof(exc->message));
+    safe_strncpy(exc->file, file ? file : "", sizeof(exc->file));
+    
+    exc->line = line;
+    exc->col = col;
+    
+    return exc;
+}
 
 // ============================================================================
 // STATIC EXCEPTION TYPE CONSTANTS
@@ -126,9 +160,9 @@ void throw_exception_object(CLJException *ex) {
     if (!global_exception_stack.top) {
         // No handler - unhandled exception
 #ifdef DEBUG
-        char *str = to_string((CljObject*)ex); 
+        const char *str = to_string((CljObject*)ex); 
         fprintf(stderr, "UNHANDLED: %s\n", str ? str : "<null>");
-        free(str);
+        free((void*)str);
 #endif
         
         // No handler - unhandled exception (exit as before)
