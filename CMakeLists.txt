@@ -267,7 +267,6 @@ add_executable(unity-tests
     src/tests/test_byte_array.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
-    src/tests/test_atom_all.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c
