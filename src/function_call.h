@@ -12,8 +12,6 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env);
 ID eval_body(ID body, CljMap *env, EvalState *st);
 ID eval_list(CljList *list, CljMap *env, EvalState *st);
 
-ID eval_equal(CljList *list, CljMap *env);
-
 // Definition und Funktionen
 ID eval_def(CljList *list, CljMap *env, EvalState *st);
 ID eval_ns(CljList *list, CljMap *env, EvalState *st);

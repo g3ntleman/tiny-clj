@@ -1573,20 +1573,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
 }
 
 
-ID eval_equal(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    CljObject *a = eval_arg_retained(list, 1, env);
-    CljObject *b = eval_arg_retained(list, 2, env);
-    
-    if (!a || !b) return NULL;
-    
-    bool equal = clj_equal(a, b);
-    return equal ? clj_true : clj_false;
-}
-
-
-
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
