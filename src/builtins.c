@@ -301,11 +301,11 @@ ID native_first(ID *args, unsigned int argc) {
         
         default: {
             // Use seq implementation for other types (vectors, maps, strings)
-            CljObject *seq = seq_create(coll);
+            CljSeqIterator *seq = make_seq(coll);
             if (!seq) return NULL;
             
-            CljObject *result = seq_first(seq);
-            seq_release(seq);
+            CljObject *result = seq_first((CljObject*)seq);
+            seq_release((CljObject*)seq);
             
             return result;
         }
@@ -342,14 +342,14 @@ ID native_next(ID *args, unsigned int argc) {
             }
             
             // Use CljSeqIterator (existing!) instead of copying
-            CljObject *seq = seq_create(coll);
+            CljSeqIterator *seq = make_seq(coll);
             if (!seq) return NULL;
             
             // Return next of sequence (DRY: uses seq_next which handles empty case)
-            CljObject *next_seq = seq_next(seq);
+            CljObject *next_seq = seq_next((CljObject*)seq);
             
             // Free the intermediate seq object to prevent memory leak
-            seq_release(seq);
+            seq_release((CljObject*)seq);
             
             return next_seq;  // May be NULL if empty
         }
@@ -408,7 +408,7 @@ ID native_cons(ID *args, unsigned int argc) {
         
         default: {
             // Vektor oder andere → zu Seq konvertieren
-            CljObject *seq = seq_create(coll);
+            CljSeqIterator *seq = make_seq(coll);
             if (!seq) {
                 result = make_list(elem, NULL);
             } else {
@@ -727,7 +727,7 @@ ID native_vec(ID *args, unsigned int argc) {
     }
     
     // Use stack-based iterator to iterate through collection (avoid code duplication)
-    // This is more efficient than heap-based seq_create and avoids memory leaks
+    // This is more efficient than heap-based make_seq and avoids memory leaks
     SeqIterator iter;
     if (!seq_iter_init(&iter, coll)) {
         // Empty collection - return empty vector (Clojure behavior: (vec '()) => [])

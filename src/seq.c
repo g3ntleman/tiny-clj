@@ -211,7 +211,7 @@ int seq_iter_position(const SeqIterator *iter) {
 // COMPATIBILITY LAYER (Heap-based API)
 // ============================================================================
 
-CljObject* seq_create(ID obj) {
+CljSeqIterator* make_seq(ID obj) {
     // Handle nil and empty collections - return nil singleton
     if (!obj) return NULL;
     
@@ -243,7 +243,7 @@ CljObject* seq_create(ID obj) {
         return NULL;
     }
     
-    return (CljObject*)heap_seq;
+    return heap_seq;
 }
 
 void seq_release(ID seq_obj) {

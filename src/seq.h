@@ -122,7 +122,7 @@ typedef struct {
 /**
  * @brief Create heap-allocated seq (legacy compatibility)
  */
-CljObject* seq_create(ID obj);
+CljSeqIterator* make_seq(ID obj);
 
 /**
  * @brief Heap-based seq API (legacy compatibility, uses stack implementation internally)

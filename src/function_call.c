@@ -1884,10 +1884,10 @@ ID eval_seq(CljList *list, CljMap *env) {
         
         default: {
             // For other seqable types, return SeqIterator directly
-            CljObject *seq = AUTORELEASE(seq_create(arg));
+            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE((CljObject*)make_seq(arg));
             if (!seq) return NULL;
             
-            return seq;
+            return (CljObject*)seq;
         }
     }
 }
@@ -1958,10 +1958,10 @@ ID eval_for(CljList *list, CljMap *env) {
     CljObject *result = empty_list();
     
     // Iterate over collection using seq
-    CljObject *seq = seq_create(collection);
+    CljSeqIterator *seq = make_seq(collection);
     if (seq) {
-        while (!seq_empty(seq)) {
-            CljObject *element = (CljObject*)seq_first(seq);
+        while (!seq_empty((CljObject*)seq)) {
+            CljObject *element = (CljObject*)seq_first((CljObject*)seq);
             
             // Create new environment with binding using helper
             CljMap *new_env = extend_env_with_binding(env, var, element);
@@ -1977,12 +1977,12 @@ ID eval_for(CljList *list, CljMap *env) {
             }
             
             // Move to next element
-            CljObject *next = (CljObject*)seq_next(seq);
-            seq_release(seq);
-            seq = next;
+            CljObject *next = (CljObject*)seq_next((CljObject*)seq);
+            seq_release((CljObject*)seq);
+            seq = (CljSeqIterator*)next;
         }
         // Clean up final seq iterator (not returned as value)
-        seq_release(seq);
+        seq_release((CljObject*)seq);
     }
     
     RELEASE(collection);
@@ -2027,10 +2027,10 @@ ID eval_doseq(CljList *list, CljMap *env) {
     }
     
     // Iterate over collection using seq
-    CljObject *seq = seq_create(collection);
+    CljSeqIterator *seq = make_seq(collection);
     if (seq) {
-        while (!seq_empty(seq)) {
-            CljObject *element = (CljObject*)seq_first(seq);
+        while (!seq_empty((CljObject*)seq)) {
+            CljObject *element = (CljObject*)seq_first((CljObject*)seq);
             
             // Create new environment with binding using helper
             CljMap *new_env = extend_env_with_binding(env, var, element);
@@ -2046,12 +2046,12 @@ ID eval_doseq(CljList *list, CljMap *env) {
             }
             
             
-            CljObject *next = (CljObject*)seq_next(seq);
-            seq_release(seq);
-            seq = next;
+            CljObject *next = (CljObject*)seq_next((CljObject*)seq);
+            seq_release((CljObject*)seq);
+            seq = (CljSeqIterator*)next;
         }
         // Clean up final seq iterator
-        seq_release(seq);
+        seq_release((CljObject*)seq);
     }
     
     // Clean up allocated objects

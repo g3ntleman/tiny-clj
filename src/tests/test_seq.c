@@ -16,16 +16,16 @@
 // SEQ CREATION TESTS
 // ============================================================================
 
-TEST(test_seq_create_list) {
+TEST(test_make_seq_list) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test with nil first
-        CljObject *seq_nil = seq_create(NULL);
+        CljSeqIterator *seq_nil = make_seq(NULL);
         TEST_ASSERT_EQUAL_PTR(NULL, seq_nil);
     }
 }
 
-TEST(test_seq_create_vector) {
+TEST(test_make_seq_vector) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
@@ -39,18 +39,18 @@ TEST(test_seq_create_vector) {
         vec_data->count = TEST_VECTOR_SIZE;
         
         // Create sequence iterator
-        CljObject *seq = seq_create((CljObject*)vec);
+        CljSeqIterator *seq = make_seq((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(seq);
         CljSeqIterator *seq_iter = as_seq((ID)seq);
         TEST_ASSERT_NOT_NULL(seq_iter);
         
         // Test sequence properties
-        TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->base.type);
         // Note: seq_iter->count may not be available in current implementation
     }
 }
 
-TEST(test_seq_create_string) {
+TEST(test_make_seq_string) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test string
@@ -58,18 +58,18 @@ TEST(test_seq_create_string) {
         TEST_ASSERT_NOT_NULL(str);
         
         // Create sequence iterator
-        CljObject *seq = seq_create((CljObject*)str);
+        CljSeqIterator *seq = make_seq((CljObject*)str);
         TEST_ASSERT_NOT_NULL(seq);
         CljSeqIterator *seq_iter = as_seq((ID)seq);
         TEST_ASSERT_NOT_NULL(seq_iter);
         
         // Test sequence properties
-        TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->base.type);
         // Note: seq_iter->count may not be available in current implementation
     }
 }
 
-TEST(test_seq_create_map) {
+TEST(test_make_seq_map) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test map
@@ -77,9 +77,9 @@ TEST(test_seq_create_map) {
         TEST_ASSERT_NOT_NULL(map);
         
         // Create sequence iterator - may return NULL for empty map
-        CljObject *seq = seq_create((CljObject*)map);
+        CljSeqIterator *seq = make_seq((CljObject*)map);
         (void)seq; // Suppress unused variable warning
-        // Note: seq_create may return NULL for empty maps - this is expected behavior
+        // Note: make_seq may return NULL for empty maps - this is expected behavior
         // TEST_ASSERT_NOT_NULL(seq); // Commented out - NULL is valid for empty maps
     }
 }
@@ -102,8 +102,8 @@ TEST(test_seq_first) {
         vec_data->count = 3;
         
         // Create sequence and test first
-        CljObject *seq = seq_create((CljObject*)vec);
-        CljObject *first_elem = (CljObject*)seq_first(seq);
+        CljSeqIterator *seq = make_seq((CljObject*)vec);
+        CljObject *first_elem = (CljObject*)seq_first((CljObject*)seq);
         TEST_ASSERT_NOT_NULL(first_elem);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)first_elem));
         TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)first_elem));
@@ -124,8 +124,8 @@ TEST(test_seq_rest) {
         vec_data->count = 3;
         
         // Create sequence and test rest
-        CljObject *seq = seq_create((CljObject*)vec);
-        CljObject *rest_seq = (CljObject*)seq_rest(seq);
+        CljSeqIterator *seq = make_seq((CljObject*)vec);
+        CljObject *rest_seq = (CljObject*)seq_rest((CljObject*)seq);
         TEST_ASSERT_NOT_NULL(rest_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
     }
@@ -145,8 +145,8 @@ TEST(test_seq_next) {
         vec_data->count = 3;
         
         // Create sequence and test next
-        CljObject *seq = seq_create((CljObject*)vec);
-        CljObject *next_seq = (CljObject*)seq_next(seq);
+        CljSeqIterator *seq = make_seq((CljObject*)vec);
+        CljObject *next_seq = (CljObject*)seq_next((CljObject*)seq);
         TEST_ASSERT_NOT_NULL(next_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, next_seq->type);
     }
@@ -163,19 +163,19 @@ TEST(test_seq_rest_vs_next_difference) {
             vec_data->data[1] = fixnum(2);
             vec_data->count = 2;
             
-            CljObject *seq = seq_create((CljObject*)vec);
+            CljSeqIterator *seq = make_seq((CljObject*)vec);
             
             // rest should return a sequence (even if empty later)
-            CljObject *rest_seq = (CljObject*)seq_rest(seq);
+            CljObject *rest_seq = (CljObject*)seq_rest((CljObject*)seq);
             TEST_ASSERT_NOT_NULL(rest_seq);
             TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
             
             // next should return a sequence (non-empty)
-            CljObject *next_seq = (CljObject*)seq_next(seq);
+            CljObject *next_seq = (CljObject*)seq_next((CljObject*)seq);
             TEST_ASSERT_NOT_NULL(next_seq);
             TEST_ASSERT_EQUAL_INT(CLJ_SEQ, next_seq->type);
             
-            seq_release(seq);
+            seq_release((CljObject*)seq);
             seq_release(rest_seq);
             seq_release(next_seq);
         }
@@ -187,19 +187,19 @@ TEST(test_seq_rest_vs_next_difference) {
             vec_data->data[0] = fixnum(42);
             vec_data->count = 1;
             
-            CljObject *seq = seq_create((CljObject*)vec);
+            CljSeqIterator *seq = make_seq((CljObject*)vec);
             
             // rest should return empty sequence (not nil!)
-            CljObject *rest_seq = (CljObject*)seq_rest(seq);
+            CljObject *rest_seq = (CljObject*)seq_rest((CljObject*)seq);
             TEST_ASSERT_NOT_NULL(rest_seq);
             TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
             TEST_ASSERT_TRUE(seq_empty(rest_seq));  // Should be empty sequence
             
             // next should return nil (not empty sequence!)
-            CljObject *next_seq = (CljObject*)seq_next(seq);
+            CljObject *next_seq = (CljObject*)seq_next((CljObject*)seq);
             TEST_ASSERT_EQUAL_PTR(NULL, next_seq);  // nil = NULL
             
-            seq_release(seq);
+            seq_release((CljObject*)seq);
             seq_release(rest_seq);
             // next_seq is NULL, no need to release
         }
@@ -233,8 +233,8 @@ TEST(test_seq_equality) {
         vec2_data->count = 2;
         
         // Create sequences
-        CljObject *seq1 = seq_create((CljObject*)vec1);
-        CljObject *seq2 = seq_create((CljObject*)vec2);
+        CljSeqIterator *seq1 = make_seq((CljObject*)vec1);
+        CljSeqIterator *seq2 = make_seq((CljObject*)vec2);
         
         TEST_ASSERT_NOT_NULL(seq1);
         TEST_ASSERT_NOT_NULL(seq2);
