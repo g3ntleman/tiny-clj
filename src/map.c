@@ -91,7 +91,7 @@ ID map_get(CljValue map, CljValue key) {
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC.
  * Hot-path (RC=1, key not found, capacity OK): Minimal branches, direct in-place mutation.
  */
-CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value) {
+CljValue map_assoc(CljValue map, CljValue key, CljValue value) {
   CljObject *map_obj = (CljObject*)map;
   CljObject *key_obj = (CljObject*)key;
   CljObject *value_obj = (CljObject*)value;
@@ -264,7 +264,7 @@ void map_put(CljValue map, CljValue key, CljValue value) {
   CljMap *map_data = as_map(map_obj);
   if (!map_data)
     return;
-  // Note: map_put() cannot grow embedded arrays - use map_assoc_cow() instead
+  // Note: map_put() cannot grow embedded arrays - use map_assoc() instead
   // This function is deprecated for embedded array approach
   KV_ASSIGN_PAIR(map_data->data, map_data->count, key_obj, value_obj);
   map_data->count++;

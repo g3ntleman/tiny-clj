@@ -33,6 +33,6 @@ ID env_get_stack(CljObject *env, CljObject *key) {
 void env_set_stack(CljObject *env, CljObject *key, CljObject *value) {
     if (!env || !key) return;
     
-    (void)map_assoc_cow(env, key, value);
+    (void)map_assoc(env, key, value);
 }
 

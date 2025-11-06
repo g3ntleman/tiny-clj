@@ -80,6 +80,7 @@ extern CljObject *SYM_KW_FILE;
 extern CljObject *SYM_KW_DOC;
 extern CljObject *SYM_KW_ERROR;
 extern CljObject *SYM_KW_STACK;
+extern CljObject *SYM_KW_NS;
 
 // Symbol interning with a real symbol table
 typedef struct SymbolEntry {

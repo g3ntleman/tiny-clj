@@ -79,7 +79,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     CljObject *v = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)sym);
     if (v) {
         // Cache the result for future lookups
-        (void)map_assoc_cow((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+        (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
         return (ID)v;
     }
 
@@ -93,7 +93,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
         v = (CljObject*)map_get((CljValue)((CljNamespace*)g_runtime.clojure_core_cache)->mappings, (CljValue)sym);
         if (v) {
             // Cache the result
-            (void)map_assoc_cow((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
             return (ID)v;
         }
     }
@@ -105,7 +105,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
             v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
             if (v) {
                 // Cache the result
-                (void)map_assoc_cow((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+                (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
                 return (ID)v;
             }
         }
@@ -278,7 +278,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 CljObject *body = (CljObject*)list_nth(as_list(clause), 2);
                 
                 // Bind variable (sym = err) - simplified
-                (void)map_assoc_cow((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);
+                (void)map_assoc((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);
                 result = eval_expr_simple(body, st);
                 return result;
             }
@@ -335,15 +335,15 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     }
     
     // Store symbol-value binding (overwrites existing)
-    // NOTE: map_assoc_cow() already does RETAIN(value) and RETAIN(symbol) internally
+    // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
-    // CRITICAL: map_assoc_cow may return a new map (COW), so we must update ns->mappings
-    CljValue new_mappings = map_assoc_cow((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
+    // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
+    CljValue new_mappings = map_assoc((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
     if (new_mappings != (CljValue)ns->mappings) {
         // Map was copied (COW) - update reference
         RELEASE((CljObject*)ns->mappings);
         ns->mappings = (CljObject*)new_mappings;
-        // new_mappings is already retained by map_assoc_cow
+        // new_mappings is already retained by map_assoc
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
 }
@@ -377,15 +377,15 @@ void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
     }
     
     // Store alias-namespace binding (overwrites existing)
-    // NOTE: map_assoc_cow() already does RETAIN(ns_name) and RETAIN(alias) internally
+    // NOTE: map_assoc() already does RETAIN(ns_name) and RETAIN(alias) internally
     // See src/map.c:98 and src/map.c:106-107
-    // CRITICAL: map_assoc_cow may return a new map (COW), so we must update ns->aliases
-    CljValue new_aliases = map_assoc_cow((CljValue)ns->aliases, (CljValue)alias, (CljValue)ns_name);
+    // CRITICAL: map_assoc may return a new map (COW), so we must update ns->aliases
+    CljValue new_aliases = map_assoc((CljValue)ns->aliases, (CljValue)alias, (CljValue)ns_name);
     if (new_aliases != (CljValue)ns->aliases) {
         // Map was copied (COW) - update reference
         RELEASE((CljObject*)ns->aliases);
         ns->aliases = (CljObject*)new_aliases;
-        // new_aliases is already retained by map_assoc_cow
+        // new_aliases is already retained by map_assoc
     }
     // If new_aliases == ns->aliases, it was in-place mutation (RC=1), no update needed
 }

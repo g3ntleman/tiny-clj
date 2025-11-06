@@ -276,11 +276,11 @@ TEST(test_map_equal_same_maps) {
     CljObject *val2 = make_string("value2");
     
     // Add same key-value pairs to both maps
-    (void)map_assoc_cow((CljValue)map1, key1, val1);
-    (void)map_assoc_cow((CljValue)map1, key2, val2);
+    (void)map_assoc((CljValue)map1, key1, val1);
+    (void)map_assoc((CljValue)map1, key2, val2);
     
-    (void)map_assoc_cow((CljValue)map2, key1, val1);
-    (void)map_assoc_cow((CljValue)map2, key2, val2);
+    (void)map_assoc((CljValue)map2, key1, val1);
+    (void)map_assoc((CljValue)map2, key2, val2);
     
     // Test equality
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -310,11 +310,11 @@ TEST(test_map_equal_different_keys) {
     CljObject *val2 = make_string("value2");
     
     // Add different key-value pairs
-    (void)map_assoc_cow((CljValue)map1, key1, val1);
-    (void)map_assoc_cow((CljValue)map1, key2, val2);
+    (void)map_assoc((CljValue)map1, key1, val1);
+    (void)map_assoc((CljValue)map1, key2, val2);
     
-    (void)map_assoc_cow((CljValue)map2, key1, val1);
-    (void)map_assoc_cow((CljValue)map2, key3, val2); // Different key
+    (void)map_assoc((CljValue)map2, key1, val1);
+    (void)map_assoc((CljValue)map2, key3, val2); // Different key
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -345,11 +345,11 @@ TEST(test_map_equal_different_values) {
     CljObject *val3 = make_string("value3");
     
     // Add same keys but different values
-    (void)map_assoc_cow((CljValue)map1, key1, val1);
-    (void)map_assoc_cow((CljValue)map1, key2, val2);
+    (void)map_assoc((CljValue)map1, key1, val1);
+    (void)map_assoc((CljValue)map1, key2, val2);
     
-    (void)map_assoc_cow((CljValue)map2, key1, val1);
-    (void)map_assoc_cow((CljValue)map2, key2, val3); // Different value
+    (void)map_assoc((CljValue)map2, key1, val1);
+    (void)map_assoc((CljValue)map2, key2, val3); // Different value
     
     // Test inequality
     TEST_ASSERT_FALSE(clj_equal((CljValue)map1, (CljValue)map2));
@@ -379,10 +379,10 @@ TEST(test_map_equal_different_sizes) {
     CljObject *val2 = make_string("value2");
     
     // Add different number of entries
-    (void)map_assoc_cow((CljValue)map1, key1, val1);
-    (void)map_assoc_cow((CljValue)map1, key2, val2);
+    (void)map_assoc((CljValue)map1, key1, val1);
+    (void)map_assoc((CljValue)map1, key2, val2);
     
-    (void)map_assoc_cow((CljValue)map2, key1, val1);
+    (void)map_assoc((CljValue)map2, key1, val1);
     // map2 has only one entry
     
     // Test inequality
@@ -426,11 +426,11 @@ TEST(test_map_equal_with_nested_vectors) {
     CljObject *val_str = make_string("value");
     
     // Add to maps
-    (void)map_assoc_cow((CljValue)map1, key1, vec1);
-    (void)map_assoc_cow((CljValue)map1, val_str, val_str);
+    (void)map_assoc((CljValue)map1, key1, vec1);
+    (void)map_assoc((CljValue)map1, val_str, val_str);
     
-    (void)map_assoc_cow((CljValue)map2, key1, vec2);
-    (void)map_assoc_cow((CljValue)map2, val_str, val_str);
+    (void)map_assoc((CljValue)map2, key1, vec2);
+    (void)map_assoc((CljValue)map2, val_str, val_str);
     
     // Test equality (should be true due to structural equality of vectors)
     TEST_ASSERT_TRUE(clj_equal((CljValue)map1, (CljValue)map2));

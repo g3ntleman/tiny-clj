@@ -52,7 +52,7 @@ CljMap* make_map(int capacity);
 /** Get value for key or NULL if absent (structural key equality). */
 ID map_get(CljValue map, CljValue key);
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
-CljValue map_assoc_cow(CljValue map, CljValue key, CljValue value);
+CljValue map_assoc(CljValue map, CljValue key, CljValue value);
 /** Return a vector of keys (retained). */
 CljValue map_keys(CljValue map);
 /** Return a vector of values (retained). */

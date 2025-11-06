@@ -68,6 +68,7 @@ CljObject *SYM_KW_FILE = NULL;
 CljObject *SYM_KW_DOC = NULL;
 CljObject *SYM_KW_ERROR = NULL;
 CljObject *SYM_KW_STACK = NULL;
+CljObject *SYM_KW_NS = NULL;
 
 // Static symbol structs for special forms (compile-time initialization)
 // These symbols have rc = 1 and use string literals (no strdup needed)
@@ -241,6 +242,9 @@ static struct { CljSymbol sym; } sym_kw_error_data = {
 };
 static struct { CljSymbol sym; } sym_kw_stack_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":stack" }
+};
+static struct { CljSymbol sym; } sym_kw_ns_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = ":ns" }
 };
 
 // Initialisierung der globalen Symbole
@@ -417,6 +421,9 @@ void init_special_symbols() {
     
     SYM_KW_STACK = (CljObject*)&sym_kw_stack_data;
     symbol_table_add(NULL, ":stack", SYM_KW_STACK);
+    
+    SYM_KW_NS = (CljObject*)&sym_kw_ns_data;
+    symbol_table_add(NULL, ":ns", SYM_KW_NS);
 }
 
 // Find symbol in the table

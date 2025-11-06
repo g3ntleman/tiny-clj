@@ -1912,7 +1912,7 @@ static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *e
             // TODO: Implement proper environment copying
         }
         // Add new binding
-        (void)map_assoc_cow((CljObject*)new_env, var, element);
+        (void)map_assoc((CljObject*)new_env, var, element);
     }
     return new_env;
 }
@@ -2134,7 +2134,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                 CljValue key = env->data[i * 2];
                 CljValue val = env->data[i * 2 + 1];
                 if (key) {
-                    (void)map_assoc_cow((CljObject*)let_env, (CljObject*)key, (CljObject*)val);
+                    (void)map_assoc((CljObject*)let_env, (CljObject*)key, (CljObject*)val);
                 }
             }
         }
@@ -2184,7 +2184,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
         }
         
         // Add binding to environment
-        (void)map_assoc_cow((CljObject*)let_env, (CljObject*)sym_val, value);
+        (void)map_assoc((CljObject*)let_env, (CljObject*)sym_val, value);
         
         // Note: value is retained by map_assoc via RETAIN in map implementation
         // So we need to release our reference
@@ -2551,7 +2551,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
             // Don't copy existing environment bindings - just add the loop variable
             // Add new binding
             CljValue i_value = fixnum((int32_t)i);
-                    (void)map_assoc_cow((CljObject*)new_env, var, i_value);
+                    (void)map_assoc((CljObject*)new_env, var, i_value);
             
             // Evaluate all body expressions with new binding
             // body_list can contain multiple expressions

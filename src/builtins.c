@@ -667,7 +667,7 @@ ID native_array_map(ID *args, unsigned int argc) {
     for (unsigned int i = 0; i < argc; i += 2) {
         CljObject *key = (CljObject*)args[i];
         CljObject *value = (CljObject*)args[i + 1];
-        (void)map_assoc_cow((CljValue)map, (CljValue)key, (CljValue)value);
+        (void)map_assoc((CljValue)map, (CljValue)key, (CljValue)value);
     }
     
     return ((CljObject*)map);

@@ -83,8 +83,8 @@ TEST(test_print_str_different_types) {
         
         // Test with map (simplified - just test basic functionality)
         CljMap *map = (CljMap*)make_map(2);
-        map_assoc_cow((CljValue)map, (CljValue)make_string("a"), fixnum(1));
-        map_assoc_cow((CljValue)map, (CljValue)make_string("b"), fixnum(2));
+        map_assoc((CljValue)map, (CljValue)make_string("a"), fixnum(1));
+        map_assoc((CljValue)map, (CljValue)make_string("b"), fixnum(2));
         
         result = print_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);

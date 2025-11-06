@@ -83,7 +83,7 @@ void benchmark_persistent_map() {
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue key = make_string("key");
             CljValue value = fixnum(i);
-            (void)map_assoc_cow(map, key, value);
+            (void)map_assoc(map, key, value);
         }
         
         RELEASE(map);

@@ -361,8 +361,8 @@ void test_embedded_array_single_malloc(void) {
         TEST_ASSERT_EQUAL(0, map->count);
         
         // Add entries to test embedded array
-        map_assoc_cow((CljValue)map, fixnum(1), fixnum(10));
-        map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        map_assoc((CljValue)map, fixnum(1), fixnum(10));
+        map_assoc((CljValue)map, fixnum(2), fixnum(20));
         
         // Verify entries in embedded array
         CljValue val1 = map_get((CljValue)map, fixnum(1));
@@ -386,9 +386,9 @@ void test_embedded_array_memory_efficiency(void) {
         CljMap *map3 = (CljMap*)make_map(8);
         
         // Add entries to each map
-        map_assoc_cow((CljValue)map1, fixnum(1), fixnum(10));
-        map_assoc_cow((CljValue)map2, fixnum(2), fixnum(20));
-        map_assoc_cow((CljValue)map3, fixnum(3), fixnum(30));
+        map_assoc((CljValue)map1, fixnum(1), fixnum(10));
+        map_assoc((CljValue)map2, fixnum(2), fixnum(20));
+        map_assoc((CljValue)map3, fixnum(3), fixnum(30));
         
         // Verify all maps work independently
         TEST_ASSERT_NOT_NULL(map_get((CljValue)map1, fixnum(1)));
@@ -409,7 +409,7 @@ void test_embedded_array_cow(void) {
     
     WITH_AUTORELEASE_POOL({
         CljMap *map = (CljMap*)make_map(4);
-        map_assoc_cow((CljValue)map, fixnum(1), fixnum(10));
+        map_assoc((CljValue)map, fixnum(1), fixnum(10));
         printf("Original map: RC=%d, count=%d\n", map->base.rc, map->count);
         
         // Simulate sharing (RC=2)
@@ -417,7 +417,7 @@ void test_embedded_array_cow(void) {
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // COW operation should create new map with embedded array
-        CljValue new_map = map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        CljValue new_map = map_assoc((CljValue)map, fixnum(2), fixnum(20));
         CljMap *new_map_data = as_map(new_map);
         
         // Verify new map has embedded array
@@ -451,15 +451,15 @@ void test_embedded_array_capacity_growth(void) {
         printf("Initial capacity: %d\n", map->capacity);
         
         // Fill initial capacity
-        map_assoc_cow((CljValue)map, fixnum(1), fixnum(10));
-        map_assoc_cow((CljValue)map, fixnum(2), fixnum(20));
+        map_assoc((CljValue)map, fixnum(1), fixnum(10));
+        map_assoc((CljValue)map, fixnum(2), fixnum(20));
         printf("After filling capacity: %d\n", map->capacity);
         
         // Simulate sharing to trigger COW with growth
         RETAIN(map);
         
         // Add more entries - should trigger COW with capacity growth
-        CljValue new_map = map_assoc_cow((CljValue)map, fixnum(3), fixnum(30));
+        CljValue new_map = map_assoc((CljValue)map, fixnum(3), fixnum(30));
         CljMap *new_map_data = as_map(new_map);
         
         // Verify new map has larger capacity
@@ -486,7 +486,7 @@ void test_embedded_array_performance(void) {
         
         // Simulate loop pattern with embedded arrays
         for (int i = 0; i < 50; i++) {
-            env = (CljMap*)AUTORELEASE(map_assoc_cow((CljValue)env, fixnum(i), fixnum(i * 10)));
+            env = (CljMap*)AUTORELEASE(map_assoc((CljValue)env, fixnum(i), fixnum(i * 10)));
             
             // RC should stay 1 (in-place optimization)
             TEST_ASSERT_EQUAL(1, env->base.rc);

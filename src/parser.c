@@ -829,6 +829,22 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     return NULL;
   }
   meta_set(obj, meta);
+  
+#ifdef ENABLE_META
+  // Automatically add source code location metadata
+  CljObject *location_meta = make_location_meta(reader, st);
+  if (location_meta) {
+    // Merge location metadata with existing metadata (doesn't overwrite)
+    CljObject *merged_meta = meta_merge((CljObject*)meta, location_meta);
+    if (merged_meta != (CljObject*)meta) {
+      // Update meta if it was merged
+      meta_set(obj, merged_meta);
+      RELEASE(merged_meta);
+    }
+    RELEASE(location_meta);
+  }
+#endif // ENABLE_META
+  
   RELEASE(meta);
   return AUTORELEASE(obj);
 }
@@ -855,6 +871,22 @@ static ID parse_meta_map(Reader *reader,
     return NULL;
   }
   meta_set(obj, meta);
+  
+#ifdef ENABLE_META
+  // Automatically add source code location metadata
+  CljObject *location_meta = make_location_meta(reader, st);
+  if (location_meta) {
+    // Merge location metadata with existing metadata (doesn't overwrite)
+    CljObject *merged_meta = meta_merge((CljObject*)meta, location_meta);
+    if (merged_meta != (CljObject*)meta) {
+      // Update meta if it was merged
+      meta_set(obj, merged_meta);
+      RELEASE(merged_meta);
+    }
+    RELEASE(location_meta);
+  }
+#endif // ENABLE_META
+  
   RELEASE(meta);
   return AUTORELEASE(obj);
 }

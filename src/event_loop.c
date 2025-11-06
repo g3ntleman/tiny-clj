@@ -72,8 +72,8 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     
     // Channel handling: reduce RC to 1 for in-place mutation
     // The channel is referenced by both the caller (via return value) and the queue.
-    // To ensure map_assoc_cow mutates in-place (RC=1), we release the queue's reference
-    // before calling map_assoc_cow. This ensures the caller's reference sees the updates.
+    // To ensure map_assoc mutates in-place (RC=1), we release the queue's reference
+    // before calling map_assoc. This ensures the caller's reference sees the updates.
     
     bool released_queue_ref = false;
     
@@ -91,11 +91,11 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         
         if (ok && result) {
             // Put value into channel (will mutate in-place since RC=1)
-            (void)map_assoc_cow((CljValue)task.result_chan, (CljValue)kw_value, (CljValue)result);
+            (void)map_assoc((CljValue)task.result_chan, (CljValue)kw_value, (CljValue)result);
         }
         
         // Close channel (will mutate in-place since RC=1)
-        CljValue new_chan = map_assoc_cow((CljValue)task.result_chan, (CljValue)kw_closed, (CljValue)clj_true);
+        CljValue new_chan = map_assoc((CljValue)task.result_chan, (CljValue)kw_closed, (CljValue)clj_true);
         // Handle COW if it occurred (shouldn't happen with RC=1 for existing key)
         if (new_chan != (CljValue)task.result_chan) {
             if (!released_queue_ref) {

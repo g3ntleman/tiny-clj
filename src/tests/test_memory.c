@@ -192,8 +192,8 @@ TEST(test_cow_assumptions_rc_behavior) {
         printf("After RETAIN: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
-        // Test 3: RC=2 would trigger COW in map_assoc_cow
-        printf("✓ RC=2 would trigger COW in map_assoc_cow\n");
+        // Test 3: RC=2 would trigger COW in map_assoc
+        printf("✓ RC=2 would trigger COW in map_assoc\n");
         
         RELEASE(map);  // Back to RC=1
         printf("After RELEASE: RC=%d\n", map->base.rc);

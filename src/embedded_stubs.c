@@ -104,7 +104,7 @@ CljObject *make_map(void) {
     return make_list(); // Fallback to list
 }
 
-CljObject *map_assoc_cow(CljObject *map, CljObject *key, CljObject *value) {
+CljObject *map_assoc(CljObject *map, CljObject *key, CljObject *value) {
     (void)map;
     (void)key;
     (void)value;
