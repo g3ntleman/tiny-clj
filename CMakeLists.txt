@@ -276,7 +276,9 @@ add_executable(unity-tests
     src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
     src/tests/test_sequences.c
+    src/tests/test_list_resolution.c
     src/tests/test_byte_array.c
+    src/tests/test_keyword_evaluation.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
     external/unity/src/unity.c

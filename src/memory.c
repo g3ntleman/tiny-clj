@@ -134,22 +134,24 @@ void retain(CljObject *v) {
 void release(CljObject *v) {
     if (!v) return;
     
-    // Only show debug output if memory profiling is enabled and verbose mode is on
-    // AND debug output is enabled (after initialization)
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-        printf("🔍 release: Object %p, type=%d (%s), rc=%d -> ", 
-               v, v->type, clj_type_name(v->type), v->rc);
-    }
-    
     // Safety check: ensure the pointer is valid and points to a valid object
     // Check if the pointer is in a reasonable memory range (not in zero page)
     if ((uintptr_t)v < 0x1000) {
         return;
     }
     
-    // Skip singletons (they don't use retain counting)
-    if (!TRACKS_RETAINS(v)) {
+    // Additional safety check: use is_singleton which has better pointer validation
+    // This avoids accessing v->type if v is an invalid pointer
+    if (is_singleton(v)) {
         return;
+    }
+    
+    // Only show debug output if memory profiling is enabled and verbose mode is on
+    // AND debug output is enabled (after initialization)
+    // Move this after the safety checks to avoid accessing v->type on invalid pointers
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+        printf("🔍 release: Object %p, type=%d (%s), rc=%d -> ", 
+               v, v->type, clj_type_name(v->type), v->rc);
     }
     
     // Skip native functions and closures (they are static)

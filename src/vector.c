@@ -18,8 +18,8 @@ static struct {
 static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singleton_data.vec;
 
 /** Return empty vector singleton (rc=0, do not retain/release). */
-CljValue empty_vector(void) {
-    return (CljValue)clj_empty_vector_singleton;
+ID empty_vector(void) {
+    return (ID)clj_empty_vector_singleton;
 }
 
 // Creates a CljVector.
@@ -43,9 +43,9 @@ CljValue empty_vector(void) {
 // === Neue CljValue API (Phase 1: Parallel) ===
 
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
-CljValue make_vector(unsigned int capacity, bool is_mutable) {
+CljVector make_vector(unsigned int capacity, bool is_mutable) {
     if (capacity == 0 && !is_mutable) {
-        return (CljValue)clj_empty_vector_singleton;
+        return clj_empty_vector_singleton;
     }
     CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
     if (!vec)
@@ -66,7 +66,7 @@ CljValue make_vector(unsigned int capacity, bool is_mutable) {
         vec->data = NULL;
     }
 
-    return (CljValue)vec;
+    return vec;
 }
 
 /** Return a new vector with item appended; original vector remains unchanged.
@@ -93,8 +93,7 @@ CljVector vector_conj(CljVector vec, ID item) {
     // Early returns for uncommon cases
     if (old_vec->base.rc == 0) {
         // Empty vector singleton: create new vector
-        CljValue new_vec_obj = make_vector(4, false);
-        CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
+        CljVector new_vec = make_vector(4, false);
         if (!new_vec)
             return vec;
         // NULL (nil) is a valid value - store directly without RETAIN
@@ -110,8 +109,7 @@ CljVector vector_conj(CljVector vec, ID item) {
         if (new_capacity < 4) new_capacity = 4;
     }
 
-    CljValue new_vec_obj = make_vector(new_capacity, false);
-    CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
+    CljVector new_vec = make_vector(new_capacity, false);
     if (!new_vec)
         return vec;
 
@@ -154,8 +152,7 @@ CljVector vector_assoc(CljVector vec, int index, ID value) {
     }
 
     // RC>1: Copy-on-Write
-    CljValue new_vec_obj = make_vector(old_vec->capacity, false);
-    CljPersistentVector *new_vec = as_vector((ID)new_vec_obj);
+    CljVector new_vec = make_vector(old_vec->capacity, false);
     if (!new_vec)
         return vec;  // Return original vector on OOM
 
@@ -269,17 +266,16 @@ CljValue persistent(CljValue tvec) {
     if (!v) return NULL;
     
     // Clojure-Semantik: Erstelle NEUE persistent collection
-    CljValue new_vec = make_vector(v->capacity, 0);  // Neue Instanz
-    CljPersistentVector *new_v = as_vector(new_vec);
+    CljVector new_vec = make_vector(v->capacity, 0);  // Neue Instanz
     
     // Kopiere alle Elemente
     for (int i = 0; i < v->count; i++) {
         if (v->data[i]) {
-            new_v->data[i] = v->data[i];
+            new_vec->data[i] = v->data[i];
             RETAIN(v->data[i]);
         }
     }
-    new_v->count = v->count;
+    new_vec->count = v->count;
     
     // Original transient wird "invalidated" (kann später implementiert werden)
     // v->base.type = CLJ_INVALID;  // TODO: Invalidierung implementieren

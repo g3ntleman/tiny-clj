@@ -15,13 +15,13 @@
 #include <stdio.h>
 
 // Global line editor instance
-static LineEditor *global_editor = NULL;
+__attribute__((unused)) static LineEditor *global_editor = NULL;
 
 // ANSI escape sequence constants
-static const char ESC_RIGHT[] = "\033[C";
-static const char ESC_LEFT[] = "\033[D";
-static const char ESC_CLEAR[] = "\033[K";
-static const char ESC_HOME[] = "\033[1G";
+__attribute__((unused)) static const char ESC_RIGHT[] = "\033[C";
+__attribute__((unused)) static const char ESC_LEFT[] = "\033[D";
+__attribute__((unused)) static const char ESC_CLEAR[] = "\033[K";
+__attribute__((unused)) static const char ESC_HOME[] = "\033[1G";
 
 
 #ifdef ENABLE_LINE_EDITING
@@ -495,10 +495,10 @@ void line_editor_set_history_from_vector(LineEditor *editor, CljObject *vec) {
     CljPersistentVector *v = as_vector(vec);
     for (int i = 0; v && i < v->count; i++) {
         if (v->data[i] && is_type(v->data[i], CLJ_STRING)) {
-            char *plain = to_string(v->data[i]);
+            const char *plain = to_string(v->data[i]);
             if (plain) {
                 line_editor_add_to_history(editor, plain);
-                free(plain);
+                free((void*)plain);
             }
         }
     }

@@ -32,6 +32,7 @@ ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
 ID native_div_variadic(ID *args, unsigned int argc);
+ID native_mod(ID *args, unsigned int argc);
 
 // Transient functions
 ID native_transient(ID *args, unsigned int argc);
@@ -43,8 +44,10 @@ ID native_first(ID *args, unsigned int argc);
 ID native_rest(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);
 ID native_cons(ID *args, unsigned int argc);
+ID native_list(ID *args, unsigned int argc);
 ID native_count(ID *args, unsigned int argc);
 ID native_conj(ID *args, unsigned int argc);
+ID native_reverse(ID *args, unsigned int argc);
 
 // Comparison operators
 ID native_lt(ID *args, unsigned int argc);

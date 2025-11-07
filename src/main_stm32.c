@@ -27,7 +27,7 @@ int main() {
     register_builtins();
     
     // Create evaluation state
-    EvalState *state = evalstate_new();
+    EvalState *state = evalstate_new(false);
     if (!state) {
         platform_print("ERROR: Failed to create eval state");
         return 1;

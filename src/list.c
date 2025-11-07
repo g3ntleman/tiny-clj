@@ -19,11 +19,11 @@ static struct {
 static CljList *clj_empty_list_singleton = &clj_empty_list_singleton_data.list;
 
 /** Return empty-list singleton (rc=0, do not retain/release). */
-CljObject* empty_list(void) {
-    return (CljObject*)clj_empty_list_singleton;
+CljList* empty_list(void) {
+    return clj_empty_list_singleton;
 }
 
-CljObject* make_list(ID first, CljList *rest) {
+CljList* make_list(ID first, CljList *rest) {
     CljList *list = ALLOC(CljList, 1);
     if (!list) throw_oom(CLJ_LIST);
     
@@ -32,7 +32,7 @@ CljObject* make_list(ID first, CljList *rest) {
     list->first = RETAIN((CljObject*)first);
     list->rest = RETAIN((CljObject*)rest);
     
-    return (CljObject*)list;
+    return list;
 }
 
 // List-Operationen für try/catch
@@ -60,6 +60,21 @@ ID list_nth(CljList *list, int n) {
 int list_count(CljList *list) {
     if (!list) return 0;
     
+    // Check if it's actually a list before calling as_list
+    if (!is_type((CljObject*)list, CLJ_LIST)) {
+        return 0;  // Not a list, return 0
+    }
+    
+    // Empty list has first = NULL and rest = NULL
+    // A list with nil as element has first = NULL but rest != NULL
+    CljList *list_data = (CljList*)list;  // Safe cast after type check
+    if (!list_data) return 0;
+    
+    // Check if this is the empty list singleton (both first and rest are NULL)
+    if (LIST_FIRST(list_data) == NULL && LIST_REST(list_data) == NULL) {
+        return 0;
+    }
+    
     int count = 0;
     CljObject *current = (CljObject*)list;
     while (current && is_type(current, CLJ_LIST)) {
@@ -77,19 +92,19 @@ int list_count(CljList *list) {
 
 /** Create a list from stack items. Returns new object with RC=1. */
 
-/** Create a list from CljValue stack items. Returns new CljValue. */
-CljValue make_list_from_stack(CljValue *stack, int count) {
-    if (count == 0) return NULL;
+/** Create a list from CljValue stack items. Returns new CljList*. */
+CljList* make_list_from_stack(CljValue *stack, int count) {
+    if (count == 0) return empty_list();
     
     // Build list from end to start using make_list
-    CljObject *result = NULL;
+    CljList *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         CljObject *element = stack[i];
-        CljObject *new_node = make_list(element, (CljList*)result);
+        CljList *new_node = make_list(element, result);
         // ✅ FIX: make_list already does RETAIN, no need to do it again
         result = new_node;
     }
-    return (CljValue)result;
+    return result;
 }
 
 bool is_list(ID v) {
@@ -118,13 +133,13 @@ CljObject* list_from_ints(int count, ...) {
     va_start(args, count);
     
     // Build list from end to start using make_list
-    CljObject *result = NULL;
+    CljList *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         int value = va_arg(args, int);
-        CljObject *new_node = make_list(fixnum(value), (CljList*)result);
+        CljList *new_node = make_list(fixnum(value), result);
         result = new_node;
     }
     
     va_end(args);
-    return result ? result : NULL;
+    return result ? (CljObject*)result : NULL;
 }

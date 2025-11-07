@@ -8,7 +8,7 @@
 
 
 // Erweiterte Funktionsaufruf-Funktionen
-ID eval_function_call(ID fn, ID *args, int argc, CljMap *env);
+ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st);
 ID eval_body(ID body, CljMap *env, EvalState *st);
 ID eval_list(CljList *list, CljMap *env, EvalState *st);
 

@@ -235,8 +235,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
     if (!quoted) return NULL;
     // Create (quote <expr>) list: (quote expr)
     // Build list using the same pattern as parse_list
-    CljObject *quote_sym = intern_symbol_global("quote");
-    ID elements[2] = {(CljValue)quote_sym, quoted};
+    ID elements[2] = {SYM_QUOTE, quoted};
     return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
   }
   
@@ -254,8 +253,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
     if (!atom_expr) return NULL;
     // Create (deref <expr>) list: (deref expr)
     // Build list using the same pattern as parse_list
-    CljObject *deref_sym = intern_symbol_global("deref");
-    ID elements[2] = {(CljValue)deref_sym, atom_expr};
+    ID elements[2] = {SYM_DEREF, atom_expr};
     return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
   }
   
@@ -376,27 +374,29 @@ static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
     
-    // Vector mit initialer Kapazität erstellen
-    // Heap-limitiert: auf ESP32 durch verfügbaren RAM begrenzt
-    // Note: mutable_flag removed - Parser uses direct access (optimized)
-    CljValue vec = make_vector(6, false);  // is_mutable parameter deprecated
+    // Create vector with initial capacity
+    CljValue vec = make_vector(6, false);
     CljPersistentVector *v = as_vector((CljObject*)vec);
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
+      size_t before = reader_offset(reader);
       ID value = parse_expr(reader, st);
-      if (!value) {
-        // Cleanup: Vector freigeben
+      size_t after = reader_offset(reader);
+      
+      // Check if parser made progress - if not, it's an error
+      // If parser made progress, NULL means nil (which is valid)
+      if (!value && after <= before && !reader_eof(reader)) {
         RELEASE((CljObject*)vec);
         return NULL;
       }
       
-      // Wachstum bei Bedarf (reuse vector_grow_capacity helper)
+      // Grow capacity if needed
       if (v->count >= v->capacity) {
         vector_grow_capacity(v);
       }
       
-      // Direktes Einfügen
-      v->data[v->count++] = RETAIN(value);
+      // Store element - NULL (nil) is valid, non-NULL values need RETAIN
+      v->data[v->count++] = value ? RETAIN(value) : NULL;
       reader_skip_all(reader);
     }
     
@@ -405,9 +405,6 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       throw_parser_exception("Unclosed vector - missing closing ']'", reader);
       return NULL;
     }
-    
-    // Note: mutable_flag removed - vector is ready for use
-    // COW (RC-based) will automatically handle immutability when shared
     
     return AUTORELEASE(vec);
   }
@@ -468,11 +465,103 @@ static ID parse_list(Reader *reader, EvalState *st) {
   ID first = parse_expr_with_progress(reader, st);
   reader_skip_all(reader);
   
+  // Check if first element is if-let symbol for macro expansion
+  if (first && is_type(first, CLJ_SYMBOL)) {
+    CljSymbol *sym = as_symbol((CljValue)first);
+    if (sym && sym->name && strcmp(sym->name, "if-let") == 0) {
+      // Macro expansion: (if-let [binding test] then else?)
+      // => (let [binding test] (if binding then else?))
+      
+      // Parse rest of the list: [binding test], then, else?
+      ID rest = parse_list_rest(reader, st);
+      if (!rest) {
+        throw_parser_exception("if-let requires at least binding vector and then expression", reader);
+        return NULL;
+      }
+      
+      // Extract binding vector [binding test] from rest
+      CljList *rest_list = as_list((ID)rest);
+      if (!rest_list || !rest_list->first) {
+        throw_parser_exception("if-let requires binding vector as first argument", reader);
+        return NULL;
+      }
+      
+      ID binding_vec = rest_list->first;
+      if (!is_type(binding_vec, CLJ_VECTOR)) {
+        throw_parser_exception("if-let binding must be a vector", reader);
+        return NULL;
+      }
+      
+      // Extract binding and test from vector [binding test]
+      CljPersistentVector *vec = as_vector((CljValue)binding_vec);
+      if (!vec || vec->count < 2) {
+        throw_parser_exception("if-let binding vector must have exactly 2 elements", reader);
+        return NULL;
+      }
+      
+      ID binding = (CljValue)vec->data[0];
+      // Note: test is in binding_vec, we use binding_vec directly in the expansion
+      
+      // Extract then expression
+      CljList *rest_after_binding = as_list((ID)rest_list->rest);
+      if (!rest_after_binding || !rest_after_binding->first) {
+        throw_parser_exception("if-let requires then expression", reader);
+        return NULL;
+      }
+      
+      ID then_expr = rest_after_binding->first;
+      
+      // Extract else expression (optional)
+      ID else_expr = NULL;
+      CljList *rest_after_then = as_list((ID)rest_after_binding->rest);
+      if (rest_after_then && rest_after_then->first) {
+        else_expr = rest_after_then->first;
+      }
+      
+      // Build expansion: (let [binding test] (if binding then else?))
+      // First, build (if binding then else?)
+      ID if_args[4];
+      if_args[0] = SYM_IF;
+      if_args[1] = binding;
+      if_args[2] = then_expr;
+      int if_arg_count = 3;
+      if (else_expr) {
+        if_args[3] = else_expr;
+        if_arg_count = 4;
+      }
+      ID if_expr = AUTORELEASE(make_list_from_stack((CljValue*)if_args, if_arg_count));
+      
+      // Build binding vector for let: [binding test]
+      ID let_binding_vec = AUTORELEASE(binding_vec);
+      
+      // Build (let [binding test] (if binding then else?))
+      ID let_args[3];
+      let_args[0] = SYM_LET;
+      let_args[1] = let_binding_vec;
+      let_args[2] = if_expr;
+      ID expanded = AUTORELEASE(make_list_from_stack((CljValue*)let_args, 3));
+      
+      // Skip whitespace before checking for closing parenthesis
+      reader_skip_all(reader);
+      
+      if (reader_eof(reader) || !reader_match(reader, ')')) {
+        RELEASE(expanded);
+        throw_parser_exception("Unclosed list - missing closing ')'", reader);
+        return NULL;
+      }
+      
+      return expanded;
+    }
+  }
+  
   // Parse rest of the list recursively
   ID rest = parse_list_rest(reader, st);
   
   // Build list from first and rest
   CljValue result = AUTORELEASE(make_list(first, (CljList*)rest));
+  
+  // Skip whitespace before checking for closing parenthesis
+  reader_skip_all(reader);
   
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
@@ -505,6 +594,9 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
 
   // Parse next element (ensure forward progress)
   ID element = parse_expr_with_progress(reader, st);
+
+  // Skip whitespace after parsing element
+  reader_skip_all(reader);
 
   // If next is ')', stop recursion early
   if (reader_peek_char(reader) == ')') {

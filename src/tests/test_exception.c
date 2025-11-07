@@ -150,7 +150,6 @@ TEST(test_repl_crash_scenario) {
 }
 
 TEST(test_map_arity_exception_zero_args) {
-    EvalState *st = evalstate_new();
     bool exception_caught = false;
     
     TRY {
@@ -160,7 +159,7 @@ TEST(test_map_arity_exception_zero_args) {
         CljObject *val = fixnum(1);
         (void)map_assoc(map_obj, key, val);
         
-        // Define 'm' in current namespace
+        // Define 'm' in current namespace (use global st from setUp)
         CljObject *m_sym = AUTORELEASE(make_symbol_impl("m", NULL));
         ns_define(st->current_ns, m_sym, (CljObject*)map_obj);
         
@@ -179,8 +178,6 @@ TEST(test_map_arity_exception_zero_args) {
     
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, 
         "Exception should be thrown when calling map with wrong arity");
-    
-    evalstate_free(st);
 }
 
 TEST(test_with_autorelease_pool_swallows_exceptions) {

@@ -55,9 +55,9 @@ CljValue fixed(float value) {
  * @param str String to create
  * @return CljValue string object
  */
-CljValue make_string(const char *str) {
+struct CljString* make_string(const char *str) {
     if (!str || str[0] == '\0') {
-        return (CljValue)empty_string_singleton;
+        return empty_string_singleton;
     }
     
     // Allocate CljString + space for string data + null terminator
@@ -74,7 +74,7 @@ CljValue make_string(const char *str) {
     s->length = (uint16_t)len;
     memcpy(s->data, str, len + 1);  // includes null terminator
     
-    return (CljValue)s;
+    return s;
 }
 
 /**
@@ -83,7 +83,7 @@ CljValue make_string(const char *str) {
  * @param ns Namespace (can be NULL)
  * @return CljValue symbol object
  */
-CljValue make_symbol_impl(const char *name, const char *ns) {
+CljSymbol* make_symbol_impl(const char *name, const char *ns) {
     if (!name) {
         throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
@@ -132,5 +132,5 @@ CljValue make_symbol_impl(const char *name, const char *ns) {
         sym->ns = NULL;  // No namespace
     }
     
-    return (CljValue)sym;
+    return sym;
 }

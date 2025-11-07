@@ -120,8 +120,8 @@ TEST(test_autorelease_pool_basic) {
     // the test framework may have active pools
     WITH_AUTORELEASE_POOL({
         // Create some objects that should be autoreleased
-        CljObject *str1 = (CljObject*)make_string("test1");
-        CljObject *str2 = (CljObject*)make_string("test2");
+        struct CljString *str1 = make_string("test1");
+        struct CljString *str2 = make_string("test2");
         CljObject *list = (CljObject*)make_list((ID)str1, (CljList*)str2);
         
         TEST_ASSERT_NOT_NULL(str1);
@@ -132,8 +132,8 @@ TEST(test_autorelease_pool_basic) {
         TEST_ASSERT_TRUE(is_autorelease_pool_active());
         
         // Test that objects are accessible
-        TEST_ASSERT_EQUAL_INT(CLJ_STRING, str1->type);
-        TEST_ASSERT_EQUAL_INT(CLJ_STRING, str2->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_STRING, ((CljObject*)str1)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_STRING, ((CljObject*)str2)->type);
         TEST_ASSERT_EQUAL_INT(CLJ_LIST, list->type);
     });
     
@@ -147,11 +147,11 @@ TEST(test_autorelease_pool_basic) {
 TEST(test_autorelease_pool_nested) {
     // Test nested autorelease pools
     WITH_AUTORELEASE_POOL({
-        CljObject *outer_str = (CljObject*)make_string("outer");
+        struct CljString *outer_str = make_string("outer");
         TEST_ASSERT_NOT_NULL(outer_str);
         
         WITH_AUTORELEASE_POOL({
-            CljObject *inner_str = (CljObject*)make_string("inner");
+            struct CljString *inner_str = make_string("inner");
             CljObject *inner_list = (CljObject*)make_list(inner_str, NULL);
             
             TEST_ASSERT_NOT_NULL(inner_str);
@@ -212,7 +212,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
         for (int i = 0; i < 10; i++) {
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "test_string_%d", i);
-            CljObject *str = (CljObject*)make_string(buffer);
+            struct CljString *str = make_string(buffer);
             TEST_ASSERT_NOT_NULL(str);
             
             // Add to autorelease pool
@@ -224,7 +224,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
         for (int i = 0; i < 5; i++) {
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "list_item_%d", i);
-            CljObject *str = (CljObject*)make_string(buffer);
+            struct CljString *str = make_string(buffer);
             list = (CljObject*)make_list((ID)str, (CljList*)list);
             AUTORELEASE(str);
         }

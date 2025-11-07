@@ -18,7 +18,7 @@ int load_clojure_core(EvalState *st);
 // ============================================================================
 
 TEST(test_evalstate_creation) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state);
     
     // Test that evalstate has a current namespace
@@ -28,7 +28,7 @@ TEST(test_evalstate_creation) {
 }
 
 TEST(test_namespace_switching) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state);
     
     // Test initial namespace
@@ -43,11 +43,11 @@ TEST(test_namespace_switching) {
 }
 
 TEST(test_namespace_isolation) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state);
     
     // Test that different eval states have different namespaces
-    EvalState *eval_state2 = evalstate_new();
+    EvalState *eval_state2 = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state2);
     
     // They should be different instances
@@ -58,7 +58,7 @@ TEST(test_namespace_isolation) {
 }
 
 TEST(test_special_ns_variable) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state);
     
     // Test that *ns* special variable exists
@@ -69,7 +69,7 @@ TEST(test_special_ns_variable) {
 }
 
 TEST(test_namespace_lookup) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state);
     
     // Test symbol creation in namespace
@@ -81,7 +81,7 @@ TEST(test_namespace_lookup) {
 }
 
 TEST(test_namespace_binding) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     TEST_ASSERT_NOT_NULL(eval_state);
     
     // Test that we can create symbols in the namespace

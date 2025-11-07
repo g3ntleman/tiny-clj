@@ -73,7 +73,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     // Resolve symbol to function if necessary (Clojure/JVM behavior)
     // Use a minimal EvalState that points to clojure.core namespace for resolution
     if (is_type(fn, CLJ_SYMBOL)) {
-        EvalState *st = evalstate();
+        EvalState *st = evalstate_new(false);
         if (st) {
             // Set current_ns to clojure.core if available, otherwise use user namespace
             // ns_resolve will search in clojure.core even if current_ns is different
@@ -113,12 +113,12 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     }
     
     // Call function with current value and additional args
-    EvalState *st = evalstate();
+    EvalState *st = evalstate_new(false);
     CljMap *env = st ? (CljMap*)st->current_ns->mappings : NULL;
     
     ID new_value = NULL;
     TRY {
-        new_value = eval_function_call(fn, fn_args, argc + 1, env);
+        new_value = eval_function_call(fn, fn_args, argc + 1, env, st);
     } CATCH(ex) {
         // Cleanup on exception (RELEASE handles nil and immediates safely)
         for (unsigned int i = 0; i < argc + 1; i++) {
@@ -126,6 +126,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         }
         free(fn_args);
         RELEASE(current_value);
+        evalstate_free(st);
         return NULL;
     } END_TRY
     
@@ -136,6 +137,8 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     free(fn_args);
     
     RELEASE(current_value);
+    
+    evalstate_free(st);
     
     if (!new_value) {
         // Function returned nil or error

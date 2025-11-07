@@ -82,9 +82,9 @@ bool clj_equal(ID a, ID b) {
             if (!map_a || !map_b) return false;
             if (map_a->count != map_b->count) return false;
             for (int i = 0; i < map_a->count; i++) {
-                CljValue key_a = KV_KEY(map_a->data, i);
-                CljValue val_a = KV_VALUE(map_a->data, i);
-                CljValue val_b = map_get(b, key_a);
+                ID key_a = KV_KEY(map_a->data, i);
+                ID val_a = KV_VALUE(map_a->data, i);
+                ID val_b = map_get((ID)b, key_a);
                 // Map-Werte können immediates oder heap objects sein
                 if (!clj_equal(val_a, val_b)) return false;
             }

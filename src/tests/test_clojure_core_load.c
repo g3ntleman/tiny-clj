@@ -13,14 +13,11 @@ int load_clojure_core(EvalState *st);
 
 // Test: Verify that inc is loaded correctly when loading clojure.core
 TEST(test_clojure_core_loads_inc) {
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
     // Get inc symbol before loading
     CljObject *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
-    // Load clojure.core
+    // Load clojure.core (use global st from setUp)
     evalstate_set_ns(st, "clojure.core");
     load_clojure_core(st);
     
@@ -76,16 +73,11 @@ TEST(test_clojure_core_loads_inc) {
         TEST_ASSERT_TRUE_MESSAGE(is_type(inc_value, CLJ_FUNC) || is_type(inc_value, CLJ_CLOSURE),
                                 "inc should be a function");
     }
-    
-    evalstate_free(st);
 }
 
 // Test: Verify that all core functions are loaded correctly
 TEST(test_clojure_core_loads_all_functions) {
-    EvalState *st = evalstate_new();
-    TEST_ASSERT_NOT_NULL(st);
-    
-    // Load clojure.core
+    // Load clojure.core (use global st from setUp)
     evalstate_set_ns(st, "clojure.core");
     load_clojure_core(st);
     
@@ -120,7 +112,5 @@ TEST(test_clojure_core_loads_all_functions) {
             TEST_FAIL_MESSAGE(msg);
         }
     }
-    
-    evalstate_free(st);
 }
 

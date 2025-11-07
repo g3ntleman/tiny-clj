@@ -250,7 +250,6 @@ TEST(test_fixed_complex_arithmetic) {
 // Test for fixed-point overflow detection
 TEST(test_fixed_overflow_detection) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         TEST_ASSERT_NOT_NULL(st);
         
         // Test multiplication overflow - this should throw an exception with correct values
@@ -283,6 +282,5 @@ TEST(test_fixed_overflow_detection) {
         TEST_ASSERT_TRUE_MESSAGE(exception_caught2, "Exception should have been thrown");
         TEST_ASSERT_NULL(result2); // Should be NULL due to exception
         
-        evalstate_free(st);
     });
 }

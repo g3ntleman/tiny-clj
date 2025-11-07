@@ -9,7 +9,6 @@ extern CljObject* history_trim_last_n(CljObject *vec, int limit);
 static const char *tmp_hist_path = "/tmp/tiny_clj_history_test.edn";
 
 TEST(test_history_roundtrip_basic) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // Erzeuge Vector aus Strings
@@ -36,11 +35,9 @@ TEST(test_history_roundtrip_basic) {
     TEST_ASSERT_TRUE(is_type(v->data[1], CLJ_STRING));
     TEST_ASSERT_TRUE(is_type(v->data[2], CLJ_STRING));
 
-    evalstate_free(st);
 }
 
 TEST(test_history_trim_to_50) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // Baue Vector mit 75 Strings über String-Parsing
@@ -69,7 +66,6 @@ TEST(test_history_trim_to_50) {
 
     RELEASE(trimmed);
     RELEASE(loaded);
-    evalstate_free(st);
 }
 
 /*
@@ -125,7 +121,6 @@ static void cleanup_test_file(const char* path) {
 // ============================================================================
 
 TEST(test_slurp_reads_file) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create test file with content
@@ -147,11 +142,9 @@ TEST(test_slurp_reads_file) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_slurp_returns_string) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create test file
@@ -169,11 +162,9 @@ TEST(test_slurp_returns_string) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_slurp_empty_file) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create empty test file
@@ -195,11 +186,9 @@ TEST(test_slurp_empty_file) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_slurp_nonexistent_file) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Test slurp with non-existent file
@@ -209,11 +198,9 @@ TEST(test_slurp_nonexistent_file) {
     // The actual behavior will be verified after implementation.
     (void)eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")", st);
     
-    evalstate_free(st);
 }
 
 TEST(test_slurp_multiline_content) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create test file with multiline content
@@ -235,7 +222,6 @@ TEST(test_slurp_multiline_content) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 // ============================================================================
@@ -243,7 +229,6 @@ TEST(test_slurp_multiline_content) {
 // ============================================================================
 
 TEST(test_spit_writes_file) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create temporary test file path
@@ -267,11 +252,9 @@ TEST(test_spit_writes_file) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_spit_overwrites_file) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create test file with initial content
@@ -297,11 +280,9 @@ TEST(test_spit_overwrites_file) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_spit_multiline_content) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create temporary test file
@@ -326,11 +307,9 @@ TEST(test_spit_multiline_content) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_spit_empty_string) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create temporary test file
@@ -355,11 +334,9 @@ TEST(test_spit_empty_string) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 
 TEST(test_spit_slurp_roundtrip) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Create temporary test file
@@ -385,6 +362,5 @@ TEST(test_spit_slurp_roundtrip) {
     
     // Cleanup
     cleanup_test_file(test_file);
-    evalstate_free(st);
 }
 

@@ -15,10 +15,8 @@ extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 // Test: Verify that (def inc (fn [x] (+ x 1))) is evaluated correctly
 TEST(test_def_inc_evaluation_during_load) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
-    evalstate_set_ns(st, "clojure.core");
     
     // Parse "(def inc (fn [x] (+ x 1)))"
     Reader reader;
@@ -29,7 +27,6 @@ TEST(test_def_inc_evaluation_during_load) {
     // Extract the symbol from the parsed form
     if (is_type(form, CLJ_LIST)) {
         CljList *list = as_list(form);
-        CljObject *def_sym = LIST_FIRST(list);
         CljObject *inc_sym = (CljObject*)list_nth(list, 1);
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);
         
@@ -88,21 +85,18 @@ TEST(test_def_inc_evaluation_during_load) {
             char msg[256];
             snprintf(msg, sizeof(msg),
                     "Exception during def inc evaluation: %s",
-                    ex && ex->message ? ex->message : "unknown");
+                    ex && ex->message[0] ? ex->message : "unknown");
             TEST_FAIL_MESSAGE(msg);
         } END_TRY
     }
     
     RELEASE((CljObject*)form);
-    evalstate_free(st);
 }
 
 // Test: Verify that + is available when evaluating (fn [x] (+ x 1))
 TEST(test_plus_available_during_fn_evaluation) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
-    evalstate_set_ns(st, "clojure.core");
     
     // Ensure + is registered (should be done by register_builtins)
     CljObject *plus_sym = intern_symbol_global("+");
@@ -137,20 +131,18 @@ TEST(test_plus_available_during_fn_evaluation) {
         
         RELEASE((CljObject*)result);
     } CATCH(ex) {
-        char msg[256];
-        snprintf(msg, sizeof(msg),
-                "Exception during fn evaluation: %s",
-                ex && ex->message ? ex->message : "unknown");
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                    "Exception during fn evaluation: %s",
+                    ex && ex->message[0] ? ex->message : "unknown");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
     
     RELEASE((CljObject*)form);
-    evalstate_free(st);
 }
 
 // Test: Verify that eval_def stores the symbol even if value evaluation returns NULL
 TEST(test_def_stores_symbol_even_if_value_null) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     evalstate_set_ns(st, "user");
@@ -172,9 +164,8 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         CljObject *test_var_sym = intern_symbol_global("test-var");
         TEST_ASSERT_NOT_NULL(test_var_sym);
         
-        CljObject *test_var_value = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)test_var_sym);
-        
         // test_var_value can be NULL if nil was stored
+        (void)map_get((CljValue)st->current_ns->mappings, (CljValue)test_var_sym);
         // But the key should be in the map
         // Let's check if the key exists by iterating
         CljMap *map = (CljMap*)st->current_ns->mappings;
@@ -195,11 +186,10 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         char msg[256];
         snprintf(msg, sizeof(msg),
                 "Exception during def test-var evaluation: %s",
-                ex && ex->message ? ex->message : "unknown");
+                ex && ex->message[0] ? ex->message : "unknown");
         TEST_FAIL_MESSAGE(msg);
     } END_TRY
     
     RELEASE((CljObject*)form);
-    evalstate_free(st);
 }
 

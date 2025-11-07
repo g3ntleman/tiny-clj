@@ -12,20 +12,20 @@ typedef struct {
 
 typedef struct {
     CljObject base;
-    CljObject **params;
+    ID *params;
     int param_count;
-    CljObject *body;
-    CljObject *closure_env;
+    ID body;
+    ID closure_env;
     const char *name;
 } CljFunction;
 
-CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name);
+CljFunction* make_function(ID *params, int param_count, ID body, ID closure_env, const char *name);
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */
-CljObject* clj_call_function(CljObject *fn, int argc, CljObject **argv);
+ID clj_call_function(ID fn, int argc, ID *argv);
 /** Apply function to array args in given env; returns result. */
-CljObject* clj_apply_function(CljObject *fn, CljObject **args, int argc, CljObject *env);
+ID clj_apply_function(ID fn, ID *args, int argc, ID env);
 
 // Type-safe casting
 static inline CljFunction* as_function(ID obj) {

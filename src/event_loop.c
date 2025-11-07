@@ -64,7 +64,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     bool ok = true;
     TRY {
         // zero-arity call
-        result = eval_function_call(task.fn, NULL, 0, env);
+        result = eval_function_call(task.fn, NULL, 0, env, st);
     } CATCH(ex) {
         // On error: do not deliver a value, just close the channel
         ok = false;
@@ -95,9 +95,9 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         }
         
         // Close channel (will mutate in-place since RC=1)
-        CljValue new_chan = map_assoc((CljValue)task.result_chan, (CljValue)kw_closed, (CljValue)clj_true);
+        ID new_chan = map_assoc((ID)task.result_chan, (ID)kw_closed, (ID)clj_true);
         // Handle COW if it occurred (shouldn't happen with RC=1 for existing key)
-        if (new_chan != (CljValue)task.result_chan) {
+        if (new_chan != (ID)task.result_chan) {
             if (!released_queue_ref) {
                 RELEASE((CljObject*)task.result_chan);
             }

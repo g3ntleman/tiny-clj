@@ -2,7 +2,6 @@
 #include "tests_common.h"
 
 TEST(test_vector_builtin_basic) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // (vector) => []
@@ -27,11 +26,9 @@ TEST(test_vector_builtin_basic) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)n2));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)n2));
 
-    evalstate_free(st);
 }
 
 TEST(test_nth_with_default_and_bounds) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // In-bounds ohne Default
@@ -45,11 +42,9 @@ TEST(test_nth_with_default_and_bounds) {
     TEST_ASSERT_NOT_NULL(d);
     TEST_ASSERT_TRUE(is_type(d, CLJ_SYMBOL));
 
-    evalstate_free(st);
 }
 
 TEST(test_peek_and_pop_vector) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // peek
@@ -68,11 +63,9 @@ TEST(test_peek_and_pop_vector) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)cnt));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)cnt));
 
-    evalstate_free(st);
 }
 
 TEST(test_subvec_bounds_and_slices) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     CljObject *s1 = eval_string("(subvec [1 2 3 4] 1 3)", st);
@@ -87,11 +80,9 @@ TEST(test_subvec_bounds_and_slices) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)s2c));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)s2c));
 
-    evalstate_free(st);
 }
 
 TEST(test_subvec_edge_cases) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // Normal cases
@@ -172,11 +163,9 @@ TEST(test_subvec_edge_cases) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)nested_subvec_val));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)nested_subvec_val));
 
-    evalstate_free(st);
 }
 
 TEST(test_subvec_error_cases) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // Index out of bounds: start < 0
@@ -259,11 +248,9 @@ TEST(test_subvec_error_cases) {
     } END_TRY
     TEST_ASSERT_NULL(result8);  // Should fail
 
-    evalstate_free(st);
 }
 
 TEST(test_vec_from_list_and_vector_id) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // Test: vec converts list to vector
@@ -297,11 +284,9 @@ TEST(test_vec_from_list_and_vector_id) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)empty_count));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)empty_count));
 
-    evalstate_free(st);
 }
 
 TEST(test_vec_with_nil_elements) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
 
     // Test: vec converts list with nil element to vector
@@ -354,7 +339,6 @@ TEST(test_vec_with_nil_elements) {
     CljObject *third2 = eval_string("(nth (vec '(nil 2 nil)) 2)", st);
     TEST_ASSERT_NULL(third2);  // nil is represented as NULL
 
-    evalstate_free(st);
 }
 
 // ============================================================================
@@ -364,7 +348,7 @@ TEST(test_vec_with_nil_elements) {
 // Test that vector_conj uses in-place mutation when RC=1
 TEST(test_vector_conj_cow_rc_one_inplace) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector *vec = (CljPersistentVector*)make_vector(4, false);
+        CljVector vec = make_vector(4, false);
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         
         // First conj should be in-place (RC=1, capacity allows)
@@ -388,7 +372,7 @@ TEST(test_vector_conj_cow_rc_one_inplace) {
 // Test that vector_conj uses Copy-on-Write when RC>1
 TEST(test_vector_conj_cow_rc_greater_one) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector *vec = (CljPersistentVector*)make_vector(4, false);
+        CljVector vec = make_vector(4, false);
         TEST_ASSERT_EQUAL(1, vec->base.rc);
         
         // Add some entries
@@ -461,7 +445,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
 // Test that original vector remains unchanged after COW
 TEST(test_vector_conj_cow_original_unchanged) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector *vec = (CljPersistentVector*)make_vector(4, false);
+        CljVector vec = make_vector(4, false);
         
         // Add entries
         vector_conj((CljVector)vec, (ID)fixnum(10));
@@ -493,7 +477,7 @@ TEST(test_vector_conj_cow_original_unchanged) {
 // Test memory leak detection for vector_conj COW
 TEST(test_vector_conj_cow_memory_leak) {
     WITH_MEMORY_PROFILING({
-        CljPersistentVector *vec = (CljPersistentVector*)make_vector(4, false);
+        CljVector vec = make_vector(4, false);
         
         // Add entries
         vector_conj((CljVector)vec, (ID)fixnum(10));

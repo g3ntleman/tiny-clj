@@ -16,7 +16,6 @@
 
 // Test to reproduce and verify the memory leak fix in recursive functions
 TEST(test_memory_leak_fibonacci_reproduction) {
-    EvalState *st = evalstate_new();
     
     // Define fibonacci function
     const char *fib_code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
@@ -49,12 +48,10 @@ TEST(test_memory_leak_fibonacci_reproduction) {
     TEST_ASSERT_TRUE(is_fixnum(fib20_result));
     TEST_ASSERT_EQUAL_INT(6765, as_fixnum(fib20_result)); // fib(20) = 6765
     
-    evalstate_free(st);
 }
 
 // Test to verify that the function object has correct reference count
 TEST(test_fibonacci_function_reference_count) {
-    EvalState *st = evalstate_new();
     
     // Define fibonacci function
     const char *fib_code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
@@ -81,12 +78,10 @@ TEST(test_fibonacci_function_reference_count) {
         TEST_ASSERT_EQUAL_INT(5, as_fixnum(fib5_result)); // fib(5) = 5
     }
     
-    evalstate_free(st);
 }
 
 // Test to verify no memory leaks with nested recursive functions
 TEST(test_nested_recursive_functions_no_leak) {
-    EvalState *st = evalstate_new();
     
     // Define two recursive functions
     const char *code1 = "(defn fact [n] (if (<= n 1) 1 (* n (fact (- n 1)))))";
@@ -112,12 +107,10 @@ TEST(test_nested_recursive_functions_no_leak) {
     TEST_ASSERT_EQUAL_INT(120, as_fixnum(fact_result)); // 5! = 120
     TEST_ASSERT_EQUAL_INT(21, as_fixnum(fib_result));   // fib(8) = 21
     
-    evalstate_free(st);
 }
 
 // Test to verify that recursive calls work without closure_env caching
 TEST(test_recursive_calls_without_closure_env_caching) {
-    EvalState *st = evalstate_new();
     
     // Define a recursive function that calls itself multiple times
     const char *code = "(defn countdown [n] (if (<= n 0) 0 (+ 1 (countdown (- n 1)))))";
@@ -141,5 +134,4 @@ TEST(test_recursive_calls_without_closure_env_caching) {
     TEST_ASSERT_TRUE(is_fixnum(countdown20_result));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(countdown20_result));
     
-    evalstate_free(st);
 }

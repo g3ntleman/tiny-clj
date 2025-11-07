@@ -40,12 +40,12 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    CljValue new_registry = map_assoc((CljValue)g_runtime.meta_registry, v, meta);
+    ID new_registry = map_assoc((ID)g_runtime.meta_registry, (ID)v, (ID)meta);
     
     // If map_assoc returned a new map (Copy-on-Write), update registry
     // When RC=1, map_assoc mutates in-place and returns the same map
     // When RC>1 or capacity full, map_assoc creates a new map
-    if (new_registry != (CljValue)g_runtime.meta_registry) {
+    if (new_registry != (ID)g_runtime.meta_registry) {
         // New map was created (Copy-on-Write), update registry
         // Old map is automatically handled by map_assoc (released if RC>1)
         g_runtime.meta_registry = (void*)new_registry;
@@ -133,7 +133,7 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     
     // Add :file (Clojure-compatible, if available)
     if (SYM_KW_FILE && file) {
-        CljObject *file_str = (CljObject*)make_string(file);
+        struct CljString *file_str = make_string(file);
         if (file_str) {
             (void)map_assoc((CljValue)location_map, (CljValue)SYM_KW_FILE, (CljValue)file_str);
             RELEASE(file_str); // map_assoc retains it
@@ -182,11 +182,11 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
         if (!key) continue;
         
         // Check if key already exists in existing map
-        CljValue existing_value = map_get((CljValue)existing_meta, (CljValue)key);
+        ID existing_value = map_get((ID)existing_meta, (ID)key);
         if (!existing_value) {
             // Key doesn't exist, add it using map_assoc
-            CljValue new_result = map_assoc((CljValue)result, (CljValue)key, (CljValue)value);
-            if (new_result != (CljValue)result) {
+            ID new_result = map_assoc((ID)result, (ID)key, (ID)value);
+            if (new_result != (ID)result) {
                 // New map was created, update result
                 RELEASE(result);
                 result = (CljObject*)new_result;

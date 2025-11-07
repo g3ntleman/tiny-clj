@@ -48,7 +48,7 @@ TEST(test_equal_different_types) {
     // Test different types
     CljValue vec_val = make_vector(1, 1);
     CljMap *map = (CljMap*)make_map(16);
-    CljObject *list = empty_list();
+    CljList *list = empty_list();
     
     CljObject *vec = (CljObject*)vec_val;
     
@@ -453,8 +453,8 @@ TEST(test_list_equal_same_lists) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical lists
-    CljObject *list1 = empty_list();
-    CljObject *list2 = empty_list();
+    CljList *list1 = empty_list();
+    CljList *list2 = empty_list();
     
     // Test equality (empty_list() returns singleton, so this should be true)
     // Both calls return the same singleton instance
@@ -470,8 +470,8 @@ TEST(test_list_equal_same_lists) {
 TEST(test_list_equal_same_instance) {
     WITH_MEMORY_PROFILING({
     
-    CljObject *list1 = empty_list();
-    CljObject *list2 = (CljObject*)list1; // Same instance
+    CljList *list1 = empty_list();
+    CljList *list2 = list1; // Same instance
     
     // Test equality of same instance
     TEST_ASSERT_TRUE(clj_equal(list1, list2));
@@ -485,8 +485,8 @@ TEST(test_list_equal_same_instance) {
 TEST(test_list_equal_empty_lists) {
     WITH_MEMORY_PROFILING({
     
-    CljObject *list1 = empty_list();
-    CljObject *list2 = empty_list();
+    CljList *list1 = empty_list();
+    CljList *list2 = empty_list();
     
     // Test equality of empty lists (should be true due to singleton behavior)
     TEST_ASSERT_TRUE(clj_equal(list1, list2));

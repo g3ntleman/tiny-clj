@@ -21,7 +21,7 @@ static CljByteArray *clj_empty_byte_array_singleton = &clj_empty_byte_array_sing
 // BASIC OPERATIONS
 // ============================================================================
 
-CljValue make_byte_array(int length) {
+CljByteArray* make_byte_array(int length) {
     assert(length >= 0 && "byte_array length must be non-negative");
     
     if (length < 0) {
@@ -49,7 +49,7 @@ CljValue make_byte_array(int length) {
         ba->data = NULL;
     }
     
-    return (CljValue)ba;
+    return ba;
 }
 
 CljValue make_byte_array_from_bytes(const uint8_t *bytes, int length) {
@@ -57,10 +57,10 @@ CljValue make_byte_array_from_bytes(const uint8_t *bytes, int length) {
     assert(length >= 0 && "length must be non-negative");
     
     if (!bytes || length < 0) {
-        return (CljValue)clj_empty_byte_array_singleton;
+        return clj_empty_byte_array_singleton;
     }
     
-    CljValue arr = make_byte_array(length);
+    CljByteArray* arr = make_byte_array(length);
     
     if (length > 0) {
         CljByteArray *ba = as_byte_array(arr);

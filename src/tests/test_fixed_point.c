@@ -35,7 +35,6 @@ TEST(test_fixed_creation_and_conversion) {
 
 TEST(test_fixed_arithmetic_operations) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         if (!st) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
@@ -79,13 +78,11 @@ TEST(test_fixed_arithmetic_operations) {
         }
         RELEASE(result);
         
-            evalstate_free(st);
     });
 }
 
 TEST(test_fixed_mixed_type_operations) {
     WITH_AUTORELEASE_POOL({
-            EvalState *st = evalstate_new();
             if (!st) {
                 TEST_FAIL_MESSAGE("Failed to create EvalState");
                 return;
@@ -121,13 +118,11 @@ TEST(test_fixed_mixed_type_operations) {
         }
         RELEASE(result);
         
-            evalstate_free(st);
     });
 }
 
 TEST(test_fixed_division_with_remainder) {
     WITH_AUTORELEASE_POOL({
-            EvalState *st = evalstate_new();
             if (!st) {
                 TEST_FAIL_MESSAGE("Failed to create EvalState");
                 return;
@@ -162,13 +157,11 @@ TEST(test_fixed_division_with_remainder) {
         }
         RELEASE(result);
         
-            evalstate_free(st);
     });
 }
 
 TEST(test_fixed_precision_limits) {
     WITH_AUTORELEASE_POOL({
-            EvalState *st = evalstate_new();
             if (!st) {
                 TEST_FAIL_MESSAGE("Failed to create EvalState");
                 return;
@@ -205,13 +198,11 @@ TEST(test_fixed_precision_limits) {
         }
         RELEASE(result);
         
-            evalstate_free(st);
     });
 }
 
 TEST(test_fixed_variadic_operations) {
     WITH_AUTORELEASE_POOL({
-            EvalState *st = evalstate_new();
             if (!st) {
                 TEST_FAIL_MESSAGE("Failed to create EvalState");
                 return;
@@ -246,13 +237,11 @@ TEST(test_fixed_variadic_operations) {
         }
         RELEASE(result);
         
-            evalstate_free(st);
     });
 }
 
 TEST(test_fixed_error_handling) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         if (!st) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
@@ -274,13 +263,11 @@ TEST(test_fixed_error_handling) {
         TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Division by zero should throw exception");
         TEST_ASSERT_NULL(result);
             
-        evalstate_free(st);
     });
 }
 
 TEST(test_fixed_comparison_operators) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         if (!st) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
@@ -340,6 +327,5 @@ TEST(test_fixed_comparison_operators) {
         TEST_ASSERT_FALSE(clj_is_truthy(result));
         RELEASE(result);
             
-        evalstate_free(st);
     });
 }

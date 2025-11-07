@@ -16,7 +16,7 @@
 // ============================================================================
 
 TEST(test_parse_basic_types) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test integer parsing
     CljObject *int_result = parse("42", eval_state);
@@ -44,7 +44,7 @@ TEST(test_parse_basic_types) {
 }
 
 TEST(test_parse_collections) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test vector parsing
     CljObject *vec_result = parse("[1 2 3]", eval_state);
@@ -65,7 +65,7 @@ TEST(test_parse_collections) {
 }
 
 TEST(test_parse_comments) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test line comment parsing
     CljObject *result = parse("; This is a comment\n42", eval_state);
@@ -77,7 +77,7 @@ TEST(test_parse_comments) {
 }
 
 TEST(test_parse_metadata) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test metadata parsing with keywords
     CljObject *result = parse("^{:key :value} 42", eval_state);
@@ -105,7 +105,7 @@ TEST(test_parse_metadata) {
 }
 
 TEST(test_parse_utf8_symbols) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test UTF-8 symbol parsing
     const char *src = "äöü✓"; // UTF-8 multibyte incl. checkmark
@@ -117,7 +117,7 @@ TEST(test_parse_utf8_symbols) {
 }
 
 TEST(test_keyword_evaluation) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test keyword parsing - use simple approach
     CljObject *keyword = parse(":test", eval_state);
@@ -139,7 +139,7 @@ TEST(test_keyword_evaluation) {
 }
 
 TEST(test_keyword_map_access) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test keyword as map key access: (:key map)
     CljObject *map = parse("{:a 1 :b 2}", eval_state);
@@ -161,7 +161,7 @@ TEST(test_keyword_map_access) {
 }
 
 TEST(test_parse_multiline_expressions) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test 1: Simple multiline list
     CljObject *list_result = parse("(+ 1\n   2\n   3)", eval_state);
@@ -206,7 +206,7 @@ TEST(test_parse_multiline_expressions) {
 }
 
 TEST(test_parse_empty_string) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Test 1: Parse empty string literal
     CljObject *empty_str_result = parse("\"\"", eval_state);
@@ -231,16 +231,17 @@ TEST(test_parse_empty_string) {
     TEST_ASSERT_TRUE(eq_result == clj_true);
     
     // Test 5: Test to_string function on empty string (this should fail with NULL pointer)
-    char *str_repr = to_string(empty_str_result);
+    // Note: to_string returns const char* but allocates memory that must be freed
+    const char *str_repr = to_string(empty_str_result);
     TEST_ASSERT_NOT_NULL(str_repr);
     TEST_ASSERT_EQUAL_STRING("", str_repr);
-    free(str_repr);
+    free((char*)str_repr);
     
     evalstate_free(eval_state);
 }
 
 TEST(test_parse_multiple_expressions) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // This test verifies that parse() still only parses one expression
     // The multiline functionality is tested separately
@@ -276,7 +277,7 @@ TEST(test_parse_multiple_expressions) {
 }
 
 TEST(test_parse_from_reader_multiple_expressions) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // This test verifies the new parse_from_reader function can parse multiple expressions
     // by calling it multiple times on the same reader
@@ -343,10 +344,10 @@ TEST(test_parse_from_reader_multiple_expressions) {
 #ifdef ENABLE_META
 
 TEST(test_meta_set_and_get) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Create a test object
-    CljObject *obj = (CljObject*)make_string("test");
+    struct CljString *obj = make_string("test");
     TEST_ASSERT_NOT_NULL(obj);
     
     // Create metadata map
@@ -354,7 +355,7 @@ TEST(test_meta_set_and_get) {
     TEST_ASSERT_NOT_NULL(meta_map);
     
     CljObject *kw_doc = intern_symbol_global(":doc");
-    CljObject *doc_str = (CljObject*)make_string("Test documentation");
+    struct CljString *doc_str = make_string("Test documentation");
     if (kw_doc && doc_str) {
         (void)map_assoc((CljValue)meta_map, (CljValue)kw_doc, (CljValue)doc_str);
         RELEASE(doc_str);
@@ -381,7 +382,7 @@ TEST(test_meta_set_and_get) {
 }
 
 TEST(test_meta_automatic_sourcecode_references) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Set file and namespace for source code references
     eval_state->file = "test.clj";
@@ -434,7 +435,7 @@ TEST(test_meta_automatic_sourcecode_references) {
 }
 
 TEST(test_meta_merge_does_not_overwrite) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Create existing metadata with :line
     CljMap *existing_meta = make_map(2);
@@ -471,7 +472,7 @@ TEST(test_meta_merge_does_not_overwrite) {
 }
 
 TEST(test_meta_clojure_compatible_keys) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Ensure special symbols are initialized
     init_special_symbols();
@@ -509,16 +510,16 @@ TEST(test_meta_clojure_compatible_keys) {
 }
 
 TEST(test_meta_clear) {
-    EvalState *eval_state = evalstate_new();
+    EvalState *eval_state = evalstate_new(false);
     
     // Create a test object
-    CljObject *obj = (CljObject*)make_string("test");
+    struct CljString *obj = make_string("test");
     TEST_ASSERT_NOT_NULL(obj);
     
     // Create and set metadata
     CljMap *meta_map = make_map(1);
     CljObject *kw_doc = intern_symbol_global(":doc");
-    CljObject *doc_str = (CljObject*)make_string("Test");
+    struct CljString *doc_str = make_string("Test");
     if (kw_doc && doc_str) {
         (void)map_assoc((CljValue)meta_map, (CljValue)kw_doc, (CljValue)doc_str);
         RELEASE(doc_str);

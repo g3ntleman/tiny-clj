@@ -43,6 +43,12 @@
 // Test Registry
 #include "test_registry.h"
 
+// Global test EvalState (available in all tests)
+extern EvalState* g_test_eval_state;
+
+// Function to get global test EvalState (for backwards compatibility)
+extern EvalState* test_get_eval_state(void);
+
 // Registration macro for automatic test discovery
 #define REGISTER_TEST(func) \
     static void register_##func(void) __attribute__((constructor)); \
@@ -53,6 +59,7 @@
 // Simple TEST macro that defines and registers a test function
 // Automatically wraps test in WITH_AUTORELEASE_POOL for memory management
 // Extracts filename from __FILE__ to use as group name
+// Note: The global variable g_test_eval_state (or st via #define) is available in all tests
 #define TEST(name) \
     static void name##_body(void); \
     void name(void) { \
@@ -66,5 +73,8 @@
         test_registry_add_with_group(#name, name, filename); \
     } \
     static void name##_body(void)
+
+// Convenience macro: use 'st' instead of 'g_test_eval_state' in tests
+#define st g_test_eval_state
 
 #endif // TESTS_COMMON_H

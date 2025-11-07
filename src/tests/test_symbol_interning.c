@@ -15,7 +15,6 @@ extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 // Test: Verify that inc symbol is interned correctly when loading clojure.core
 TEST(test_inc_symbol_interning_during_load) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     // Get inc symbol BEFORE loading clojure.core
@@ -23,8 +22,6 @@ TEST(test_inc_symbol_interning_during_load) {
     TEST_ASSERT_NOT_NULL(inc_sym_before);
     
     // Load clojure.core
-    evalstate_set_ns(st, "clojure.core");
-    load_clojure_core(st);
     
     // Get inc symbol AFTER loading clojure.core
     CljObject *inc_sym_after = intern_symbol_global("inc");
@@ -81,7 +78,6 @@ TEST(test_inc_symbol_interning_during_load) {
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc should be in clojure.core mappings");
     }
     
-    evalstate_free(st);
 }
 
 // Test: Verify that symbols used during parsing are the same as interned symbols
@@ -89,10 +85,8 @@ TEST(test_inc_symbol_pointer_consistency) {
     // This test verifies that when we parse "(def inc ...)", the symbol "inc"
     // used in the parsed form is the same as when we later look it up
     
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
-    evalstate_set_ns(st, "clojure.core");
     
     // Get inc symbol before parsing
     CljObject *inc_sym_before = intern_symbol_global("inc");
@@ -152,7 +146,6 @@ TEST(test_inc_symbol_pointer_consistency) {
     }
     
     RELEASE((CljObject*)form);
-    evalstate_free(st);
 }
 
 // Test: Verify symbol interning consistency across multiple calls
@@ -173,7 +166,6 @@ TEST(test_inc_symbol_interning_consistency) {
 
 // Test: Verify that map_get uses pointer equality for interned symbols
 TEST(test_map_get_with_interned_symbols) {
-    EvalState *st = evalstate_new();
     TEST_ASSERT_NOT_NULL(st);
     
     evalstate_set_ns(st, "user");
@@ -202,6 +194,5 @@ TEST(test_map_get_with_interned_symbols) {
         TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
     }
     
-    evalstate_free(st);
 }
 

@@ -22,7 +22,7 @@ static inline CljByteArray* as_byte_array(ID obj) {
 // ============================================================================
 
 /** Create a byte array with given length (zero-initialized) */
-CljValue make_byte_array(int length);
+CljByteArray* make_byte_array(int length);
 
 /** Create a byte array from existing byte data (copies data) */
 CljValue make_byte_array_from_bytes(const uint8_t *bytes, int length);

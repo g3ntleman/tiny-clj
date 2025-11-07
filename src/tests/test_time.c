@@ -6,6 +6,7 @@
 #include "types.h"
 #include "vector.h"
 #include "function_call.h"
+#include "symbol.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -26,19 +27,18 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st);
 TEST(test_time_basic_functionality) {
     // Test that time function executes and returns the result
     // Create a simple expression: (+ 1 2)
-    CljObject *plus_symbol = intern_symbol_global("+");
+    CljObject *plus_symbol = SYM_PLUS;
     CljObject *one = fixnum(1);
     CljObject *two = fixnum(2);
     
     // Create the expression: (+ 1 2) - use proper make_list syntax
-    CljObject *expr = make_list((ID)plus_symbol, (CljList*)make_list((ID)one, (CljList*)make_list((ID)two, NULL)));
+    CljObject *expr = (CljObject*)make_list((ID)plus_symbol, (CljList*)make_list((ID)one, (CljList*)make_list((ID)two, NULL)));
     
     // Create a list for eval_time: (time (+ 1 2))
     CljObject *time_symbol = SYM_TIME;
     CljList *time_list = (CljList*)make_list((ID)time_symbol, (CljList*)make_list((ID)expr, NULL));
     
-    // Create environment and evalstate
-    EvalState *st = evalstate();
+    // Create environment (use global st from setUp)
     CljMap *env = make_map(16);
     
     // Call eval_time (time is now only a special form)
@@ -62,7 +62,6 @@ TEST(test_time_arity_validation) {
     CljObject *time_symbol = SYM_TIME;
     CljList *time_list = (CljList*)make_list((ID)time_symbol, NULL);
     
-    EvalState *st = evalstate();
     CljMap *env = make_map(16);
     
     // This should throw an exception for insufficient arguments
@@ -89,7 +88,6 @@ TEST(test_time_with_too_many_arguments) {
         (CljList*)make_list((ID)expr1, 
         (CljList*)make_list((ID)expr2, NULL)));
     
-    EvalState *st = evalstate();
     CljMap *env = make_map(16);
     
     // This should throw an exception for too many arguments
@@ -115,13 +113,12 @@ TEST(test_time_with_sleep) {
     CljObject *one_second = fixnum(1);
     
     // Create the expression: (sleep 1)
-    CljObject *expr = make_list((ID)sleep_symbol, (CljList*)make_list((ID)one_second, NULL));
+    CljObject *expr = (CljObject*)make_list((ID)sleep_symbol, (CljList*)make_list((ID)one_second, NULL));
     
     // Create (time (sleep 1))
     CljObject *time_symbol = SYM_TIME;
     CljList *time_list = (CljList*)make_list((ID)time_symbol, (CljList*)make_list((ID)expr, NULL));
     
-    EvalState *st = evalstate();
     CljMap *env = make_map(16);
     
     // Call eval_time - this should take approximately 1000ms
@@ -142,19 +139,18 @@ TEST(test_time_no_double_evaluation) {
     // Use a simple arithmetic expression that we can verify
     
     // Create a simple expression: (+ 1 2)
-    CljObject *plus_symbol = intern_symbol_global("+");
+    CljObject *plus_symbol = SYM_PLUS;
     CljObject *one = fixnum(1);
     CljObject *two = fixnum(2);
     
     // Create the expression: (+ 1 2)
-    CljObject *expr = make_list((ID)plus_symbol, (CljList*)make_list((ID)one, (CljList*)make_list((ID)two, NULL)));
+    CljObject *expr = (CljObject*)make_list((ID)plus_symbol, (CljList*)make_list((ID)one, (CljList*)make_list((ID)two, NULL)));
     
     // Create a list for eval_time: (time (+ 1 2))
     CljObject *time_symbol = SYM_TIME;
     CljList *time_list = (CljList*)make_list((ID)time_symbol, (CljList*)make_list((ID)expr, NULL));
     
-    // Create environment and evalstate
-    EvalState *st = evalstate();
+    // Create environment (use global st from setUp)
     CljMap *env = make_map(16);
     
     // Call eval_time directly (this tests the special form implementation)
@@ -178,9 +174,9 @@ TEST(test_time_with_dotimes) {
     
     // Create symbols
     CljObject *time_symbol = SYM_TIME;
-    CljObject *dotimes_symbol = intern_symbol_global("dotimes");
+    CljObject *dotimes_symbol = SYM_DOTIMES;
     CljObject *i_symbol = intern_symbol_global("i");
-    CljObject *plus_symbol = intern_symbol_global("+");
+    CljObject *plus_symbol = SYM_PLUS;
     
     // Create numbers
     CljObject *thousand = fixnum(1000);
@@ -198,7 +194,7 @@ TEST(test_time_with_dotimes) {
     vec_data->count = 2; // Set the count manually
     
     // Create arithmetic expression: (+ 1 2 3 4 5)
-    CljObject *arithmetic_expr = make_list((ID)plus_symbol, 
+    CljObject *arithmetic_expr = (CljObject*)make_list((ID)plus_symbol, 
         (CljList*)make_list((ID)one, 
         (CljList*)make_list((ID)two, 
         (CljList*)make_list((ID)three, 
@@ -206,17 +202,16 @@ TEST(test_time_with_dotimes) {
         (CljList*)make_list((ID)five, NULL))))));
     
     // Create dotimes call: (dotimes [i 1000] (+ 1 2 3 4 5))
-    CljObject *dotimes_call = make_list((ID)dotimes_symbol, 
+    CljObject *dotimes_call = (CljObject*)make_list((ID)dotimes_symbol, 
         (CljList*)make_list((ID)binding_vector, 
         (CljList*)make_list((ID)arithmetic_expr, NULL)));
     
     // Create time call: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
-    CljObject *time_call = make_list((ID)time_symbol, 
+    CljObject *time_call = (CljObject*)make_list((ID)time_symbol, 
         (CljList*)make_list((ID)dotimes_call, NULL));
     
     // Create environment
     CljMap *env = (CljMap*)make_map(4);
-    EvalState *st = evalstate();
     
     // Test time evaluation with dotimes
     CljObject *result = eval_time((CljList*)(CljObject*)time_call, env, st);
@@ -254,12 +249,11 @@ TEST(test_time_returns_expression_result) {
         (CljList*)make_list((ID)three, NULL))));
     
     // Create time call: (time (+ 1 2 3))
-    CljObject *time_call = make_list((ID)time_symbol, 
+    CljObject *time_call = (CljObject*)make_list((ID)time_symbol, 
         (CljList*)make_list((ID)arithmetic_expr, NULL));
     
     // Create environment
     CljMap *env = (CljMap*)make_map(4);
-    EvalState *st = evalstate();
     
     // Test time evaluation
     CljObject *result = eval_time((CljList*)(CljObject*)time_call, env, st);

@@ -317,7 +317,7 @@ TEST(test_atom_print_representation) {
 TEST(test_atom_deref_invalid) {
     ID args[] = {fixnum(42)};
     TRY {
-        ID result = native_deref(args, 1);
+        (void)native_deref(args, 1);
         // Should not reach here - exception should be thrown
         TEST_FAIL_MESSAGE("deref should throw exception for invalid argument");
     } CATCH(ex) {
@@ -331,7 +331,7 @@ TEST(test_atom_deref_invalid) {
 TEST(test_atom_reset_invalid) {
     ID args[] = {fixnum(42), fixnum(100)};
     TRY {
-        ID result = native_reset_bang(args, 2);
+        (void)native_reset_bang(args, 2);
         // Should not reach here - exception should be thrown
         TEST_FAIL_MESSAGE("reset! should throw exception for invalid argument");
     } CATCH(ex) {
@@ -351,7 +351,7 @@ TEST(test_atom_swap_invalid_atom) {
     if (inc_func) {
         ID args[] = {fixnum(42), inc_func};
         TRY {
-            ID result = native_swap_bang(args, 2);
+            (void)native_swap_bang(args, 2);
             // Should not reach here - exception should be thrown
             TEST_FAIL_MESSAGE("swap! should throw exception for invalid atom argument");
         } CATCH(ex) {
@@ -575,7 +575,7 @@ TEST(test_atom_def_symbol_recognized) {
             CljSymbol *parsed_sym = as_symbol(def_sym);
             CljSymbol *special_sym = as_symbol(SYM_DEF);
             if (parsed_sym && special_sym && parsed_sym->name && special_sym->name) {
-                bool name_match = (strcmp(parsed_sym->name, special_sym->name) == 0);
+                (void)(strcmp(parsed_sym->name, special_sym->name) == 0);
                 TEST_FAIL_MESSAGE("def symbol pointer mismatch - parsed symbol has different pointer than SYM_DEF (symbol interning issue)");
             } else {
                 TEST_FAIL_MESSAGE("def symbol pointer mismatch and cannot compare names");
@@ -589,7 +589,6 @@ TEST(test_atom_def_symbol_recognized) {
 // Test: Verify that (def inc ...) is parsed correctly
 TEST(test_atom_def_inc_parsed) {
 
-        EvalState *st = evalstate_new();
         TEST_ASSERT_NOT_NULL(st);
         
         // Parse (def inc (fn [x] (+ x 1)))
@@ -690,7 +689,6 @@ TEST(test_atom_eval_core_source_processes_inc) {
         TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (def inc ...)");
         
         // Evaluate it
-        CljMap *env = st->current_ns ? (CljMap*)st->current_ns->mappings : NULL;
         ID result = eval_expr_simple((CljObject*)form, st);
         
         // Should succeed

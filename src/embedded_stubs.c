@@ -117,17 +117,17 @@ CljObject *map_get(CljObject *map, CljObject *key) {
     return make_nil();
 }
 
-CljObject *map_keys(CljObject *map) {
+ID map_keys(ID map) {
     (void)map;
-    return make_list();
+    return (ID)make_list();
 }
 
-CljObject *map_vals(CljObject *map) {
+ID map_vals(ID map) {
     (void)map;
-    return make_list();
+    return (ID)make_list();
 }
 
-int map_count(CljObject *map) {
+int map_count(ID map) {
     (void)map;
     return 0;
 }

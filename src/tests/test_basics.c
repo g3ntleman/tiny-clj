@@ -37,12 +37,12 @@ TEST(test_list_count) {
 
 TEST(test_list_creation) {
     // High-level test using eval_string
-    EvalState *st = evalstate_new();
     
     
-    // Test empty list creation - (list) returns nil in Clojure
+    // Test empty list creation - (list) returns empty list in Clojure
     CljObject *list = eval_string("(list)", st);
-    TEST_ASSERT_NULL(list);  // (list) returns nil, not empty list
+    TEST_ASSERT_NOT_NULL(list);  // (list) returns empty list, not nil
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list->type);
     
     // Test list with elements
     CljObject *list_with_elements = eval_string("(list 1 2 3)", st);
@@ -57,12 +57,10 @@ TEST(test_list_creation) {
     }
     
     // Clean up
-    evalstate_free(st);
 }
 
 TEST(test_symbol_creation) {
     // High-level test using eval_string
-    EvalState *st = evalstate_new();
     
     // Test symbol creation (quoted symbol)
     CljObject *sym = eval_string("'test-symbol", st);
@@ -75,12 +73,10 @@ TEST(test_symbol_creation) {
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ns_sym->type);
     
     // Clean up
-    evalstate_free(st);
 }
 
 TEST(test_string_creation) {
     // Test direct string creation (bypassing eval_string)
-    EvalState *st = evalstate_new();
 
     // Test direct string creation
     CljObject *str = AUTORELEASE(make_string("hello world"));
@@ -88,12 +84,10 @@ TEST(test_string_creation) {
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
 
     // Clean up
-    evalstate_free(st);
 }
 
 TEST(test_vector_creation) {
     // Step 1: Test empty vector (should be singleton)
-    EvalState *st = evalstate_new();
     
     // Test empty vector creation
     CljObject *vec = eval_string("[]", st);
@@ -120,7 +114,6 @@ TEST(test_vector_creation) {
     }
     
     // Clean up
-    evalstate_free(st);
 }
 
 
@@ -132,7 +125,7 @@ TEST(test_map_creation) {
 }
 
 TEST(test_array_map_builtin) {
-        EvalState *eval_state = evalstate_new();
+        EvalState *eval_state = evalstate_new(false);
         
         // Test empty map: (array-map)
         CljObject *result0 = parse("(array-map)", eval_state);
@@ -165,7 +158,6 @@ TEST(test_array_map_builtin) {
 
 TEST(test_integer_creation) {
     // High-level test using eval_string
-    EvalState *st = evalstate_new();
     
     // Test positive integer
     CljObject *int_val = eval_string("42", st);
@@ -190,7 +182,6 @@ TEST(test_integer_creation) {
 
 TEST(test_float_creation) {
     // High-level test using eval_string
-    EvalState *st = evalstate_new();
     
     // Test positive float
     CljObject *float_val = eval_string("3.14", st);
@@ -215,18 +206,17 @@ TEST(test_float_creation) {
 
 TEST(test_nil_creation) {
     // High-level test using eval_string
-    EvalState *st = evalstate_new();
     
     
     // Test nil literal - nil is represented as NULL in our system
     CljObject *nil_obj = eval_string("nil", st);
     TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
     
-    // Test nil in expressions - currently returns nil, not 0
+    // Test nil in expressions - count should return 0 for nil
     CljObject *nil_count = eval_string("(count nil)", st);
-    // TODO: Fix count function to return 0 for nil
-    // For now, accept that it returns nil
-    TEST_ASSERT_NULL(nil_count);
+    TEST_ASSERT_NOT_NULL(nil_count);
+    TEST_ASSERT_TRUE(is_fixnum(nil_count));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(nil_count));
     
     // Memory is automatically managed by eval_string
 }
@@ -256,7 +246,6 @@ TEST(test_nil_creation) {
 // CljValue tests moved to test_values.c to avoid duplication
 
 TEST(test_special_form_and) {
-    EvalState *st = evalstate_new();
     
     // Initialize namespace first
     
@@ -281,11 +270,9 @@ TEST(test_special_form_and) {
     TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result4));
     
     // result1, result2, result3, result4 are automatically managed by eval_string
-    evalstate_free(st);
 }
 
 TEST(test_special_form_or) {
-    EvalState *st = evalstate_new();
     
     // Initialize namespace first
     
@@ -319,11 +306,9 @@ TEST(test_special_form_or) {
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result4));
     
     // result1, result2, result3, result4 are automatically managed by eval_string
-    evalstate_free(st);
 }
 
 TEST(test_special_form_when) {
-    EvalState *st = evalstate_new();
     
     // (when true expr) => expr
     ID result1 = eval_string("(when true 42)", st);
@@ -377,7 +362,6 @@ TEST(test_special_form_when) {
     TEST_ASSERT_NULL(result10); // nil is NULL in our system
     
     // result1-10 are automatically managed by eval_string
-    evalstate_free(st);
 }
 
 // ============================================================================
@@ -388,7 +372,6 @@ TEST(test_special_form_when) {
 
 TEST(test_load_multiline_file) {
     // Test multiline expressions parsing (without evaluation)
-    EvalState *st = evalstate_new();
     
     // Test 1: Simple multiline function definition
     const char *multiline_def = "(def add-nums\n  (fn [a b]\n    (+ a b)))";
@@ -421,13 +404,11 @@ TEST(test_load_multiline_file) {
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, parsed5->type);
     
     // Clean up
-    evalstate_free(st);
 }
 
 
 // Isolated tests for easier debugging
 TEST(test_first_function) {
-    EvalState *st = evalstate_new();
     
     // Test first on vectors (builtin function)
     CljObject *first_result = eval_string("(first [1 2 3])", st);
@@ -436,11 +417,9 @@ TEST(test_first_function) {
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
     }
     
-    evalstate_free(st);
 }
 
 TEST(test_rest_function) {
-    EvalState *st = evalstate_new();
     
     // Test rest on vectors (builtin function)
     CljObject *rest_test = eval_string("(rest [1 2 3])", st);
@@ -449,11 +428,9 @@ TEST(test_rest_function) {
         TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
     }
     
-    evalstate_free(st);
 }
 
 TEST(test_cons_function) {
-    EvalState *st = evalstate_new();
     
     // Test cons (builtin function)
     CljObject *cons_test = eval_string("(cons 1 '(2 3))", st);
@@ -462,11 +439,9 @@ TEST(test_cons_function) {
         TEST_ASSERT_EQUAL_INT(CLJ_LIST, cons_test->type);
     }
     
-    evalstate_free(st);
 }
 
 TEST(test_count_vector) {
-    EvalState *st = evalstate_new();
     
     // Test count on vector
     CljObject *count_result = eval_string("(count [1 2 3 4])", st);
@@ -475,11 +450,9 @@ TEST(test_count_vector) {
         TEST_ASSERT_EQUAL_INT(4, as_fixnum(count_result));
     }
     
-    evalstate_free(st);
 }
 
 TEST(test_count_list) {
-    EvalState *st = evalstate_new();
     
     // Test count on list
     CljObject *list_count_result = eval_string("(count (list 1 2 3))", st);
@@ -488,11 +461,9 @@ TEST(test_count_list) {
         TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_count_result));
     }
     
-    evalstate_free(st);
 }
 
 TEST(test_count_string) {
-    EvalState *st = evalstate_new();
     
     // Test count on string
     CljObject *string_count_result = eval_string("(count \"hello\")", st);
@@ -501,7 +472,6 @@ TEST(test_count_string) {
         TEST_ASSERT_EQUAL_INT(5, as_fixnum(string_count_result));
     }
     
-    evalstate_free(st);
 }
 
 TEST(test_map_function) {
@@ -509,7 +479,6 @@ TEST(test_map_function) {
     // NOTE: map needs to be implemented as a builtin function
     // This test is currently a placeholder that verifies the system is ready for map
     {
-        EvalState *st = evalstate_new();
         
         // Test map count
         CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", st);
@@ -584,7 +553,6 @@ TEST(test_map_function) {
         // (map inc []) => ()
         // (map (fn [x] (+ x 1)) [1 2 3]) => (2 3 4)
         
-        evalstate_free(st);
     }
 }
 
@@ -611,7 +579,6 @@ TEST(test_map_function) {
 
 // Test as_list function with valid list
 TEST(test_as_list_valid) {
-    EvalState *st = evalstate_new();
     
     // Create a simple list: (list 1 2 3)
     CljObject *list = eval_string("(list 1 2 3)", st);
@@ -626,7 +593,6 @@ TEST(test_as_list_valid) {
     CljObject *first = LIST_FIRST(list_data);
     TEST_ASSERT_NOT_NULL(first);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
-    evalstate_free(st);
 }
 
 // Test as_list function with invalid input
@@ -646,7 +612,6 @@ TEST(test_as_list_invalid) {
 
 // Test LIST_FIRST with valid list
 TEST(test_list_first_valid) {
-    EvalState *st = evalstate_new();
     
     // Create a simple list: (list 42)
     CljObject *list = eval_string("(list 42)", st);
@@ -661,12 +626,10 @@ TEST(test_list_first_valid) {
     TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
     
     RELEASE(list);
-    evalstate_free(st);
 }
 
 // Test is_type function with various types
 TEST(test_is_type_function) {
-    EvalState *st = evalstate_new();
     
     // Test with list
     CljObject *list = eval_string("(list 1 2 3)", st);
@@ -686,12 +649,10 @@ TEST(test_is_type_function) {
     TEST_ASSERT_TRUE(IS_IMMEDIATE(number));
     TEST_ASSERT_FALSE(is_type(number, CLJ_SYMBOL));
     
-    evalstate_free(st);
 }
 
 // Test eval_list with simple arithmetic
 TEST(test_eval_list_simple_arithmetic) {
-    EvalState *st = evalstate_new();
     
     // Test simple addition
     CljObject *result = eval_string("(+ 1 2)", st);
@@ -699,12 +660,10 @@ TEST(test_eval_list_simple_arithmetic) {
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
     
     // No RELEASE needed - eval_string returns autoreleased object
-    evalstate_free(st);
 }
 
 // Test eval_list with function call
 TEST(test_eval_list_function_call) {
-    EvalState *st = evalstate_new();
     
     // Define a simple function
     CljObject *def_result = NULL;
@@ -712,7 +671,6 @@ TEST(test_eval_list_function_call) {
         def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Failed to define function");
-        evalstate_free(st);
         return;
     } END_TRY
     
@@ -725,7 +683,6 @@ TEST(test_eval_list_function_call) {
         result = eval_string("(test-fn 5)", st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Failed to call function - symbol not resolved");
-        evalstate_free(st);
         return;
     } END_TRY
     
@@ -733,7 +690,6 @@ TEST(test_eval_list_function_call) {
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
     
     // No RELEASE needed - eval_string returns autoreleased object
-    evalstate_free(st);
 }
 
 // ============================================================================
@@ -742,7 +698,6 @@ TEST(test_eval_list_function_call) {
 
 // Test that isolates the def problem: checks if def stores symbol correctly
 TEST(test_def_isolated_problem) {
-    EvalState *st = evalstate_new();
     
     // Step 1: Verify namespace is initialized
     TEST_ASSERT_NOT_NULL(st->current_ns);
@@ -754,7 +709,6 @@ TEST(test_def_isolated_problem) {
         def_result = eval_string("(def test-value 42)", st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("def should not throw exception");
-        evalstate_free(st);
         return;
     } END_TRY
     
@@ -783,7 +737,6 @@ TEST(test_def_isolated_problem) {
         eval_resolved = eval_symbol(test_value_sym, st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined symbol");
-        evalstate_free(st);
         RELEASE(test_value_sym);
         return;
     } END_TRY
@@ -801,7 +754,6 @@ TEST(test_def_isolated_problem) {
         eval_string_result = eval_string("test-value", st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_string should resolve test-value without exception");
-        evalstate_free(st);
         RELEASE(test_value_sym);
         if (eval_resolved) RELEASE(eval_resolved);
         return;
@@ -817,12 +769,10 @@ TEST(test_def_isolated_problem) {
     // Cleanup
     RELEASE(test_value_sym);
     if (eval_resolved) RELEASE(eval_resolved);
-    evalstate_free(st);
 }
 
 // Test that isolates the def problem with functions: checks if def stores function correctly
 TEST(test_def_function_isolated_problem) {
-    EvalState *st = evalstate_new();
     
     // Step 1: Define a function using def and fn
     CljObject *def_result = NULL;
@@ -830,7 +780,6 @@ TEST(test_def_function_isolated_problem) {
         def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("def with fn should not throw exception");
-        evalstate_free(st);
         return;
     } END_TRY
     
@@ -847,7 +796,6 @@ TEST(test_def_function_isolated_problem) {
     // Step 4: Check if mappings map exists and has entries
     if (!st->current_ns->mappings) {
         TEST_FAIL_MESSAGE("Namespace mappings should exist after def");
-        evalstate_free(st);
         RELEASE(test_fn_sym);
         return;
     }
@@ -876,7 +824,6 @@ TEST(test_def_function_isolated_problem) {
         eval_resolved = eval_symbol(test_fn_sym, st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined function");
-        evalstate_free(st);
         RELEASE(test_fn_sym);
         if (resolved) RELEASE(resolved);
         return;
@@ -892,7 +839,6 @@ TEST(test_def_function_isolated_problem) {
         call_result = eval_string("(test-fn 5)", st);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Calling test-fn should not throw exception");
-        evalstate_free(st);
         RELEASE(test_fn_sym);
         if (resolved) RELEASE(resolved);
         if (eval_resolved) RELEASE(eval_resolved);
@@ -910,7 +856,6 @@ TEST(test_def_function_isolated_problem) {
     RELEASE(test_fn_sym);
     if (resolved) RELEASE(resolved);
     if (eval_resolved) RELEASE(eval_resolved);
-    evalstate_free(st);
 }
 
 // ============================================================================
@@ -924,7 +869,6 @@ TEST(test_def_function_isolated_problem) {
 // ============================================================================
 
 TEST(test_identical_predicate) {
-    EvalState *st = evalstate_new();
     
     // Test identical? with same object
     CljObject *vec1 = eval_string("[1 2 3]", st);
@@ -949,11 +893,9 @@ TEST(test_identical_predicate) {
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4)); // Different objects
     
-    evalstate_free(st);
 }
 
 TEST(test_vector_predicate) {
-    EvalState *st = evalstate_new();
     
     // Test vector? with vector
     CljObject *result1 = eval_string("(vector? [1 2 3])", st);
@@ -980,13 +922,11 @@ TEST(test_vector_predicate) {
     TEST_ASSERT_NOT_NULL(result5);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result5));
     
-    evalstate_free(st);
 }
 
 // TODO: Fix cond special form - symbol resolution issue
 // TEST(test_cond_special_form) {
 //     WITH_AUTORELEASE_POOL({
-//         EvalState *st = evalstate_new();
 //         
 //         // Test cond with single condition
 //         CljObject *result1 = eval_string("(cond true \"yes\")", st);
@@ -1011,7 +951,6 @@ TEST(test_vector_predicate) {
 //         CljObject *result5 = eval_string("(cond)", st);
 //         TEST_ASSERT_NULL(result5); // Should return nil
 //         
-//         evalstate_free(st);
 //     });
 // }
 

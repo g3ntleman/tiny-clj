@@ -22,7 +22,6 @@
 // TEST: Basic defn function definition
 // ============================================================================
 TEST(test_defn_basic_function) {
-        EvalState *st = evalstate_new();
         
         // Test: (defn add [a b] (+ a b)) should define a function
         const char *code = "(defn add [a b] (+ a b))";
@@ -39,14 +38,12 @@ TEST(test_defn_basic_function) {
         TEST_ASSERT_TRUE(is_fixnum(call_result));
         TEST_ASSERT_EQUAL_INT(7, as_fixnum(call_result));
         
-        evalstate_free(st);
 }
 
 // ============================================================================
 // TEST: defn with single parameter
 // ============================================================================
 TEST(test_defn_single_parameter) {
-        EvalState *st = evalstate_new();
         
         // Test: (defn square [x] (* x x))
         eval_string("(defn square [x] (* x x))", st);
@@ -59,14 +56,12 @@ TEST(test_defn_single_parameter) {
         TEST_ASSERT_TRUE(is_fixnum(result));
         TEST_ASSERT_EQUAL_INT(25, as_fixnum(result));
         
-        evalstate_free(st);
 }
 
 // ============================================================================
 // TEST: defn with no parameters
 // ============================================================================
 TEST(test_defn_no_parameters) {
-        EvalState *st = evalstate_new();
         
         // Test: (defn answer [] 42)
         eval_string("(defn answer [] 42)", st);
@@ -79,14 +74,12 @@ TEST(test_defn_no_parameters) {
         TEST_ASSERT_TRUE(is_fixnum(result));
         TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
         
-        evalstate_free(st);
 }
 
 // ============================================================================
 // TEST: defn with multiple body expressions
 // ============================================================================
 TEST(test_defn_multiple_body_expressions) {
-        EvalState *st = evalstate_new();
         
         // Test: (defn test-fn [x] (+ x 1) (+ x 2))
         eval_string("(defn test-fn [x] (+ x 1) (+ x 2))", st);
@@ -99,14 +92,12 @@ TEST(test_defn_multiple_body_expressions) {
         TEST_ASSERT_TRUE(is_fixnum(result));
         TEST_ASSERT_EQUAL_INT(7, as_fixnum(result));
         
-        evalstate_free(st);
 }
 
 // ============================================================================
 // TEST: defn with recursive function
 // ============================================================================
 TEST(test_defn_recursive_function) {
-        EvalState *st = evalstate_new();
         
         // Test: (defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))
         eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", st);
@@ -119,14 +110,12 @@ TEST(test_defn_recursive_function) {
         TEST_ASSERT_TRUE(is_fixnum(result));
         TEST_ASSERT_EQUAL_INT(120, as_fixnum(result));
         
-        evalstate_free(st);
 }
 
 // ============================================================================
 // TEST: defn symbol resolution in REPL context (reproduces current bug)
 // ============================================================================
 TEST(test_defn_symbol_resolution_in_repl_context) {
-    EvalState *st = evalstate_new();
     
     // Simuliere REPL-Kontext: evaluiere defn wie im REPL
     // Das sollte aktuell fehlschlagen mit "Unable to resolve symbol: defn"
@@ -142,14 +131,12 @@ TEST(test_defn_symbol_resolution_in_repl_context) {
     TEST_ASSERT_TRUE(is_fixnum(call));
     TEST_ASSERT_EQUAL_INT(5, as_fixnum(call));
     
-    evalstate_free(st);
 }
 
 // ============================================================================
 // TEST: Parameter lookup optimization
 // ============================================================================
 TEST(test_parameter_lookup_optimization) {
-    EvalState *st = evalstate_new();
     
     // Define a function with 3 parameters to test lookup performance
     eval_string("(defn test-lookup [a b c] (+ a (+ b c)))", st);
@@ -175,7 +162,6 @@ TEST(test_parameter_lookup_optimization) {
     
     printf("Baseline: 1000 function calls with parameter lookups took %.2f ms\n", elapsed_ms);
     
-    evalstate_free(st);
 }
 
 // ============================================================================
@@ -185,7 +171,6 @@ TEST(test_parameter_lookup_optimization) {
 // Test: Verify that defn is recognized as special form
 TEST(test_defn_symbol_recognized) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         TEST_ASSERT_NOT_NULL(st);
         
         // Get 'defn' symbol from parser
@@ -214,7 +199,6 @@ TEST(test_defn_symbol_recognized) {
             CljSymbol *parsed_sym = as_symbol(defn_sym);
             CljSymbol *special_sym = as_symbol(SYM_DEFN);
             if (parsed_sym && special_sym && parsed_sym->name && special_sym->name) {
-                bool name_match = (strcmp(parsed_sym->name, special_sym->name) == 0);
                 TEST_FAIL_MESSAGE("defn symbol pointer mismatch - parsed symbol has different pointer than SYM_DEFN (symbol interning issue)");
             } else {
                 TEST_FAIL_MESSAGE("defn symbol pointer mismatch and cannot compare names");
@@ -222,14 +206,12 @@ TEST(test_defn_symbol_recognized) {
         }
         
         RELEASE((CljObject*)form);
-        evalstate_free(st);
     });
 }
 
 // Test: Verify that (defn test-fn ...) is parsed correctly
 TEST(test_defn_test_fn_parsed) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         TEST_ASSERT_NOT_NULL(st);
         
         // Parse (defn test-fn [x] (+ x 1))
@@ -262,18 +244,15 @@ TEST(test_defn_test_fn_parsed) {
                                         "second element should be 'test-fn' symbol");
         
         RELEASE((CljObject*)form);
-        evalstate_free(st);
     });
 }
 
 // Test: Verify that eval_defn is called when (defn test-fn ...) is evaluated
 TEST(test_defn_test_fn_evaluated) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         TEST_ASSERT_NOT_NULL(st);
         
         // Set current namespace to clojure.core
-        evalstate_set_ns(st, "clojure.core");
         
         // Ensure clojure.core cache is set
         if (st->current_ns && !g_runtime.clojure_core_cache) {
@@ -310,7 +289,136 @@ TEST(test_defn_test_fn_evaluated) {
                                  "test-fn should be a function");
         
         RELEASE((CljObject*)form);
-        evalstate_free(st);
+    });
+}
+
+// ============================================================================
+// TEST: Verify that add is stored in namespace after defn
+// ============================================================================
+TEST(test_defn_add_stored_in_namespace) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Define add function
+        const char *code = "(defn add [a b] (+ a b))";
+        CljValue result = eval_string(code, st);
+        TEST_ASSERT_NOT_NULL(result);
+        
+        // Verify that 'add' is now in the namespace mappings
+        CljNamespace *ns = st->current_ns;
+        TEST_ASSERT_NOT_NULL(ns);
+        TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
+        
+        CljObject *add_sym = intern_symbol_global("add");
+        TEST_ASSERT_NOT_NULL(add_sym);
+        
+        ID add_value = map_get((CljValue)ns->mappings, (CljValue)add_sym);
+        TEST_ASSERT_NOT_NULL_MESSAGE(add_value, 
+                                     "'add' should be in namespace mappings after defn");
+        
+        // Verify that add_value is a function (CLJ_CLOSURE)
+        TEST_ASSERT_TRUE_MESSAGE(is_type(add_value, CLJ_CLOSURE) || is_type(add_value, CLJ_FUNC),
+                                 "add should be a function");
+        
+    });
+}
+
+// ============================================================================
+// TEST: Verify that ns_resolve finds add after defn
+// ============================================================================
+TEST(test_defn_ns_resolve_finds_add) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Define add function
+        const char *code = "(defn add [a b] (+ a b))";
+        CljValue result = eval_string(code, st);
+        TEST_ASSERT_NOT_NULL(result);
+        
+        // Try to resolve 'add' using ns_resolve
+        CljObject *add_sym = intern_symbol_global("add");
+        TEST_ASSERT_NOT_NULL(add_sym);
+        
+        ID resolved = ns_resolve(st, add_sym);
+        TEST_ASSERT_NOT_NULL_MESSAGE(resolved, 
+                                     "ns_resolve should find 'add' after defn");
+        
+        // Verify that resolved is a function
+        TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_CLOSURE) || is_type(resolved, CLJ_FUNC),
+                                 "resolved 'add' should be a function");
+        
+    });
+}
+
+// ============================================================================
+// TEST: Verify that eval_symbol resolves add after defn
+// ============================================================================
+TEST(test_defn_eval_symbol_resolves_add) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Define add function
+        const char *code = "(defn add [a b] (+ a b))";
+        CljValue result = eval_string(code, st);
+        TEST_ASSERT_NOT_NULL(result);
+        
+        // Try to resolve 'add' using eval_symbol
+        CljObject *add_sym = intern_symbol_global("add");
+        TEST_ASSERT_NOT_NULL(add_sym);
+        
+        ID resolved = eval_symbol(add_sym, st);
+        TEST_ASSERT_NOT_NULL_MESSAGE(resolved, 
+                                     "eval_symbol should resolve 'add' after defn");
+        
+        // Verify that resolved is a function
+        TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_CLOSURE) || is_type(resolved, CLJ_FUNC),
+                                 "resolved 'add' should be a function");
+        
+    });
+}
+
+// ============================================================================
+// TEST: Verify that a function can be called after defn
+// ============================================================================
+TEST(test_defn_add_can_be_called) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(st);
+        
+        // Define a function (not 'add' since it already exists in clojure.core)
+        const char *defn_code = "(defn my-sum [a b] (+ a b))";
+        CljValue defn_result = eval_string(defn_code, st);
+        TEST_ASSERT_NOT_NULL(defn_result);
+        
+        // Verify that 'my-sum' is in namespace
+        CljObject *my_sum_sym = intern_symbol_global("my-sum");
+        ID my_sum_value = ns_resolve(st, my_sum_sym);
+        TEST_ASSERT_NOT_NULL_MESSAGE(my_sum_value, 
+                                     "'my-sum' should be resolvable after defn");
+        
+        // Try to call my-sum
+        const char *call_code = "(my-sum 3 4)";
+        CljValue call_result = eval_string(call_code, st);
+        
+        TEST_ASSERT_NOT_NULL_MESSAGE(call_result, 
+                                     "Calling (my-sum 3 4) should return a result");
+        
+        // Debug: Check what type call_result actually is
+        if (call_result) {
+            CljObject *obj = (CljObject*)call_result;
+            if (!is_fixnum(call_result)) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), 
+                        "Calling (my-sum 3 4) returned type %d (%s), expected fixnum", 
+                        obj->type, clj_type_name(obj->type));
+                TEST_FAIL_MESSAGE(msg);
+            }
+        }
+        
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum(call_result), 
+                                 "Calling (my-sum 3 4) should return a fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(7, as_fixnum(call_result), 
+                                      "Calling (my-sum 3 4) should return 7");
+        
     });
 }
 

@@ -195,7 +195,6 @@ TEST(test_cljvalue_immediates_fixed) {
 TEST(test_cljvalue_parser_immediates) {
     WITH_AUTORELEASE_POOL({
         // Test parser immediate value creation
-        EvalState *st = evalstate_new();
         TEST_ASSERT_NOT_NULL(st);
         
         // Test parsing fixnums
@@ -228,7 +227,6 @@ TEST(test_cljvalue_parser_immediates) {
         CljObject *nil_obj = eval_string("nil", st);
         TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
         
-        evalstate_free(st);
     });
 }
 
@@ -301,7 +299,6 @@ TEST(test_cljvalue_immediates_high_level) {
 // Test division by zero exception
 TEST(test_division_by_zero_exception) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         if (!st) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
@@ -320,14 +317,12 @@ TEST(test_division_by_zero_exception) {
         TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Division by zero should throw exception");
         TEST_ASSERT_NULL(result);
         
-        evalstate_free(st);
     });
 }
 
 // Ein sehr einfacher Test für die Grundfunktionalität
 TEST(test_simple_arithmetic) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
         if (!st) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
@@ -342,7 +337,6 @@ TEST(test_simple_arithmetic) {
         }
         if (result) RELEASE(result);
         
-        evalstate_free(st);
     });
 }
 

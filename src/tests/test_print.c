@@ -83,8 +83,8 @@ TEST(test_print_str_different_types) {
         
         // Test with map (simplified - just test basic functionality)
         CljMap *map = (CljMap*)make_map(2);
-        map_assoc((CljValue)map, (CljValue)make_string("a"), fixnum(1));
-        map_assoc((CljValue)map, (CljValue)make_string("b"), fixnum(2));
+        map_assoc((CljValue)map, (CljValue)(ID)make_string("a"), fixnum(1));
+        map_assoc((CljValue)map, (CljValue)(ID)make_string("b"), fixnum(2));
         
         result = print_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
@@ -128,10 +128,9 @@ TEST(test_print_str_special_values) {
 // ============================================================================
 TEST(test_native_print_functions) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        
         // Test: (print "Hello") should print without quotes, without newline
         // Note: This test captures stdout, but for now we just test that it doesn't crash
+        // Use global st from setUp
         const char *code1 = "(print \"Hello\")";
         CljValue result1 = eval_string(code1, st);
         TEST_ASSERT_NULL(result1);  // print returns nil
@@ -150,8 +149,6 @@ TEST(test_native_print_functions) {
         const char *code4 = "(prn \"Hello\")";
         CljValue result4 = eval_string(code4, st);
         TEST_ASSERT_NULL(result4);  // prn returns nil
-        
-        evalstate_free(st);
     });
 }
 
@@ -160,9 +157,8 @@ TEST(test_native_print_functions) {
 // ============================================================================
 TEST(test_native_print_multiple_args) {
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        
         // Test: (println "a" "b" "c") should print "a b c" with newline
+        // Use global st from setUp
         const char *code = "(println \"a\" \"b\" \"c\")";
         CljValue result = eval_string(code, st);
         TEST_ASSERT_NULL(result);  // println returns nil
@@ -171,7 +167,5 @@ TEST(test_native_print_multiple_args) {
         const char *code2 = "(print 1 2 3)";
         CljValue result2 = eval_string(code2, st);
         TEST_ASSERT_NULL(result2);  // print returns nil
-        
-        evalstate_free(st);
     });
 }

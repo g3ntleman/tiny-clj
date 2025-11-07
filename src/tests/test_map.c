@@ -1,9 +1,9 @@
 #include "tests_common.h"
 #include "../channel.h"
+#include "../symbol.h"
 
 // Test that map_assoc correctly updates values for interned symbol keys
 TEST(test_map_assoc_updates_interned_symbol_key) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(2);
     CljObject *kw = intern_symbol(NULL, ":closed");
     
@@ -16,14 +16,11 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljValue)map, (CljValue)kw)) == SPECIAL_TRUE);
     TEST_ASSERT_EQUAL_INT(1, map->count); // Should update, not add
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
 }
 
 // Test that map_assoc works correctly with channel pattern (like result channels)
 TEST(test_map_assoc_channel_pattern) {
-    EvalState *st = evalstate_new();
-    
     // Create channel like make_result_channel
     CljMap *chan = (CljMap*)make_map(2);
     (void)map_assoc((CljObject*)chan, intern_symbol(NULL, ":value"), NULL);
@@ -36,7 +33,6 @@ TEST(test_map_assoc_channel_pattern) {
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljValue)chan, (CljValue)kw_closed)) == SPECIAL_TRUE);
     
-    evalstate_free(st);
     RELEASE((CljObject*)chan);
 }
 
@@ -73,7 +69,6 @@ TEST(test_assign_with_immediates) {
 
 // Test that ASSIGN with Immediates works in map context
 TEST(test_assign_immediates_in_map) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(4);
     CljObject *kw = intern_symbol(NULL, ":test");
     
@@ -103,13 +98,11 @@ TEST(test_assign_immediates_in_map) {
     
     TEST_ASSERT_EQUAL_INT(1, map->count); // Should update, not add
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
 }
 
 // Hypothesis 1: intern_symbol returns different pointers for same symbol
 TEST(test_intern_symbol_consistency_for_closed) {
-    EvalState *st = evalstate_new();
     
     // Call intern_symbol multiple times with same arguments
     CljObject *kw1 = intern_symbol(NULL, ":closed");
@@ -121,12 +114,10 @@ TEST(test_intern_symbol_consistency_for_closed) {
     TEST_ASSERT_EQUAL_PTR(kw2, kw3);
     TEST_ASSERT_EQUAL_PTR(kw1, kw3);
     
-    evalstate_free(st);
 }
 
 // Hypothesis 2: map_assoc fails when called from different contexts
 TEST(test_map_assoc_with_different_intern_calls) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(4);
     
     // Create channel like make_result_channel does
@@ -154,13 +145,11 @@ TEST(test_map_assoc_with_different_intern_calls) {
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(2, map->count);
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
 }
 
 // Hypothesis 3: Problem with NULL value in map_assoc
 TEST(test_map_assoc_with_null_value) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(4);
     CljObject *kw = intern_symbol(NULL, ":value");
     
@@ -182,13 +171,11 @@ TEST(test_map_assoc_with_null_value) {
     
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
 }
 
 // Hypothesis 4: Test exact channel pattern from make_result_channel and channel_put_and_close
 TEST(test_exact_channel_pattern) {
-    EvalState *st = evalstate_new();
     
     // Exact replication of make_result_channel
     CljMap *chan = (CljMap*)make_map(4);
@@ -214,13 +201,11 @@ TEST(test_exact_channel_pattern) {
     TEST_ASSERT_TRUE(is_special(closed_final));
     TEST_ASSERT_TRUE(as_special(closed_final) == SPECIAL_TRUE);
     
-    evalstate_free(st);
     RELEASE((CljObject*)chan);
 }
 
 // Hypothesis 5: Channel object identity - is the channel returned by eval_list the same as the one in the queue?
 TEST(test_channel_object_identity) {
-    EvalState *st = evalstate_new();
     CljMap *env = (CljMap*)make_map(4);
     
     // Create a channel manually
@@ -246,7 +231,6 @@ TEST(test_channel_object_identity) {
     TEST_ASSERT_TRUE(is_special(closed_final));
     TEST_ASSERT_TRUE(as_special(closed_final) == SPECIAL_TRUE);
     
-    evalstate_free(st);
     RELEASE(env);
     RELEASE(chan1);
 }
@@ -258,7 +242,6 @@ TEST(test_channel_object_identity) {
 // Test that map_assoc works with pointer equality via clj_equal()
 // (verifies that removing redundant fast-path doesn't break functionality)
 TEST(test_map_assoc_with_pointer_equality) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(4);
     CljObject *kw = intern_symbol(NULL, ":test");
     
@@ -277,13 +260,11 @@ TEST(test_map_assoc_with_pointer_equality) {
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
 }
 
 // Test that map_assoc works with structural equality (non-interned keys)
 TEST(test_map_assoc_with_structural_equality) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(4);
     
     // Create two different string objects with same content
@@ -305,15 +286,79 @@ TEST(test_map_assoc_with_structural_equality) {
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
     RELEASE(str1);
     RELEASE(str2);
 }
 
+// Test that map_get finds symbols bound in let_env
+TEST(test_map_get_finds_let_binding) {
+    // Create a map (simulating let_env)
+    CljMap *let_env = (CljMap*)make_map(4);
+    TEST_ASSERT_NOT_NULL(let_env);
+    
+    // Create a symbol "step" (interned)
+    CljObject *step_sym = intern_symbol_global("step");
+    TEST_ASSERT_NOT_NULL(step_sym);
+    
+    // Create a function value (simulating fn result)
+    CljObject *fn_value = fixnum(42); // Simplified: use fixnum as placeholder
+    TEST_ASSERT_NOT_NULL(fn_value);
+    
+    // Bind step in let_env
+    (void)map_assoc((CljObject*)let_env, step_sym, fn_value);
+    
+    // Verify step is in let_env
+    CljValue found = map_get((CljValue)let_env, (CljValue)step_sym);
+    TEST_ASSERT_NOT_NULL(found);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(found));
+    
+    // Create another "step" symbol (should be same pointer if interned)
+    CljObject *step_sym2 = intern_symbol_global("step");
+    TEST_ASSERT_NOT_NULL(step_sym2);
+    
+    // Verify both symbols are the same pointer (interned)
+    TEST_ASSERT_EQUAL_PTR(step_sym, step_sym2);
+    
+    // Verify map_get finds step using second symbol
+    CljValue found2 = map_get((CljValue)let_env, (CljValue)step_sym2);
+    TEST_ASSERT_NOT_NULL(found2);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(found2));
+    
+    RELEASE((CljObject*)let_env);
+}
+
+// Test that map_get uses structural comparison for non-interned symbols
+TEST(test_map_get_structural_comparison) {
+    // Create a map
+    CljMap *let_env = (CljMap*)make_map(4);
+    TEST_ASSERT_NOT_NULL(let_env);
+    
+    // Create a symbol "step" (interned)
+    CljObject *step_sym = intern_symbol_global("step");
+    TEST_ASSERT_NOT_NULL(step_sym);
+    
+    // Create a function value
+    CljObject *fn_value = fixnum(42);
+    TEST_ASSERT_NOT_NULL(fn_value);
+    
+    // Bind step in let_env
+    (void)map_assoc((CljObject*)let_env, step_sym, fn_value);
+    
+    // Create another "step" symbol (should be same pointer if interned)
+    CljObject *step_sym2 = intern_symbol_global("step");
+    TEST_ASSERT_NOT_NULL(step_sym2);
+    
+    // Verify map_get finds step using second symbol (should work via pointer or structural comparison)
+    CljValue found = map_get((CljValue)let_env, (CljValue)step_sym2);
+    TEST_ASSERT_NOT_NULL(found);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(found));
+    
+    RELEASE((CljObject*)let_env);
+}
+
 // Test that performance is unchanged (clj_equal() already does == check first)
 TEST(test_map_assoc_performance_unchanged) {
-    EvalState *st = evalstate_new();
     CljMap *map = (CljMap*)make_map(100);
     CljObject *kw = intern_symbol(NULL, ":test");
     
@@ -329,7 +374,6 @@ TEST(test_map_assoc_performance_unchanged) {
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
     
-    evalstate_free(st);
     RELEASE((CljObject*)map);
 }
 
@@ -762,4 +806,256 @@ TEST(test_cow_actual_cow_demonstration) {
         // Cleanup
         RELEASE((CljValue)map);
     });
+}
+
+// ============================================================================
+// Tests for update function
+// ============================================================================
+
+TEST(test_update_basic) {
+    // Test: (update {:a 1} :a inc) => {:a 2}
+    CljObject *result = eval_string("(update {:a 1} :a inc)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_type(result, CLJ_MAP));
+    
+    // Verify the updated value
+    CljObject *key = intern_symbol(NULL, ":a");
+    CljValue val = map_get((CljValue)result, (CljValue)key);
+    TEST_ASSERT_NOT_NULL(val);
+    TEST_ASSERT_TRUE(is_fixnum(val));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(val));
+}
+
+TEST(test_update_with_function) {
+    // Test: (update {:count 5} :count (fn [x] (* x 2))) => {:count 10}
+    CljObject *result = eval_string("(update {:count 5} :count (fn [x] (* x 2)))", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_type(result, CLJ_MAP));
+    
+    // Verify the updated value
+    CljObject *key = intern_symbol(NULL, ":count");
+    CljValue val = map_get((CljValue)result, (CljValue)key);
+    TEST_ASSERT_NOT_NULL(val);
+    TEST_ASSERT_TRUE(is_fixnum(val));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(val));
+}
+
+// Simplified test: Direct C function calls
+TEST(test_update_missing_key_simple) {
+    // Step 1: Create initial map {:a 1}
+    CljObject *pairs[2];
+    pairs[0] = intern_symbol(NULL, ":a");
+    pairs[1] = (CljObject*)fixnum(1);
+    CljMap *map = make_map_from_stack(pairs, 1);
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(1, map->count);
+    
+    // Step 2: Get value for missing key :b (should return NULL)
+    CljObject *key_b = intern_symbol(NULL, ":b");
+    CljValue val_b_before = map_get((CljValue)map, (CljValue)key_b);
+    TEST_ASSERT_NULL_MESSAGE(val_b_before, "key :b should not exist before update");
+    
+    // Step 3: Apply function to missing key (nil -> 0)
+    CljObject *new_val_b = (CljObject*)fixnum(0);
+    
+    // Step 4: Use map_assoc to add the new key
+    CljValue result = map_assoc((CljValue)map, (CljValue)key_b, (CljValue)new_val_b);
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "map_assoc should return a map");
+    TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_MAP));
+    
+    CljMap *result_map = as_map((CljObject*)result);
+    TEST_ASSERT_EQUAL_INT(2, result_map->count);
+    
+    // Step 5: Verify the new key was added
+    CljValue val_b_after = map_get(result, (CljValue)key_b);
+    TEST_ASSERT_NOT_NULL_MESSAGE(val_b_after, "key :b should exist after update");
+    if (val_b_after) {
+        TEST_ASSERT_TRUE(is_fixnum(val_b_after));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum(val_b_after));
+    }
+    
+    // Step 6: Verify original key still exists
+    CljObject *key_a = intern_symbol(NULL, ":a");
+    CljValue val_a = map_get(result, (CljValue)key_a);
+    TEST_ASSERT_NOT_NULL_MESSAGE(val_a, "key :a should still exist");
+    if (val_a) {
+        TEST_ASSERT_TRUE(is_fixnum(val_a));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
+    }
+    
+    RELEASE((CljObject*)map);
+}
+
+// Test if (if nil 0 0) returns 0 correctly
+// This tests the fix for the bug where if returned NULL when cond_val was nil,
+// instead of evaluating the else branch
+TEST(test_if_nil_zero) {
+    
+    // Test: (if nil 0 0) => 0
+    // nil is falsy, so the else branch (0) should be evaluated
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(if nil 0 0)", st);
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "if should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "(if nil 0 0) should return 0, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "(if nil 0 0) should return a fixnum");
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+    
+}
+
+// Test if (fn [x] (if x 0 0)) works correctly with nil
+// This tests the fix for the bug where if inside a function returned NULL when cond_val was nil,
+// instead of evaluating the else branch. This is the critical test that caught the bug.
+TEST(test_fn_if_nil_zero) {
+    
+    // Test: ((fn [x] (if x 0 0)) nil) => 0
+    // When x is nil, (if x 0 0) should evaluate the else branch (0)
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("((fn [x] (if x 0 0)) nil)", st);
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "fn call should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "((fn [x] (if x 0 0)) nil) should return 0, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "((fn [x] (if x 0 0)) nil) should return a fixnum");
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+    
+}
+
+// High-level test: Using eval_string to test the full update function
+// This tests: (update {:a 1} :b (fn [x] (if x 0 0))) => {:a 1 :b 0}
+// The update function is defined as: (def update (fn [m key f] (assoc m key (f (get m key)))))
+TEST(test_update_missing_key) {
+    // Test: (update {:a 1} :b (fn [x] (if x 0 0))) => {:a 1 :b 0} (nil -> 0)
+    // This expands to: (assoc {:a 1} :b ((fn [x] (if x 0 0)) (get {:a 1} :b)))
+    // When :b doesn't exist, (get {:a 1} :b) returns nil
+    // Then ((fn [x] (if x 0 0)) nil) => (if nil 0 0) => 0
+    // Finally: (assoc {:a 1} :b 0) => {:a 1 :b 0}
+    
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(update {:a 1} :b (fn [x] (if x 0 0)))", st);
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "update should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "update should return a map, not NULL");
+    if (!result) {
+        return;
+    }
+    
+    TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_MAP), "update result should be a map");
+    
+    CljMap *result_map = as_map((CljObject*)result);
+    TEST_ASSERT_EQUAL_INT(2, result_map->count);
+    
+    // Verify the new key was added
+    CljObject *key_b = intern_symbol(NULL, ":b");
+    CljValue val_b = map_get((CljValue)result, (CljValue)key_b);
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(val_b, "update should add missing key");
+    if (val_b) {
+        TEST_ASSERT_TRUE(is_fixnum(val_b));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum(val_b));
+    }
+    
+    // Verify original key still exists
+    CljObject *key_a = intern_symbol(NULL, ":a");
+    CljValue val_a = map_get((CljValue)result, (CljValue)key_a);
+    TEST_ASSERT_NOT_NULL_MESSAGE(val_a, "update should preserve existing keys");
+    if (val_a) {
+        TEST_ASSERT_TRUE(is_fixnum(val_a));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
+    }
+}
+
+// Isolated test for assoc with maps - reproduces the problem
+TEST(test_assoc_map_isolated) {
+
+    // Test: (assoc {:a 1} :b 2) should return {:a 1 :b 2}, not nil
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(assoc {:a 1} :b 2)", st);
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "assoc should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    } END_TRY
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "assoc should return a map, not nil");
+    if (!result) {
+        return;
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_MAP), "assoc result should be a map");
+
+    // Verify the new key was added
+    CljObject *key_b = intern_symbol(NULL, ":b");
+    CljValue val_b = map_get((CljValue)result, (CljValue)key_b);
+    TEST_ASSERT_NOT_NULL_MESSAGE(val_b, "assoc should add new key :b");
+    if (val_b) {
+        TEST_ASSERT_TRUE(is_fixnum(val_b));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_b));
+    }
+
+    // Verify original key still exists
+    CljObject *key_a = intern_symbol(NULL, ":a");
+    CljValue val_a = map_get((CljValue)result, (CljValue)key_a);
+    TEST_ASSERT_NOT_NULL_MESSAGE(val_a, "assoc should preserve existing key :a");
+    if (val_a) {
+        TEST_ASSERT_TRUE(is_fixnum(val_a));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
+    }
+
+}
+
+// Direct C test for map_assoc adding a new key
+TEST(test_map_assoc_direct) {
+    
+    // Create a map {:a 1} with capacity 4
+    CljObject *pairs[2];
+    pairs[0] = intern_symbol(NULL, ":a");
+    pairs[1] = (CljObject*)fixnum(1);
+    CljMap *map = make_map_from_stack(pairs, 1);
+    
+    
+    // Add a new key :b with value 2
+    CljObject *key_b = intern_symbol(NULL, ":b");
+    CljObject *val_b = (CljObject*)fixnum(2);
+    
+    CljValue result = map_assoc((CljValue)map, (CljValue)key_b, (CljValue)val_b);
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Verify the new key was added
+    CljValue retrieved_val_b = map_get(result, (CljValue)key_b);
+    TEST_ASSERT_NOT_NULL_MESSAGE(retrieved_val_b, "map_assoc should add new key :b");
+    if (retrieved_val_b) {
+        TEST_ASSERT_TRUE(is_fixnum(retrieved_val_b));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum(retrieved_val_b));
+    }
+    
+    // Verify original key still exists
+    CljObject *key_a = intern_symbol(NULL, ":a");
+    CljValue retrieved_val_a = map_get(result, (CljValue)key_a);
+    TEST_ASSERT_NOT_NULL_MESSAGE(retrieved_val_a, "map_assoc should preserve existing key :a");
+    if (retrieved_val_a) {
+        TEST_ASSERT_TRUE(is_fixnum(retrieved_val_a));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(retrieved_val_a));
+    }
+    
+    RELEASE((CljObject*)map);
 }

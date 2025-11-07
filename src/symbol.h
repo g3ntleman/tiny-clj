@@ -18,6 +18,13 @@ static inline CljSymbol* as_symbol(ID obj) {
     return (CljSymbol*)assert_type((CljObject*)obj, CLJ_SYMBOL);
 }
 
+// Check if an object is a keyword (symbol starting with ':')
+#define IS_KEYWORD(obj) \
+    (is_type((obj), CLJ_SYMBOL) && \
+     as_symbol((obj)) && \
+     as_symbol((obj))->name && \
+     as_symbol((obj))->name[0] == ':')
+
 // Globale Symbol-Pointer für Spezialformen (direkt als CljObject*)
 extern CljObject *SYM_TRY;
 extern CljObject *SYM_CATCH;
@@ -42,6 +49,8 @@ extern CljObject *SYM_FINALLY;
 extern CljObject *SYM_NS;
 extern CljObject *SYM_GO;
 extern CljObject *SYM_TIME;
+extern CljObject *SYM_DEREF;
+extern CljObject *SYM_NIL;
 
 // Globale Symbol-Pointer für Builtin-Funktionen
 extern CljObject *SYM_PLUS;

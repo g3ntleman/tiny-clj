@@ -30,6 +30,8 @@ CljObject *SYM_VAR = NULL;
 CljObject *SYM_NS = NULL;
 CljObject *SYM_TIME = NULL;
 CljObject *SYM_GO = NULL;
+CljObject *SYM_DEREF = NULL;
+CljObject *SYM_NIL = NULL;
 
 // Builtin-Funktionen
 CljObject *SYM_PLUS = NULL;
@@ -101,6 +103,12 @@ static struct { CljSymbol sym; } sym_def_data = {
 };
 static struct { CljSymbol sym; } sym_defn_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "defn" }
+};
+static struct { CljSymbol sym; } sym_deref_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "deref" }
+};
+static struct { CljSymbol sym; } sym_nil_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "nil" }
 };
 static struct { CljSymbol sym; } sym_quote_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = 1 }, .ns = NULL, .name = "quote" }
@@ -305,6 +313,12 @@ void init_special_symbols() {
     
     SYM_DEFN = (CljObject*)&sym_defn_data;
     symbol_table_add(NULL, "defn", SYM_DEFN);
+    
+    SYM_DEREF = (CljObject*)&sym_deref_data;
+    symbol_table_add(NULL, "deref", SYM_DEREF);
+    
+    SYM_NIL = (CljObject*)&sym_nil_data;
+    symbol_table_add(NULL, "nil", SYM_NIL);
     
     SYM_VAR = (CljObject*)&sym_var_data;
     symbol_table_add(NULL, "var", SYM_VAR);

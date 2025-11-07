@@ -3,6 +3,7 @@
 
 #include "object.h"
 #include "namespace.h"
+#include "symbol.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,6 +12,7 @@
 // CljNamespace is already defined in namespace.h
 
 // Forward declarations for string functions
+struct CljString;
 extern struct CljString* empty_string_singleton;
 
 // Forward declarations for namespace functions
@@ -108,8 +110,8 @@ static inline int32_t as_fixnum(CljValue val) {
 // Function declarations for large functions moved to value.c
 CljValue character(uint32_t codepoint);
 CljValue fixed(float value);
-CljValue make_string(const char *str);
-CljValue make_symbol_impl(const char *name, const char *ns);
+struct CljString* make_string(const char *str);
+CljSymbol* make_symbol_impl(const char *name, const char *ns);
 
 
 static inline bool is_character(CljValue val) {

@@ -13,7 +13,33 @@
 #include "object.h"
 #include "value.h"
 
-CljObject* make_function(CljObject **params, int param_count, CljObject *body, CljObject *closure_env, const char *name) {
+/**
+ * @brief Allocate and initialize parameter array for function
+ * @param func Function object to allocate params for
+ * @param params Source parameter array
+ * @param param_count Number of parameters
+ * @return 0 on success, -1 on failure (func is cleaned up on failure)
+ */
+static int allocate_function_params(CljFunction *func, ID *params, int param_count) {
+    if (param_count > 0 && params) {
+        // Use alloc for memory profiling, even though it's not a CljObject
+        // Pass CLJ_UNKNOWN as type since it's just raw memory
+        func->params = (ID*)alloc(sizeof(ID), param_count, CLJ_UNKNOWN);
+        if (!func->params) {
+            DEALLOC(func);
+            throw_oom(CLJ_CLOSURE);
+            return -1;
+        }
+        for (int i = 0; i < param_count; i++) {
+            func->params[i] = RETAIN(params[i]);
+        }
+    } else {
+        func->params = NULL;
+    }
+    return 0;
+}
+
+CljFunction* make_function(ID *params, int param_count, ID body, ID closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
@@ -26,20 +52,11 @@ CljObject* make_function(CljObject **params, int param_count, CljObject *body, C
     func->closure_env = RETAIN(closure_env);
     func->name = name ? strdup(name) : NULL;
     
-    // Parameter-Array kopieren
-    if (param_count > 0 && params) {
-        func->params = (CljObject**)malloc(sizeof(CljObject*) * param_count);
-        if (!func->params) {
-            DEALLOC(func);
-            throw_oom(CLJ_CLOSURE);
-        }
-        for (int i = 0; i < param_count; i++) {
-            func->params[i] = RETAIN(params[i]);
-        }
-    } else {
-        func->params = NULL;
+    // Allocate and initialize parameter array
+    if (allocate_function_params(func, params, param_count) != 0) {
+        return NULL;
     }
     
-    return (CljObject*)func;
+    return func;
 }
 

@@ -91,8 +91,13 @@ static inline CljType TYPE_impl(ID obj) {
 
 // Check if an object is a singleton (should not be reference counted)
 static inline bool is_singleton(CljObject *obj) {
+    // Safety check: ensure the pointer is valid before accessing fields
+    if (!obj || (uintptr_t)obj < 0x1000) {
+        return true;  // NULL or invalid pointer is treated as singleton
+    }
+    
     // Happy path: valid object that is NOT a singleton
-    if (obj && (uintptr_t)obj >= 0x1000 && !IS_SINGLETON_TYPE(obj->type) && 
+    if (!IS_SINGLETON_TYPE(obj->type) && 
         !(obj->rc == 0 && (obj->type == CLJ_MAP || obj->type == CLJ_LIST || obj->type == CLJ_STRING || obj->type == CLJ_VECTOR))) {
         return false;
     }

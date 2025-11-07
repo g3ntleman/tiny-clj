@@ -32,9 +32,9 @@ static inline CljPersistentVector* as_vector(ID obj) {
 
 // === CljValue API ===
 /** Return empty vector singleton (rc=0, do not retain/release). */
-CljValue empty_vector(void);
+ID empty_vector(void);
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
-CljValue make_vector(unsigned int capacity, bool is_mutable);
+CljVector make_vector(unsigned int capacity, bool is_mutable);
 /** Return a new vector with item appended; original vector remains unchanged.
  * Uses Copy-on-Write: RC=1 → in-place mutation, RC>1 → COW.
  */

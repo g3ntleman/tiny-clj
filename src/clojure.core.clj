@@ -36,6 +36,8 @@ R"CLOJURE(
 ; ============================================================================
 (def second (fn [coll] (first (rest coll))))
 (def empty? (fn [coll] (= (count coll) 0)))
+(def update (fn [map key f]
+  (assoc map key (f (get map key)))))
 
 ; ============================================================================
 ; Utility Functions
@@ -49,6 +51,15 @@ R"CLOJURE(
   (if (empty? coll)
     (list)
     (cons (f (first coll)) (recur f (rest coll))))))
+
+(def filter (fn [pred coll]
+  (let [step (fn [pred coll acc]
+                (if (empty? coll)
+                  (reverse acc)
+                  (if (pred (first coll))
+                    (recur pred (rest coll) (cons (first coll) acc))
+                    (recur pred (rest coll) acc))))]
+    (step pred coll (list)))))
 
 ; ============================================================================
 ; Utility Functions

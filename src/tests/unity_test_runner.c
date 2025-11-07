@@ -18,8 +18,10 @@ int load_clojure_core(EvalState *st);
 
 // Static flags to ensure initialization happens only once
 static bool g_clojure_core_loaded = false;
-static EvalState *g_test_eval_state = NULL;
 static bool g_special_symbols_initialized = false;
+
+// Global test EvalState (available in all tests via tests_common.h)
+EvalState *g_test_eval_state = NULL;
 
 // ============================================================================
 // GLOBAL SETUP/TEARDOWN
@@ -53,25 +55,57 @@ void setUp(void) {
     // Load clojure.core for each test (refresh state between tests)
     // Use autorelease pool for load_clojure_core to handle AUTORELEASE calls
     WITH_AUTORELEASE_POOL({
-        EvalState *st = evalstate_new();
-        if (st) {
-            // Set quiet mode to avoid output during tests
-            clojure_core_set_quiet(true);
-            load_clojure_core(st);
-            clojure_core_set_quiet(false);
-            
-            // CRITICAL: Create/update global evalState for all tests with inc available
-            // This ensures all tests can access clojure.core functions
-            if (!g_test_eval_state) {
-                g_test_eval_state = evalstate_new();
+        // CRITICAL: Create/update global evalState for all tests with clojure.core loaded
+        // This ensures all tests can access clojure.core functions
+        if (!g_test_eval_state) {
+            g_test_eval_state = evalstate_new(true); // Load clojure.core automatically
+        } else {
+            // Ensure clojure.core is loaded (reload if cache was cleared or namespace is empty)
+            bool needs_reload = false;
+            if (!g_runtime.clojure_core_cache) {
+                needs_reload = true;
+            } else {
+                // Check if clojure.core namespace actually has functions loaded
+                CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+                if (!clojure_core || !clojure_core->mappings) {
+                    needs_reload = true;
+                } else {
+                    // Check if 'inc' is in the namespace (quick check to verify functions are loaded)
+                    CljObject *inc_sym = intern_symbol_global("inc");
+                    if (inc_sym) {
+                        CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym);
+                        if (!inc_value) {
+                            needs_reload = true;
+                        }
+                    }
+                }
             }
-            if (g_test_eval_state && g_runtime.clojure_core_cache) {
-                g_test_eval_state->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
-            }
             
-            evalstate_free(st);
-            g_clojure_core_loaded = true; // Mark as loaded for first time
+            if (needs_reload) {
+                // Set current_ns to clojure.core before loading
+                evalstate_set_ns(g_test_eval_state, "clojure.core");
+                load_clojure_core(g_test_eval_state);
+            }
         }
+        
+        // Reset all fields of EvalState between tests
+        if (g_test_eval_state) {
+            g_test_eval_state->expr = NULL;
+            g_test_eval_state->result = NULL;
+            g_test_eval_state->pc = 0;
+            g_test_eval_state->step_budget = 0;
+            g_test_eval_state->sp = 0;
+            g_test_eval_state->finished = 0;
+            g_test_eval_state->file = NULL;
+            g_test_eval_state->line = 0;
+            g_test_eval_state->col = 0;
+            
+            // CRITICAL: Set current_ns to "user" (not clojure.core)
+            // clojure.core functions are available via ns_resolve() from cached namespace
+            evalstate_set_ns(g_test_eval_state, "user");
+        }
+        
+        g_clojure_core_loaded = true; // Mark as loaded for first time
     });
 }
 
@@ -96,12 +130,8 @@ void tearDown(void) {
 // EMBEDDED ARRAY TESTS (defined in this file)
 // ============================================================================
 
-// Forward declarations for embedded array tests (defined in this file)
-void test_embedded_array_single_malloc(void);
-void test_embedded_array_memory_efficiency(void);
-void test_embedded_array_cow(void);
-void test_embedded_array_capacity_growth(void);
-void test_embedded_array_performance(void);
+// Forward declarations for embedded array tests (now using TEST macro)
+// No forward declarations needed - TEST macro handles registration automatically
 
 // Note: All other tests are automatically registered via TEST() macro
 // No extern declarations needed for tests using TEST() macro
@@ -339,6 +369,10 @@ int main(int argc, char **argv) {
     }
 #endif
     
+    // Free global test evalState at the end (no memory leaks)
+    evalstate_free(g_test_eval_state);
+    g_test_eval_state = NULL;
+    
     // Unity will print its own summary (Tests X Failures Y Ignored Z)
     return UNITY_END();
 }
@@ -347,7 +381,7 @@ int main(int argc, char **argv) {
 // EMBEDDED ARRAY TESTS
 // ============================================================================
 
-void test_embedded_array_single_malloc(void) {
+TEST(test_embedded_array_single_malloc) {
     printf("\n=== Test: Single Malloc für embedded array ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -376,7 +410,7 @@ void test_embedded_array_single_malloc(void) {
     });
 }
 
-void test_embedded_array_memory_efficiency(void) {
+TEST(test_embedded_array_memory_efficiency) {
     printf("\n=== Test: Memory Efficiency ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -404,7 +438,7 @@ void test_embedded_array_memory_efficiency(void) {
     });
 }
 
-void test_embedded_array_cow(void) {
+TEST(test_embedded_array_cow) {
     printf("\n=== Test: COW mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -443,7 +477,7 @@ void test_embedded_array_cow(void) {
     });
 }
 
-void test_embedded_array_capacity_growth(void) {
+TEST(test_embedded_array_capacity_growth) {
     printf("\n=== Test: Capacity Growth mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
@@ -477,7 +511,7 @@ void test_embedded_array_capacity_growth(void) {
     });
 }
 
-void test_embedded_array_performance(void) {
+TEST(test_embedded_array_performance) {
     printf("\n=== Test: Performance mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({

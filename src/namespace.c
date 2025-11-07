@@ -8,6 +8,8 @@
 #include "exception.h"
 #include "symbol.h"
 #include "runtime.h"
+#include "tiny_clj.h"
+#include "memory.h"
 
 // Direkte Zugriffe auf g_runtime (ohne Makros)
 // #define ns_registry ((CljNamespace*)g_runtime.ns_registry)
@@ -58,7 +60,13 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
 }
 
 ID ns_resolve(EvalState *st, CljObject *sym) {
-    if (!st || !sym || !st->current_ns) {
+    if (!sym) {
+        return NULL;
+    }
+    
+    // Use default namespace if st is NULL (eliminates need for temporary EvalState instances)
+    CljNamespace *current_ns = st ? st->current_ns : ns_get_or_create("user", NULL);
+    if (!current_ns) {
         return NULL;
     }
     
@@ -69,18 +77,18 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     }
     
     // OPTIMIZATION: Check cache first (fast path for repeated lookups)
-    CljObject *cached = (CljObject*)map_get((CljValue)g_resolve_cache, (CljValue)sym);
+    ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym);
     if (cached) {
-        return (ID)cached;
+        return cached;
     }
     
     // Cache miss - perform normal resolution
     // First search in the current namespace
-    CljObject *v = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)sym);
+    ID v = map_get((CljValue)current_ns->mappings, (CljValue)sym);
     if (v) {
         // Cache the result for future lookups
         (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
-        return (ID)v;
+        return v;
     }
 
     // OPTIMIZATION: Priority-based namespace search
@@ -185,7 +193,7 @@ void ns_cleanup() {
 }
 
 // EvalState functions
-EvalState* evalstate() {
+EvalState* evalstate_new(bool load_core) {
     EvalState *st = (EvalState*)malloc(sizeof(EvalState));
     if (!st) {
         return NULL;
@@ -206,11 +214,18 @@ EvalState* evalstate() {
     st->line = 0;
     st->col = 0;
     
+    // Load clojure.core automatically if requested (functions available via ns_resolve)
+    // current_ns stays on "user"
+    if (load_core) {
+        WITH_AUTORELEASE_POOL({
+            load_clojure_core(st);
+        });
+        
+        // Ensure current_ns is "user" (not clojure.core)
+        evalstate_set_ns(st, "user");
+    }
+    
     return st;
-}
-
-EvalState* evalstate_new() {
-    return evalstate();
 }
 
 void evalstate_free(EvalState *st) {
@@ -306,8 +321,12 @@ CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
     if (is_type(expr, CLJ_SYMBOL)) {
         result = eval_symbol(expr, st);  // Bereits autoreleased
     } else if (is_type(expr, CLJ_LIST)) {
-        CljObject *env = (st && st->current_ns) ? st->current_ns->mappings : NULL;
-        result = eval_list(as_list(expr), (CljMap*)env, st);  // Bereits autoreleased
+        // ns_get_or_create always creates a map, so mappings should never be NULL
+        CLJ_ASSERT(st != NULL);
+        CLJ_ASSERT(st->current_ns != NULL);
+        CLJ_ASSERT(st->current_ns->mappings != NULL);
+        CljMap *env = (CljMap*)st->current_ns->mappings;
+        result = eval_list(as_list(expr), env, st);  // Bereits autoreleased
     } else {
         result = expr;  // Literal, bereits autoreleased von parse()
         // For literals, we need to AUTORELEASE them since eval_expr_simple is called from eval_parsed
@@ -338,8 +357,8 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
-    CljValue new_mappings = map_assoc((CljValue)ns->mappings, (CljValue)symbol, (CljValue)value);
-    if (new_mappings != (CljValue)ns->mappings) {
+    ID new_mappings = map_assoc((ID)ns->mappings, (ID)symbol, (ID)value);
+    if (new_mappings != (ID)ns->mappings) {
         // Map was copied (COW) - update reference
         RELEASE((CljObject*)ns->mappings);
         ns->mappings = (CljObject*)new_mappings;
@@ -380,8 +399,8 @@ void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
     // NOTE: map_assoc() already does RETAIN(ns_name) and RETAIN(alias) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->aliases
-    CljValue new_aliases = map_assoc((CljValue)ns->aliases, (CljValue)alias, (CljValue)ns_name);
-    if (new_aliases != (CljValue)ns->aliases) {
+    ID new_aliases = map_assoc((ID)ns->aliases, (ID)alias, (ID)ns_name);
+    if (new_aliases != (ID)ns->aliases) {
         // Map was copied (COW) - update reference
         RELEASE((CljObject*)ns->aliases);
         ns->aliases = (CljObject*)new_aliases;

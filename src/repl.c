@@ -99,17 +99,17 @@ static void print_result(CljObject *v) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->name[0] != '\0') {
             // Delegate to pr_str for correct formatting (handles :: and ns/)
-            char *s = pr_str(v);
+            const char *s = pr_str(v);
             if (s) {
                 printf("%s\n", s);
-                free(s);
+                free((void*)s);
             }
             return;
         }
     }
     
-    char *s = pr_str(v);
-    if (s) { printf("%s\n", s); free(s); }
+    const char *s = pr_str(v);
+    if (s) { printf("%s\n", s); free((void*)s); }
 }
 
 /** @brief Print exception details to stderr with location information.
@@ -220,11 +220,11 @@ static bool eval_string_repl(const char *code, EvalState *st) {
  *  @return New vector with last N elements (or original if smaller)
  */
 CljObject* history_trim_last_n(CljObject *vec, int limit) {
-    if (!vec || !is_type(vec, CLJ_VECTOR) || limit <= 0) return make_vector(0, 0);
+    if (!vec || !is_type(vec, CLJ_VECTOR) || limit <= 0) return (CljObject*)make_vector(0, 0);
     CljPersistentVector *v = as_vector(vec);
     if (!v || v->count <= limit) return RETAIN(vec);
     int start = v->count - limit;
-    CljValue out = make_vector(limit, 0);
+    CljValue out = (CljValue)make_vector(limit, 0);
     CljPersistentVector *o = as_vector((CljObject*)out);
     for (int i = 0; i < limit; i++) {
         o->data[i] = (RETAIN(v->data[start + i]), v->data[start + i]);
@@ -241,12 +241,12 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
 bool history_save_to_file(CljObject *vec, const char *path) {
     if (!path || !vec || !is_type(vec, CLJ_VECTOR)) return false;
     CljObject *trimmed = history_trim_last_n(vec, 50);
-    char *s = pr_str(trimmed);
+    const char *s = pr_str(trimmed);
     FILE *fp = fopen(path, "w");
-    if (!fp) { if (s) free(s); RELEASE(trimmed); return false; }
+    if (!fp) { if (s) free((void*)s); RELEASE(trimmed); return false; }
     size_t n = fwrite(s, 1, strlen(s), fp);
     fclose(fp);
-    free(s);
+    free((void*)s);
     RELEASE(trimmed);
     return n > 0;
 }
@@ -271,7 +271,7 @@ CljObject* history_load_from_file(const char *path) {
 
     CljObject *result = NULL;
     Reader rd; reader_init(&rd, buf);
-    EvalState *st = evalstate();
+    EvalState *st = evalstate_new(false);
     TRY {
         ID form = value_by_parsing_expr(&rd, st);
         if (form && is_type((CljObject*)form, CLJ_VECTOR)) {
@@ -286,6 +286,7 @@ CljObject* history_load_from_file(const char *path) {
                 result = RETAIN((CljObject*)form);
                 // Don't AUTORELEASE again - it's already in the test's pool
                 free(buf);
+                evalstate_free(st);
                 return result;
             }
         }
@@ -293,7 +294,8 @@ CljObject* history_load_from_file(const char *path) {
         result = NULL;
     } END_TRY
     free(buf);
-    if (!result) result = make_vector(0, 0);
+    evalstate_free(st);
+    if (!result) result = (CljObject*)make_vector(0, 0);
     // Return with AUTORELEASE to add to caller's pool
     return AUTORELEASE(result);
 }
@@ -303,7 +305,7 @@ CljObject* history_load_from_file(const char *path) {
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display
  */
-static void usage(const char *prog) {
+__attribute__((unused)) static void usage(const char *prog) {
     printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl]\n", prog);
 }
 
@@ -311,7 +313,7 @@ static void usage(const char *prog) {
  *  @param eval_args Array to free before exit
  *  @param exit_code Exit code to use
  */
-static void cleanup_and_exit(const char **eval_args, int exit_code) {
+__attribute__((unused)) static void cleanup_and_exit(const char **eval_args, int exit_code) {
     // Print memory profiling stats
 #ifdef ENABLE_MEMORY_PROFILING
     printf("\n🔍 === REPL Memory Profiling Stats ===\n");
@@ -340,7 +342,7 @@ static void cleanup_and_exit(const char **eval_args, int exit_code) {
  *  @param st Evaluation state for the REPL session
  *  @return true on successful completion
  */
-static bool run_interactive_repl(EvalState *st) {
+__attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     // Initialize memory profiling DIRECTLY before the first prompt
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();
@@ -574,7 +576,7 @@ int main(int argc, char **argv) {
     platform_init();
     runtime_init();
     init_special_symbols();  // Initialize special symbols like SYM_DEF
-    EvalState *st = evalstate_new();
+    EvalState *st = evalstate_new(false);
     if (!st) return 1;
     // Note: set_global_eval_state() removed - Exception handling now independent
     evalstate_set_ns(st, "user");
@@ -696,6 +698,9 @@ int main(int argc, char **argv) {
     // Restore terminal settings
     platform_set_raw_mode(0);
 #endif
+    
+    // Free EvalState before exit (no memory leaks)
+    evalstate_free(st);
     
     return 0;
 }
