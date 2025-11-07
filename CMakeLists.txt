@@ -125,6 +125,7 @@ set(STM32_SOURCES
     src/reader.c
     src/function_call.c
     src/function.c
+    src/optimize.c
     src/environment.c
     src/equality.c
     src/list.c
@@ -162,6 +163,7 @@ add_executable(tiny-clj-esp32
     src/reader.c
     src/function_call.c
     src/function.c
+    src/optimize.c
     src/environment.c
     src/equality.c
     src/list.c

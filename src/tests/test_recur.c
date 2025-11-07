@@ -259,10 +259,14 @@ TEST(test_if_in_function_simple) {
     TEST_ASSERT_TRUE(clj_is_truthy(result1));
     
     CljObject *result2 = eval_string("(test-if-simple nil)", st);
-    // nil is NULL, so result2 should be NULL or falsy
-    if (result2) {
-        TEST_ASSERT_FALSE(clj_is_truthy(result2));
-    }
+    // nil is NULL, so result2 should be :no (not :yes), which is truthy
+    // So result2 should NOT be NULL, but should be :no
+    TEST_ASSERT_NOT_NULL_MESSAGE(result2, "(test-if-simple nil) should return :no, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(is_type(result2, CLJ_SYMBOL), "Result should be a symbol");
+    CljSymbol *sym2 = as_symbol(result2);
+    TEST_ASSERT_NOT_NULL(sym2);
+    TEST_ASSERT_EQUAL_CHAR(':', sym2->name[0]);
+    TEST_ASSERT_EQUAL_STRING("no", sym2->name + 1);
     
     RELEASE(fn_def);
 }
@@ -608,7 +612,9 @@ TEST(test_eval_body_with_params_fixnum_literal) {
     
     // Test eval_body_with_params with Fixnum literal
     // No parameters, so param_count = 0
-    ID result = eval_body_with_params(fixnum_one, NULL, NULL, 0, NULL, st);
+    EvalEnv env_ctx = {NULL, st};
+    EvalContext ctx = {NULL, &env_ctx, NULL};
+    ID result = eval_body_with_params(fixnum_one, &ctx);
     
     // Result should be the same Fixnum literal, not NULL
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
@@ -638,7 +644,10 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     int param_count = 1;
     
     // Test: When body is the parameter symbol, it should return the Fixnum value
-    ID result = eval_body_with_params(param_sym_obj, params, values, param_count, NULL, st);
+    ParamContext param_ctx = {params, values, param_count};
+    EvalEnv env_ctx = {NULL, st};
+    EvalContext ctx = {&param_ctx, &env_ctx, NULL};
+    ID result = eval_body_with_params(param_sym_obj, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum value, not NULL");
     TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");
@@ -669,7 +678,10 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     int param_count = 1;
     
     // Test: When body is a Fixnum literal (1), it should return the literal directly
-    ID result = eval_body_with_params(fixnum_one, params, values, param_count, NULL, st);
+    ParamContext param_ctx = {params, values, param_count};
+    EvalEnv env_ctx = {NULL, st};
+    EvalContext ctx = {&param_ctx, &env_ctx, NULL};
+    ID result = eval_body_with_params(fixnum_one, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
     TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");
@@ -692,7 +704,9 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_one));
     
     // Test eval_body_with_params with Fixnum literal
-    ID result = eval_body_with_params(fixnum_one, NULL, NULL, 0, NULL, st);
+    EvalEnv env_ctx = {NULL, st};
+    EvalContext ctx = {NULL, &env_ctx, NULL};
+    ID result = eval_body_with_params(fixnum_one, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
     TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");

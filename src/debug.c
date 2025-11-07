@@ -9,7 +9,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-// Print AST structure with indentation for debugging
+// Print AST as Clojure code for debugging
 static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_size, int *offset) {
     if (!v) {
         *offset += snprintf(buf + *offset, buf_size - *offset, "nil");
@@ -32,24 +32,28 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol((ID)v);
             if (sym && sym->name) {
-                *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:%s", sym->name);
+                // Output symbol name as Clojure code (no "SYM:" prefix)
+                *offset += snprintf(buf + *offset, buf_size - *offset, "%s", sym->name);
             } else {
-                *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:?");
+                *offset += snprintf(buf + *offset, buf_size - *offset, "?");
             }
             break;
         }
         
         case CLJ_LIST: {
             CljList *list = as_list((ID)v);
-            *offset += snprintf(buf + *offset, buf_size - *offset, "LIST[");
+            // Output list as Clojure code: (element1 element2 ...)
+            *offset += snprintf(buf + *offset, buf_size - *offset, "(");
             if (list) {
                 CljObject *current = list->first;
                 int count = 0;
-                while (current && count < 10) {  // Limit to 10 elements for readability
-                    if (count > 0) {
+                bool first = true;
+                while (current && count < 20) {  // Limit to 20 elements for readability
+                    if (!first) {
                         *offset += snprintf(buf + *offset, buf_size - *offset, " ");
                     }
-                    if (depth > 3) {
+                    first = false;
+                    if (depth > 5) {
                         *offset += snprintf(buf + *offset, buf_size - *offset, "...");
                         break;
                     }
@@ -62,7 +66,7 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
                     *offset += snprintf(buf + *offset, buf_size - *offset, " ...");
                 }
             }
-            *offset += snprintf(buf + *offset, buf_size - *offset, "]");
+            *offset += snprintf(buf + *offset, buf_size - *offset, ")");
             break;
         }
         
@@ -111,4 +115,5 @@ const char* print_ast(CljObject *v) {
     
     return buf;
 }
+
 

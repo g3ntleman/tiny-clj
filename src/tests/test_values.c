@@ -341,5 +341,157 @@ TEST(test_simple_arithmetic) {
 }
 
 // ============================================================================
+// TRUTHINESS TESTS
+// ============================================================================
+
+// Comprehensive test for all truthiness combinations
+// In Clojure, only nil and false are falsy, everything else is truthy
+TEST(test_truthiness_comprehensive) {
+    WITH_AUTORELEASE_POOL({
+        // ===== FALSY VALUES =====
+        // nil (NULL) is falsy
+        TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)NULL));
+        
+        // false is falsy
+        CljValue false_val = clj_false;
+        TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)false_val));
+        
+        // ===== TRUTHY VALUES =====
+        // true is truthy
+        CljValue true_val = clj_true;
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)true_val));
+        
+        // Fixnums are truthy (including 0)
+        CljValue fixnum_zero = fixnum(0);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_zero));
+        
+        CljValue fixnum_one = fixnum(1);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_one));
+        
+        CljValue fixnum_negative = fixnum(-1);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_negative));
+        
+        CljValue fixnum_large = fixnum(42);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_large));
+        
+        // Characters are truthy
+        CljValue char_val = character('A');
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)char_val));
+        
+        CljValue char_zero = character('\0');
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)char_zero));
+        
+        // Strings are truthy (including empty strings)
+        CljObject *empty_string = make_string("");
+        TEST_ASSERT_NOT_NULL(empty_string);
+        TEST_ASSERT_TRUE(clj_is_truthy(empty_string));
+        RELEASE(empty_string);
+        
+        CljObject *non_empty_string = make_string("hello");
+        TEST_ASSERT_NOT_NULL(non_empty_string);
+        TEST_ASSERT_TRUE(clj_is_truthy(non_empty_string));
+        RELEASE(non_empty_string);
+        
+        // Keywords are truthy
+        CljObject *keyword = intern_symbol_global(":test");
+        TEST_ASSERT_NOT_NULL(keyword);
+        TEST_ASSERT_TRUE(clj_is_truthy(keyword));
+        RELEASE(keyword);
+        
+        // Symbols are truthy
+        CljObject *symbol = intern_symbol_global("test");
+        TEST_ASSERT_NOT_NULL(symbol);
+        TEST_ASSERT_TRUE(clj_is_truthy(symbol));
+        RELEASE(symbol);
+        
+        // Empty list is truthy (in Clojure, empty collections are truthy)
+        // Note: empty_list() returns a singleton, which should be truthy
+        // We test this via eval_string to ensure it works correctly
+        // (see edge cases section below)
+        
+        // Non-empty list is truthy
+        CljList *non_empty_list = make_list(fixnum(1), NULL);
+        TEST_ASSERT_NOT_NULL(non_empty_list);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_list));
+        RELEASE(non_empty_list);
+        
+        // Empty vector is truthy
+        CljPersistentVector *empty_vec = make_vector(0, 0);
+        TEST_ASSERT_NOT_NULL(empty_vec);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)empty_vec));
+        RELEASE(empty_vec);
+        
+        // Non-empty vector is truthy
+        CljPersistentVector *non_empty_vec = make_vector(1, 1);
+        TEST_ASSERT_NOT_NULL(non_empty_vec);
+        non_empty_vec->data[0] = fixnum(1);
+        non_empty_vec->count = 1;
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_vec));
+        RELEASE(non_empty_vec);
+        
+        // Empty map is truthy
+        CljMap *empty_map = make_map(0);
+        TEST_ASSERT_NOT_NULL(empty_map);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)empty_map));
+        RELEASE(empty_map);
+        
+        // Non-empty map is truthy
+        CljMap *non_empty_map = make_map(4);
+        TEST_ASSERT_NOT_NULL(non_empty_map);
+        map_put(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1));
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_map));
+        RELEASE(non_empty_map);
+        
+        // Fixed-point numbers are truthy (including 0.0)
+        CljValue fixed_val = fixed(3.14f);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixed_val));
+        
+        CljValue fixed_zero = fixed(0.0f);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixed_zero));
+        
+        // ===== EDGE CASES =====
+        // Test with eval_string for high-level truthiness checks
+        CljObject *nil_result = eval_string("nil", st);
+        TEST_ASSERT_NULL(nil_result);
+        TEST_ASSERT_FALSE(clj_is_truthy(nil_result));
+        
+        CljObject *false_result = eval_string("false", st);
+        TEST_ASSERT_NOT_NULL(false_result);
+        TEST_ASSERT_FALSE(clj_is_truthy(false_result));
+        RELEASE(false_result);
+        
+        CljObject *true_result = eval_string("true", st);
+        TEST_ASSERT_NOT_NULL(true_result);
+        TEST_ASSERT_TRUE(clj_is_truthy(true_result));
+        RELEASE(true_result);
+        
+        CljObject *zero_result = eval_string("0", st);
+        TEST_ASSERT_NOT_NULL(zero_result);
+        TEST_ASSERT_TRUE(clj_is_truthy(zero_result));
+        RELEASE(zero_result);
+        
+        CljObject *empty_list_result = eval_string("(list)", st);
+        TEST_ASSERT_NOT_NULL(empty_list_result);
+        TEST_ASSERT_TRUE(clj_is_truthy(empty_list_result));
+        RELEASE(empty_list_result);
+        
+        CljObject *empty_vector_result = eval_string("[]", st);
+        TEST_ASSERT_NOT_NULL(empty_vector_result);
+        TEST_ASSERT_TRUE(clj_is_truthy(empty_vector_result));
+        RELEASE(empty_vector_result);
+        
+        CljObject *empty_map_result = eval_string("{}", st);
+        TEST_ASSERT_NOT_NULL(empty_map_result);
+        TEST_ASSERT_TRUE(clj_is_truthy(empty_map_result));
+        RELEASE(empty_map_result);
+        
+        CljObject *keyword_result = eval_string(":test", st);
+        TEST_ASSERT_NOT_NULL(keyword_result);
+        TEST_ASSERT_TRUE(clj_is_truthy(keyword_result));
+        RELEASE(keyword_result);
+    });
+}
+
+// ============================================================================
 // TEST REGISTRATION
 // ============================================================================

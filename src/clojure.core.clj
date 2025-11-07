@@ -55,7 +55,9 @@ R"CLOJURE(
 (def filter (fn [pred coll]
   (let [step (fn [pred coll acc]
                 (if (empty? coll)
-                  (reverse acc)
+                  (if (empty? acc)
+                    nil
+                    (reverse acc))
                   (if (pred (first coll))
                     (recur pred (rest coll) (cons (first coll) acc))
                     (recur pred (rest coll) acc))))]

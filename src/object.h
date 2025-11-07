@@ -128,8 +128,17 @@ static inline bool is_type(ID obj, CljType expected_type) {
 /** Structural equality for collections; pointer equality fast path. */
 bool clj_equal(ID a, ID b);
 static inline bool clj_is_truthy(CljObject *v) {
-    // Ultra-schneller Bit-Trick: nil(0) und false(5) haben Byte < 8
-    return ((uintptr_t)v & 0xFF) >= 8;
+    // In Clojure, only nil and false are falsy, everything else is truthy
+    // nil = NULL (0x0)
+    // false = (0 << 3) | 5 = 0x5
+    if (!v) return false;  // nil is falsy
+    // Check if it's false: false has tag 5 (TAG_BOOL) and special value 0
+    if (((uintptr_t)v & 0x7) == 5) {  // TAG_BOOL = 5
+        uint8_t special = (uint8_t)((uintptr_t)v >> 3);
+        if (special == 0) return false;  // SPECIAL_FALSE = 0
+    }
+    // Everything else is truthy (including character('\0'), fixed(0.0), etc.)
+    return true;
 }
 
 // Specific function implementations moved to their respective headers:

@@ -980,11 +980,6 @@ ID native_prn(ID *args, unsigned int argc) {
 // Helper function to validate numeric arguments
 static bool validate_numeric_args(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
-        // DEBUG: Print what we got
-#ifdef DEBUG
-        fprintf(stderr, "[DEBUG] validate_numeric_args: args[%d]=0x%" PRIxPTR ", IS_FIXNUM=%d, IS_FIXED=%d, IS_IMMEDIATE=%d, args[i]==NULL=%d\n",
-                i, (uintptr_t)args[i], IS_FIXNUM(args[i]), IS_FIXED(args[i]), IS_IMMEDIATE(args[i]), args[i] == NULL);
-#endif
         // CRITICAL: Check if args[i] is NULL or if it's a valid immediate value
         // Immediate values (fixnums) have odd tags, so they are never NULL
         // But we need to check if args[i] is actually NULL (nil) or if it's a valid value
@@ -1003,11 +998,6 @@ static bool validate_numeric_args(ID *args, int argc) {
         // Immediate values (fixnums) should pass this check
         // But if args[i] is a heap object, it must be a number type
         if (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i])) {
-            // DEBUG: Print what we got
-#ifdef DEBUG
-            fprintf(stderr, "[DEBUG] validate_numeric_args: args[%d]=0x%" PRIxPTR ", IS_FIXNUM=%d, IS_FIXED=%d, IS_IMMEDIATE=%d\n",
-                    i, (uintptr_t)args[i], IS_FIXNUM(args[i]), IS_FIXED(args[i]), IS_IMMEDIATE(args[i]));
-#endif
             throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
