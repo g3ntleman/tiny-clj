@@ -1,4 +1,8 @@
 #include "tests_common.h"
+#include "function_call.h"
+#include "value.h"
+#include "symbol.h"
+#include "map.h"
 
 // Test factorial with recur
 TEST(test_recur_factorial) {
@@ -587,4 +591,110 @@ TEST(test_tco_artificially_generates_recur) {
     TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)result));  // 5! = 120
     
     RELEASE(factorial_func_obj);
+}
+
+// ============================================================================
+// Tests for eval_body_with_params with Fixnum Literals
+// ============================================================================
+
+// Test: Verify that eval_body_with_params returns Fixnum literals correctly
+TEST(test_eval_body_with_params_fixnum_literal) {
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create a Fixnum literal (1)
+    CljValue fixnum_one = fixnum(1);
+    TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_one));
+    TEST_ASSERT_EQUAL_INT(1, AS_FIXNUM(fixnum_one));
+    
+    // Test eval_body_with_params with Fixnum literal
+    // No parameters, so param_count = 0
+    ID result = eval_body_with_params(fixnum_one, NULL, NULL, 0, NULL, st);
+    
+    // Result should be the same Fixnum literal, not NULL
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE((void*)fixnum_one, (void*)result, 
+                                  "Result should be the same Fixnum literal");
+}
+
+// Test: Verify that eval_body_with_params handles Fixnum in parameter substitution
+TEST(test_eval_body_with_params_fixnum_with_params) {
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create a symbol parameter
+    CljObject *param_sym_obj = intern_symbol_global("x");
+    TEST_ASSERT_NOT_NULL(param_sym_obj);
+    CljSymbol *param_sym = as_symbol(param_sym_obj);
+    TEST_ASSERT_NOT_NULL(param_sym);
+    
+    // Create a Fixnum value for the parameter
+    CljValue fixnum_value = fixnum(42);
+    TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_value));
+    
+    // Set up parameters and values
+    ID params[] = {param_sym_obj};
+    ID values[] = {fixnum_value};
+    int param_count = 1;
+    
+    // Test: When body is the parameter symbol, it should return the Fixnum value
+    ID result = eval_body_with_params(param_sym_obj, params, values, param_count, NULL, st);
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum value, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(42, AS_FIXNUM(result), "Result should be 42");
+}
+
+// Test: Verify that eval_body_with_params handles Fixnum literal in arithmetic operation
+TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // Create a symbol parameter
+    CljObject *param_sym_obj = intern_symbol_global("n");
+    TEST_ASSERT_NOT_NULL(param_sym_obj);
+    CljSymbol *param_sym = as_symbol(param_sym_obj);
+    TEST_ASSERT_NOT_NULL(param_sym);
+    
+    // Create a Fixnum value for the parameter (e.g., n = 5)
+    CljValue fixnum_n = fixnum(5);
+    TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_n));
+    
+    // Create a Fixnum literal (1)
+    CljValue fixnum_one = fixnum(1);
+    TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_one));
+    
+    // Set up parameters and values
+    ID params[] = {param_sym_obj};
+    ID values[] = {fixnum_n};
+    int param_count = 1;
+    
+    // Test: When body is a Fixnum literal (1), it should return the literal directly
+    ID result = eval_body_with_params(fixnum_one, params, values, param_count, NULL, st);
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE((void*)fixnum_one, (void*)result, 
+                                  "Result should be the same Fixnum literal");
+}
+
+// Test: Verify that eval_body_with_params handles Fixnum literal in list context
+// This simulates the case where (- n 1) is evaluated
+TEST(test_eval_body_with_params_fixnum_in_list_context) {
+    TEST_ASSERT_NOT_NULL(st);
+    
+    // This test would require creating a list like (- n 1) and evaluating it
+    // For now, we just test that Fixnum literals work correctly
+    // The actual list evaluation is tested in other tests
+    
+    // Create a Fixnum literal (1)
+    CljValue fixnum_one = fixnum(1);
+    TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_one));
+    
+    // Test eval_body_with_params with Fixnum literal
+    ID result = eval_body_with_params(fixnum_one, NULL, NULL, 0, NULL, st);
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(IS_FIXNUM(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
 }

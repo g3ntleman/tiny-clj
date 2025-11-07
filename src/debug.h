@@ -1,12 +1,13 @@
 #ifndef TINY_CLJ_DEBUG_H
 #define TINY_CLJ_DEBUG_H
 
-#include "platform.h"
+#include "object.h"
 
-#ifdef ENABLE_DEBUG_STRINGS
-  #define DEBUG_PRINT(msg) platform_print(msg)
-#else
-  #define DEBUG_PRINT(msg) ((void)0)
-#endif
+/**
+ * @brief Print AST structure for debugging
+ * @param v CljObject to print
+ * @return Newly allocated C-string representation (caller must free)
+ */
+const char* print_ast(CljObject *v);
 
-#endif /* TINY_CLJ_DEBUG_H */
+#endif // TINY_CLJ_DEBUG_H

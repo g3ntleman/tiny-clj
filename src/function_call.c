@@ -23,6 +23,7 @@
 #include "error_messages.h"
 #include <limits.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <string.h>
 #include "clj_strings.h"
 #include "seq.h"
@@ -37,6 +38,7 @@
 #include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
+#include "debug.h"  // For print_ast
 
 // Global state for stack-based recur implementation - statically initialized
 static _Thread_local ID g_recur_args[16] = {0};  // Max 16 arguments, initialized to NULL
@@ -323,8 +325,71 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
 // - However, nil cannot be used in arithmetic operations, so we validate here
 // - The caller (eval_list_with_param_substitution) must handle nil values appropriately
 ID eval_arithmetic_generic_with_substitution(CljList *list, ID *params, ID *values, int param_count, ArithOp op, CljMap *closure_env, EvalState *st) {
-    ID a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (ID)closure_env, st);
-    ID b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, (ID)closure_env, st);
+    // TEST: Check if this function is called at all
+    assert(false && "eval_arithmetic_generic_with_substitution called");
+    
+    CljObject *first_arg = list_get_element(as_list((ID)list), 1);
+    CljObject *second_arg = list_get_element(as_list((ID)list), 2);
+    
+    // CRITICAL ASSERTION: Arguments should exist
+    CLJ_ASSERT(first_arg != NULL);
+    CLJ_ASSERT(second_arg != NULL);
+    
+    ID a = eval_body_with_params(first_arg, params, values, param_count, (ID)closure_env, st);
+    ID b = eval_body_with_params(second_arg, params, values, param_count, (ID)closure_env, st);
+    
+    // CRITICAL ASSERTION: For arithmetic operations, arguments should not be NULL
+    // If the argument is a symbol (parameter), it should resolve to a value
+    // If the argument is a fixnum literal, it should return the fixnum
+    // If the argument is a function call, it should return a value
+    if (is_type(first_arg, CLJ_SYMBOL)) {
+        // If first argument is a symbol, it should resolve to a value (not NULL)
+        // Exception: nil is valid, but we check for that separately
+        CljSymbol *first_sym = as_symbol((ID)first_arg);
+        if (first_sym && first_sym->name) {
+            // Check if it's a parameter
+            bool is_param = false;
+            for (int i = 0; i < param_count; i++) {
+                if (params[i] == (ID)first_arg) {
+                    is_param = true;
+                    // CRITICAL: Parameter should have a value (can be nil, but should be set)
+                    CLJ_ASSERT(values[i] != NULL || a == NULL); // If values[i] is NULL, a should be NULL
+                    break;
+                }
+            }
+            if (is_param && a == NULL) {
+                // Parameter found but value is NULL - this is the bug!
+                CLJ_ASSERT(0 && "Parameter resolved to NULL in arithmetic operation");
+            }
+        }
+    } else if (IS_IMMEDIATE(first_arg)) {
+        // If first argument is an immediate (fixnum, etc.), it should return itself
+        CLJ_ASSERT(a == (ID)first_arg);
+    }
+    
+    if (is_type(second_arg, CLJ_SYMBOL)) {
+        // If second argument is a symbol, it should resolve to a value (not NULL)
+        CljSymbol *second_sym = as_symbol((ID)second_arg);
+        if (second_sym && second_sym->name) {
+            // Check if it's a parameter
+            bool is_param = false;
+            for (int i = 0; i < param_count; i++) {
+                if (params[i] == (ID)second_arg) {
+                    is_param = true;
+                    // CRITICAL: Parameter should have a value (can be nil, but should be set)
+                    CLJ_ASSERT(values[i] != NULL || b == NULL); // If values[i] is NULL, b should be NULL
+                    break;
+                }
+            }
+            if (is_param && b == NULL) {
+                // Parameter found but value is NULL - this is the bug!
+                CLJ_ASSERT(0 && "Parameter resolved to NULL in arithmetic operation");
+            }
+        }
+    } else if (IS_IMMEDIATE(second_arg)) {
+        // If second argument is an immediate (fixnum, etc.), it should return itself
+        CLJ_ASSERT(b == (ID)second_arg);
+    }
     
     // ASSERTION: Test thesis that arguments are evaluated correctly
     // This tests whether eval_body_with_params returns nil unexpectedly
@@ -832,8 +897,18 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
     if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol - check parameters first
         // OPTIMIZATION: Ordered by frequency (Identity check first, then string comparison)
-        CljSymbol *body_sym = as_symbol((ID)body);
-        const char *body_name = body_sym && body_sym->name ? body_sym->name : "unknown";
+        CljSymbol *body_sym = as_symbol(body);
+        // CRITICAL: body_sym should never be NULL if body is a symbol, but check for safety
+        if (!body_sym) {
+            // This should never happen, but if it does, try to resolve from namespace
+            CljObject *resolved = ns_resolve(st, body);
+            if (resolved) {
+                return RETAIN(resolved);
+            }
+            throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+                "Unable to resolve symbol: invalid symbol object");
+            return NULL;
+        }
         
         for (int i = 0; i < param_count; i++) {
             // Tier 1: Pointer identity check (fastest - O(1), most common case)
@@ -843,7 +918,12 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
                 // We return values[i] directly, even if it's NULL (nil)
                 // The caller must distinguish between nil (valid) and evaluation errors
                 // Return values[i] even if NULL (nil is valid in Clojure)
-                // Use RETAIN to ensure proper memory management
+                // CRITICAL: If values[i] is an immediate (fixnum, char, etc.), return it directly
+                // RETAIN is safe for immediates but returns CljObject*, which breaks fixnums
+                if (IS_IMMEDIATE(values[i])) {
+                    return values[i];  // Return immediate value directly as ID
+                }
+                // For heap objects, use RETAIN to ensure proper memory management
                 return values[i] ? RETAIN(values[i]) : NULL;
             }
             
@@ -852,44 +932,62 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
             if (params[i] && body != params[i] && 
                 is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
                 // Tier 3: String comparison (slowest, only if needed)
-                CljSymbol *param_sym = as_symbol((ID)params[i]);
-                if (param_sym && body_sym && param_sym->name && body_sym->name) {
+                CljSymbol *param_sym = as_symbol(params[i]);
+                // CRITICAL: param_sym should never be NULL if params[i] is a symbol, but check for safety
+                // CRITICAL: Check both param_sym and body_sym exist and have names
+                // This ensures we can compare symbol names even if pointers differ
+                if (param_sym && param_sym->name && body_sym && body_sym->name) {
                     if (strcmp(param_sym->name, body_sym->name) == 0) {
                         // NOTE: String comparison matched but pointers differ
                         // This indicates symbol interning issue - parameter symbol has different pointer than body symbol
                         // Parameter found - values[i] can be NULL (nil), which is valid
                         // In Clojure, nil is a valid value and can be passed as an argument
                         // We return values[i] directly, even if it's NULL (nil)
-                        // Return values[i] even if NULL (nil is valid in Clojure)
+                        // CRITICAL: If values[i] is an immediate (fixnum, char, etc.), return it directly
+                        // RETAIN is safe for immediates but returns CljObject*, which breaks fixnums
+                        if (IS_IMMEDIATE(values[i])) {
+                            return values[i];  // Return immediate value directly as ID
+                        }
+                        // For heap objects, use RETAIN to ensure proper memory management
                         return values[i] ? RETAIN(values[i]) : NULL;
                     }
                 }
             }
         }
         
+        
         // Parameter not found - will try to resolve from namespace
         // If not a parameter, try to resolve from closure_env (namespace map)
         if (closure_env && is_type(closure_env, CLJ_MAP)) {
             // Check if key exists in closure_env (even if value is nil/NULL)
-            if (map_contains((CljValue)closure_env, (CljValue)body)) {
-                CljObject *resolved = (CljObject*)map_get((CljValue)closure_env, (CljValue)body);
-                // resolved can be NULL (nil), which is valid
-                // Return resolved value if found, even if it's NULL (nil)
-                return resolved ? RETAIN(resolved) : NULL;
+            // map_contains and map_get take ID (can handle both objects and immediates)
+            if (map_contains(closure_env, body)) {
+                // map_get returns ID (can be object or immediate)
+                // In closure_env, values are always objects (CljObject*), not immediates
+                ID resolved_id = map_get(closure_env, body);
+                if (resolved_id) {
+                    // resolved_id is an object (CljObject*), not an immediate
+                    return RETAIN(resolved_id);
+                }
+                // resolved_id is NULL (nil), which is valid
+                return NULL;
             }
         }
         // If still not found, try namespace lookup (for recursive function calls)
-        CljObject *resolved = (CljObject*)ns_resolve(st, body);
-        if (resolved) {
-            return RETAIN(resolved);
+        // ns_resolve takes CljObject* (only objects, not immediates) and returns ID
+        // body is a symbol (CljObject*), so we can pass it directly
+        ID resolved_id = ns_resolve(st, (CljObject*)body);
+        if (resolved_id) {
+            // resolved_id can be an object or immediate, but in namespace context it's usually an object
+            return RETAIN(resolved_id);
         }
         // Check if symbol is a keyword - keywords evaluate to themselves
         if (IS_KEYWORD(body)) {
             // Keywords evaluate to themselves (singletons need no memory management)
-            return (CljObject*)body;
+            return body;
         }
         // Symbol not found - throw exception instead of returning symbol
-        CljSymbol *sym = as_symbol((ID)body);
+        CljSymbol *sym = as_symbol(body);
         const char *sym_name = sym && sym->name ? sym->name : "unknown";
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
             "Unable to resolve symbol: %s in this context", sym_name);
@@ -898,48 +996,50 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
     
     // body is guaranteed non-NULL beyond this point
     
-    // Check if body is an immediate value (fixnum, char, special, fixed)
+    // CRITICAL: Check if body is an immediate value (fixnum, char, special, fixed) FIRST
+    // This must come BEFORE the pointer validation check, because immediate values
+    // have small numeric values (e.g., 1 = 0x9) that would fail the pointer check
     if (IS_IMMEDIATE(body)) {
         // Immediate values don't need retain/release
-        return (CljObject*)body;
+        // CRITICAL: Return body directly as ID (void*), not as CljObject*
+        // This ensures Fixnum-Literale korrekt zurückgegeben werden
+        return body;
     }
     
     // Check if body is a valid pointer (not pointing to invalid memory)
+    // NOTE: This check must come AFTER IS_IMMEDIATE, because immediate values
+    // have small numeric values that would fail this check
+    // CRITICAL: Also check IS_IMMEDIATE again here as a safety check
+    // If body has a small address but IS_IMMEDIATE is true, it's an immediate value
     if ((uintptr_t)body < 0x1000) {
+        // Double-check if it's an immediate value (in case IS_IMMEDIATE check failed)
+        if (IS_IMMEDIATE(body)) {
+            // It's an immediate value - return it directly
+            return body;
+        }
+        // CRITICAL: If we reach here, body is not an immediate value but has a small address
+        // This might indicate a bug
         return NULL;
     }
     
     // For lists, evaluate them with parameter substitution
+    // CRITICAL: Before casting to CljObject*, check if body is an immediate value
+    // This prevents undefined behavior when accessing body_obj->type for Fixnum-Literale
+    if (IS_IMMEDIATE(body)) {
+        // This should have been caught earlier, but as a safety check, return body directly
+        return body;
+    }
+    
     CljObject *body_obj = (CljObject*)body;
     switch (body_obj->type) {
         case CLJ_LIST: {
-            CljMap *env_map = (closure_env && is_type((CljObject*)closure_env, CLJ_MAP)) ? (CljMap*)closure_env : NULL;
-            return eval_list_with_param_substitution(body, params, values, param_count, env_map, st);
-        }
-        
-        case CLJ_SYMBOL: {
-            // Check if symbol is a parameter
-            for (int i = 0; i < param_count; i++) {
-                if (params[i] && body == params[i]) {
-                    return values[i] ? RETAIN((CljObject*)values[i]) : NULL;
-                }
-                if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
-                    CljSymbol *param_sym = as_symbol((ID)params[i]);
-                    CljSymbol *body_sym = as_symbol((ID)body);
-                    if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
-                        return values[i] ? RETAIN((CljObject*)values[i]) : NULL;
-                    }
-                }
-            }
-            // Not a parameter - resolve from namespace
-            if (st) {
-                ID resolved = ns_resolve(st, (CljObject*)body);
-                if (resolved) {
-                    return AUTORELEASE(RETAIN((CljObject*)resolved));
-                }
-            }
-            // Not found in namespace - return as literal value
-            return RETAIN(body);
+            CljMap *env_map = (closure_env && is_type(closure_env, CLJ_MAP)) ? (CljMap*)closure_env : NULL;
+            // CRITICAL: Check for timing/cyclic dependency issues
+            // params and values arrays must be valid for recursive calls
+            CLJ_ASSERT(params != NULL || param_count == 0);
+            CLJ_ASSERT(values != NULL || param_count == 0);
+            ID result = eval_list_with_param_substitution(body, params, values, param_count, env_map, st);
+            return result;
         }
         
         default:
@@ -950,9 +1050,12 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
 
 // Evaluate list with parameter substitution
 ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_count, CljMap *closure_env, EvalState *st) {
-    // Assertion: List must not be NULL when expected
+    // CRITICAL ASSERTION: Check for timing/cyclic dependency issues
     CLJ_ASSERT(list != NULL);
+    CLJ_ASSERT(params != NULL || param_count == 0);
+    CLJ_ASSERT(values != NULL || param_count == 0);
     assert(param_count >= 0); // param_count should be non-negative
+    
     if (!is_type((CljObject*)list, CLJ_LIST)) return NULL;
     
     CljList *list_data = as_list((ID)list);
@@ -1013,19 +1116,99 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
                 ID *args = (ID*)alloc_obj_array(argc, args_stack);
                 
                 for (int i = 0; i < argc; i++) {
-                    args[i] = eval_body_with_params(list_get_element(as_list((ID)list), i + 1), params, values, param_count, (ID)closure_env, st);
+                    CljObject *arg_expr = list_get_element(as_list((ID)list), i + 1);
+                    
+                    // CRITICAL ASSERTION: arg_expr should not be NULL
+                    CLJ_ASSERT(arg_expr != NULL);
+                    
+                    
+                    // CRITICAL: Evaluate argument - this might trigger recursion
+                    // If arg_expr is a list (like (- n 1)), eval_body_with_params will recursively evaluate it
+                    // This could cause timing issues if the recursion modifies params/values
+                    args[i] = eval_body_with_params(arg_expr, params, values, param_count, (ID)closure_env, st);
+                    
+                    // DEBUG: Print what we got with full AST
+#ifdef DEBUG
+                    if (is_type(op, CLJ_SYMBOL)) {
+                        CljSymbol *op_sym = as_symbol((ID)op);
+                        if (op_sym && op_sym->name && strcmp(op_sym->name, "-") == 0) {
+                            fprintf(stderr, "[DEBUG] After eval_body_with_params: args[%d]=0x%" PRIxPTR ", IS_IMMEDIATE=%d, IS_FIXNUM=%d, args[i]==NULL=%d\n",
+                                    i, (uintptr_t)args[i], IS_IMMEDIATE(args[i]), IS_FIXNUM(args[i]), args[i] == NULL);
+                            if (args[i]) {
+                                const char *result_ast = print_ast((CljObject*)args[i]);
+                                if (result_ast) {
+                                    fprintf(stderr, "  result AST: %s\n", result_ast);
+                                    free((void*)result_ast);
+                                }
+                            } else {
+                                fprintf(stderr, "  result is NULL!\n");
+                                // Print params/values for debugging
+                                fprintf(stderr, "  params/values: param_count=%d\n", param_count);
+                                for (int k = 0; k < param_count; k++) {
+                                    if (params[k]) {
+                                        CljSymbol *p_sym = as_symbol((ID)params[k]);
+                                        const char *p_name = p_sym && p_sym->name ? p_sym->name : "unknown";
+                                        fprintf(stderr, "    param[%d]: %s, value=%p", k, p_name, (void*)values[k]);
+                                        if (values[k]) {
+                                            const char *val_ast = print_ast((CljObject*)values[k]);
+                                            if (val_ast) {
+                                                fprintf(stderr, " (%s)", val_ast);
+                                                free((void*)val_ast);
+                                            }
+                                        }
+                                        fprintf(stderr, "\n");
+                                    }
+                                }
+                            }
+                        }
+                    }
+#endif
+                    
                     // args[i] can be NULL if eval_body_with_params returns nil
                     // This will be validated by validate_numeric_args in builtin functions
                     
-                    // ASSERTION: Verify that arguments are evaluated correctly
-                    // This tests the thesis that arguments are not nil when they shouldn't be
-                    // Note: args[i] can be NULL (nil), which is valid, but we log it for debugging
-                    if (!args[i] && is_type(op, CLJ_SYMBOL)) {
+                    // CRITICAL ASSERTION: For arithmetic operations, arguments should not be NULL
+                    // If the argument is a symbol (parameter), it should resolve to a value
+                    // If the argument is a fixnum literal, it should return the fixnum
+                    if (is_type(op, CLJ_SYMBOL)) {
                         CljSymbol *op_sym = as_symbol((ID)op);
-                        if (op_sym && op_sym->name) {
-                            // Only assert for non-nil-returning functions (arithmetic, etc.)
-                            // This is a soft assertion - we allow nil but log it
-                            // The actual validation happens in validate_numeric_args
+                        if (op_sym && op_sym->name && (strcmp(op_sym->name, "-") == 0 || strcmp(op_sym->name, "+") == 0 || 
+                            strcmp(op_sym->name, "*") == 0 || strcmp(op_sym->name, "/") == 0)) {
+                            // This is an arithmetic operation - arguments should not be NULL
+                            if (is_type(arg_expr, CLJ_SYMBOL)) {
+                                // If argument is a symbol (parameter), it should resolve to a value
+                                CljSymbol *arg_sym = as_symbol((ID)arg_expr);
+                                if (arg_sym && arg_sym->name) {
+                                    // Check if it's a parameter
+                                    bool is_param = false;
+                                    for (int j = 0; j < param_count; j++) {
+                                        if (params[j] == (ID)arg_expr) {
+                                            is_param = true;
+                                            // CRITICAL: Parameter should have a value (can be nil, but should be set)
+                                            CLJ_ASSERT(values[j] != NULL || args[i] == NULL); // If values[j] is NULL, args[i] should be NULL
+                                            break;
+                                        }
+                                    }
+                                    if (is_param && args[i] == NULL) {
+                                        // Parameter found but value is NULL - this is the bug!
+                                        assert(false && "Parameter resolved to NULL in arithmetic operation");
+                                    }
+                                }
+                            } else if (IS_IMMEDIATE(arg_expr)) {
+                                // If argument is an immediate (fixnum, etc.), it should return itself
+                                CLJ_ASSERT(args[i] == (ID)arg_expr);
+                            } else if (is_type(arg_expr, CLJ_LIST)) {
+                                // If argument is a list, it might evaluate to nil (which is valid in Clojure)
+                                // But for arithmetic operations, we expect a number, not nil
+                                if (args[i] == NULL) {
+                                    // This is a problem - a list evaluated to nil in an arithmetic operation
+                                    // nil is valid in Clojure, just not for arithmetic
+                                }
+                            } else if (args[i] == NULL) {
+                                // CRITICAL: args[i] is NULL but arg_expr is not a symbol, immediate, or list
+                                // This means eval_body_with_params returned NULL unexpectedly
+                                // This might be valid (e.g., if arg_expr is nil)
+                            }
                         }
                     }
                 }
@@ -1086,6 +1269,8 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
     }
     
     if (op == SYM_MINUS) {
+        // TEST: Check if this code path is reached
+        assert(false && "SYM_MINUS code path reached");
         return eval_arithmetic_generic_with_substitution(list_data, params, values, param_count, ARITH_SUB, closure_env, st);
     }
     
@@ -1129,8 +1314,9 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
         // Restore recur state if it was set during branch evaluation
         // Only restore if it wasn't set during evaluation (saved was -1)
         if (g_recur_arg_count >= 0 && saved_recur_arg_count == -1) {
-            // Branch evaluation set recur state - clear it since if doesn't support recur
-            clear_recur_args();
+            // Branch evaluation set recur state - keep it so TCO loop can continue
+            // Don't clear it - let eval_function_call handle the recur continuation
+            // The recur state will be used by eval_function_call to continue the TCO loop
         } else {
             // Restore original state
             g_recur_arg_count = saved_recur_arg_count;
@@ -1753,8 +1939,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         // Restore recur state if it was set during branch evaluation
         // Only restore if it wasn't set during evaluation (saved was -1)
         if (g_recur_arg_count >= 0 && saved_recur_arg_count == -1) {
-            // Branch evaluation set recur state - clear it since if doesn't support recur
-            clear_recur_args();
+            // Branch evaluation set recur state - keep it so TCO loop can continue
+            // Don't clear it - let eval_function_call handle the recur continuation
+            // The recur state will be used by eval_function_call to continue the TCO loop
         } else {
             // Restore original state
             g_recur_arg_count = saved_recur_arg_count;

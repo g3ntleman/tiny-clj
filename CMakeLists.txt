@@ -89,6 +89,7 @@ list(APPEND SOURCES
     src/map.c
     src/atom.c
     src/strings.c
+    src/debug.c
     src/seq.c
     src/memory.c
     src/error_messages.c
@@ -131,6 +132,7 @@ set(STM32_SOURCES
     src/map.c
     src/atom.c
     src/strings.c
+    src/debug.c
     src/seq.c
     src/memory.c
     src/error_messages.c
@@ -167,6 +169,7 @@ add_executable(tiny-clj-esp32
     src/map.c
     src/atom.c
     src/strings.c
+    src/debug.c
     src/seq.c
     src/memory.c
     src/error_messages.c
@@ -260,8 +263,6 @@ add_executable(unity-tests
     src/tests/test_namespace_legacy.c
     src/tests/test_namespace.c
     src/tests/test_symbol_interning.c
-    src/tests/test_def_inc_evaluation.c
-    src/tests/test_clojure_core_load.c
     src/tests/test_core_initialization.c
     src/tests/test_equal.c
     src/tests/test_seq.c

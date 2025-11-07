@@ -100,7 +100,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
       
       // Always log exceptions for def expressions, even in quiet mode
       // This helps catch silent failures during core loading
-      if (ex && ex->message != NULL && (!g_core_quiet || is_def_expr)) {
+      if (ex && ex->message[0] != '\0' && (!g_core_quiet || is_def_expr)) {
         printf("[clojure.core] Exception loading expression: %s\n", ex->message);
       }
     } END_TRY

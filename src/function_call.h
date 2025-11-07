@@ -10,6 +10,7 @@
 // Erweiterte Funktionsaufruf-Funktionen
 ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st);
 ID eval_body(ID body, CljMap *env, EvalState *st);
+ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID closure_env, EvalState *st);
 ID eval_list(CljList *list, CljMap *env, EvalState *st);
 
 // Definition und Funktionen
