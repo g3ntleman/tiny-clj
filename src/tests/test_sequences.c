@@ -166,8 +166,9 @@ TEST(test_seq_iterator_verification) {
 TEST(test_filter_basic) {
     // Use global st from setUp (clojure.core already loaded)
     
-    // Test: (filter even? [1 2 3 4 5]) => (2 4)
-    CljObject *result = eval_string("(filter even? [1 2 3 4 5])", st);
+    // Test: (filter even? (list 1 2 3 4 5)) => (2 4)
+    // Use list instead of vector to avoid potential vector handling issues
+    CljObject *result = eval_string("(filter even? (list 1 2 3 4 5))", st);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
     

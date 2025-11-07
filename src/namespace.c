@@ -10,20 +10,12 @@
 #include "runtime.h"
 #include "tiny_clj.h"
 #include "memory.h"
-
-// Direkte Zugriffe auf g_runtime (ohne Makros)
-// #define ns_registry ((CljNamespace*)g_runtime.ns_registry)
-// #define clojure_core_cache ((CljNamespace*)g_runtime.clojure_core_cache)
-
-// Alte Definitionen auskommentieren:
-// CljNamespace *ns_registry = NULL;
-// static CljNamespace *clojure_core_cache = NULL;
+#include "parser.h"  // For eval_parsed
 
 // Symbol resolution cache - uses array-map for DRY principle
 // Cache size: 16 entries (good balance between hit rate and memory usage)
 #define RESOLVE_CACHE_SIZE 16
 static CljObject *g_resolve_cache = NULL;
-static int g_resolve_cache_index = 0; // Round-robin index for cache eviction
 
 CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!name) return NULL;
@@ -45,8 +37,8 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!ns) return NULL;
     
     ns->name = intern_symbol(NULL, name);
-    ns->mappings = (CljObject*)make_map(64); // Increased capacity for clojure.core // Initial capacity
-    ns->aliases = (CljObject*)make_map(16); // Initial capacity for aliases
+    ns->mappings = (CljObject*)make_map(64); // Increased capacity for clojure.core
+    ns->aliases = (CljObject*)make_map(16);
     ns->filename = file ? strdup(file) : NULL;
     ns->next = (CljNamespace*)g_runtime.ns_registry;
     g_runtime.ns_registry = (void*)ns;
@@ -73,40 +65,42 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     // Initialize cache on first use (DRY: reuse array-map)
     if (!g_resolve_cache) {
         g_resolve_cache = (CljObject*)make_map(RESOLVE_CACHE_SIZE);
-        g_resolve_cache_index = 0;
     }
     
-    // OPTIMIZATION: Check cache first (fast path for repeated lookups)
-    ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym);
-    if (cached) {
-        return cached;
-    }
-    
-    // Cache miss - perform normal resolution
-    // First search in the current namespace
+    // CRITICAL: Always check current namespace first (before cache)
+    // This ensures that redefined symbols in current namespace take precedence over cached values
     ID v = map_get((CljValue)current_ns->mappings, (CljValue)sym);
     if (v) {
-        // Cache the result for future lookups
-        (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+        // Found in current namespace - update cache and return
+        // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+        if (g_resolve_cache) {
+            ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            ASSIGN(g_resolve_cache, (CljObject*)updated_cache);
+        }
         return v;
     }
-
-    // OPTIMIZATION: Priority-based namespace search
-    // 1. Search clojure.core first (most common) - use cache for O(1) lookup
-    // Cache should be set during initialization (load_clojure_core or register_builtins)
-    // No need to search through all namespaces - just check if cache is set
     
-    // Search clojure.core first if cached
+    // Not in current namespace - check cache (fast path for repeated lookups)
+    if (g_resolve_cache) {
+        ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym);
+        if (cached) {
+            return cached;
+        }
+    }
+
+    // Search clojure.core first (most common)
     if (g_runtime.clojure_core_cache && ((CljNamespace*)g_runtime.clojure_core_cache)->mappings) {
         v = (CljObject*)map_get((CljValue)((CljNamespace*)g_runtime.clojure_core_cache)->mappings, (CljValue)sym);
         if (v) {
             // Cache the result
-            (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+            ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            ASSIGN(g_resolve_cache, (CljObject*)updated_cache);
             return (ID)v;
         }
     }
     
-    // 2. Search other namespaces (excluding clojure.core to avoid double search)
+    // Search other namespaces (excluding clojure.core to avoid double search)
     CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
         if (cur != (CljNamespace*)g_runtime.clojure_core_cache && cur->mappings) {
@@ -178,9 +172,7 @@ void ns_cleanup() {
         // Don't free clojure.core namespace if it's cached (preserve for tests)
         if (cur != preserved_clojure_core) {
             if (cur->filename) free((void*)cur->filename);
-            // ADDED: Freigebe mappings
             if (cur->mappings) RELEASE((CljObject*)cur->mappings);
-            // ADDED: Freigebe aliases
             if (cur->aliases) RELEASE((CljObject*)cur->aliases);
             free(cur);
         }
@@ -200,8 +192,7 @@ EvalState* evalstate_new(bool load_core) {
     }
     
     memset(st, 0, sizeof(EvalState));
-    // Remove pool management from EvalState - use global pools instead
-    st->pool = NULL; // No longer needed
+    st->pool = NULL; // No longer needed - use global pools instead
     
     st->current_ns = ns_get_or_create("user", NULL); // Default namespace
     if (!st->current_ns) {
@@ -209,13 +200,11 @@ EvalState* evalstate_new(bool load_core) {
         return NULL;
     }
     
-    // Note: Exception handling now uses global exception stack
     st->file = NULL;
     st->line = 0;
     st->col = 0;
     
     // Load clojure.core automatically if requested (functions available via ns_resolve)
-    // current_ns stays on "user"
     if (load_core) {
         WITH_AUTORELEASE_POOL({
             load_clojure_core(st);
@@ -231,7 +220,6 @@ EvalState* evalstate_new(bool load_core) {
 void evalstate_free(EvalState *st) {
     if (!st) return;
     
-    // No pool management needed - EvalState no longer owns a pool
     if (st->stack) free(st->stack);
     free(st);
 }
@@ -239,9 +227,7 @@ void evalstate_free(EvalState *st) {
 void evalstate_set_ns(EvalState *st, const char *ns_name) {
     if (!st || !ns_name) return;
     
-    // CRITICAL: Check if this is clojure.core and use cached version if available
-    // This prevents creating a new clojure.core namespace when one already exists in cache
-    // This is important for tests where runtime_init() clears the registry but preserves cache
+    // Use cached clojure.core if available (prevents duplicate namespace creation)
     if (strcmp(ns_name, "clojure.core") == 0 && g_runtime.clojure_core_cache) {
         st->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
         return;
@@ -282,7 +268,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
     TRY {
         // normaler Body (zweites Element)
         CljObject *body = (CljObject*)list_nth(as_list(form), 1);
-        result = eval_expr_simple(body, st);
+        result = (CljObject*)eval_parsed(body, st, NULL);
     } CATCH(ex) {
         // We arrived here via eval_error
         // Search for catch clauses
@@ -293,8 +279,10 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 CljObject *body = (CljObject*)list_nth(as_list(clause), 2);
                 
                 // Bind variable (sym = err) - simplified
-                (void)map_assoc((CljObject*)st->current_ns->mappings, sym, (CljObject*)ex);
-                result = eval_expr_simple(body, st);
+                // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+                ID updated_mappings = map_assoc((ID)st->current_ns->mappings, (ID)sym, (ID)ex);
+                ASSIGN(st->current_ns->mappings, (CljObject*)updated_mappings);
+                result = (CljObject*)eval_parsed(body, st, NULL);
                 return result;
             }
         }
@@ -312,30 +300,6 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
     return eval_try(form, st);
 }
 
-// Simplified evaluation for demonstration purposes
-CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
-    if (!expr) return NULL;
-    
-    CljObject *result = NULL;
-    
-    if (is_type(expr, CLJ_SYMBOL)) {
-        result = eval_symbol(expr, st);  // Bereits autoreleased
-    } else if (is_type(expr, CLJ_LIST)) {
-        // ns_get_or_create always creates a map, so mappings should never be NULL
-        CLJ_ASSERT(st != NULL);
-        CLJ_ASSERT(st->current_ns != NULL);
-        CLJ_ASSERT(st->current_ns->mappings != NULL);
-        CljMap *env = (CljMap*)st->current_ns->mappings;
-        result = eval_list(as_list(expr), env, st);  // Bereits autoreleased
-    } else {
-        result = expr;  // Literal, bereits autoreleased von parse()
-        // For literals, we need to AUTORELEASE them since eval_expr_simple is called from eval_parsed
-        // which expects the result to be autoreleased
-        AUTORELEASE(result);
-    }
-    
-    return result;
-}
 
 /**
  * @brief Define a symbol in the current namespace
@@ -365,6 +329,15 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         // new_mappings is already retained by map_assoc
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
+    
+    // CRITICAL: Invalidate resolve cache when a symbol is redefined in the current namespace
+    // This ensures that ns_resolve will find the new definition instead of returning cached value
+    // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+    if (g_resolve_cache) {
+        // Remove the symbol from cache to force re-resolution
+        ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)symbol, NULL);
+        ASSIGN(g_resolve_cache, (CljObject*)updated_cache);
+    }
 }
 
 /**

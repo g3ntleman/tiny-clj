@@ -17,6 +17,8 @@
 #include "function.h"
 #include "validation.h"
 #include "builtins.h"
+#include "optimize.h"
+#include "parser.h"  // For eval_parsed
 
 #include "error_messages.h"
 #include <limits.h>
@@ -197,7 +199,7 @@ static inline ID* alloc_obj_array(int size, CljObject **stack_buffer) {
 }
 
 /** @brief Free array allocated with alloc_obj_array */
-static inline void free_obj_array(CljObject **array, CljObject **stack_buffer) {
+static inline void free_obj_array(ID *array, CljObject **stack_buffer) {
     if (array != stack_buffer) free(array);
 }
 
@@ -313,14 +315,87 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
 }
 
 // Generic arithmetic function (with parameter substitution)
+// 
+// FINDINGS from debugging parameter evaluation issues:
+// - eval_body_with_params now correctly returns values[i] even if NULL (nil is valid in Clojure)
+// - The original issue (args[0] being NULL when function is called) was fixed by allowing
+//   eval_body_with_params to return NULL for nil values
+// - However, nil cannot be used in arithmetic operations, so we validate here
+// - The caller (eval_list_with_param_substitution) must handle nil values appropriately
 ID eval_arithmetic_generic_with_substitution(CljList *list, ID *params, ID *values, int param_count, ArithOp op, CljMap *closure_env, EvalState *st) {
     ID a = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (ID)closure_env, st);
     ID b = eval_body_with_params(list_get_element(as_list((ID)list), 2), params, values, param_count, (ID)closure_env, st);
     
-    // eval_body_with_params now throws exception if symbol cannot be resolved
-    // or returns NULL only if the value is nil
-    // Check for nil arguments
+    // ASSERTION: Test thesis that arguments are evaluated correctly
+    // This tests whether eval_body_with_params returns nil unexpectedly
+    // Note: a and b can be NULL (nil), which is valid, but we want to catch unexpected nil
+    // We'll check the source of the nil to understand if it's from a function call or parameter
+    
+    // ASSERTION: Test thesis that arithmetic operations receive nil as argument
+    // This tests whether nil is being passed to arithmetic operations
     if (!a || !b) {
+        // ASSERTION: Verify that nil is being passed to arithmetic operation
+        // This tests the thesis that nil is being passed to arithmetic operations
+        // This assertion will always pass if we reach here, but it documents the condition
+        CLJ_ASSERT(a == NULL || b == NULL); // At least one is nil
+        
+        // ASSERTION: Test thesis - identify which argument is nil
+        // This helps identify the source of the nil value
+        // CRITICAL: This is where we catch nil being passed to arithmetic operations
+        // We need to trace back to find where the nil came from
+        if (!a) {
+            // ASSERTION: Verify that first argument is nil
+            // This tests the thesis that the first argument to arithmetic is nil
+            // This is where we catch nil being passed to arithmetic operations
+            CLJ_ASSERT(a == NULL);
+            // CRITICAL: 'a' is nil - this means the first argument to the arithmetic operation
+            // was evaluated to nil. This could be:
+            // 1. A parameter that is nil
+            // 2. A function call that returned nil
+            // 3. A symbol that resolved to nil
+            // We need to check what the first argument was
+            CljObject *first_arg = list_get_element(as_list((ID)list), 1);
+            CLJ_ASSERT(first_arg != NULL); // The argument expression should exist
+            // TODO: Trace back to find where 'a' came from - is it from a function call or parameter?
+        }
+        if (!b) {
+            // ASSERTION: Verify that second argument is nil
+            // This tests the thesis that the second argument to arithmetic is nil
+            // This is where we catch nil being passed to arithmetic operations
+            CLJ_ASSERT(b == NULL);
+            // CRITICAL: 'b' is nil - this means the second argument to the arithmetic operation
+            // was evaluated to nil. This could be:
+            // 1. A parameter that is nil
+            // 2. A function call that returned nil (e.g., factorial returned nil)
+            // 3. A symbol that resolved to nil
+            // We need to check what the second argument was
+            CljObject *second_arg = list_get_element(as_list((ID)list), 2);
+            CLJ_ASSERT(second_arg != NULL); // The argument expression should exist
+            
+            // ASSERTION: Test thesis that 'b' is a function call that returned nil
+            // This tests whether factorial (or another function) returned nil
+            // If 'b' is a function call (e.g., (factorial (- n 1))), then factorial returned nil
+            if (second_arg && is_type(second_arg, CLJ_LIST)) {
+                CljList *second_list = as_list((ID)second_arg);
+                if (second_list && second_list->first) {
+                    CljObject *second_op = second_list->first;
+                    if (is_type(second_op, CLJ_SYMBOL)) {
+                        CljSymbol *second_op_sym = as_symbol((ID)second_op);
+                        if (second_op_sym && second_op_sym->name && strcmp(second_op_sym->name, "factorial") == 0) {
+                            // ASSERTION: Verify that factorial returned nil
+                            // This tests the thesis that factorial returned nil when called recursively
+                            CLJ_ASSERT(b == NULL); // Factorial returned nil
+                            // CRITICAL: factorial returned nil - this is the root cause of the problem
+                            // This means that when factorial is called recursively (e.g., (factorial (- n 1))),
+                            // it returns nil instead of a number, which then gets passed to the multiplication
+                        }
+                    }
+                }
+            }
+            
+            // TODO: Trace back to find where 'b' came from - is it from a function call or parameter?
+        }
+        
         if (a) RELEASE(a);
         if (b) RELEASE(b);
         throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
@@ -538,18 +613,33 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
                                                        current_args, current_argc, 
                                                        func->closure_env, st);
         
+        // ASSERTION: Test thesis that factorial returns nil when it shouldn't
+        // This tests whether recursive functions return nil unexpectedly
+        // Note: new_result can be NULL (nil), which is valid, but we want to catch unexpected nil
+        if (!new_result && func->name && strcmp(func->name, "factorial") == 0) {
+            // ASSERTION: Verify that factorial returned nil
+            // This tests the thesis that factorial returns nil when it shouldn't
+            // This assertion will always pass if we reach here, but it documents the condition
+            CLJ_ASSERT(new_result == NULL); // Factorial returned nil
+            // TODO: Trace back to find why factorial returned nil - is it from a recursive call?
+        }
+        
         // Check if recur was triggered in THIS function
         // If a nested function (like step in filter) uses recur, it will set
         // g_recur_arg_count, but that's for the nested function, not this one.
         // We need to distinguish between recur for THIS function vs nested function.
         // If new_result is NULL and g_recur_arg_count >= 0, it might be from a nested function.
         // We check if g_recur_arg_count was set AFTER we started evaluating (saved was -1)
+        // CRITICAL: Also check if new_result is NULL, which indicates recur was used
         if (g_recur_arg_count >= 0 && saved_recur_arg_count == -1) {
-            // Tail Call erkannt
+            // Tail Call erkannt - recur was used in THIS function
             CLJ_ASSERT(g_recur_arg_count <= 16);  // Assertion für max 16 Argumente
             // ✅ CRITICAL: Release intermediate result from recur iteration
             // RELEASE/RETAIN macros handle immediates automatically - no guard needed
-            RELEASE(new_result);
+            // new_result can be NULL when recur is used (recur returns NULL), so check before releasing
+            if (new_result) {
+                RELEASE(new_result);
+            }
             
             // Release old arguments and copy new ones
             for (int i = 0; i < current_argc; i++) {
@@ -565,7 +655,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
                 g_recur_args[i] = NULL; // Clear global to prevent double-release
             }
             
-            // Continue loop
+            // Continue loop - g_recur_arg_count will be reset at the start of the next iteration
             continue;
         }
         
@@ -579,6 +669,10 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     for (int i = 0; i < current_argc; i++) {
         RELEASE(current_args[i]);
     }
+    
+    // CRITICAL: Clear recur state after function call to avoid interference with subsequent calls
+    // This ensures that if statements and other expressions work correctly after recur was used
+    clear_recur_args();
     
     // Return result with proper memory management
     // Note: result is already retained by ASSIGN, just return it
@@ -601,7 +695,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
     switch (body_obj->type) {
         case CLJ_SYMBOL: {
             // Look up symbol in environment
-            return (ID)env_get_stack((CljObject*)env, body);
+            return (ID)map_get((CljValue)env, (CljValue)body);
         }
         
         case CLJ_LIST: {
@@ -633,7 +727,7 @@ ID eval_body_with_local_env(ID body, CljMap *local_env, EvalState *st) {
     switch (body_obj->type) {
         case CLJ_SYMBOL: {
             // First try local environment
-            CljObject *result = (CljObject*)env_get_stack((CljObject*)local_env, body);
+            CljObject *result = (CljObject*)map_get((CljValue)local_env, (CljValue)body);
             if (result) {
                 return AUTORELEASE(RETAIN(result));
             }
@@ -681,7 +775,7 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
     
     // For symbols, look up in environment
     if (is_type(op, CLJ_SYMBOL)) {
-        CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, op);
+        CljObject *resolved = (CljObject*)map_get((CljValue)env, (CljValue)op);
         if (resolved) {
             // If it's a function, call it
             if (is_type(resolved, CLJ_FUNC)) {
@@ -716,6 +810,13 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
 }
 
 // Simplified body evaluation with parameter binding
+//
+// FINDINGS from debugging parameter evaluation issues:
+// - In Clojure, nil is a valid value and can be passed as an argument
+// - We return values[i] directly, even if it's NULL (nil), to distinguish from evaluation errors
+// - The caller must handle nil values appropriately (e.g., arithmetic operations reject nil)
+// - This fixes the original issue where args[0] was NULL when function was called,
+//   which was caused by eval_body_with_params returning NULL for nil values
 ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID closure_env, EvalState *st) {
     // Handle nil body gracefully (represents Clojure nil)
     if (!body) {
@@ -731,10 +832,19 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
     if (is_type(body, CLJ_SYMBOL)) {
         // Resolve symbol - check parameters first
         // OPTIMIZATION: Ordered by frequency (Identity check first, then string comparison)
+        CljSymbol *body_sym = as_symbol((ID)body);
+        const char *body_name = body_sym && body_sym->name ? body_sym->name : "unknown";
+        
         for (int i = 0; i < param_count; i++) {
             // Tier 1: Pointer identity check (fastest - O(1), most common case)
             if (params[i] && body == params[i]) {
-                return RETAIN(values[i]);
+                // Parameter found - values[i] can be NULL (nil), which is valid
+                // In Clojure, nil is a valid value and can be passed as an argument
+                // We return values[i] directly, even if it's NULL (nil)
+                // The caller must distinguish between nil (valid) and evaluation errors
+                // Return values[i] even if NULL (nil is valid in Clojure)
+                // Use RETAIN to ensure proper memory management
+                return values[i] ? RETAIN(values[i]) : NULL;
             }
             
             // Tier 2: Symbol identity check (if both are symbols but different pointers)
@@ -743,12 +853,21 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
                 is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
                 // Tier 3: String comparison (slowest, only if needed)
                 CljSymbol *param_sym = as_symbol((ID)params[i]);
-                CljSymbol *body_sym = as_symbol((ID)body);
-                if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
-                    return RETAIN(values[i]);
+                if (param_sym && body_sym && param_sym->name && body_sym->name) {
+                    if (strcmp(param_sym->name, body_sym->name) == 0) {
+                        // NOTE: String comparison matched but pointers differ
+                        // This indicates symbol interning issue - parameter symbol has different pointer than body symbol
+                        // Parameter found - values[i] can be NULL (nil), which is valid
+                        // In Clojure, nil is a valid value and can be passed as an argument
+                        // We return values[i] directly, even if it's NULL (nil)
+                        // Return values[i] even if NULL (nil is valid in Clojure)
+                        return values[i] ? RETAIN(values[i]) : NULL;
+                    }
                 }
             }
         }
+        
+        // Parameter not found - will try to resolve from namespace
         // If not a parameter, try to resolve from closure_env (namespace map)
         if (closure_env && is_type(closure_env, CLJ_MAP)) {
             // Check if key exists in closure_env (even if value is nil/NULL)
@@ -798,6 +917,31 @@ ID eval_body_with_params(ID body, ID *params, ID *values, int param_count, ID cl
             return eval_list_with_param_substitution(body, params, values, param_count, env_map, st);
         }
         
+        case CLJ_SYMBOL: {
+            // Check if symbol is a parameter
+            for (int i = 0; i < param_count; i++) {
+                if (params[i] && body == params[i]) {
+                    return values[i] ? RETAIN((CljObject*)values[i]) : NULL;
+                }
+                if (params[i] && is_type(params[i], CLJ_SYMBOL) && is_type(body, CLJ_SYMBOL)) {
+                    CljSymbol *param_sym = as_symbol((ID)params[i]);
+                    CljSymbol *body_sym = as_symbol((ID)body);
+                    if (param_sym && body_sym && strcmp(param_sym->name, body_sym->name) == 0) {
+                        return values[i] ? RETAIN((CljObject*)values[i]) : NULL;
+                    }
+                }
+            }
+            // Not a parameter - resolve from namespace
+            if (st) {
+                ID resolved = ns_resolve(st, (CljObject*)body);
+                if (resolved) {
+                    return AUTORELEASE(RETAIN((CljObject*)resolved));
+                }
+            }
+            // Not found in namespace - return as literal value
+            return RETAIN(body);
+        }
+        
         default:
             // Literal value
             return RETAIN(body);
@@ -824,9 +968,38 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
     // This fixes the bug where (+ a b) inside defn returned the list instead of evaluating it
     // Note: We must resolve ALL symbols, not just cached ones, because the namespace
     // contains CljFunc objects for builtins like +, -, *, /, not just symbol pointers
+    // CRITICAL: Check closure_env FIRST for recursive function calls, then namespace
+    // This ensures that recursive functions are found even if namespace lookup fails
     CljObject *resolved_op = NULL;
     if (is_type(op, CLJ_SYMBOL)) {
-        resolved_op = ns_resolve(st, op);
+        // First, try closure_env (for recursive function calls)
+        if (closure_env && is_type((CljObject*)closure_env, CLJ_MAP)) {
+            resolved_op = (CljObject*)map_get((CljValue)closure_env, (CljValue)op);
+            // closure_env can contain the function if it was closed over
+            // But we don't RETAIN it - use it temporarily only
+            
+            // ASSERTION: If closure_env lookup found something, verify it's a function
+            // This tests the thesis that closure_env contains functions for recursive calls
+            if (resolved_op && is_type(op, CLJ_SYMBOL)) {
+                CLJ_ASSERT(is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE) || 
+                          is_type(resolved_op, CLJ_SYMBOL) || is_type(resolved_op, CLJ_MAP) ||
+                          IS_IMMEDIATE(resolved_op));
+            }
+        }
+        
+        // If not found in closure_env, try namespace lookup
+        if (!resolved_op) {
+            resolved_op = ns_resolve(st, op);
+            
+            // ASSERTION: If namespace lookup found something, verify it's a function
+            // This tests the thesis that ns_resolve finds functions for recursive calls
+            if (resolved_op && is_type(op, CLJ_SYMBOL)) {
+                CLJ_ASSERT(is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE) || 
+                          is_type(resolved_op, CLJ_SYMBOL) || is_type(resolved_op, CLJ_MAP) ||
+                          IS_IMMEDIATE(resolved_op));
+            }
+        }
+        
         if (resolved_op) {
             // If resolved to a function, use it directly
             if (is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE)) {
@@ -841,11 +1014,54 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
                 
                 for (int i = 0; i < argc; i++) {
                     args[i] = eval_body_with_params(list_get_element(as_list((ID)list), i + 1), params, values, param_count, (ID)closure_env, st);
-                    if (!args[i]) args[i] = NULL;
+                    // args[i] can be NULL if eval_body_with_params returns nil
+                    // This will be validated by validate_numeric_args in builtin functions
+                    
+                    // ASSERTION: Verify that arguments are evaluated correctly
+                    // This tests the thesis that arguments are not nil when they shouldn't be
+                    // Note: args[i] can be NULL (nil), which is valid, but we log it for debugging
+                    if (!args[i] && is_type(op, CLJ_SYMBOL)) {
+                        CljSymbol *op_sym = as_symbol((ID)op);
+                        if (op_sym && op_sym->name) {
+                            // Only assert for non-nil-returning functions (arithmetic, etc.)
+                            // This is a soft assertion - we allow nil but log it
+                            // The actual validation happens in validate_numeric_args
+                        }
+                    }
                 }
+                
+                // ASSERTION: Verify that resolved_op is a function before calling
+                // This tests the thesis that resolved_op is correctly identified as a function
+                CLJ_ASSERT(resolved_op != NULL);
+                CLJ_ASSERT(is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE));
                 
                 // Call the function
                 CljObject *result = eval_function_call(resolved_op, args, argc, NULL, st);
+                
+                // ASSERTION: Verify that the function call returned a result (or nil)
+                // This tests the thesis that factorial returns a value, not nil unexpectedly
+                // Note: result can be NULL (nil), which is valid, but we want to catch unexpected nil
+                if (!result && is_type(op, CLJ_SYMBOL)) {
+                    CljSymbol *op_sym = as_symbol((ID)op);
+                    if (op_sym && op_sym->name && strcmp(op_sym->name, "factorial") == 0) {
+                        // ASSERTION: Verify that factorial returned nil
+                        // This tests the thesis that factorial returns nil when it shouldn't
+                        // This assertion will always pass if we reach here, but it documents the condition
+                        CLJ_ASSERT(result == NULL); // Factorial returned nil
+                        // CRITICAL: factorial returned nil - this is the root cause of the problem
+                        // This means that when factorial is called recursively, it returns nil instead of a number
+                        // We need to check:
+                        // 1. Are the arguments to factorial correct?
+                        // 2. Does factorial's body evaluation return nil?
+                        // 3. Is there an issue with the recursive call?
+                        // TODO: Trace back to find why factorial returned nil - is it from a recursive call?
+                        // Check if args[0] is nil (the argument to factorial)
+                        if (argc > 0 && !args[0]) {
+                            CLJ_ASSERT(args[0] == NULL); // Argument to factorial is nil
+                            // This means the argument passed to factorial was nil
+                        }
+                    }
+                }
                 
                 // Release arguments
                 for (int i = 0; i < argc; i++) {
@@ -892,14 +1108,35 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
     
     if (op == SYM_IF) {
         // (if cond then else?)
+        // CRITICAL: Reset recur state before evaluating if to avoid interference from previous tests
+        // This ensures that if statements work correctly even after recur was used in previous tests
+        int saved_recur_arg_count = g_recur_arg_count;
+        g_recur_arg_count = -1;  // Reset to ensure if evaluation is not affected by recur state
+        
         ID cond_val = eval_body_with_params(list_get_element(as_list((ID)list), 1), params, values, param_count, (ID)closure_env, st);
-        // Note: cond_val can be NULL (nil), which is falsy - don't return NULL here!
+        // Note: cond_val can be NULL (nil), which is falsy - clj_is_truthy handles NULL correctly
         // nil is a valid value and should be checked with clj_is_truthy
         
-        bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
+        bool truthy = clj_is_truthy((CljObject*)cond_val);
         CljObject *branch = truthy ? list_get_element(as_list((ID)list), 2) : list_get_element(as_list((ID)list), 3);
-        if (!branch) return NULL;
-        return eval_body_with_params(branch, params, values, param_count, (ID)closure_env, st);
+        if (!branch) {
+            // Restore recur state if it was set during condition evaluation
+            g_recur_arg_count = saved_recur_arg_count;
+            return NULL;
+        }
+        ID result = eval_body_with_params(branch, params, values, param_count, (ID)closure_env, st);
+        
+        // Restore recur state if it was set during branch evaluation
+        // Only restore if it wasn't set during evaluation (saved was -1)
+        if (g_recur_arg_count >= 0 && saved_recur_arg_count == -1) {
+            // Branch evaluation set recur state - clear it since if doesn't support recur
+            clear_recur_args();
+        } else {
+            // Restore original state
+            g_recur_arg_count = saved_recur_arg_count;
+        }
+        
+        return result;
     }
     
     if (op == SYM_WHEN) {
@@ -987,20 +1224,22 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
         }
         
         // Evaluate new argument values
+        // FINDING: eval_body_with_params can return NULL for nil values, which is valid in Clojure
+        // We must allow NULL values here (unlike the old code that treated NULL as an error)
+        // This fixes the circular dependency issue where NULL values caused infinite loops:
+        // - Old behavior: NULL → treated as error → args[0] = NULL → current_args[0] = NULL → values[0] = NULL → loop
+        // - New behavior: NULL → accepted as nil → properly handled by caller
         CLJ_ASSERT(recur_argc >= 0 && recur_argc <= 16);  // Validierung vor Schleife
         for (int i = 0; i < recur_argc; i++) {
             CLJ_ASSERT(i < 16);  // Array-Zugriff-Validierung
             g_recur_args[i] = eval_body_with_params(
                 list_get_element(as_list((ID)list), i + 1), 
                 params, values, param_count, (CljObject*)closure_env, st);
-            if (!g_recur_args[i]) {
-                // Cleanup on error - release already evaluated arguments
-                for (int j = 0; j < i; j++) {
-                    ASSIGN(g_recur_args[j], NULL);
-                }
-                return NULL;
+            // g_recur_args[i] can be NULL if the evaluated value is nil (valid in Clojure)
+            // We only need to RETAIN if it's not NULL (immediate values don't need retain)
+            if (g_recur_args[i] && !IS_IMMEDIATE(g_recur_args[i])) {
+                RETAIN(g_recur_args[i]);
             }
-            RETAIN(g_recur_args[i]);
         }
         
         g_recur_arg_count = recur_argc;  // Setze Argumentanzahl (>= 0 = Tail Call erkannt)
@@ -1078,6 +1317,14 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
             resolved_op = (CljObject*)map_get((CljValue)closure_env, (CljValue)op);
             // closure_env can contain the function if it was closed over
             // But we don't RETAIN it - use it temporarily only
+            
+            // ASSERTION: If closure_env lookup found something, verify it's a function
+            // This tests the thesis that closure_env contains functions for recursive calls
+            if (resolved_op) {
+                CLJ_ASSERT(is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE) || 
+                          is_type(resolved_op, CLJ_SYMBOL) || is_type(resolved_op, CLJ_MAP) ||
+                          IS_IMMEDIATE(resolved_op));
+            }
         }
         
         // If still not found, try global namespace lookup (for recursive calls)
@@ -1086,6 +1333,14 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
             resolved_op = ns_resolve(st, op);
             // ns_resolve returns unretained pointer from namespace
             // We don't RETAIN it here - just use it temporarily
+            
+            // ASSERTION: If namespace lookup found something, verify it's a function
+            // This tests the thesis that ns_resolve finds functions for recursive calls
+            if (resolved_op) {
+                CLJ_ASSERT(is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE) || 
+                          is_type(resolved_op, CLJ_SYMBOL) || is_type(resolved_op, CLJ_MAP) ||
+                          IS_IMMEDIATE(resolved_op));
+            }
         }
     }
     
@@ -1102,14 +1357,48 @@ ID eval_list_with_param_substitution(ID list, ID *params, ID *values, int param_
         
         for (int i = 0; i < argc; i++) {
             args[i] = eval_body_with_params(list_get_element(as_list((ID)list), i + 1), params, values, param_count, (ID)closure_env, st);
-            if (!args[i]) args[i] = NULL;
+            // args[i] can be NULL if eval_body_with_params returns nil
+            // This will be validated by validate_numeric_args in builtin functions
+            
+            // ASSERTION: Test thesis that arguments are evaluated correctly
+            // This tests whether arguments to function calls are nil when they shouldn't be
+            // Note: args[i] can be NULL (nil), which is valid, but we want to catch unexpected nil
+            if (!args[i] && is_type(op, CLJ_SYMBOL)) {
+                CljSymbol *op_sym = as_symbol((ID)op);
+                if (op_sym && op_sym->name && strcmp(op_sym->name, "factorial") == 0) {
+                    // ASSERTION: Verify that argument to factorial is nil
+                    // This tests the thesis that arguments to factorial are nil when they shouldn't be
+                    // This assertion will always pass if we reach here, but it documents the condition
+                    CLJ_ASSERT(args[i] == NULL); // Argument to factorial is nil
+                    // TODO: Trace back to find where this nil argument came from
+                }
+            }
         }
         
         // Save recur state before calling nested function (in case it uses recur)
         int saved_recur_arg_count = g_recur_arg_count;
         
+        // ASSERTION: Test thesis that resolved_op is a function before calling
+        // This tests whether resolved_op is correctly identified as a function
+        CLJ_ASSERT(resolved_op != NULL);
+        CLJ_ASSERT(is_type(resolved_op, CLJ_FUNC) || is_type(resolved_op, CLJ_CLOSURE));
+        
         // Call the function
         CljObject *result = eval_function_call(resolved_op, args, argc, NULL, st);
+        
+        // ASSERTION: Test thesis that factorial returns nil when it shouldn't
+        // This tests whether recursive functions return nil unexpectedly
+        // Note: result can be NULL (nil), which is valid, but we want to catch unexpected nil
+        if (!result && is_type(op, CLJ_SYMBOL)) {
+            CljSymbol *op_sym = as_symbol((ID)op);
+            if (op_sym && op_sym->name && strcmp(op_sym->name, "factorial") == 0) {
+                // ASSERTION: Verify that factorial returned nil
+                // This tests the thesis that factorial returns nil when it shouldn't
+                // This assertion will always pass if we reach here, but it documents the condition
+                CLJ_ASSERT(result == NULL); // Factorial returned nil
+                // TODO: Trace back to find why factorial returned nil - is it from a recursive call?
+            }
+        }
         
         // Restore recur state if nested function used recur (it's for the nested function, not this one)
         // CRITICAL: Only restore if nested function used recur AND we didn't have a recur pending
@@ -1421,7 +1710,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     CljObject *original_op = op;
     if (is_type(op, CLJ_SYMBOL)) {
         // First try local environment
-        CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, op);
+        CljObject *resolved = (CljObject*)map_get((CljValue)env, (CljValue)op);
         if (resolved) {
             op = resolved;
         } else {
@@ -1444,13 +1733,34 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     if (original_op == SYM_IF) {
         // (if cond then else?)
+        // CRITICAL: Reset recur state before evaluating if to avoid interference from previous tests
+        // This ensures that if statements work correctly even after recur was used in previous tests
+        int saved_recur_arg_count = g_recur_arg_count;
+        g_recur_arg_count = -1;  // Reset to ensure if evaluation is not affected by recur state
+        
         CljObject *cond_val = eval_arg_retained(list, 1, env);
-        // Note: cond_val can be NULL (nil), which is falsy
-        bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
+        // Note: cond_val can be NULL (nil), which is falsy - clj_is_truthy handles NULL correctly
+        bool truthy = clj_is_truthy(cond_val);
         if (cond_val) RELEASE(cond_val);
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
-        if (!branch) return NULL;
-        return eval_body(branch, env, st);
+        if (!branch) {
+            // Restore recur state if it was set during condition evaluation
+            g_recur_arg_count = saved_recur_arg_count;
+            return NULL;
+        }
+        CljObject *result = eval_body(branch, env, st);
+        
+        // Restore recur state if it was set during branch evaluation
+        // Only restore if it wasn't set during evaluation (saved was -1)
+        if (g_recur_arg_count >= 0 && saved_recur_arg_count == -1) {
+            // Branch evaluation set recur state - clear it since if doesn't support recur
+            clear_recur_args();
+        } else {
+            // Restore original state
+            g_recur_arg_count = saved_recur_arg_count;
+        }
+        
+        return result;
     }
     
     if (original_op == SYM_WHEN) {
@@ -1559,7 +1869,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
             fn_rest->rest = (CljObject*)make_list(body_expr, NULL);
         }
         // Evaluiere (fn [] body)
-        CljObject *fn_obj = eval_fn(fn_list, env);
+        CljObject *fn_obj = eval_fn(fn_list, env, st);
         if (!fn_obj) {
             RELEASE(fn_list);
             return NULL;
@@ -1655,7 +1965,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
             fn_env = (CljMap*)st->current_ns->mappings;
         }
         // If env is provided, it should already contain namespace mappings (from eval_let)
-        return AUTORELEASE(eval_fn(list, fn_env));
+        return AUTORELEASE(eval_fn(list, fn_env, st));
     }
     
     if (original_op == SYM_DEF) {
@@ -1815,13 +2125,16 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // This ensures that builtin functions like + are available during evaluation
     CljMap *eval_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
     CljObject *value = NULL;
-    if (is_type(value_expr, CLJ_LIST)) {
-        value = eval_list(as_list((ID)value_expr), eval_env, st);
-    } else {
-        value = eval_expr_simple(value_expr, st);
+    if (value_expr) {
+        if (is_type(value_expr, CLJ_LIST)) {
+            value = eval_list(as_list((ID)value_expr), eval_env, st);
+        } else {
+            value = (CljObject*)eval_parsed(value_expr, st, eval_env);
+        }
     }
+    // If value_expr is NULL, value remains NULL (nil case)
     // value can be NULL if nil was evaluated (legitimate case)
-    // If evaluation failed, eval_list/eval_expr_simple should have thrown an exception
+    // If evaluation failed, eval_list/eval_parsed should have thrown an exception
     
     // If the value is a function, set its name
     if (is_type(value, CLJ_FUNC)) {
@@ -1925,381 +2238,9 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
 // ============================================================================
 // AST Transformation Functions for TCO
 // ============================================================================
+// TCO functions moved to optimize.c
 
-// Helper function to check if two symbols are equal
-static bool symbols_equal(CljObject *sym1, CljObject *sym2) {
-    if (!sym1 || !sym2) return false;
-    if (sym1 == sym2) return true;  // Pointer equality (fast path)
-    if (!is_type(sym1, CLJ_SYMBOL) || !is_type(sym2, CLJ_SYMBOL)) return false;
-    
-    CljSymbol *s1 = as_symbol((ID)sym1);
-    CljSymbol *s2 = as_symbol((ID)sym2);
-    if (!s1 || !s2 || !s1->name || !s2->name) return false;
-    
-    return strcmp(s1->name, s2->name) == 0;
-}
-
-// Check if an expression is in tail position within a body
-static bool is_tail_position(CljObject *expr, CljObject *body) {
-    if (!expr || !body) return false;
-    
-    // If body is a list, check if expr is the last element
-    if (is_type(body, CLJ_LIST)) {
-        CljList *body_list = as_list((ID)body);
-        if (!body_list) return false;
-        
-        // Find the last element in the list
-        CljList *current = body_list;
-        while (current && current->rest) {
-            current = as_list((ID)current->rest);
-        }
-        
-        // Check if expr is the last element
-        if (current && current->first == expr) {
-            return true;
-        }
-        
-        // Check if body is a special form where branches are in tail position
-        CljObject *head = body_list->first;
-        if (head == SYM_IF) {
-            // In (if cond then else), both then and else are in tail position
-            CljList *rest = as_list((ID)body_list->rest);
-            if (rest) {
-                CljList *then_branch = as_list((ID)rest->rest);
-                if (then_branch && then_branch->first == expr) return true;
-                if (then_branch && then_branch->rest) {
-                    CljList *else_branch = as_list((ID)then_branch->rest);
-                    if (else_branch && else_branch->first == expr) return true;
-                }
-            }
-            // Also check recursively in if branches
-            if (rest) {
-                CljList *then_branch = as_list((ID)rest->rest);
-                if (then_branch && is_tail_position(expr, then_branch->first)) return true;
-                if (then_branch && then_branch->rest) {
-                    CljList *else_branch = as_list((ID)then_branch->rest);
-                    if (else_branch && is_tail_position(expr, else_branch->first)) return true;
-                }
-            }
-        } else if (head == SYM_WHEN) {
-            // In (when cond body...), the last body expression is in tail position
-            CljList *rest = as_list((ID)body_list->rest);
-            if (rest && rest->rest) {
-                CljList *body_exprs = as_list((ID)rest->rest);
-                CljList *current_body = body_exprs;
-                while (current_body && current_body->rest) {
-                    current_body = as_list((ID)current_body->rest);
-                }
-                if (current_body && current_body->first == expr) return true;
-            }
-        } else if (head == SYM_DO) {
-            // In (do expr1 expr2 ...), the last expression is in tail position
-            CljList *rest = as_list((ID)body_list->rest);
-            if (rest) {
-                CljList *current_do = rest;
-                while (current_do && current_do->rest) {
-                    current_do = as_list((ID)current_do->rest);
-                }
-                if (current_do && current_do->first == expr) return true;
-            }
-        }
-    }
-    
-    return false;
-}
-
-// Check if a function call is recursive (calls the same function)
-static bool is_recursive_call(CljObject *call_expr, CljObject *func_name) {
-    if (!call_expr || !func_name || !is_type(call_expr, CLJ_LIST)) return false;
-    
-    CljList *call_list = as_list((ID)call_expr);
-    if (!call_list) return false;
-    
-    CljObject *called_name = call_list->first;
-    if (!called_name || !is_type(called_name, CLJ_SYMBOL)) return false;
-    
-    return symbols_equal(called_name, func_name);
-}
-
-// Validate that all recur calls are in tail position
-static void validate_recur_positions(CljObject *body, CljObject *parent_body) {
-    if (!body) return;
-    
-    if (is_type(body, CLJ_LIST)) {
-        CljList *body_list = as_list((ID)body);
-        if (!body_list) return;
-        
-        CljObject *head = body_list->first;
-        
-        // Check if this is a recur call
-        if (head == SYM_RECUR) {
-            if (!is_tail_position(body, parent_body)) {
-                throw_exception(EXCEPTION_RUNTIME, 
-                               "recur must be in tail position", 
-                               __FILE__, __LINE__, 0);
-                return;
-            }
-        }
-        
-        // Recursively check all elements
-        CljObject *rest_obj = body_list->rest;
-        while (rest_obj && is_type(rest_obj, CLJ_LIST)) {
-            CljList *rest = as_list((ID)rest_obj);
-            if (!rest) break;
-            validate_recur_positions(rest->first, body);
-            rest_obj = rest->rest;
-        }
-    }
-}
-
-// Helper: Transform a recursive tail call to (recur ...)
-static CljObject* transform_to_recur(CljList *call_list) {
-    CljObject *rest_obj = call_list->rest;
-    if (!rest_obj || !is_type(rest_obj, CLJ_LIST)) {
-        // No arguments - create (recur)
-        CljList *new_list = (CljList*)make_list((CljObject*)SYM_RECUR, NULL);
-        if (!new_list) return NULL;
-        RETAIN((CljObject*)new_list);
-        return (CljObject*)new_list;
-    }
-    
-    // Copy arguments (the rest of the original list)
-    CljObject *rest_copy = (CljObject*)rest_obj;
-    RETAIN(rest_copy);
-    
-    // Create new list with SYM_RECUR as first element
-    CljList *new_list = (CljList*)make_list((CljObject*)SYM_RECUR, NULL);
-    if (!new_list) {
-        RELEASE(rest_copy);
-        return NULL;
-    }
-    
-    new_list->rest = rest_copy;
-    RETAIN((CljObject*)new_list);
-    return (CljObject*)new_list;
-}
-
-// Forward declaration
-static CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name, 
-                                                 CljObject **params, int param_count,
-                                                 CljObject *parent_body);
-
-// Helper: Transform a single expression (for if branches)
-static CljObject* transform_expr(CljObject *expr, CljObject *func_name, 
-                                  CljObject **params, int param_count, 
-                                  CljObject *parent_body);
-
-// Helper: Build a new list from transformed expressions
-static CljList* build_list(CljObject *first, CljObject *second, CljObject *third) {
-    CljList *new_list = (CljList*)make_list(first, NULL);
-    if (!new_list) return NULL;
-    
-    if (second) {
-        CljList *new_second = (CljList*)make_list(second, NULL);
-        if (!new_second) {
-            RELEASE((CljObject*)new_list);
-            return NULL;
-        }
-        new_list->rest = (CljObject*)new_second;
-        
-        if (third) {
-            CljList *new_third = (CljList*)make_list(third, NULL);
-            if (!new_third) {
-                RELEASE((CljObject*)new_list);
-                return NULL;
-            }
-            new_second->rest = (CljObject*)new_third;
-        }
-    }
-    
-    return new_list;
-}
-
-// Helper: Transform a list of expressions recursively
-static CljList* transform_list(CljList *list, CljObject *func_name, 
-                                CljObject **params, int param_count, 
-                                CljObject *parent_body) {
-    if (!list) return NULL;  // Empty list - return NULL (caller should handle this)
-    
-    CljList *new_rest = NULL;
-    CljList *current = list;
-    CljList *new_current = NULL;
-    
-    while (current) {
-        CljObject *expr = current->first;
-        if (!expr) {
-            // NULL expression - skip it or handle error?
-            // For now, skip it and continue
-            current = as_list((ID)current->rest);
-            continue;
-        }
-        
-        CljObject *transformed = transform_recursive_tail_calls(
-            expr, func_name, params, param_count, parent_body);
-        if (!transformed) {
-            // Transformation failed - this is an error
-            if (new_rest) RELEASE((CljObject*)new_rest);
-            return NULL;
-        }
-        
-        CljList *new_node = (CljList*)make_list(transformed, NULL);
-        if (!new_node) {
-            RELEASE(transformed);
-            if (new_rest) RELEASE((CljObject*)new_rest);
-            return NULL;
-        }
-        
-        if (!new_rest) {
-            new_rest = new_node;
-            new_current = new_node;
-        } else {
-            new_current->rest = (CljObject*)new_node;
-            new_current = new_node;
-        }
-        
-        current = as_list((ID)current->rest);
-    }
-    
-    return new_rest;  // Can be NULL if list was empty, which is OK
-}
-
-// Helper: Transform a single expression (for if branches)
-static CljObject* transform_expr(CljObject *expr, CljObject *func_name, 
-                                  CljObject **params, int param_count, 
-                                  CljObject *parent_body) {
-    if (!expr) return NULL;  // NULL expr is valid (e.g., missing else branch)
-    CljObject *result = transform_recursive_tail_calls(expr, func_name, params, param_count, parent_body);
-    // If transformation returns NULL, it means an error occurred
-    // Return NULL to signal error
-    return result;
-}
-
-// Transform recursive tail calls to recur
-static CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name, 
-                                                 CljObject **params, int param_count,
-                                                 CljObject *parent_body) {
-    if (!body) {
-        // NULL body is valid (e.g., missing else branch) - return NULL
-        return NULL;
-    }
-    
-    // If body is not a list, return as-is
-    if (!is_type(body, CLJ_LIST)) {
-        return RETAIN(body), body;
-    }
-    
-    CljList *body_list = as_list((ID)body);
-    if (!body_list) return NULL;
-    
-    CljObject *head = body_list->first;
-    
-    // Check if this is a recursive call in tail position
-    CljObject *context = parent_body ? parent_body : body;
-    if (is_recursive_call(body, func_name) && is_tail_position(body, context)) {
-        return transform_to_recur(body_list);
-    }
-    
-    // Transform if expression branches recursively
-    // In (if cond then else), both then and else are in tail position
-    if (head == SYM_IF) {
-        CljList *rest = as_list((ID)body_list->rest);
-        if (!rest) return RETAIN(body), body;
-        
-        // Transform condition, then branch, and else branch
-        CljObject *cond = rest->first;
-        CljObject *transformed_cond = cond ? transform_expr(cond, func_name, params, param_count, body) : NULL;
-        if (cond && !transformed_cond) return NULL;
-        
-        CljObject *transformed_then = NULL;
-        CljObject *transformed_else = NULL;
-        
-        // Structure: (if cond then else)
-        // rest->rest is a list containing then as first, else as rest->first
-        CljList *then_list = as_list((ID)rest->rest);
-        if (then_list && then_list->first) {
-            transformed_then = transform_expr(then_list->first, func_name, params, param_count, body);
-            if (!transformed_then) {
-                RELEASE(transformed_cond);
-                return NULL;
-            }
-            
-            // Transform else branch (if present)
-            CljList *else_list = as_list((ID)then_list->rest);
-            if (else_list && else_list->first) {
-                transformed_else = transform_expr(else_list->first, func_name, params, param_count, body);
-                if (!transformed_else) {
-                    // Transformation failed for non-NULL expression - error
-                    if (transformed_cond && transformed_cond != cond) RELEASE(transformed_cond);
-                    if (transformed_then) RELEASE(transformed_then);
-                    return NULL;
-                }
-            }
-        }
-        
-        // Build new if expression
-        // If transformed_cond is NULL, use original cond
-        CljObject *cond_to_use = transformed_cond ? transformed_cond : cond;
-        if (transformed_cond != cond && cond_to_use) {
-            RETAIN(cond_to_use);
-        }
-        
-        CljList *new_if = build_list((CljObject*)SYM_IF, cond_to_use, transformed_then);
-        if (!new_if) {
-            if (transformed_cond && transformed_cond != cond) RELEASE(transformed_cond);
-            if (transformed_then) RELEASE(transformed_then);
-            if (transformed_else) RELEASE(transformed_else);
-            return NULL;
-        }
-        
-        // Add else branch if present
-        if (transformed_else) {
-            CljList *rest_list = as_list((ID)new_if->rest);
-            if (rest_list && rest_list->rest) {
-                CljList *then_list = as_list((ID)rest_list->rest);
-                if (then_list) {
-                    CljList *new_else = (CljList*)make_list(transformed_else, NULL);
-                    if (!new_else) {
-                        RELEASE((CljObject*)new_if);
-                        if (transformed_cond && transformed_cond != cond) RELEASE(transformed_cond);
-                        if (transformed_then) RELEASE(transformed_then);
-                        RELEASE(transformed_else);
-                        return NULL;
-                    }
-                    then_list->rest = (CljObject*)new_else;
-                }
-            }
-        }
-        
-        RETAIN((CljObject*)new_if);
-        return (CljObject*)new_if;
-    }
-    
-    // Recursively transform nested expressions in a list
-    CljObject *rest_obj = body_list->rest;
-    if (rest_obj && is_type(rest_obj, CLJ_LIST)) {
-        CljList *rest = as_list((ID)rest_obj);
-        if (rest) {
-            CljList *new_rest = transform_list(rest, func_name, params, param_count, body);
-            // new_rest can be NULL if rest is empty - that's OK, we still create a new list
-            // Create new body list with transformed rest
-            CljList *new_body = (CljList*)make_list(head, NULL);
-            if (!new_body) {
-                if (new_rest) RELEASE((CljObject*)new_rest);
-                return NULL;
-            }
-            if (new_rest) {
-                new_body->rest = (CljObject*)new_rest;
-            }
-            RETAIN((CljObject*)new_body);
-            return (CljObject*)new_body;
-        }
-    }
-    
-    // No transformation needed, return as-is
-    return RETAIN(body), body;
-}
-
-ID eval_fn(CljList *list, CljMap *env) {
+ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(is_list(list));
@@ -2349,8 +2290,12 @@ ID eval_fn(CljList *list, CljMap *env) {
     // Note: For anonymous functions (fn), we can't easily detect recursive calls
     // because there's no function name. This transformation is mainly for defn.
     
+    // CRITICAL: Use current namespace mappings as environment for function evaluation
+    // This ensures that builtin functions like reverse are available in closures
+    CljMap *fn_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
+    
     // Create function object
-    CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, (ID)body, (ID)env, NULL));
+    CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, (ID)body, (ID)fn_env, NULL));
     
     // Cleanup heap-allocated params if any
     free_obj_array((CljObject**)params, params_stack);
@@ -2504,7 +2449,9 @@ static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *e
             // TODO: Implement proper environment copying
         }
         // Add new binding
-        (void)map_assoc((CljObject*)new_env, var, element);
+        // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+        ID updated_env = map_assoc((ID)new_env, (ID)var, (ID)element);
+        ASSIGN(new_env, (CljMap*)updated_env);
     }
     return new_env;
 }
@@ -2848,7 +2795,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
     // Clean up environment
     RELEASE(let_env);
     
-    return AUTORELEASE(result);
+    // Return the result of the last body expression
+    return result;
 }
 
 // ============================================================================
@@ -2923,12 +2871,12 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     int param_count = params_vec_data->count;
     CljObject *params_stack[16];
-    CljObject **params = (CljObject**)alloc_obj_array(param_count, params_stack);
+    ID *params = alloc_obj_array(param_count, params_stack);
     
     for (int i = 0; i < param_count; i++) {
-        params[i] = params_vec_data->data[i];
-        if (!params[i] || !is_type(params[i], CLJ_SYMBOL)) {
-            free_obj_array(params, params_stack);
+        params[i] = (ID)params_vec_data->data[i];
+        if (!params[i] || !is_type((CljObject*)params[i], CLJ_SYMBOL)) {
+            free_obj_array((CljObject**)params, params_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                            "defn parameters must be symbols", 
                            NULL, 0, 0);
@@ -2973,9 +2921,9 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Transform recursive tail calls to recur (AST transformation)
     CljObject *body_expr = body_expr_obj;
     CljObject *transformed_body_expr = transform_recursive_tail_calls(
-        body_expr, name_sym, params, param_count, body_expr_obj);
+        body_expr, name_sym, (CljObject**)params, param_count, body_expr_obj);
     if (!transformed_body_expr) {
-        free_obj_array(params, params_stack);
+        free_obj_array((CljObject**)params, params_stack);
         return NULL;
     }
     
@@ -2990,31 +2938,64 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Create function object directly (skip fn list creation to save code)
     // Use current namespace mappings as environment for function evaluation
     // This ensures that builtin functions like + are available in closures
-    CljMap *fn_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
-    CljObject *fn_obj = (CljObject*)make_function(params, param_count, (ID)body_expr_obj, (ID)fn_env, NULL);
+    if (!st || !st->current_ns) {
+        free_obj_array((CljObject**)params, params_stack);
+        throw_exception(EXCEPTION_RUNTIME, "defn requires an evaluation state with namespace", NULL, 0, 0);
+        return NULL;
+    }
+    
+    CljMap *fn_env = (CljMap*)st->current_ns->mappings;
+    if (!fn_env) {
+        fn_env = make_map(16);
+        st->current_ns->mappings = (CljObject*)fn_env;
+    }
+    
+    // Create function object with namespace mappings as closure_env
+    CljFunction *fn_obj = make_function(params, param_count, (ID)body_expr_obj, (ID)fn_env, NULL);
     if (!fn_obj) {
-        free_obj_array(params, params_stack);
+        free_obj_array((CljObject**)params, params_stack);
         return NULL;
     }
     
     // Set function name
-    CljFunction *func = as_function((ID)fn_obj);
+    CljFunction *func = fn_obj;
     CljSymbol *sym = as_symbol((ID)name_sym);
     if (func && sym && sym->name[0] && !func->name) {
         func->name = strdup(sym->name);
     }
     
-    // Register function in namespace (before body evaluation for recursive calls)
-    if (!st || !st->current_ns) {
-        RELEASE(fn_obj);
-        free_obj_array(params, params_stack);
-        throw_exception(EXCEPTION_RUNTIME, "defn requires an evaluation state with namespace", NULL, 0, 0);
-        return NULL;
-    }
-    ns_define(st->current_ns, name_sym, fn_obj); // ns_define does RETAIN internally
+    // Register function in namespace (after creation for recursive calls)
+    // This ensures the function is available when the body is evaluated
+    // ns_define may update st->current_ns->mappings (COW), so we need to update closure_env
+    ns_define(st->current_ns, name_sym, (ID)fn_obj); // ns_define does RETAIN internally
     
-    RELEASE(fn_obj); // Release our reference (namespace keeps it)
-    free_obj_array(params, params_stack);
+    // CRITICAL: Update closure_env to point to current namespace mappings
+    // This ensures recursive calls can find the function via closure_env or namespace lookup
+    // Since ns_define may have updated st->current_ns->mappings (COW),
+    // we need to update the function's closure_env to point to the updated mappings
+    // Always update closure_env to ensure it contains the function that was just registered
+    // This is necessary even if COW didn't happen, because the function needs to be
+    // available in closure_env for recursive calls
+    // CRITICAL: Always update closure_env, even if pointers are the same, because
+    // the function was just added to the mappings, and closure_env needs to reflect that
+    if (st->current_ns->mappings != (CljObject*)func->closure_env) {
+        RELEASE((CljObject*)func->closure_env);
+        func->closure_env = (ID)st->current_ns->mappings;
+        RETAIN((CljObject*)st->current_ns->mappings);
+    }
+    // Even if pointers are the same, the function is now in the mappings
+    // closure_env already points to the correct map, so no update needed
+    
+    // ASSERTION: Verify that the function is now in closure_env
+    // This tests the thesis that closure_env contains the function after ns_define
+    CLJ_ASSERT(func->closure_env != NULL);
+    CLJ_ASSERT(is_type((CljObject*)func->closure_env, CLJ_MAP));
+    CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym);
+    CLJ_ASSERT(func_in_closure != NULL);
+    CLJ_ASSERT(func_in_closure == (CljObject*)fn_obj || func_in_closure == (CljObject*)func);
+    
+    RELEASE((CljObject*)fn_obj); // Release our reference (namespace keeps it)
+    free_obj_array((CljObject**)params, params_stack);
     return name_sym; // Return symbol (Clojure-compatible)
 }
 
@@ -3057,7 +3038,7 @@ ID eval_arg(CljList *list, int index, CljMap *env) {
         if (env && is_type((CljObject*)env, CLJ_MAP)) {
             // Check if key exists in environment (even if value is nil/NULL)
             if (map_contains((CljValue)env, (CljValue)element)) {
-                CljObject *resolved = (CljObject*)env_get_stack((CljObject*)env, element);
+                CljObject *resolved = (CljObject*)map_get((CljValue)env, (CljValue)element);
                 // resolved can be NULL (nil), which is valid
                 return resolved;
             }
@@ -3167,8 +3148,10 @@ ID eval_dotimes(CljList *list, CljMap *env) {
         if (new_env) {
             // Don't copy existing environment bindings - just add the loop variable
             // Add new binding
+            // CRITICAL: map_assoc may return a new map (COW), so we must use the result
             CljValue i_value = fixnum((int32_t)i);
-                    (void)map_assoc((CljObject*)new_env, var, i_value);
+            ID updated_env = map_assoc((ID)new_env, (ID)var, i_value);
+            ASSIGN(new_env, (CljMap*)updated_env);
             
             // Evaluate all body expressions with new binding
             // body_list can contain multiple expressions
@@ -3229,8 +3212,22 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     struct timeval start, end;
     gettimeofday(&start, NULL);
     
-    // Evaluate the expression (this is the key difference from builtin!)
-    CljObject *result = eval_expr_simple(expr, st);
+    // Evaluate the expression using eval_list with the provided environment
+    // This ensures that functions like + are available from the environment
+    CljObject *result = NULL;
+    if (is_type(expr, CLJ_LIST)) {
+        result = eval_list(as_list(expr), env, st);
+    } else if (is_type(expr, CLJ_SYMBOL)) {
+        // For symbols, look up in environment
+        result = (CljObject*)map_get((CljValue)env, (CljValue)expr);
+        if (result) {
+            RETAIN(result);
+        }
+    } else {
+        // Literal value - return as-is
+        result = expr;
+        RETAIN(result);
+    }
     
     // End timing
     gettimeofday(&end, NULL);

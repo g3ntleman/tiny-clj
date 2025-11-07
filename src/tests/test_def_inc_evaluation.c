@@ -27,7 +27,7 @@ TEST(test_def_inc_evaluation_during_load) {
     // Extract the symbol from the parsed form
     if (is_type(form, CLJ_LIST)) {
         CljList *list = as_list(form);
-        CljObject *inc_sym = (CljObject*)list_nth(list, 1);
+        CljSymbol *inc_sym = as_symbol(list_nth(list, 1));
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);
         
         TEST_ASSERT_NOT_NULL(inc_sym);

@@ -10,6 +10,7 @@
 #include "list.h"    // For LIST_FIRST
 #include "function_call.h"  // For SYM_DEF
 #include "map.h"     // For map_get
+#include "parser.h"  // For eval_parsed
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -65,10 +66,10 @@ static bool eval_core_source(const char *src, EvalState *st) {
     
     // Evaluate with exception handling using TRY/CATCH
     TRY {
-      CljValue result = eval_expr_simple((CljObject*)form, st);
-      // Don't RELEASE result - eval_expr_simple already returns AUTORELEASE
+      ID result = eval_parsed((CljObject*)form, st, NULL);
+      // Don't RELEASE result - eval_parsed already returns AUTORELEASE
       // result can be NULL if nil was evaluated (legitimate case)
-      // eval_expr_simple should throw exceptions for errors, not return NULL
+      // eval_parsed should throw exceptions for errors, not return NULL
       if (result) {
         success_count++;
       } else {

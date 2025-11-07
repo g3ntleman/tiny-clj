@@ -176,6 +176,153 @@ TEST(test_if_bug_in_functions) {
     
 }
 
+// Isolated test: Check if direct if evaluation works
+TEST(test_if_direct_evaluation) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing direct if evaluation...\n");
+    CljObject *result = eval_string("(if (= 0 0) :yes :no)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+}
+
+// Isolated test: Check if comparison works
+TEST(test_if_comparison_works) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing comparison in if...\n");
+    CljObject *result1 = eval_string("(= 0 0)", st);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(clj_is_truthy(result1));
+    
+    CljObject *result2 = eval_string("(= 0 1)", st);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_FALSE(clj_is_truthy(result2));
+}
+
+// Isolated test: Check if keywords are truthy
+TEST(test_if_keywords_truthy) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing keywords are truthy...\n");
+    CljObject *result = eval_string(":yes", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+}
+
+// Isolated test: Check if function call works
+TEST(test_if_function_call_works) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing function call...\n");
+    CljObject *fn_def = eval_string("(def test-fn (fn [n] n))", st);
+    TEST_ASSERT_NOT_NULL(fn_def);
+    
+    CljObject *result = eval_string("(test-fn 0)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
+    
+    RELEASE(fn_def);
+}
+
+// Isolated test: Check if if works in function without comparison
+TEST(test_if_in_function_simple) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing if in function without comparison...\n");
+    CljObject *fn_def = eval_string("(def test-if-simple (fn [n] (if n :yes :no)))", st);
+    TEST_ASSERT_NOT_NULL(fn_def);
+    
+    CljObject *result1 = eval_string("(test-if-simple 0)", st);
+    TEST_ASSERT_NOT_NULL(result1);
+    // 0 is truthy in Clojure (only nil and false are falsy)
+    TEST_ASSERT_TRUE(clj_is_truthy(result1));
+    
+    CljObject *result2 = eval_string("(test-if-simple nil)", st);
+    // nil is NULL, so result2 should be NULL or falsy
+    if (result2) {
+        TEST_ASSERT_FALSE(clj_is_truthy(result2));
+    }
+    
+    RELEASE(fn_def);
+}
+
+// Isolated test: Check if if works in function with comparison
+TEST(test_if_in_function_with_comparison) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing if in function with comparison...\n");
+    CljObject *fn_def = eval_string("(def test-if-comp (fn [n] (if (= n 0) :yes :no)))", st);
+    TEST_ASSERT_NOT_NULL(fn_def);
+    
+    CljObject *result1 = eval_string("(test-if-comp 0)", st);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(clj_is_truthy(result1));
+    
+    CljObject *result2 = eval_string("(test-if-comp 1)", st);
+    TEST_ASSERT_NOT_NULL(result2);
+    // :no should also be truthy, but let's check what we get
+    printf("Result2 is truthy: %d\n", clj_is_truthy(result2));
+    
+    RELEASE(fn_def);
+}
+
+// Isolated test: Check if recur state affects if evaluation
+TEST(test_if_after_recur_state) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    printf("Testing if after recur state...\n");
+    
+    // First, trigger a recur to set g_recur_arg_count
+    // Use a simpler recur function that we know works
+    CljObject *recur_def = eval_string("(def test-recur-simple (fn [n] (if (= n 0) n (recur (- n 1)))))", st);
+    TEST_ASSERT_NOT_NULL(recur_def);
+    
+    CljObject *recur_result = eval_string("(test-recur-simple 3)", st);
+    if (!recur_result) {
+        printf("ERROR: recur_result is NULL - recur failed!\n");
+        TEST_FAIL_MESSAGE("recur_result is NULL");
+        RELEASE(recur_def);
+        return;
+    }
+    TEST_ASSERT_NOT_NULL(recur_result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)recur_result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)recur_result));
+    
+    // Now test if in a new function
+    CljObject *if_def = eval_string("(def test-if-after (fn [n] (if (= n 0) :yes :no)))", st);
+    TEST_ASSERT_NOT_NULL(if_def);
+    
+    CljObject *result = eval_string("(test-if-after 0)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+    
+    RELEASE(recur_def);
+    RELEASE(if_def);
+}
+
 // Test integer overflow detection
 TEST(test_integer_overflow_detection) {
     if (!st) {
@@ -372,4 +519,72 @@ TEST(test_automatic_tco_fibonacci) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
     TEST_ASSERT_EQUAL_INT(102334155, as_fixnum((CljValue)result3));  // 40th fibonacci number
     
+}
+
+// Test that verifies recur was artificially generated by TCO transformation
+// This test directly inspects the function body to confirm transformation
+TEST(test_tco_artificially_generates_recur) {
+    if (!st) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Define a function WITHOUT explicit recur - should be transformed to use recur
+    CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", st);
+    TEST_ASSERT_NOT_NULL(factorial_def);
+    
+    // Get the function from namespace
+    CljObject *factorial_func_obj = ns_resolve(st, factorial_def);
+    TEST_ASSERT_NOT_NULL(factorial_func_obj);
+    TEST_ASSERT_TRUE(is_type(factorial_func_obj, CLJ_CLOSURE));
+    
+    CljFunction *factorial_func = as_function((ID)factorial_func_obj);
+    TEST_ASSERT_NOT_NULL(factorial_func);
+    TEST_ASSERT_NOT_NULL(factorial_func->body);
+    
+    // Helper function to check if a list contains recur
+    extern CljObject *SYM_RECUR;
+    TEST_ASSERT_NOT_NULL(SYM_RECUR);
+    
+    // Check if body contains recur
+    bool found_recur = false;
+    CljObject *body = (CljObject*)factorial_func->body;
+    
+    // Recursively search for recur in the body
+    if (is_type(body, CLJ_LIST)) {
+        CljList *list = as_list((ID)body);
+        while (list) {
+            // Check if first element is recur
+            if (list->first == SYM_RECUR) {
+                found_recur = true;
+                break;
+            }
+            
+            // Recursively check nested lists
+            if (list->first && is_type(list->first, CLJ_LIST)) {
+                CljList *nested = as_list((ID)list->first);
+                while (nested) {
+                    if (nested->first == SYM_RECUR) {
+                        found_recur = true;
+                        break;
+                    }
+                    nested = as_list((ID)nested->rest);
+                }
+                if (found_recur) break;
+            }
+            
+            list = as_list((ID)list->rest);
+        }
+    }
+    
+    TEST_ASSERT_TRUE_MESSAGE(found_recur, 
+                            "TCO should have transformed recursive call to recur in function body");
+    
+    // Verify the function still works correctly
+    CljObject *result = eval_string("(factorial 5 1)", st);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)result));  // 5! = 120
+    
+    RELEASE(factorial_func_obj);
 }

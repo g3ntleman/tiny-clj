@@ -129,7 +129,7 @@ TEST(test_array_map_builtin) {
         
         // Test empty map: (array-map)
         CljObject *result0 = parse("(array-map)", eval_state);
-        CljObject *eval0 = eval_expr_simple(result0, eval_state);
+        ID eval0 = eval_parsed(result0, eval_state, NULL);
         TEST_ASSERT_EQUAL_INT(0, map_count(eval0));
         // result0 and eval0 are automatically managed by AUTORELEASE
 
@@ -139,19 +139,19 @@ TEST(test_array_map_builtin) {
         TEST_ASSERT_NOT_NULL(eval1);
         TEST_ASSERT_EQUAL_INT(CLJ_MAP, eval1->type);
         TEST_ASSERT_EQUAL_INT(1, map_count(eval1));
-        // result1 and eval1 are automatically managed by parse() and eval_expr_simple()
+        // result1 and eval1 are automatically managed by parse() and eval_parsed()
 
         // Test multiple pairs: (array-map "a" 1 "b" 2)
         CljObject *result2 = parse("(array-map \"a\" 1 \"b\" 2)", eval_state);
-        CljObject *eval2 = eval_expr_simple(result2, eval_state);
+        ID eval2 = eval_parsed(result2, eval_state, NULL);
         TEST_ASSERT_EQUAL_INT(2, map_count(eval2));
-        // result2 and eval2 are automatically managed by parse() and eval_expr_simple()
+        // result2 and eval2 are automatically managed by parse() and eval_parsed()
 
         // Test with keywords: (array-map :a 1 :b 2)
         CljObject *result3 = parse("(array-map :a 1 :b 2)", eval_state);
-        CljObject *eval3 = eval_expr_simple(result3, eval_state);
+        ID eval3 = eval_parsed(result3, eval_state, NULL);
         TEST_ASSERT_EQUAL_INT(2, map_count(eval3));
-        // result3 and eval3 are automatically managed by parse() and eval_expr_simple()
+        // result3 and eval3 are automatically managed by parse() and eval_parsed()
 
         evalstate_free(eval_state);
 }
@@ -362,6 +362,95 @@ TEST(test_special_form_when) {
     TEST_ASSERT_NULL(result10); // nil is NULL in our system
     
     // result1-10 are automatically managed by eval_string
+}
+
+// ============================================================================
+// REGRESSION TEST: nil in if statements within functions
+// ============================================================================
+// This test verifies that nil is correctly treated as falsy in if statements
+// within functions. Previously, nil was not correctly handled when passed as
+// a parameter to a function containing an if statement.
+TEST(test_if_nil_in_function_regression) {
+    // Test 1: Simple fn with if and nil parameter
+    // ((fn [x] (if x :then :else)) nil) => :else
+    CljObject *result1 = NULL;
+    TRY {
+        result1 = eval_string("((fn [x] (if x :then :else)) nil)", st);
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "if in function should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL_MESSAGE(result1, "((fn [x] (if x :then :else)) nil) should return :else, not NULL");
+    TEST_ASSERT_TRUE_MESSAGE(is_type(result1, CLJ_SYMBOL), "Result should be a symbol");
+    CljSymbol *sym1 = as_symbol(result1);
+    TEST_ASSERT_NOT_NULL(sym1);
+    TEST_ASSERT_EQUAL_CHAR(':', sym1->name[0]);
+    TEST_ASSERT_EQUAL_STRING("else", sym1->name + 1);
+    
+    // Test 2: defn with if and nil parameter
+    // (defn test-nil [x] (if x 1 0))
+    // (test-nil nil) => 0
+    CljObject *def_result = NULL;
+    TRY {
+        def_result = eval_string("(defn test-nil [x] (if x 1 0))", st);
+        TEST_ASSERT_NOT_NULL(def_result);
+        
+        CljObject *result2 = eval_string("(test-nil nil)", st);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result2, "(test-nil nil) should return 0, not NULL");
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)result2), "Result should be a fixnum");
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result2));
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "defn with if should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
+    
+    // Test 3: fn with if and nil, but no else branch
+    // ((fn [x] (if x 42)) nil) => nil
+    CljObject *result3 = NULL;
+    TRY {
+        result3 = eval_string("((fn [x] (if x 42)) nil)", st);
+        // When condition is falsy and no else branch, if returns nil
+        TEST_ASSERT_NULL_MESSAGE(result3, "((fn [x] (if x 42)) nil) should return nil when no else branch");
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "if without else should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
+    
+    // Test 4: Multiple if statements with nil in same function
+    // ((fn [x] (if x 1 (if x 2 3))) nil) => 3
+    CljObject *result4 = NULL;
+    TRY {
+        result4 = eval_string("((fn [x] (if x 1 (if x 2 3))) nil)", st);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result4, "Nested if with nil should return 3, not NULL");
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)result4), "Result should be a fixnum");
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result4));
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Nested if should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
+    
+    // Test 5: Compare nil with false - both should be falsy
+    // ((fn [x] (if x :truthy :falsy)) false) => :falsy
+    CljObject *result5 = NULL;
+    TRY {
+        result5 = eval_string("((fn [x] (if x :truthy :falsy)) false)", st);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result5, "if with false should return :falsy, not NULL");
+        TEST_ASSERT_TRUE_MESSAGE(is_type(result5, CLJ_SYMBOL), "Result should be a symbol");
+        CljSymbol *sym5 = as_symbol(result5);
+        TEST_ASSERT_NOT_NULL(sym5);
+        TEST_ASSERT_EQUAL_CHAR(':', sym5->name[0]);
+        TEST_ASSERT_EQUAL_STRING("falsy", sym5->name + 1);
+    } CATCH(ex) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "if with false should not throw exception, got: %s", ex->message);
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
 }
 
 // ============================================================================

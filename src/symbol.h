@@ -101,6 +101,7 @@ typedef struct SymbolEntry {
 
 extern SymbolEntry *symbol_table;
 
+CljSymbol* make_symbol_impl(const char *name, const char *ns);
 CljObject* intern_symbol(const char *ns, const char *name);
 CljObject* intern_symbol_global(const char *name);  // Without namespace
 SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol);

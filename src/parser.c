@@ -295,9 +295,10 @@ ID parse_expr(Reader *reader, EvalState *st) {
  * @brief Evaluate a parsed Clojure expression
  * @param parsed_expr The parsed AST
  * @param eval_state The evaluation state
+ * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
-CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
+ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
     CLJ_ASSERT(parsed_expr != NULL);
     CLJ_ASSERT(eval_state != NULL);
     
@@ -309,14 +310,22 @@ CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state) {
         // For immediate values, return them as CljObject* (they're already evaluated)
         result = parsed_expr;
     } else if (is_type(parsed_expr, CLJ_LIST)) {
-        CLJ_ASSERT(eval_state->current_ns != NULL);
-        CljObject *env = eval_state->current_ns->mappings;
-        result = eval_list(as_list(parsed_expr), (CljMap*)env, eval_state);
+        // Use provided env or fall back to current_ns->mappings
+        CljMap *eval_env = env;
+        if (!eval_env) {
+            CLJ_ASSERT(eval_state->current_ns != NULL);
+            eval_env = (CljMap*)eval_state->current_ns->mappings;
+        }
+        result = eval_list(as_list(parsed_expr), eval_env, eval_state);
         // eval_list returns mixed results - don't autorelease objects we didn't create
+    } else if (is_type(parsed_expr, CLJ_SYMBOL)) {
+        // For symbols, use eval_symbol (uses current_ns->mappings internally)
+        result = (CljObject*)eval_symbol((ID)parsed_expr, eval_state);
+        // eval_symbol already returns autoreleased object
     } else {
-        // Handle other types with eval_expr_simple
-        result = eval_expr_simple(parsed_expr, eval_state);
-        // eval_expr_simple already returns autoreleased object
+        // Literal value (vector, map, etc.) - return as-is with AUTORELEASE
+        result = parsed_expr;
+        AUTORELEASE(result);
     }
     
     // result can be NULL only if the evaluation result is nil
@@ -353,8 +362,8 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
         return parsed;
     }
     
-    // For heap objects, evaluate them
-    ID result = eval_parsed(parsed, eval_state);
+    // For heap objects, evaluate them (use NULL env to use current_ns->mappings)
+    ID result = eval_parsed(parsed, eval_state, NULL);
     
     // result can be NULL only if the evaluation result is nil
     // If eval_parsed fails, it should throw an exception, not return NULL

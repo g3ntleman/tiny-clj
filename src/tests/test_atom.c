@@ -689,7 +689,7 @@ TEST(test_atom_eval_core_source_processes_inc) {
         TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (def inc ...)");
         
         // Evaluate it
-        ID result = eval_expr_simple((CljObject*)form, st);
+        ID result = eval_parsed((CljObject*)form, st, NULL);
         
         // Should succeed
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "should evaluate (def inc ...) successfully");

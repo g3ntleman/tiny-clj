@@ -352,9 +352,56 @@ TEST(test_let_filter_function_call) {
     TEST_ASSERT_NOT_NULL(filter_fn);
     TEST_ASSERT_TRUE(is_type(filter_fn, CLJ_FUNC) || is_type(filter_fn, CLJ_CLOSURE));
     
-    // Test a simple filter call: (filter (fn [x] true) [1 2 3])
-    // This should return [1 2 3] if filter works
-    CljObject *result = eval_string("(filter (fn [x] true) [1 2 3])", st);
-    TEST_ASSERT_NOT_NULL(result);
+    // Test a simple filter call: (filter (fn [x] true) (list 1 2 3))
+    // This should return (1 2 3) if filter works
+    CljObject *result = eval_string("(filter (fn [x] true) (list 1 2 3))", st);
+    if (!result) {
+        TEST_FAIL_MESSAGE("filter with (fn [x] true) returned NULL");
+        return;
+    }
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    
+    // Test if even? works: (even? 2) => true
+    CljObject *even_result = eval_string("(even? 2)", st);
+    if (!even_result) {
+        TEST_FAIL_MESSAGE("even? 2 returned NULL");
+        return;
+    }
+    TEST_ASSERT_TRUE(clj_is_truthy(even_result));
+    
+    // Test if even? works: (even? 1) => false
+    CljObject *odd_result = eval_string("(even? 1)", st);
+    if (!odd_result) {
+        TEST_FAIL_MESSAGE("even? 1 returned NULL");
+        return;
+    }
+    TEST_ASSERT_FALSE(clj_is_truthy(odd_result));
+    
+    // Test a simple let with step function: (let [step (fn [x] x)] (step 42))
+    CljObject *simple_step = eval_string("(let [step (fn [x] x)] (step 42))", st);
+    if (!simple_step) {
+        TEST_FAIL_MESSAGE("simple let with step returned NULL");
+        return;
+    }
+    TEST_ASSERT_TRUE(is_fixnum(simple_step));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(simple_step));
+    
+    // Test with even?: (filter even? (list 1 2 3))
+    // This should return (2) if filter works
+    CljObject *result2 = eval_string("(filter even? (list 1 2 3))", st);
+    if (!result2) {
+        TEST_FAIL_MESSAGE("filter with even? returned NULL");
+        return;
+    }
+    TEST_ASSERT_TRUE(is_type(result2, CLJ_LIST));
+    
+    // Verify first element is 2
+    CljList *list = as_list((ID)result2);
+    TEST_ASSERT_NOT_NULL(list);
+    if (!list->first) {
+        TEST_FAIL_MESSAGE("filter result list is empty (first is NULL)");
+        return;
+    }
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
 }

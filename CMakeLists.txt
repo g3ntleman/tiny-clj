@@ -79,6 +79,7 @@ list(APPEND SOURCES
     src/reader.c
     src/function_call.c
     src/function.c
+    src/optimize.c
     src/environment.c
     src/equality.c
     src/event_loop.c
@@ -249,6 +250,7 @@ set_target_properties(tiny-clj-esp32-repl PROPERTIES
 
 # Unity Test Framework (central runner with separate test files)
 add_executable(unity-tests
+    ${SOURCES}
     src/tests/unity_test_runner.c
     src/tests/test_registry.c
     src/tests/test_memory.c

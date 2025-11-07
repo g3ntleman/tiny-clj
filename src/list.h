@@ -6,6 +6,10 @@
 #include "exception.h" // For throw_exception
 #include <stdbool.h>
 #include <stdio.h> // For snprintf
+#ifdef __GNUC__
+#include <execinfo.h> // For backtrace and backtrace_symbols
+#include <stdlib.h> // For free
+#endif
 
 // CljList represents a Clojure-style linked list
 typedef struct CljList {

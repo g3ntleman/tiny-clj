@@ -16,6 +16,7 @@
 #include "namespace.h"
 #include "reader.h"
 #include "value.h"
+#include "map.h"  // For CljMap
 
 
 // === Legacy API (deprecated - use CljValue API) ===
@@ -33,9 +34,10 @@ CljObject *parse(const char *input, EvalState *st);
  * @brief Evaluate a parsed Clojure expression
  * @param parsed_expr The parsed AST
  * @param eval_state The evaluation state
+ * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL on error
  */
-CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state);
+ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env);
 
 /**
  * @brief Parse and evaluate a Clojure expression from a string (convenience)

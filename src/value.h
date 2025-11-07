@@ -111,7 +111,6 @@ static inline int32_t as_fixnum(CljValue val) {
 CljValue character(uint32_t codepoint);
 CljValue fixed(float value);
 struct CljString* make_string(const char *str);
-CljSymbol* make_symbol_impl(const char *name, const char *ns);
 
 
 static inline bool is_character(CljValue val) {

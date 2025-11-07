@@ -122,27 +122,32 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     }
     
     // Add :line (Clojure-compatible)
+    // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     if (SYM_KW_LINE) {
-        (void)map_assoc((CljValue)location_map, (CljValue)SYM_KW_LINE, fixnum(line));
+        ID updated_map = map_assoc((CljValue)location_map, (CljValue)SYM_KW_LINE, fixnum(line));
+        ASSIGN(location_map, (CljMap*)updated_map);
     }
     
     // Add :column (Clojure-compatible)
     if (kw_column) {
-        (void)map_assoc((CljValue)location_map, (CljValue)kw_column, fixnum(column));
+        ID updated_map = map_assoc((CljValue)location_map, (CljValue)kw_column, fixnum(column));
+        ASSIGN(location_map, (CljMap*)updated_map);
     }
     
     // Add :file (Clojure-compatible, if available)
     if (SYM_KW_FILE && file) {
         struct CljString *file_str = make_string(file);
         if (file_str) {
-            (void)map_assoc((CljValue)location_map, (CljValue)SYM_KW_FILE, (CljValue)file_str);
+            ID updated_map = map_assoc((CljValue)location_map, (CljValue)SYM_KW_FILE, (CljValue)file_str);
+            ASSIGN(location_map, (CljMap*)updated_map);
             RELEASE(file_str); // map_assoc retains it
         }
     }
     
     // Add :ns (Clojure-compatible, if available)
     if (SYM_KW_NS && ns_name) {
-        (void)map_assoc((CljValue)location_map, (CljValue)SYM_KW_NS, (CljValue)ns_name);
+        ID updated_map = map_assoc((CljValue)location_map, (CljValue)SYM_KW_NS, (CljValue)ns_name);
+        ASSIGN(location_map, (CljMap*)updated_map);
     }
     
     return (CljObject*)location_map;

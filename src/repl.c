@@ -168,7 +168,7 @@ static bool eval_multiline_string(const char *code, EvalState *st) {
                 }
                 
                 // Evaluate the parsed expression
-                CljObject *eval_result = eval_parsed(parsed, st);
+                ID eval_result = eval_parsed(parsed, st, NULL);
                 
                 // Print the result (can be NULL for nil)
                 print_result(eval_result);

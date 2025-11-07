@@ -65,7 +65,6 @@ void eval_error(const char *msg, EvalState *st);
 void parse_error(const char *msg, EvalState *st);
 CljObject* eval_try(CljObject *form, EvalState *st);
 CljObject* eval_catch(CljObject *form, EvalState *st);
-CljObject* eval_expr_simple(CljObject *expr, EvalState *st);
 
 // List helpers moved to list.h
 

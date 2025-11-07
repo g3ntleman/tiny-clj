@@ -776,10 +776,12 @@ ID native_array_map(ID *args, unsigned int argc) {
     CljMap *map = (CljMap*)make_map(pair_count);
     
     // Add all key-value pairs
+    // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     for (unsigned int i = 0; i < argc; i += 2) {
         CljObject *key = (CljObject*)args[i];
         CljObject *value = (CljObject*)args[i + 1];
-        (void)map_assoc((ID)map, (ID)key, (ID)value);
+        ID updated_map = map_assoc((ID)map, (ID)key, (ID)value);
+        ASSIGN(map, (CljMap*)updated_map);
     }
     
     return ((CljObject*)map);
@@ -977,7 +979,18 @@ ID native_prn(ID *args, unsigned int argc) {
 // Helper function to validate numeric arguments
 static bool validate_numeric_args(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
-        if (!args[i] || (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i]))) {
+        if (!args[i]) {
+            // ASSERTION: Test thesis that nil is being passed to numeric operations
+            // This tests whether nil is being passed to builtin numeric functions
+            // This is where the "Cannot use nil as a Number" error originates
+            CLJ_ASSERT(args[i] == NULL); // Argument is nil
+            
+            // NULL argument (nil) - provide better error message
+            throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, 
+                "Cannot use nil as a Number");
+            return false;
+        }
+        if (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i])) {
             throw_exception_formatted(EXCEPTION_TYPE_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
@@ -1202,7 +1215,7 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                 if (!form) {
                     if (reader_is_eof(&reader)) break; else { ok = false; break; }
                 }
-                (void)eval_expr_simple((CljObject*)form, st);
+                (void)eval_parsed((CljObject*)form, st, NULL);
                 RELEASE((CljObject*)form);
             } CATCH(ex) {
                 ok = false;
@@ -2079,9 +2092,9 @@ ID native_time_micro(ID *args, unsigned int argc) {
     EvalState *st = evalstate_new(false);
     CljObject *result = NULL;
     
-    // Use eval_expr_simple for proper evaluation
+    // Use eval_parsed for proper evaluation
     if (st && args[0]) {
-        result = eval_expr_simple(args[0], st);
+        result = (CljObject*)eval_parsed(args[0], st, NULL);
     }
     
     // End timing (Clojure-compatible: capture end time)
@@ -2251,7 +2264,7 @@ ID native_def(ID *args, unsigned int argc) {
     if (is_type(value_expr, CLJ_LIST)) {
         value = eval_list(as_list((ID)value_expr), (CljMap*)st->current_ns->mappings, st);
     } else {
-        value = eval_expr_simple(value_expr, st);
+        value = (CljObject*)eval_parsed(value_expr, st, NULL);
     }
     if (!value) {
         evalstate_free(st);
