@@ -74,7 +74,4 @@ extern EvalState* test_get_eval_state(void);
     } \
     static void name##_body(void)
 
-// Convenience macro: use 'st' instead of 'g_test_eval_state' in tests
-#define st g_test_eval_state
-
 #endif // TESTS_COMMON_H

@@ -66,94 +66,11 @@ void set_memory_verbose_mode(bool verbose) {
 }
 #endif
 
-#ifdef DISABLE_VECTOR_OPERATIONS
-// Stub implementations for vector operations when disabled
-CljObject *make_vector(int capacity) {
-    (void)capacity;
-    return make_list(); // Fallback to list
-}
+// Vectors are required - no stubs needed
+// DISABLE_VECTOR_OPERATIONS is no longer supported
 
-CljObject *vector_conj(CljObject *vec, CljObject *item) {
-    (void)vec;
-    (void)item;
-    return make_list(); // Fallback to list
-}
-
-CljObject *vector_get(CljObject *vec, int index) {
-    (void)vec;
-    (void)index;
-    return make_nil();
-}
-
-CljObject *vector_assoc(CljObject *vec, int index, CljObject *item) {
-    (void)vec;
-    (void)index;
-    (void)item;
-    return make_list(); // Fallback to list
-}
-
-int vector_count(CljObject *vec) {
-    (void)vec;
-    return 0;
-}
-#endif
-
-#ifdef DISABLE_MAP_OPERATIONS
-// Stub implementations for map operations when disabled
-CljObject *make_map(void) {
-    return make_list(); // Fallback to list
-}
-
-CljObject *map_assoc(CljObject *map, CljObject *key, CljObject *value) {
-    (void)map;
-    (void)key;
-    (void)value;
-    return make_list(); // Fallback to list
-}
-
-CljObject *map_get(CljObject *map, CljObject *key) {
-    (void)map;
-    (void)key;
-    return make_nil();
-}
-
-ID map_keys(ID map) {
-    (void)map;
-    return (ID)make_list();
-}
-
-ID map_vals(ID map) {
-    (void)map;
-    return (ID)make_list();
-}
-
-int map_count(ID map) {
-    (void)map;
-    return 0;
-}
-
-CljObject *make_map_from_stack(CljObject **stack, int count) {
-    (void)stack;
-    (void)count;
-    return make_list();
-}
-
-CljObject *conj_map(CljObject *map, CljObject *item) {
-    (void)map;
-    (void)item;
-    return make_list();
-}
-
-CljObject *persistent_map(CljObject *map) {
-    (void)map;
-    return make_list();
-}
-
-CljObject *transient_map(CljObject *map) {
-    (void)map;
-    return make_list();
-}
-#endif
+// Maps are required - no stubs needed
+// DISABLE_MAP_OPERATIONS is no longer supported
 
 #ifdef DISABLE_COMPLEX_PARSING
 // Stub implementations for complex parsing when disabled

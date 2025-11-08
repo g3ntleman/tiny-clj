@@ -19,7 +19,7 @@ TEST(test_let_basic_binding) {
         
         // Test: (let [x 10] x) should return 10
         const char *code = "(let [x 10] x)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -36,7 +36,7 @@ TEST(test_let_multiple_bindings) {
         
         // Test: (let [x 10 y 20] (+ x y)) should return 30
         const char *code = "(let [x 10 y 20] (+ x y))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -53,7 +53,7 @@ TEST(test_let_sequential_bindings) {
         
         // Test: (let [x 10 y (+ x 5)] y) should return 15
         const char *code = "(let [x 10 y (+ x 5)] y)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -70,7 +70,7 @@ TEST(test_let_expression_body) {
         
         // Test: (let [x 5 y 3] (* x y)) should return 15
         const char *code = "(let [x 5 y 3] (* x y))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -87,7 +87,7 @@ TEST(test_let_multiple_body_expressions) {
         
         // Test: (let [x 10] (+ x 1) (+ x 2)) should return 12 (last expression)
         const char *code = "(let [x 10] (+ x 1) (+ x 2))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -104,7 +104,7 @@ TEST(test_let_nested) {
         
         // Test: (let [x 10] (let [y 20] (+ x y))) should return 30
         const char *code = "(let [x 10] (let [y 20] (+ x y)))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -121,7 +121,7 @@ TEST(test_let_shadowing) {
         
         // Test: (let [x 10] (let [x 20] x)) should return 20 (inner shadows outer)
         const char *code = "(let [x 10] (let [x 20] x))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -137,11 +137,11 @@ TEST(test_let_with_function_calls) {
         // Use global st from setUp (clojure.core already loaded)
         
         // Define a function first
-        eval_string("(def square (fn [x] (* x x)))", st);
+        eval_string("(def square (fn [x] (* x x)))", g_test_eval_state);
         
         // Test: (let [x 5] (square x)) should return 25
         const char *code = "(let [x 5] (square x))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -158,7 +158,7 @@ TEST(test_let_empty_bindings) {
         
         // Test: (let [] 42) should return 42
         const char *code = "(let [] 42)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -174,7 +174,7 @@ TEST(test_if_let_basic) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (if-let [x 42] x nil) => 42
-    CljObject *result = eval_string("(if-let [x 42] x nil)", st);
+    CljObject *result = eval_string("(if-let [x 42] x nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
@@ -184,7 +184,7 @@ TEST(test_if_let_false_condition) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (if-let [x false] x 100) => 100
-    CljObject *result = eval_string("(if-let [x false] x 100)", st);
+    CljObject *result = eval_string("(if-let [x false] x 100)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(result));
@@ -194,7 +194,7 @@ TEST(test_if_let_nil_condition) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (if-let [x nil] x 200) => 200
-    CljObject *result = eval_string("(if-let [x nil] x 200)", st);
+    CljObject *result = eval_string("(if-let [x nil] x 200)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(200, as_fixnum(result));
@@ -204,13 +204,13 @@ TEST(test_if_let_without_else) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (if-let [x 42] x) => 42
-    CljObject *result = eval_string("(if-let [x 42] x)", st);
+    CljObject *result = eval_string("(if-let [x 42] x)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
     
     // Test: (if-let [x nil] x) => nil
-    CljObject *result2 = eval_string("(if-let [x nil] x)", st);
+    CljObject *result2 = eval_string("(if-let [x nil] x)", g_test_eval_state);
     TEST_ASSERT_NULL(result2);
 }
 
@@ -218,7 +218,7 @@ TEST(test_if_let_with_expression) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (if-let [x 10] (+ x 5) 0) => 15
-    CljObject *result = eval_string("(if-let [x 10] (+ x 5) 0)", st);
+    CljObject *result = eval_string("(if-let [x 10] (+ x 5) 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(15, as_fixnum(result));
@@ -233,7 +233,7 @@ TEST(test_let_with_local_function) {
     
     // Test: (let [step (fn [x] (+ x 1))] (step 5)) => 6
     // This tests if local functions defined in let can be called
-    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (step 5))", st);
+    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (step 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
@@ -243,7 +243,7 @@ TEST(test_let_with_local_function_multiple_calls) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (let [step (fn [x] (+ x 1))] (+ (step 5) (step 10))) => 17
-    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (+ (step 5) (step 10)))", st);
+    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (+ (step 5) (step 10)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(17, as_fixnum(result));
@@ -254,7 +254,7 @@ TEST(test_let_with_local_function_using_namespace_function) {
     
     // Test: (let [step (fn [x] (+ x 1))] (step 5)) => 6
     // This tests if local functions can use namespace functions like +
-    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (step 5))", st);
+    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (step 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
@@ -265,7 +265,7 @@ TEST(test_let_with_local_function_using_reverse) {
     
     // Test: (let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))
     // This tests if local functions can use namespace functions like reverse
-    CljObject *result = eval_string("(let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))", st);
+    CljObject *result = eval_string("(let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
     
@@ -284,7 +284,7 @@ TEST(test_let_verify_step_binding) {
     // Parse the let expression manually to inspect the binding
     // (let [step (fn [x] (+ x 1))] step)
     // This should return the function itself, proving step is bound
-    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] step)", st);
+    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] step)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_type(result, CLJ_FUNC) || is_type(result, CLJ_CLOSURE));
 }
@@ -295,7 +295,7 @@ TEST(test_let_verify_step_callable) {
     
     // (let [step (fn [x] (+ x 1))] (step 5))
     // This should return 6, proving step is bound and callable
-    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (step 5))", st);
+    CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] (step 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
@@ -307,7 +307,7 @@ TEST(test_let_verify_step_binding_order) {
     
     // (let [step (fn [x] x)] (let [result (step 42)] result))
     // This tests if step is available in nested let
-    CljObject *result = eval_string("(let [step (fn [x] x)] (let [result (step 42)] result))", st);
+    CljObject *result = eval_string("(let [step (fn [x] x)] (let [result (step 42)] result))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
@@ -319,10 +319,10 @@ TEST(test_let_inside_function) {
     
     // Define a function that uses let internally
     // (def test-filter (fn [pred coll] (let [step (fn [x] (+ x 1))] (step 5))))
-    eval_string("(def test-filter (fn [pred coll] (let [step (fn [x] (+ x 1))] (step 5))))", st);
+    eval_string("(def test-filter (fn [pred coll] (let [step (fn [x] (+ x 1))] (step 5))))", g_test_eval_state);
     
     // Call the function
-    CljObject *result = eval_string("(test-filter even? [1 2 3])", st);
+    CljObject *result = eval_string("(test-filter even? [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
@@ -334,10 +334,10 @@ TEST(test_let_filter_pattern) {
     
     // Test pattern similar to filter: (fn [pred coll] (let [step (fn [x] x)] (step pred coll (list))))
     // Simplified: (fn [pred coll] (let [step (fn [x] x)] (step 42)))
-    eval_string("(def test-filter-pattern (fn [pred coll] (let [step (fn [x] x)] (step 42))))", st);
+    eval_string("(def test-filter-pattern (fn [pred coll] (let [step (fn [x] x)] (step 42))))", g_test_eval_state);
     
     // Call the function
-    CljObject *result = eval_string("(test-filter-pattern even? [1 2 3])", st);
+    CljObject *result = eval_string("(test-filter-pattern even? [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
@@ -348,13 +348,13 @@ TEST(test_let_filter_function_call) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test if filter function exists and can be called
-    CljObject *filter_fn = eval_string("filter", st);
+    CljObject *filter_fn = eval_string("filter", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(filter_fn);
     TEST_ASSERT_TRUE(is_type(filter_fn, CLJ_FUNC) || is_type(filter_fn, CLJ_CLOSURE));
     
     // Test a simple filter call: (filter (fn [x] true) (list 1 2 3))
     // This should return (1 2 3) if filter works
-    CljObject *result = eval_string("(filter (fn [x] true) (list 1 2 3))", st);
+    CljObject *result = eval_string("(filter (fn [x] true) (list 1 2 3))", g_test_eval_state);
     if (!result) {
         TEST_FAIL_MESSAGE("filter with (fn [x] true) returned NULL");
         return;
@@ -362,7 +362,7 @@ TEST(test_let_filter_function_call) {
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
     
     // Test if even? works: (even? 2) => true
-    CljObject *even_result = eval_string("(even? 2)", st);
+    CljObject *even_result = eval_string("(even? 2)", g_test_eval_state);
     if (!even_result) {
         TEST_FAIL_MESSAGE("even? 2 returned NULL");
         return;
@@ -370,7 +370,7 @@ TEST(test_let_filter_function_call) {
     TEST_ASSERT_TRUE(clj_is_truthy(even_result));
     
     // Test if even? works: (even? 1) => false
-    CljObject *odd_result = eval_string("(even? 1)", st);
+    CljObject *odd_result = eval_string("(even? 1)", g_test_eval_state);
     if (!odd_result) {
         TEST_FAIL_MESSAGE("even? 1 returned NULL");
         return;
@@ -378,7 +378,7 @@ TEST(test_let_filter_function_call) {
     TEST_ASSERT_FALSE(clj_is_truthy(odd_result));
     
     // Test a simple let with step function: (let [step (fn [x] x)] (step 42))
-    CljObject *simple_step = eval_string("(let [step (fn [x] x)] (step 42))", st);
+    CljObject *simple_step = eval_string("(let [step (fn [x] x)] (step 42))", g_test_eval_state);
     if (!simple_step) {
         TEST_FAIL_MESSAGE("simple let with step returned NULL");
         return;
@@ -388,7 +388,7 @@ TEST(test_let_filter_function_call) {
     
     // Test with even?: (filter even? (list 1 2 3))
     // This should return (2) if filter works
-    CljObject *result2 = eval_string("(filter even? (list 1 2 3))", st);
+    CljObject *result2 = eval_string("(filter even? (list 1 2 3))", g_test_eval_state);
     if (!result2) {
         TEST_FAIL_MESSAGE("filter with even? returned NULL");
         return;

@@ -250,13 +250,13 @@ TEST(test_fixed_complex_arithmetic) {
 // Test for fixed-point overflow detection
 TEST(test_fixed_overflow_detection) {
     WITH_AUTORELEASE_POOL({
-        TEST_ASSERT_NOT_NULL(st);
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
         
         // Test multiplication overflow - this should throw an exception with correct values
         CljObject *result = NULL;
         bool exception_caught = false;
         TRY {
-            result = eval_string("(* 1000.8 1000000.9)", st);
+            result = eval_string("(* 1000.8 1000000.9)", g_test_eval_state);
             // If we reach here, no exception was thrown
             result = NULL;
         } CATCH(ex) {
@@ -271,7 +271,7 @@ TEST(test_fixed_overflow_detection) {
         CljObject *result2 = NULL;
         bool exception_caught2 = false;
         TRY {
-            result2 = eval_string("(+ 1000000.5 1000000.5)", st);
+            result2 = eval_string("(+ 1000000.5 1000000.5)", g_test_eval_state);
             // If we reach here, no exception was thrown
             result2 = NULL;
         } CATCH(ex) {

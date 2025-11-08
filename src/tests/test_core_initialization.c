@@ -129,8 +129,8 @@ TEST(test_clojure_core_loads_inc) {
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Load clojure.core (use global st from setUp)
-    evalstate_set_ns(st, "clojure.core");
-    load_clojure_core(st);
+    evalstate_set_ns(g_test_eval_state, "clojure.core");
+    load_clojure_core(g_test_eval_state);
     
     // Check if inc is in clojure.core mappings
     CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
@@ -189,8 +189,8 @@ TEST(test_clojure_core_loads_inc) {
 // Test: Verify that all core functions are loaded correctly
 TEST(test_clojure_core_loads_all_functions) {
     // Load clojure.core (use global st from setUp)
-    evalstate_set_ns(st, "clojure.core");
-    load_clojure_core(st);
+    evalstate_set_ns(g_test_eval_state, "clojure.core");
+    load_clojure_core(g_test_eval_state);
     
     // Check if key functions are loaded
     CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
@@ -231,13 +231,13 @@ TEST(test_clojure_core_loads_all_functions) {
 
 // Test: Verify that (def inc (fn [x] (+ x 1))) is evaluated correctly
 TEST(test_def_inc_evaluation_during_load) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     
     // Parse "(def inc (fn [x] (+ x 1)))"
     Reader reader;
     reader_init(&reader, "(def inc (fn [x] (+ x 1)))");
-    CljValue form = value_by_parsing_expr(&reader, st);
+    CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
@@ -256,18 +256,18 @@ TEST(test_def_inc_evaluation_during_load) {
                                       "inc symbol should be interned");
         
         // Evaluate the def expression
-        CljMap *env = st->current_ns ? (CljMap*)st->current_ns->mappings : NULL;
+        CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
         TEST_ASSERT_NOT_NULL(env);
         
         TRY {
-            CljValue result = eval_list(list, env, st);
+            CljValue result = eval_list(list, env, g_test_eval_state);
             
             // Check if inc is now in the mappings
-            CljObject *inc_value = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)inc_sym_interned);
+            CljObject *inc_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_interned);
             
             if (!inc_value) {
                 // Debug: Check what symbols ARE in the mappings
-                CljMap *map = (CljMap*)st->current_ns->mappings;
+                CljMap *map = (CljMap*)g_test_eval_state->current_ns->mappings;
                 int symbol_count = 0;
                 const char *first_symbol = NULL;
                 for (int i = 0; i < map->count; i++) {
@@ -311,7 +311,7 @@ TEST(test_def_inc_evaluation_during_load) {
 
 // Test: Verify that + is available when evaluating (fn [x] (+ x 1))
 TEST(test_plus_available_during_fn_evaluation) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     
     // Ensure + is registered (should be done by register_builtins)
@@ -331,15 +331,15 @@ TEST(test_plus_available_during_fn_evaluation) {
     // Parse "(fn [x] (+ x 1))"
     Reader reader;
     reader_init(&reader, "(fn [x] (+ x 1))");
-    CljValue form = value_by_parsing_expr(&reader, st);
+    CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
     
     // Evaluate the fn expression
-    CljMap *env = st->current_ns ? (CljMap*)st->current_ns->mappings : NULL;
+    CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(form), env, st);
+        CljValue result = eval_list(as_list(form), env, g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, 
                                     "fn expression should evaluate to a function");
         TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_FUNC) || is_type(result, CLJ_CLOSURE),
@@ -359,32 +359,32 @@ TEST(test_plus_available_during_fn_evaluation) {
 
 // Test: Verify that eval_def stores the symbol even if value evaluation returns NULL
 TEST(test_def_stores_symbol_even_if_value_null) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    evalstate_set_ns(st, "user");
+    evalstate_set_ns(g_test_eval_state, "user");
     
     // Parse "(def test-var nil)"
     Reader reader;
     reader_init(&reader, "(def test-var nil)");
-    CljValue form = value_by_parsing_expr(&reader, st);
+    CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
     
     // Evaluate the def expression
-    CljMap *env = st->current_ns ? (CljMap*)st->current_ns->mappings : NULL;
+    CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(form), env, st);
+        CljValue result = eval_list(as_list(form), env, g_test_eval_state);
         
         // Check if test-var is in the mappings (even if value is nil/NULL)
         CljObject *test_var_sym = intern_symbol_global("test-var");
         TEST_ASSERT_NOT_NULL(test_var_sym);
         
         // test_var_value can be NULL if nil was stored
-        (void)map_get((CljValue)st->current_ns->mappings, (CljValue)test_var_sym);
+        (void)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)test_var_sym);
         // But the key should be in the map
         // Let's check if the key exists by iterating
-        CljMap *map = (CljMap*)st->current_ns->mappings;
+        CljMap *map = (CljMap*)g_test_eval_state->current_ns->mappings;
         bool found_key = false;
         for (int i = 0; i < map->count; i++) {
             CljObject *key = KV_KEY(map->data, i);

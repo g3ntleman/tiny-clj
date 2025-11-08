@@ -14,14 +14,14 @@ TEST(test_function_registered_before_body_evaluation) {
     
     // Define a simple function (not recursive)
     const char *code = "(defn simple [x] (+ x 1))";
-    CljValue result = eval_string(code, st);
+    CljValue result = eval_string(code, g_test_eval_state);
     
     // Function should be defined
     TEST_ASSERT_NOT_NULL(result);
     
     // Check if function is in namespace
     CljObject *fn_sym = intern_symbol_global("simple");
-    CljObject *fn_value = (CljObject*)ns_resolve(st, fn_sym);
+    CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
     TEST_ASSERT_NOT_NULL(fn_value);
     TEST_ASSERT_TRUE(is_type(fn_value, CLJ_FUNC) || is_type(fn_value, CLJ_CLOSURE));
@@ -36,14 +36,14 @@ TEST(test_recursive_function_name_resolvable) {
     const char *code = "(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))";
     
     // This should not throw an exception
-    CljValue result = eval_string(code, st);
+    CljValue result = eval_string(code, g_test_eval_state);
     
     // Function should be defined
     TEST_ASSERT_NOT_NULL(result);
     
     // Check if function is in namespace
     CljObject *fn_sym = intern_symbol_global("factorial");
-    CljObject *fn_value = (CljObject*)ns_resolve(st, fn_sym);
+    CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
     TEST_ASSERT_NOT_NULL(fn_value);
     TEST_ASSERT_TRUE(is_type(fn_value, CLJ_FUNC) || is_type(fn_value, CLJ_CLOSURE));
@@ -58,15 +58,15 @@ TEST(test_ns_resolve_during_definition) {
     
     // Before evaluation, function should not be in namespace
     CljObject *fn_sym = intern_symbol_global("test-fn");
-    CljObject *fn_value_before = (CljObject*)ns_resolve(st, fn_sym);
+    CljObject *fn_value_before = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     TEST_ASSERT_NULL(fn_value_before);
     
     // Evaluate defn
-    CljValue result = eval_string(defn_code, st);
+    CljValue result = eval_string(defn_code, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     
     // After evaluation, function should be in namespace
-    CljObject *fn_value_after = (CljObject*)ns_resolve(st, fn_sym);
+    CljObject *fn_value_after = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     TEST_ASSERT_NOT_NULL(fn_value_after);
     TEST_ASSERT_TRUE(is_type(fn_value_after, CLJ_FUNC) || is_type(fn_value_after, CLJ_CLOSURE));
     
@@ -76,11 +76,11 @@ TEST(test_ns_resolve_during_definition) {
 TEST(test_symbol_resolution_in_eval_body_with_params) {
     
     // Define a function
-    eval_string("(defn test-fn [x] x)", st);
+    eval_string("(defn test-fn [x] x)", g_test_eval_state);
     
     // Get the function from namespace
     CljObject *fn_sym = intern_symbol_global("test-fn");
-    CljObject *fn_value = (CljObject*)ns_resolve(st, fn_sym);
+    CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     TEST_ASSERT_NOT_NULL(fn_value);
     
     // Try to resolve the symbol using ns_resolve with NULL st
@@ -95,10 +95,10 @@ TEST(test_symbol_resolution_in_eval_body_with_params) {
 TEST(test_recursive_call_simplified) {
     
     // Define a recursive function
-    eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", st);
+    eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", g_test_eval_state);
     
     // Call the function
-    CljValue result = eval_string("(factorial 5)", st);
+    CljValue result = eval_string("(factorial 5)", g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
@@ -111,12 +111,12 @@ TEST(test_recursive_call_simplified) {
 TEST(test_eval_body_with_params_symbol_in_arithmetic) {
     
     // Define a recursive function
-    eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", st);
+    eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", g_test_eval_state);
     
     // Get the function symbol
     CljObject *fn_sym = intern_symbol_global("factorial");
     
-    // Try to resolve it using ns_resolve with NULL st (like eval_body_with_params does)
+    // Try to resolve it using ns_resolve with NULL g_test_eval_state (like eval_body_with_params does)
     CljObject *resolved = (CljObject*)ns_resolve(NULL, fn_sym);
     
     // Should find the function
@@ -130,11 +130,11 @@ TEST(test_eval_body_with_params_symbol_in_arithmetic) {
 TEST(test_arithmetic_with_recursive_symbol) {
     
     // Define a recursive function
-    eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", st);
+    eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", g_test_eval_state);
     
     // Try to evaluate just the arithmetic part: (* 5 (factorial 4))
     // This simulates what happens inside the recursive call
-    CljValue result = eval_string("(* 5 (factorial 4))", st);
+    CljValue result = eval_string("(* 5 (factorial 4))", g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));

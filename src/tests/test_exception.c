@@ -159,12 +159,12 @@ TEST(test_map_arity_exception_zero_args) {
         CljObject *val = fixnum(1);
         (void)map_assoc(map_obj, key, val);
         
-        // Define 'm' in current namespace (use global st from setUp)
+        // Define 'm' in current namespace (use global g_test_eval_state from setUp)
         CljObject *m_sym = AUTORELEASE(make_symbol_impl("m", NULL));
-        ns_define(st->current_ns, m_sym, (CljObject*)map_obj);
+        ns_define(g_test_eval_state->current_ns, m_sym, (CljObject*)map_obj);
         
         // Try to call map function with 0 arguments: (map)
-        eval_string("(map)", st);
+        eval_string("(map)", g_test_eval_state);
         
         // Should not reach here
         TEST_ASSERT_TRUE_MESSAGE(false, "Should throw ArityException when calling map with 0 args");

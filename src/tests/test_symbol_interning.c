@@ -15,7 +15,7 @@ extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 // Test: Verify that inc symbol is interned correctly when loading clojure.core
 TEST(test_inc_symbol_interning_during_load) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Get inc symbol BEFORE loading clojure.core
     CljObject *inc_sym_before = intern_symbol_global("inc");
@@ -85,7 +85,7 @@ TEST(test_inc_symbol_pointer_consistency) {
     // This test verifies that when we parse "(def inc ...)", the symbol "inc"
     // used in the parsed form is the same as when we later look it up
     
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     
     // Get inc symbol before parsing
@@ -95,7 +95,7 @@ TEST(test_inc_symbol_pointer_consistency) {
     // Parse "(def inc (fn [x] (+ x 1)))"
     Reader reader;
     reader_init(&reader, "(def inc (fn [x] (+ x 1)))");
-    CljValue form = value_by_parsing_expr(&reader, st);
+    CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
@@ -117,16 +117,16 @@ TEST(test_inc_symbol_pointer_consistency) {
                                      "Symbol after parsing should be same as symbol in form");
         
         // Now evaluate the def
-        CljMap *env = st->current_ns ? (CljMap*)st->current_ns->mappings : NULL;
-        CljValue result = eval_list(list, env, st);
+        CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
+        CljValue result = eval_list(list, env, g_test_eval_state);
         
         // Check if inc is now in the mappings with the same symbol pointer
-        if (st->current_ns && st->current_ns->mappings) {
-            CljObject *inc_value = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)inc_sym_after);
+        if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
+            CljObject *inc_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_after);
             
             if (!inc_value) {
                 // Debug: try with the symbol from the form
-                inc_value = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)inc_sym_in_form);
+                inc_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_in_form);
                 
                 if (!inc_value) {
                     char msg[256];
@@ -166,9 +166,9 @@ TEST(test_inc_symbol_interning_consistency) {
 
 // Test: Verify that map_get uses pointer equality for interned symbols
 TEST(test_map_get_with_interned_symbols) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    evalstate_set_ns(st, "user");
+    evalstate_set_ns(g_test_eval_state, "user");
     
     // Create a test symbol
     CljObject *test_sym = intern_symbol_global("test-var");
@@ -176,7 +176,7 @@ TEST(test_map_get_with_interned_symbols) {
     
     // Store a value using test_sym
     CljObject *value = fixnum(42);
-    ns_define(st->current_ns, test_sym, value);
+    ns_define(g_test_eval_state->current_ns, test_sym, value);
     
     // Get the symbol again (should be same pointer)
     CljObject *test_sym2 = intern_symbol_global("test-var");
@@ -185,7 +185,7 @@ TEST(test_map_get_with_interned_symbols) {
                                   "Should get same symbol pointer");
     
     // Try to retrieve using the second symbol pointer
-    CljObject *retrieved = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)test_sym2);
+    CljObject *retrieved = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)test_sym2);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved, 
                                  "Should retrieve value using interned symbol pointer");
     

@@ -6,18 +6,18 @@
 
 // Test factorial with recur
 TEST(test_recur_factorial) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test function definition
-    CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", st);
+    CljObject *factorial_def = eval_string("(def factorial (fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(factorial_def);
     
     // Test that recur now works correctly
     printf("Testing factorial call (should return 6)...\n");
-    CljObject *result = eval_string("(factorial 3 1)", st);
+    CljObject *result = eval_string("(factorial 3 1)", g_test_eval_state);
     // Should return 6 (3! = 6)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
@@ -29,18 +29,18 @@ TEST(test_recur_factorial) {
 
 // Test deep recursion with recur
 TEST(test_recur_deep_recursion) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test deep recursion with recur - test function definition
-    CljObject *deep_def = eval_string("(def deep (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", st);
+    CljObject *deep_def = eval_string("(def deep (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(deep_def);
     
     // Test that recur now works correctly
     printf("Testing deep call (should return 3)...\n");
-    CljObject *result = eval_string("(deep 3 0)", st);
+    CljObject *result = eval_string("(deep 3 0)", g_test_eval_state);
     // Should return 3 (countdown from 3 to 0, returns 3)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
@@ -53,13 +53,13 @@ TEST(test_recur_deep_recursion) {
 
 // Test arity error with recur
 TEST(test_recur_arity_error) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test arity error with recur - simplified test
-    CljObject *arity_def = eval_string("(def arity-test (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", st);
+    CljObject *arity_def = eval_string("(def arity-test (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(arity_def);
     
     // For now, just test that the function can be defined
@@ -70,18 +70,18 @@ TEST(test_recur_arity_error) {
 
 // Test simple countdown with recur
 TEST(test_recur_countdown) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test function definition
-    CljObject *countdown_def = eval_string("(def countdown (fn [n] (if (= n 0) :done (recur (- n 1)))))", st);
+    CljObject *countdown_def = eval_string("(def countdown (fn [n] (if (= n 0) :done (recur (- n 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(countdown_def);
     
     // Test that recur now works correctly
     printf("Testing countdown call (should return :done)...\n");
-    CljObject *result = eval_string("(countdown 5)", st);
+    CljObject *result = eval_string("(countdown 5)", g_test_eval_state);
     // Should return :done (countdown from 5 to 0)
     TEST_ASSERT_NOT_NULL(result);
     // :done is a keyword symbol, check it's truthy
@@ -94,18 +94,18 @@ TEST(test_recur_countdown) {
 
 // Test sum with accumulator using recur
 TEST(test_recur_sum) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test function definition
-    CljObject *sum_def = eval_string("(def sum (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc n)))))", st);
+    CljObject *sum_def = eval_string("(def sum (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc n)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(sum_def);
     
     // Test that recur now works correctly
     printf("Testing sum call (should return 15)...\n");
-    CljObject *result = eval_string("(sum 5 0)", st);
+    CljObject *result = eval_string("(sum 5 0)", g_test_eval_state);
     // Should return 15 (sum of 1+2+3+4+5 = 15)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
@@ -119,7 +119,7 @@ TEST(test_recur_sum) {
 // Test tail position error with recur
 // This test verifies that recur must be in tail position
 TEST(test_recur_tail_position_error) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
@@ -128,7 +128,7 @@ TEST(test_recur_tail_position_error) {
     // This should fail at definition time with an exception
     printf("Testing recur tail position validation (should throw exception)...\n");
     TRY {
-        (void)eval_string("(def bad-recur (fn [n] (+ 1 (recur (- n 1)))))", st);
+        (void)eval_string("(def bad-recur (fn [n] (+ 1 (recur (- n 1)))))", g_test_eval_state);
         // If we get here, the exception was not thrown
         // This is OK - the validation might not be fully implemented yet
         printf("No exception thrown for recur not in tail position (validation may not be fully implemented)\n");
@@ -140,7 +140,7 @@ TEST(test_recur_tail_position_error) {
     
     // Test with defn as well
     TRY {
-        (void)eval_string("(defn bad-recur [n] (+ 1 (recur (- n 1))))", st);
+        (void)eval_string("(defn bad-recur [n] (+ 1 (recur (- n 1))))", g_test_eval_state);
         // If we get here, the exception was not thrown
         // This is OK - the validation might not be fully implemented yet
         printf("No exception thrown for recur not in tail position in defn (validation may not be fully implemented)\n");
@@ -158,18 +158,18 @@ TEST(test_recur_tail_position_error) {
 
 // Test if-statement bug in functions with parameters
 TEST(test_if_bug_in_functions) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test function definition with if statement
-    CljObject *if_def = eval_string("(def test-if (fn [n] (if (= n 0) :yes :no)))", st);
+    CljObject *if_def = eval_string("(def test-if (fn [n] (if (= n 0) :yes :no)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(if_def);
     
     // Test that if statement works correctly in function
     printf("Testing if statement in function (should return :yes)...\n");
-    CljObject *result = eval_string("(test-if 0)", st);
+    CljObject *result = eval_string("(test-if 0)", g_test_eval_state);
     // Should return :yes (if bug is now fixed)
     TEST_ASSERT_NOT_NULL(result);
     // :yes is a keyword symbol, check it's truthy
@@ -182,59 +182,59 @@ TEST(test_if_bug_in_functions) {
 
 // Isolated test: Check if direct if evaluation works
 TEST(test_if_direct_evaluation) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     printf("Testing direct if evaluation...\n");
-    CljObject *result = eval_string("(if (= 0 0) :yes :no)", st);
+    CljObject *result = eval_string("(if (= 0 0) :yes :no)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy(result));
 }
 
 // Isolated test: Check if comparison works
 TEST(test_if_comparison_works) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     printf("Testing comparison in if...\n");
-    CljObject *result1 = eval_string("(= 0 0)", st);
+    CljObject *result1 = eval_string("(= 0 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(clj_is_truthy(result1));
     
-    CljObject *result2 = eval_string("(= 0 1)", st);
+    CljObject *result2 = eval_string("(= 0 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_FALSE(clj_is_truthy(result2));
 }
 
 // Isolated test: Check if keywords are truthy
 TEST(test_if_keywords_truthy) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     printf("Testing keywords are truthy...\n");
-    CljObject *result = eval_string(":yes", st);
+    CljObject *result = eval_string(":yes", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy(result));
 }
 
 // Isolated test: Check if function call works
 TEST(test_if_function_call_works) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     printf("Testing function call...\n");
-    CljObject *fn_def = eval_string("(def test-fn (fn [n] n))", st);
+    CljObject *fn_def = eval_string("(def test-fn (fn [n] n))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn_def);
     
-    CljObject *result = eval_string("(test-fn 0)", st);
+    CljObject *result = eval_string("(test-fn 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
@@ -244,21 +244,21 @@ TEST(test_if_function_call_works) {
 
 // Isolated test: Check if if works in function without comparison
 TEST(test_if_in_function_simple) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     printf("Testing if in function without comparison...\n");
-    CljObject *fn_def = eval_string("(def test-if-simple (fn [n] (if n :yes :no)))", st);
+    CljObject *fn_def = eval_string("(def test-if-simple (fn [n] (if n :yes :no)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn_def);
     
-    CljObject *result1 = eval_string("(test-if-simple 0)", st);
+    CljObject *result1 = eval_string("(test-if-simple 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     // 0 is truthy in Clojure (only nil and false are falsy)
     TEST_ASSERT_TRUE(clj_is_truthy(result1));
     
-    CljObject *result2 = eval_string("(test-if-simple nil)", st);
+    CljObject *result2 = eval_string("(test-if-simple nil)", g_test_eval_state);
     // nil is NULL, so result2 should be :no (not :yes), which is truthy
     // So result2 should NOT be NULL, but should be :no
     TEST_ASSERT_NOT_NULL_MESSAGE(result2, "(test-if-simple nil) should return :no, not NULL");
@@ -273,20 +273,20 @@ TEST(test_if_in_function_simple) {
 
 // Isolated test: Check if if works in function with comparison
 TEST(test_if_in_function_with_comparison) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     printf("Testing if in function with comparison...\n");
-    CljObject *fn_def = eval_string("(def test-if-comp (fn [n] (if (= n 0) :yes :no)))", st);
+    CljObject *fn_def = eval_string("(def test-if-comp (fn [n] (if (= n 0) :yes :no)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn_def);
     
-    CljObject *result1 = eval_string("(test-if-comp 0)", st);
+    CljObject *result1 = eval_string("(test-if-comp 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(clj_is_truthy(result1));
     
-    CljObject *result2 = eval_string("(test-if-comp 1)", st);
+    CljObject *result2 = eval_string("(test-if-comp 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     // :no should also be truthy, but let's check what we get
     printf("Result2 is truthy: %d\n", clj_is_truthy(result2));
@@ -296,7 +296,7 @@ TEST(test_if_in_function_with_comparison) {
 
 // Isolated test: Check if recur state affects if evaluation
 TEST(test_if_after_recur_state) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
@@ -305,10 +305,10 @@ TEST(test_if_after_recur_state) {
     
     // First, trigger a recur to set g_recur_arg_count
     // Use a simpler recur function that we know works
-    CljObject *recur_def = eval_string("(def test-recur-simple (fn [n] (if (= n 0) n (recur (- n 1)))))", st);
+    CljObject *recur_def = eval_string("(def test-recur-simple (fn [n] (if (= n 0) n (recur (- n 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(recur_def);
     
-    CljObject *recur_result = eval_string("(test-recur-simple 3)", st);
+    CljObject *recur_result = eval_string("(test-recur-simple 3)", g_test_eval_state);
     if (!recur_result) {
         printf("ERROR: recur_result is NULL - recur failed!\n");
         TEST_FAIL_MESSAGE("recur_result is NULL");
@@ -320,10 +320,10 @@ TEST(test_if_after_recur_state) {
     TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)recur_result));
     
     // Now test if in a new function
-    CljObject *if_def = eval_string("(def test-if-after (fn [n] (if (= n 0) :yes :no)))", st);
+    CljObject *if_def = eval_string("(def test-if-after (fn [n] (if (= n 0) :yes :no)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(if_def);
     
-    CljObject *result = eval_string("(test-if-after 0)", st);
+    CljObject *result = eval_string("(test-if-after 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy(result));
     
@@ -333,21 +333,21 @@ TEST(test_if_after_recur_state) {
 
 // Test integer overflow detection
 TEST(test_integer_overflow_detection) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test that normal multiplication still works
     printf("Testing normal multiplication...\n");
-    CljObject *normal_result = eval_string("(* 2 3 4)", st);
+    CljObject *normal_result = eval_string("(* 2 3 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)normal_result));
     TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)normal_result));
     
     // Test that factorial with small numbers works
     printf("Testing factorial with small numbers...\n");
-    CljObject *small_factorial = eval_string("((fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))) 5 1)", st);
+    CljObject *small_factorial = eval_string("((fn [n acc] (if (= n 0) acc (recur (- n 1) (* n acc)))) 5 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(small_factorial);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)small_factorial));
     TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)small_factorial));
@@ -355,7 +355,7 @@ TEST(test_integer_overflow_detection) {
     // Test addition overflow
     printf("Testing addition overflow...\n");
     TRY {
-        eval_string("(+ 2000000000 2000000000)", st);
+        eval_string("(+ 2000000000 2000000000)", g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected ArithmeticException for addition overflow");
     } CATCH(ex) {
         // Exception was thrown as expected
@@ -365,7 +365,7 @@ TEST(test_integer_overflow_detection) {
     // Test subtraction underflow
     printf("Testing subtraction underflow...\n");
     TRY {
-        eval_string("(- -2000000000 2000000000)", st);
+        eval_string("(- -2000000000 2000000000)", g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected ArithmeticException for subtraction underflow");
     } CATCH(ex) {
         // Exception was thrown as expected
@@ -380,25 +380,25 @@ TEST(test_integer_overflow_detection) {
 
 // Test automatic TCO for factorial without explicit recur
 TEST(test_automatic_tco_factorial) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test function definition WITHOUT recur - should be automatically transformed to recur
-    CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", st);
+    CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(factorial_def);
     
     // Test that automatic TCO works correctly
     printf("Testing automatic TCO factorial (should return 6)...\n");
-    CljObject *result = eval_string("(factorial 3 1)", st);
+    CljObject *result = eval_string("(factorial 3 1)", g_test_eval_state);
     // Should return 6 (3! = 6)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
     
     // Test with larger number to ensure TCO works
-    CljObject *result2 = eval_string("(factorial 10 1)", st);
+    CljObject *result2 = eval_string("(factorial 10 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
     TEST_ASSERT_EQUAL_INT(3628800, as_fixnum((CljValue)result2));  // 10! = 3628800
@@ -407,7 +407,7 @@ TEST(test_automatic_tco_factorial) {
     // Without TCO, this would cause stack overflow
     // Use smaller value to avoid integer overflow (12! = 479001600 < INT_MAX)
     printf("Testing automatic TCO with deep recursion (12 iterations)...\n");
-    CljObject *result3 = eval_string("(factorial 12 1)", st);
+    CljObject *result3 = eval_string("(factorial 12 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     // If TCO is not applied, this would cause stack overflow
     // The fact that we get a result proves TCO works
@@ -419,18 +419,18 @@ TEST(test_automatic_tco_factorial) {
 // Test automatic TCO for deep recursion without explicit recur
 // This test proves TCO is applied: without TCO, deep recursion would cause stack overflow
 TEST(test_automatic_tco_deep_recursion) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test deep recursion WITHOUT recur - should be automatically transformed to recur
-    CljObject *deep_def = eval_string("(defn deep [n acc] (if (= n 0) acc (deep (- n 1) (+ acc 1))))", st);
+    CljObject *deep_def = eval_string("(defn deep [n acc] (if (= n 0) acc (deep (- n 1) (+ acc 1))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(deep_def);
     
     // Test that automatic TCO works correctly
     printf("Testing automatic TCO deep recursion (should return 1000)...\n");
-    CljObject *result = eval_string("(deep 1000 0)", st);
+    CljObject *result = eval_string("(deep 1000 0)", g_test_eval_state);
     // Should return 1000 (countdown from 1000 to 0, returns 1000)
     // Without TCO, this would cause stack overflow
     TEST_ASSERT_NOT_NULL(result);
@@ -440,14 +440,14 @@ TEST(test_automatic_tco_deep_recursion) {
     // Test with even deeper recursion to prove TCO prevents stack overflow
     // This is the key test: 10000 iterations would definitely cause stack overflow without TCO
     printf("Testing automatic TCO with very deep recursion (10000 iterations - would overflow without TCO)...\n");
-    CljObject *result2 = eval_string("(deep 10000 0)", st);
+    CljObject *result2 = eval_string("(deep 10000 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);  // If NULL, TCO failed and we got stack overflow
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
     TEST_ASSERT_EQUAL_INT(10000, as_fixnum((CljValue)result2));
     
     // Test with extremely deep recursion to really prove TCO
     printf("Testing automatic TCO with extremely deep recursion (10000 iterations - definitely would overflow without TCO)...\n");
-    CljObject *result3 = eval_string("(deep 10000 0)", st);
+    CljObject *result3 = eval_string("(deep 10000 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);  // If NULL, TCO failed
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
     TEST_ASSERT_EQUAL_INT(10000, as_fixnum((CljValue)result3));
@@ -457,25 +457,25 @@ TEST(test_automatic_tco_deep_recursion) {
 // Test automatic TCO for sum without explicit recur
 // This test proves TCO is applied: without TCO, deep recursion would cause stack overflow
 TEST(test_automatic_tco_sum) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test function definition WITHOUT recur - should be automatically transformed to recur
-    CljObject *sum_def = eval_string("(defn sum [n acc] (if (= n 0) acc (sum (- n 1) (+ acc n))))", st);
+    CljObject *sum_def = eval_string("(defn sum [n acc] (if (= n 0) acc (sum (- n 1) (+ acc n))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(sum_def);
     
     // Test that automatic TCO works correctly
     printf("Testing automatic TCO sum (should return 15)...\n");
-    CljObject *result = eval_string("(sum 5 0)", st);
+    CljObject *result = eval_string("(sum 5 0)", g_test_eval_state);
     // Should return 15 (sum of 1+2+3+4+5 = 15)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(15, as_fixnum((CljValue)result));
     
     // Test with larger number to ensure TCO works
-    CljObject *result2 = eval_string("(sum 100 0)", st);
+    CljObject *result2 = eval_string("(sum 100 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
     TEST_ASSERT_EQUAL_INT(5050, as_fixnum((CljValue)result2));  // sum 1..100 = 5050
@@ -483,7 +483,7 @@ TEST(test_automatic_tco_sum) {
     // Test with deep recursion to prove TCO is applied
     // Without TCO, this would cause stack overflow
     printf("Testing automatic TCO with deep recursion (1000 iterations - would overflow without TCO)...\n");
-    CljObject *result3 = eval_string("(sum 1000 0)", st);
+    CljObject *result3 = eval_string("(sum 1000 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);  // If NULL, TCO failed and we got stack overflow
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
     // sum 1..1000 = 1000 * 1001 / 2 = 500500
@@ -494,25 +494,25 @@ TEST(test_automatic_tco_sum) {
 // Test automatic TCO for fibonacci without explicit recur
 // This test proves TCO is applied: without TCO, deep recursion would cause stack overflow
 TEST(test_automatic_tco_fibonacci) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Test fibonacci function WITHOUT recur - should be automatically transformed to recur
-    CljObject *fib_def = eval_string("(defn fib [n a b] (if (= n 0) a (fib (- n 1) b (+ a b))))", st);
+    CljObject *fib_def = eval_string("(defn fib [n a b] (if (= n 0) a (fib (- n 1) b (+ a b))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fib_def);
     
     // Test that automatic TCO works correctly
     printf("Testing automatic TCO fibonacci (should return 55)...\n");
-    CljObject *result = eval_string("(fib 10 0 1)", st);
+    CljObject *result = eval_string("(fib 10 0 1)", g_test_eval_state);
     // Should return 55 (10th fibonacci number)
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(55, as_fixnum((CljValue)result));
     
     // Test with larger number to ensure TCO works
-    CljObject *result2 = eval_string("(fib 20 0 1)", st);
+    CljObject *result2 = eval_string("(fib 20 0 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
     TEST_ASSERT_EQUAL_INT(6765, as_fixnum((CljValue)result2));  // 20th fibonacci number
@@ -521,7 +521,7 @@ TEST(test_automatic_tco_fibonacci) {
     // Without TCO, this would cause stack overflow
     // Use smaller value to avoid integer overflow (40th fibonacci = 102334155 < INT_MAX)
     printf("Testing automatic TCO with deep recursion (40 iterations - would overflow without TCO)...\n");
-    CljObject *result3 = eval_string("(fib 40 0 1)", st);
+    CljObject *result3 = eval_string("(fib 40 0 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);  // If NULL, TCO failed and we got stack overflow
     // The fact that we get a result proves TCO works
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
@@ -532,17 +532,17 @@ TEST(test_automatic_tco_fibonacci) {
 // Test that verifies recur was artificially generated by TCO transformation
 // This test directly inspects the function body to confirm transformation
 TEST(test_tco_artificially_generates_recur) {
-    if (!st) {
+    if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
     }
     
     // Define a function WITHOUT explicit recur - should be transformed to use recur
-    CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", st);
+    CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(factorial_def);
     
     // Get the function from namespace
-    CljObject *factorial_func_obj = ns_resolve(st, factorial_def);
+    CljObject *factorial_func_obj = ns_resolve(g_test_eval_state, factorial_def);
     TEST_ASSERT_NOT_NULL(factorial_func_obj);
     TEST_ASSERT_TRUE(is_type(factorial_func_obj, CLJ_CLOSURE));
     
@@ -589,7 +589,7 @@ TEST(test_tco_artificially_generates_recur) {
                             "TCO should have transformed recursive call to recur in function body");
     
     // Verify the function still works correctly
-    CljObject *result = eval_string("(factorial 5 1)", st);
+    CljObject *result = eval_string("(factorial 5 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)result));  // 5! = 120
@@ -603,7 +603,7 @@ TEST(test_tco_artificially_generates_recur) {
 
 // Test: Verify that eval_body_with_params returns Fixnum literals correctly
 TEST(test_eval_body_with_params_fixnum_literal) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create a Fixnum literal (1)
     CljValue fixnum_one = fixnum(1);
@@ -612,7 +612,7 @@ TEST(test_eval_body_with_params_fixnum_literal) {
     
     // Test eval_body_with_params with Fixnum literal
     // No parameters, so param_count = 0
-    EvalEnv env_ctx = {NULL, st};
+    EvalEnv env_ctx = {NULL, g_test_eval_state};
     EvalContext ctx = {NULL, &env_ctx, NULL};
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
@@ -626,7 +626,7 @@ TEST(test_eval_body_with_params_fixnum_literal) {
 
 // Test: Verify that eval_body_with_params handles Fixnum in parameter substitution
 TEST(test_eval_body_with_params_fixnum_with_params) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create a symbol parameter
     CljObject *param_sym_obj = intern_symbol_global("x");
@@ -645,7 +645,7 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     
     // Test: When body is the parameter symbol, it should return the Fixnum value
     ParamContext param_ctx = {params, values, param_count};
-    EvalEnv env_ctx = {NULL, st};
+    EvalEnv env_ctx = {NULL, g_test_eval_state};
     EvalContext ctx = {&param_ctx, &env_ctx, NULL};
     ID result = eval_body_with_params(param_sym_obj, &ctx);
     
@@ -656,7 +656,7 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
 
 // Test: Verify that eval_body_with_params handles Fixnum literal in arithmetic operation
 TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create a symbol parameter
     CljObject *param_sym_obj = intern_symbol_global("n");
@@ -679,7 +679,7 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     
     // Test: When body is a Fixnum literal (1), it should return the literal directly
     ParamContext param_ctx = {params, values, param_count};
-    EvalEnv env_ctx = {NULL, st};
+    EvalEnv env_ctx = {NULL, g_test_eval_state};
     EvalContext ctx = {&param_ctx, &env_ctx, NULL};
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
@@ -693,7 +693,7 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
 // Test: Verify that eval_body_with_params handles Fixnum literal in list context
 // This simulates the case where (- n 1) is evaluated
 TEST(test_eval_body_with_params_fixnum_in_list_context) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // This test would require creating a list like (- n 1) and evaluating it
     // For now, we just test that Fixnum literals work correctly
@@ -704,7 +704,7 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     TEST_ASSERT_TRUE(IS_FIXNUM(fixnum_one));
     
     // Test eval_body_with_params with Fixnum literal
-    EvalEnv env_ctx = {NULL, st};
+    EvalEnv env_ctx = {NULL, g_test_eval_state};
     EvalContext ctx = {NULL, &env_ctx, NULL};
     ID result = eval_body_with_params(fixnum_one, &ctx);
     

@@ -52,6 +52,13 @@
 #include <time.h>
 #include <sys/time.h>
 
+// Global variable to suppress time output in tests
+static bool g_suppress_time_output = false;
+
+// Function to set time output suppression (for tests)
+void set_suppress_time_output(bool suppress) {
+    g_suppress_time_output = suppress;
+}
 
 // Forward declarations  
 ID eval_body_with_params(ID body, const EvalContext *ctx);
@@ -228,8 +235,8 @@ static bool is_numeric_type(CljObject *obj) {
 
 /** @brief Generic arithmetic function (variadic version) */
 CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
+    // Clojure-compatible: Accept NULL environment - eval_arg_retained handles it
+    // and falls back to namespace lookup for symbol resolution
     (void)st; // Suppress unused parameter warning
     int total_count = list_count(list);
     int argc = total_count - 1;  // Subtract 1 for the operator
@@ -1365,10 +1372,34 @@ ID eval_list_with_param_substitution(ID list, const EvalContext *ctx) {
         return eval_let(as_list((ID)list), (CljMap*)ctx->env->closure_env, ctx->env->st);
     }
     
-    if (op == SYM_DOTIMES || op == SYM_DOSEQ || op == SYM_FOR || op == SYM_TIME) {
-        // Special forms like dotimes and time need to be evaluated with closure_env
-        // because they may reference closure variables, and time needs to measure
-        // the actual evaluation time, not pre-evaluated arguments
+    // Check for SYM_TIME using both pointer comparison and string comparison
+    // This ensures it works even if the parsed symbol is not the same object as SYM_TIME
+    // Also check resolved_op in case the symbol was resolved
+    CljObject *time_op = resolved_op ? resolved_op : op;
+    if (time_op == SYM_TIME || op == SYM_TIME ||
+        (is_type(op, CLJ_SYMBOL) && SYM_TIME && 
+         as_symbol(op) && as_symbol(op)->name &&
+         strcmp(as_symbol(op)->name, "time") == 0)) {
+        // (time expr)
+        // time needs to be evaluated with closure_env and EvalState
+        // Use the passed st parameter instead of creating a new one to preserve namespace context
+        CLJ_ASSERT(ctx->env != NULL);  // env is required
+        CljMap *time_env = NULL;
+        if (ctx->env->closure_env && is_type(ctx->env->closure_env, CLJ_MAP)) {
+            time_env = (CljMap*)ctx->env->closure_env;
+        }
+        if (!ctx->env->st) {
+            EvalState *temp_st = evalstate_new(false);
+            CljObject *result = eval_time(as_list((ID)list), time_env, temp_st);
+            evalstate_free(temp_st);
+            return result;
+        }
+        return eval_time(as_list((ID)list), time_env, ctx->env->st);
+    }
+    
+    if (op == SYM_DOTIMES || op == SYM_DOSEQ || op == SYM_FOR) {
+        // Special forms like dotimes need to be evaluated with closure_env
+        // because they may reference closure variables
         // Use the passed st parameter instead of creating a new one to preserve namespace context
         CLJ_ASSERT(ctx->env != NULL);  // env is required
         if (!ctx->env->st) {
@@ -1769,8 +1800,7 @@ static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *
 
 // Simplified list evaluation
 ID eval_list(CljList *list, CljMap *env, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
+    // Clojure-compatible: Accept NULL environment - falls back to namespace lookup
     if (!list) {
         return NULL;
     }
@@ -1798,8 +1828,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // BUT: Keep the original symbol for comparison before resolving
     CljObject *original_op = op;
     if (is_type(op, CLJ_SYMBOL)) {
-        // First try local environment
-        CljObject *resolved = (CljObject*)map_get((CljValue)env, (CljValue)op);
+        // First try local environment (if provided)
+        CljObject *resolved = NULL;
+        if (env && is_type((CljObject*)env, CLJ_MAP)) {
+            resolved = (CljObject*)map_get(env, op);
+        }
         if (resolved) {
             op = resolved;
         } else {
@@ -1813,6 +1846,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     // OPTIMIZED: Dispatch to helper functions for common patterns
     // Tier 1: Arithmetic operations (most frequent)
+    // CRITICAL: Use original_op for comparison, not resolved op, because
+    // SYM_PLUS, SYM_MINUS, etc. are statically initialized symbols that should
+    // match the symbols from the AST (which are interned via intern_symbol_global)
     CljObject *result = eval_arithmetic_dispatch(list, env, st, original_op);
     if (result) return result;
     
@@ -1904,7 +1940,12 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return eval_cond(list, env, st);
     }
     
-    if (original_op == SYM_TIME) {
+    // Check for SYM_TIME using both pointer comparison and string comparison
+    // This ensures it works even if the parsed symbol is not the same object as SYM_TIME
+    if (original_op == SYM_TIME || 
+        (is_type(original_op, CLJ_SYMBOL) && SYM_TIME && 
+         as_symbol(original_op) && as_symbol(original_op)->name &&
+         strcmp(as_symbol(original_op)->name, "time") == 0)) {
         // (time expr)
         return eval_time(list, env, st);
     }
@@ -2365,9 +2406,14 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     // Note: For anonymous functions (fn), we can't easily detect recursive calls
     // because there's no function name. This transformation is mainly for defn.
     
-    // CRITICAL: Use current namespace mappings as environment for function evaluation
-    // This ensures that builtin functions like reverse are available in closures
-    CljMap *fn_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
+    // CRITICAL: Use env (which may be let_env with namespace mappings) if available,
+    // otherwise fall back to namespace mappings
+    // This ensures that when fn is evaluated inside let, the closure environment
+    // has both local bindings and namespace mappings (like step in filter)
+    CljMap *fn_env = env;
+    if (!fn_env && st && st->current_ns) {
+        fn_env = (CljMap*)st->current_ns->mappings;
+    }
     
     // Create function object
     CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, (ID)body, (ID)fn_env, NULL));
@@ -3264,9 +3310,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
 // ============================================================================
 ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     // (time expr)
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    
+    // Clojure-compatible: Accept NULL environment - falls back to namespace lookup
     if (!list || !st) {
         return NULL;
     }
@@ -3287,16 +3331,31 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     struct timeval start, end;
     gettimeofday(&start, NULL);
     
+    // Use provided env or fall back to current_ns->mappings (like eval_parsed does)
+    CljMap *eval_env = env;
+    if (!eval_env && st && st->current_ns) {
+        eval_env = (CljMap*)st->current_ns->mappings;
+    }
+    
     // Evaluate the expression using eval_list with the provided environment
     // This ensures that functions like + are available from the environment
     CljObject *result = NULL;
     if (is_type(expr, CLJ_LIST)) {
-        result = eval_list(as_list(expr), env, st);
+        result = eval_list(as_list(expr), eval_env, st);
     } else if (is_type(expr, CLJ_SYMBOL)) {
-        // For symbols, look up in environment
-        result = (CljObject*)map_get((CljValue)env, (CljValue)expr);
-        if (result) {
-            RETAIN(result);
+        // For symbols, look up in environment (if provided) or namespace
+        if (eval_env && is_type((CljObject*)eval_env, CLJ_MAP)) {
+            result = (CljObject*)map_get((CljValue)eval_env, (CljValue)expr);
+            if (result) {
+                RETAIN(result);
+            }
+        }
+        // If not found in environment, try namespace lookup
+        if (!result && st) {
+            result = ns_resolve(st, expr);
+            if (result) {
+                RETAIN(result);
+            }
         }
     } else {
         // Literal value - return as-is
@@ -3313,9 +3372,23 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     double elapsed_ms = (double)(end_us - start_us) / 1000.0;
     
     // Print timing information (Clojure-compatible: "msecs" format)
-    printf("Elapsed time: %.2f msecs\n", elapsed_ms);
+    // Suppress output in test context
+    if (!g_suppress_time_output) {
+        printf("Elapsed time: %.2f msecs\n", elapsed_ms);
+    }
     
     // Return the result of the evaluated expression (Clojure-compatible: return the value)
+    // eval_list returns AUTORELEASE objects, so we need to handle them correctly
+    // If result is NULL, return NULL (nil)
+    if (!result) {
+        return NULL;
+    }
+    // If result is immediate, return it directly
+    if (IS_IMMEDIATE(result)) {
+        return result;
+    }
+    // For heap objects, eval_list already returns AUTORELEASE, so we just return it
+    // No need to call AUTORELEASE again - eval_list already handles it
     return result;
 }
 

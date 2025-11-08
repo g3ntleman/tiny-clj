@@ -814,7 +814,7 @@ TEST(test_cow_actual_cow_demonstration) {
 
 TEST(test_update_basic) {
     // Test: (update {:a 1} :a inc) => {:a 2}
-    CljObject *result = eval_string("(update {:a 1} :a inc)", st);
+    CljObject *result = eval_string("(update {:a 1} :a inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_type(result, CLJ_MAP));
     
@@ -828,7 +828,7 @@ TEST(test_update_basic) {
 
 TEST(test_update_with_function) {
     // Test: (update {:count 5} :count (fn [x] (* x 2))) => {:count 10}
-    CljObject *result = eval_string("(update {:count 5} :count (fn [x] (* x 2)))", st);
+    CljObject *result = eval_string("(update {:count 5} :count (fn [x] (* x 2)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_type(result, CLJ_MAP));
     
@@ -895,7 +895,7 @@ TEST(test_if_nil_zero) {
     // nil is falsy, so the else branch (0) should be evaluated
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(if nil 0 0)", st);
+        result = eval_string("(if nil 0 0)", g_test_eval_state);
     } CATCH(ex) {
         char msg[256];
         snprintf(msg, sizeof(msg), "if should not throw exception, got: %s", ex->message);
@@ -918,7 +918,7 @@ TEST(test_fn_if_nil_zero) {
     // When x is nil, (if x 0 0) should evaluate the else branch (0)
     CljObject *result = NULL;
     TRY {
-        result = eval_string("((fn [x] (if x 0 0)) nil)", st);
+        result = eval_string("((fn [x] (if x 0 0)) nil)", g_test_eval_state);
     } CATCH(ex) {
         char msg[256];
         snprintf(msg, sizeof(msg), "fn call should not throw exception, got: %s", ex->message);
@@ -944,7 +944,7 @@ TEST(test_update_missing_key) {
     
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(update {:a 1} :b (fn [x] (if x 0 0)))", st);
+        result = eval_string("(update {:a 1} :b (fn [x] (if x 0 0)))", g_test_eval_state);
     } CATCH(ex) {
         char msg[256];
         snprintf(msg, sizeof(msg), "update should not throw exception, got: %s", ex->message);
@@ -988,7 +988,7 @@ TEST(test_assoc_map_isolated) {
     // Test: (assoc {:a 1} :b 2) should return {:a 1 :b 2}, not nil
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(assoc {:a 1} :b 2)", st);
+        result = eval_string("(assoc {:a 1} :b 2)", g_test_eval_state);
     } CATCH(ex) {
         char msg[256];
         snprintf(msg, sizeof(msg), "assoc should not throw exception, got: %s", ex->message);

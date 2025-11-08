@@ -59,8 +59,8 @@ R"CLOJURE(
                     nil
                     (reverse acc))
                   (if (pred (first coll))
-                    (recur pred (rest coll) (cons (first coll) acc))
-                    (recur pred (rest coll) acc))))]
+                    (step pred (rest coll) (cons (first coll) acc))
+                    (step pred (rest coll) acc))))]
     (step pred coll (list)))))
 
 ; ============================================================================

@@ -24,23 +24,23 @@ TEST(test_dotimes_basic) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
 
 TEST(test_doseq_basic) {
     // Test that eval_doseq handles NULL input gracefully
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test with NULL list
     CljObject *result = eval_doseq(NULL, env);
@@ -57,7 +57,7 @@ TEST(test_doseq_basic) {
 
 TEST(test_for_basic) {
     // Test that eval_for handles NULL input gracefully
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test with NULL list
     CljObject *result = eval_for(NULL, env);
@@ -80,16 +80,16 @@ TEST(test_dotimes_with_environment) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
@@ -97,12 +97,12 @@ TEST(test_dotimes_with_environment) {
 // Test that go-block enqueues task and result channel receives value
 // High-level test using eval_string
 TEST(test_go_enqueues_and_result_channel_receives_value) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Use eval_string to evaluate (go (do 1 2 3)) - high-level approach
     CljObject *chan = NULL;
     TRY {
-        chan = eval_string("(go (do 1 2 3))", st);
+        chan = eval_string("(go (do 1 2 3))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
         return;
@@ -119,7 +119,7 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     // Run next task using eval_string - high-level approach
     CljObject *ran_val = NULL;
     TRY {
-        ran_val = eval_string("(run-next-task)", st);
+        ran_val = eval_string("(run-next-task)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("run-next-task should not throw exception");
         RELEASE(chan);
@@ -146,12 +146,12 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
 // Test that run-next-task returns false when no tasks are queued
 // High-level test using eval_string
 TEST(test_run_next_task_returns_false_when_empty) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Call run-next-task when no tasks are queued using eval_string - high-level approach
     CljObject *ran_val = NULL;
     TRY {
-        ran_val = eval_string("(run-next-task)", st);
+        ran_val = eval_string("(run-next-task)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("run-next-task should not throw exception");
         return;
@@ -167,12 +167,12 @@ TEST(test_run_next_task_returns_false_when_empty) {
 // Test that go-block with exception closes channel without value
 // High-level test using eval_string
 TEST(test_go_exception_closes_channel_without_value) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Use eval_string to evaluate (go (/ 1 0)) - high-level approach
     CljObject *chan = NULL;
     TRY {
-        chan = eval_string("(go (/ 1 0))", st);
+        chan = eval_string("(go (/ 1 0))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
         return;
@@ -183,7 +183,7 @@ TEST(test_go_exception_closes_channel_without_value) {
     // Run next task using eval_string - high-level approach
     CljObject *ran_val = NULL;
     TRY {
-        ran_val = eval_string("(run-next-task)", st);
+        ran_val = eval_string("(run-next-task)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("run-next-task should not throw exception");
         RELEASE(chan);
@@ -213,12 +213,12 @@ TEST(test_go_exception_closes_channel_without_value) {
 
 // High-level test: Test that go-block with successful execution puts value
 TEST(test_go_success_puts_value_high_level) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create channel with go-block that succeeds
     CljObject *chan = NULL;
     TRY {
-        chan = eval_string("(go (+ 1 2))", st);
+        chan = eval_string("(go (+ 1 2))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
         return;
@@ -229,7 +229,7 @@ TEST(test_go_success_puts_value_high_level) {
     // Run next task
     CljObject *ran_result = NULL;
     TRY {
-        ran_result = eval_string("(run-next-task)", st);
+        ran_result = eval_string("(run-next-task)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("run-next-task should not throw exception");
         RELEASE(chan);
@@ -269,16 +269,16 @@ TEST(test_dotimes_zero_iterations) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
@@ -291,16 +291,16 @@ TEST(test_dotimes_negative_iterations) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
@@ -313,16 +313,16 @@ TEST(test_dotimes_large_iterations) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
@@ -335,16 +335,16 @@ TEST(test_dotimes_invalid_binding_format) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for invalid format
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
@@ -357,23 +357,23 @@ TEST(test_dotimes_non_numeric_count) {
     CljObject *dotimes_call = (CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
     
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
 
 TEST(test_dotimes_null_input) {
     // Test eval_dotimes with NULL input
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation with NULL
     CljObject *result = eval_dotimes(NULL, env);
@@ -399,10 +399,10 @@ TEST(test_dotimes_simple_iteration_count) {
                                                          (CljList*)make_list((ID)body, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes((CljList*)(CljObject*)dotimes_call, env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // The test passes if no errors occur and the function returns NULL
@@ -411,7 +411,7 @@ TEST(test_dotimes_simple_iteration_count) {
     // Clean up
     RELEASE(binding_vector);
     RELEASE(body);
-    RELEASE((CljObject*)dotimes_call);
+    RELEASE(dotimes_call);
     RETAIN(env);
     RELEASE(env);
 }
@@ -441,7 +441,7 @@ TEST(test_doseq_with_environment) {
     CljObject *doseq_call = (CljObject*)make_list((ID)SYM_DOSEQ, (CljList*)make_list((ID)binding_list, (CljList*)make_list((ID)body, NULL)));
     
     // Create a simple environment
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = make_map(4);
     
     // Test doseq evaluation with environment
     CljObject *result = eval_doseq((CljList*)(CljObject*)doseq_call, env);
@@ -464,11 +464,11 @@ TEST(test_doseq_with_environment) {
 
 TEST(test_while_basic_true) {
     // Test while with true condition that becomes false
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (let [i (atom 0)] (while (< @i 1) (swap! i inc)) @i) => 1
     // Executes once, then condition becomes false
-    ID result = eval_string("(let [i (atom 0)] (while (< @i 1) (swap! i inc)) @i)", st);
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 1) (swap! i inc)) @i)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
@@ -477,11 +477,11 @@ TEST(test_while_basic_true) {
 
 TEST(test_while_loop_multiple) {
     // Test while with loop that executes multiple times
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (while (< @i 3) (swap! i inc)) where i starts at 0
     // This should execute 3 times (i: 0 -> 1 -> 2 -> 3)
-    ID result = eval_string("(let [i (atom 0)] (while (< @i 3) (swap! i inc)) @i)", st);
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 3) (swap! i inc)) @i)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
@@ -490,30 +490,30 @@ TEST(test_while_loop_multiple) {
 
 TEST(test_while_false_condition) {
     // Test while with false condition - should not execute
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (while false 42) => nil (does not execute)
-    ID result = eval_string("(while false 42)", st);
+    ID result = eval_string("(while false 42)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
     
 }
 
 TEST(test_while_nil_condition) {
     // Test while with nil condition - should not execute
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (while nil 42) => nil (does not execute)
-    ID result = eval_string("(while nil 42)", st);
+    ID result = eval_string("(while nil 42)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
     
 }
 
 TEST(test_while_with_atom) {
     // Test while with atom (like in mandelbrot.clj)
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (let [i (atom 0)] (while (< @i 5) (swap! i inc)) @i) => 5
-    ID result = eval_string("(let [i (atom 0)] (while (< @i 5) (swap! i inc)) @i)", st);
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 5) (swap! i inc)) @i)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(5, as_fixnum(result));
@@ -522,11 +522,11 @@ TEST(test_while_with_atom) {
 
 TEST(test_while_multiple_body_exprs) {
     // Test while with multiple body expressions
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // (let [i (atom 0)] (while (< @i 2) (swap! i inc) (+ @i 10)) @i) => 2
     // Last expression in body is evaluated, but while always returns nil
-    ID result = eval_string("(let [i (atom 0)] (while (< @i 2) (swap! i inc) (+ @i 10)) @i)", st);
+    ID result = eval_string("(let [i (atom 0)] (while (< @i 2) (swap! i inc) (+ @i 10)) @i)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));

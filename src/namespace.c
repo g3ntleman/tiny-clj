@@ -17,6 +17,14 @@
 #define RESOLVE_CACHE_SIZE 16
 static CljObject *g_resolve_cache = NULL;
 
+// Function to reset resolve cache (for test isolation)
+void ns_reset_resolve_cache(void) {
+    if (g_resolve_cache) {
+        RELEASE((CljObject*)g_resolve_cache);
+        g_resolve_cache = NULL;
+    }
+}
+
 CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!name) return NULL;
     

@@ -17,16 +17,14 @@
 #ifdef ESP32_BUILD
 #define CLJ_ASSERT(expr) do { \
     if (!(expr)) { \
-        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s\n", #expr); \
-        fprintf(stderr, "📍 File: %s, Line: %d\n", __FILE__, __LINE__); \
+        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
         abort(); \
     } \
 } while(0)
 #else
 #define CLJ_ASSERT(expr) do { \
     if (!(expr)) { \
-        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s\n", #expr); \
-        fprintf(stderr, "📍 File: %s, Line: %d\n", __FILE__, __LINE__); \
+        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
         fprintf(stderr, "📚 Stack Trace:\n"); \
         void *array[20]; \
         int size = backtrace(array, 20); \

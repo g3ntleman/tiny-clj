@@ -67,4 +67,7 @@ ID eval_arg(CljList *list, int index, CljMap *env);
 ID eval_arg_retained(CljList *list, int index, CljMap *env);
 bool is_symbol(ID v, const char *name);
 
+// Time output suppression (for tests)
+void set_suppress_time_output(bool suppress);
+
 #endif

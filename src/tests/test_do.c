@@ -9,7 +9,7 @@ TEST(test_do_empty) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NULL(result);
         
@@ -21,7 +21,7 @@ TEST(test_do_single_expr) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 42)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -35,7 +35,7 @@ TEST(test_do_multiple_exprs) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 1 2 3)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -49,7 +49,7 @@ TEST(test_do_with_arithmetic) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do (+ 1 1) (+ 2 2) (+ 3 3))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -63,7 +63,7 @@ TEST(test_do_nested) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do (do 1 2) (do 3 4))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -77,7 +77,7 @@ TEST(test_do_in_if) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(if true (do (+ 1 1) 10) 20)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -91,7 +91,7 @@ TEST(test_do_in_if_else) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(if false 1 (do (+ 2 2) 20))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -105,7 +105,7 @@ TEST(test_do_mixed_types) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 42 true nil 99)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));
@@ -119,7 +119,7 @@ TEST(test_do_last_nil) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 42 nil)";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NULL(result);
         
@@ -131,7 +131,7 @@ TEST(test_do_with_let) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(let [x 5] (do (+ x 1) (+ x 2)))";
-        CljValue result = eval_string(code, st);
+        CljValue result = eval_string(code, g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum(result));

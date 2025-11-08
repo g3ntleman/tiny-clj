@@ -40,17 +40,17 @@ TEST(test_list_creation) {
     
     
     // Test empty list creation - (list) returns empty list in Clojure
-    CljObject *list = eval_string("(list)", st);
+    CljObject *list = eval_string("(list)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);  // (list) returns empty list, not nil
     TEST_ASSERT_EQUAL_INT(CLJ_LIST, list->type);
     
     // Test list with elements
-    CljObject *list_with_elements = eval_string("(list 1 2 3)", st);
+    CljObject *list_with_elements = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list_with_elements);
     TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_with_elements->type);
     
     // Test count function
-    CljObject *count_result = eval_string("(count (list 1 2 3))", st);
+    CljObject *count_result = eval_string("(count (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(count_result);
     if (count_result && is_fixnum(count_result)) {
         TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
@@ -63,12 +63,12 @@ TEST(test_symbol_creation) {
     // High-level test using eval_string
     
     // Test symbol creation (quoted symbol)
-    CljObject *sym = eval_string("'test-symbol", st);
+    CljObject *sym = eval_string("'test-symbol", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(sym);
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, sym->type);
     
     // Test symbol with namespace
-    CljObject *ns_sym = eval_string("'user/test-symbol", st);
+    CljObject *ns_sym = eval_string("'user/test-symbol", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(ns_sym);
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, ns_sym->type);
     
@@ -90,7 +90,7 @@ TEST(test_vector_creation) {
     // Step 1: Test empty vector (should be singleton)
     
     // Test empty vector creation
-    CljObject *vec = eval_string("[]", st);
+    CljObject *vec = eval_string("[]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
     
@@ -102,7 +102,7 @@ TEST(test_vector_creation) {
     }
     
     // Test vector with elements
-    CljObject *vec2 = eval_string("[1 2 3]", st);
+    CljObject *vec2 = eval_string("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec2);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec2->type);
     
@@ -160,19 +160,19 @@ TEST(test_integer_creation) {
     // High-level test using eval_string
     
     // Test positive integer
-    CljObject *int_val = eval_string("42", st);
+    CljObject *int_val = eval_string("42", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(int_val);
     TEST_ASSERT_TRUE(is_fixnum(int_val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(int_val));
     
     // Test negative integer
-    CljObject *neg_int = eval_string("-100", st);
+    CljObject *neg_int = eval_string("-100", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(neg_int);
     TEST_ASSERT_TRUE(is_fixnum(neg_int));
     TEST_ASSERT_EQUAL_INT(-100, as_fixnum(neg_int));
     
     // Test zero
-    CljObject *zero = eval_string("0", st);
+    CljObject *zero = eval_string("0", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(zero);
     TEST_ASSERT_TRUE(is_fixnum(zero));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(zero));
@@ -184,19 +184,19 @@ TEST(test_float_creation) {
     // High-level test using eval_string
     
     // Test positive float
-    CljObject *float_val = eval_string("3.14", st);
+    CljObject *float_val = eval_string("3.14", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(float_val);
     TEST_ASSERT_TRUE(is_fixed(float_val));
     TEST_ASSERT_TRUE(as_fixed(float_val) > 3.1f && as_fixed(float_val) < 3.2f);
     
     // Test negative float
-    CljObject *neg_float = eval_string("-2.5", st);
+    CljObject *neg_float = eval_string("-2.5", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(neg_float);
     TEST_ASSERT_TRUE(is_fixed(neg_float));
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -2.5f, as_fixed(neg_float));
     
     // Test zero float
-    CljObject *zero_float = eval_string("0.0", st);
+    CljObject *zero_float = eval_string("0.0", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(zero_float);
     TEST_ASSERT_TRUE(is_fixed(zero_float));
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.0f, as_fixed(zero_float));
@@ -209,11 +209,11 @@ TEST(test_nil_creation) {
     
     
     // Test nil literal - nil is represented as NULL in our system
-    CljObject *nil_obj = eval_string("nil", st);
+    CljObject *nil_obj = eval_string("nil", g_test_eval_state);
     TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
     
     // Test nil in expressions - count should return 0 for nil
-    CljObject *nil_count = eval_string("(count nil)", st);
+    CljObject *nil_count = eval_string("(count nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(nil_count);
     TEST_ASSERT_TRUE(is_fixnum(nil_count));
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(nil_count));
@@ -250,22 +250,22 @@ TEST(test_special_form_and) {
     // Initialize namespace first
     
     // (and) => true
-    ID result1 = eval_string("(and)", st);
+    ID result1 = eval_string("(and)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result1));
     
     // (and true true) => true
-    ID result2 = eval_string("(and true true)", st);
+    ID result2 = eval_string("(and true true)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result2));
     
     // (and true false) => false
-    ID result3 = eval_string("(and true false)", st);
+    ID result3 = eval_string("(and true false)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result3));
     
     // (and false true) => false (short-circuit)
-    ID result4 = eval_string("(and false true)", st);
+    ID result4 = eval_string("(and false true)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result4));
     
@@ -283,7 +283,7 @@ TEST(test_special_form_or) {
     TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)nil_val));
     
     // (or) => nil
-    ID result1 = eval_string("(or)", st);
+    ID result1 = eval_string("(or)", g_test_eval_state);
     if (result1) {
         TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result1));
     } else {
@@ -291,17 +291,17 @@ TEST(test_special_form_or) {
     }
     
     // (or false false) => false
-    ID result2 = eval_string("(or false false)", st);
+    ID result2 = eval_string("(or false false)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result2));
     
     // (or false true) => true
-    ID result3 = eval_string("(or false true)", st);
+    ID result3 = eval_string("(or false true)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result3));
     
     // (or true false) => true (short-circuit)
-    ID result4 = eval_string("(or true false)", st);
+    ID result4 = eval_string("(or true false)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result4));
     
@@ -311,54 +311,54 @@ TEST(test_special_form_or) {
 TEST(test_special_form_when) {
     
     // (when true expr) => expr
-    ID result1 = eval_string("(when true 42)", st);
+    ID result1 = eval_string("(when true 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum(result1));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result1));
     
     // (when false expr) => nil
-    ID result2 = eval_string("(when false 42)", st);
+    ID result2 = eval_string("(when false 42)", g_test_eval_state);
     TEST_ASSERT_NULL(result2); // nil is NULL in our system
     
     // (when nil expr) => nil
-    ID result3 = eval_string("(when nil 42)", st);
+    ID result3 = eval_string("(when nil 42)", g_test_eval_state);
     TEST_ASSERT_NULL(result3); // nil is NULL in our system
     
     // (when true expr1 expr2) => expr2 (last expression)
-    ID result4 = eval_string("(when true 1 2)", st);
+    ID result4 = eval_string("(when true 1 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_TRUE(is_fixnum(result4));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result4));
     
     // (when true expr1 expr2 expr3) => expr3 (last expression)
-    ID result5 = eval_string("(when true 1 2 3)", st);
+    ID result5 = eval_string("(when true 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
     TEST_ASSERT_TRUE(is_fixnum(result5));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result5));
     
     // (when true) => nil (no body expressions)
-    ID result6 = eval_string("(when true)", st);
+    ID result6 = eval_string("(when true)", g_test_eval_state);
     TEST_ASSERT_NULL(result6); // nil is NULL in our system
     
     // (when true (do expr1 expr2)) => last result of do
-    ID result7 = eval_string("(when true (do 10 20))", st);
+    ID result7 = eval_string("(when true (do 10 20))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result7);
     TEST_ASSERT_TRUE(is_fixnum(result7));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(result7));
     
     // (when condition with string) => string
-    ID result8 = eval_string("(when true \"hello\")", st);
+    ID result8 = eval_string("(when true \"hello\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result8);
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, ((CljObject*)result8)->type);
     
     // (when condition with arithmetic) => result
-    ID result9 = eval_string("(when true (+ 1 2))", st);
+    ID result9 = eval_string("(when true (+ 1 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result9);
     TEST_ASSERT_TRUE(is_fixnum(result9));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result9));
     
     // (when false with multiple expressions) => nil (condition false, body not evaluated)
-    ID result10 = eval_string("(when false 1 2 3)", st);
+    ID result10 = eval_string("(when false 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NULL(result10); // nil is NULL in our system
     
     // result1-10 are automatically managed by eval_string
@@ -375,7 +375,7 @@ TEST(test_if_nil_in_function_regression) {
     // ((fn [x] (if x :then :else)) nil) => :else
     CljObject *result1 = NULL;
     TRY {
-        result1 = eval_string("((fn [x] (if x :then :else)) nil)", st);
+        result1 = eval_string("((fn [x] (if x :then :else)) nil)", g_test_eval_state);
     } CATCH(ex) {
         char msg[256];
         snprintf(msg, sizeof(msg), "if in function should not throw exception, got: %s", ex->message);
@@ -395,10 +395,10 @@ TEST(test_if_nil_in_function_regression) {
     // (test-nil nil) => 0
     CljObject *def_result = NULL;
     TRY {
-        def_result = eval_string("(defn test-nil [x] (if x 1 0))", st);
+        def_result = eval_string("(defn test-nil [x] (if x 1 0))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(def_result);
         
-        CljObject *result2 = eval_string("(test-nil nil)", st);
+        CljObject *result2 = eval_string("(test-nil nil)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result2, "(test-nil nil) should return 0, not NULL");
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)result2), "Result should be a fixnum");
         TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result2));
@@ -412,7 +412,7 @@ TEST(test_if_nil_in_function_regression) {
     // ((fn [x] (if x 42)) nil) => nil
     CljObject *result3 = NULL;
     TRY {
-        result3 = eval_string("((fn [x] (if x 42)) nil)", st);
+        result3 = eval_string("((fn [x] (if x 42)) nil)", g_test_eval_state);
         // When condition is falsy and no else branch, if returns nil
         TEST_ASSERT_NULL_MESSAGE(result3, "((fn [x] (if x 42)) nil) should return nil when no else branch");
     } CATCH(ex) {
@@ -425,7 +425,7 @@ TEST(test_if_nil_in_function_regression) {
     // ((fn [x] (if x 1 (if x 2 3))) nil) => 3
     CljObject *result4 = NULL;
     TRY {
-        result4 = eval_string("((fn [x] (if x 1 (if x 2 3))) nil)", st);
+        result4 = eval_string("((fn [x] (if x 1 (if x 2 3))) nil)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result4, "Nested if with nil should return 3, not NULL");
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)result4), "Result should be a fixnum");
         TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result4));
@@ -439,7 +439,7 @@ TEST(test_if_nil_in_function_regression) {
     // ((fn [x] (if x :truthy :falsy)) false) => :falsy
     CljObject *result5 = NULL;
     TRY {
-        result5 = eval_string("((fn [x] (if x :truthy :falsy)) false)", st);
+        result5 = eval_string("((fn [x] (if x :truthy :falsy)) false)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result5, "if with false should return :falsy, not NULL");
         TEST_ASSERT_TRUE_MESSAGE(is_type(result5, CLJ_SYMBOL), "Result should be a symbol");
         CljSymbol *sym5 = as_symbol(result5);
@@ -464,31 +464,31 @@ TEST(test_load_multiline_file) {
     
     // Test 1: Simple multiline function definition
     const char *multiline_def = "(def add-nums\n  (fn [a b]\n    (+ a b)))";
-    CljObject *parsed1 = parse(multiline_def, st);
+    CljObject *parsed1 = parse(multiline_def, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed1);
     TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed1->type);
     
     // Test 2: Multiline function with inline comments
     const char *multiline_with_comments = "(def multiply\n  (fn [x y] ; parameters\n    (* x y))) ; body";
-    CljObject *parsed2 = parse(multiline_with_comments, st);
+    CljObject *parsed2 = parse(multiline_with_comments, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed2);
     TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed2->type);
     
     // Test 3: Multiline vector definition
     const char *multiline_vec = "(def my-vec\n  [1\n   2\n   3])";
-    CljObject *parsed3 = parse(multiline_vec, st);
+    CljObject *parsed3 = parse(multiline_vec, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed3);
     TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed3->type);
     
     // Test 4: Multiline map
     const char *multiline_map = "{:a 1\n :b 2\n :c 3}";
-    CljObject *parsed4 = parse(multiline_map, st);
+    CljObject *parsed4 = parse(multiline_map, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed4);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, parsed4->type);
     
     // Test 5: Multiline nested structures
     const char *multiline_nested = "[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]";
-    CljObject *parsed5 = parse(multiline_nested, st);
+    CljObject *parsed5 = parse(multiline_nested, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed5);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, parsed5->type);
     
@@ -500,7 +500,7 @@ TEST(test_load_multiline_file) {
 TEST(test_first_function) {
     
     // Test first on vectors (builtin function)
-    CljObject *first_result = eval_string("(first [1 2 3])", st);
+    CljObject *first_result = eval_string("(first [1 2 3])", g_test_eval_state);
     if (first_result) {
         TEST_ASSERT_TRUE(is_fixnum(first_result));
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
@@ -511,7 +511,7 @@ TEST(test_first_function) {
 TEST(test_rest_function) {
     
     // Test rest on vectors (builtin function)
-    CljObject *rest_test = eval_string("(rest [1 2 3])", st);
+    CljObject *rest_test = eval_string("(rest [1 2 3])", g_test_eval_state);
     if (rest_test) {
         TEST_ASSERT_NOT_NULL(rest_test);
         TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
@@ -522,7 +522,7 @@ TEST(test_rest_function) {
 TEST(test_cons_function) {
     
     // Test cons (builtin function)
-    CljObject *cons_test = eval_string("(cons 1 '(2 3))", st);
+    CljObject *cons_test = eval_string("(cons 1 '(2 3))", g_test_eval_state);
     if (cons_test) {
         TEST_ASSERT_NOT_NULL(cons_test);
         TEST_ASSERT_EQUAL_INT(CLJ_LIST, cons_test->type);
@@ -533,7 +533,7 @@ TEST(test_cons_function) {
 TEST(test_count_vector) {
     
     // Test count on vector
-    CljObject *count_result = eval_string("(count [1 2 3 4])", st);
+    CljObject *count_result = eval_string("(count [1 2 3 4])", g_test_eval_state);
     if (count_result) {
         TEST_ASSERT_TRUE(is_fixnum(count_result));
         TEST_ASSERT_EQUAL_INT(4, as_fixnum(count_result));
@@ -544,7 +544,7 @@ TEST(test_count_vector) {
 TEST(test_count_list) {
     
     // Test count on list
-    CljObject *list_count_result = eval_string("(count (list 1 2 3))", st);
+    CljObject *list_count_result = eval_string("(count (list 1 2 3))", g_test_eval_state);
     if (list_count_result) {
         TEST_ASSERT_TRUE(is_fixnum(list_count_result));
         TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_count_result));
@@ -555,7 +555,7 @@ TEST(test_count_list) {
 TEST(test_count_string) {
     
     // Test count on string
-    CljObject *string_count_result = eval_string("(count \"hello\")", st);
+    CljObject *string_count_result = eval_string("(count \"hello\")", g_test_eval_state);
     if (string_count_result) {
         TEST_ASSERT_TRUE(is_fixnum(string_count_result));
         TEST_ASSERT_EQUAL_INT(5, as_fixnum(string_count_result));
@@ -570,67 +570,67 @@ TEST(test_map_function) {
     {
         
         // Test map count
-        CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", st);
+        CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", g_test_eval_state);
         if (map_count_result) {
             TEST_ASSERT_TRUE(is_fixnum(map_count_result));
             TEST_ASSERT_EQUAL_INT(3, as_fixnum(map_count_result));
         }
         
         // Test nil count (should return 0)
-        CljObject *nil_count_result = eval_string("(count nil)", st);
+        CljObject *nil_count_result = eval_string("(count nil)", g_test_eval_state);
         if (nil_count_result) {
             TEST_ASSERT_TRUE(is_fixnum(nil_count_result));
             TEST_ASSERT_EQUAL_INT(0, as_fixnum(nil_count_result));
         }
         
         // Test empty vector count
-        CljObject *empty_vec_count = eval_string("(count [])", st);
+        CljObject *empty_vec_count = eval_string("(count [])", g_test_eval_state);
         if (empty_vec_count) {
             TEST_ASSERT_TRUE(is_fixnum(empty_vec_count));
             TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_vec_count));
         }
         
         // Test empty list count
-        CljObject *empty_list_count = eval_string("(count (list))", st);
+        CljObject *empty_list_count = eval_string("(count (list))", g_test_eval_state);
         if (empty_list_count) {
             TEST_ASSERT_TRUE(is_fixnum(empty_list_count));
             TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_list_count));
         }
         
         // Test empty string count
-        CljObject *empty_string_count = eval_string("(count \"\")", st);
+        CljObject *empty_string_count = eval_string("(count \"\")", g_test_eval_state);
         if (empty_string_count) {
             TEST_ASSERT_TRUE(is_fixnum(empty_string_count));
             TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_string_count));
         }
         
         // Test empty map count
-        CljObject *empty_map_count = eval_string("(count {})", st);
+        CljObject *empty_map_count = eval_string("(count {})", g_test_eval_state);
         if (empty_map_count) {
             TEST_ASSERT_TRUE(is_fixnum(empty_map_count));
             TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_map_count));
         }
         
         // Test single element containers
-        CljObject *single_vec_count = eval_string("(count [42])", st);
+        CljObject *single_vec_count = eval_string("(count [42])", g_test_eval_state);
         if (single_vec_count) {
             TEST_ASSERT_TRUE(is_fixnum(single_vec_count));
             TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_vec_count));
         }
         
-        CljObject *single_list_count = eval_string("(count (list 42))", st);
+        CljObject *single_list_count = eval_string("(count (list 42))", g_test_eval_state);
         if (single_list_count) {
             TEST_ASSERT_TRUE(is_fixnum(single_list_count));
             TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_list_count));
         }
         
-        CljObject *single_string_count = eval_string("(count \"x\")", st);
+        CljObject *single_string_count = eval_string("(count \"x\")", g_test_eval_state);
         if (single_string_count) {
             TEST_ASSERT_TRUE(is_fixnum(single_string_count));
             TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_string_count));
         }
         
-        CljObject *single_map_count = eval_string("(count {:a 1})", st);
+        CljObject *single_map_count = eval_string("(count {:a 1})", g_test_eval_state);
         if (single_map_count) {
             TEST_ASSERT_TRUE(is_fixnum(single_map_count));
             TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_map_count));
@@ -670,7 +670,7 @@ TEST(test_map_function) {
 TEST(test_as_list_valid) {
     
     // Create a simple list: (list 1 2 3)
-    CljObject *list = eval_string("(list 1 2 3)", st);
+    CljObject *list = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
     
@@ -703,7 +703,7 @@ TEST(test_as_list_invalid) {
 TEST(test_list_first_valid) {
     
     // Create a simple list: (list 42)
-    CljObject *list = eval_string("(list 42)", st);
+    CljObject *list = eval_string("(list 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
     
@@ -721,19 +721,19 @@ TEST(test_list_first_valid) {
 TEST(test_is_type_function) {
     
     // Test with list
-    CljObject *list = eval_string("(list 1 2 3)", st);
+    CljObject *list = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_TRUE(is_type(list, CLJ_LIST));
     TEST_ASSERT_FALSE(is_type(list, CLJ_SYMBOL));
     
     // Test with symbol - use a defined symbol
-    CljObject *symbol = eval_string("'test-symbol", st);  // Quote the symbol to avoid evaluation
+    CljObject *symbol = eval_string("'test-symbol", g_test_eval_state);  // Quote the symbol to avoid evaluation
     TEST_ASSERT_NOT_NULL(symbol);
     TEST_ASSERT_TRUE(is_type(symbol, CLJ_SYMBOL));
     TEST_ASSERT_FALSE(is_type(symbol, CLJ_LIST));
     
     // Test with number
-    CljObject *number = eval_string("42", st);
+    CljObject *number = eval_string("42", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(number);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(number));
     TEST_ASSERT_FALSE(is_type(number, CLJ_SYMBOL));
@@ -744,7 +744,7 @@ TEST(test_is_type_function) {
 TEST(test_eval_list_simple_arithmetic) {
     
     // Test simple addition
-    CljObject *result = eval_string("(+ 1 2)", st);
+    CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
     
@@ -757,7 +757,7 @@ TEST(test_eval_list_function_call) {
     // Define a simple function
     CljObject *def_result = NULL;
     TRY {
-        def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
+        def_result = eval_string("(def test-fn (fn [x] (* x 2)))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Failed to define function");
         return;
@@ -769,7 +769,7 @@ TEST(test_eval_list_function_call) {
     // Call the function
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(test-fn 5)", st);
+        result = eval_string("(test-fn 5)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Failed to call function - symbol not resolved");
         return;
@@ -789,13 +789,13 @@ TEST(test_eval_list_function_call) {
 TEST(test_def_isolated_problem) {
     
     // Step 1: Verify namespace is initialized
-    TEST_ASSERT_NOT_NULL(st->current_ns);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
     // Note: mappings will be created on demand by ns_define
     
     // Step 2: Define a simple value using def
     CljObject *def_result = NULL;
     TRY {
-        def_result = eval_string("(def test-value 42)", st);
+        def_result = eval_string("(def test-value 42)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("def should not throw exception");
         return;
@@ -804,14 +804,14 @@ TEST(test_def_isolated_problem) {
     TEST_ASSERT_NOT_NULL(def_result);
     
     // Step 3: Check if namespace mappings exist after def
-    TEST_ASSERT_NOT_NULL_MESSAGE(st->current_ns->mappings, "Namespace mappings should exist after def");
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state->current_ns->mappings, "Namespace mappings should exist after def");
     
     // Step 4: Use the symbol returned by def (should be the same as what was stored)
     CljObject *test_value_sym = def_result;  // def returns the symbol
     TEST_ASSERT_NOT_NULL(test_value_sym);
     TEST_ASSERT_TRUE(is_type(test_value_sym, CLJ_SYMBOL));
     
-    CljObject *resolved = ns_resolve(st, test_value_sym);
+    CljObject *resolved = ns_resolve(g_test_eval_state, test_value_sym);
     if (resolved) {
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "Resolved value should be a fixnum");
         TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)resolved), "Resolved value should be 42");
@@ -823,7 +823,7 @@ TEST(test_def_isolated_problem) {
     // Step 5: Try to resolve via eval_symbol (what eval_string uses)
     CljObject *eval_resolved = NULL;
     TRY {
-        eval_resolved = eval_symbol(test_value_sym, st);
+        eval_resolved = eval_symbol(test_value_sym, g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined symbol");
         RELEASE(test_value_sym);
@@ -840,7 +840,7 @@ TEST(test_def_isolated_problem) {
     // Step 6: Try to use the symbol in eval_string
     CljObject *eval_string_result = NULL;
     TRY {
-        eval_string_result = eval_string("test-value", st);
+        eval_string_result = eval_string("test-value", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_string should resolve test-value without exception");
         RELEASE(test_value_sym);
@@ -866,7 +866,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 1: Define a function using def and fn
     CljObject *def_result = NULL;
     TRY {
-        def_result = eval_string("(def test-fn (fn [x] (* x 2)))", st);
+        def_result = eval_string("(def test-fn (fn [x] (* x 2)))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("def with fn should not throw exception");
         return;
@@ -875,7 +875,7 @@ TEST(test_def_function_isolated_problem) {
     TEST_ASSERT_NOT_NULL(def_result);
     
     // Step 2: Check if namespace mappings exist after def
-    TEST_ASSERT_NOT_NULL_MESSAGE(st->current_ns->mappings, "Namespace mappings should exist after def");
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state->current_ns->mappings, "Namespace mappings should exist after def");
     
     // Step 3: Use the symbol returned by def (should be the same as what was stored)
     CljObject *test_fn_sym = def_result;  // def returns the symbol
@@ -883,14 +883,14 @@ TEST(test_def_function_isolated_problem) {
     TEST_ASSERT_TRUE(is_type(test_fn_sym, CLJ_SYMBOL));
     
     // Step 4: Check if mappings map exists and has entries
-    if (!st->current_ns->mappings) {
+    if (!g_test_eval_state->current_ns->mappings) {
         TEST_FAIL_MESSAGE("Namespace mappings should exist after def");
         RELEASE(test_fn_sym);
         return;
     }
     
     // Step 5: Try to get the value directly from the map
-    CljObject *direct_map_value = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)test_fn_sym);
+    CljObject *direct_map_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)test_fn_sym);
     if (direct_map_value) {
         TEST_ASSERT_TRUE_MESSAGE(is_type(direct_map_value, CLJ_FUNC) || is_type(direct_map_value, CLJ_CLOSURE), 
                                  "Direct map lookup should return a function");
@@ -899,7 +899,7 @@ TEST(test_def_function_isolated_problem) {
     }
     
     // Step 6: Try to resolve the symbol directly via ns_resolve
-    CljObject *resolved = ns_resolve(st, test_fn_sym);
+    CljObject *resolved = ns_resolve(g_test_eval_state, test_fn_sym);
     if (resolved) {
         TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_FUNC) || is_type(resolved, CLJ_CLOSURE), 
                                  "Resolved value should be a function");
@@ -910,7 +910,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 4: Try to resolve via eval_symbol
     CljObject *eval_resolved = NULL;
     TRY {
-        eval_resolved = eval_symbol(test_fn_sym, st);
+        eval_resolved = eval_symbol(test_fn_sym, g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined function");
         RELEASE(test_fn_sym);
@@ -925,7 +925,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 7: Try to call the function via eval_string
     CljObject *call_result = NULL;
     TRY {
-        call_result = eval_string("(test-fn 5)", st);
+        call_result = eval_string("(test-fn 5)", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Calling test-fn should not throw exception");
         RELEASE(test_fn_sym);
@@ -960,25 +960,25 @@ TEST(test_def_function_isolated_problem) {
 TEST(test_identical_predicate) {
     
     // Test identical? with same object
-    CljObject *vec1 = eval_string("[1 2 3]", st);
+    CljObject *vec1 = eval_string("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec1);
     
-    CljObject *result1 = eval_string("(identical? [1 2 3] [1 2 3])", st);
+    CljObject *result1 = eval_string("(identical? [1 2 3] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result1)); // Different objects
     
     // Test identical? with same reference
-    CljObject *result2 = eval_string("(let [x [1 2 3]] (identical? x x))", st);
+    CljObject *result2 = eval_string("(let [x [1 2 3]] (identical? x x))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result2)); // Same object
     
     // Test identical? with nil
-    CljObject *result3 = eval_string("(identical? nil nil)", st);
+    CljObject *result3 = eval_string("(identical? nil nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result3)); // Both nil
     
     // Test identical? with different types
-    CljObject *result4 = eval_string("(identical? nil [1 2 3])", st);
+    CljObject *result4 = eval_string("(identical? nil [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4)); // Different objects
     
@@ -987,27 +987,27 @@ TEST(test_identical_predicate) {
 TEST(test_vector_predicate) {
     
     // Test vector? with vector
-    CljObject *result1 = eval_string("(vector? [1 2 3])", st);
+    CljObject *result1 = eval_string("(vector? [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(result1));
     
     // Test vector? with list
-    CljObject *result2 = eval_string("(vector? '(1 2 3))", st);
+    CljObject *result2 = eval_string("(vector? '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result2));
     
     // Test vector? with nil
-    CljObject *result3 = eval_string("(vector? nil)", st);
+    CljObject *result3 = eval_string("(vector? nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result3));
     
     // Test vector? with string
-    CljObject *result4 = eval_string("(vector? \"hello\")", st);
+    CljObject *result4 = eval_string("(vector? \"hello\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result4));
     
     // Test vector? with number
-    CljObject *result5 = eval_string("(vector? 42)", st);
+    CljObject *result5 = eval_string("(vector? 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
     TEST_ASSERT_EQUAL_INT(SPECIAL_FALSE, as_special(result5));
     
@@ -1018,26 +1018,26 @@ TEST(test_vector_predicate) {
 //     WITH_AUTORELEASE_POOL({
 //         
 //         // Test cond with single condition
-//         CljObject *result1 = eval_string("(cond true \"yes\")", st);
+//         CljObject *result1 = eval_string("(cond true \"yes\")", g_test_eval_state);
 //         TEST_ASSERT_NOT_NULL(result1);
 //         TEST_ASSERT_EQUAL_INT(CLJ_STRING, result1->type);
 //         
 //         // Test cond with multiple conditions
-//         CljObject *result2 = eval_string("(cond false \"no\" true \"yes\")", st);
+//         CljObject *result2 = eval_string("(cond false \"no\" true \"yes\")", g_test_eval_state);
 //         TEST_ASSERT_NOT_NULL(result2);
 //         TEST_ASSERT_EQUAL_INT(CLJ_STRING, result2->type);
 //         
 //         // Test cond with no matching condition
-//         CljObject *result3 = eval_string("(cond false \"no\" false \"also no\")", st);
+//         CljObject *result3 = eval_string("(cond false \"no\" false \"also no\")", g_test_eval_state);
 //         TEST_ASSERT_NULL(result3); // Should return nil
 //         
 //         // Test cond with :else clause
-//         CljObject *result4 = eval_string("(cond false \"no\" :else \"default\")", st);
+//         CljObject *result4 = eval_string("(cond false \"no\" :else \"default\")", g_test_eval_state);
 //         TEST_ASSERT_NOT_NULL(result4);
 //         TEST_ASSERT_EQUAL_INT(CLJ_STRING, result4->type);
 //         
 //         // Test empty cond
-//         CljObject *result5 = eval_string("(cond)", st);
+//         CljObject *result5 = eval_string("(cond)", g_test_eval_state);
 //         TEST_ASSERT_NULL(result5); // Should return nil
 //         
 //     });

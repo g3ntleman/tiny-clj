@@ -9,10 +9,10 @@ extern CljObject* history_trim_last_n(CljObject *vec, int limit);
 static const char *tmp_hist_path = "/tmp/tiny_clj_history_test.edn";
 
 TEST(test_history_roundtrip_basic) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Erzeuge Vector aus Strings
-    CljObject *vec = eval_string("[\"a\" \"b\" \"c\"]", st);
+    CljObject *vec = eval_string("[\"a\" \"b\" \"c\"]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
 
@@ -26,7 +26,7 @@ TEST(test_history_roundtrip_basic) {
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, loaded->type);
 
     // Vergleiche Count und Werte
-    CljObject *c = eval_string("(count [\"a\" \"b\" \"c\"])", st);
+    CljObject *c = eval_string("(count [\"a\" \"b\" \"c\"])", g_test_eval_state);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)c));
     CljPersistentVector *v = as_vector(loaded);
     TEST_ASSERT_NOT_NULL(v);
@@ -38,11 +38,11 @@ TEST(test_history_roundtrip_basic) {
 }
 
 TEST(test_history_trim_to_50) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Baue Vector mit 75 Strings über String-Parsing
     // Der Parser unterstützt jetzt Vektoren mit mehr als 64 Elementen
-    CljObject *vec = eval_string("[\"0\" \"1\" \"2\" \"3\" \"4\" \"5\" \"6\" \"7\" \"8\" \"9\" \"10\" \"11\" \"12\" \"13\" \"14\" \"15\" \"16\" \"17\" \"18\" \"19\" \"20\" \"21\" \"22\" \"23\" \"24\" \"25\" \"26\" \"27\" \"28\" \"29\" \"30\" \"31\" \"32\" \"33\" \"34\" \"35\" \"36\" \"37\" \"38\" \"39\" \"40\" \"41\" \"42\" \"43\" \"44\" \"45\" \"46\" \"47\" \"48\" \"49\" \"50\" \"51\" \"52\" \"53\" \"54\" \"55\" \"56\" \"57\" \"58\" \"59\" \"60\" \"61\" \"62\" \"63\" \"64\" \"65\" \"66\" \"67\" \"68\" \"69\" \"70\" \"71\" \"72\" \"73\" \"74\"]", st);
+    CljObject *vec = eval_string("[\"0\" \"1\" \"2\" \"3\" \"4\" \"5\" \"6\" \"7\" \"8\" \"9\" \"10\" \"11\" \"12\" \"13\" \"14\" \"15\" \"16\" \"17\" \"18\" \"19\" \"20\" \"21\" \"22\" \"23\" \"24\" \"25\" \"26\" \"27\" \"28\" \"29\" \"30\" \"31\" \"32\" \"33\" \"34\" \"35\" \"36\" \"37\" \"38\" \"39\" \"40\" \"41\" \"42\" \"43\" \"44\" \"45\" \"46\" \"47\" \"48\" \"49\" \"50\" \"51\" \"52\" \"53\" \"54\" \"55\" \"56\" \"57\" \"58\" \"59\" \"60\" \"61\" \"62\" \"63\" \"64\" \"65\" \"66\" \"67\" \"68\" \"69\" \"70\" \"71\" \"72\" \"73\" \"74\"]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec->type);
     CljPersistentVector *v = as_vector(vec);
@@ -121,7 +121,7 @@ static void cleanup_test_file(const char* path) {
 // ============================================================================
 
 TEST(test_slurp_reads_file) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create test file with content
     char* test_file = create_test_file("Hello, World!\nThis is a test.");
@@ -130,7 +130,7 @@ TEST(test_slurp_reads_file) {
     // Test slurp with file path as string
     char expr[256];
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *result = eval_string(expr, st);
+    CljObject *result = eval_string(expr, g_test_eval_state);
     
     // Verify result is a string
     TEST_ASSERT_NOT_NULL(result);
@@ -145,7 +145,7 @@ TEST(test_slurp_reads_file) {
 }
 
 TEST(test_slurp_returns_string) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create test file
     char* test_file = create_test_file("Test content");
@@ -154,7 +154,7 @@ TEST(test_slurp_returns_string) {
     // Test slurp returns string type
     char expr[256];
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *result = eval_string(expr, st);
+    CljObject *result = eval_string(expr, g_test_eval_state);
     
     // Verify return type
     TEST_ASSERT_NOT_NULL(result);
@@ -165,7 +165,7 @@ TEST(test_slurp_returns_string) {
 }
 
 TEST(test_slurp_empty_file) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create empty test file
     char* test_file = create_test_file("");
@@ -174,7 +174,7 @@ TEST(test_slurp_empty_file) {
     // Test slurp on empty file
     char expr[256];
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *result = eval_string(expr, st);
+    CljObject *result = eval_string(expr, g_test_eval_state);
     
     // Verify result is empty string
     TEST_ASSERT_NOT_NULL(result);
@@ -189,19 +189,19 @@ TEST(test_slurp_empty_file) {
 }
 
 TEST(test_slurp_nonexistent_file) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test slurp with non-existent file
     // This should throw an exception or return nil
     // Note: Depending on implementation, this might throw exception
     // or return nil. For now, we test that it doesn't crash.
     // The actual behavior will be verified after implementation.
-    (void)eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")", st);
+    (void)eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")", g_test_eval_state);
     
 }
 
 TEST(test_slurp_multiline_content) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create test file with multiline content
     const char* content = "Line 1\nLine 2\nLine 3\n";
@@ -211,7 +211,7 @@ TEST(test_slurp_multiline_content) {
     // Test slurp with multiline content
     char expr[256];
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *result = eval_string(expr, st);
+    CljObject *result = eval_string(expr, g_test_eval_state);
     
     // Verify result contains all lines
     TEST_ASSERT_NOT_NULL(result);
@@ -229,7 +229,7 @@ TEST(test_slurp_multiline_content) {
 // ============================================================================
 
 TEST(test_spit_writes_file) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create temporary test file path
     char* test_file = create_test_file(NULL);  // Create empty file
@@ -238,11 +238,11 @@ TEST(test_spit_writes_file) {
     // Write content to file using spit
     char expr[512];
     snprintf(expr, sizeof(expr), "(spit \"%s\" \"Hello from spit!\")", test_file);
-    (void)eval_string(expr, st);  // spit returns nil (Clojure-compatible)
+    (void)eval_string(expr, g_test_eval_state);  // spit returns nil (Clojure-compatible)
     
     // Read file back to verify content
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *read_result = eval_string(expr, st);
+    CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
     TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
@@ -255,7 +255,7 @@ TEST(test_spit_writes_file) {
 }
 
 TEST(test_spit_overwrites_file) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create test file with initial content
     char* test_file = create_test_file("Initial content");
@@ -264,11 +264,11 @@ TEST(test_spit_overwrites_file) {
     // Overwrite with new content
     char expr[512];
     snprintf(expr, sizeof(expr), "(spit \"%s\" \"New content\")", test_file);
-    (void)eval_string(expr, st);
+    (void)eval_string(expr, g_test_eval_state);
     
     // Read file back to verify it was overwritten
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *read_result = eval_string(expr, st);
+    CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
     TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
@@ -283,7 +283,7 @@ TEST(test_spit_overwrites_file) {
 }
 
 TEST(test_spit_multiline_content) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create temporary test file
     char* test_file = create_test_file(NULL);
@@ -293,11 +293,11 @@ TEST(test_spit_multiline_content) {
     const char* content = "Line 1\nLine 2\nLine 3\n";
     char expr[512];
     snprintf(expr, sizeof(expr), "(spit \"%s\" \"%s\")", test_file, content);
-    (void)eval_string(expr, st);
+    (void)eval_string(expr, g_test_eval_state);
     
     // Read back and verify
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *read_result = eval_string(expr, st);
+    CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
     TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
@@ -310,7 +310,7 @@ TEST(test_spit_multiline_content) {
 }
 
 TEST(test_spit_empty_string) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create temporary test file
     char* test_file = create_test_file("Some content");
@@ -319,11 +319,11 @@ TEST(test_spit_empty_string) {
     // Write empty string
     char expr[512];
     snprintf(expr, sizeof(expr), "(spit \"%s\" \"\")", test_file);
-    (void)eval_string(expr, st);
+    (void)eval_string(expr, g_test_eval_state);
     
     // Read back and verify it's empty
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *read_result = eval_string(expr, st);
+    CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
     TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
@@ -337,7 +337,7 @@ TEST(test_spit_empty_string) {
 }
 
 TEST(test_spit_slurp_roundtrip) {
-    TEST_ASSERT_NOT_NULL(st);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create temporary test file
     char* test_file = create_test_file(NULL);
@@ -348,11 +348,11 @@ TEST(test_spit_slurp_roundtrip) {
     // Write with spit
     char expr[512];
     snprintf(expr, sizeof(expr), "(spit \"%s\" \"%s\")", test_file, original_content);
-    (void)eval_string(expr, st);
+    (void)eval_string(expr, g_test_eval_state);
     
     // Read back with slurp
     snprintf(expr, sizeof(expr), "(slurp \"%s\")", test_file);
-    CljObject *read_result = eval_string(expr, st);
+    CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
     TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));

@@ -16,7 +16,7 @@ TEST(test_list_in_namespace) {
     TEST_ASSERT_NOT_NULL(list_sym);
     
     // Try to resolve list from namespace
-    CljObject *list_value = ns_resolve(st, list_sym);
+    CljObject *list_value = ns_resolve(g_test_eval_state, list_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(list_value, "list should be resolvable from namespace");
     
     // Check if it's a function
@@ -26,7 +26,7 @@ TEST(test_list_in_namespace) {
 
 TEST(test_list_direct_call) {
     // Test: Direct call to list function
-    CljObject *result = eval_string("(list)", st);
+    CljObject *result = eval_string("(list)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "list should work with no arguments");
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
     
@@ -35,7 +35,7 @@ TEST(test_list_direct_call) {
 
 TEST(test_list_with_args) {
     // Test: list with arguments
-    CljObject *result = eval_string("(list 1 2 3)", st);
+    CljObject *result = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "list should work with arguments");
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
     
@@ -56,14 +56,14 @@ TEST(test_list_in_clojure_core_clj) {
     TEST_ASSERT_NOT_NULL(list_sym);
     
     // Switch to clojure.core namespace (like during loading)
-    evalstate_set_ns(st, "clojure.core");
+    evalstate_set_ns(g_test_eval_state, "clojure.core");
     
     // Try to resolve list
-    CljObject *list_value = ns_resolve(st, list_sym);
+    CljObject *list_value = ns_resolve(g_test_eval_state, list_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(list_value, "list should be resolvable in clojure.core namespace");
     
     // Switch back to user namespace
-    evalstate_set_ns(st, "user");
+    evalstate_set_ns(g_test_eval_state, "user");
 }
 
 TEST(test_list_via_symbol_resolution) {
@@ -72,7 +72,7 @@ TEST(test_list_via_symbol_resolution) {
     TEST_ASSERT_NOT_NULL(list_sym);
     
     // Use eval_symbol to resolve (like eval_list does)
-    CljObject *resolved = eval_symbol((ID)list_sym, st);
+    CljObject *resolved = eval_symbol((ID)list_sym, g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(resolved, "list should be resolvable via eval_symbol");
     
     // Check if it's a function
@@ -86,8 +86,8 @@ TEST(test_list_available_in_evalstate) {
     CljObject *list_sym = SYM_LIST;
     TEST_ASSERT_NOT_NULL_MESSAGE(list_sym, "list symbol should be created");
     
-    // Resolve list using EvalState (st from setUp)
-    CljObject *list_func = ns_resolve(st, list_sym);
+    // Resolve list using EvalState (g_test_eval_state from setUp)
+    CljObject *list_func = ns_resolve(g_test_eval_state, list_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(list_func, "list should be resolvable via ns_resolve(st, list_sym)");
     
     // Verify it's a function (builtin)

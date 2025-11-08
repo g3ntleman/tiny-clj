@@ -17,7 +17,6 @@ extern bool g_memory_verbose_mode;
 int load_clojure_core(EvalState *st);
 
 // Static flags to ensure initialization happens only once
-static bool g_clojure_core_loaded = false;
 static bool g_special_symbols_initialized = false;
 
 // Global test EvalState (available in all tests via tests_common.h)
@@ -31,6 +30,9 @@ EvalState *g_test_eval_state = NULL;
 void setUp(void) {
     // Reset memory profiler statistics BEFORE each test
     memory_profiler_reset();
+    
+    // Suppress time output in tests
+    set_suppress_time_output(true);
     
     runtime_init();
     
@@ -57,10 +59,24 @@ void setUp(void) {
     WITH_AUTORELEASE_POOL({
         // CRITICAL: Create/update global evalState for all tests with clojure.core loaded
         // This ensures all tests can access clojure.core functions
+        // IMPORTANT: After runtime_free() in tearDown(), g_test_eval_state may become invalid
+        // (e.g., current_ns points to freed memory), so we always recreate it to be safe
+        if (g_test_eval_state) {
+            // Free existing eval state to avoid memory leaks
+            evalstate_free(g_test_eval_state);
+            g_test_eval_state = NULL;
+        }
+        
+        // Always create a fresh eval state for each test
+        g_test_eval_state = evalstate_new(true); // Load clojure.core automatically
         if (!g_test_eval_state) {
-            g_test_eval_state = evalstate_new(true); // Load clojure.core automatically
-        } else {
-            // Ensure clojure.core is loaded (reload if cache was cleared or namespace is empty)
+            // Failed to create eval state - this should not happen
+            printf("ERROR: Failed to create g_test_eval_state in setUp()\n");
+            return;
+        }
+        
+        // Ensure clojure.core is loaded (reload if cache was cleared or namespace is empty)
+        {
             bool needs_reload = false;
             if (!g_runtime.clojure_core_cache) {
                 needs_reload = true;
@@ -100,12 +116,32 @@ void setUp(void) {
             g_test_eval_state->line = 0;
             g_test_eval_state->col = 0;
             
+            // CRITICAL: After runtime_free() in tearDown(), current_ns may point to a freed namespace
+            // So we MUST reset it to NULL first, then set it to a valid namespace
+            // This ensures evalstate_set_ns doesn't try to access a freed namespace
+            g_test_eval_state->current_ns = NULL;
+            
+            // CRITICAL: Reset user namespace between tests for test isolation
+            // This ensures that variables/functions defined in one test don't leak to another test
+            CljNamespace *user_ns = ns_find("user");
+            if (user_ns && user_ns != (CljNamespace*)g_runtime.clojure_core_cache) {
+                // Clear user namespace mappings (but keep the namespace itself)
+                // This ensures each test starts with a clean user namespace
+                if (user_ns->mappings) {
+                    RELEASE((CljObject*)user_ns->mappings);
+                    user_ns->mappings = (CljObject*)make_map(16);
+                }
+            }
+            
+            // CRITICAL: Reset symbol resolution cache for test isolation
+            // This ensures that cached symbol resolutions from previous tests don't affect current test
+            ns_reset_resolve_cache();
+            
             // CRITICAL: Set current_ns to "user" (not clojure.core)
             // clojure.core functions are available via ns_resolve() from cached namespace
+            // This will create a new "user" namespace if it doesn't exist
             evalstate_set_ns(g_test_eval_state, "user");
         }
-        
-        g_clojure_core_loaded = true; // Mark as loaded for first time
     });
 }
 
@@ -115,6 +151,9 @@ EvalState* test_get_eval_state(void) {
 }
 
 void tearDown(void) {
+    // Reset time output suppression (for consistency)
+    set_suppress_time_output(false);
+    
     // JUnit-style: Only print memory stats if verbose mode is enabled
     // (memory_profiler_check_leaks already handles leak reporting)
     if (g_memory_verbose_mode) {
@@ -386,7 +425,7 @@ TEST(test_embedded_array_single_malloc) {
     
     WITH_AUTORELEASE_POOL({
         // Create map with embedded array
-        CljMap *map = (CljMap*)make_map(4);
+        CljMap *map = make_map(4);
         printf("Map created with embedded array\n");
         
         // Verify embedded array is accessible
@@ -415,9 +454,9 @@ TEST(test_embedded_array_memory_efficiency) {
     
     WITH_AUTORELEASE_POOL({
         // Create multiple maps to test memory efficiency
-        CljMap *map1 = (CljMap*)make_map(2);
-        CljMap *map2 = (CljMap*)make_map(4);
-        CljMap *map3 = (CljMap*)make_map(8);
+        CljMap *map1 = make_map(2);
+        CljMap *map2 = make_map(4);
+        CljMap *map3 = make_map(8);
         
         // Add entries to each map
         map_assoc((CljValue)map1, fixnum(1), fixnum(10));
@@ -442,7 +481,7 @@ TEST(test_embedded_array_cow) {
     printf("\n=== Test: COW mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
-        CljMap *map = (CljMap*)make_map(4);
+        CljMap *map = make_map(4);
         map_assoc((CljValue)map, fixnum(1), fixnum(10));
         printf("Original map: RC=%d, count=%d\n", map->base.rc, map->count);
         
@@ -481,7 +520,7 @@ TEST(test_embedded_array_capacity_growth) {
     printf("\n=== Test: Capacity Growth mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
-        CljMap *map = (CljMap*)make_map(2);  // Small capacity
+        CljMap *map = make_map(2);  // Small capacity
         printf("Initial capacity: %d\n", map->capacity);
         
         // Fill initial capacity
@@ -515,7 +554,7 @@ TEST(test_embedded_array_performance) {
     printf("\n=== Test: Performance mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
-        CljMap *env = (CljMap*)make_map(4);
+        CljMap *env = make_map(4);
         printf("Starting performance test...\n");
         
         // Simulate loop pattern with embedded arrays

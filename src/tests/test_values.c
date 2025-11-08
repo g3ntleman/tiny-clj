@@ -195,16 +195,16 @@ TEST(test_cljvalue_immediates_fixed) {
 TEST(test_cljvalue_parser_immediates) {
     WITH_AUTORELEASE_POOL({
         // Test parser immediate value creation
-        TEST_ASSERT_NOT_NULL(st);
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
         
         // Test parsing fixnums
-        CljObject *fixnum_obj = eval_string("42", st);
+        CljObject *fixnum_obj = eval_string("42", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(fixnum_obj);
         TEST_ASSERT_TRUE(is_fixnum(fixnum_obj));
         TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_obj));
         
         // Test parsing characters - skip for now due to syntax issues
-        // CljObject *char_obj = eval_string("\\A", st);
+        // CljObject *char_obj = eval_string("\\A", g_test_eval_state);
         // if (char_obj) {
         //     TEST_ASSERT_TRUE(is_char(char_obj));
         //     TEST_ASSERT_EQUAL_INT('A', as_char(char_obj));
@@ -213,18 +213,18 @@ TEST(test_cljvalue_parser_immediates) {
         // }
         
         // Test parsing booleans
-        CljObject *true_obj = eval_string("true", st);
+        CljObject *true_obj = eval_string("true", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(true_obj);
         TEST_ASSERT_TRUE(is_bool(true_obj));
         TEST_ASSERT_TRUE((CljValue)true_obj == clj_true);
         
-        CljObject *false_obj = eval_string("false", st);
+        CljObject *false_obj = eval_string("false", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(false_obj);
         TEST_ASSERT_TRUE(is_bool(false_obj));
         TEST_ASSERT_TRUE((CljValue)false_obj == clj_false);
         
         // Test parsing nil
-        CljObject *nil_obj = eval_string("nil", st);
+        CljObject *nil_obj = eval_string("nil", g_test_eval_state);
         TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
         
     });
@@ -299,7 +299,7 @@ TEST(test_cljvalue_immediates_high_level) {
 // Test division by zero exception
 TEST(test_division_by_zero_exception) {
     WITH_AUTORELEASE_POOL({
-        if (!st) {
+        if (!g_test_eval_state) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
         }
@@ -308,7 +308,7 @@ TEST(test_division_by_zero_exception) {
         bool exception_caught = false;
         
         TRY {
-            result = eval_string("(/ 1 0)", st);
+            result = eval_string("(/ 1 0)", g_test_eval_state);
         } CATCH(ex) {
             exception_caught = true;
             result = NULL;
@@ -323,13 +323,13 @@ TEST(test_division_by_zero_exception) {
 // Ein sehr einfacher Test für die Grundfunktionalität
 TEST(test_simple_arithmetic) {
     WITH_AUTORELEASE_POOL({
-        if (!st) {
+        if (!g_test_eval_state) {
             TEST_FAIL_MESSAGE("Failed to create EvalState");
             return;
         }
         
         // Test einfache Addition
-        CljObject *result = eval_string("(+ 1 2)", st);
+        CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         if (result && is_fixnum(result)) {
             int val = as_fixnum(result);
@@ -451,41 +451,41 @@ TEST(test_truthiness_comprehensive) {
         
         // ===== EDGE CASES =====
         // Test with eval_string for high-level truthiness checks
-        CljObject *nil_result = eval_string("nil", st);
+        CljObject *nil_result = eval_string("nil", g_test_eval_state);
         TEST_ASSERT_NULL(nil_result);
         TEST_ASSERT_FALSE(clj_is_truthy(nil_result));
         
-        CljObject *false_result = eval_string("false", st);
+        CljObject *false_result = eval_string("false", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(false_result);
         TEST_ASSERT_FALSE(clj_is_truthy(false_result));
         RELEASE(false_result);
         
-        CljObject *true_result = eval_string("true", st);
+        CljObject *true_result = eval_string("true", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(true_result);
         TEST_ASSERT_TRUE(clj_is_truthy(true_result));
         RELEASE(true_result);
         
-        CljObject *zero_result = eval_string("0", st);
+        CljObject *zero_result = eval_string("0", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(zero_result);
         TEST_ASSERT_TRUE(clj_is_truthy(zero_result));
         RELEASE(zero_result);
         
-        CljObject *empty_list_result = eval_string("(list)", st);
+        CljObject *empty_list_result = eval_string("(list)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(empty_list_result);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_list_result));
         RELEASE(empty_list_result);
         
-        CljObject *empty_vector_result = eval_string("[]", st);
+        CljObject *empty_vector_result = eval_string("[]", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(empty_vector_result);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_vector_result));
         RELEASE(empty_vector_result);
         
-        CljObject *empty_map_result = eval_string("{}", st);
+        CljObject *empty_map_result = eval_string("{}", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(empty_map_result);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_map_result));
         RELEASE(empty_map_result);
         
-        CljObject *keyword_result = eval_string(":test", st);
+        CljObject *keyword_result = eval_string(":test", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(keyword_result);
         TEST_ASSERT_TRUE(clj_is_truthy(keyword_result));
         RELEASE(keyword_result);
