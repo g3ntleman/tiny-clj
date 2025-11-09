@@ -222,7 +222,7 @@ TEST(lowlevel_eval_arg_symbol_resolution) {
     TEST_ASSERT_NOT_NULL(atom);
     
     // Store i -> atom in let_env
-    CljMap *new_let_env = (CljMap*)map_assoc((CljObject*)let_env, i_sym, (CljObject*)atom);
+    CljMap *new_let_env = map_assoc(let_env, i_sym, (CljObject*)atom);
     ASSIGN(let_env, new_let_env);
     
     // Verify i is in let_env
@@ -230,15 +230,12 @@ TEST(lowlevel_eval_arg_symbol_resolution) {
     TEST_ASSERT_NOT_NULL(found);
     TEST_ASSERT_TRUE(is_type(found, CLJ_ATOM));
     
-    // Create a list (swap! i inc) to test eval_arg
-    CljObject *swap_sym = intern_symbol_global("swap!");
-    CljObject *inc_sym = intern_symbol_global("inc");
-    
-    // Create list: (swap! i inc)
-    CljList *list = make_list(swap_sym, NULL);
-    list = make_list(i_sym, list);
-    list = make_list(inc_sym, list);
-    list = make_list(swap_sym, list);
+    // Create a list (swap! i inc) to test eval_arg using parser
+    ID parsed = parse("(swap! i inc)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(is_type(parsed, CLJ_LIST));
+    CljList *list = as_list(parsed);
+    TEST_ASSERT_NOT_NULL(list);
     
     // Test eval_arg with index 1 (should be "i")
     // eval_arg should resolve "i" from let_env
@@ -252,7 +249,7 @@ TEST(lowlevel_eval_arg_symbol_resolution) {
     // Cleanup
     RELEASE((CljObject*)let_env);
     RELEASE((CljObject*)atom);
-    RELEASE((CljObject*)list);
+    // parsed is autoreleased, no need to RELEASE
 }
 
 TEST(lowlevel_eval_arg_symbol_resolution_direct) {
@@ -269,7 +266,7 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     TEST_ASSERT_NOT_NULL(atom);
     
     // Store i -> atom in let_env
-    CljMap *new_let_env = (CljMap*)map_assoc((CljObject*)let_env, i_sym, (CljObject*)atom);
+    CljMap *new_let_env = map_assoc(let_env, i_sym, (CljObject*)atom);
     ASSIGN(let_env, new_let_env);
     
     // Verify i is in let_env using map_contains
@@ -297,20 +294,14 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     TEST_ASSERT_NOT_NULL_MESSAGE(found2, "map_get should find symbol 'i' (second instance) in let_env");
     TEST_ASSERT_TRUE(is_type(found2, CLJ_ATOM));
     
-    // Now create a simple list with just "i" as first element
-    // This simulates (swap! i inc) where i is at index 1
+    // Create list (swap! i inc) using parser to test eval_arg
     // For eval_arg, index 0 is the first element after the function
     // So we need a list like (swap! i inc) where index 1 is "i"
-    // Create list: (swap! i inc)
-    CljObject *swap_sym = intern_symbol_global("swap!");
-    CljObject *inc_sym = intern_symbol_global("inc");
-    
-    // Create list structure: (swap! i inc)
-    // list->first = swap!, list->rest->first = i, list->rest->rest->first = inc
-    CljList *list = make_list(swap_sym, NULL);
-    list = make_list(i_sym2, (CljObject*)list);
-    list = make_list(inc_sym, (CljObject*)list);
-    list = make_list(swap_sym, (CljObject*)list);
+    ID parsed = parse("(swap! i inc)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(is_type(parsed, CLJ_LIST));
+    CljList *list = as_list(parsed);
+    TEST_ASSERT_NOT_NULL(list);
     
     // Test eval_arg with index 1 (should be "i" - second element after swap!)
     ID result = eval_arg(list, 1, let_env, g_test_eval_state);
@@ -323,6 +314,6 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     // Cleanup
     RELEASE((CljObject*)let_env);
     RELEASE((CljObject*)atom);
-    RELEASE((CljObject*)list);
+    // parsed is autoreleased, no need to RELEASE
 }
 

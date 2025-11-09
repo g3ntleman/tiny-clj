@@ -263,11 +263,12 @@ TEST(test_atom_memory_management) {
     CljObject *str = make_string("test");
     CljAtom *atom = make_atom((ID)str);
     
-    // Atom should retain the string
+    // Atom should retain the string (rc=1 from make_string, +1 from make_atom)
     TEST_ASSERT_EQUAL(2, ((CljObject*)str)->rc);
     
     RELEASE((CljObject*)atom);
-    // String should still be retained (by atom)
+    // After releasing atom, atom's value should be released, so str->rc should be 1
+    // (only the original reference from make_string remains)
     TEST_ASSERT_EQUAL(1, ((CljObject*)str)->rc);
     
     RELEASE(str);

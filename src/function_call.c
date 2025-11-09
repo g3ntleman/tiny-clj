@@ -674,24 +674,22 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             // CRITICAL: Recreate call_env with new arguments for recur iteration
             // eval_body_with_params uses call_env for parameter lookups, so we must update it
             // Create new call_env first (this will retain new parameter values)
-            CljMap *old_call_env = call_env;
+            CljMap *new_call_env;
             if (func->closure_env) {
-                call_env = env_extend_stack(func->closure_env, (ID*)func->params, (ID*)current_args, current_argc);
-                if (!call_env) {
+                new_call_env = env_extend_stack(func->closure_env, (ID*)func->params, (ID*)current_args, current_argc);
+                if (!new_call_env) {
                     throw_exception(EXCEPTION_RUNTIME, "Failed to create function call environment", NULL, 0, 0);
                     return NULL;
                 }
             } else {
-                call_env = env_extend_stack(NULL, (ID*)func->params, (ID*)current_args, current_argc);
-                if (!call_env) {
+                new_call_env = env_extend_stack(NULL, (ID*)func->params, (ID*)current_args, current_argc);
+                if (!new_call_env) {
                     throw_exception(EXCEPTION_RUNTIME, "Failed to create function call environment", NULL, 0, 0);
                     return NULL;
                 }
             }
-            // Release old call_env after creating new one (old values are still retained by new map)
-            if (old_call_env) {
-                RELEASE((CljObject*)old_call_env);
-            }
+            // Use ASSIGN to safely replace call_env (releases old, retains new)
+            ASSIGN(call_env, new_call_env);
             
             // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
@@ -2169,11 +2167,11 @@ ID eval_for(CljList *list, CljMap *env) {
             
             // Move to next element
             CljObject *next = (CljObject*)seq_next((CljObject*)seq);
-            seq_release((CljObject*)seq);
+            RELEASE((ID)seq);
             seq = (CljSeqIterator*)next;
         }
         // Clean up final seq iterator (not returned as value)
-        seq_release((CljObject*)seq);
+        RELEASE((ID)seq);
     }
     
     RELEASE(collection);
@@ -2238,11 +2236,11 @@ ID eval_doseq(CljList *list, CljMap *env) {
             
             
             CljObject *next = (CljObject*)seq_next((CljObject*)seq);
-            seq_release((CljObject*)seq);
+            RELEASE((ID)seq);
             seq = (CljSeqIterator*)next;
         }
         // Clean up final seq iterator
-        seq_release((CljObject*)seq);
+        RELEASE((ID)seq);
     }
     
     // Clean up allocated objects
@@ -2423,9 +2421,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                     // Update closure_env (map_assoc handles COW and capacity growth)
                     if (new_func_env != func_env) {
                         // Update closure_env if it changed (COW or capacity growth)
-                        RELEASE((CljObject*)func->closure_env);
-                        func->closure_env = new_func_env;
-                        RETAIN((CljObject*)new_func_env);
+                        // Use ASSIGN to safely replace closure_env (releases old, retains new)
+                        ASSIGN(func->closure_env, new_func_env);
                     } else {
                         // map_assoc returned same map but should have added the function
                         // Verify it's there now
@@ -2435,9 +2432,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                             // This shouldn't happen, but handle it
                             CljMap *forced_new = map_assoc(func_env, (ID)sym_val, (ID)value);
                             if (forced_new != func_env) {
-                                RELEASE((CljObject*)func->closure_env);
-                                func->closure_env = forced_new;
-                                RETAIN((CljObject*)forced_new);
+                                // Use ASSIGN to safely replace closure_env (releases old, retains new)
+                                ASSIGN(func->closure_env, forced_new);
                             }
                         }
                     }
@@ -2673,9 +2669,8 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // CRITICAL: Always update closure_env, even if pointers are the same, because
     // the function was just added to the mappings, and closure_env needs to reflect that
     if (st->current_ns->mappings != (CljObject*)func->closure_env) {
-        RELEASE((CljObject*)func->closure_env);
-        func->closure_env = (CljMap*)st->current_ns->mappings;
-        RETAIN((CljObject*)st->current_ns->mappings);
+        // Use ASSIGN to safely replace closure_env (releases old, retains new)
+        ASSIGN(func->closure_env, (CljMap*)st->current_ns->mappings);
     }
     // Even if pointers are the same, the function is now in the mappings
     // closure_env already points to the correct map, so no update needed

@@ -18,6 +18,7 @@
 #include "list.h"
 #include "byte_array.h"
 #include "atom.h"
+#include "seq.h"  // For CljSeqIterator and as_seq
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -571,12 +572,20 @@ static void release_object_deep(CljObject *v) {
     }
     
 #ifdef DEBUG
-    // Skip zombie objects - they should not be freed
+    // For zombie objects, only cleanup CLJ_ATOM
+    // For all other types, skip cleanup to avoid accessing freed memory
     if (v->rc == ZOMBIE_RC) {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-            printf("🔍 release_object_deep: Skipping zombie object %p\n", v);
+        CljType type = v->type;
+        if (type != CLJ_ATOM) {
+            if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                printf("🔍 release_object_deep: Skipping zombie object %p (type=%s)\n", v, clj_type_name(type));
+            }
+            return;
         }
-        return;
+        // For CLJ_ATOM, continue with cleanup to release the atom's value
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+            printf("🔍 release_object_deep: Cleaning up zombie CLJ_ATOM %p\n", v);
+        }
     }
 #endif
     
@@ -695,10 +704,18 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_ATOM:
             {
-                CljAtom *atom = as_atom(v);
-                if (atom) {
-                    // Release the atom's value (RELEASE handles nil and immediates safely)
-                    RELEASE(atom->value);
+                CljAtom *atom = (CljAtom*)v;
+                // Release the atom's value (RELEASE handles nil and immediates safely)
+                RELEASE(atom->value);
+            }
+            break;
+            
+        case CLJ_SEQ:
+            {
+                CljSeqIterator *seq = as_seq(v);
+                // Release the retained container (was retained in make_seq)
+                if (seq) {
+                    RELEASE(seq->iter.container);
                 }
             }
             break;

@@ -309,7 +309,7 @@ ID native_first(ID *args, unsigned int argc) {
             if (!seq) return NULL;
             
             CljObject *result = seq_first((CljObject*)seq);
-            seq_release((CljObject*)seq);
+            RELEASE((ID)seq);
             
             return result;
         }
@@ -365,19 +365,34 @@ ID native_next(ID *args, unsigned int argc) {
         // Empty or not seqable - return nil
         return NULL;
     }
+    
+    // CRITICAL: Check if make_seq returned the original object (if coll was already a CLJ_SEQ)
+    // If so, we must NOT release it, as it's owned by the caller (args[0])
+    bool seq_is_original = ((ID)seq == (ID)coll);
+    
     // Return next of the created seq
     ID result = seq_next((ID)seq);
-    seq_release((ID)seq);
+    
     // seq_next returns new objects (rc=1) or existing objects - need to AUTORELEASE new ones
     // For CLJ_LIST, seq_next returns existing objects directly (no memory management needed)
     // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
-    if (result && !IS_IMMEDIATE(result)) {
+    // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
+    if (result) {
         CljObject *obj = (CljObject*)result;
         // If it's a CLJ_LIST, it's an existing object - no AUTORELEASE needed
         // If it's a CLJ_SEQ, it's a new object - need AUTORELEASE
         if (obj->type == CLJ_SEQ) {
-            return AUTORELEASE(result);
+            // CRITICAL: AUTORELEASE before releasing the original seq
+            // This ensures the result is properly managed before we free the original seq
+            // AUTORELEASE already has IS_IMMEDIATE check, so no need to check here
+            result = AUTORELEASE(result);
         }
+    }
+    
+    // Only release the seq if we created it (not if it was the original object)
+    // If seq_is_original, the caller (eval_and_call_native) will release args[0]
+    if (!seq_is_original) {
+        RELEASE((ID)seq);
     }
     return result;
 }
@@ -518,7 +533,7 @@ ID native_reverse(ID *args, unsigned int argc) {
     }
     
     // Release seq object
-    seq_release(seq);
+    RELEASE((ID)seq);
     
     // If result is NULL, return empty list
     if (!result) {

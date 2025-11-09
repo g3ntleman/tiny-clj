@@ -132,7 +132,6 @@ ID seq_rest(ID seq);
 ID seq_next(ID seq);
 bool seq_empty(ID seq);
 int seq_count(ID obj);
-void seq_release(ID seq);
 
 /**
  * @brief Seqable predicates

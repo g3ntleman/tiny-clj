@@ -221,6 +221,22 @@ static void print_new_usage(const char *program_name) {
     printf("  %s\n", program_name);
 }
 
+// Print test summary with PASS/FAIL/IGNORE counts
+static void print_test_summary(void) {
+    int total = Unity.NumberOfTests;
+    int failures = Unity.TestFailures;
+    int ignores = Unity.TestIgnores;
+    int passes = total - failures - ignores;
+    
+    printf("\n=== Test Summary ===\n");
+    printf("Total: %d  PASS: %d  FAIL: %d  IGNORE: %d\n", total, passes, failures, ignores);
+    if (failures > 0) {
+        printf("❌ %d test(s) failed\n", failures);
+    } else if (total > 0) {
+        printf("✅ All tests passed\n");
+    }
+}
+
 // JUnit-style test runner: simple progress indicator (. for pass, F for fail, I for ignore)
 static void run_tests_by_registry(void) {
     size_t test_count;
@@ -359,7 +375,7 @@ static void run_specific_test(const char *test_name_or_pattern) {
         if (test) {
             printf("Running: %s\n", test->qualified_name);
             RUN_TEST(test->func);
-            // Unity will print the result
+            // Summary will be printed at end of main()
         } else {
             printf("❌ Test not found: %s\n", test_name_or_pattern);
             printf("Use --list to see available tests\n");
@@ -400,10 +416,12 @@ int main(int argc, char **argv) {
             printf("Note: Legacy command '%s' - running all registered tests\n", argv[1]);
             printf("Use --test <pattern> to filter tests, or --list to see available tests\n");
             run_tests_by_registry();
+            print_test_summary();
         }
     } else {
         // Run all tests by default using new registry system
         run_tests_by_registry();
+        print_test_summary();
     }
     
     // Memory leak summary only if there are leaks (JUnit-style: minimal output)
@@ -417,6 +435,9 @@ int main(int argc, char **argv) {
     // Free global test evalState at the end (no memory leaks)
     evalstate_free(g_test_eval_state);
     g_test_eval_state = NULL;
+    
+    // Print our test summary before Unity's summary
+    print_test_summary();
     
     // Unity will print its own summary (Tests X Failures Y Ignored Z)
     return UNITY_END();

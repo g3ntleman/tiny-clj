@@ -177,9 +177,9 @@ TEST(test_seq_rest_vs_next_difference) {
             TEST_ASSERT_NOT_NULL(next_seq);
             TEST_ASSERT_EQUAL_INT(CLJ_SEQ, next_seq->type);
             
-            seq_release((CljObject*)seq);
-            seq_release(rest_seq);
-            seq_release(next_seq);
+            RELEASE((ID)seq);
+            RELEASE((ID)rest_seq);
+            RELEASE((ID)next_seq);
         }
         
         // Test 2: Single-element sequence - rest should return empty sequence, next should return nil
@@ -201,8 +201,8 @@ TEST(test_seq_rest_vs_next_difference) {
             CljObject *next_seq = (CljObject*)seq_next((CljObject*)seq);
             TEST_ASSERT_EQUAL_PTR(NULL, next_seq);  // nil = NULL
             
-            seq_release((CljObject*)seq);
-            seq_release(rest_seq);
+            RELEASE((ID)seq);
+            RELEASE((ID)rest_seq);
             // next_seq is NULL, no need to release
         }
         
@@ -292,8 +292,8 @@ TEST(test_seq_next_with_list_returns_list) {
         TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)rest_list->first));
         
         // Cleanup
-        seq_release((CljObject*)seq);
-        // next_result is a CLJ_LIST, not a CLJ_SEQ, so no seq_release needed
+        RELEASE((ID)seq);
+        // next_result is a CLJ_LIST, not a CLJ_SEQ, so no RELEASE needed
     }
 }
 
@@ -334,8 +334,8 @@ TEST(test_seq_next_with_list_preserves_structure) {
         TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)rest_list->first));
         
         // Cleanup
-        seq_release((CljObject*)seq);
-        // next_result is a CLJ_LIST, not a CLJ_SEQ, so no seq_release needed
+        RELEASE((ID)seq);
+        // next_result is a CLJ_LIST, not a CLJ_SEQ, so no RELEASE needed
     }
 }
 
@@ -355,7 +355,7 @@ TEST(test_seq_next_with_single_element_list) {
         TEST_ASSERT_NULL(next_result);  // next returns nil if rest is empty
         
         // Cleanup
-        seq_release((CljObject*)seq);
+        RELEASE((ID)seq);
     }
 }
 

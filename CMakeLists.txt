@@ -329,8 +329,8 @@ add_executable(unity-tests
 # Unity Tests - Always in Debug mode for comprehensive testing
 apply_common_settings(unity-tests)
 set_target_properties(unity-tests PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-    LINK_FLAGS ""
+    COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
+    LINK_FLAGS "-fsanitize=address"
 )
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c
