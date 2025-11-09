@@ -106,7 +106,7 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     }
     
     // Get or create :column keyword
-    CljObject *kw_column = intern_symbol_global(":column");
+    CljSymbol *kw_column = intern_symbol_global(":column");
     if (!kw_column) {
         RELEASE((CljObject*)location_map);
         return NULL;

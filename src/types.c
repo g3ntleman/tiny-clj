@@ -25,7 +25,8 @@ const char* clj_type_name(CljType type) {
         case CLJ_SEQ: return "Sequence";
         case CLJ_TRANSIENT_VECTOR: return "TransientVector";
         case CLJ_TRANSIENT_MAP: return "TransientMap";
-        case CLJ_UNKNOWN: return "Unknown";
+        case CLJ_RAW_MEMORY: return "RawMemory";
+        case CLJ_NIL: return "Nil";
         default: return "Unknown";
     }
 }

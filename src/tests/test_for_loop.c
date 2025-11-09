@@ -18,7 +18,7 @@ TEST(test_dotimes_basic) {
     // Test eval_dotimes with basic functionality
     // Create dotimes call: (dotimes [i 3] i)
     CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljObject *body = intern_symbol_global("i");
+    CljSymbol *body = intern_symbol_global("i");
     CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
     
     // Create environment
@@ -51,7 +51,7 @@ TEST(test_for_basic) {
 
 TEST(test_dotimes_with_environment) {
     CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljObject *body = intern_symbol_global("i");
+    CljSymbol *body = intern_symbol_global("i");
     CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
     CljMap *env = make_map(4);
     
@@ -100,7 +100,7 @@ TEST(test_dotimes_negative_iterations) {
 
 TEST(test_dotimes_large_iterations) {
     CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(1000), NULL));
-    CljObject *body = intern_symbol_global("i");
+    CljSymbol *body = intern_symbol_global("i");
     CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
     CljMap *env = make_map(4);
     
@@ -115,7 +115,7 @@ TEST(test_dotimes_large_iterations) {
 
 TEST(test_dotimes_invalid_binding_format) {
     CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), NULL);
-    CljObject *body = intern_symbol_global("i");
+    CljSymbol *body = intern_symbol_global("i");
     CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
     CljMap *env = make_map(4);
     
@@ -130,7 +130,7 @@ TEST(test_dotimes_invalid_binding_format) {
 
 TEST(test_dotimes_non_numeric_count) {
     CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)make_string("not-a-number"), NULL));
-    CljObject *body = intern_symbol_global("i");
+    CljSymbol *body = intern_symbol_global("i");
     CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
     CljMap *env = make_map(4);
     
@@ -165,7 +165,7 @@ TEST(test_dotimes_missing_body) {
 
 TEST(test_dotimes_simple_iteration_count) {
     CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljObject *body = intern_symbol_global("i");
+    CljSymbol *body = intern_symbol_global("i");
     CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, 
                                        make_list((ID)binding_vector, 
                                                 make_list((ID)body, NULL)));
@@ -195,7 +195,7 @@ TEST(test_doseq_with_environment) {
         vec_data->count = 3;
         
         CljObject *binding_list = make_list((ID)intern_symbol_global("x"), make_list((ID)vec, NULL));
-        CljObject *body = intern_symbol_global("x");
+        CljSymbol *body = intern_symbol_global("x");
         CljObject *doseq_call = make_list((ID)SYM_DOSEQ, make_list((ID)binding_list, make_list((ID)body, NULL)));
         CljMap *env = make_map(4);
         

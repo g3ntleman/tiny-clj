@@ -20,7 +20,7 @@ TEST(test_function_registered_before_body_evaluation) {
     TEST_ASSERT_NOT_NULL(result);
     
     // Check if function is in namespace
-    CljObject *fn_sym = intern_symbol_global("simple");
+    CljSymbol *fn_sym = intern_symbol_global("simple");
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
     TEST_ASSERT_NOT_NULL(fn_value);
@@ -42,7 +42,7 @@ TEST(test_recursive_function_name_resolvable) {
     TEST_ASSERT_NOT_NULL(result);
     
     // Check if function is in namespace
-    CljObject *fn_sym = intern_symbol_global("factorial");
+    CljSymbol *fn_sym = intern_symbol_global("factorial");
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
     TEST_ASSERT_NOT_NULL(fn_value);
@@ -57,7 +57,7 @@ TEST(test_ns_resolve_during_definition) {
     const char *defn_code = "(defn test-fn [x] x)";
     
     // Before evaluation, function should not be in namespace
-    CljObject *fn_sym = intern_symbol_global("test-fn");
+    CljSymbol *fn_sym = intern_symbol_global("test-fn");
     CljObject *fn_value_before = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     TEST_ASSERT_NULL(fn_value_before);
     
@@ -79,7 +79,7 @@ TEST(test_symbol_resolution_in_eval_body_with_params) {
     eval_string("(defn test-fn [x] x)", g_test_eval_state);
     
     // Get the function from namespace
-    CljObject *fn_sym = intern_symbol_global("test-fn");
+    CljSymbol *fn_sym = intern_symbol_global("test-fn");
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     TEST_ASSERT_NOT_NULL(fn_value);
     
@@ -114,7 +114,7 @@ TEST(test_eval_body_with_params_symbol_in_arithmetic) {
     eval_string("(defn factorial [n] (if (= n 0) 1 (* n (factorial (- n 1)))))", g_test_eval_state);
     
     // Get the function symbol
-    CljObject *fn_sym = intern_symbol_global("factorial");
+    CljSymbol *fn_sym = intern_symbol_global("factorial");
     
     // Try to resolve it using ns_resolve with NULL g_test_eval_state (like eval_body_with_params does)
     CljObject *resolved = (CljObject*)ns_resolve(NULL, fn_sym);

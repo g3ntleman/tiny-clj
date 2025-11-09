@@ -93,7 +93,7 @@ void setUp(void) {
                     needs_reload = true;
                 } else {
                     // Check if 'inc' is in the namespace (quick check to verify functions are loaded)
-                    CljObject *inc_sym = intern_symbol_global("inc");
+                    CljSymbol *inc_sym = intern_symbol_global("inc");
                     if (inc_sym) {
                         CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
                         if (!inc_value) {

@@ -749,7 +749,7 @@ TEST(test_as_list_valid) {
     // Test LIST_FIRST
     CljObject *first = LIST_FIRST(list_data);
     TEST_ASSERT_NOT_NULL(first);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(first));  // First element should be a fixnum (1)
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(first));  // First element should be a fixnum (1)
 }
 
 // Test as_list function with invalid input
@@ -1110,65 +1110,65 @@ TEST(test_type_check_all_types) {
     }
     
     // Test nil (NULL)
-    TEST_ASSERT_EQUAL_INT(CLJ_UNKNOWN, TYPE(NULL));
+    TEST_ASSERT_EQUAL_INT(CLJ_NIL, TAG(NULL));
     
     // Test immediate types
     ID fixnum_val = parse("42", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fixnum_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TYPE(fixnum_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_val));
     
     // Character literals are not yet supported in the parser
     // Skip character test for now
     // ID char_val = parse("\\a", g_test_eval_state);
     // TEST_ASSERT_NOT_NULL(char_val);
-    // TEST_ASSERT_EQUAL_INT(CLJ_CHAR, TYPE(char_val));
+    // TEST_ASSERT_EQUAL_INT(CLJ_CHAR, TAG(char_val));
     
     ID true_val = parse("true", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(true_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, TYPE(true_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, TAG(true_val));
     
     ID false_val = parse("false", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(false_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, TYPE(false_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_BOOL, TAG(false_val));
     
     ID fixed_val = parse("3.14", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fixed_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_FLOAT, TYPE(fixed_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_FLOAT, TAG(fixed_val));
     
     // Test heap object types
     // Note: parse("()") returns nil (Clojure behavior: () is nil)
     ID empty_list_val = parse("()", g_test_eval_state);
     TEST_ASSERT_NULL(empty_list_val);  // () is nil in Clojure
-    TEST_ASSERT_EQUAL_INT(CLJ_UNKNOWN, TYPE(empty_list_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_NIL, TAG(empty_list_val));
     
     ID vector_val = parse("[]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vector_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TYPE(vector_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(vector_val));
     
     ID map_val = parse("{}", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(map_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TYPE(map_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map_val));
     
     ID string_val = parse("\"hello\"", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(string_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TYPE(string_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(string_val));
     
     ID symbol_val = parse("foo", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(symbol_val);
-    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TYPE(symbol_val));
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(symbol_val));
     
     // Test with non-empty collections
     ID list_with_elems = parse("(1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list_with_elems);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TYPE(list_with_elems));
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(list_with_elems));
     
     ID vector_with_elems = parse("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vector_with_elems);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TYPE(vector_with_elems));
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(vector_with_elems));
     
     ID map_with_elems = parse("{:a 1 :b 2}", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(map_with_elems);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TYPE(map_with_elems));
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map_with_elems));
 }
 
 // ============================================================================

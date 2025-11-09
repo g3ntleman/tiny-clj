@@ -18,7 +18,7 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
     
     // Handle immediates
     if (IS_IMMEDIATE(v)) {
-        switch (GET_TAG(v)) {
+        switch (TAG(v)) {
             case CLJ_INT:
                 *offset += snprintf(buf + *offset, buf_size - *offset, "%d", as_fixnum((CljValue)v));
                 break;

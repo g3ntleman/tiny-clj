@@ -713,7 +713,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     
     if (alias_str[0] != '\0' && symbol_str[0] != '\0') {
       // Create alias symbol
-      CljObject *alias_sym = intern_symbol_global(alias_str);
+      CljSymbol *alias_sym = intern_symbol_global(alias_str);
       if (!alias_sym) {
         // Restore original buffer and return original symbol
         return AUTORELEASE(intern_symbol_global(original_buffer));
@@ -729,7 +729,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
           CljNamespace *target_ns = ns_find(ns_sym->name);
           if (target_ns && target_ns->mappings) {
             // Create symbol symbol
-            CljObject *symbol_sym = intern_symbol_global(symbol_str);
+            CljSymbol *symbol_sym = intern_symbol_global(symbol_str);
             if (symbol_sym) {
               // Look up symbol in target namespace
               CljObject *resolved = (CljObject*)map_get((CljMap*)target_ns->mappings, (CljValue)symbol_sym);

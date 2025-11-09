@@ -39,7 +39,7 @@ static EvalState* get_test_eval_state(void) {
 TEST(test_atom_create_with_value) {
     CljAtom *atom = make_atom(fixnum(42));
     TEST_ASSERT_NOT_NULL(atom);
-    TEST_ASSERT_EQUAL(CLJ_ATOM, TYPE((CljObject*)atom));
+    TEST_ASSERT_EQUAL(CLJ_ATOM, TAG((CljObject*)atom));
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)atom->value));
     RELEASE((CljObject*)atom);
 }
@@ -47,7 +47,7 @@ TEST(test_atom_create_with_value) {
 TEST(test_atom_create_with_nil) {
     CljAtom *atom = make_atom(NULL);
     TEST_ASSERT_NOT_NULL(atom);
-    TEST_ASSERT_EQUAL(CLJ_ATOM, TYPE((CljObject*)atom));
+    TEST_ASSERT_EQUAL(CLJ_ATOM, TAG((CljObject*)atom));
     TEST_ASSERT_NULL(atom->value);
     RELEASE((CljObject*)atom);
 }
@@ -113,7 +113,7 @@ TEST(test_atom_swap_simple) {
     // Get 'inc' function from clojure.core using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
@@ -136,7 +136,7 @@ TEST(test_atom_swap_with_args) {
     
     // Get '+' function from clojure.core using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *plus_sym = intern_symbol_global("+");
+    CljSymbol *plus_sym = intern_symbol_global("+");
     ID plus_func = ns_resolve(g_test_eval_state, plus_sym);
     
     if (plus_func) {
@@ -159,7 +159,7 @@ TEST(test_atom_swap_persists) {
     
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
@@ -182,7 +182,7 @@ TEST(test_atom_swap_multiple_times) {
     
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
@@ -240,7 +240,7 @@ TEST(test_atom_builtin_swap_bang) {
     
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
@@ -339,7 +339,7 @@ TEST(test_atom_reset_invalid) {
 
 TEST(test_atom_swap_invalid_atom) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
@@ -369,7 +369,7 @@ TEST(test_atom_real_world_usage) {
     
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
@@ -410,7 +410,7 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
                                   "clojure.core cache should be set");
     
     // Get 'inc' symbol
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Debug: Check if mappings exist
@@ -488,7 +488,7 @@ TEST(test_atom_swap_resolve_inc_symbol) {
     CljAtom *atom = make_atom(fixnum(42));
     
     // Get 'inc' symbol (not resolved yet)
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Try swap! with symbol (should resolve internally)
@@ -511,7 +511,7 @@ TEST(test_atom_swap_with_resolved_function) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Get 'inc' symbol and resolve it
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
@@ -554,7 +554,7 @@ TEST(test_atom_def_symbol_recognized) {
                                  "first element should be a symbol");
         
         // Check if def_sym matches SYM_DEF
-        extern CljObject *SYM_DEF;
+        extern CljSymbol *SYM_DEF;
         TEST_ASSERT_NOT_NULL(SYM_DEF);
         
         // Check pointer equality
@@ -637,7 +637,7 @@ TEST(test_atom_def_inc_evaluated) {
         TEST_ASSERT_NOT_NULL(ns);
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
         
-        CljObject *inc_sym = intern_symbol_global("inc");
+        CljSymbol *inc_sym = intern_symbol_global("inc");
         ID inc_value = map_get((CljMap*)ns->mappings, (CljValue)inc_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                      "'inc' should be in namespace mappings after eval_def");
@@ -682,7 +682,7 @@ TEST(test_atom_eval_core_source_processes_inc) {
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "should evaluate (def inc ...) successfully");
         
         // Verify inc is in mappings
-        CljObject *inc_sym = intern_symbol_global("inc");
+        CljSymbol *inc_sym = intern_symbol_global("inc");
         ID inc_value = map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                      "'inc' should be in namespace mappings after evaluation");

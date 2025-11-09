@@ -36,7 +36,7 @@ static inline CljFunction* as_function(ID obj) {
 // Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)
 static inline int is_native_fn(CljObject *fn) {
     // Native builtins are represented as CljFunc; interpreted functions as CljFunction
-    if (TYPE(fn) != CLJ_FUNC) return 0;
+    if (TAG(fn) != CLJ_FUNC) return 0;
     
     // Additional check: native functions have a function pointer
     CljFunc *native_func = (CljFunc*)fn;

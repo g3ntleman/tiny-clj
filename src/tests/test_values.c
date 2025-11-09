@@ -349,13 +349,13 @@ TEST(test_truthiness_comprehensive) {
         RELEASE(non_empty_string);
         
         // Keywords are truthy
-        CljObject *keyword = intern_symbol_global(":test");
+        CljSymbol *keyword = intern_symbol_global(":test");
         TEST_ASSERT_NOT_NULL(keyword);
         TEST_ASSERT_TRUE(clj_is_truthy(keyword));
         RELEASE(keyword);
         
         // Symbols are truthy
-        CljObject *symbol = intern_symbol_global("test");
+        CljSymbol *symbol = intern_symbol_global("test");
         TEST_ASSERT_NOT_NULL(symbol);
         TEST_ASSERT_TRUE(clj_is_truthy(symbol));
         RELEASE(symbol);

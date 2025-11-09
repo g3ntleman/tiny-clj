@@ -57,7 +57,7 @@ TEST(test_time_basic_functionality) {
     }
     
     // Check that intern_symbol_global("time") returns SYM_TIME
-    CljObject *time_sym = intern_symbol_global("time");
+    CljSymbol *time_sym = intern_symbol_global("time");
     if (!time_sym) {
         TEST_FAIL_MESSAGE("intern_symbol_global(\"time\") returned NULL");
         return;
@@ -149,7 +149,7 @@ TEST(test_time_with_too_many_arguments) {
 TEST(test_time_with_sleep) {
     // Test time function with sleep to get measurable timing
     // Create a sleep expression: (sleep 1) - sleep for 1 second
-    CljObject *sleep_symbol = intern_symbol_global("sleep");
+    CljSymbol *sleep_symbol = intern_symbol_global("sleep");
     CljObject *one_second = fixnum(1);
     
     // Create the expression: (sleep 1)
@@ -192,7 +192,7 @@ TEST(test_time_with_dotimes) {
     // Create symbols
     CljObject *time_symbol = SYM_TIME;
     CljObject *dotimes_symbol = SYM_DOTIMES;
-    CljObject *i_symbol = intern_symbol_global("i");
+    CljSymbol *i_symbol = intern_symbol_global("i");
     CljObject *plus_symbol = SYM_PLUS;
     
     // Create numbers

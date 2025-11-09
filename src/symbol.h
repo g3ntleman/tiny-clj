@@ -26,71 +26,71 @@ static inline bool is_keyword(ID obj) {
 }
 #define IS_KEYWORD(obj) is_keyword(obj)
 
-// Globale Symbol-Pointer für Spezialformen (direkt als CljObject*)
-extern CljObject *SYM_TRY;
-extern CljObject *SYM_CATCH;
-extern CljObject *SYM_IF;
-extern CljObject *SYM_COND;
-extern CljObject *SYM_WHEN;
-extern CljObject *SYM_WHILE;
-extern CljObject *SYM_LET;
-extern CljObject *SYM_FN;
-extern CljObject *SYM_DEF;
-extern CljObject *SYM_DEFN;
-extern CljObject *SYM_VAR;
-extern CljObject *SYM_QUOTE;
-extern CljObject *SYM_QUASIQUOTE;
-extern CljObject *SYM_UNQUOTE;
-extern CljObject *SYM_SPLICE_UNQUOTE;
-extern CljObject *SYM_DO;
-extern CljObject *SYM_LOOP;
-extern CljObject *SYM_RECUR;
-extern CljObject *SYM_THROW;
-extern CljObject *SYM_FINALLY;
-extern CljObject *SYM_NS;
-extern CljObject *SYM_GO;
-extern CljObject *SYM_TIME;
-extern CljObject *SYM_DEREF;
-extern CljObject *SYM_NIL;
+// Globale Symbol-Pointer für Spezialformen
+extern CljSymbol *SYM_TRY;
+extern CljSymbol *SYM_CATCH;
+extern CljSymbol *SYM_IF;
+extern CljSymbol *SYM_COND;
+extern CljSymbol *SYM_WHEN;
+extern CljSymbol *SYM_WHILE;
+extern CljSymbol *SYM_LET;
+extern CljSymbol *SYM_FN;
+extern CljSymbol *SYM_DEF;
+extern CljSymbol *SYM_DEFN;
+extern CljSymbol *SYM_VAR;
+extern CljSymbol *SYM_QUOTE;
+extern CljSymbol *SYM_QUASIQUOTE;
+extern CljSymbol *SYM_UNQUOTE;
+extern CljSymbol *SYM_SPLICE_UNQUOTE;
+extern CljSymbol *SYM_DO;
+extern CljSymbol *SYM_LOOP;
+extern CljSymbol *SYM_RECUR;
+extern CljSymbol *SYM_THROW;
+extern CljSymbol *SYM_FINALLY;
+extern CljSymbol *SYM_NS;
+extern CljSymbol *SYM_GO;
+extern CljSymbol *SYM_TIME;
+extern CljSymbol *SYM_DEREF;
+extern CljSymbol *SYM_NIL;
 
 // Globale Symbol-Pointer für Builtin-Funktionen
-extern CljObject *SYM_PLUS;
-extern CljObject *SYM_MINUS;
-extern CljObject *SYM_MULTIPLY;
-extern CljObject *SYM_DIVIDE;
-extern CljObject *SYM_EQUALS;
-extern CljObject *SYM_EQUAL;
-extern CljObject *SYM_LT;
-extern CljObject *SYM_GT;
-extern CljObject *SYM_LE;
-extern CljObject *SYM_GE;
-extern CljObject *SYM_PRINTLN;
-extern CljObject *SYM_PRINT;
-extern CljObject *SYM_STR;
-extern CljObject *SYM_CONJ;
-extern CljObject *SYM_NTH;
-extern CljObject *SYM_FIRST;
-extern CljObject *SYM_REST;
-extern CljObject *SYM_COUNT;
+extern CljSymbol *SYM_PLUS;
+extern CljSymbol *SYM_MINUS;
+extern CljSymbol *SYM_MULTIPLY;
+extern CljSymbol *SYM_DIVIDE;
+extern CljSymbol *SYM_EQUALS;
+extern CljSymbol *SYM_EQUAL;
+extern CljSymbol *SYM_LT;
+extern CljSymbol *SYM_GT;
+extern CljSymbol *SYM_LE;
+extern CljSymbol *SYM_GE;
+extern CljSymbol *SYM_PRINTLN;
+extern CljSymbol *SYM_PRINT;
+extern CljSymbol *SYM_STR;
+extern CljSymbol *SYM_CONJ;
+extern CljSymbol *SYM_NTH;
+extern CljSymbol *SYM_FIRST;
+extern CljSymbol *SYM_REST;
+extern CljSymbol *SYM_COUNT;
 
 // Additional symbols for optimization
-extern CljObject *SYM_CONS;
-extern CljObject *SYM_SEQ;
-extern CljObject *SYM_NEXT;
-extern CljObject *SYM_LIST;
-extern CljObject *SYM_AND;
-extern CljObject *SYM_OR;
-extern CljObject *SYM_FOR;
-extern CljObject *SYM_DOSEQ;
-extern CljObject *SYM_DOTIMES;
+extern CljSymbol *SYM_CONS;
+extern CljSymbol *SYM_SEQ;
+extern CljSymbol *SYM_NEXT;
+extern CljSymbol *SYM_LIST;
+extern CljSymbol *SYM_AND;
+extern CljSymbol *SYM_OR;
+extern CljSymbol *SYM_FOR;
+extern CljSymbol *SYM_DOSEQ;
+extern CljSymbol *SYM_DOTIMES;
 
 // Globale Symbol-Pointer für Keywords
-extern CljObject *SYM_KW_LINE;
-extern CljObject *SYM_KW_FILE;
-extern CljObject *SYM_KW_DOC;
-extern CljObject *SYM_KW_ERROR;
-extern CljObject *SYM_KW_STACK;
-extern CljObject *SYM_KW_NS;
+extern CljSymbol *SYM_KW_LINE;
+extern CljSymbol *SYM_KW_FILE;
+extern CljSymbol *SYM_KW_DOC;
+extern CljSymbol *SYM_KW_ERROR;
+extern CljSymbol *SYM_KW_STACK;
+extern CljSymbol *SYM_KW_NS;
 
 // Symbol interning with a real symbol table
 typedef struct SymbolEntry {
@@ -102,12 +102,11 @@ typedef struct SymbolEntry {
 
 extern SymbolEntry *symbol_table;
 
-CljSymbol* make_symbol_impl(const char *name, const char *ns);
-CljObject* intern_symbol(const char *ns, const char *name);
-CljObject* intern_symbol_global(const char *name);  // Without namespace
-SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol);
+CljSymbol* make_symbol(const char *name, const char *ns);
+CljSymbol* intern_symbol(const char *ns, const char *name);
+CljSymbol* intern_symbol_global(const char *name);  // Without namespace
+SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbol);
 void symbol_table_cleanup();
-int symbol_count();
 
 // Initialisierung der globalen Symbole
 void init_special_symbols();

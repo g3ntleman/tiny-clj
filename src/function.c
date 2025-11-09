@@ -23,8 +23,8 @@
 static int allocate_function_params(CljFunction *func, ID *params, int param_count) {
     if (param_count > 0 && params) {
         // Use alloc for memory profiling, even though it's not a CljObject
-        // Pass CLJ_UNKNOWN as type since it's just raw memory
-        func->params = (ID*)alloc(sizeof(ID), param_count, CLJ_UNKNOWN);
+        // Pass CLJ_RAW_MEMORY as type since it's just raw memory
+        func->params = (ID*)alloc(sizeof(ID), param_count, CLJ_RAW_MEMORY);
         if (!func->params) {
             DEALLOC(func);
             throw_oom(CLJ_CLOSURE);

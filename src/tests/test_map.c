@@ -298,7 +298,7 @@ TEST(test_map_get_finds_let_binding) {
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "step" (interned)
-    CljObject *step_sym = intern_symbol_global("step");
+    CljSymbol *step_sym = intern_symbol_global("step");
     TEST_ASSERT_NOT_NULL(step_sym);
     
     // Create a function value (simulating fn result)
@@ -335,7 +335,7 @@ TEST(test_map_get_structural_comparison) {
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "step" (interned)
-    CljObject *step_sym = intern_symbol_global("step");
+    CljSymbol *step_sym = intern_symbol_global("step");
     TEST_ASSERT_NOT_NULL(step_sym);
     
     // Create a function value

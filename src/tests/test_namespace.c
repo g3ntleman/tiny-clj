@@ -14,7 +14,7 @@ TEST(test_namespace_lookup_core_functions) {
     // Load clojure.core functions - temporarily disabled due to double free
     
     // Test that map symbol exists in clojure.core namespace
-    CljObject *map_sym = intern_symbol_global("map");
+    CljSymbol *map_sym = intern_symbol_global("map");
     TEST_ASSERT_NOT_NULL(map_sym);
     
     // Switch to clojure.core namespace
@@ -37,7 +37,7 @@ TEST(test_namespace_lookup_user_namespace) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test direct namespace storage and retrieval
-    CljObject *test_sym = intern_symbol_global("test-var");
+    CljSymbol *test_sym = intern_symbol_global("test-var");
     CljObject *value = fixnum(42);
     
     // Store variable directly in namespace
@@ -58,15 +58,15 @@ TEST(test_namespace_lookup_user_namespace) {
 // Test symbol interning - same symbol should return same pointer
 TEST(test_symbol_interning_consistency) {
     // Test that intern_symbol_global returns the same pointer for the same name
-    CljObject *sym1 = intern_symbol_global("test-symbol");
-    CljObject *sym2 = intern_symbol_global("test-symbol");
+    CljSymbol *sym1 = intern_symbol_global("test-symbol");
+    CljSymbol *sym2 = intern_symbol_global("test-symbol");
     
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
     
     // Test different symbols return different pointers
-    CljObject *sym3 = intern_symbol_global("different-symbol");
+    CljSymbol *sym3 = intern_symbol_global("different-symbol");
     TEST_ASSERT_NOT_NULL(sym3);
     TEST_ASSERT_TRUE(sym1 != sym3);
     
@@ -100,7 +100,7 @@ TEST(test_symbol_interning_with_namespace) {
 // Test symbol interning with NULL namespace (global)
 TEST(test_symbol_interning_global) {
     // Test that intern_symbol_global is equivalent to intern_symbol(NULL, name)
-    CljObject *sym1 = intern_symbol_global("global-symbol");
+    CljSymbol *sym1 = intern_symbol_global("global-symbol");
     CljObject *sym2 = intern_symbol(NULL, "global-symbol");
     
     TEST_ASSERT_NOT_NULL(sym1);
@@ -118,17 +118,13 @@ TEST(test_symbol_table_operations) {
     const char *test_name = "table-test-symbol";
     
     // First call should create new symbol
-    CljObject *sym1 = intern_symbol_global(test_name);
+    CljSymbol *sym1 = intern_symbol_global(test_name);
     TEST_ASSERT_NOT_NULL(sym1);
     
     // Second call should return same symbol
-    CljObject *sym2 = intern_symbol_global(test_name);
+    CljSymbol *sym2 = intern_symbol_global(test_name);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2);
-    
-    // Test symbol count
-    int count = symbol_count();
-    TEST_ASSERT_TRUE(count > 0);
     
     // Cleanup
     RELEASE((CljObject*)sym1);
@@ -159,7 +155,7 @@ TEST(test_namespace_variable_storage) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create symbols
-    CljObject *var_sym = intern_symbol_global("test-variable");
+    CljSymbol *var_sym = intern_symbol_global("test-variable");
     CljObject *value = fixnum(123);
     
     // Store variable in namespace
@@ -182,8 +178,8 @@ TEST(test_namespace_multiple_variables) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create multiple variables
-    CljObject *var1_sym = intern_symbol_global("var1");
-    CljObject *var2_sym = intern_symbol_global("var2");
+    CljSymbol *var1_sym = intern_symbol_global("var1");
+    CljSymbol *var2_sym = intern_symbol_global("var2");
     CljObject *value1 = fixnum(100);
     CljObject *value2 = fixnum(200);
     
@@ -214,7 +210,7 @@ TEST(test_symbol_resolution_fallback) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test that built-in functions are resolved via eval_symbol fallback
-    CljObject *plus_sym = intern_symbol_global("+");
+    CljSymbol *plus_sym = intern_symbol_global("+");
     CljObject *resolved = eval_symbol(plus_sym, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(resolved);
@@ -230,7 +226,7 @@ TEST(test_namespace_special_characters) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test symbols with special characters
-    CljObject *special_sym = intern_symbol_global("test-var?");
+    CljSymbol *special_sym = intern_symbol_global("test-var?");
     CljObject *value = fixnum(42);
     
     // Store and retrieve
@@ -251,7 +247,7 @@ TEST(test_namespace_error_handling) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test resolving non-existent symbol
-    CljObject *non_existent = intern_symbol_global("non-existent-var");
+    CljSymbol *non_existent = intern_symbol_global("non-existent-var");
     CljObject *resolved = ns_resolve(g_test_eval_state, non_existent);
     
     TEST_ASSERT_NULL(resolved); // Should return NULL for non-existent symbol
@@ -294,7 +290,7 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
     
     // Test multiple ns_resolve calls - should NOT trigger namespace search loop
     // If cache is properly set, the search loop in ns_resolve (lines 66-79) won't execute
-    CljObject *plus_sym = intern_symbol_global("+");
+    CljSymbol *plus_sym = intern_symbol_global("+");
     for (int i = 0; i < 100; i++) {
         CljObject *resolved = ns_resolve(g_test_eval_state, plus_sym);
         // Should work without searching through all namespaces
@@ -320,7 +316,7 @@ TEST(test_ns_resolve_symbol_cache) {
     }
     
     // Register a test symbol in clojure.core
-    CljObject *test_sym = intern_symbol_global("test-cached-symbol");
+    CljSymbol *test_sym = intern_symbol_global("test-cached-symbol");
     CljObject *test_value = fixnum(42);
     ns_define(clojure_core, test_sym, test_value);
     
@@ -461,7 +457,7 @@ TEST(test_require_with_alias) {
     (void)req_result; // require returns nil
 
     // Verify alias was stored in current namespace
-    CljObject *ta_alias = intern_symbol_global("ta");
+    CljSymbol *ta_alias = intern_symbol_global("ta");
     TEST_ASSERT_NOT_NULL(ta_alias);
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, ta_alias);
     TEST_ASSERT_NOT_NULL(ns_name);
@@ -486,7 +482,7 @@ TEST(test_require_with_refer) {
     (void)req_result; // require returns nil
 
     // Verify func was copied to current namespace
-    CljObject *func_sym = intern_symbol_global("func");
+    CljSymbol *func_sym = intern_symbol_global("func");
     TEST_ASSERT_NOT_NULL(func_sym);
     CljObject *func_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)func_sym);
     TEST_ASSERT_NOT_NULL(func_val);
@@ -510,8 +506,8 @@ TEST(test_require_with_refer_all) {
     (void)req_result; // require returns nil
 
     // Verify both vars were copied to current namespace
-    CljObject *var1_sym = intern_symbol_global("var1");
-    CljObject *var2_sym = intern_symbol_global("var2");
+    CljSymbol *var1_sym = intern_symbol_global("var1");
+    CljSymbol *var2_sym = intern_symbol_global("var2");
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
     
@@ -542,8 +538,8 @@ TEST(test_require_multiple_namespaces) {
     (void)req_result; // require returns nil
 
     // Verify both aliases were stored
-    CljObject *m1_alias = intern_symbol_global("m1");
-    CljObject *m2_alias = intern_symbol_global("m2");
+    CljSymbol *m1_alias = intern_symbol_global("m1");
+    CljSymbol *m2_alias = intern_symbol_global("m2");
     TEST_ASSERT_NOT_NULL(m1_alias);
     TEST_ASSERT_NOT_NULL(m2_alias);
     
@@ -575,7 +571,7 @@ TEST(test_require_alias_resolution) {
     (void)req_result; // require returns nil
 
     // Verify alias was stored
-    CljObject *tar_alias = intern_symbol_global("tar");
+    CljSymbol *tar_alias = intern_symbol_global("tar");
     TEST_ASSERT_NOT_NULL(tar_alias);
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, tar_alias);
     TEST_ASSERT_NOT_NULL(ns_name);

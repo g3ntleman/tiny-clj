@@ -23,7 +23,7 @@ typedef enum {
     CLJ_FLOAT = 7,    // TAG_FIXED
     
     // Heap object types - use non-conflicting even values
-    CLJ_UNKNOWN = 0,  // Type for nil (nil is represented as NULL)
+    CLJ_NIL = 0,      // Type for nil (nil is represented as NULL)
     CLJ_SYMBOL = 2,   // Interned symbols
     CLJ_STRING = 4,   // Strings
     CLJ_VECTOR = 6,   // Vectors
@@ -37,10 +37,11 @@ typedef enum {
     CLJ_BYTE_ARRAY = 22,  // Mutable byte array
     CLJ_ATOM = 24,         // Mutable atom container
     CLJ_TRANSIENT_VECTOR = 26,
-    CLJ_TRANSIENT_MAP = 28
+    CLJ_TRANSIENT_MAP = 28,
+    CLJ_RAW_MEMORY = 32   // Raw memory allocations (ID arrays, etc.)
 } CljType;
 
-#define CLJ_TYPE_COUNT (CLJ_TRANSIENT_MAP + 1)
+#define CLJ_TYPE_COUNT (CLJ_RAW_MEMORY + 1)
 
 const char* clj_type_name(CljType type);
 

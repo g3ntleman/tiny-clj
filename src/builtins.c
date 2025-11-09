@@ -60,7 +60,7 @@ ID nth2(ID *args, unsigned int argc) {
     ID vec = args[0];
     ID idx = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
-    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || GET_TAG(idx) != CLJ_INT) return NULL;
+    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || TAG(idx) != CLJ_INT) return NULL;
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) {
@@ -149,7 +149,7 @@ ID native_subvec(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (!start_idx || GET_TAG(start_idx) != CLJ_INT) {
+    if (!start_idx || TAG(start_idx) != CLJ_INT) {
         throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
                 "subvec requires a number as start index");
         return NULL;
@@ -163,7 +163,7 @@ ID native_subvec(ID *args, unsigned int argc) {
     
     // Determine end index: if not provided, use vector count
     if (end_idx) {
-        if (GET_TAG(end_idx) != CLJ_INT) {
+        if (TAG(end_idx) != CLJ_INT) {
             throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
                     "subvec requires a number as end index");
             return NULL;
@@ -553,7 +553,7 @@ ID assoc3(ID *args, unsigned int argc) {
     
     // Handle vectors
     if (is_type(coll, CLJ_VECTOR)) {
-        if (!key || GET_TAG(key) != CLJ_INT) return NULL;
+        if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljPersistentVector *v = as_vector(coll);
         if (!v || i < 0 || i >= v->count) return NULL;
@@ -728,26 +728,27 @@ ID native_type(ID *args, unsigned int argc) {
     // Get the tag to determine immediate vs heap object
     uint8_t tag = get_tag(val);
     
+    // Return namespace-qualified symbols in clojure.lang namespace (Clojure-compatible)
     // Switch on tag for immediate values
     switch (tag) {
         case TAG_FIXNUM:
-            return (CljObject*)intern_symbol_global("Number");
+            return (CljObject*)intern_symbol("clojure.lang", "Long");
         case TAG_CHAR:
-            return (CljObject*)intern_symbol_global("Character");
+            return (CljObject*)intern_symbol("clojure.lang", "Character");
         case TAG_BOOL: {
             int special_type = as_special(val);
             if (special_type == SPECIAL_TRUE || special_type == SPECIAL_FALSE) {
-                return (CljObject*)intern_symbol_global("Boolean");
+                return (CljObject*)intern_symbol("clojure.lang", "Boolean");
             }
-            return (CljObject*)intern_symbol_global("Special");
+            return (CljObject*)intern_symbol("clojure.lang", "Special");
         }
         case TAG_FIXED:
-            return (CljObject*)intern_symbol_global("Number");
+            return (CljObject*)intern_symbol("clojure.lang", "Double");
         case TAG_POINTER:
             // Heap object - continue to object type switch
             break;
         default:
-            return (CljObject*)intern_symbol_global("Unknown");
+            return (CljObject*)intern_symbol("clojure.lang", "Unknown");
     }
     
     // Handle heap objects
@@ -755,31 +756,34 @@ ID native_type(ID *args, unsigned int argc) {
     
     // Check for keyword (symbol with ':' prefix)
     if (IS_KEYWORD(obj)) {
-        return (CljObject*)intern_symbol_global("Keyword");
+        return (CljObject*)intern_symbol("clojure.lang", "Keyword");
     }
     
     // Switch on object type for heap objects
     switch (obj->type) {
         case CLJ_SYMBOL:
-            return (CljObject*)intern_symbol_global("Symbol");
+            return (CljObject*)intern_symbol("clojure.lang", "Symbol");
         case CLJ_STRING:
-            return (CljObject*)intern_symbol_global("String");
+            return (CljObject*)intern_symbol("clojure.lang", "String");
         case CLJ_VECTOR:
-            return (CljObject*)intern_symbol_global("Vector");
+            return (CljObject*)intern_symbol("clojure.lang", "PersistentVector");
         case CLJ_TRANSIENT_VECTOR:
-            return (CljObject*)intern_symbol_global("TransientVector");
+            return (CljObject*)intern_symbol("clojure.lang", "TransientVector");
         case CLJ_TRANSIENT_MAP:
-            return (CljObject*)intern_symbol_global("TransientMap");
+            return (CljObject*)intern_symbol("clojure.lang", "TransientArrayMap");
         case CLJ_MAP:
-            return (CljObject*)intern_symbol_global("Map");
+            return (CljObject*)intern_symbol("clojure.lang", "PersistentArrayMap");
         case CLJ_LIST:
-            return (CljObject*)intern_symbol_global("List");
+            return (CljObject*)intern_symbol("clojure.lang", "PersistentList");
         case CLJ_FUNC:
-            return (CljObject*)intern_symbol_global("Function");
+            return (CljObject*)intern_symbol("clojure.lang", "IFn");
+        case CLJ_CLOSURE:
+            return (CljObject*)intern_symbol("clojure.lang", "IFn");
         case CLJ_EXCEPTION:
-            return (CljObject*)intern_symbol_global("Exception");
+            return (CljObject*)intern_symbol("clojure.lang", "Exception");
         default:
-            return (CljObject*)intern_symbol_global(clj_type_name(obj->type));
+            // Fallback: use type name but still in clojure.lang namespace
+            return (CljObject*)intern_symbol("clojure.lang", clj_type_name(obj->type));
     }
 }
 
@@ -876,8 +880,8 @@ ID native_vec(ID *args, unsigned int argc) {
         return empty_vector();
     }
     
-    // Check if iterator is empty (seq_type == CLJ_UNKNOWN means empty)
-    if (iter.seq_type == CLJ_UNKNOWN) {
+    // Check if iterator is empty (using singleton pattern)
+    if (seq_iter_empty(&iter)) {
         return empty_vector();  // Returns singleton - no memory management needed
     }
     
@@ -1024,7 +1028,7 @@ static bool validate_numeric_args(ID *args, int argc) {
         // CRITICAL: Check if args[i] is a valid number
         // Immediate values (fixnums) should pass this check
         // But if args[i] is a heap object, it must be a number type
-        uint16_t tag = GET_TAG(args[i]);
+        uint16_t tag = TAG(args[i]);
         if (tag != CLJ_INT && tag != CLJ_FLOAT) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
@@ -1397,7 +1401,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (existing) {
         // Namespace already loaded - just set alias/refer if needed
         if (alias_sym && is_type(alias_sym, CLJ_SYMBOL)) {
-            CljObject *ns_name_sym = intern_symbol(NULL, ns_name);
+            CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
             if (ns_name_sym) {
                 ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
             }
@@ -1465,7 +1469,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns) {
         if (alias_sym && is_type(alias_sym, CLJ_SYMBOL)) {
-            CljObject *ns_name_sym = intern_symbol(NULL, ns_name);
+            CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
             if (ns_name_sym) {
                 ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
             }
@@ -1599,7 +1603,7 @@ ID native_add_variadic(ID *args, unsigned int argc) {
     
     for (unsigned int i = 0; i < argc; i++) {
         if (!sawFixed) {
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT: {
                     int new_val = AS_FIXNUM(args[i]);
                     // Check for integer overflow before addition
@@ -1641,7 +1645,7 @@ ID native_add_variadic(ID *args, unsigned int argc) {
             }
         } else {
             int32_t val;
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT:
                     val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                     break;
@@ -1653,7 +1657,7 @@ ID native_add_variadic(ID *args, unsigned int argc) {
             // Check for fixed-point addition overflow using original values
             float acc_f = (float)acc_fixed / 8192.0f;
             float val_f;
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT:
                     val_f = (float)AS_FIXNUM(args[i]);
                     break;
@@ -1685,7 +1689,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
     
     for (unsigned int i = 0; i < argc; i++) {
         if (!sawFixed) {
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT: {
                     int new_val = AS_FIXNUM(args[i]);
                     // Check for integer overflow before multiplication
@@ -1755,7 +1759,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
             }
         } else {
             int32_t val;
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT:
                     val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                     break;
@@ -1767,7 +1771,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
             // Check for fixed-point multiplication overflow
             float acc_f = (float)acc_fixed / 8192.0f;
             float val_f;
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT:
                     val_f = (float)AS_FIXNUM(args[i]);
                     break;
@@ -1799,7 +1803,7 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
         }
-        uint16_t tag = GET_TAG(args[0]);
+        uint16_t tag = TAG(args[0]);
         if (tag != CLJ_INT && tag != CLJ_FLOAT) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
@@ -1819,7 +1823,7 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
     int32_t acc_fixed = 0; 
     int acc_i = 0;
     
-    switch (GET_TAG(args[0])) {
+    switch (TAG(args[0])) {
         case CLJ_INT:
             acc_i = AS_FIXNUM(args[0]);
             break;
@@ -1832,7 +1836,7 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
     
         for (unsigned int i = 1; i < argc; i++) {
         if (!sawFixed) {
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT: {
                     int new_val = AS_FIXNUM(args[i]);
                     // Check for integer overflow/underflow before subtraction
@@ -1852,7 +1856,7 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
                     acc_fixed = fixnum_to_fixed(acc_i);
                     sawFixed = true;
                     int32_t val;
-                    switch (GET_TAG(args[i])) {
+                    switch (TAG(args[i])) {
                         case CLJ_INT:
                             val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                             break;
@@ -1866,7 +1870,7 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
             }
         } else {
             int32_t val;
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT:
                     val = fixnum_to_fixed(AS_FIXNUM(args[i]));
                     break;
@@ -1886,8 +1890,8 @@ ID native_mod(ID *args, unsigned int argc) {
     
     if (!validate_numeric_args(args, argc)) return NULL;
     
-    uint16_t tag_a = GET_TAG(args[0]);
-    uint16_t tag_b = GET_TAG(args[1]);
+    uint16_t tag_a = TAG(args[0]);
+    uint16_t tag_b = TAG(args[1]);
     if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
         int a = AS_FIXNUM(args[0]);
         int b = AS_FIXNUM(args[1]);
@@ -1901,7 +1905,7 @@ ID native_mod(ID *args, unsigned int argc) {
     
     // For fixed-point or mixed types, convert to fixed and compute
     int32_t a_fixed;
-    switch (GET_TAG(args[0])) {
+    switch (TAG(args[0])) {
         case CLJ_INT:
             a_fixed = fixnum_to_fixed(AS_FIXNUM(args[0]));
             break;
@@ -1910,7 +1914,7 @@ ID native_mod(ID *args, unsigned int argc) {
             break;
     }
     int32_t b_fixed;
-    switch (GET_TAG(args[1])) {
+    switch (TAG(args[1])) {
         case CLJ_INT:
             b_fixed = fixnum_to_fixed(AS_FIXNUM(args[1]));
             break;
@@ -1947,7 +1951,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
         }
-        uint16_t tag = GET_TAG(args[0]);
+        uint16_t tag = TAG(args[0]);
         if (tag != CLJ_INT && tag != CLJ_FLOAT) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
@@ -1984,7 +1988,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
     int32_t acc_fixed = 0; 
     int acc_i = 0;
     
-    switch (GET_TAG(args[0])) {
+    switch (TAG(args[0])) {
         case CLJ_INT:
             acc_i = AS_FIXNUM(args[0]);
             break;
@@ -1997,7 +2001,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
     
         for (unsigned int i = 1; i < argc; i++) {
         if (!sawFixed) {
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT: {
                     int d = AS_FIXNUM(args[i]);
                     if (d == 0) {
@@ -2021,7 +2025,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
                         sawFixed = true;
                     }
                     int32_t d;
-                    switch (GET_TAG(args[i])) {
+                    switch (TAG(args[i])) {
                         case CLJ_INT:
                             d = fixnum_to_fixed(AS_FIXNUM(args[i]));
                             break;
@@ -2042,7 +2046,7 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             }
         } else {
             int32_t d;
-            switch (GET_TAG(args[i])) {
+            switch (TAG(args[i])) {
                 case CLJ_INT:
                     d = fixnum_to_fixed(AS_FIXNUM(args[i]));
                     break;
@@ -2074,7 +2078,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "byte-array")) return NULL;
     
     // If argument is a fixnum, create array with that size
-    switch (GET_TAG(args[0])) {
+    switch (TAG(args[0])) {
         case CLJ_INT: {
             int size = AS_FIXNUM(args[0]);
             if (size < 0) {
@@ -2102,7 +2106,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
         CljValue arr = (CljValue)make_byte_array(vec->count);
         
         for (int i = 0; i < vec->count; i++) {
-            if (GET_TAG(vec->data[i]) != CLJ_INT) {
+            if (TAG(vec->data[i]) != CLJ_INT) {
                 RELEASE((CljObject*)arr);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "byte-array sequence elements must be numbers",
                                __FILE__, __LINE__, 0);
@@ -2136,7 +2140,7 @@ ID native_aget(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (GET_TAG(args[1]) != CLJ_INT) {
+    if (TAG(args[1]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aget index must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2157,13 +2161,13 @@ ID native_aset(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (GET_TAG(args[1]) != CLJ_INT) {
+    if (TAG(args[1]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aset index must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    if (GET_TAG(args[2]) != CLJ_INT) {
+    if (TAG(args[2]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aset value must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2270,7 +2274,7 @@ ID native_eq(ID *args, unsigned int argc) {
     
     // Try numeric comparison first
     float val_a, val_b;
-    switch (GET_TAG(a)) {
+    switch (TAG(a)) {
         case CLJ_INT:
             val_a = (float)as_fixnum((CljValue)a);
             break;
@@ -2282,7 +2286,7 @@ ID native_eq(ID *args, unsigned int argc) {
             return clj_equal(a, b) ? clj_true : clj_false;
     }
     
-    switch (GET_TAG(b)) {
+    switch (TAG(b)) {
         case CLJ_INT:
             val_b = (float)as_fixnum((CljValue)b);
             break;
@@ -2352,7 +2356,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     
     // Get the sleep duration in seconds
     CljObject *duration_obj = args[0];
-    if (GET_TAG(duration_obj) != CLJ_INT) {
+    if (TAG(duration_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2508,7 +2512,7 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     }
     
     // Register the builtin in clojure.core namespace
-    CljObject *symbol = intern_symbol(NULL, name);
+    CljObject *symbol = (CljObject*)intern_symbol(NULL, name);
     CljObject *func_obj = make_named_func(func, NULL, name);
     if (symbol && func_obj) {
         ns_define(clojure_core, symbol, func_obj);

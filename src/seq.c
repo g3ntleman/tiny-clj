@@ -25,7 +25,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     
     // Handle nil (now represented as NULL)
     if (!obj) {
-        iter->seq_type = CLJ_UNKNOWN; // Use UNKNOWN for empty sequence
+        // Empty sequence - don't set seq_type, leave it as 0
         return true;  // Empty sequence, but valid
     }
     
@@ -38,7 +38,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             // A list is only empty if list_data itself is NULL or the list structure is invalid
             // We check if list_data is valid and has a structure (even if first element is nil)
             if (!list_data) {
-                iter->seq_type = CLJ_UNKNOWN;
+                // Empty list - don't set seq_type, leave it as 0
                 return true;  // Empty list
             }
             
@@ -58,7 +58,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             // Already a sequence - copy the embedded iterator state
             CljSeqIterator *seq = as_seq((ID)obj);
             if (!seq) {
-                iter->seq_type = CLJ_UNKNOWN;
+                // Empty seq - don't set seq_type, leave it as 0
                 return true;  // Empty seq
             }
             
@@ -69,8 +69,10 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(obj);
-            if (!vec || vec->count == 0) {
-                iter->seq_type = CLJ_UNKNOWN;
+            // Check if empty: either empty_vector_singleton or count == 0 with singleton check
+            if (!vec || vec->count == 0 || vec == empty_vector_singleton || 
+                (vec->count == 0 && is_singleton((CljObject*)vec))) {
+                // Empty vector - don't set seq_type, leave it as 0
                 return true;  // Empty vector
             }
             
@@ -87,7 +89,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             
             // Special case: empty string singleton
             if (str == empty_string_singleton) {
-                iter->seq_type = CLJ_UNKNOWN;
+                // Empty string - don't set seq_type, leave it as 0
                 return true;  // Empty string
             }
             
@@ -191,6 +193,31 @@ bool seq_iter_next(SeqIterator *iter) {
 bool seq_iter_empty(const SeqIterator *iter) {
     if (!iter) return true;
     
+    // Check if container is nil
+    if (!iter->container) return true;
+    
+    // Check if container is an empty collection singleton
+    if (is_singleton(iter->container)) {
+        // Check if it's actually empty based on type
+        switch (iter->container->type) {
+            case CLJ_VECTOR: {
+                CljPersistentVector *vec = (CljPersistentVector*)iter->container;
+                return vec->count == 0 || vec == empty_vector_singleton;
+            }
+            case CLJ_LIST: {
+                CljList *list = (CljList*)iter->container;
+                return LIST_FIRST(list) == NULL;
+            }
+            case CLJ_STRING: {
+                CljString *str = (CljString*)iter->container;
+                return str == empty_string_singleton || str->length == 0;
+            }
+            default:
+                return true;
+        }
+    }
+    
+    // Check based on seq_type for non-empty sequences
     switch (iter->seq_type) {
         case CLJ_LIST:
             return iter->state.list.current == NULL;
@@ -201,11 +228,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
         case CLJ_STRING:
             return iter->state.str.index >= iter->state.str.length;
         
-        // Note: nil is now represented as NULL
-            return true;
-        
         default:
-            return true;
+            // If seq_type is 0 (not set), it's an empty sequence
+            return iter->seq_type == 0;
     }
 }
 
@@ -260,8 +285,8 @@ CljSeqIterator* make_seq(ID obj) {
         return NULL;  // Empty or not seqable
     }
     
-    // If iterator is empty (seq_type == CLJ_UNKNOWN), return nil (NULL)
-    if (heap_seq->iter.seq_type == CLJ_UNKNOWN) {
+    // If iterator is empty, return nil (NULL) - JVM-compatible
+    if (seq_iter_empty(&heap_seq->iter)) {
         free(heap_seq);
         return NULL;
     }
@@ -409,6 +434,6 @@ bool is_seqable(ID obj) {
 }
 
 bool is_seq(ID obj) {
-    return TYPE((CljObject*)obj) == CLJ_SEQ || TYPE((CljObject*)obj) == CLJ_LIST;
+    return TAG((CljObject*)obj) == CLJ_SEQ || TAG((CljObject*)obj) == CLJ_LIST;
 }
 

@@ -549,7 +549,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         TEST_ASSERT_NOT_NULL(let_env);
         
         // Create a symbol "i" (interned)
-        CljObject *i_sym = intern_symbol_global("i");
+        CljSymbol *i_sym = intern_symbol_global("i");
         TEST_ASSERT_NOT_NULL(i_sym);
         
         // Create an atom value

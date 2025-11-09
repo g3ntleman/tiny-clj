@@ -41,7 +41,6 @@ typedef void* CljValue;
 #define IS_SINGLETON(obj) is_singleton(obj)
 
 // Automatic type mapping for ALLOC macros
-#define TYPE_OF_CljObject CLJ_UNKNOWN
 #define TYPE_OF_CljList CLJ_LIST
 #define TYPE_OF_CljSymbol CLJ_SYMBOL
 #define TYPE_OF_CljFunction CLJ_CLOSURE
@@ -58,10 +57,8 @@ typedef void* CljValue;
 #define TYPE_OF_double CLJ_FLOAT
 #define TYPE_OF_char CLJ_STRING
 // Für interne Strukturen ohne CLJ_TYPE
-#define TYPE_OF_SymbolEntry CLJ_UNKNOWN
-#define TYPE_OF_CljNamespace CLJ_UNKNOWN
-#define TYPE_OF_EvalState CLJ_UNKNOWN
-#define TYPE_OF_CljObjectPool CLJ_UNKNOWN
+#define TYPE_OF_SymbolEntry CLJ_NIL
+#define TYPE_OF_CljNamespace CLJ_NIL
 
 // Makro zur Typableitung
 #define TYPE_OF(struct_type) TYPE_OF_##struct_type
@@ -76,20 +73,14 @@ struct CljObject {
     // Keine Union! Daten in Substrukturen (CljString, CljVector, etc.)
 };
 
-// Macro: safe type extraction (handles NULL, immediates, and heap objects)
-static inline CljType TYPE_impl(ID obj) {
-    if (!obj) return CLJ_UNKNOWN;
+// Unified tag extraction (handles NULL, immediates, and heap objects)
+// Returns CljType for type safety - values match immediate tags (CLJ_INT=1=TAG_FIXNUM, etc.)
+static inline CljType TAG(ID obj) {
+    if (!obj) return CLJ_NIL;
     // Check if it's an immediate (tagged pointer with odd tag)
     if ((uintptr_t)obj & 0x1) {
-        // It's an immediate - extract tag and map to CljType
-        uint8_t tag = (uint8_t)((uintptr_t)obj & 0x7);
-        switch (tag) {
-            case 1: return CLJ_INT;    // TAG_FIXNUM -> CLJ_INT (1)
-            case 3: return CLJ_CHAR;   // TAG_CHAR -> CLJ_CHAR (3)
-            case 5: return CLJ_BOOL;   // TAG_BOOL -> CLJ_BOOL (5)
-            case 7: return CLJ_FLOAT;  // TAG_FIXED -> CLJ_FLOAT (7)
-            default: return CLJ_UNKNOWN;
-        }
+        // It's an immediate - tag value directly maps to CljType
+        return (CljType)((uintptr_t)obj & 0x7);
     }
     // It's a heap object - return obj->type directly
     CljObject *obj_ptr = (CljObject*)obj;
@@ -104,7 +95,6 @@ static inline CljType TYPE_impl(ID obj) {
 #endif
     return obj_ptr->type;
 }
-#define TYPE(object) TYPE_impl(object)
 
 // Check if an object is a singleton (should not be reference counted)
 static inline bool is_singleton(CljObject *obj) {
@@ -161,13 +151,13 @@ static inline bool is_type(ID obj, CljType expected_type) {
     if (obj_ptr && (uintptr_t)obj_ptr >= 0x1000 && obj_ptr->rc == ZOMBIE_RC) {
         // Zombie detected: throw exception with stacktrace and zombie object
         // Note: We need to include exception.h for this, but to avoid circular dependency,
-        // we'll just return false here and let TYPE() macro handle the exception
-        // Actually, TYPE() macro will access obj->type, which will trigger zombie detection there
-        // So we can just let it fall through to TYPE() macro
+        // we'll just return false here and let TAG() macro handle the exception
+        // Actually, TAG() macro will access obj->type, which will trigger zombie detection there
+        // So we can just let it fall through to TAG() macro
     }
 #endif
     
-    return TYPE(obj) == expected_type;
+    return TAG(obj) == expected_type;
 }
 
 // Equality comparison

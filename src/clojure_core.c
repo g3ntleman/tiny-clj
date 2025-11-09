@@ -162,7 +162,7 @@ int load_clojure_core(EvalState *st) {
   if (st->current_ns && g_runtime.clojure_core_cache) {
     CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
     if (clojure_core && clojure_core->mappings) {
-      CljObject *inc_sym = intern_symbol_global("inc");
+      CljSymbol *inc_sym = intern_symbol_global("inc");
       if (inc_sym) {
         CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
         if (!inc_value) {

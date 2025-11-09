@@ -111,7 +111,7 @@ typedef enum { COMP_LT, COMP_GT, COMP_LE, COMP_GE, COMP_EQ } ComparisonOp;
  */
 static bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, float *val_b) {
     // Extract value from first object
-    switch (GET_TAG(a)) {
+    switch (TAG(a)) {
         case CLJ_INT:
             *val_a = (float)as_fixnum((CljValue)a);
             break;
@@ -123,7 +123,7 @@ static bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, flo
     }
     
     // Extract value from second object
-    switch (GET_TAG(b)) {
+    switch (TAG(b)) {
         case CLJ_INT:
             *val_b = (float)as_fixnum((CljValue)b);
             break;
@@ -403,8 +403,8 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // FAST PATH: Both arguments are fixnums - direct arithmetic without type checks
     // This is the most common case in arithmetic operations
-    uint16_t tag_a = GET_TAG(a);
-    uint16_t tag_b = GET_TAG(b);
+    uint16_t tag_a = TAG(a);
+    uint16_t tag_b = TAG(b);
     if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
         int a_val = as_fixnum((CljValue)a);
         int b_val = as_fixnum((CljValue)b);
@@ -1975,7 +1975,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
         if (st && st->current_ns && st->current_ns->name) {
             return st->current_ns->name;  // Return the namespace symbol (e.g., 'user')
         }
-        return intern_symbol(NULL, "user");  // Default namespace
+        return (ID)intern_symbol(NULL, "user");  // Default namespace
     }
     
     // Lookup im aktuellen Namespace
@@ -2879,7 +2879,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
         return NULL;
     }
     
-    if (!var || !n_obj || GET_TAG(n_obj) != CLJ_INT) {
+    if (!var || !n_obj || TAG(n_obj) != CLJ_INT) {
         return NULL;
     }
     

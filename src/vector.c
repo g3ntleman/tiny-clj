@@ -16,6 +16,8 @@ static struct {
     }
 };
 static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singleton_data.vec;
+// Export as external symbol (similar to empty_string_singleton pattern)
+CljPersistentVector* empty_vector_singleton = (CljPersistentVector*)&clj_empty_vector_singleton_data.vec;
 
 /** Return empty vector singleton (rc=0, do not retain/release). */
 ID empty_vector(void) {

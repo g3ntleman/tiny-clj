@@ -112,7 +112,7 @@ bool is_symbol(ID v, const char *name) {
     if (!v || !is_type(v, CLJ_SYMBOL) || !name) return false;
     
     // Erstelle Symbol für Vergleich (wird interniert)
-    CljObject *compare_symbol = intern_symbol_global(name);
+    CljSymbol *compare_symbol = intern_symbol_global(name);
     if (!compare_symbol) return false;
     
     // Pointer-Vergleich statt String-Vergleich!

@@ -86,8 +86,8 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
             released_queue_ref = true;
         }
         
-        CljObject *kw_value = intern_symbol(NULL, ":value");
-        CljObject *kw_closed = intern_symbol(NULL, ":closed");
+        CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+        CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
         
         ID current_chan = (ID)task.result_chan;
         

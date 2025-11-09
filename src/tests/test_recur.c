@@ -351,7 +351,7 @@ TEST(test_eval_body_with_params_fixnum_literal) {
     
     // Create a Fixnum literal (1)
     CljValue fixnum_one = fixnum(1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(fixnum_one));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
     TEST_ASSERT_EQUAL_INT(1, AS_FIXNUM(fixnum_one));
     
     // Test eval_body_with_params with Fixnum literal
@@ -362,7 +362,7 @@ TEST(test_eval_body_with_params_fixnum_literal) {
     
     // Result should be the same Fixnum literal, not NULL
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, GET_TAG(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, TAG(result), "Result should be a Fixnum");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
     TEST_ASSERT_EQUAL_PTR_MESSAGE((void*)fixnum_one, (void*)result, 
                                   "Result should be the same Fixnum literal");
@@ -373,14 +373,14 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create a symbol parameter
-    CljObject *param_sym_obj = intern_symbol_global("x");
+    CljSymbol *param_sym_obj = intern_symbol_global("x");
     TEST_ASSERT_NOT_NULL(param_sym_obj);
     CljSymbol *param_sym = as_symbol(param_sym_obj);
     TEST_ASSERT_NOT_NULL(param_sym);
     
     // Create a Fixnum value for the parameter
     CljValue fixnum_value = fixnum(42);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(fixnum_value));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_value));
     
     // Set up parameters and values
     ID params[] = {param_sym_obj};
@@ -394,7 +394,7 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     ID result = eval_body_with_params(param_sym_obj, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum value, not NULL");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, GET_TAG(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, TAG(result), "Result should be a Fixnum");
     TEST_ASSERT_EQUAL_INT_MESSAGE(42, AS_FIXNUM(result), "Result should be 42");
 }
 
@@ -403,18 +403,18 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Create a symbol parameter
-    CljObject *param_sym_obj = intern_symbol_global("n");
+    CljSymbol *param_sym_obj = intern_symbol_global("n");
     TEST_ASSERT_NOT_NULL(param_sym_obj);
     CljSymbol *param_sym = as_symbol(param_sym_obj);
     TEST_ASSERT_NOT_NULL(param_sym);
     
     // Create a Fixnum value for the parameter (e.g., n = 5)
     CljValue fixnum_n = fixnum(5);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(fixnum_n));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_n));
     
     // Create a Fixnum literal (1)
     CljValue fixnum_one = fixnum(1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(fixnum_one));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
     
     // Set up parameters and values
     ID params[] = {param_sym_obj};
@@ -428,7 +428,7 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, GET_TAG(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, TAG(result), "Result should be a Fixnum");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
     TEST_ASSERT_EQUAL_PTR_MESSAGE((void*)fixnum_one, (void*)result, 
                                   "Result should be the same Fixnum literal");
@@ -445,7 +445,7 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     
     // Create a Fixnum literal (1)
     CljValue fixnum_one = fixnum(1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(fixnum_one));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
     
     // Test eval_body_with_params with Fixnum literal
     EvalEnv env_ctx = {NULL, g_test_eval_state};
@@ -453,6 +453,6 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, GET_TAG(result), "Result should be a Fixnum");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, TAG(result), "Result should be a Fixnum");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
 }

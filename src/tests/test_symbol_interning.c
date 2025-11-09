@@ -18,13 +18,13 @@ TEST(test_inc_symbol_interning_during_load) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Get inc symbol BEFORE loading clojure.core
-    CljObject *inc_sym_before = intern_symbol_global("inc");
+    CljSymbol *inc_sym_before = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym_before);
     
     // Load clojure.core
     
     // Get inc symbol AFTER loading clojure.core
-    CljObject *inc_sym_after = intern_symbol_global("inc");
+    CljSymbol *inc_sym_after = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym_after);
     
     // They should be the SAME pointer (same interned symbol)
@@ -89,7 +89,7 @@ TEST(test_inc_symbol_pointer_consistency) {
     
     
     // Get inc symbol before parsing
-    CljObject *inc_sym_before = intern_symbol_global("inc");
+    CljSymbol *inc_sym_before = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym_before);
     
     // Parse "(def inc (fn [x] (+ x 1)))"
@@ -107,7 +107,7 @@ TEST(test_inc_symbol_pointer_consistency) {
         TEST_ASSERT_TRUE(is_type(inc_sym_in_form, CLJ_SYMBOL));
         
         // Get inc symbol after parsing
-        CljObject *inc_sym_after = intern_symbol_global("inc");
+        CljSymbol *inc_sym_after = intern_symbol_global("inc");
         TEST_ASSERT_NOT_NULL(inc_sym_after);
         
         // The symbol in the parsed form should be the same as the interned symbol
@@ -151,9 +151,9 @@ TEST(test_inc_symbol_pointer_consistency) {
 // Test: Verify symbol interning consistency across multiple calls
 TEST(test_inc_symbol_interning_consistency) {
     // Test that intern_symbol_global("inc") always returns the same pointer
-    CljObject *sym1 = intern_symbol_global("inc");
-    CljObject *sym2 = intern_symbol_global("inc");
-    CljObject *sym3 = intern_symbol_global("inc");
+    CljSymbol *sym1 = intern_symbol_global("inc");
+    CljSymbol *sym2 = intern_symbol_global("inc");
+    CljSymbol *sym3 = intern_symbol_global("inc");
     
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
@@ -171,7 +171,7 @@ TEST(test_map_get_with_interned_symbols) {
     evalstate_set_ns(g_test_eval_state, "user");
     
     // Create a test symbol
-    CljObject *test_sym = intern_symbol_global("test-var");
+    CljSymbol *test_sym = intern_symbol_global("test-var");
     TEST_ASSERT_NOT_NULL(test_sym);
     
     // Store a value using test_sym
@@ -179,7 +179,7 @@ TEST(test_map_get_with_interned_symbols) {
     ns_define(g_test_eval_state->current_ns, test_sym, value);
     
     // Get the symbol again (should be same pointer)
-    CljObject *test_sym2 = intern_symbol_global("test-var");
+    CljSymbol *test_sym2 = intern_symbol_global("test-var");
     TEST_ASSERT_NOT_NULL(test_sym2);
     TEST_ASSERT_EQUAL_PTR_MESSAGE(test_sym, test_sym2, 
                                   "Should get same symbol pointer");

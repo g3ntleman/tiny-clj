@@ -213,7 +213,7 @@ TEST(test_defn_symbol_recognized) {
                                  "first element should be a symbol");
         
         // Check if defn_sym matches SYM_DEFN
-        extern CljObject *SYM_DEFN;
+        extern CljSymbol *SYM_DEFN;
         TEST_ASSERT_NOT_NULL(SYM_DEFN);
         
         // Check pointer equality
@@ -304,7 +304,7 @@ TEST(test_defn_test_fn_evaluated) {
         TEST_ASSERT_NOT_NULL(ns);
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
         
-        CljObject *test_fn_sym = intern_symbol_global("test-fn");
+        CljSymbol *test_fn_sym = intern_symbol_global("test-fn");
         ID test_fn_value = map_get((CljMap*)ns->mappings, (CljValue)test_fn_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_value, 
                                      "'test-fn' should be in namespace mappings after eval_defn");
@@ -334,7 +334,7 @@ TEST(test_defn_add_stored_in_namespace) {
         TEST_ASSERT_NOT_NULL(ns);
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
         
-        CljObject *add_sym = intern_symbol_global("add");
+        CljSymbol *add_sym = intern_symbol_global("add");
         TEST_ASSERT_NOT_NULL(add_sym);
         
         ID add_value = map_get((CljMap*)ns->mappings, (CljValue)add_sym);
@@ -361,7 +361,7 @@ TEST(test_defn_ns_resolve_finds_add) {
         TEST_ASSERT_NOT_NULL(result);
         
         // Try to resolve 'add' using ns_resolve
-        CljObject *add_sym = intern_symbol_global("add");
+        CljSymbol *add_sym = intern_symbol_global("add");
         TEST_ASSERT_NOT_NULL(add_sym);
         
         ID resolved = ns_resolve(g_test_eval_state, add_sym);
@@ -388,7 +388,7 @@ TEST(test_defn_eval_symbol_resolves_add) {
         TEST_ASSERT_NOT_NULL(result);
         
         // Try to resolve 'add' using eval_symbol
-        CljObject *add_sym = intern_symbol_global("add");
+        CljSymbol *add_sym = intern_symbol_global("add");
         TEST_ASSERT_NOT_NULL(add_sym);
         
         ID resolved = eval_symbol(add_sym, g_test_eval_state);
@@ -415,7 +415,7 @@ TEST(test_defn_add_can_be_called) {
         TEST_ASSERT_NOT_NULL(defn_result);
         
         // Verify that 'my-sum' is in namespace
-        CljObject *my_sum_sym = intern_symbol_global("my-sum");
+        CljSymbol *my_sum_sym = intern_symbol_global("my-sum");
         ID my_sum_value = ns_resolve(g_test_eval_state, my_sum_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(my_sum_value, 
                                      "'my-sum' should be resolvable after defn");

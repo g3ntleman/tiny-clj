@@ -31,6 +31,8 @@ static inline CljPersistentVector* as_vector(ID obj) {
 // === Legacy API removed - use CljValue API instead ===
 
 // === CljValue API ===
+/** Empty vector singleton (rc=0, do not retain/release). */
+extern CljPersistentVector* empty_vector_singleton;
 /** Return empty vector singleton (rc=0, do not retain/release). */
 ID empty_vector(void);
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */

@@ -11,70 +11,70 @@
 #include <assert.h>
 
 // Globale Symbol-Pointer Definitionen
-CljObject *SYM_TRY = NULL;
-CljObject *SYM_CATCH = NULL;
-CljObject *SYM_IF = NULL;
-CljObject *SYM_COND = NULL;
-CljObject *SYM_WHEN = NULL;
-CljObject *SYM_WHILE = NULL;
-CljObject *SYM_LET = NULL;
-CljObject *SYM_FN = NULL;
-CljObject *SYM_DEF = NULL;
-CljObject *SYM_DEFN = NULL;
-CljObject *SYM_QUOTE = NULL;
-CljObject *SYM_QUASIQUOTE = NULL;
-CljObject *SYM_UNQUOTE = NULL;
-CljObject *SYM_SPLICE_UNQUOTE = NULL;
-CljObject *SYM_DO = NULL;
-CljObject *SYM_LOOP = NULL;
-CljObject *SYM_RECUR = NULL;
-CljObject *SYM_THROW = NULL;
-CljObject *SYM_FINALLY = NULL;
-CljObject *SYM_VAR = NULL;
-CljObject *SYM_NS = NULL;
-CljObject *SYM_TIME = NULL;
-CljObject *SYM_GO = NULL;
-CljObject *SYM_DEREF = NULL;
-CljObject *SYM_NIL = NULL;
+CljSymbol *SYM_TRY = NULL;
+CljSymbol *SYM_CATCH = NULL;
+CljSymbol *SYM_IF = NULL;
+CljSymbol *SYM_COND = NULL;
+CljSymbol *SYM_WHEN = NULL;
+CljSymbol *SYM_WHILE = NULL;
+CljSymbol *SYM_LET = NULL;
+CljSymbol *SYM_FN = NULL;
+CljSymbol *SYM_DEF = NULL;
+CljSymbol *SYM_DEFN = NULL;
+CljSymbol *SYM_QUOTE = NULL;
+CljSymbol *SYM_QUASIQUOTE = NULL;
+CljSymbol *SYM_UNQUOTE = NULL;
+CljSymbol *SYM_SPLICE_UNQUOTE = NULL;
+CljSymbol *SYM_DO = NULL;
+CljSymbol *SYM_LOOP = NULL;
+CljSymbol *SYM_RECUR = NULL;
+CljSymbol *SYM_THROW = NULL;
+CljSymbol *SYM_FINALLY = NULL;
+CljSymbol *SYM_VAR = NULL;
+CljSymbol *SYM_NS = NULL;
+CljSymbol *SYM_TIME = NULL;
+CljSymbol *SYM_GO = NULL;
+CljSymbol *SYM_DEREF = NULL;
+CljSymbol *SYM_NIL = NULL;
 
 // Builtin-Funktionen
-CljObject *SYM_PLUS = NULL;
-CljObject *SYM_MINUS = NULL;
-CljObject *SYM_MULTIPLY = NULL;
-CljObject *SYM_DIVIDE = NULL;
-CljObject *SYM_EQUALS = NULL;
-CljObject *SYM_EQUAL = NULL;
-CljObject *SYM_LT = NULL;
-CljObject *SYM_GT = NULL;
-CljObject *SYM_LE = NULL;
-CljObject *SYM_GE = NULL;
-CljObject *SYM_PRINTLN = NULL;
-CljObject *SYM_PRINT = NULL;
-CljObject *SYM_STR = NULL;
-CljObject *SYM_CONJ = NULL;
-CljObject *SYM_NTH = NULL;
-CljObject *SYM_FIRST = NULL;
-CljObject *SYM_REST = NULL;
-CljObject *SYM_COUNT = NULL;
+CljSymbol *SYM_PLUS = NULL;
+CljSymbol *SYM_MINUS = NULL;
+CljSymbol *SYM_MULTIPLY = NULL;
+CljSymbol *SYM_DIVIDE = NULL;
+CljSymbol *SYM_EQUALS = NULL;
+CljSymbol *SYM_EQUAL = NULL;
+CljSymbol *SYM_LT = NULL;
+CljSymbol *SYM_GT = NULL;
+CljSymbol *SYM_LE = NULL;
+CljSymbol *SYM_GE = NULL;
+CljSymbol *SYM_PRINTLN = NULL;
+CljSymbol *SYM_PRINT = NULL;
+CljSymbol *SYM_STR = NULL;
+CljSymbol *SYM_CONJ = NULL;
+CljSymbol *SYM_NTH = NULL;
+CljSymbol *SYM_FIRST = NULL;
+CljSymbol *SYM_REST = NULL;
+CljSymbol *SYM_COUNT = NULL;
 
 // Additional symbols for optimization
-CljObject *SYM_CONS = NULL;
-CljObject *SYM_SEQ = NULL;
-CljObject *SYM_NEXT = NULL;
-CljObject *SYM_LIST = NULL;
-CljObject *SYM_AND = NULL;
-CljObject *SYM_OR = NULL;
-CljObject *SYM_FOR = NULL;
-CljObject *SYM_DOSEQ = NULL;
-CljObject *SYM_DOTIMES = NULL;
+CljSymbol *SYM_CONS = NULL;
+CljSymbol *SYM_SEQ = NULL;
+CljSymbol *SYM_NEXT = NULL;
+CljSymbol *SYM_LIST = NULL;
+CljSymbol *SYM_AND = NULL;
+CljSymbol *SYM_OR = NULL;
+CljSymbol *SYM_FOR = NULL;
+CljSymbol *SYM_DOSEQ = NULL;
+CljSymbol *SYM_DOTIMES = NULL;
 
 // Keywords
-CljObject *SYM_KW_LINE = NULL;
-CljObject *SYM_KW_FILE = NULL;
-CljObject *SYM_KW_DOC = NULL;
-CljObject *SYM_KW_ERROR = NULL;
-CljObject *SYM_KW_STACK = NULL;
-CljObject *SYM_KW_NS = NULL;
+CljSymbol *SYM_KW_LINE = NULL;
+CljSymbol *SYM_KW_FILE = NULL;
+CljSymbol *SYM_KW_DOC = NULL;
+CljSymbol *SYM_KW_ERROR = NULL;
+CljSymbol *SYM_KW_STACK = NULL;
+CljSymbol *SYM_KW_NS = NULL;
 
 // Static symbol structs for special forms (compile-time initialization)
 // These symbols have rc = 1 and use string literals (no strdup needed)
@@ -264,184 +264,184 @@ void init_special_symbols() {
     // Special forms - static structs with symbol table registration
     // Initialize names with strdup to avoid string literal issues
     sym_try_data.sym.name = strdup("try");
-    SYM_TRY = (CljObject*)&sym_try_data;
+    SYM_TRY = &sym_try_data;
     symbol_table_add(NULL, "try", SYM_TRY);
     
-    SYM_CATCH = (CljObject*)&sym_catch_data;
+    SYM_CATCH = &sym_catch_data;
     symbol_table_add(NULL, "catch", SYM_CATCH);
     
-    SYM_IF = (CljObject*)&sym_if_data;
+    SYM_IF = &sym_if_data;
     symbol_table_add(NULL, "if", SYM_IF);
     
-    SYM_COND = (CljObject*)&sym_cond_data;
+    SYM_COND = &sym_cond_data;
     symbol_table_add(NULL, "cond", SYM_COND);
     
-    SYM_WHEN = (CljObject*)&sym_when_data;
+    SYM_WHEN = &sym_when_data;
     symbol_table_add(NULL, "when", SYM_WHEN);
     
-    SYM_WHILE = (CljObject*)&sym_while_data;
+    SYM_WHILE = &sym_while_data;
     symbol_table_add(NULL, "while", SYM_WHILE);
     
-    SYM_LET = (CljObject*)&sym_let_data;
+    SYM_LET = &sym_let_data;
     symbol_table_add(NULL, "let", SYM_LET);
     
-    SYM_FN = (CljObject*)&sym_fn_data;
+    SYM_FN = &sym_fn_data;
     symbol_table_add(NULL, "fn", SYM_FN);
     
-    SYM_QUOTE = (CljObject*)&sym_quote_data;
+    SYM_QUOTE = &sym_quote_data;
     symbol_table_add(NULL, "quote", SYM_QUOTE);
     
-    SYM_QUASIQUOTE = (CljObject*)&sym_quasiquote_data;
+    SYM_QUASIQUOTE = &sym_quasiquote_data;
     symbol_table_add(NULL, "quasiquote", SYM_QUASIQUOTE);
     
-    SYM_UNQUOTE = (CljObject*)&sym_unquote_data;
+    SYM_UNQUOTE = &sym_unquote_data;
     symbol_table_add(NULL, "unquote", SYM_UNQUOTE);
     
-    SYM_SPLICE_UNQUOTE = (CljObject*)&sym_splice_unquote_data;
+    SYM_SPLICE_UNQUOTE = &sym_splice_unquote_data;
     symbol_table_add(NULL, "splice-unquote", SYM_SPLICE_UNQUOTE);
     
-    SYM_DO = (CljObject*)&sym_do_data;
+    SYM_DO = &sym_do_data;
     symbol_table_add(NULL, "do", SYM_DO);
     
-    SYM_LOOP = (CljObject*)&sym_loop_data;
+    SYM_LOOP = &sym_loop_data;
     symbol_table_add(NULL, "loop", SYM_LOOP);
     
-    SYM_RECUR = (CljObject*)&sym_recur_data;
+    SYM_RECUR = &sym_recur_data;
     symbol_table_add(NULL, "recur", SYM_RECUR);
     
-    SYM_THROW = (CljObject*)&sym_throw_data;
+    SYM_THROW = &sym_throw_data;
     symbol_table_add(NULL, "throw", SYM_THROW);
     
-    SYM_FINALLY = (CljObject*)&sym_finally_data;
+    SYM_FINALLY = &sym_finally_data;
     symbol_table_add(NULL, "finally", SYM_FINALLY);
     
-    SYM_DEFN = (CljObject*)&sym_defn_data;
+    SYM_DEFN = &sym_defn_data;
     symbol_table_add(NULL, "defn", SYM_DEFN);
     
-    SYM_DEREF = (CljObject*)&sym_deref_data;
+    SYM_DEREF = &sym_deref_data;
     symbol_table_add(NULL, "deref", SYM_DEREF);
     
-    SYM_NIL = (CljObject*)&sym_nil_data;
+    SYM_NIL = &sym_nil_data;
     symbol_table_add(NULL, "nil", SYM_NIL);
     
-    SYM_VAR = (CljObject*)&sym_var_data;
+    SYM_VAR = &sym_var_data;
     symbol_table_add(NULL, "var", SYM_VAR);
     
     // Built-in functions - static structs with symbol table registration
-    SYM_DEF = (CljObject*)&sym_def_data;
+    SYM_DEF = &sym_def_data;
     symbol_table_add(NULL, "def", SYM_DEF);
     
-    SYM_NS = (CljObject*)&sym_ns_data;
+    SYM_NS = &sym_ns_data;
     symbol_table_add(NULL, "ns", SYM_NS);
     
     sym_time_data.sym.name = strdup("time");
-    SYM_TIME = (CljObject*)&sym_time_data;
+    SYM_TIME = &sym_time_data;
     symbol_table_add(NULL, "time", SYM_TIME);
     
-    SYM_GO = (CljObject*)&sym_go_data;
+    SYM_GO = &sym_go_data;
     symbol_table_add(NULL, "go", SYM_GO);
     
-    SYM_PLUS = (CljObject*)&sym_plus_data;
+    SYM_PLUS = &sym_plus_data;
     symbol_table_add(NULL, "+", SYM_PLUS);
     
-    SYM_MINUS = (CljObject*)&sym_minus_data;
+    SYM_MINUS = &sym_minus_data;
     symbol_table_add(NULL, "-", SYM_MINUS);
     
-    SYM_MULTIPLY = (CljObject*)&sym_multiply_data;
+    SYM_MULTIPLY = &sym_multiply_data;
     symbol_table_add(NULL, "*", SYM_MULTIPLY);
     
-    SYM_DIVIDE = (CljObject*)&sym_divide_data;
+    SYM_DIVIDE = &sym_divide_data;
     symbol_table_add(NULL, "/", SYM_DIVIDE);
     
-    SYM_EQUALS = (CljObject*)&sym_equals_data;
+    SYM_EQUALS = &sym_equals_data;
     symbol_table_add(NULL, "=", SYM_EQUALS);
     
-    SYM_EQUAL = (CljObject*)&sym_equal_data;
+    SYM_EQUAL = &sym_equal_data;
     symbol_table_add(NULL, "equal", SYM_EQUAL);
     
-    SYM_LT = (CljObject*)&sym_lt_data;
+    SYM_LT = &sym_lt_data;
     symbol_table_add(NULL, "<", SYM_LT);
     
-    SYM_GT = (CljObject*)&sym_gt_data;
+    SYM_GT = &sym_gt_data;
     symbol_table_add(NULL, ">", SYM_GT);
     
-    SYM_LE = (CljObject*)&sym_le_data;
+    SYM_LE = &sym_le_data;
     symbol_table_add(NULL, "<=", SYM_LE);
     
-    SYM_GE = (CljObject*)&sym_ge_data;
+    SYM_GE = &sym_ge_data;
     symbol_table_add(NULL, ">=", SYM_GE);
     
-    SYM_PRINTLN = (CljObject*)&sym_println_data;
+    SYM_PRINTLN = &sym_println_data;
     symbol_table_add(NULL, "println", SYM_PRINTLN);
     
-    SYM_PRINT = (CljObject*)&sym_print_data;
+    SYM_PRINT = &sym_print_data;
     symbol_table_add(NULL, "print", SYM_PRINT);
     
-    SYM_STR = (CljObject*)&sym_str_data;
+    SYM_STR = &sym_str_data;
     symbol_table_add(NULL, "str", SYM_STR);
     
-    SYM_CONJ = (CljObject*)&sym_conj_data;
+    SYM_CONJ = &sym_conj_data;
     symbol_table_add(NULL, "conj", SYM_CONJ);
     
-    SYM_NTH = (CljObject*)&sym_nth_data;
+    SYM_NTH = &sym_nth_data;
     symbol_table_add(NULL, "nth", SYM_NTH);
     
-    SYM_FIRST = (CljObject*)&sym_first_data;
+    SYM_FIRST = &sym_first_data;
     symbol_table_add(NULL, "first", SYM_FIRST);
     
-    SYM_REST = (CljObject*)&sym_rest_data;
+    SYM_REST = &sym_rest_data;
     symbol_table_add(NULL, "rest", SYM_REST);
     
-    SYM_COUNT = (CljObject*)&sym_count_data;
+    SYM_COUNT = &sym_count_data;
     symbol_table_add(NULL, "count", SYM_COUNT);
     
     // Additional symbols - static structs with symbol table registration
-    SYM_CONS = (CljObject*)&sym_cons_data;
+    SYM_CONS = &sym_cons_data;
     symbol_table_add(NULL, "cons", SYM_CONS);
     
-    SYM_SEQ = (CljObject*)&sym_seq_data;
+    SYM_SEQ = &sym_seq_data;
     symbol_table_add(NULL, "seq", SYM_SEQ);
     
-    SYM_NEXT = (CljObject*)&sym_next_data;
+    SYM_NEXT = &sym_next_data;
     symbol_table_add(NULL, "next", SYM_NEXT);
     
-    SYM_LIST = (CljObject*)&sym_list_data;
+    SYM_LIST = &sym_list_data;
     symbol_table_add(NULL, "list", SYM_LIST);
     
-    SYM_AND = (CljObject*)&sym_and_data;
+    SYM_AND = &sym_and_data;
     symbol_table_add(NULL, "and", SYM_AND);
     
-    SYM_OR = (CljObject*)&sym_or_data;
+    SYM_OR = &sym_or_data;
     symbol_table_add(NULL, "or", SYM_OR);
     
-    SYM_FOR = (CljObject*)&sym_for_data;
+    SYM_FOR = &sym_for_data;
     symbol_table_add(NULL, "for", SYM_FOR);
     
     sym_doseq_data.sym.name = strdup("doseq");
-    SYM_DOSEQ = (CljObject*)&sym_doseq_data;
+    SYM_DOSEQ = &sym_doseq_data;
     symbol_table_add(NULL, "doseq", SYM_DOSEQ);
     
     sym_dotimes_data.sym.name = strdup("dotimes");
-    SYM_DOTIMES = (CljObject*)&sym_dotimes_data;
+    SYM_DOTIMES = &sym_dotimes_data;
     symbol_table_add(NULL, "dotimes", SYM_DOTIMES);
     
     // Keywords - static structs with symbol table registration
-    SYM_KW_LINE = (CljObject*)&sym_kw_line_data;
+    SYM_KW_LINE = &sym_kw_line_data;
     symbol_table_add(NULL, ":line", SYM_KW_LINE);
     
-    SYM_KW_FILE = (CljObject*)&sym_kw_file_data;
+    SYM_KW_FILE = &sym_kw_file_data;
     symbol_table_add(NULL, ":file", SYM_KW_FILE);
     
-    SYM_KW_DOC = (CljObject*)&sym_kw_doc_data;
+    SYM_KW_DOC = &sym_kw_doc_data;
     symbol_table_add(NULL, ":doc", SYM_KW_DOC);
     
-    SYM_KW_ERROR = (CljObject*)&sym_kw_error_data;
+    SYM_KW_ERROR = &sym_kw_error_data;
     symbol_table_add(NULL, ":error", SYM_KW_ERROR);
     
-    SYM_KW_STACK = (CljObject*)&sym_kw_stack_data;
+    SYM_KW_STACK = &sym_kw_stack_data;
     symbol_table_add(NULL, ":stack", SYM_KW_STACK);
     
-    SYM_KW_NS = (CljObject*)&sym_kw_ns_data;
+    SYM_KW_NS = &sym_kw_ns_data;
     symbol_table_add(NULL, ":ns", SYM_KW_NS);
 }
 
@@ -464,7 +464,7 @@ static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
 }
 
 // Add symbol to the table
-SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbol) {
+SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbol) {
     SymbolEntry *entry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
     if (!entry) return NULL;
     
@@ -480,7 +480,7 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbo
         entry->name = (char*)name;
     }
     
-    entry->symbol = symbol;
+    entry->symbol = (CljObject*)symbol;
     entry->next = (SymbolEntry*)g_runtime.symbol_table;
     g_runtime.symbol_table = (void*)entry;
     
@@ -493,7 +493,7 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljObject *symbo
  * @param ns Namespace (can be NULL)
  * @return CljSymbol symbol object
  */
-CljSymbol* make_symbol_impl(const char *name, const char *ns) {
+CljSymbol* make_symbol(const char *name, const char *ns) {
     if (!name) {
         throw_exception_formatted("ArgumentError", __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
@@ -549,17 +549,17 @@ CljSymbol* make_symbol_impl(const char *name, const char *ns) {
 }
 
 // Actual symbol interning
-CljObject* intern_symbol(const char *ns, const char *name) {
+CljSymbol* intern_symbol(const char *ns, const char *name) {
     if (!name) return NULL;
     
     // Suche zuerst in der Symbol-Table
     SymbolEntry *existing = symbol_table_find(ns, name);
     if (existing) {
-        return existing->symbol;  // Gleicher Pointer!
+        return (CljSymbol*)existing->symbol;  // Gleicher Pointer!
     }
     
     // Symbol nicht gefunden, erstelle neues
-    CljObject *symbol = (CljObject*)make_symbol_impl(name, ns);
+    CljSymbol *symbol = make_symbol(name, ns);
     if (!symbol) return NULL;
     
     // Füge zur Symbol-Table hinzu
@@ -569,7 +569,7 @@ CljObject* intern_symbol(const char *ns, const char *name) {
 }
 
 // Global symbols (without namespace)
-CljObject* intern_symbol_global(const char *name) {
+CljSymbol* intern_symbol_global(const char *name) {
     return intern_symbol(NULL, name);
 }
 
@@ -592,16 +592,5 @@ void symbol_table_cleanup() {
         entry = next;
     }
     g_runtime.symbol_table = NULL;
-}
-
-// Number of symbols in the table
-int symbol_count() {
-    int count = 0;
-    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
-    while (entry) {
-        count++;
-        entry = entry->next;
-    }
-    return count;
 }
 

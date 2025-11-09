@@ -143,7 +143,7 @@ bool is_seq(ID obj);
  * @brief Cast to CljSeqIterator (legacy compatibility)
  */
 static inline CljSeqIterator* as_seq(ID obj) {
-    return (TYPE((CljObject*)obj) == CLJ_SEQ) ? (CljSeqIterator*)obj : NULL;
+    return (TAG((CljObject*)obj) == CLJ_SEQ) ? (CljSeqIterator*)obj : NULL;
 }
 
 #ifdef __cplusplus

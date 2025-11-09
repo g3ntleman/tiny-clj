@@ -20,14 +20,14 @@ TEST(test_integer_overflow_detection) {
     // Test that normal multiplication still works
     CljObject *normal_result = eval_string("(* 2 3 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(normal_result));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(normal_result));
     TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)normal_result));
     
     // Test that factorial calculation works (using direct multiplication)
     // Note: recur can only be used inside function bodies, so we test factorial via direct multiplication
     CljObject *small_factorial = eval_string("(* 5 4 3 2 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(small_factorial);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(small_factorial));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(small_factorial));
     TEST_ASSERT_EQUAL_INT(120, as_fixnum((CljValue)small_factorial));
     
     // Test addition overflow - large positive numbers
@@ -36,7 +36,7 @@ TEST(test_integer_overflow_detection) {
         CljObject *result = eval_string("(+ 2000000000 2000000000)", g_test_eval_state);
         if (result) {
             printf("WARNING: Addition overflow did not throw exception, result: %d\n", 
-                   (GET_TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0);
+                   (TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0);
         }
     } CATCH(ex) {
         exception_caught = true;
@@ -52,7 +52,7 @@ TEST(test_integer_overflow_detection) {
         CljObject *result = eval_string("(+ 2147483640 10)", g_test_eval_state);
         if (result) {
             printf("WARNING: Addition overflow did not throw exception, result: %d\n", 
-                   (GET_TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0);
+                   (TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0);
         }
     } CATCH(ex) {
         exception_caught = true;
@@ -111,7 +111,7 @@ TEST(test_integer_overflow_detection) {
     TRY {
         CljObject *result = eval_string("(* 100000 100000)", g_test_eval_state);
         if (result) {
-            int result_val = (GET_TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0;
+            int result_val = (TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0;
             // 100000 * 100000 = 10000000000, which exceeds INT_MAX (2147483647)
             if (result_val > 0 && result_val < 10000000000) {
                 printf("WARNING: Multiplication may have overflowed without exception\n");
@@ -128,12 +128,12 @@ TEST(test_integer_overflow_detection) {
     // Test that normal operations still work after overflow tests
     CljObject *normal_add = eval_string("(+ 10 20)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_add);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(normal_add));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(normal_add));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)normal_add));
     
     CljObject *normal_sub = eval_string("(- 50 20)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_sub);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(normal_sub));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(normal_sub));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)normal_sub));
 }
 
@@ -147,7 +147,7 @@ TEST(test_simple_arithmetic) {
     // Test simple addition
     CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    if (result && GET_TAG(result) == CLJ_INT) {
+    if (result && TAG(result) == CLJ_INT) {
         int val = as_fixnum((CljValue)result);
         TEST_ASSERT_EQUAL_INT(3, val);
     }
@@ -197,30 +197,30 @@ TEST(test_multiplication_with_negative_numbers) {
     // Test: (* 1 -2) => -2 (positive * negative)
     CljObject *result1 = eval_string("(* 1 -2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result1));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
     TEST_ASSERT_EQUAL_INT(-2, as_fixnum((CljValue)result1));
     
     // Test: (* -2 3) => -6 (negative * positive)
     CljObject *result2 = eval_string("(* -2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
     TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result2));
     
     // Test: (* -2 3 -4) => 24 (negative * positive * negative)
     CljObject *result3 = eval_string("(* -2 3 -4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result3));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
     TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)result3));
     
     // Test: (* -1 -2) => 2 (negative * negative)
     CljObject *result4 = eval_string("(* -1 -2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result4));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result4));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result4));
     
     // Test: (* -1 -2 -3) => -6 (negative * negative * negative)
     CljObject *result5 = eval_string("(* -1 -2 -3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result5);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result5));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result5));
     TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result5));
 }

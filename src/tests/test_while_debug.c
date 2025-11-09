@@ -214,7 +214,7 @@ TEST(lowlevel_eval_arg_symbol_resolution) {
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "i" (interned)
-    CljObject *i_sym = intern_symbol_global("i");
+    CljSymbol *i_sym = intern_symbol_global("i");
     TEST_ASSERT_NOT_NULL(i_sym);
     
     // Create an atom value
@@ -258,7 +258,7 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "i" (interned)
-    CljObject *i_sym = intern_symbol_global("i");
+    CljSymbol *i_sym = intern_symbol_global("i");
     TEST_ASSERT_NOT_NULL(i_sym);
     
     // Create an atom value
@@ -279,7 +279,7 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     TEST_ASSERT_TRUE(is_type(found, CLJ_ATOM));
     
     // Create another "i" symbol (should be same pointer if interned)
-    CljObject *i_sym2 = intern_symbol_global("i");
+    CljSymbol *i_sym2 = intern_symbol_global("i");
     TEST_ASSERT_NOT_NULL(i_sym2);
     
     // Verify both symbols are the same pointer (interned)

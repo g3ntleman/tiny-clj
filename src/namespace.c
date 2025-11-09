@@ -44,7 +44,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     CljNamespace *ns = (CljNamespace*)malloc(sizeof(CljNamespace));
     if (!ns) return NULL;
     
-    ns->name = intern_symbol(NULL, name);
+    ns->name = (CljObject*)intern_symbol(NULL, name);
     ns->mappings = (CljObject*)make_map(64); // Increased capacity for clojure.core
     ns->aliases = (CljObject*)make_map(16);
     ns->filename = file ? strdup(file) : NULL;

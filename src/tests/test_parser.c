@@ -70,7 +70,7 @@ TEST(test_parse_empty_list) {
     // Test: () is nil in Clojure (Clojure-compatible behavior)
     CljObject *empty_list_result = parse("()", eval_state);
     TEST_ASSERT_NULL(empty_list_result);  // () is nil (NULL)
-    TEST_ASSERT_EQUAL_INT(CLJ_UNKNOWN, TYPE(empty_list_result));
+    TEST_ASSERT_EQUAL_INT(CLJ_NIL, TAG(empty_list_result));
     
     // Test: (list) creates an empty list (different from ())
     // This is tested separately in test_basics.c
@@ -106,8 +106,8 @@ TEST(test_parse_metadata) {
     TEST_ASSERT_TRUE(is_type((CljObject*)meta, CLJ_MAP));
     
     // Test that metadata contains the key-value pair
-    CljObject *kw_key = intern_symbol_global(":key");
-    CljObject *kw_value = intern_symbol_global(":value");
+    CljSymbol *kw_key = intern_symbol_global(":key");
+    CljSymbol *kw_value = intern_symbol_global(":value");
     if (kw_key && kw_value) {
         CljValue meta_value = map_get((CljMap*)meta, (CljValue)kw_key);
         TEST_ASSERT_NOT_NULL(meta_value);
@@ -368,7 +368,7 @@ TEST(test_meta_set_and_get) {
     CljMap *meta_map = make_map(2);
     TEST_ASSERT_NOT_NULL(meta_map);
     
-    CljObject *kw_doc = intern_symbol_global(":doc");
+    CljSymbol *kw_doc = intern_symbol_global(":doc");
     struct CljString *doc_str = make_string("Test documentation");
     if (kw_doc && doc_str) {
         meta_map = map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str);
@@ -423,7 +423,7 @@ TEST(test_meta_automatic_sourcecode_references) {
     }
     
     // Check :column (not a special symbol, use intern_symbol_global)
-    CljObject *kw_column = intern_symbol_global(":column");
+    CljSymbol *kw_column = intern_symbol_global(":column");
     if (kw_column) {
         CljValue column_value = map_get((CljMap*)meta, (CljValue)kw_column);
         TEST_ASSERT_NOT_NULL(column_value);
@@ -497,7 +497,7 @@ TEST(test_meta_clojure_compatible_keys) {
     TEST_ASSERT_NOT_NULL(SYM_KW_NS);
     
     // Test :column keyword
-    CljObject *kw_column = intern_symbol_global(":column");
+    CljSymbol *kw_column = intern_symbol_global(":column");
     TEST_ASSERT_NOT_NULL(kw_column);
     
     // Create location metadata
@@ -532,7 +532,7 @@ TEST(test_meta_clear) {
     
     // Create and set metadata
     CljMap *meta_map = make_map(1);
-    CljObject *kw_doc = intern_symbol_global(":doc");
+    CljSymbol *kw_doc = intern_symbol_global(":doc");
     struct CljString *doc_str = make_string("Test");
     if (kw_doc && doc_str) {
         meta_map = map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str);

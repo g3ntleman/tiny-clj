@@ -24,7 +24,7 @@ TEST(test_core_initialization_inc_loaded) {
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core->mappings, "clojure.core mappings should exist");
     
     // Get inc symbol
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Check if inc is in clojure.core mappings
@@ -82,7 +82,7 @@ TEST(test_core_initialization_arithmetic_functions) {
     char missing_names[256] = "";
     
     for (int i = 0; i < 7; i++) {
-        CljObject *sym = intern_symbol_global(functions[i]);
+        CljSymbol *sym = intern_symbol_global(functions[i]);
         CljObject *value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)sym);
         
         if (!value) {
@@ -109,7 +109,7 @@ TEST(test_core_initialization_plus_available) {
     TEST_ASSERT_NOT_NULL(clojure_core);
     
     // Get + symbol
-    CljObject *plus_sym = intern_symbol_global("+");
+    CljSymbol *plus_sym = intern_symbol_global("+");
     TEST_ASSERT_NOT_NULL(plus_sym);
     
     // Check if + is in clojure.core mappings (should be registered by register_builtins)
@@ -125,7 +125,7 @@ TEST(test_core_initialization_plus_available) {
 // Test: Verify that inc is loaded correctly when loading clojure.core
 TEST(test_clojure_core_loads_inc) {
     // Get inc symbol before loading
-    CljObject *inc_sym = intern_symbol_global("inc");
+    CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Load clojure.core (use global st from setUp)
@@ -203,7 +203,7 @@ TEST(test_clojure_core_loads_all_functions) {
         char missing_names[256] = "";
         
         for (int i = 0; i < 7; i++) {
-            CljObject *sym = intern_symbol_global(functions[i]);
+            CljSymbol *sym = intern_symbol_global(functions[i]);
             CljObject *value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)sym);
             
             if (!value) {
@@ -315,7 +315,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     
     
     // Ensure + is registered (should be done by register_builtins)
-    CljObject *plus_sym = intern_symbol_global("+");
+    CljSymbol *plus_sym = intern_symbol_global("+");
     TEST_ASSERT_NOT_NULL(plus_sym);
     
     // Check if + is in clojure.core mappings
@@ -377,7 +377,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         CljValue result = eval_list(as_list(form), env, g_test_eval_state);
         
         // Check if test-var is in the mappings (even if value is nil/NULL)
-        CljObject *test_var_sym = intern_symbol_global("test-var");
+        CljSymbol *test_var_sym = intern_symbol_global("test-var");
         TEST_ASSERT_NOT_NULL(test_var_sym);
         
         // test_var_value can be NULL if nil was stored
