@@ -84,14 +84,14 @@ static inline CljType TYPE_impl(ID obj) {
         // It's an immediate - extract tag and map to CljType
         uint8_t tag = (uint8_t)((uintptr_t)obj & 0x7);
         switch (tag) {
-            case 1: return CLJ_INT;    // TAG_FIXNUM
-            case 3: return CLJ_CHAR;   // TAG_CHAR
-            case 5: return CLJ_BOOL;   // TAG_BOOL
-            case 7: return CLJ_FLOAT;  // TAG_FIXED
+            case 1: return CLJ_INT;    // TAG_FIXNUM -> CLJ_INT (1)
+            case 3: return CLJ_CHAR;   // TAG_CHAR -> CLJ_CHAR (3)
+            case 5: return CLJ_BOOL;   // TAG_BOOL -> CLJ_BOOL (5)
+            case 7: return CLJ_FLOAT;  // TAG_FIXED -> CLJ_FLOAT (7)
             default: return CLJ_UNKNOWN;
         }
     }
-    // It's a heap object - use the type field
+    // It's a heap object - return obj->type directly
     CljObject *obj_ptr = (CljObject*)obj;
 #ifdef DEBUG
     // Check for zombie object before accessing type

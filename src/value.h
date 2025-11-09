@@ -57,6 +57,24 @@ static inline uint8_t get_tag(CljValue val) {
     return (uint8_t)((uintptr_t)val & TAG_MASK);
 }
 
+// Unified tag extraction for both immediates and heap objects
+// For immediates: returns the tag (1, 3, 5, 7)
+// For heap objects: returns obj->type (CljType enum)
+// Returns uint16_t to accommodate both immediate tags (uint8_t) and CljType (uint16_t)
+// Usage: switch (GET_TAG(val)) { case TAG_FIXNUM: ... case CLJ_STRING: ... }
+static inline uint16_t get_tag_unified(ID obj) {
+    if (!obj) return CLJ_UNKNOWN;  // NULL (nil)
+    // Check if it's an immediate (tagged pointer with odd tag)
+    if ((uintptr_t)obj & 0x1) {
+        // It's an immediate - return the tag directly
+        return (uint8_t)((uintptr_t)obj & TAG_MASK);
+    }
+    // It's a heap object - return the object type
+    CljObject *obj_ptr = (CljObject*)obj;
+    return obj_ptr->type;  // Returns CljType (uint16_t)
+}
+#define GET_TAG(obj) get_tag_unified(obj)
+
 // === 32-bit Tagged Pointer Immediates ===
 
 // SPECIAL sub-types: false nutzt 0 für Bit-Trick
@@ -217,15 +235,12 @@ static inline ID CHECKED(ID id) {
 #endif
 
 
-// Convenience macros for type checking with ID or any pointer type
-// These eliminate the need to cast to CljValue before checking
-#define IS_FIXNUM(val) is_fixnum((CljValue)(val))
+// Convenience macros for value extraction with ID or any pointer type
+// These eliminate the need to cast to CljValue before extraction
+// Note: IS_* macros removed - use GET_TAG() and switch statements instead
 #define AS_FIXNUM(val) as_fixnum((CljValue)(val))
-#define IS_FIXED(val) is_fixed((CljValue)(val))
 #define AS_FIXED(val) as_fixed((CljValue)(val))
-#define IS_CHAR(val) is_char((CljValue)(val))
 #define AS_CHAR(val) as_char((CljValue)(val))
-#define IS_SPECIAL(val) is_special((CljValue)(val))
 #define AS_SPECIAL(val) as_special((CljValue)(val))
 
 // Wrapper für existierende Funktionen (Phase 1: Immediates + Heap Fallback)

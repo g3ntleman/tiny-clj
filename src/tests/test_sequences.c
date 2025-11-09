@@ -440,15 +440,15 @@ TEST(test_reduce_basic_addition) {
     // Test: (reduce + (list 1 2 3 4 5)) => 15
     CljObject *result = eval_string("(reduce + (list 1 2 3 4 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(15, as_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum((CljValue)result));
     
     // Note: Vector support may require seq handling - test with list for now
     // Test: (reduce + (list 1 2 3)) => 6
     CljObject *result2 = eval_string("(reduce + (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(is_fixnum(result2));
-    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(result2));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result2));
 }
 
 // EDGE CASE 5: Reduce with multiplication

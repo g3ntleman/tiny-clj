@@ -60,7 +60,7 @@ ID nth2(ID *args, unsigned int argc) {
     ID vec = args[0];
     ID idx = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
-    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || !IS_FIXNUM(idx)) return NULL;
+    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || GET_TAG(idx) != CLJ_INT) return NULL;
     int i = AS_FIXNUM(idx);
     CljPersistentVector *v = as_vector(vec);
     if (!v || i < 0 || i >= v->count) {
@@ -149,7 +149,7 @@ ID native_subvec(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (!start_idx || !IS_FIXNUM(start_idx)) {
+    if (!start_idx || GET_TAG(start_idx) != CLJ_INT) {
         throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
                 "subvec requires a number as start index");
         return NULL;
@@ -163,7 +163,7 @@ ID native_subvec(ID *args, unsigned int argc) {
     
     // Determine end index: if not provided, use vector count
     if (end_idx) {
-        if (!IS_FIXNUM(end_idx)) {
+        if (GET_TAG(end_idx) != CLJ_INT) {
             throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
                     "subvec requires a number as end index");
             return NULL;
@@ -553,7 +553,7 @@ ID assoc3(ID *args, unsigned int argc) {
     
     // Handle vectors
     if (is_type(coll, CLJ_VECTOR)) {
-        if (!key || !IS_FIXNUM(key)) return NULL;
+        if (!key || GET_TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljPersistentVector *v = as_vector(coll);
         if (!v || i < 0 || i >= v->count) return NULL;
@@ -665,8 +665,12 @@ ID native_count(ID *args, unsigned int argc) {
     
     if (!validate_builtin_args(argc, 1, "count")) return NULL;
     CljObject *coll = args[0];
-    // nil (NULL) should return 0, not NULL
-    if (!coll) return fixnum(0);
+    // Clojure behavior: (count nil) throws IllegalArgumentException
+    if (!coll) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "Don't know how to count: nil");
+        return NULL;
+    }
     
     // Handle CLJ_SEQ (sequences from rest, etc.)
     if (is_type(coll, CLJ_SEQ)) {
@@ -1020,7 +1024,7 @@ static bool validate_numeric_args(ID *args, int argc) {
         // CRITICAL: Check if args[i] is a valid number
         // Immediate values (fixnums) should pass this check
         // But if args[i] is a heap object, it must be a number type
-        if (!IS_FIXNUM(args[i]) && !IS_FIXED(args[i])) {
+        if (GET_TAG(args[i]) != CLJ_INT && GET_TAG(args[i]) != CLJ_FLOAT) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
@@ -1594,36 +1598,68 @@ ID native_add_variadic(ID *args, unsigned int argc) {
     
     for (unsigned int i = 0; i < argc; i++) {
         if (!sawFixed) {
-            if (IS_FIXNUM(args[i])) {
-                int new_val = AS_FIXNUM(args[i]);
-                // Check for integer overflow before addition
-                if (acc_i > 0 && new_val > INT_MAX - acc_i) {
-                    // Overflow detected - throw exception
-                    return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_ADDITION, acc_i, new_val);
-                } else if (acc_i < 0 && new_val < INT_MIN - acc_i) {
-                    // Underflow detected - throw exception
-                    return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_ADDITION, acc_i, new_val);
-                } else {
-                    acc_i += new_val;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT: {
+                    int new_val = AS_FIXNUM(args[i]);
+                    // Check for integer overflow before addition
+                    if (acc_i > 0 && new_val > INT_MAX - acc_i) {
+                        // Overflow detected - throw exception
+                        return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_ADDITION, acc_i, new_val);
+                    } else if (acc_i < 0 && new_val < INT_MIN - acc_i) {
+                        // Underflow detected - throw exception
+                        return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_ADDITION, acc_i, new_val);
+                    } else {
+                        acc_i += new_val;
+                    }
+                    break;
                 }
-            } else {
-                sawFixed = true;
-                // Check for fixed-point overflow before conversion using original values
-                float acc_f = (float)acc_i;
-                float val_f = as_fixed(args[i]);
-                float result = acc_f + val_f;
-                if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
-                    return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
+                case CLJ_FLOAT: {
+                    sawFixed = true;
+                    // Check for fixed-point overflow before conversion using original values
+                    float acc_f = (float)acc_i;
+                    float val_f = AS_FIXED(args[i]);
+                    float result = acc_f + val_f;
+                    if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
+                        return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
+                    }
+                    acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
+                    break;
                 }
-                acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
+                default: {
+                    // Heap objects or other types - convert to fixed-point
+                    sawFixed = true;
+                    float acc_f = (float)acc_i;
+                    float val_f = as_fixed(args[i]);
+                    float result = acc_f + val_f;
+                    if (result > 262144.0f || result < -262144.0f) {
+                        return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
+                    }
+                    acc_fixed = fixnum_to_fixed(acc_i) + extract_fixed_value(args[i]);
+                    break;
+                }
             }
         } else {
-            int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
-                                              : extract_fixed_value(args[i]);
+            int32_t val;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT:
+                    val = fixnum_to_fixed(AS_FIXNUM(args[i]));
+                    break;
+                default:
+                    val = extract_fixed_value(args[i]);
+                    break;
+            }
             
             // Check for fixed-point addition overflow using original values
             float acc_f = (float)acc_fixed / 8192.0f;
-            float val_f = IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : as_fixed(args[i]);
+            float val_f;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT:
+                    val_f = (float)AS_FIXNUM(args[i]);
+                    break;
+                default:
+                    val_f = as_fixed(args[i]);
+                    break;
+            }
             float result = acc_f + val_f;
             if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
                 return throw_fixed_overflow(ERR_FIXED_OVERFLOW_ADDITION);
@@ -1648,52 +1684,96 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
     
     for (unsigned int i = 0; i < argc; i++) {
         if (!sawFixed) {
-            if (IS_FIXNUM(args[i])) {
-                int new_val = AS_FIXNUM(args[i]);
-                // Check for integer overflow before multiplication
-                if (acc_i != 0 && new_val != 0) {
-                    bool would_overflow = false;
-                    if (new_val > 0) {
-                        // Standard overflow check for positive multiplier
-                        would_overflow = (acc_i > INT_MAX / new_val || acc_i < INT_MIN / new_val);
-                    } else {
-                        // Negative multiplier: check based on sign of accumulator
-                        if (acc_i > 0) {
-                            // Positive * negative = negative: check if result < INT_MIN
-                            would_overflow = (acc_i > INT_MIN / new_val);
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT: {
+                    int new_val = AS_FIXNUM(args[i]);
+                    // Check for integer overflow before multiplication
+                    if (acc_i != 0 && new_val != 0) {
+                        bool would_overflow = false;
+                        if (new_val > 0) {
+                            // Standard overflow check for positive multiplier
+                            would_overflow = (acc_i > INT_MAX / new_val || acc_i < INT_MIN / new_val);
                         } else {
+                            // Negative multiplier: check based on sign of accumulator
+                            // Positive * negative = negative: check if result < INT_MIN
                             // Negative * negative = positive: check if result > INT_MAX
-                            would_overflow = (acc_i < INT_MAX / new_val);
+                            // Special case: new_val == -1
+                            if (new_val == -1) {
+                                // acc_i * -1 = -acc_i
+                                // Overflow if: acc_i == INT_MIN (would make -acc_i overflow)
+                                // Note: acc_i can't be > INT_MAX since it's an int
+                                would_overflow = (acc_i == INT_MIN);
+                            } else {
+                                // For acc_i > 0 and new_val < 0: check if acc_i * new_val < INT_MIN
+                                //   => acc_i > INT_MIN / new_val (since new_val is negative, division rounds toward 0)
+                                // For acc_i < 0 and new_val < 0: check if acc_i * new_val > INT_MAX
+                                //   => acc_i < INT_MAX / new_val (since both are negative, division rounds toward 0)
+                                would_overflow = (acc_i > 0) 
+                                    ? (acc_i > INT_MIN / new_val)  // acc_i * new_val < INT_MIN if acc_i > INT_MIN / new_val
+                                    : (acc_i < INT_MAX / new_val); // acc_i * new_val > INT_MAX if acc_i < INT_MAX / new_val
+                            }
+                        }
+                        if (would_overflow) {
+                            return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_MULTIPLICATION, acc_i, new_val);
+                        }
+                        acc_i *= new_val;
+                    } else {
+                        acc_i *= new_val; // Safe: one operand is 0
+                    }
+                    break;
+                }
+                case CLJ_FLOAT: {
+                    sawFixed = true;
+                    // Check for fixed-point overflow before conversion
+                    float acc_f = (float)acc_i;
+                    float val_f = AS_FIXED(args[i]);
+                    if (acc_f != 0.0f && val_f != 0.0f) {
+                        // Check if multiplication would exceed fixed-point range
+                        float result = acc_f * val_f;
+                        if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
+                            return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
                         }
                     }
-                    if (would_overflow) {
-                        return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_MULTIPLICATION, acc_i, new_val);
-                    }
-                    acc_i *= new_val;
-                } else {
-                    acc_i *= new_val; // Safe: one operand is 0
+                    acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
+                    break;
                 }
-            } else {
-                sawFixed = true;
-                // Check for fixed-point overflow before conversion
-                float acc_f = (float)acc_i;
-                float val_f = as_fixed(args[i]);
-                if (acc_f != 0.0f && val_f != 0.0f) {
-                    // Check if multiplication would exceed fixed-point range
-                    float result = acc_f * val_f;
-                    if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
-                        return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
+                default: {
+                    // Heap objects or other types - convert to fixed-point
+                    sawFixed = true;
+                    float acc_f = (float)acc_i;
+                    float val_f = as_fixed(args[i]);
+                    if (acc_f != 0.0f && val_f != 0.0f) {
+                        float result = acc_f * val_f;
+                        if (result > 262144.0f || result < -262144.0f) {
+                            return throw_fixed_overflow(ERR_FIXED_OVERFLOW_MULTIPLICATION);
+                        }
                     }
+                    acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
+                    break;
                 }
-                acc_fixed = (fixnum_to_fixed(acc_i) * extract_fixed_value(args[i])) >> 13;
             }
         } else {
-            int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
-                                              : extract_fixed_value(args[i]);
+            int32_t val;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT:
+                    val = fixnum_to_fixed(AS_FIXNUM(args[i]));
+                    break;
+                default:
+                    val = extract_fixed_value(args[i]);
+                    break;
+            }
             
             // Check for fixed-point multiplication overflow
             float acc_f = (float)acc_fixed / 8192.0f;
-            float val_f = IS_FIXNUM(args[i]) ? (float)AS_FIXNUM(args[i]) : as_fixed(args[i]);
+            float val_f;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT:
+                    val_f = (float)AS_FIXNUM(args[i]);
+                    break;
+                default:
+                    val_f = as_fixed(args[i]);
+                    break;
+            }
             if (acc_f != 0.0f && val_f != 0.0f) {
                 float result = acc_f * val_f;
                 if (result > 262144.0f || result < -262144.0f) { // Max fixed-point range
@@ -1714,12 +1794,17 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
         return NULL; 
     }
     if (argc == 1) {
-        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
+        if (!args[0] || (GET_TAG(args[0]) != CLJ_INT && GET_TAG(args[0]) != CLJ_FLOAT)) { 
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
         } 
-        return IS_FIXNUM(args[0]) ? create_fixnum_result(-AS_FIXNUM(args[0]))
-                                  : create_fixed_result(-extract_fixed_value(args[0]));
+        switch (GET_TAG(args[0])) {
+            case CLJ_INT:
+                return create_fixnum_result(-AS_FIXNUM(args[0]));
+            case CLJ_FLOAT:
+            default:
+                return create_fixed_result(-extract_fixed_value(args[0]));
+        }
     }
     
     if (!validate_numeric_args(args, argc)) return (NULL);
@@ -1728,33 +1813,61 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
     int32_t acc_fixed = 0; 
     int acc_i = 0;
     
-    if (IS_FIXNUM(args[0])) {
-        acc_i = AS_FIXNUM(args[0]);
-    } else {
-        sawFixed = true;
-        acc_fixed = extract_fixed_value(args[0]);
+    switch (GET_TAG(args[0])) {
+        case CLJ_INT:
+            acc_i = AS_FIXNUM(args[0]);
+            break;
+        case CLJ_FLOAT:
+        default:
+            sawFixed = true;
+            acc_fixed = extract_fixed_value(args[0]);
+            break;
     }
     
         for (unsigned int i = 1; i < argc; i++) {
-        if (!sawFixed && IS_FIXNUM(args[i])) {
-            int new_val = AS_FIXNUM(args[i]);
-            // Check for integer overflow/underflow before subtraction
-            if (acc_i > 0 && new_val < acc_i - INT_MAX) {
-                // Overflow detected - throw exception
-                return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_SUBTRACTION, acc_i, new_val);
-            } else if (acc_i < 0 && new_val > acc_i - INT_MIN) {
-                // Underflow detected - throw exception
-                return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_SUBTRACTION, acc_i, new_val);
-            } else {
-                acc_i -= new_val;
+        if (!sawFixed) {
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT: {
+                    int new_val = AS_FIXNUM(args[i]);
+                    // Check for integer overflow/underflow before subtraction
+                    if (acc_i > 0 && new_val < acc_i - INT_MAX) {
+                        // Overflow detected - throw exception
+                        return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_SUBTRACTION, acc_i, new_val);
+                    } else if (acc_i < 0 && new_val > acc_i - INT_MIN) {
+                        // Underflow detected - throw exception
+                        return throw_arithmetic_overflow(ERR_INTEGER_UNDERFLOW_SUBTRACTION, acc_i, new_val);
+                    } else {
+                        acc_i -= new_val;
+                    }
+                    break;
+                }
+                case CLJ_FLOAT:
+                default: {
+                    acc_fixed = fixnum_to_fixed(acc_i);
+                    sawFixed = true;
+                    int32_t val;
+                    switch (GET_TAG(args[i])) {
+                        case CLJ_INT:
+                            val = fixnum_to_fixed(AS_FIXNUM(args[i]));
+                            break;
+                        default:
+                            val = extract_fixed_value(args[i]);
+                            break;
+                    }
+                    acc_fixed -= val;
+                    break;
+                }
             }
         } else {
-            if (!sawFixed) {
-                acc_fixed = fixnum_to_fixed(acc_i);
-                sawFixed = true;
+            int32_t val;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT:
+                    val = fixnum_to_fixed(AS_FIXNUM(args[i]));
+                    break;
+                default:
+                    val = extract_fixed_value(args[i]);
+                    break;
             }
-            int32_t val = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
-                                              : extract_fixed_value(args[i]);
             acc_fixed -= val;
         }
     }
@@ -1767,7 +1880,7 @@ ID native_mod(ID *args, unsigned int argc) {
     
     if (!validate_numeric_args(args, argc)) return NULL;
     
-    if (IS_FIXNUM(args[0]) && IS_FIXNUM(args[1])) {
+    if (GET_TAG(args[0]) == CLJ_INT && GET_TAG(args[1]) == CLJ_INT) {
         int a = AS_FIXNUM(args[0]);
         int b = AS_FIXNUM(args[1]);
         if (b == 0) {
@@ -1779,8 +1892,24 @@ ID native_mod(ID *args, unsigned int argc) {
     }
     
     // For fixed-point or mixed types, convert to fixed and compute
-    int32_t a_fixed = IS_FIXNUM(args[0]) ? fixnum_to_fixed(AS_FIXNUM(args[0])) : extract_fixed_value(args[0]);
-    int32_t b_fixed = IS_FIXNUM(args[1]) ? fixnum_to_fixed(AS_FIXNUM(args[1])) : extract_fixed_value(args[1]);
+    int32_t a_fixed;
+    switch (GET_TAG(args[0])) {
+        case CLJ_INT:
+            a_fixed = fixnum_to_fixed(AS_FIXNUM(args[0]));
+            break;
+        default:
+            a_fixed = extract_fixed_value(args[0]);
+            break;
+    }
+    int32_t b_fixed;
+    switch (GET_TAG(args[1])) {
+        case CLJ_INT:
+            b_fixed = fixnum_to_fixed(AS_FIXNUM(args[1]));
+            break;
+        default:
+            b_fixed = extract_fixed_value(args[1]);
+            break;
+    }
     
     if (b_fixed == 0) {
         throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
@@ -1806,29 +1935,33 @@ ID native_div_variadic(ID *args, unsigned int argc) {
         return NULL; 
     }
     if (argc == 1) {
-        if (!args[0] || (!IS_FIXNUM(args[0]) && !IS_FIXED(args[0]))) { 
+        if (!args[0] || (GET_TAG(args[0]) != CLJ_INT && GET_TAG(args[0]) != CLJ_FLOAT)) { 
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
         } 
-        if (IS_FIXNUM(args[0])) { 
-            int x = AS_FIXNUM(args[0]); 
-            if (x == 0) {
-                // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
-                    "Division by zero: 1 / %d", x);
-                return NULL;
+        switch (GET_TAG(args[0])) {
+            case CLJ_INT: {
+                int x = AS_FIXNUM(args[0]); 
+                if (x == 0) {
+                    // Division by zero - throw exception
+                    throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                        "Division by zero: 1 / %d", x);
+                    return NULL;
+                }
+                if (1 % x == 0) return create_fixnum_result(1/x); 
+                return create_fixed_result(fixnum_to_fixed(1) / x); 
             }
-            if (1 % x == 0) return create_fixnum_result(1/x); 
-            return create_fixed_result(fixnum_to_fixed(1) / x); 
-        } else { 
-            int32_t x = extract_fixed_value(args[0]);
-            if (x == 0) {
-                // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
-                    "Division by zero: 1 / %d", x >> 13);
-                return NULL;
+            case CLJ_FLOAT:
+            default: {
+                int32_t x = extract_fixed_value(args[0]);
+                if (x == 0) {
+                    // Division by zero - throw exception
+                    throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                        "Division by zero: 1 / %d", x >> 13);
+                    return NULL;
+                }
+                return create_fixed_result(fixnum_to_fixed(1) / x); 
             }
-            return create_fixed_result(fixnum_to_fixed(1) / x); 
         }
     }
     
@@ -1838,35 +1971,72 @@ ID native_div_variadic(ID *args, unsigned int argc) {
     int32_t acc_fixed = 0; 
     int acc_i = 0;
     
-    if (IS_FIXNUM(args[0])) {
-        acc_i = AS_FIXNUM(args[0]);
-    } else {
-        sawFixed = true;
-        acc_fixed = extract_fixed_value(args[0]);
+    switch (GET_TAG(args[0])) {
+        case CLJ_INT:
+            acc_i = AS_FIXNUM(args[0]);
+            break;
+        case CLJ_FLOAT:
+        default:
+            sawFixed = true;
+            acc_fixed = extract_fixed_value(args[0]);
+            break;
     }
     
         for (unsigned int i = 1; i < argc; i++) {
-        if (!sawFixed && IS_FIXNUM(args[i])) {
-            int d = AS_FIXNUM(args[i]);
-            if (d == 0) {
-                // Division by zero - throw exception
-                throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
-                    "Division by zero: %d / %d", acc_i, d);
-                return NULL;
-            }
-            if (acc_i % d == 0) {
-                acc_i /= d;
-            } else {
-                sawFixed = true;
-                acc_fixed = fixnum_to_fixed(acc_i) / d; // Fixnum zu Fixed promoten
+        if (!sawFixed) {
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT: {
+                    int d = AS_FIXNUM(args[i]);
+                    if (d == 0) {
+                        // Division by zero - throw exception
+                        throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                            "Division by zero: %d / %d", acc_i, d);
+                        return NULL;
+                    }
+                    if (acc_i % d == 0) {
+                        acc_i /= d;
+                    } else {
+                        sawFixed = true;
+                        acc_fixed = fixnum_to_fixed(acc_i) / d; // Fixnum zu Fixed promoten
+                    }
+                    break;
+                }
+                case CLJ_FLOAT:
+                default: {
+                    if (!sawFixed) {
+                        acc_fixed = fixnum_to_fixed(acc_i);
+                        sawFixed = true;
+                    }
+                    int32_t d;
+                    switch (GET_TAG(args[i])) {
+                        case CLJ_INT:
+                            d = fixnum_to_fixed(AS_FIXNUM(args[i]));
+                            break;
+                        default:
+                            d = extract_fixed_value(args[i]);
+                            break;
+                    }
+                    if (d == 0) {
+                        // Division by zero - throw exception
+                        throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
+                            "Division by zero: %d / %d", acc_fixed >> 13, d >> 13);
+                        return NULL;
+                    } else {
+                        acc_fixed = (acc_fixed << 13) / d; // Fixed-Point Division mit Shift
+                    }
+                    break;
+                }
             }
         } else {
-            if (!sawFixed) {
-                acc_fixed = fixnum_to_fixed(acc_i);
-                sawFixed = true;
+            int32_t d;
+            switch (GET_TAG(args[i])) {
+                case CLJ_INT:
+                    d = fixnum_to_fixed(AS_FIXNUM(args[i]));
+                    break;
+                default:
+                    d = extract_fixed_value(args[i]);
+                    break;
             }
-            int32_t d = IS_FIXNUM(args[i]) ? fixnum_to_fixed(AS_FIXNUM(args[i])) 
-                                            : extract_fixed_value(args[i]);
             if (d == 0) {
                 // Division by zero - throw exception
                 throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0, 
@@ -1891,14 +2061,18 @@ ID native_byte_array(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "byte-array")) return NULL;
     
     // If argument is a fixnum, create array with that size
-    if (IS_FIXNUM(args[0])) {
-        int size = AS_FIXNUM(args[0]);
-        if (size < 0) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
-                    "byte-array size must be non-negative, got %d", size);
-            return NULL;
+    switch (GET_TAG(args[0])) {
+        case CLJ_INT: {
+            int size = AS_FIXNUM(args[0]);
+            if (size < 0) {
+                throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                        "byte-array size must be non-negative, got %d", size);
+                return NULL;
+            }
+            return (ID)make_byte_array(size);
         }
-        return (ID)make_byte_array(size);
+        default:
+            break;
     }
     
     // Otherwise, treat as sequence and create array from values
@@ -1915,7 +2089,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
         CljValue arr = (CljValue)make_byte_array(vec->count);
         
         for (int i = 0; i < vec->count; i++) {
-            if (!IS_FIXNUM(vec->data[i])) {
+            if (GET_TAG(vec->data[i]) != CLJ_INT) {
                 RELEASE((CljObject*)arr);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "byte-array sequence elements must be numbers",
                                __FILE__, __LINE__, 0);
@@ -1949,7 +2123,7 @@ ID native_aget(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (!IS_FIXNUM(args[1])) {
+    if (GET_TAG(args[1]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aget index must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -1970,13 +2144,13 @@ ID native_aset(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (!IS_FIXNUM(args[1])) {
+    if (GET_TAG(args[1]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aset index must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    if (!IS_FIXNUM(args[2])) {
+    if (GET_TAG(args[2]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aset value must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;

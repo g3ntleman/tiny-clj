@@ -35,7 +35,10 @@ R"CLOJURE(
 ; Collection Functions
 ; ============================================================================
 (def second (fn [coll] (first (rest coll))))
-(def empty? (fn [coll] (= (count coll) 0)))
+(def empty? (fn [coll] 
+  (if coll
+    (= (count coll) 0)
+    true)))
 (def update (fn [map key f]
   (assoc map key (f (get map key)))))
 

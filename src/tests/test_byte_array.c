@@ -212,9 +212,9 @@ TEST(test_byte_array_id_operations) {
     TEST_ASSERT_EQUAL_PTR(id2, read2);
     
     // Verify the values decode correctly
-    TEST_ASSERT_TRUE(IS_FIXNUM(read1));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(read1));
     TEST_ASSERT_EQUAL_INT(42, AS_FIXNUM(read1));
-    TEST_ASSERT_TRUE(IS_FIXNUM(read2));
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, GET_TAG(read2));
     TEST_ASSERT_EQUAL_INT(999, AS_FIXNUM(read2));
     
     RELEASE((CljObject*)arr);

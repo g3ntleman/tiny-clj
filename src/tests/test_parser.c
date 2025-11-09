@@ -64,6 +64,20 @@ TEST(test_parse_collections) {
     evalstate_free(eval_state);
 }
 
+TEST(test_parse_empty_list) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test: () is nil in Clojure (Clojure-compatible behavior)
+    CljObject *empty_list_result = parse("()", eval_state);
+    TEST_ASSERT_NULL(empty_list_result);  // () is nil (NULL)
+    TEST_ASSERT_EQUAL_INT(CLJ_UNKNOWN, TYPE(empty_list_result));
+    
+    // Test: (list) creates an empty list (different from ())
+    // This is tested separately in test_basics.c
+    
+    evalstate_free(eval_state);
+}
+
 TEST(test_parse_comments) {
     EvalState *eval_state = evalstate_new(false);
     

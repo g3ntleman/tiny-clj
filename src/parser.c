@@ -464,10 +464,10 @@ static ID parse_list(Reader *reader, EvalState *st) {
     return NULL;
   reader_skip_all(reader);
   
-  // Handle empty list
+  // Handle empty list - return nil (Clojure behavior: () is nil)
   if (reader_peek_char(reader) == ')') {
     reader_next(reader);
-    return NULL;
+    return NULL;  // () is nil in Clojure
   }
   
   // Parse first element

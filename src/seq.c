@@ -42,6 +42,10 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
                 return true;  // Empty list
             }
             
+            // Note: Empty list singleton is handled above (list_data check)
+            // In Clojure, () is nil, not an empty list
+            // empty_list() singleton is only used by (list) function
+            
             // Store the list node itself, not the first element
             // Note: LIST_FIRST(list_data) can be NULL (nil) - this is valid
             iter->state.list.current = (CljObject*)list_data;

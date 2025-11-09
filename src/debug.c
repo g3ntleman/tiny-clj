@@ -18,12 +18,16 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
     
     // Handle immediates
     if (IS_IMMEDIATE(v)) {
-        if (IS_FIXNUM(v)) {
-            *offset += snprintf(buf + *offset, buf_size - *offset, "%d", as_fixnum((CljValue)v));
-        } else if (IS_FIXED(v)) {
-            *offset += snprintf(buf + *offset, buf_size - *offset, "%.2f", as_fixed((CljValue)v));
-        } else {
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<immediate>");
+        switch (GET_TAG(v)) {
+            case CLJ_INT:
+                *offset += snprintf(buf + *offset, buf_size - *offset, "%d", as_fixnum((CljValue)v));
+                break;
+            case CLJ_FLOAT:
+                *offset += snprintf(buf + *offset, buf_size - *offset, "%.2f", as_fixed((CljValue)v));
+                break;
+            default:
+                *offset += snprintf(buf + *offset, buf_size - *offset, "#<immediate>");
+                break;
         }
         return;
     }
