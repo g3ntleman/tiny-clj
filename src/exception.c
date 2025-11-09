@@ -15,6 +15,15 @@
 #include "object.h"
 #include "memory.h"
 #include "clj_strings.h"  // For to_string
+#include "value.h"  // For make_string
+#include "strings.h"  // For CljString
+
+// Stacktrace support
+#ifdef __APPLE__
+#include <execinfo.h>
+#elif defined(__linux__)
+#include <execinfo.h>
+#endif
 
 // Safe string copy helper
 static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
@@ -22,6 +31,23 @@ static inline void safe_strncpy(char *dest, const char *src, size_t dest_size) {
     strncpy(dest, src, dest_size - 1);
     dest[dest_size - 1] = '\0';
 }
+
+// Shorten file path to show only from /src/ onwards
+static inline const char* shorten_file_path(const char *file) {
+    if (!file) return "";
+    const char *src_pos = strstr(file, "/src/");
+    if (src_pos) {
+        return src_pos + 1; // Skip the leading "/"
+    }
+    return file;
+}
+
+// Forward declaration for stacktrace function
+#ifdef DEBUG
+struct CljString* stacktrace(void);
+#else
+static inline struct CljString* stacktrace(void) { return NULL; }
+#endif
 
 // Global storage for current exception
 CLJException *g_current_exception = NULL;
@@ -52,6 +78,14 @@ CLJException* make_exception(const char *type, const char *message, const char *
     exc->line = line;
     exc->col = col;
     
+#ifdef DEBUG
+    // Always generate stacktrace in DEBUG builds
+    exc->stacktrace = stacktrace();  // Can be NULL on error
+    exc->object = NULL;  // Initialize to NULL
+#else
+    // Release builds: no stacktrace field
+#endif
+    
     return exc;
 }
 
@@ -60,28 +94,31 @@ CLJException* make_exception(const char *type, const char *message, const char *
 // ============================================================================
 
 /** @brief Static exception type: RuntimeException */
-const char *EXCEPTION_TYPE_RUNTIME = "RuntimeException";
+const char *EXCEPTION_RUNTIME = "RuntimeException";
 
 /** @brief Static exception type: ParseError */
-const char *EXCEPTION_TYPE_PARSE = "ParseError";
+const char *EXCEPTION_PARSE = "ParseError";
 
 /** @brief Static exception type: IllegalArgumentException */
-const char *EXCEPTION_TYPE_ILLEGAL_ARGUMENT = "IllegalArgumentException";
+const char *EXCEPTION_ILLEGAL_ARGUMENT = "IllegalArgumentException";
 
 /** @brief Static exception type: ArityException */
-const char *EXCEPTION_TYPE_ARITY = "ArityException";
+const char *EXCEPTION_ARITY = "ArityException";
 
 /** @brief Static exception type: TypeError */
-const char *EXCEPTION_TYPE_TYPE = "TypeError";
+const char *EXCEPTION_TYPE = "TypeError";
 
 /** @brief Static exception type: OutOfMemoryError */
-const char *EXCEPTION_TYPE_OUT_OF_MEMORY = "OutOfMemoryError";
+const char *EXCEPTION_OUT_OF_MEMORY = "OutOfMemoryError";
 
 /** @brief Static exception type: StackOverflowError */
-const char *EXCEPTION_TYPE_STACK_OVERFLOW = "StackOverflowError";
+const char *EXCEPTION_STACK_OVERFLOW = "StackOverflowError";
 
 /** @brief Static exception type: DivisionByZeroError */
-const char *EXCEPTION_TYPE_DIVISION_BY_ZERO = "DivisionByZeroError";
+const char *EXCEPTION_DIVISION_BY_ZERO = "DivisionByZeroError";
+
+/** @brief Static exception type: ZombieAccessException */
+const char *EXCEPTION_ZOMBIE_ACCESS = "ZombieAccessException";
 
 // ============================================================================
 // EXCEPTION THROWING FUNCTIONS
@@ -112,18 +149,11 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
         message[sizeof(message)-1] = '\0';
     }
     
-    // Shorten file path to show only from /src/ onwards
-    const char *short_file = file;
-    const char *src_pos = strstr(file, "/src/");
-    if (src_pos) {
-        short_file = src_pos + 1; // Skip the leading "/"
-    }
-    
     // Use generic RuntimeException if type is NULL
-    const char *exception_type = (type != NULL) ? type : EXCEPTION_TYPE_RUNTIME;
+    const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
     
-    // Create exception and use the unified function
-    CLJException *exception = make_exception(exception_type, message, short_file, line, code);
+    // Create exception and use the unified function (file path will be shortened in print_exception)
+    CLJException *exception = make_exception(exception_type, message, file, line, code);
     if (!exception) {
 #ifdef DEBUG
         fprintf(stderr, "FAILED TO ALLOCATE FORMATTED EXCEPTION\n");
@@ -148,6 +178,153 @@ void throw_exception(const char *type, const char *message, const char *file, in
     throw_exception_object(exception);
 }
 
+/** @brief Generate stacktrace as CljString
+ *  @return CljString* with stacktrace or NULL on error/in Release builds
+ *  @note Only available in DEBUG builds
+ */
+#ifdef DEBUG
+struct CljString* stacktrace(void) {
+#ifdef __APPLE__
+    void *array[32];
+    size_t size = backtrace(array, 32);
+    char **symbols = backtrace_symbols(array, size);
+    
+    if (!symbols || size == 0) {
+        if (symbols) free(symbols);
+        return NULL;
+    }
+    
+    // Calculate total length needed
+    size_t total_len = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (symbols[i]) {
+            total_len += strlen(symbols[i]);
+            total_len += 1;  // newline
+        }
+    }
+    
+    // Allocate buffer for stacktrace string
+    char *buffer = (char*)malloc(total_len + 1);
+    if (!buffer) {
+        free(symbols);
+        return NULL;
+    }
+    
+    // Build stacktrace string
+    size_t pos = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (symbols[i]) {
+            size_t len = strlen(symbols[i]);
+            memcpy(buffer + pos, symbols[i], len);
+            pos += len;
+            buffer[pos++] = '\n';
+        }
+    }
+    buffer[pos] = '\0';
+    
+    free(symbols);
+    
+    // Create CljString from buffer
+    struct CljString *result = make_string(buffer);
+    free(buffer);
+    
+    return result;
+#elif defined(__linux__)
+    void *array[32];
+    size_t size = backtrace(array, 32);
+    char **symbols = backtrace_symbols(array, size);
+    
+    if (!symbols || size == 0) {
+        if (symbols) free(symbols);
+        return NULL;
+    }
+    
+    // Calculate total length needed
+    size_t total_len = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (symbols[i]) {
+            total_len += strlen(symbols[i]);
+            total_len += 1;  // newline
+        }
+    }
+    
+    // Allocate buffer for stacktrace string
+    char *buffer = (char*)malloc(total_len + 1);
+    if (!buffer) {
+        free(symbols);
+        return NULL;
+    }
+    
+    // Build stacktrace string
+    size_t pos = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (symbols[i]) {
+            size_t len = strlen(symbols[i]);
+            memcpy(buffer + pos, symbols[i], len);
+            pos += len;
+            buffer[pos++] = '\n';
+        }
+    }
+    buffer[pos] = '\0';
+    
+    free(symbols);
+    
+    // Create CljString from buffer
+    struct CljString *result = make_string(buffer);
+    free(buffer);
+    
+    return result;
+#else
+    // No stacktrace support on this platform
+    return NULL;
+#endif
+}
+#else
+// Release builds: return NULL
+struct CljString* stacktrace(void) {
+    return NULL;
+}
+#endif
+
+// print_stacktrace() removed - use stacktrace() function instead
+
+/** @brief Print exception details including stacktrace and object (if available) */
+void print_exception(CLJException *ex) {
+    if (!ex) return;
+    
+    // Print basic exception information (compact)
+    fprintf(stderr, "%s: %s at %s:%d:%d", 
+            ex->type, ex->message, shorten_file_path(ex->file), ex->line, ex->col);
+    
+#ifdef DEBUG
+    // Print object if available (very important for zombie objects)
+    if (ex->object) {
+        const char *obj_str = to_string(ex->object);
+        if (obj_str) {
+            fprintf(stderr, " object: %s @%p", obj_str, (void*)ex->object);
+            free((void*)obj_str);  // to_string returns allocated C-string
+        }
+    }
+    
+    fprintf(stderr, "\n");
+    
+    // Print stacktrace if available (compact)
+    if (ex->stacktrace) {
+        fprintf(stderr, "Stack trace:\n");
+        // Use string_data macro to get C-string from CljString
+        const char *stacktrace_str = string_data((CljString*)ex->stacktrace);
+        if (stacktrace_str) {
+            fprintf(stderr, "%s", stacktrace_str);
+        }
+    }
+    
+    fprintf(stderr, "\n");  // Empty line after exception for readability
+#else
+    // Release builds: no stacktrace or object fields
+    fprintf(stderr, "\n");
+#endif
+}
+
 /** @brief Re-throw an existing exception object */
 void throw_exception_object(CLJException *ex) {
     if (!ex) {
@@ -159,16 +336,17 @@ void throw_exception_object(CLJException *ex) {
     
     if (!global_exception_stack.top) {
         // No handler - unhandled exception
-#ifdef DEBUG
-        const char *str = to_string((CljObject*)ex); 
-        fprintf(stderr, "UNHANDLED: %s\n", str ? str : "<null>");
-        free((void*)str);
-#endif
+        fprintf(stderr, "UNHANDLED: ");
+        print_exception(ex);
         
         // No handler - unhandled exception (exit as before)
         // Tests should use TRY/CATCH to catch exceptions
         free(ex); exit(1);
     }
+    
+    // Print exception details (compact, includes zombie object if available)
+    fprintf(stderr, "Exception thrown: ");
+    print_exception(ex);
     
     // Store existing exception in thread-local variable
     // Note: We don't create a new exception, we reuse the existing one

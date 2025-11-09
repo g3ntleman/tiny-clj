@@ -61,6 +61,5 @@ int list_count(CljList *list);
 CljList* make_list_from_stack(CljValue *stack, int count);
 bool is_list(ID v);
 bool is_symbol(ID v, const char *name);
-CljObject* list_from_ints(int count, ...);
 
 #endif

@@ -9,6 +9,9 @@
 #include "../memory.h"
 #include "../namespace.h"
 #include "../symbol.h"
+#include "../atom.h"
+#include "../debug.h"
+#include "../list.h"
 
 // ============================================================================
 // TEST: Basic let binding
@@ -404,4 +407,240 @@ TEST(test_let_filter_function_call) {
     }
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+}
+
+// ============================================================================
+// TESTS: Recursive functions in let bindings - Thesis testing
+// ============================================================================
+
+// THESIS 1: A recursive function defined in a let binding should be able to find itself
+// This tests whether step can find itself when calling (step ...) recursively
+TEST(test_let_recursive_function_self_reference) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (let [step (fn [n acc] (if (= n 0) acc (step (- n 1) (+ acc n))))] (step 5 0))
+    // This should return 15 (sum of 1+2+3+4+5)
+    // The function step calls itself recursively, so it must find itself in its closure environment
+    CljObject *result = eval_string("(let [step (fn [n acc] (if (= n 0) acc (step (- n 1) (+ acc n))))] (step 5 0))", g_test_eval_state);
+    
+    if (!result) {
+        TEST_FAIL_MESSAGE("Recursive function in let returned NULL - step cannot find itself");
+        return;
+    }
+    
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum(result));
+}
+
+// THESIS 2: A recursive function in let should be able to call namespace functions like reverse
+// This tests whether step can find reverse in its closure environment
+TEST(test_let_recursive_function_with_namespace_function) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (let [step (fn [coll acc] (if (empty? coll) (reverse acc) (step (rest coll) (cons (first coll) acc))))] (step (list 1 2 3) (list)))
+    // This should return (1 2 3) - step calls reverse, which must be in closure environment
+    CljObject *result = eval_string("(let [step (fn [coll acc] (if (empty? coll) (reverse acc) (step (rest coll) (cons (first coll) acc))))] (step (list 1 2 3) (list)))", g_test_eval_state);
+    
+    if (!result) {
+        TEST_FAIL_MESSAGE("Recursive function with reverse returned NULL - reverse not found in closure environment");
+        return;
+    }
+    
+    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    
+    // Verify result is (1 2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)list->first));
+    
+    CljList *rest1 = as_list((ID)list->rest);
+    TEST_ASSERT_NOT_NULL(rest1);
+    TEST_ASSERT_NOT_NULL(rest1->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)rest1->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)rest1->first));
+    
+    CljList *rest2 = as_list((ID)rest1->rest);
+    TEST_ASSERT_NOT_NULL(rest2);
+    TEST_ASSERT_NOT_NULL(rest2->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)rest2->first));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)rest2->first));
+}
+
+// THESIS 3: A recursive function in let should work like filter's step function
+// This tests the exact pattern used in filter: step calls itself and uses reverse
+TEST(test_let_filter_step_pattern) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Simplified filter pattern
+    // (let [step (fn [pred coll acc] (if (empty? coll) (if (empty? acc) nil (reverse acc)) (if (pred (first coll)) (step pred (rest coll) (cons (first coll) acc)) (step pred (rest coll) acc))))] (step even? (list 1 2 3) (list)))
+    // This should return (2) - step must find itself and reverse
+    CljObject *result = eval_string("(let [step (fn [pred coll acc] (if (empty? coll) (if (empty? acc) nil (reverse acc)) (if (pred (first coll)) (step pred (rest coll) (cons (first coll) acc)) (step pred (rest coll) acc))))] (step even? (list 1 2 3) (list)))", g_test_eval_state);
+    
+    if (!result) {
+        TEST_FAIL_MESSAGE("Filter step pattern returned NULL - step cannot find itself or reverse");
+        return;
+    }
+    
+    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    
+    // Verify result is (2)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+}
+
+// THESIS 4: A recursive function in let should work with multiple recursive calls
+// This tests that step can find itself even when called multiple times in the same expression
+TEST(test_let_recursive_function_multiple_calls) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (let [step (fn [n] (if (= n 0) 0 (+ (step (- n 1)) (step (- n 1)))))] (step 3))
+    // This should return 6 (step calls itself twice in the same expression)
+    CljObject *result = eval_string("(let [step (fn [n] (if (= n 0) 0 (+ (step (- n 1)) (step (- n 1)))))] (step 3))", g_test_eval_state);
+    
+    if (!result) {
+        TEST_FAIL_MESSAGE("Recursive function with multiple calls returned NULL - step cannot find itself");
+        return;
+    }
+    
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    // Note: This is a simple test - the actual value depends on the recursion depth
+    // We just verify it doesn't return NULL
+    TEST_ASSERT_NOT_NULL(result);
+}
+
+// THESIS 5: A recursive function in let should have access to all namespace functions
+// This tests that step can find multiple namespace functions (reverse, cons, first, rest, empty?)
+TEST(test_let_recursive_function_namespace_access) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (let [step (fn [coll] (if (empty? coll) (list) (cons (first coll) (step (rest coll)))))] (step (list 1 2 3)))
+    // This should return (1 2 3) - step uses empty?, first, rest, cons, and calls itself
+    CljObject *result = eval_string("(let [step (fn [coll] (if (empty? coll) (list) (cons (first coll) (step (rest coll)))))] (step (list 1 2 3)))", g_test_eval_state);
+    
+    if (!result) {
+        TEST_FAIL_MESSAGE("Recursive function with namespace access returned NULL - namespace functions not found");
+        return;
+    }
+    
+    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    
+    // Verify result is (1 2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)list->first));
+}
+
+// ============================================================================
+// LOW-LEVEL TEST: Symbol resolution in eval_arg
+// ============================================================================
+
+// Test that eval_arg can resolve symbols from let_env
+TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
+    WITH_AUTORELEASE_POOL({
+        // Create a let_env manually (simulating what eval_let does)
+        CljMap *let_env = (CljMap*)make_map(4);
+        TEST_ASSERT_NOT_NULL(let_env);
+        
+        // Create a symbol "i" (interned)
+        CljObject *i_sym = intern_symbol_global("i");
+        TEST_ASSERT_NOT_NULL(i_sym);
+        
+        // Create an atom value
+        CljAtom *atom = make_atom(fixnum(0));
+        TEST_ASSERT_NOT_NULL(atom);
+        
+        // Store i -> atom in let_env (simulating map_assoc in eval_let)
+        CljMap *new_let_env = (CljMap*)map_assoc((CljObject*)let_env, i_sym, (CljObject*)atom);
+        ASSIGN(let_env, new_let_env);
+        
+        // Verify i is in let_env using map_contains
+        bool contains = map_contains((CljMap*)let_env, (CljValue)i_sym);
+        TEST_ASSERT_TRUE_MESSAGE(contains, "map_contains should find symbol 'i' in let_env");
+        
+        // Verify i is in let_env using map_get
+        CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym);
+        TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
+        TEST_ASSERT_TRUE(is_type(found, CLJ_ATOM));
+        
+        // Create another "i" symbol (should be same pointer if interned)
+        CljObject *i_sym2 = intern_symbol_global("i");
+        TEST_ASSERT_NOT_NULL(i_sym2);
+        
+        // Verify both symbols are the same pointer (interned)
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(i_sym, i_sym2, "Symbol 'i' should be interned (same pointer)");
+        
+        // Test map_contains with second symbol
+        bool contains2 = map_contains((CljMap*)let_env, (CljValue)i_sym2);
+        TEST_ASSERT_TRUE_MESSAGE(contains2, "map_contains should find symbol 'i' (second instance) in let_env");
+        
+        // Test map_get with second symbol
+        CljValue found2 = map_get((CljMap*)let_env, (CljValue)i_sym2);
+        TEST_ASSERT_NOT_NULL_MESSAGE(found2, "map_get should find symbol 'i' (second instance) in let_env");
+        TEST_ASSERT_TRUE(is_type(found2, CLJ_ATOM));
+        
+        // Now create a simple list with "i" as an element
+        // This simulates (swap! i inc) where i is at index 1
+        // Use parse() to build the list structure: (swap! i inc)
+        ID parsed = parse("(swap! i inc)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(parsed);
+        TEST_ASSERT_TRUE(is_type(parsed, CLJ_LIST));
+        CljList *list = as_list(parsed);
+        
+        // Test 1: Direct eval_arg call (should work)
+        ID result = eval_arg(list, 1, let_env, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_arg should resolve symbol 'i' from let_env (direct call)");
+        TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_ATOM), "eval_arg should return atom for symbol 'i' (direct call)");
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(atom, result, "eval_arg should return the same atom (direct call)");
+        
+        // Test 2: Call via eval_list (which uses call_function_with_args internally)
+        // This simulates what happens when (swap! i inc) is evaluated in a let body
+        // eval_list will call call_function_with_args, which will call eval_arg_retained_with_st
+        // The question is: does the environment get passed correctly through this chain?
+        // 
+        // First, reset the atom to 0 to test the swap! call
+        atom_reset(atom, fixnum(0));
+        
+        // Now call eval_list - this should:
+        // 1. Resolve swap! from namespace (should work)
+        // 2. Call call_function_with_args with let_env
+        // 3. call_function_with_args should call eval_arg_retained_with_st(list, 1, let_env, st) for "i"
+        // 4. eval_arg should find "i" in let_env (this is what we're testing)
+        // 5. call_function_with_args should call eval_arg_retained_with_st(list, 2, let_env, st) for "inc"
+        // 6. eval_arg should find "inc" in namespace (should work)
+        ID result2 = eval_list(list, let_env, g_test_eval_state);
+        
+        // Check if eval_list returned NULL (indicates failure)
+        if (!result2) {
+            // If swap! failed, check if the atom value changed
+            // If it's still 0, then swap! didn't execute (probably because 'i' wasn't found)
+            CljAtom *atom_after = (CljAtom*)atom;
+            ID atom_value = atom_deref(atom_after);
+            if (as_fixnum(atom_value) == 0) {
+                // Atom value is still 0 - swap! didn't execute
+                // This means 'i' was probably not found in let_env
+                TEST_FAIL_MESSAGE("eval_list returned NULL and atom value is still 0. "
+                                 "This indicates that 'i' was not found in let_env when called via eval_list. "
+                                 "The direct eval_arg call worked, but eval_list (via call_function_with_args) failed.");
+            } else {
+                // Atom value changed - swap! executed but returned NULL
+                TEST_FAIL_MESSAGE("eval_list returned NULL but atom value changed. "
+                                 "This indicates swap! executed but returned NULL.");
+            }
+        }
+        
+        // If swap! works correctly, it should have incremented the atom value from 0 to 1
+        // So dereferencing the atom should return 1
+        CljAtom *atom_after = (CljAtom*)atom;
+        ID atom_value = atom_deref(atom_after);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result2, "eval_list should execute swap! successfully");
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum(atom_value), "atom value should be a fixnum after swap!");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(atom_value), "atom value should be 1 after swap! inc");
+    });
 }

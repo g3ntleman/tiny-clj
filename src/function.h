@@ -2,6 +2,7 @@
 #define TINY_CLJ_FUNCTION_H
 
 #include "object.h"
+#include "map.h"
 
 typedef struct {
     CljObject base;
@@ -15,11 +16,11 @@ typedef struct {
     ID *params;
     int param_count;
     ID body;
-    ID closure_env;
+    CljMap *closure_env;  // Closure environment map (can be NULL)
     const char *name;
 } CljFunction;
 
-CljFunction* make_function(ID *params, int param_count, ID body, ID closure_env, const char *name);
+CljFunction* make_function(ID *params, int param_count, ID body, CljMap *closure_env, const char *name);
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */

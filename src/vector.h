@@ -49,11 +49,11 @@ void vector_grow_capacity(CljPersistentVector *v);
 
 // === Transient API (Phase 2) ===
 /** Convert persistent vector to transient. */
-CljValue transient(CljValue vec);
+ID transient(ID vec);
 /** Append to transient vector (guaranteed in-place). */
-CljValue clj_conj(CljValue tvec, CljValue item);
+ID clj_conj(ID tvec, ID item);
 /** Convert transient vector back to persistent. */
-CljValue persistent(CljValue tvec);
+ID persistent(ID tvec);
 
 #endif
 

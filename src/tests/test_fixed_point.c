@@ -76,7 +76,7 @@ TEST(test_fixed_arithmetic_operations) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.0f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
     });
 }
@@ -98,7 +98,7 @@ TEST(test_fixed_mixed_type_operations) {
             // Fixed-Point precision: 2.2 becomes ~2.199
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.2f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test float + int: 2.5 + 3 = 5.5
         result = eval_string("(+ 2.5 3)", g_test_eval_state);
@@ -107,7 +107,7 @@ TEST(test_fixed_mixed_type_operations) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.5f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test multiple mixed types: 1 + 2.5 + 3 = 6.5
         result = eval_string("(+ 1 2.5 3)", g_test_eval_state);
@@ -116,7 +116,7 @@ TEST(test_fixed_mixed_type_operations) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 6.5f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
     });
 }
@@ -137,7 +137,7 @@ TEST(test_fixed_division_with_remainder) {
             int val = as_fixnum(result);
             TEST_ASSERT_EQUAL_INT(3, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test float division (with remainder): 5 / 2 = 2.5 (Fixed-Point)
         result = eval_string("(/ 5 2)", g_test_eval_state);
@@ -146,7 +146,7 @@ TEST(test_fixed_division_with_remainder) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.5f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test mixed division: 7.0 / 2 = 3.5 (Fixed-Point)
         result = eval_string("(/ 7.0 2)", g_test_eval_state);
@@ -155,7 +155,7 @@ TEST(test_fixed_division_with_remainder) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.5f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
     });
 }
@@ -177,7 +177,7 @@ TEST(test_fixed_precision_limits) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.001f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test that very precise numbers get rounded
         result = eval_string("1.23456789", g_test_eval_state);
@@ -187,7 +187,7 @@ TEST(test_fixed_precision_limits) {
             // Fixed-Point should round to ~4 significant digits
             TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.235f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test large number
         result = eval_string("1000.5", g_test_eval_state);
@@ -196,7 +196,7 @@ TEST(test_fixed_precision_limits) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.1f, 1000.5f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
     });
 }
@@ -217,7 +217,7 @@ TEST(test_fixed_variadic_operations) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test mixed variadic: 1 + 2.5 + 3 + 4.5 = 11.0
         result = eval_string("(+ 1 2.5 3 4.5)", g_test_eval_state);
@@ -226,7 +226,7 @@ TEST(test_fixed_variadic_operations) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.01f, 11.0f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test multiplication with floats
         result = eval_string("(* 2.0 3.0 4.0)", g_test_eval_state);
@@ -235,7 +235,7 @@ TEST(test_fixed_variadic_operations) {
             float val = as_fixed(result);
             TEST_ASSERT_FLOAT_WITHIN(0.1f, 24.0f, val);
         }
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
     });
 }
@@ -250,7 +250,7 @@ TEST(test_fixed_error_handling) {
         // Test division by zero
         CljObject *result = eval_string("(/ 6 2)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result); // Should work fine
-        if (result) RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test division by zero - should throw exception
         bool exception_caught = false;
@@ -279,53 +279,53 @@ TEST(test_fixed_comparison_operators) {
         CljObject *result = eval_string("(< 1.5 2.0)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test > operator
         result = eval_string("(> 2.0 1.5)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test <= operator
         result = eval_string("(<= 1.5 1.5)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test >= operator
         result = eval_string("(>= 2.0 2.0)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test = operator
         result = eval_string("(= 1.5 1.5)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test mixed int/float comparisons
         result = eval_string("(< 1 1.5)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         result = eval_string("(> 1.5 1)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         // Test false cases
         result = eval_string("(< 2.0 1.5)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_FALSE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
         
         result = eval_string("(> 1.5 2.0)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_FALSE(clj_is_truthy(result));
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
             
     });
 }

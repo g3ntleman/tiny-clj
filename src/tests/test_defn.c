@@ -230,7 +230,7 @@ TEST(test_defn_symbol_recognized) {
             }
         }
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
     });
 }
 
@@ -268,7 +268,7 @@ TEST(test_defn_test_fn_parsed) {
         TEST_ASSERT_EQUAL_STRING_MESSAGE("test-fn", test_fn->name, 
                                         "second element should be 'test-fn' symbol");
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
     });
 }
 
@@ -305,7 +305,7 @@ TEST(test_defn_test_fn_evaluated) {
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
         
         CljObject *test_fn_sym = intern_symbol_global("test-fn");
-        ID test_fn_value = map_get((CljValue)ns->mappings, (CljValue)test_fn_sym);
+        ID test_fn_value = map_get((CljMap*)ns->mappings, (CljValue)test_fn_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_value, 
                                      "'test-fn' should be in namespace mappings after eval_defn");
         
@@ -313,7 +313,7 @@ TEST(test_defn_test_fn_evaluated) {
         TEST_ASSERT_TRUE_MESSAGE(is_type(test_fn_value, CLJ_CLOSURE) || is_type(test_fn_value, CLJ_FUNC),
                                  "test-fn should be a function");
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
     });
 }
 
@@ -337,7 +337,7 @@ TEST(test_defn_add_stored_in_namespace) {
         CljObject *add_sym = intern_symbol_global("add");
         TEST_ASSERT_NOT_NULL(add_sym);
         
-        ID add_value = map_get((CljValue)ns->mappings, (CljValue)add_sym);
+        ID add_value = map_get((CljMap*)ns->mappings, (CljValue)add_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(add_value, 
                                      "'add' should be in namespace mappings after defn");
         

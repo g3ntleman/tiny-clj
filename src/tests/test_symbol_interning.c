@@ -37,7 +37,7 @@ TEST(test_inc_symbol_interning_during_load) {
     
     if (clojure_core && clojure_core->mappings) {
         // Check if inc_sym_after is in the mappings
-        CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym_after);
+        CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym_after);
         
         if (!inc_value) {
             // Debug: Check what symbols ARE in the mappings
@@ -122,11 +122,11 @@ TEST(test_inc_symbol_pointer_consistency) {
         
         // Check if inc is now in the mappings with the same symbol pointer
         if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
-            CljObject *inc_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_after);
+            CljObject *inc_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_after);
             
             if (!inc_value) {
                 // Debug: try with the symbol from the form
-                inc_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_in_form);
+                inc_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_in_form);
                 
                 if (!inc_value) {
                     char msg[256];
@@ -142,10 +142,10 @@ TEST(test_inc_symbol_pointer_consistency) {
             TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc should be in mappings after def");
         }
         
-        RELEASE((CljObject*)result);
+        // Don't RELEASE result - eval_list returns autoreleased object
     }
     
-    RELEASE((CljObject*)form);
+    // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
 }
 
 // Test: Verify symbol interning consistency across multiple calls
@@ -185,7 +185,7 @@ TEST(test_map_get_with_interned_symbols) {
                                   "Should get same symbol pointer");
     
     // Try to retrieve using the second symbol pointer
-    CljObject *retrieved = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)test_sym2);
+    CljObject *retrieved = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)test_sym2);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved, 
                                  "Should retrieve value using interned symbol pointer");
     

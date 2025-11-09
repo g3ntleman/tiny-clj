@@ -530,6 +530,41 @@ TEST(test_cons_function) {
     
 }
 
+TEST(test_identity_function) {
+    // Test identity function from clojure.core
+    // identity should return its argument unchanged
+    
+    // Test with number
+    CljObject *result1 = eval_string("(identity 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum(result1));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result1));
+    
+    // Test with string
+    CljObject *result2 = eval_string("(identity \"hello\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_type(result2, CLJ_STRING));
+    
+    // Test with list
+    CljObject *result3 = eval_string("(identity (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(is_type(result3, CLJ_LIST));
+    
+    // Test with nil
+    CljObject *result4 = eval_string("(identity nil)", g_test_eval_state);
+    TEST_ASSERT_NULL(result4);  // nil is represented as NULL
+    
+    // Test with vector
+    CljObject *result5 = eval_string("(identity [1 2 3])", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result5);
+    TEST_ASSERT_TRUE(is_type(result5, CLJ_VECTOR));
+    
+    // Test with map
+    CljObject *result6 = eval_string("(identity {:a 1 :b 2})", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result6);
+    TEST_ASSERT_TRUE(is_type(result6, CLJ_MAP));
+}
+
 TEST(test_count_vector) {
     
     // Test count on vector
@@ -714,7 +749,7 @@ TEST(test_list_first_valid) {
     TEST_ASSERT_NOT_NULL(first);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(first));
     
-    RELEASE(list);
+    // Don't RELEASE list - eval_string returns autoreleased object
 }
 
 // Test is_type function with various types
@@ -740,20 +775,8 @@ TEST(test_is_type_function) {
     
 }
 
-// Test eval_list with simple arithmetic
-TEST(test_eval_list_simple_arithmetic) {
-    
-    // Test simple addition
-    CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
-    
-    // No RELEASE needed - eval_string returns autoreleased object
-}
-
 // Test eval_list with function call
 TEST(test_eval_list_function_call) {
-    
     // Define a simple function
     CljObject *def_result = NULL;
     TRY {
@@ -844,7 +867,7 @@ TEST(test_def_isolated_problem) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_string should resolve test-value without exception");
         RELEASE(test_value_sym);
-        if (eval_resolved) RELEASE(eval_resolved);
+        // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
         return;
     } END_TRY
     
@@ -857,7 +880,7 @@ TEST(test_def_isolated_problem) {
     
     // Cleanup
     RELEASE(test_value_sym);
-    if (eval_resolved) RELEASE(eval_resolved);
+    // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
 }
 
 // Test that isolates the def problem with functions: checks if def stores function correctly
@@ -890,7 +913,7 @@ TEST(test_def_function_isolated_problem) {
     }
     
     // Step 5: Try to get the value directly from the map
-    CljObject *direct_map_value = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)test_fn_sym);
+    CljObject *direct_map_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)test_fn_sym);
     if (direct_map_value) {
         TEST_ASSERT_TRUE_MESSAGE(is_type(direct_map_value, CLJ_FUNC) || is_type(direct_map_value, CLJ_CLOSURE), 
                                  "Direct map lookup should return a function");
@@ -930,7 +953,7 @@ TEST(test_def_function_isolated_problem) {
         TEST_FAIL_MESSAGE("Calling test-fn should not throw exception");
         RELEASE(test_fn_sym);
         if (resolved) RELEASE(resolved);
-        if (eval_resolved) RELEASE(eval_resolved);
+        // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
         return;
     } END_TRY
     
@@ -944,7 +967,7 @@ TEST(test_def_function_isolated_problem) {
     // Cleanup
     RELEASE(test_fn_sym);
     if (resolved) RELEASE(resolved);
-    if (eval_resolved) RELEASE(eval_resolved);
+    // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
 }
 
 // ============================================================================

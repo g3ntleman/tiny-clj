@@ -89,20 +89,27 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         CljObject *kw_value = intern_symbol(NULL, ":value");
         CljObject *kw_closed = intern_symbol(NULL, ":closed");
         
+        ID current_chan = (ID)task.result_chan;
+        
         if (ok && result) {
-            // Put value into channel (will mutate in-place since RC=1)
-            (void)map_assoc((CljValue)task.result_chan, (CljValue)kw_value, (CljValue)result);
+            // Put value into channel (map_assoc always returns a new map)
+            ID new_chan = map_assoc(current_chan, (CljValue)kw_value, (CljValue)result);
+            if (!released_queue_ref && current_chan == (ID)task.result_chan) {
+                RELEASE((CljObject*)current_chan);
+            } else if (current_chan != (ID)task.result_chan) {
+                RELEASE((CljObject*)current_chan);
+            }
+            current_chan = new_chan;
         }
         
-        // Close channel (will mutate in-place since RC=1)
-        ID new_chan = map_assoc((ID)task.result_chan, (ID)kw_closed, (ID)clj_true);
-        // Handle COW if it occurred (shouldn't happen with RC=1 for existing key)
-        if (new_chan != (ID)task.result_chan) {
-            if (!released_queue_ref) {
-                RELEASE((CljObject*)task.result_chan);
-            }
-            task.result_chan = (CljObject*)new_chan;
+        // Close channel (map_assoc always returns a new map)
+        ID new_chan = map_assoc(current_chan, (ID)kw_closed, (ID)clj_true);
+        if (current_chan != (ID)task.result_chan) {
+            RELEASE((CljObject*)current_chan);
+        } else if (!released_queue_ref) {
+            RELEASE((CljObject*)task.result_chan);
         }
+        task.result_chan = (CljObject*)new_chan;
     }
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);

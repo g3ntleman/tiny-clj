@@ -24,14 +24,14 @@ extern const char *ERROR_MEMORY_ALLOCATION;  /* "Memory allocation failed" */
 
 // Exception type constants
 extern const char *EXCEPTION_ARITHMETIC;           /* "ArithmeticException" */
-extern const char *EXCEPTION_TYPE_RUNTIME;         /* "RuntimeException" */
-extern const char *EXCEPTION_TYPE_PARSE;           /* "ParseError" */
-extern const char *EXCEPTION_TYPE_ILLEGAL_ARGUMENT;/* "IllegalArgumentException" */
-extern const char *EXCEPTION_TYPE_ARITY;           /* "ArityException" */
-extern const char *EXCEPTION_TYPE_TYPE;            /* "TypeError" */
-extern const char *EXCEPTION_TYPE_OUT_OF_MEMORY;   /* "OutOfMemoryError" */
-extern const char *EXCEPTION_TYPE_STACK_OVERFLOW;  /* "StackOverflowError" */
-extern const char *EXCEPTION_TYPE_DIVISION_BY_ZERO;/* "DivisionByZeroError" */
+extern const char *EXCEPTION_RUNTIME;         /* "RuntimeException" */
+extern const char *EXCEPTION_PARSE;           /* "ParseError" */
+extern const char *EXCEPTION_ILLEGAL_ARGUMENT;/* "IllegalArgumentException" */
+extern const char *EXCEPTION_ARITY;           /* "ArityException" */
+extern const char *EXCEPTION_TYPE;            /* "TypeError" */
+extern const char *EXCEPTION_OUT_OF_MEMORY;   /* "OutOfMemoryError" */
+extern const char *EXCEPTION_STACK_OVERFLOW;  /* "StackOverflowError" */
+extern const char *EXCEPTION_DIVISION_BY_ZERO;/* "DivisionByZeroError" */
 
 // Integer overflow/underflow error messages
 extern const char *ERR_INTEGER_OVERFLOW_ADDITION;     /* "Integer overflow in addition: %d + %d would exceed INT_MAX" */

@@ -26,7 +26,11 @@
 #define MAX_FUNCTION_PARAMS 32
 
 // Maximum stack depth for function calls
-#define MAX_CALL_STACK_DEPTH 20
+// Increased to handle nested function calls like (update {:a 1} :a inc)
+// Note: This is a safety limit - actual stack depth depends on function nesting
+// Very high value to handle deeply nested Clojure function calls
+// Note: This is a safety limit to prevent infinite recursion, not a hard limit
+#define MAX_CALL_STACK_DEPTH 1000
 
 // Maximum autorelease pool depth
 #define MAX_POOL_DEPTH 24

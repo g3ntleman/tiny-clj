@@ -67,4 +67,16 @@ R"CLOJURE(
 ; Utility Functions
 ; ============================================================================
 (def constantly (fn [x] (fn [y] x)))
+
+; ============================================================================
+; Reduce Function
+; ============================================================================
+(def reduce (fn [f coll]
+  (if (empty? coll)
+    nil
+    (let [step (fn [f coll acc]
+                  (if (empty? coll)
+                    acc
+                    (step f (rest coll) (f acc (first coll)))))]
+      (step f (rest coll) (first coll))))))
 )CLOJURE"

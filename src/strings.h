@@ -46,6 +46,13 @@ static inline bool is_clj_string(CljObject *obj) {
 CljString* make_clj_string(const char *str);
 
 /**
+ * @brief Create a string value
+ * @param str String to create
+ * @return CljString object (caller must release)
+ */
+struct CljString* make_string(const char *str);
+
+/**
  * @brief Get string length
  * @param str CljString object
  * @return String length

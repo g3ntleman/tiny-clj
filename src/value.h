@@ -110,6 +110,7 @@ static inline int32_t as_fixnum(CljValue val) {
 // Function declarations for large functions moved to value.c
 CljValue character(uint32_t codepoint);
 CljValue fixed(float value);
+// make_string moved to strings.h - forward declaration for compatibility
 struct CljString* make_string(const char *str);
 
 

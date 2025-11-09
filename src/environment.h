@@ -3,9 +3,10 @@
 
 #include "object.h"
 #include "value.h"
+#include "map.h"
 
 // Environment helpers for function calls
 /** Create child env extended with param/value bindings (stack impl.). */
-CljObject* env_extend_stack(CljObject *parent_env, CljObject **params, CljObject **values, int count);
+CljMap* env_extend_stack(CljMap *parent_env, ID *params, ID *values, int count);
 
 #endif

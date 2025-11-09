@@ -6,8 +6,8 @@
 
 // Result channel API (promise-chan like)
 CljMap* make_result_channel(void);           // returns a map {:value nil :closed false}
-void result_channel_put(ID chan, ID value);
-void result_channel_close(CljObject *chan);
+ID result_channel_put(ID chan, ID value);    // returns new channel map
+ID result_channel_close(ID chan);             // returns new channel map
 
 #endif
 

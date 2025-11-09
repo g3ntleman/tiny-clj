@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <assert.h>
 #include "object.h"
 #include "strings.h"
 #include "clj_strings.h"
@@ -31,7 +32,32 @@ static struct {
 
 CljString* empty_string_singleton = (CljString*)&empty_string_data;
 
-// make_string_old function removed - use make_string from value.h instead
+/**
+ * @brief Create a string value
+ * @param str String to create
+ * @return CljString object (caller must release)
+ */
+struct CljString* make_string(const char *str) {
+    if (!str || str[0] == '\0') {
+        return empty_string_singleton;
+    }
+    
+    // Allocate CljString + space for string data + null terminator
+    size_t len = strlen(str);
+    
+    // Assert that string length fits in 16-bit field (max 65,535 characters)
+    assert(len <= UINT16_MAX && "String length exceeds 16-bit limit (65,535 chars)");
+    
+    CljString *s = (CljString*)alloc(sizeof(CljString) + len + 1, 1, CLJ_STRING);
+    if (!s) throw_oom(CLJ_STRING);
+    
+    s->base.type = CLJ_STRING;
+    s->base.rc = 1;
+    s->length = (uint16_t)len;
+    memcpy(s->data, str, len + 1);  // includes null terminator
+    
+    return s;
+}
 
 const char* to_string(CljObject *v) {
     // Handle nil (represented as NULL)

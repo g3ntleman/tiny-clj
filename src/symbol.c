@@ -334,6 +334,7 @@ void init_special_symbols() {
     SYM_NS = (CljObject*)&sym_ns_data;
     symbol_table_add(NULL, "ns", SYM_NS);
     
+    sym_time_data.sym.name = strdup("time");
     SYM_TIME = (CljObject*)&sym_time_data;
     symbol_table_add(NULL, "time", SYM_TIME);
     
@@ -558,7 +559,7 @@ CljObject* intern_symbol(const char *ns, const char *name) {
     }
     
     // Symbol nicht gefunden, erstelle neues
-    CljObject *symbol = make_symbol_impl(name, ns);
+    CljObject *symbol = (CljObject*)make_symbol_impl(name, ns);
     if (!symbol) return NULL;
     
     // Füge zur Symbol-Table hinzu

@@ -39,7 +39,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
     return 0;
 }
 
-CljFunction* make_function(ID *params, int param_count, ID body, ID closure_env, const char *name) {
+CljFunction* make_function(ID *params, int param_count, ID body, CljMap *closure_env, const char *name) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);

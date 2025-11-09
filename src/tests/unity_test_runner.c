@@ -42,6 +42,7 @@ void setUp(void) {
         g_special_symbols_initialized = true;
     }
     
+    
     if (!g_runtime.builtins_registered) {
         meta_registry_init();
         register_builtins();
@@ -52,6 +53,11 @@ void setUp(void) {
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
         set_memory_verbose_mode(false);
+#endif
+
+#ifdef DEBUG
+        // Enable zombie mode for debugging use-after-free errors
+        enable_zombie_mode();
 #endif
     
     // Load clojure.core for each test (refresh state between tests)
@@ -89,7 +95,7 @@ void setUp(void) {
                     // Check if 'inc' is in the namespace (quick check to verify functions are loaded)
                     CljObject *inc_sym = intern_symbol_global("inc");
                     if (inc_sym) {
-                        CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym);
+                        CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
                         if (!inc_value) {
                             needs_reload = true;
                         }
@@ -236,8 +242,8 @@ static void run_tests_by_registry(void) {
             RUN_TEST(all_tests[i].func);
         } CATCH(ex) {
             // Unhandled exception caught - mark test as failed
-            printf("\nUNHANDLED EXCEPTION in %s: %s\n", 
-                   all_tests[i].qualified_name, ex->message);
+            fprintf(stderr, "UNHANDLED EXCEPTION in %s: ", all_tests[i].qualified_name);
+            print_exception(ex);
             // Mark test as failed using Unity's internal state
             // Also increment test count since RUN_TEST might not have been fully executed
             Unity.NumberOfTests++;
@@ -311,8 +317,8 @@ static void run_specific_test(const char *test_name_or_pattern) {
                     RUN_TEST(all_tests[i].func);
                 } CATCH(ex) {
                     // Unhandled exception caught - mark test as failed
-                    printf("\nUNHANDLED EXCEPTION in %s: %s\n", 
-                           all_tests[i].qualified_name, ex->message);
+                    fprintf(stderr, "UNHANDLED EXCEPTION in %s: ", all_tests[i].qualified_name);
+                    print_exception(ex);
                     // Mark test as failed using Unity's internal state
                     // Also increment test count since RUN_TEST might not have been fully executed
                     Unity.NumberOfTests++;
@@ -434,12 +440,12 @@ TEST(test_embedded_array_single_malloc) {
         TEST_ASSERT_EQUAL(0, map->count);
         
         // Add entries to test embedded array
-        map_assoc((CljValue)map, fixnum(1), fixnum(10));
-        map_assoc((CljValue)map, fixnum(2), fixnum(20));
+        map = map_assoc(map, fixnum(1), fixnum(10));
+        map = map_assoc(map, fixnum(2), fixnum(20));
         
         // Verify entries in embedded array
-        CljValue val1 = map_get((CljValue)map, fixnum(1));
-        CljValue val2 = map_get((CljValue)map, fixnum(2));
+        CljValue val1 = map_get((CljMap*)map, fixnum(1));
+        CljValue val2 = map_get((CljMap*)map, fixnum(2));
         TEST_ASSERT_NOT_NULL(val1);
         TEST_ASSERT_NOT_NULL(val2);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
@@ -459,14 +465,14 @@ TEST(test_embedded_array_memory_efficiency) {
         CljMap *map3 = make_map(8);
         
         // Add entries to each map
-        map_assoc((CljValue)map1, fixnum(1), fixnum(10));
-        map_assoc((CljValue)map2, fixnum(2), fixnum(20));
-        map_assoc((CljValue)map3, fixnum(3), fixnum(30));
+        map1 = map_assoc(map1, fixnum(1), fixnum(10));
+        map2 = map_assoc(map2, fixnum(2), fixnum(20));
+        map3 = map_assoc(map3, fixnum(3), fixnum(30));
         
         // Verify all maps work independently
-        TEST_ASSERT_NOT_NULL(map_get((CljValue)map1, fixnum(1)));
-        TEST_ASSERT_NOT_NULL(map_get((CljValue)map2, fixnum(2)));
-        TEST_ASSERT_NOT_NULL(map_get((CljValue)map3, fixnum(3)));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map1, fixnum(1)));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map2, fixnum(2)));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map3, fixnum(3)));
         
         // Verify embedded arrays are separate
         TEST_ASSERT_NOT_EQUAL(map1->data, map2->data);
@@ -482,7 +488,7 @@ TEST(test_embedded_array_cow) {
     
     WITH_AUTORELEASE_POOL({
         CljMap *map = make_map(4);
-        map_assoc((CljValue)map, fixnum(1), fixnum(10));
+        map = map_assoc(map, fixnum(1), fixnum(10));
         printf("Original map: RC=%d, count=%d\n", map->base.rc, map->count);
         
         // Simulate sharing (RC=2)
@@ -490,13 +496,12 @@ TEST(test_embedded_array_cow) {
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // COW operation should create new map with embedded array
-        CljValue new_map = map_assoc((CljValue)map, fixnum(2), fixnum(20));
-        CljMap *new_map_data = as_map(new_map);
+        CljMap *new_map = map_assoc(map, fixnum(2), fixnum(20));
         
         // Verify new map has embedded array
-        TEST_ASSERT_NOT_NULL(new_map_data->data);
-        TEST_ASSERT_EQUAL(4, new_map_data->capacity);
-        TEST_ASSERT_EQUAL(2, new_map_data->count);
+        TEST_ASSERT_NOT_NULL(new_map->data);
+        TEST_ASSERT_EQUAL(4, new_map->capacity);
+        TEST_ASSERT_EQUAL(2, new_map->count);
         
         // Verify entries in new map
         CljValue val1 = map_get(new_map, fixnum(1));
@@ -508,7 +513,7 @@ TEST(test_embedded_array_cow) {
         
         // Verify original unchanged
         TEST_ASSERT_EQUAL(1, map->count);
-        TEST_ASSERT_NULL(map_get((CljValue)map, fixnum(2)));
+        TEST_ASSERT_NULL(map_get((CljMap*)map, fixnum(2)));
         
         printf("✓ COW mit embedded arrays funktioniert\n");
         
@@ -524,20 +529,19 @@ TEST(test_embedded_array_capacity_growth) {
         printf("Initial capacity: %d\n", map->capacity);
         
         // Fill initial capacity
-        map_assoc((CljValue)map, fixnum(1), fixnum(10));
-        map_assoc((CljValue)map, fixnum(2), fixnum(20));
+        map = map_assoc(map, fixnum(1), fixnum(10));
+        map = map_assoc(map, fixnum(2), fixnum(20));
         printf("After filling capacity: %d\n", map->capacity);
         
         // Simulate sharing to trigger COW with growth
         RETAIN(map);
         
         // Add more entries - should trigger COW with capacity growth
-        CljValue new_map = map_assoc((CljValue)map, fixnum(3), fixnum(30));
-        CljMap *new_map_data = as_map(new_map);
+        CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
         
         // Verify new map has larger capacity
-        printf("New map capacity: %d\n", new_map_data->capacity);
-        TEST_ASSERT_TRUE(new_map_data->capacity > map->capacity);
+        printf("New map capacity: %d\n", new_map->capacity);
+        TEST_ASSERT_TRUE(new_map->capacity > map->capacity);
         
         // Verify all entries exist in new map
         TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(1)));
@@ -559,7 +563,7 @@ TEST(test_embedded_array_performance) {
         
         // Simulate loop pattern with embedded arrays
         for (int i = 0; i < 50; i++) {
-            env = (CljMap*)AUTORELEASE(map_assoc((CljValue)env, fixnum(i), fixnum(i * 10)));
+            env = (CljMap*)AUTORELEASE(map_assoc(env, fixnum(i), fixnum(i * 10)));
             
             // RC should stay 1 (in-place optimization)
             TEST_ASSERT_EQUAL(1, env->base.rc);
@@ -572,7 +576,7 @@ TEST(test_embedded_array_performance) {
         
         // Verify final state
         TEST_ASSERT_EQUAL(50, env->count);
-        CljValue val25 = map_get((CljValue)env, fixnum(25));
+        CljValue val25 = map_get((CljMap*)env, fixnum(25));
         TEST_ASSERT_NOT_NULL(val25);
         TEST_ASSERT_EQUAL_INT(250, as_fixnum(val25));
         

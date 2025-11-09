@@ -27,7 +27,7 @@ TEST(test_conj_arity_1) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, result->type);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_conj_arity_2) {
@@ -38,7 +38,7 @@ TEST(test_conj_arity_2) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, result->type);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_conj_arity_variadic) {
@@ -49,7 +49,7 @@ TEST(test_conj_arity_variadic) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, result->type);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_conj_nil_collection) {
@@ -60,7 +60,7 @@ TEST(test_conj_nil_collection) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_rest_arity_0) {
@@ -71,7 +71,7 @@ TEST(test_rest_arity_0) {
     TRY {
         CljObject *result = eval_string("(rest)", g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected ArityException for (rest)");
-        RELEASE(result);
+        // Don't RELEASE result - eval_string returns autoreleased object
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
@@ -89,7 +89,7 @@ TEST(test_rest_nil) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_rest_empty_vector) {
@@ -100,7 +100,7 @@ TEST(test_rest_empty_vector) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_rest_single_element) {
@@ -111,7 +111,7 @@ TEST(test_rest_single_element) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 // ============================================================================
@@ -344,5 +344,473 @@ TEST(test_reverse_multiple_elements) {
     TEST_ASSERT_TRUE(is_fixnum(second_result));
     TEST_ASSERT_EQUAL_INT(4, as_fixnum(second_result));
     
+}
+
+// ============================================================================
+// REDUCE TESTS
+// ============================================================================
+
+// Test reduce step by step
+TEST(test_reduce_debug) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (list 42)
+    CljObject *list = eval_string("(list 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(list);
+    
+    // Test: (first (list 42))
+    CljValue first_result = eval_string("(first (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_result);
+    TEST_ASSERT_TRUE(is_fixnum(first_result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(first_result));
+    
+    // Test: (rest (list 42))
+    CljObject *rest_result = eval_string("(rest (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rest_result);
+    
+    // Test: (first (rest (list 42)))
+    CljObject *first_rest = eval_string("(first (rest (list 42)))", g_test_eval_state);
+    TEST_ASSERT_NULL(first_rest);  // Expected for empty rest
+    
+    // Test: (reduce + (list 42)) - step by step
+    // Step 1: (rest (list 42)) => empty list
+    CljObject *rest1 = eval_string("(rest (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rest1);
+    
+    // Step 2: (first (list 42)) => 42
+    CljValue first1 = eval_string("(first (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first1);
+    TEST_ASSERT_TRUE(is_fixnum(first1));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(first1));
+    
+    // Step 3: (empty? (rest (list 42))) => true
+    CljValue empty1 = eval_string("(empty? (rest (list 42)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty1);
+    TEST_ASSERT_TRUE(clj_is_truthy(empty1));
+    
+    // Step 4: (reduce + (list 42))
+    CljObject *result = eval_string("(reduce + (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// EDGE CASE 1: Empty collection should return nil
+TEST(test_reduce_empty_collection) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list)) => nil
+    CljObject *result = eval_string("(reduce + (list))", g_test_eval_state);
+    TEST_ASSERT_NULL(result);  // Empty collection returns nil
+    
+    // Note: Vector support may require seq handling - test with list for now
+    // Empty list test is sufficient for edge case coverage
+}
+
+// EDGE CASE 2: Single element collection should return that element
+TEST(test_reduce_single_element) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list 42)) => 42
+    CljObject *result = eval_string("(reduce + (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+    
+    // Test: (reduce * (list 5)) => 5
+    CljObject *result2 = eval_string("(reduce * (list 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result2));
+}
+
+// EDGE CASE 3: Nil collection should return nil
+TEST(test_reduce_nil_collection) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + nil) => nil
+    CljObject *result = eval_string("(reduce + nil)", g_test_eval_state);
+    TEST_ASSERT_NULL(result);  // nil collection returns nil
+}
+
+// EDGE CASE 4: Basic reduce with addition
+TEST(test_reduce_basic_addition) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list 1 2 3 4 5)) => 15
+    CljObject *result = eval_string("(reduce + (list 1 2 3 4 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum(result));
+    
+    // Note: Vector support may require seq handling - test with list for now
+    // Test: (reduce + (list 1 2 3)) => 6
+    CljObject *result2 = eval_string("(reduce + (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result2));
+}
+
+// EDGE CASE 5: Reduce with multiplication
+TEST(test_reduce_multiplication) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce * (list 1 2 3 4)) => 24
+    CljObject *result = eval_string("(reduce * (list 1 2 3 4))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(24, as_fixnum(result));
+    
+    // Note: Vector support may require seq handling - test with list for now
+    // Test: (reduce * (list 2 3 4)) => 24
+    CljObject *result2 = eval_string("(reduce * (list 2 3 4))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(24, as_fixnum(result2));
+}
+
+// EDGE CASE 6: Reduce with max function
+TEST(test_reduce_max) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce max (list 1 5 3 9 2)) => 9
+    CljObject *result = eval_string("(reduce max (list 1 5 3 9 2))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(9, as_fixnum(result));
+    
+    // Note: Vector support may require seq handling - test with list for now
+    // Test: (reduce max (list 10 3 7 1)) => 10
+    CljObject *result2 = eval_string("(reduce max (list 10 3 7 1))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(result2));
+}
+
+// EDGE CASE 7: Reduce with min function
+TEST(test_reduce_min) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce min (list 5 2 8 1 9)) => 1
+    CljObject *result = eval_string("(reduce min (list 5 2 8 1 9))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+}
+
+// EDGE CASE 8: Reduce with custom function
+TEST(test_reduce_custom_function) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce (fn [a b] (+ a b)) (list 1 2 3)) => 6
+    CljObject *result = eval_string("(reduce (fn [a b] (+ a b)) (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// EDGE CASE 9: Reduce with subtraction (order matters)
+TEST(test_reduce_subtraction) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce - (list 10 3 2)) => 5 (10 - 3 - 2)
+    CljObject *result = eval_string("(reduce - (list 10 3 2))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result));
+}
+
+// EDGE CASE 10: Reduce with zero values
+TEST(test_reduce_with_zero) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list 0 0 0)) => 0
+    CljObject *result = eval_string("(reduce + (list 0 0 0))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+    
+    // Test: (reduce * (list 5 0 3)) => 0
+    CljObject *result2 = eval_string("(reduce * (list 5 0 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result2));
+}
+
+// EDGE CASE 11: Reduce with negative numbers
+TEST(test_reduce_with_negative_numbers) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list -1 -2 -3)) => -6
+    CljObject *result = eval_string("(reduce + (list -1 -2 -3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(-6, as_fixnum(result));
+    
+    // Test: (reduce * (list -2 3 -4)) => 24
+    CljObject *result2 = eval_string("(reduce * (list -2 3 -4))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(24, as_fixnum(result2));
+}
+
+// EDGE CASE 12: Reduce with large collection
+TEST(test_reduce_large_collection) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list 1 2 3 4 5 6 7 8 9 10)) => 55
+    CljObject *result = eval_string("(reduce + (list 1 2 3 4 5 6 7 8 9 10))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(55, as_fixnum(result));
+}
+
+// EDGE CASE 13: Reduce with identity function (should work like identity)
+TEST(test_reduce_with_identity_function) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce identity (list 42)) => 42
+    CljObject *result = eval_string("(reduce identity (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// EDGE CASE 14: Reduce with two elements
+TEST(test_reduce_two_elements) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reduce + (list 10 20)) => 30
+    CljObject *result = eval_string("(reduce + (list 10 20))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum(result));
+    
+    // Note: Vector support may require seq handling - test with list for now
+    // Test: (reduce * (list 3 4)) => 12
+    CljObject *result2 = eval_string("(reduce * (list 3 4))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(12, as_fixnum(result2));
+}
+
+// ============================================================================
+// REST/NEXT TESTS FOR PARAMETER RESOLUTION
+// ============================================================================
+
+// THESIS 1: rest with parameter in function call
+// Test: (rest coll) where coll is a parameter
+TEST(test_rest_with_parameter) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function that takes coll as parameter and calls (rest coll)
+    // (defn test-rest [coll] (rest coll))
+    CljObject *defn_result = eval_string("(defn test-rest [coll] (rest coll))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-rest (list 1 2 3)) => (2 3)
+    CljObject *result = eval_string("(test-rest (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 2: rest with parameter in nested function call
+// Test: (rest coll) where coll is a parameter in a nested function
+TEST(test_rest_with_parameter_nested) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function that takes coll as parameter and calls (rest coll) in a let
+    // (defn test-rest-nested [coll] (let [r (rest coll)] r))
+    CljObject *defn_result = eval_string("(defn test-rest-nested [coll] (let [r (rest coll)] r))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-rest-nested (list 1 2 3)) => (2 3)
+    CljObject *result = eval_string("(test-rest-nested (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 3: rest with parameter in recursive function call
+// Test: (rest coll) where coll is a parameter in a recursive function
+TEST(test_rest_with_parameter_recursive) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a recursive function that takes coll as parameter and calls (rest coll)
+    // (defn test-rest-recursive [coll] (if (empty? coll) nil (rest coll)))
+    CljObject *defn_result = eval_string("(defn test-rest-recursive [coll] (if (empty? coll) nil (rest coll)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-rest-recursive (list 1 2 3)) => (2 3)
+    CljObject *result = eval_string("(test-rest-recursive (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 4: rest with parameter in closure
+// Test: (rest coll) where coll is a parameter in a closure
+TEST(test_rest_with_parameter_closure) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function that returns a closure that uses coll parameter
+    // (defn test-rest-closure [coll] (fn [] (rest coll)))
+    CljObject *defn_result = eval_string("(defn test-rest-closure [coll] (fn [] (rest coll)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: ((test-rest-closure (list 1 2 3))) => (2 3)
+    CljObject *closure = eval_string("(test-rest-closure (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(closure);
+    TEST_ASSERT_TRUE(closure->type == CLJ_CLOSURE || closure->type == CLJ_FUNC);
+    // Don't RELEASE closure - eval_string returns autoreleased object
+    
+    // Test: Call the closure
+    CljObject *result = eval_string("((test-rest-closure (list 1 2 3)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 5: rest with parameter in reduce-like function
+// Test: (rest coll) where coll is a parameter in a reduce-like function
+TEST(test_rest_with_parameter_reduce_like) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function similar to reduce that uses (rest coll)
+    // (defn test-rest-reduce-like [f coll] (if (empty? coll) nil (rest coll)))
+    CljObject *defn_result = eval_string("(defn test-rest-reduce-like [f coll] (if (empty? coll) nil (rest coll)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-rest-reduce-like + (list 1 2 3)) => (2 3)
+    CljObject *result = eval_string("(test-rest-reduce-like + (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 6: rest with parameter in step function (like reduce)
+// Test: (rest coll) where coll is a parameter in a step function
+TEST(test_rest_with_parameter_step_function) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function similar to reduce's step function
+    // (defn test-rest-step [f coll acc] (if (empty? coll) acc (test-rest-step f (rest coll) (f acc (first coll)))))
+    // But we'll use a simpler version to avoid infinite recursion
+    // (defn test-rest-step [f coll acc] (if (empty? coll) acc (rest coll)))
+    CljObject *defn_result = eval_string("(defn test-rest-step [f coll acc] (if (empty? coll) acc (rest coll)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-rest-step + (list 1 2 3) 0) => (2 3)
+    CljObject *result = eval_string("(test-rest-step + (list 1 2 3) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 7: next with parameter in function call
+// Test: (next coll) where coll is a parameter
+TEST(test_next_with_parameter) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function that takes coll as parameter and calls (next coll)
+    // (defn test-next [coll] (next coll))
+    CljObject *defn_result = eval_string("(defn test-next [coll] (next coll))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-next (list 1 2 3)) => (2 3)
+    CljObject *result = eval_string("(test-next (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+// THESIS 8: rest with parameter in let binding
+// Test: (rest coll) where coll is a parameter in a let binding
+TEST(test_rest_with_parameter_let) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: Define a function that uses let to bind coll and then calls (rest coll)
+    // (defn test-rest-let [coll] (let [c coll] (rest c)))
+    CljObject *defn_result = eval_string("(defn test-rest-let [coll] (let [c coll] (rest c)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(defn_result);
+    // Don't RELEASE defn_result - eval_string returns autoreleased object
+    
+    // Test: (test-rest-let (list 1 2 3)) => (2 3)
+    CljObject *result = eval_string("(test-rest-let (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
+    
+    // Verify result is (2 3)
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 

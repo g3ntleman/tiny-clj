@@ -16,8 +16,8 @@ typedef struct {
 
 // Evaluation environment
 typedef struct {
-    ID closure_env;    // Closure environment
-    EvalState *st;     // Evaluation state
+    CljMap *closure_env;  // Closure environment map (can be NULL)
+    EvalState *st;        // Evaluation state
 } EvalEnv;
 
 // Recur state (optional - only needed for recur)
@@ -63,8 +63,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st);
 ID eval_defn(CljList *list, CljMap *env, EvalState *st);
 
 // Hilfsfunktionen
-ID eval_arg(CljList *list, int index, CljMap *env);
-ID eval_arg_retained(CljList *list, int index, CljMap *env);
+ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st);
 bool is_symbol(ID v, const char *name);
 
 // Time output suppression (for tests)

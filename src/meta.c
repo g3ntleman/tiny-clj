@@ -40,7 +40,7 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    ID new_registry = map_assoc((ID)g_runtime.meta_registry, (ID)v, (ID)meta);
+    CljMap *new_registry = map_assoc((CljMap*)g_runtime.meta_registry, (ID)v, (ID)meta);
     
     // If map_assoc returned a new map (Copy-on-Write), update registry
     // When RC=1, map_assoc mutates in-place and returns the same map
@@ -55,29 +55,20 @@ void meta_set(CljObject *v, CljObject *meta) {
 ID meta_get(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return NULL;
     
-    return (ID)map_get((CljValue)g_runtime.meta_registry, (CljValue)v);
+    return (ID)map_get((CljMap*)g_runtime.meta_registry, (CljValue)v);
 }
 
 void meta_clear(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return;
     
-    // Find the entry and remove it using KV macros
-    CljMap *map = (CljMap*)g_runtime.meta_registry;
-    int index = KV_FIND_INDEX(map->data, map->count, v);
-    if (index >= 0) {
-        // Entry found; remove it
-        CljObject *old_value = KV_VALUE(map->data, index);
-        RELEASE(old_value);
-        
-        // Shift following elements to the left
-        for (int j = index; j < map->count - 1; j++) {
-            KV_ASSIGN_PAIR(map->data, j,
-                       KV_KEY(map->data, j + 1),
-                       KV_VALUE(map->data, j + 1));
-        }
-        
-        map->count--;
+    // Use map_remove which always returns a new map (COW disabled)
+    CljMap *new_registry = map_remove((CljMap*)g_runtime.meta_registry, (ID)v);
+    if (new_registry != (CljMap*)g_runtime.meta_registry) {
+        // New map was created, update registry
+        RELEASE((CljObject*)g_runtime.meta_registry);
+        g_runtime.meta_registry = (void*)new_registry;
     }
+    // If key was not found, map_remove returns original map (no change needed)
 }
 
 /**
@@ -187,11 +178,11 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
         if (!key) continue;
         
         // Check if key already exists in existing map
-        ID existing_value = map_get((ID)existing_meta, (ID)key);
+        ID existing_value = map_get((CljMap*)existing_meta, (ID)key);
         if (!existing_value) {
             // Key doesn't exist, add it using map_assoc
-            ID new_result = map_assoc((ID)result, (ID)key, (ID)value);
-            if (new_result != (ID)result) {
+            CljMap *new_result = map_assoc((CljMap*)result, (ID)key, (ID)value);
+            if (new_result != (CljMap*)result) {
                 // New map was created, update result
                 RELEASE(result);
                 result = (CljObject*)new_result;

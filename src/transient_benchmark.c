@@ -104,16 +104,16 @@ void benchmark_transient_map() {
     clock_t start = clock();
     
     for (int iter = 0; iter < BENCHMARK_ITERATIONS; iter++) {
-        CljValue map = (CljValue)make_map(0); // Start with empty map
-        CljValue tmap = transient_map(map);
+        CljMap *map = (CljValue)make_map(0); // Start with empty map
+        CljMap *tmap = map_transient((CljMap*)map);
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
-            CljValue key = make_string("key");
-            CljValue value = fixnum(i);
+            ID key = make_string("key");
+            ID value = fixnum(i);
             conj_map(tmap, key, value);
         }
         
-        CljValue final_map = persistent_map(tmap);
+        CljMap * final_map = map_persistent(tmap);
         
         RELEASE(map);
         RELEASE(tmap);

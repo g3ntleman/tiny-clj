@@ -112,20 +112,6 @@ static void print_result(CljObject *v) {
     if (s) { printf("%s\n", s); free((void*)s); }
 }
 
-/** @brief Print exception details to stderr with location information.
- *  @param ex Exception to print (can be NULL)
- */
-static void print_exception(CLJException *ex) {
-    if (!ex) {
-        fprintf(stderr, "EXCEPTION: NULL exception\n");
-        return;
-    }
-    
-    // Safely print exception with bounds checking
-    fprintf(stderr, "EXCEPTION: %.127s: %.255s at %.127s:%d:%d\n",
-        ex->type, ex->message, ex->file, ex->line, ex->col);
-}
-
 /** @brief Evaluate multiple expressions from a multiline string.
  *  @param code Multiline string containing multiple expressions
  *  @param st Evaluation state

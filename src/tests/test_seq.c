@@ -5,6 +5,8 @@
  */
 
 #include "tests_common.h"
+#include "../list.h"
+#include "../seq.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -242,6 +244,160 @@ TEST(test_seq_equality) {
         // Test equality (simplified - actual implementation may vary)
         TEST_ASSERT_TRUE(seq1 != seq2); // Different objects
     }
+}
+
+// ============================================================================
+// SEQ_NEXT WITH CLJ_LIST TESTS
+// ============================================================================
+
+// TEST: seq_next with CLJ_LIST should return CLJ_LIST (not CLJ_SEQ)
+// CRITICAL: seq_next now returns CLJ_LIST directly when original was CLJ_LIST
+TEST(test_seq_next_with_list_returns_list) {
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
+        // Create a list: (1 2 3)
+        CljList *list = make_list(fixnum(1), NULL);
+        CljList *list2 = make_list(fixnum(2), NULL);
+        CljList *list3 = make_list(fixnum(3), NULL);
+        
+        // Link them: (1 2 3)
+        list->rest = (CljObject*)list2;
+        list2->rest = (CljObject*)list3;
+        
+        // Create a seq from the list
+        CljSeqIterator *seq = make_seq((CljObject*)list);
+        TEST_ASSERT_NOT_NULL(seq);
+        TEST_ASSERT_EQUAL_INT(CLJ_SEQ, seq->base.type);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, seq->iter.seq_type);
+        
+        // Call seq_next - should return CLJ_LIST directly (not CLJ_SEQ)
+        CljObject *next_result = (CljObject*)seq_next((CljObject*)seq);
+        TEST_ASSERT_NOT_NULL(next_result);
+        
+        // seq_next now returns CLJ_LIST directly when original was CLJ_LIST
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, next_result->type);
+        
+        // Verify the result is (2 3) - should be a CljList
+        CljList *next_list = as_list((ID)next_result);
+        TEST_ASSERT_NOT_NULL(next_list);
+        TEST_ASSERT_NOT_NULL(next_list->first);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)next_list->first));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)next_list->first));
+        
+        // Verify second element is 3
+        CljList *rest_list = as_list((ID)next_list->rest);
+        TEST_ASSERT_NOT_NULL(rest_list);
+        TEST_ASSERT_NOT_NULL(rest_list->first);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)rest_list->first));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)rest_list->first));
+        
+        // Cleanup
+        seq_release((CljObject*)seq);
+        // next_result is a CLJ_LIST, not a CLJ_SEQ, so no seq_release needed
+    }
+}
+
+// TEST: seq_next with CLJ_LIST preserves list structure
+TEST(test_seq_next_with_list_preserves_structure) {
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
+        // Create a list: (1 2 3)
+        CljList *list = make_list(fixnum(1), NULL);
+        CljList *list2 = make_list(fixnum(2), NULL);
+        CljList *list3 = make_list(fixnum(3), NULL);
+        
+        // Link them: (1 2 3)
+        list->rest = (CljObject*)list2;
+        list2->rest = (CljObject*)list3;
+        
+        // Create a seq from the list
+        CljSeqIterator *seq = make_seq((CljObject*)list);
+        TEST_ASSERT_NOT_NULL(seq);
+        
+        // Call seq_next - should return CLJ_LIST directly
+        CljObject *next_result = (CljObject*)seq_next((CljObject*)seq);
+        TEST_ASSERT_NOT_NULL(next_result);
+        TEST_ASSERT_EQUAL_INT(CLJ_LIST, next_result->type);
+        
+        // Verify the result is (2 3) - should be a CljList
+        CljList *next_list = as_list((ID)next_result);
+        TEST_ASSERT_NOT_NULL(next_list);
+        TEST_ASSERT_NOT_NULL(next_list->first);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)next_list->first));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)next_list->first));
+        
+        // Get second element - should also be a CljList
+        CljList *rest_list = as_list((ID)next_list->rest);
+        TEST_ASSERT_NOT_NULL(rest_list);
+        TEST_ASSERT_NOT_NULL(rest_list->first);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)rest_list->first));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)rest_list->first));
+        
+        // Cleanup
+        seq_release((CljObject*)seq);
+        // next_result is a CLJ_LIST, not a CLJ_SEQ, so no seq_release needed
+    }
+}
+
+// TEST: seq_next with single-element list should return nil
+TEST(test_seq_next_with_single_element_list) {
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
+        // Create a list: (1)
+        CljList *list = make_list(fixnum(1), NULL);
+        
+        // Create a seq from the list
+        CljSeqIterator *seq = make_seq((CljObject*)list);
+        TEST_ASSERT_NOT_NULL(seq);
+        
+        // Call seq_next - should return nil (NULL) for single-element list
+        CljObject *next_result = (CljObject*)seq_next((CljObject*)seq);
+        TEST_ASSERT_NULL(next_result);  // next returns nil if rest is empty
+        
+        // Cleanup
+        seq_release((CljObject*)seq);
+    }
+}
+
+// TEST: seq_next with empty list should return nil
+TEST(test_seq_next_with_empty_list) {
+    // Manual memory management - no WITH_AUTORELEASE_POOL
+    {
+        // Create empty list: ()
+        CljList *list = empty_list();
+        
+        // Create a seq from the list - should return NULL for empty list
+        CljSeqIterator *seq = make_seq((CljObject*)list);
+        // make_seq returns NULL for empty lists
+        TEST_ASSERT_NULL(seq);
+    }
+}
+
+// TEST: seq_next with CLJ_LIST via native_next (high-level API)
+// This tests the behavior when next is called on a list directly
+TEST(test_native_next_with_list) {
+    // Use global st from setUp
+    // Test: (next (list 1 2 3)) should return (2 3) as CLJ_LIST
+    CljObject *result = eval_string("(next (list 1 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // native_next should return CLJ_LIST directly (not CLJ_SEQ)
+    // Because native_next handles CLJ_LIST specially in builtins.c
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, result->type);
+    
+    // Verify it's a CljList with correct content
+    CljList *list = as_list((ID)result);
+    TEST_ASSERT_NOT_NULL(list);
+    TEST_ASSERT_NOT_NULL(list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
+    
+    // Verify second element is 3
+    CljList *rest_list = as_list((ID)list->rest);
+    TEST_ASSERT_NOT_NULL(rest_list);
+    TEST_ASSERT_NOT_NULL(rest_list->first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)rest_list->first));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)rest_list->first));
 }
 
 // ============================================================================

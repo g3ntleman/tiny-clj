@@ -50,30 +50,5 @@ CljValue fixed(float value) {
     return (CljValue)(((uintptr_t)fixed << TAG_BITS) | TAG_FIXED);
 }
 
-/**
- * @brief Create a string value (extracted from inline)
- * @param str String to create
- * @return CljValue string object
- */
-struct CljString* make_string(const char *str) {
-    if (!str || str[0] == '\0') {
-        return empty_string_singleton;
-    }
-    
-    // Allocate CljString + space for string data + null terminator
-    size_t len = strlen(str);
-    
-    // Assert that string length fits in 16-bit field (max 65,535 characters)
-    assert(len <= UINT16_MAX && "String length exceeds 16-bit limit (65,535 chars)");
-    
-    CljString *s = (CljString*)alloc(sizeof(CljString) + len + 1, 1, CLJ_STRING);
-    if (!s) throw_oom(CLJ_STRING);
-    
-    s->base.type = CLJ_STRING;
-    s->base.rc = 1;
-    s->length = (uint16_t)len;
-    memcpy(s->data, str, len + 1);  // includes null terminator
-    
-    return s;
-}
+// make_string moved to strings.c
 

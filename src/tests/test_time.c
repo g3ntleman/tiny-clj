@@ -34,8 +34,21 @@ TEST(test_time_basic_functionality) {
         TEST_FAIL_MESSAGE("eval_string(\"(+ 1 2)\", g_test_eval_state) returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(is_fixnum(simple_result));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum(simple_result));
+    if (!is_fixnum(simple_result)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned non-fixnum (value: %p, type: %d)", 
+                 (void*)simple_result, simple_result ? ((CljObject*)simple_result)->type : -1);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    }
+    int simple_actual = as_fixnum(simple_result);
+    if (simple_actual != 3) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "eval_string(\"(+ 1 2)\") returned %d, expected 3", simple_actual);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(3, simple_actual);
     
     // Check that SYM_TIME is initialized
     if (!SYM_TIME) {
@@ -63,6 +76,20 @@ TEST(test_time_basic_functionality) {
     // The result should be 3
     if (!result) {
         TEST_FAIL_MESSAGE("eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned NULL");
+        return;
+    }
+    if (!is_fixnum(result)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned non-fixnum (type: %d)", 
+                 result ? ((CljObject*)result)->type : -1);
+        TEST_FAIL_MESSAGE(msg);
+        return;
+    }
+    int actual = as_fixnum(result);
+    if (actual != 3) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "eval_string(\"(time (+ 1 2))\", g_test_eval_state) returned %d, expected 3", actual);
+        TEST_FAIL_MESSAGE(msg);
         return;
     }
     TEST_ASSERT_TRUE(is_fixnum(result));
@@ -215,7 +242,7 @@ TEST(test_time_with_dotimes) {
     RELEASE(arithmetic_expr);
     RELEASE(dotimes_call);
     RELEASE(time_call);
-    RELEASE(result);
+    // Don't RELEASE result - eval_time returns autoreleased object
     RELEASE(env);
 }
 

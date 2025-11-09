@@ -296,50 +296,6 @@ TEST(test_cljvalue_immediates_high_level) {
     });
 }
 
-// Test division by zero exception
-TEST(test_division_by_zero_exception) {
-    WITH_AUTORELEASE_POOL({
-        if (!g_test_eval_state) {
-            TEST_FAIL_MESSAGE("Failed to create EvalState");
-            return;
-        }
-        
-        CljObject *result = NULL;
-        bool exception_caught = false;
-        
-        TRY {
-            result = eval_string("(/ 1 0)", g_test_eval_state);
-        } CATCH(ex) {
-            exception_caught = true;
-            result = NULL;
-        } END_TRY
-        
-        TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Division by zero should throw exception");
-        TEST_ASSERT_NULL(result);
-        
-    });
-}
-
-// Ein sehr einfacher Test für die Grundfunktionalität
-TEST(test_simple_arithmetic) {
-    WITH_AUTORELEASE_POOL({
-        if (!g_test_eval_state) {
-            TEST_FAIL_MESSAGE("Failed to create EvalState");
-            return;
-        }
-        
-        // Test einfache Addition
-        CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
-        TEST_ASSERT_NOT_NULL(result);
-        if (result && is_fixnum(result)) {
-            int val = as_fixnum(result);
-            TEST_ASSERT_EQUAL_INT(3, val);
-        }
-        if (result) RELEASE(result);
-        
-    });
-}
-
 // ============================================================================
 // TRUTHINESS TESTS
 // ============================================================================
@@ -438,9 +394,12 @@ TEST(test_truthiness_comprehensive) {
         // Non-empty map is truthy
         CljMap *non_empty_map = make_map(4);
         TEST_ASSERT_NOT_NULL(non_empty_map);
-        map_put(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1));
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_map));
-        RELEASE(non_empty_map);
+        // map_assoc always returns a new map (COW disabled)
+        CljMap *new_map = (CljMap*)map_assoc((ID)non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1));
+        RELEASE(non_empty_map);  // Release old map
+        TEST_ASSERT_NOT_NULL(new_map);
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)new_map));
+        RELEASE(new_map);
         
         // Fixed-point numbers are truthy (including 0.0)
         CljValue fixed_val = fixed(3.14f);
@@ -458,37 +417,37 @@ TEST(test_truthiness_comprehensive) {
         CljObject *false_result = eval_string("false", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(false_result);
         TEST_ASSERT_FALSE(clj_is_truthy(false_result));
-        RELEASE(false_result);
+        // Don't RELEASE false_result - eval_string returns autoreleased object
         
         CljObject *true_result = eval_string("true", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(true_result);
         TEST_ASSERT_TRUE(clj_is_truthy(true_result));
-        RELEASE(true_result);
+        // Don't RELEASE true_result - eval_string returns autoreleased object
         
         CljObject *zero_result = eval_string("0", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(zero_result);
         TEST_ASSERT_TRUE(clj_is_truthy(zero_result));
-        RELEASE(zero_result);
+        // Don't RELEASE zero_result - eval_string returns autoreleased object
         
         CljObject *empty_list_result = eval_string("(list)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(empty_list_result);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_list_result));
-        RELEASE(empty_list_result);
+        // Don't RELEASE empty_list_result - eval_string returns autoreleased object
         
         CljObject *empty_vector_result = eval_string("[]", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(empty_vector_result);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_vector_result));
-        RELEASE(empty_vector_result);
+        // Don't RELEASE empty_vector_result - eval_string returns autoreleased object
         
         CljObject *empty_map_result = eval_string("{}", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(empty_map_result);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_map_result));
-        RELEASE(empty_map_result);
+        // Don't RELEASE empty_map_result - eval_string returns autoreleased object
         
         CljObject *keyword_result = eval_string(":test", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(keyword_result);
         TEST_ASSERT_TRUE(clj_is_truthy(keyword_result));
-        RELEASE(keyword_result);
+        // Don't RELEASE keyword_result - eval_string returns autoreleased object
     });
 }
 

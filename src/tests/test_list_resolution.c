@@ -30,7 +30,7 @@ TEST(test_list_direct_call) {
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "list should work with no arguments");
     TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_list_with_args) {
@@ -46,7 +46,7 @@ TEST(test_list_with_args) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)list->first));
     
-    RELEASE(result);
+    // Don't RELEASE result - eval_string returns autoreleased object
 }
 
 TEST(test_list_in_clojure_core_clj) {

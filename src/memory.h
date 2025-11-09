@@ -18,6 +18,24 @@
 #include <stdarg.h>
 
 // ============================================================================
+// ZOMBIE MODE (NSZombieEnabled)
+// ============================================================================
+
+#ifdef DEBUG
+// ZOMBIE_RC is defined in types.h to avoid circular dependencies
+
+/** @brief Public flag to enable zombie mode (NSZombieEnabled).
+ *  When enabled, objects are marked as zombies instead of being freed.
+ */
+extern bool g_zombie_enabled;
+
+/** @brief Enable zombie mode for debugging.
+ *  When enabled, objects are marked as zombies (rc = ZOMBIE_RC) instead of being freed.
+ */
+void enable_zombie_mode(void);
+#endif
+
+// ============================================================================
 // REFERENCE COUNTING FUNCTIONS
 // ============================================================================
 
@@ -140,11 +158,21 @@ int get_retain_count(CljObject *obj);
     /** @brief Deallocate object with memory profiling (DEBUG builds).
      *  @param obj Object to deallocate
      *  @note Tracks object destruction for memory profiling
+     *  @note In zombie mode, marks object as zombie instead of freeing
      */
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
         if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
-            memory_profiler_track_object_destruction((CljObject*)_tmp); \
+            CljObject *_obj = (CljObject*)_tmp; \
+            if (g_zombie_enabled) { \
+                /* Zombie mode: mark object as zombie instead of freeing */ \
+                _obj->rc = ZOMBIE_RC; \
+                /* Type remains unchanged for printing */ \
+            } else { \
+                /* Normal mode: track and free */ \
+                memory_profiler_track_object_destruction(_obj); \
+                free(_obj); \
+            } \
         } \
     } while(0)
     
@@ -159,7 +187,7 @@ int get_retain_count(CljObject *obj);
             CljObject* _tmp = (CljObject*)_id; \
             retain(_tmp); \
         } \
-        (CljObject*)_id; \
+        _id; \
     })
     
     /** @brief Release object (safe for immediate values).
@@ -261,7 +289,7 @@ int get_retain_count(CljObject *obj);
             CljObject* _tmp = (CljObject*)_id; \
             retain(_tmp); \
         } \
-        (CljObject*)_id; \
+        _id; \
     })
     
     /** @brief Release object (safe for immediate values).

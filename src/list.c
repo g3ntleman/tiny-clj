@@ -4,7 +4,6 @@
 #include "symbol.h"
 #include "object.h"
 #include "exception.h"
-#include <stdarg.h>
 
 // Empty-list singleton: CLJ_LIST with rc=0, statically initialized
 static struct {
@@ -90,8 +89,6 @@ int list_count(CljList *list) {
     return count;
 }
 
-/** Create a list from stack items. Returns new object with RC=1. */
-
 /** Create a list from CljValue stack items. Returns new CljList*. */
 CljList* make_list_from_stack(CljValue *stack, int count) {
     if (count == 0) return empty_list();
@@ -120,26 +117,4 @@ bool is_symbol(ID v, const char *name) {
     
     // Pointer-Vergleich statt String-Vergleich!
     return (CljObject*)v == compare_symbol;
-}
-
-// ============================================================================
-// CONVENIENCE FUNCTIONS
-// ============================================================================
-
-CljObject* list_from_ints(int count, ...) {
-    if (count <= 0) return NULL;
-    
-    va_list args;
-    va_start(args, count);
-    
-    // Build list from end to start using make_list
-    CljList *result = NULL;
-    for (int i = count - 1; i >= 0; i--) {
-        int value = va_arg(args, int);
-        CljList *new_node = make_list(fixnum(value), result);
-        result = new_node;
-    }
-    
-    va_end(args);
-    return result ? (CljObject*)result : NULL;
 }

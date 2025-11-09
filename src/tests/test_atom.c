@@ -122,7 +122,7 @@ TEST(test_atom_swap_simple) {
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
         TEST_ASSERT_EQUAL(43, as_fixnum((CljValue)result));
-        RELEASE(result);
+        // Don't RELEASE result - atom_swap returns autoreleased object
     } else {
         TEST_FAIL_MESSAGE("Could not resolve 'inc' function from clojure.core");
     }
@@ -452,7 +452,7 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
     }
     
     // Debug: Try direct map_get to see if symbol is found
-    ID direct_lookup = map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym);
+    ID direct_lookup = map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
     if (!direct_lookup) {
         if (symbol_count == 0) {
             TEST_FAIL_MESSAGE("clojure.core mappings are empty - core functions were not loaded");
@@ -571,7 +571,7 @@ TEST(test_atom_def_symbol_recognized) {
             }
         }
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
         // Don't free st - it's the global test evalState
 }
 
@@ -608,7 +608,7 @@ TEST(test_atom_def_inc_parsed) {
         TEST_ASSERT_EQUAL_STRING_MESSAGE("inc", inc->name, 
                                         "second element should be 'inc' symbol");
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
         // Don't free st - it's the global test evalState
 }
 
@@ -637,11 +637,11 @@ TEST(test_atom_def_inc_evaluated) {
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
         
         CljObject *inc_sym = intern_symbol_global("inc");
-        ID inc_value = map_get((CljValue)ns->mappings, (CljValue)inc_sym);
+        ID inc_value = map_get((CljMap*)ns->mappings, (CljValue)inc_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                      "'inc' should be in namespace mappings after eval_def");
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
         // Don't free g_test_eval_state - it's the global test evalState
 }
 
@@ -682,10 +682,10 @@ TEST(test_atom_eval_core_source_processes_inc) {
         
         // Verify inc is in mappings
         CljObject *inc_sym = intern_symbol_global("inc");
-        ID inc_value = map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym);
+        ID inc_value = map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                      "'inc' should be in namespace mappings after evaluation");
         
-        RELEASE((CljObject*)form);
+        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
         // Don't free g_test_eval_state - it's the global test evalState
 }

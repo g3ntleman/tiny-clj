@@ -50,6 +50,19 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             return true;
         }
         
+        case CLJ_SEQ: {
+            // Already a sequence - copy the embedded iterator state
+            CljSeqIterator *seq = as_seq((ID)obj);
+            if (!seq) {
+                iter->seq_type = CLJ_UNKNOWN;
+                return true;  // Empty seq
+            }
+            
+            // Copy the embedded iterator state
+            *iter = seq->iter;  // Struct copy
+            return true;
+        }
+        
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(obj);
             if (!vec || vec->count == 0) {
@@ -215,6 +228,12 @@ CljSeqIterator* make_seq(ID obj) {
     // Handle nil and empty collections - return nil singleton
     if (!obj) return NULL;
     
+    // If already a CLJ_SEQ, return it directly (no need to wrap again)
+    if (is_type((CljObject*)obj, CLJ_SEQ)) {
+        CljSeqIterator *seq = as_seq(obj);
+        return seq;  // Already a seq, return as-is
+    }
+    
     // Check if collection is empty
     if (is_type((CljObject*)obj, CLJ_VECTOR)) {
         CljPersistentVector *vec = as_vector((CljObject*)obj);
@@ -285,6 +304,24 @@ ID seq_rest(ID seq_obj) {
 ID seq_next(ID seq_obj) {
     if (!seq_obj) return NULL;
     
+    // CRITICAL: If the original sequence was a CLJ_LIST, return CLJ_LIST directly
+    // This matches the behavior of native_next in builtins.c
+    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    if (seq && seq->iter.seq_type == CLJ_LIST) {
+        // Original was a CLJ_LIST - return CLJ_LIST directly (not CLJ_SEQ)
+        if (seq->iter.state.list.current) {
+            CljList *current_list = as_list(seq->iter.state.list.current);
+            if (current_list) {
+                CljObject *rest = LIST_REST(current_list);
+                // next returns nil if rest is empty, otherwise rest
+                return rest ? (ID)rest : NULL;  // nil
+            }
+        }
+        // Empty list - return nil
+        return NULL;
+    }
+    
+    // For other types (CLJ_VECTOR, CLJ_STRING, etc.), use seq_rest
     // Get rest sequence (DRY: reuse seq_rest implementation)
     ID rest_seq = seq_rest(seq_obj);
     if (!rest_seq) return NULL;
@@ -359,6 +396,7 @@ bool is_seqable(ID obj) {
         case CLJ_VECTOR:
         case CLJ_MAP:
         case CLJ_STRING:
+        case CLJ_SEQ:  // Sequences are seqable
         // Note: nil is now represented as NULL
             return true;
         default:

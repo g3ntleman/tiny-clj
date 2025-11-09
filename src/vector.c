@@ -175,8 +175,10 @@ CljVector vector_assoc(CljVector vec, int index, ID value) {
 // === Transient API (Phase 2) ===
 
 /** Convert persistent vector to transient. */
-CljValue transient(CljValue vec) {
-    if (!vec || vec->type != CLJ_VECTOR) {
+ID transient(ID vec) {
+    if (!vec) return NULL;
+    CljObject *obj = (CljObject*)vec;
+    if (obj->type != CLJ_VECTOR) {
         return NULL;
     }
     
@@ -210,7 +212,7 @@ CljValue transient(CljValue vec) {
         tvec->data = NULL;
     }
     
-    return (CljValue)tvec;
+    return (ID)tvec;
 }
 
 /** Grow vector capacity in-place (for RC=1 or transient vectors).
@@ -238,8 +240,10 @@ void vector_grow_capacity(CljPersistentVector *v) {
 }
 
 /** Append to transient vector (guaranteed in-place). */
-CljValue clj_conj(CljValue tvec, CljValue item) {
-    if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR || !item) {
+ID clj_conj(ID tvec, ID item) {
+    if (!tvec || !item) return NULL;
+    CljObject *obj = (CljObject*)tvec;
+    if (obj->type != CLJ_TRANSIENT_VECTOR) {
         return NULL;
     }
     
@@ -257,8 +261,10 @@ CljValue clj_conj(CljValue tvec, CljValue item) {
 }
 
 /** Convert transient vector back to persistent. */
-CljValue persistent(CljValue tvec) {
-    if (!tvec || tvec->type != CLJ_TRANSIENT_VECTOR) {
+ID persistent(ID tvec) {
+    if (!tvec) return NULL;
+    CljObject *obj = (CljObject*)tvec;
+    if (obj->type != CLJ_TRANSIENT_VECTOR) {
         return NULL;
     }
     

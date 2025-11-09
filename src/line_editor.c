@@ -18,10 +18,10 @@
 __attribute__((unused)) static LineEditor *global_editor = NULL;
 
 // ANSI escape sequence constants
-__attribute__((unused)) static const char ESC_RIGHT[] = "\033[C";
-__attribute__((unused)) static const char ESC_LEFT[] = "\033[D";
-__attribute__((unused)) static const char ESC_CLEAR[] = "\033[K";
-__attribute__((unused)) static const char ESC_HOME[] = "\033[1G";
+static const char ESC_RIGHT[] = "\033[C";
+static const char ESC_LEFT[] = "\033[D";
+static const char ESC_CLEAR[] = "\033[K";
+static const char ESC_HOME[] = "\033[1G";
 
 
 #ifdef ENABLE_LINE_EDITING

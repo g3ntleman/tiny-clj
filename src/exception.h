@@ -11,6 +11,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+// Forward declaration for CljString
+struct CljString;
+
 // CLJException struct definition
 typedef struct {
     CljObject base;
@@ -19,6 +22,10 @@ typedef struct {
     char file[128];
     int line;
     int col;
+#ifdef DEBUG
+    struct CljString *stacktrace;  // Stacktrace as CljString (can be NULL)
+    CljObject *object;             // General object field (e.g., zombie object, can be NULL)
+#endif
 } CLJException;
 
 // Type-safe casting
@@ -28,6 +35,12 @@ static inline CLJException* as_exception(ID obj) {
 
 /** Create a CLJException object (rc=1) with optional data. */
 CLJException* make_exception(const char *type, const char *message, const char *file, int line, int col);
+
+/** Print exception details including stacktrace and object (if available).
+ *  @param ex Exception to print
+ *  @note Only available in DEBUG builds (stacktrace and object fields)
+ */
+void print_exception(CLJException *ex);
 
 // Exception throwing functions
 /** Throw exception via longjmp; transfers ownership to runtime. */
@@ -198,37 +211,30 @@ extern const char *ERROR_MEMORY_ALLOCATION;
 // ============================================================================
 
 /** @brief Static exception type: RuntimeException */
-extern const char *EXCEPTION_TYPE_RUNTIME;
+extern const char *EXCEPTION_RUNTIME;
 
 /** @brief Static exception type: ParseError */
-extern const char *EXCEPTION_TYPE_PARSE;
+extern const char *EXCEPTION_PARSE;
 
 /** @brief Static exception type: IllegalArgumentException */
-extern const char *EXCEPTION_TYPE_ILLEGAL_ARGUMENT;
+extern const char *EXCEPTION_ILLEGAL_ARGUMENT;
 
 /** @brief Static exception type: ArityException */
-extern const char *EXCEPTION_TYPE_ARITY;
+extern const char *EXCEPTION_ARITY;
 
 /** @brief Static exception type: TypeError */
-extern const char *EXCEPTION_TYPE_TYPE;
+extern const char *EXCEPTION_TYPE;
 
 /** @brief Static exception type: OutOfMemoryError */
-extern const char *EXCEPTION_TYPE_OUT_OF_MEMORY;
+extern const char *EXCEPTION_OUT_OF_MEMORY;
 
 /** @brief Static exception type: StackOverflowError */
-extern const char *EXCEPTION_TYPE_STACK_OVERFLOW;
+extern const char *EXCEPTION_STACK_OVERFLOW;
 
 /** @brief Static exception type: DivisionByZeroError */
-extern const char *EXCEPTION_TYPE_DIVISION_BY_ZERO;
+extern const char *EXCEPTION_DIVISION_BY_ZERO;
 
-// Short aliases (drop _TYPE_ for brevity)
-#define EXCEPTION_RUNTIME EXCEPTION_TYPE_RUNTIME
-#define EXCEPTION_PARSE EXCEPTION_TYPE_PARSE
-#define EXCEPTION_ILLEGAL_ARGUMENT EXCEPTION_TYPE_ILLEGAL_ARGUMENT
-#define EXCEPTION_ARITY EXCEPTION_TYPE_ARITY
-#define EXCEPTION_TYPE EXCEPTION_TYPE_TYPE
-#define EXCEPTION_OUT_OF_MEMORY EXCEPTION_TYPE_OUT_OF_MEMORY
-#define EXCEPTION_STACK_OVERFLOW EXCEPTION_TYPE_STACK_OVERFLOW
-#define EXCEPTION_DIVISION_BY_ZERO EXCEPTION_TYPE_DIVISION_BY_ZERO
+/** @brief Static exception type: ZombieAccessException */
+extern const char *EXCEPTION_ZOMBIE_ACCESS;
 
 #endif

@@ -488,7 +488,7 @@ TEST(test_require_with_refer) {
     // Verify func was copied to current namespace
     CljObject *func_sym = intern_symbol_global("func");
     TEST_ASSERT_NOT_NULL(func_sym);
-    CljObject *func_val = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)func_sym);
+    CljObject *func_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)func_sym);
     TEST_ASSERT_NOT_NULL(func_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
@@ -515,8 +515,8 @@ TEST(test_require_with_refer_all) {
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
     
-    CljObject *var1_val = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)var1_sym);
-    CljObject *var2_val = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)var2_sym);
+    CljObject *var1_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)var1_sym);
+    CljObject *var2_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)var2_sym);
     TEST_ASSERT_NOT_NULL(var1_val);
     TEST_ASSERT_NOT_NULL(var2_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));

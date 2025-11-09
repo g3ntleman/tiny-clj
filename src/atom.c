@@ -65,32 +65,27 @@ ID atom_reset(CljAtom *atom, ID new_value) {
 ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     // Validate arguments (Clojure/JVM behavior: throw IllegalArgumentException)
     if (!atom) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "swap! requires an atom", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom", 
                        __FILE__, __LINE__, 0);
         return NULL;
     }
     
     // Resolve symbol to function if necessary (Clojure/JVM behavior)
-    // Use a minimal EvalState that points to clojure.core namespace for resolution
+    // ns_resolve automatically searches clojure.core, so we don't need to set current_ns
     if (is_type(fn, CLJ_SYMBOL)) {
-        EvalState *st = evalstate_new(false);
-        if (st) {
-            // Set current_ns to clojure.core if available, otherwise use user namespace
-            // ns_resolve will search in clojure.core even if current_ns is different
-            if (g_runtime.clojure_core_cache) {
-                st->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
-            }
-            ID resolved = ns_resolve(st, fn);
-            if (resolved) {
-                fn = resolved;
-            }
-            evalstate_free(st);
+        // ns_resolve searches clojure.core even if current_ns is different
+        // Pass NULL for st to use default namespace - ns_resolve will still search clojure.core
+        ID resolved = ns_resolve(NULL, fn);
+        if (resolved) {
+            // resolved is retained by the map, so we can use it directly
+            // No need to RELEASE old fn (it's a parameter) or RETAIN resolved (already retained)
+            fn = resolved;
         }
     }
     
     // Validate that fn is a valid function (Clojure/JVM throws IllegalArgumentException/ClassCastException)
     if (!fn || (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE))) {
-        throw_exception(EXCEPTION_TYPE_ILLEGAL_ARGUMENT, "swap! requires a function", 
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires a function", 
                        __FILE__, __LINE__, 0);
         return NULL;
     }

@@ -62,12 +62,17 @@ void runtime_free(void) {
     // So we need to preserve it BEFORE ns_cleanup() and restore it AFTER
     void *preserved_cache = g_runtime.clojure_core_cache;
     
-    // Preserve symbol table if clojure.core cache is set (important for tests)
+    // Preserve symbol table ALWAYS if set (important for tests)
     // Symbol table is needed for symbol interning to work correctly
     // If we clean it up, new symbols will have different pointers than stored symbols
-    void *preserved_symbol_table = preserved_cache ? g_runtime.symbol_table : NULL;
+    // CRITICAL: Symbol table should ALWAYS be preserved if set, not just when cache is set
+    // This ensures that SYM_TIME, SYM_DEF, etc. remain consistent across tests
+    void *preserved_symbol_table = g_runtime.symbol_table;
     
-    if (!preserved_cache) {
+    // CRITICAL: Never cleanup symbol table in tests - it must persist across test runs
+    // Only cleanup if we're actually shutting down (preserved_cache is NULL)
+    // In tests, preserved_cache is always set, so symbol table is never cleaned up
+    if (!preserved_cache && !preserved_symbol_table) {
         symbol_table_cleanup();
     }
     meta_registry_cleanup();

@@ -3,6 +3,18 @@
 
 #include <stdint.h>
 
+#ifdef DEBUG
+#ifndef ZOMBIE_RC
+/** @brief Zombie RC marker value (for NSZombieEnabled debugging).
+ *  When an object's rc is set to ZOMBIE_RC, it indicates the object is a zombie
+ *  (freed but not deallocated). The object's type remains unchanged for printing.
+ *  Defined here to avoid circular dependencies between memory.h and object.h.
+ *  Note: Using -1 as zombie marker, which is safe since normal rc values are >= 0.
+ */
+#define ZOMBIE_RC -1
+#endif
+#endif
+
 typedef enum {
     // Immediate types (for tagged pointers, not used in heap objects)
     CLJ_INT,     // Immediate integer (fixnum)

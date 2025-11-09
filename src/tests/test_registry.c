@@ -130,11 +130,8 @@ void test_registry_list_all(void) {
 
 // Get tests by group
 Test *test_registry_get_by_group(const char *group, size_t *count) {
-    static Test *filtered_tests = NULL;
-    static size_t filtered_capacity = 0;
+    // Count tests in group first
     size_t filtered_count = 0;
-    
-    // Count tests in group
     for (size_t i = 0; i < test_count; i++) {
         if (strcmp(test_registry[i].group, group) == 0) {
             filtered_count++;
@@ -146,16 +143,12 @@ Test *test_registry_get_by_group(const char *group, size_t *count) {
         return NULL;
     }
     
-    // Grow filtered array if needed
-    if (filtered_count > filtered_capacity) {
-        Test *new_filtered = realloc(filtered_tests, filtered_count * sizeof(Test));
-        if (!new_filtered) {
-            fprintf(stderr, "Error: Failed to allocate memory for filtered tests\n");
-            *count = 0;
-            return NULL;
-        }
-        filtered_tests = new_filtered;
-        filtered_capacity = filtered_count;
+    // Allocate new array for filtered tests (no static state to avoid isolation issues)
+    Test *filtered_tests = malloc(filtered_count * sizeof(Test));
+    if (!filtered_tests) {
+        fprintf(stderr, "Error: Failed to allocate memory for filtered tests\n");
+        *count = 0;
+        return NULL;
     }
     
     // Copy tests from group

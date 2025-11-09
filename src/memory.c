@@ -30,6 +30,16 @@ extern bool g_memory_verbose_mode;
 // Global flag to control debug output during initialization
 static bool g_debug_output_enabled = false;
 
+#ifdef DEBUG
+// Public flag to enable zombie mode (NSZombieEnabled)
+bool g_zombie_enabled = false;
+
+/** @brief Enable zombie mode for debugging */
+void enable_zombie_mode(void) {
+    g_zombie_enabled = true;
+}
+#endif
+
 // Function to enable debug output after initialization
 void enable_memory_debug_output(void) {
     g_debug_output_enabled = true;
@@ -115,8 +125,33 @@ static void release_object_deep(CljObject *v);
  * also ignored to prevent reference counting issues.
  */
 void retain(CljObject *v) {
+    if (!v) return;
+    
+    // Safety check: ensure the pointer is valid
+    if ((uintptr_t)v < 0x1000) {
+        return;
+    }
+    
+#ifdef DEBUG
+    // Check for zombie object
+    if (v->rc == ZOMBIE_RC) {
+        // Zombie detected: throw exception with stacktrace and zombie object
+        char message[512];
+        snprintf(message, sizeof(message),
+            "Attempted to retain zombie object %p (type=%s). "
+            "This object was already freed but marked as zombie for debugging.",
+            v, clj_type_name(v->type));
+        CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
+        if (ex) {
+            ex->object = (CljObject*)v;  // Store zombie object in exception
+            throw_exception_object(ex);
+        }
+        return;
+    }
+#endif
+    
     // Happy path: valid object that tracks retains
-    if (v && (uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
+    if ((uintptr_t)v >= 0x1000 && TRACKS_RETAINS(v)) {
         // Track retain call for profiling
         memory_profiler_track_retain(v);
         v->rc++;
@@ -159,6 +194,24 @@ void release(CljObject *v) {
         return;
     }
     
+#ifdef DEBUG
+    // Check for zombie object BEFORE checking for underflow
+    if (v->rc == ZOMBIE_RC) {
+        // Zombie detected: throw exception with stacktrace and zombie object
+        char message[512];
+        snprintf(message, sizeof(message),
+            "Attempted to release zombie object %p (type=%s). "
+            "This object was already freed but marked as zombie for debugging.",
+            v, clj_type_name(v->type));
+        CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
+        if (ex) {
+            ex->object = (CljObject*)v;  // Store zombie object in exception
+            throw_exception_object(ex);
+        }
+        return;
+    }
+#endif
+    
     // Check for underflow BEFORE decrementing
     if (v->rc == 0) {
         printf("❌ UNDERFLOW! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
@@ -181,8 +234,15 @@ void release(CljObject *v) {
         if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
             printf("🔍 release: Object %p will be freed (rc=0)\n", v);
         }
+#ifdef DEBUG
+        // In zombie mode, mark object as zombie BEFORE deep release
+        // This allows release_object_deep to access the object safely
+        if (g_zombie_enabled) {
+            v->rc = ZOMBIE_RC;  // Mark as zombie before deep release
+        }
+#endif
         release_object_deep(v); 
-        DEALLOC(v); // Hook for memory profiling - BEFORE deep release
+        DEALLOC(v); // Hook for memory profiling - marks as zombie if enabled
 
         if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
             printf("🔍 release: Object %p freed\n", v);
@@ -337,13 +397,37 @@ void autorelease_pool_pop(CljObjectPool *pool) {
     }
     
     // Release all objects in pool
+    // Note: Multiple AUTORELEASE calls on the same object are allowed,
+    // so we need to track which objects have already been released
     CljPersistentVector *vec = as_vector(pool->backing);
     if (vec) {
+        // Track released objects to prevent double-release from duplicates
+        CljObject *released_objects[1024];  // Stack-allocated for performance
+        int released_count = 0;
+        
         for (int i = vec->count - 1; i >= 0; --i) {
             CljObject *obj = vec->data[i];
-            vec->data[i] = NULL;  // Prevent double-free
-            if (obj && TRACKS_RETAINS(obj)) {
-                RELEASE(obj);
+            if (obj) {
+                // Check if object was already released in this pop
+                bool already_released = false;
+                for (int j = 0; j < released_count; j++) {
+                    if (released_objects[j] == obj) {
+                        already_released = true;
+                        break;
+                    }
+                }
+                
+                if (!already_released && released_count < 1024) {
+                    released_objects[released_count++] = obj;
+                    vec->data[i] = NULL;  // Prevent double-free
+                    if (TRACKS_RETAINS(obj)) {
+                        RELEASE(obj);
+                    }
+                } else {
+                    vec->data[i] = NULL;  // Clear even if already released
+                }
+            } else {
+                vec->data[i] = NULL;  // Clear NULL entries
             }
         }
         vec->count = 0;
@@ -485,6 +569,16 @@ static void release_object_deep(CljObject *v) {
         }
         return;
     }
+    
+#ifdef DEBUG
+    // Skip zombie objects - they should not be freed
+    if (v->rc == ZOMBIE_RC) {
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+            printf("🔍 release_object_deep: Skipping zombie object %p\n", v);
+        }
+        return;
+    }
+#endif
     
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
         printf("🔍 release_object_deep: Object %p, type=%d (%s), rc=%d\n", 

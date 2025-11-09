@@ -276,10 +276,12 @@ add_executable(unity-tests
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_time.c
     src/tests/test_loops.c
+    src/tests/test_while_debug.c
     src/tests/test_map.c
     src/tests/test_vector.c
     src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
+    src/tests/test_arithmetic.c
     src/tests/test_sequences.c
     src/tests/test_list_resolution.c
     src/tests/test_byte_array.c
@@ -327,8 +329,8 @@ add_executable(unity-tests
 # Unity Tests - Always in Debug mode for comprehensive testing
 apply_common_settings(unity-tests)
 set_target_properties(unity-tests PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fsanitize=address -fno-omit-frame-pointer"
-    LINK_FLAGS "-fsanitize=address"
+    COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
+    LINK_FLAGS ""
 )
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c

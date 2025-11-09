@@ -105,12 +105,8 @@ static bool eval_core_source(const char *src, EvalState *st) {
       }
     } END_TRY
     
-    // CRITICAL: Release form after evaluation
-    // value_by_parsing_expr returns object with rc=1
-    RELEASE((CljObject*)form);
+    // value_by_parsing_expr returns AUTORELEASE object
     
-    // Don't RELEASE form here - it's already managed by the parser
-    // RELEASE((CljObject*)form);
     expr_count++;
   }
   
@@ -168,7 +164,7 @@ int load_clojure_core(EvalState *st) {
     if (clojure_core && clojure_core->mappings) {
       CljObject *inc_sym = intern_symbol_global("inc");
       if (inc_sym) {
-        CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym);
+        CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
         if (!inc_value) {
           // inc not found - this is a critical error
           fprintf(stderr, "[clojure.core] CRITICAL: 'inc' not found in mappings after loading!\n");

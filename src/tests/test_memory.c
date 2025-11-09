@@ -45,7 +45,7 @@ TEST(test_memory_deallocation) {
     {
         // Test object lifecycle with heap-allocated object (not immediate)
         // Use a string object since symbols are singletons and don't use reference counting
-        CljObject *obj = make_string("test_string_for_reference_counting");
+        CljObject *obj = (CljObject*)make_string("test_string_for_reference_counting");
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting
@@ -253,21 +253,38 @@ TEST(test_autorelease_pool_memory_cleanup) {
     TEST_ASSERT_TRUE(after_stats.memory_leaks <= 10); // Allow for some singleton objects
 }
 
-// ============================================================================
-// TEST GROUPS
-// ============================================================================
-// (Unused test groups removed for cleanup)
-
-// ============================================================================
-// COMMAND LINE INTERFACE
-// ============================================================================
-
-// Unused function removed for cleanup
-
-// Unused function removed for cleanup
-
-// Unused function removed for cleanup
-
-// ============================================================================
-// TEST FUNCTIONS (no main function - called by unity_test_runner.c)
-// ============================================================================
+#ifdef DEBUG
+TEST(test_zombie_detection) {
+    // Test zombie detection: release object once too often
+    // This should trigger ZombieAccessException when zombie mode is enabled
+    
+    // Create an object (rc = 1)
+    CljObject *obj = (CljObject*)make_string("test_zombie_object");
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_EQUAL_INT(1, obj->rc);
+    
+    // Release once (rc = 0, object becomes zombie if zombie mode enabled)
+    RELEASE(obj);
+    
+    // Try to release again - should trigger ZombieAccessError
+    TRY {
+        RELEASE(obj);  // This should throw ZombieAccessException
+        TEST_FAIL_MESSAGE("Expected ZombieAccessException when releasing zombie object");
+    } CATCH(ex) {
+        // Verify exception type
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("ZombieAccessException", ex->type);
+        TEST_ASSERT_NOT_NULL(strstr(ex->message, "zombie"));
+        
+        // Verify zombie object is stored in exception
+        TEST_ASSERT_NOT_NULL(ex->object);
+        TEST_ASSERT_EQUAL_PTR(obj, ex->object);
+        
+        // Verify object is marked as zombie
+        TEST_ASSERT_EQUAL_INT(ZOMBIE_RC, obj->rc);
+        
+        // Verify stacktrace is present (DEBUG builds only)
+        TEST_ASSERT_NOT_NULL(ex->stacktrace);
+    } END_TRY
+}
+#endif

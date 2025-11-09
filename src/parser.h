@@ -19,14 +19,9 @@
 #include "map.h"  // For CljMap
 
 
-// === Legacy API (deprecated - use CljValue API) ===
-/**
- * @deprecated Use parse_v() instead. Parse Clojure expression from string input
- * @param input Input string to parse
- * @param st Evaluation state
- * @return Parsed CljObject (caller must release) or NULL on error
- */
-CljObject *parse(const char *input, EvalState *st);
+// === Legacy API (deprecated - use ID API) ===
+// Note: parse() can return both objects (CljObject*) and immediate values (CljValue)
+// Use ID as the return type to handle both cases
 
 // Convenience API
 
@@ -53,7 +48,7 @@ ID eval_string(const char* expr_str, EvalState *eval_state);
  * @brief Create CljValue by parsing expression from Reader (Phase 1: Immediates)
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return New CljValue or NULL on error
+ * @return Autoreleased object or NULL (nil) - throws exception on error
  */
 CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
@@ -61,7 +56,7 @@ CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
  * @brief Parse Clojure expression from Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return Autoreleased object or NULL on error (no manual RELEASE needed)
+ * @return Autoreleased object or NULL (nil) - throws exception on error (no manual RELEASE needed)
  */
 ID parse_expr(Reader *reader, EvalState *st);
 
@@ -74,12 +69,12 @@ ID parse_expr(Reader *reader, EvalState *st);
 CljValue parse_from_reader(Reader *reader, EvalState *st);
 
 /**
- * @brief Parse Clojure expression from string input (CljValue API)
+ * @brief Parse Clojure expression from string input
  * @param input Input string to parse
  * @param st Evaluation state
- * @return Parsed CljValue or NULL on error
+ * @return Parsed ID (can be CljObject* for objects or CljValue for immediates) or NULL on error
  */
-CljValue parse(const char *input, EvalState *st);
+ID parse(const char *input, EvalState *st);
 
 
 #endif

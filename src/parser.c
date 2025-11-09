@@ -146,7 +146,7 @@ static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
  * @brief Create CljObject by parsing expression from Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return New CljObject with RC=1 or NULL on error (caller must release)
+ * @return Autoreleased object or NULL (nil) - throws exception on error (no manual RELEASE needed)
  */
 ID parse_expr(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
@@ -317,15 +317,15 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
             eval_env = (CljMap*)eval_state->current_ns->mappings;
         }
         result = eval_list(as_list(parsed_expr), eval_env, eval_state);
-        // eval_list returns mixed results - don't autorelease objects we didn't create
+        // eval_list returns AUTORELEASE objects
     } else if (is_type(parsed_expr, CLJ_SYMBOL)) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
         result = (CljObject*)eval_symbol((ID)parsed_expr, eval_state);
         // eval_symbol already returns autoreleased object
     } else {
-        // Literal value (vector, map, etc.) - return as-is with AUTORELEASE
+        // Literal value (vector, map, etc.) - return as-is
+        // parsed_expr is already AUTORELEASEd by parse()
         result = parsed_expr;
-        AUTORELEASE(result);
     }
     
     // result can be NULL only if the evaluation result is nil
@@ -567,6 +567,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   ID rest = parse_list_rest(reader, st);
   
   // Build list from first and rest
+  // Return autoreleased object - caller can use until pool is popped
   CljValue result = AUTORELEASE(make_list(first, (CljList*)rest));
   
   // Skip whitespace before checking for closing parenthesis
@@ -696,7 +697,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
     return NULL;
   }
   if (!utf8valid(buffer))
-    return NULL;
+    throw_parser_exception("Invalid UTF-8 in symbol", reader);
   
   // Check for namespace-qualified symbol: alias/symbol
   if (slash_pos > 0 && slash_pos < pos - 1 && st && st->current_ns) {
@@ -731,7 +732,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             CljObject *symbol_sym = intern_symbol_global(symbol_str);
             if (symbol_sym) {
               // Look up symbol in target namespace
-              CljObject *resolved = (CljObject*)map_get((CljValue)target_ns->mappings, (CljValue)symbol_sym);
+              CljObject *resolved = (CljObject*)map_get((CljMap*)target_ns->mappings, (CljValue)symbol_sym);
               if (resolved) {
                 // Return resolved value (already retained by map_get)
                 return AUTORELEASE(RETAIN(resolved));
@@ -796,7 +797,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
   }
   buf[pos] = '\0';
   if (!utf8valid(buf))
-    return NULL;
+    throw_parser_exception("Invalid UTF-8 in string", reader);
   ID result = AUTORELEASE(make_string(buf));
   return result;
 }
@@ -858,7 +859,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
  * @brief Create CljValue by parsing expression from Reader (Phase 1: Immediates)
  * @param reader Reader instance for input
  * @param st Evaluation state
- * @return New CljValue or NULL on error
+ * @return Autoreleased object or NULL (nil) - throws exception on error
  */
 CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
   // Delegate to make_object_by_parsing_expr to avoid code duplication
@@ -898,7 +899,7 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
  * @param st Evaluation state
  * @return Parsed CljValue or NULL on error
  */
-CljValue parse(const char *input, EvalState *st) {
+ID parse(const char *input, EvalState *st) {
   if (!input || !st) return NULL;
   
   Reader reader;
@@ -906,7 +907,7 @@ CljValue parse(const char *input, EvalState *st) {
   
   // Delegate to parse_from_reader (DRY principle)
   // Don't create autorelease pool here - let caller manage memory
-  return parse_from_reader(&reader, st);
+  return (ID)parse_from_reader(&reader, st);
 }
 
 

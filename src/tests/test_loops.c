@@ -112,7 +112,7 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     
     // Initially closed should be false
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    CljObject *closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    CljObject *closed_val = (CljObject*)map_get((CljMap*)chan, (CljValue)kw_closed);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_FALSE);
     
@@ -132,10 +132,10 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     
     // Channel should have value 3 and be closed
     CljObject *kw_value = intern_symbol(NULL, ":value");
-    CljObject *val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_value);
+    CljObject *val = (CljObject*)map_get((CljMap*)chan, (CljValue)kw_value);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)val));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)val));
-    closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    closed_val = (CljObject*)map_get((CljMap*)chan, (CljValue)kw_closed);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
     
@@ -197,11 +197,11 @@ TEST(test_go_exception_closes_channel_without_value) {
     // Channel should be closed and have no value
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
     CljObject *kw_value = intern_symbol(NULL, ":value");
-    CljObject *closed_val = (CljObject*)map_get((CljValue)chan, (CljValue)kw_closed);
+    CljObject *closed_val = (CljObject*)map_get((CljMap*)chan, (CljValue)kw_closed);
     TEST_ASSERT_NOT_NULL(closed_val);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
-    CljValue val = map_get((CljValue)chan, (CljValue)kw_value);
+    CljValue val = map_get((CljMap*)chan, (CljValue)kw_value);
     // When no value is set (error case), :value key exists but value is NULL
     // make_result_channel sets :value to NULL, so map_get returns NULL
     // After error, we don't update :value, so it remains NULL
@@ -243,8 +243,8 @@ TEST(test_go_success_puts_value_high_level) {
     // After successful execution, channel should have value 3 and be closed
     CljObject *kw_value = intern_symbol(NULL, ":value");
     CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    CljValue val = map_get((CljValue)chan, (CljValue)kw_value);
-    CljValue closed_val = map_get((CljValue)chan, (CljValue)kw_closed);
+    CljValue val = map_get((CljMap*)chan, (CljValue)kw_value);
+    CljValue closed_val = map_get((CljMap*)chan, (CljValue)kw_closed);
     
     TEST_ASSERT_NOT_NULL((CljObject*)val);
     TEST_ASSERT_TRUE(is_fixnum(val));
