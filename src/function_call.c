@@ -403,7 +403,9 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // FAST PATH: Both arguments are fixnums - direct arithmetic without type checks
     // This is the most common case in arithmetic operations
-    if (GET_TAG(a) == CLJ_INT && GET_TAG(b) == CLJ_INT) {
+    uint16_t tag_a = GET_TAG(a);
+    uint16_t tag_b = GET_TAG(b);
+    if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
         int a_val = as_fixnum((CljValue)a);
         int b_val = as_fixnum((CljValue)b);
         int result;
@@ -473,12 +475,12 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // Division by zero check
     if (op == ARITH_DIV) {
-        if (GET_TAG(b) == CLJ_INT && as_fixnum((CljValue)b) == 0) {
+        if (tag_b == CLJ_INT && as_fixnum((CljValue)b) == 0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
                     "Division by zero: %d / %d", as_fixnum((CljValue)a), as_fixnum((CljValue)b));
             return NULL;
         }
-        if (GET_TAG(b) == CLJ_FLOAT && as_fixed((CljValue)b) == 0.0) {
+        if (tag_b == CLJ_FLOAT && as_fixed((CljValue)b) == 0.0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
                     "Division by zero: %f / %f", as_fixed((CljValue)a), as_fixed((CljValue)b));
             return NULL;
@@ -487,7 +489,7 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // For now, only support integer arithmetic
     // TODO: Add mixed int/float support
-    if (GET_TAG(a) != CLJ_INT || GET_TAG(b) != CLJ_INT) {
+    if (tag_a != CLJ_INT || tag_b != CLJ_INT) {
         throw_exception_formatted("NotImplementedError", __FILE__, __LINE__, 0,
                 "Mixed int/float arithmetic not yet implemented");
         return NULL;

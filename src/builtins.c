@@ -1024,7 +1024,8 @@ static bool validate_numeric_args(ID *args, int argc) {
         // CRITICAL: Check if args[i] is a valid number
         // Immediate values (fixnums) should pass this check
         // But if args[i] is a heap object, it must be a number type
-        if (GET_TAG(args[i]) != CLJ_INT && GET_TAG(args[i]) != CLJ_FLOAT) {
+        uint16_t tag = GET_TAG(args[i]);
+        if (tag != CLJ_INT && tag != CLJ_FLOAT) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return false;
         }
@@ -1794,11 +1795,16 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
         return NULL; 
     }
     if (argc == 1) {
-        if (!args[0] || (GET_TAG(args[0]) != CLJ_INT && GET_TAG(args[0]) != CLJ_FLOAT)) { 
+        if (!args[0]) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
-        } 
-        switch (GET_TAG(args[0])) {
+        }
+        uint16_t tag = GET_TAG(args[0]);
+        if (tag != CLJ_INT && tag != CLJ_FLOAT) {
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
+            return NULL;
+        }
+        switch (tag) {
             case CLJ_INT:
                 return create_fixnum_result(-AS_FIXNUM(args[0]));
             case CLJ_FLOAT:
@@ -1880,7 +1886,9 @@ ID native_mod(ID *args, unsigned int argc) {
     
     if (!validate_numeric_args(args, argc)) return NULL;
     
-    if (GET_TAG(args[0]) == CLJ_INT && GET_TAG(args[1]) == CLJ_INT) {
+    uint16_t tag_a = GET_TAG(args[0]);
+    uint16_t tag_b = GET_TAG(args[1]);
+    if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
         int a = AS_FIXNUM(args[0]);
         int b = AS_FIXNUM(args[1]);
         if (b == 0) {
@@ -1935,11 +1943,16 @@ ID native_div_variadic(ID *args, unsigned int argc) {
         return NULL; 
     }
     if (argc == 1) {
-        if (!args[0] || (GET_TAG(args[0]) != CLJ_INT && GET_TAG(args[0]) != CLJ_FLOAT)) { 
+        if (!args[0]) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
             return NULL;
-        } 
-        switch (GET_TAG(args[0])) {
+        }
+        uint16_t tag = GET_TAG(args[0]);
+        if (tag != CLJ_INT && tag != CLJ_FLOAT) {
+            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER); 
+            return NULL;
+        }
+        switch (tag) {
             case CLJ_INT: {
                 int x = AS_FIXNUM(args[0]); 
                 if (x == 0) {
