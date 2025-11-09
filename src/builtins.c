@@ -1652,13 +1652,24 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
                 int new_val = AS_FIXNUM(args[i]);
                 // Check for integer overflow before multiplication
                 if (acc_i != 0 && new_val != 0) {
-                    // Check if multiplication would overflow
-                    if (acc_i > INT_MAX / new_val || acc_i < INT_MIN / new_val) {
-                        // Overflow detected - throw exception (no promotion possible)
-                        return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_MULTIPLICATION, acc_i, new_val);
+                    bool would_overflow = false;
+                    if (new_val > 0) {
+                        // Standard overflow check for positive multiplier
+                        would_overflow = (acc_i > INT_MAX / new_val || acc_i < INT_MIN / new_val);
                     } else {
-                        acc_i *= new_val;
+                        // Negative multiplier: check based on sign of accumulator
+                        if (acc_i > 0) {
+                            // Positive * negative = negative: check if result < INT_MIN
+                            would_overflow = (acc_i > INT_MIN / new_val);
+                        } else {
+                            // Negative * negative = positive: check if result > INT_MAX
+                            would_overflow = (acc_i < INT_MAX / new_val);
+                        }
                     }
+                    if (would_overflow) {
+                        return throw_arithmetic_overflow(ERR_INTEGER_OVERFLOW_MULTIPLICATION, acc_i, new_val);
+                    }
+                    acc_i *= new_val;
                 } else {
                     acc_i *= new_val; // Safe: one operand is 0
                 }

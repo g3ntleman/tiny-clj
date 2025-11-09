@@ -186,3 +186,41 @@ TEST(test_eval_list_simple_arithmetic) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(IS_IMMEDIATE(result));
 }
+
+// Test multiplication with negative numbers (for reduce tests)
+TEST(test_multiplication_with_negative_numbers) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (* 1 -2) => -2 (positive * negative)
+    CljObject *result1 = eval_string("(* 1 -2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
+    TEST_ASSERT_EQUAL_INT(-2, as_fixnum((CljValue)result1));
+    
+    // Test: (* -2 3) => -6 (negative * positive)
+    CljObject *result2 = eval_string("(* -2 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
+    TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result2));
+    
+    // Test: (* -2 3 -4) => 24 (negative * positive * negative)
+    CljObject *result3 = eval_string("(* -2 3 -4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result3));
+    TEST_ASSERT_EQUAL_INT(24, as_fixnum((CljValue)result3));
+    
+    // Test: (* -1 -2) => 2 (negative * negative)
+    CljObject *result4 = eval_string("(* -1 -2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result4));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)result4));
+    
+    // Test: (* -1 -2 -3) => -6 (negative * negative * negative)
+    CljObject *result5 = eval_string("(* -1 -2 -3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result5);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result5));
+    TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result5));
+}
