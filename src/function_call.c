@@ -111,21 +111,27 @@ typedef enum { COMP_LT, COMP_GT, COMP_LE, COMP_GE, COMP_EQ } ComparisonOp;
  */
 static bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, float *val_b) {
     // Extract value from first object
-    if (is_fixnum((CljValue)a)) {
-        *val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        *val_a = as_fixed((CljValue)a);
-    } else {
-        return false; // Invalid type
+    switch (GET_TAG(a)) {
+        case CLJ_INT:
+            *val_a = (float)as_fixnum((CljValue)a);
+            break;
+        case CLJ_FLOAT:
+            *val_a = as_fixed((CljValue)a);
+            break;
+        default:
+            return false; // Invalid type
     }
     
     // Extract value from second object
-    if (is_fixnum((CljValue)b)) {
-        *val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        *val_b = as_fixed((CljValue)b);
-    } else {
-        return false; // Invalid type
+    switch (GET_TAG(b)) {
+        case CLJ_INT:
+            *val_b = (float)as_fixnum((CljValue)b);
+            break;
+        case CLJ_FLOAT:
+            *val_b = as_fixed((CljValue)b);
+            break;
+        default:
+            return false; // Invalid type
     }
     
     return true;
@@ -397,7 +403,7 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // FAST PATH: Both arguments are fixnums - direct arithmetic without type checks
     // This is the most common case in arithmetic operations
-    if (is_fixnum((CljValue)a) && is_fixnum((CljValue)b)) {
+    if (GET_TAG(a) == CLJ_INT && GET_TAG(b) == CLJ_INT) {
         int a_val = as_fixnum((CljValue)a);
         int b_val = as_fixnum((CljValue)b);
         int result;
@@ -467,12 +473,12 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // Division by zero check
     if (op == ARITH_DIV) {
-        if (is_fixnum((CljValue)b) && as_fixnum((CljValue)b) == 0) {
+        if (GET_TAG(b) == CLJ_INT && as_fixnum((CljValue)b) == 0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
                     "Division by zero: %d / %d", as_fixnum((CljValue)a), as_fixnum((CljValue)b));
             return NULL;
         }
-        if (is_fixed((CljValue)b) && as_fixed((CljValue)b) == 0.0) {
+        if (GET_TAG(b) == CLJ_FLOAT && as_fixed((CljValue)b) == 0.0) {
             throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
                     "Division by zero: %f / %f", as_fixed((CljValue)a), as_fixed((CljValue)b));
             return NULL;
@@ -481,7 +487,7 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     // For now, only support integer arithmetic
     // TODO: Add mixed int/float support
-    if (!is_fixnum((CljValue)a) || !is_fixnum((CljValue)b)) {
+    if (GET_TAG(a) != CLJ_INT || GET_TAG(b) != CLJ_INT) {
         throw_exception_formatted("NotImplementedError", __FILE__, __LINE__, 0,
                 "Mixed int/float arithmetic not yet implemented");
         return NULL;
@@ -2871,7 +2877,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
         return NULL;
     }
     
-    if (!var || !n_obj || !is_fixnum((CljValue)n_obj)) {
+    if (!var || !n_obj || GET_TAG(n_obj) != CLJ_INT) {
         return NULL;
     }
     

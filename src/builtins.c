@@ -2257,22 +2257,28 @@ ID native_eq(ID *args, unsigned int argc) {
     
     // Try numeric comparison first
     float val_a, val_b;
-    if (is_fixnum((CljValue)a)) {
-        val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        val_a = as_fixed((CljValue)a);
-    } else {
-        // Not numeric, use general equality
-        return clj_equal(a, b) ? clj_true : clj_false;
+    switch (GET_TAG(a)) {
+        case CLJ_INT:
+            val_a = (float)as_fixnum((CljValue)a);
+            break;
+        case CLJ_FLOAT:
+            val_a = as_fixed((CljValue)a);
+            break;
+        default:
+            // Not numeric, use general equality
+            return clj_equal(a, b) ? clj_true : clj_false;
     }
     
-    if (is_fixnum((CljValue)b)) {
-        val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        val_b = as_fixed((CljValue)b);
-    } else {
-        // Not numeric, use general equality
-        return clj_equal(a, b) ? clj_true : clj_false;
+    switch (GET_TAG(b)) {
+        case CLJ_INT:
+            val_b = (float)as_fixnum((CljValue)b);
+            break;
+        case CLJ_FLOAT:
+            val_b = as_fixed((CljValue)b);
+            break;
+        default:
+            // Not numeric, use general equality
+            return clj_equal(a, b) ? clj_true : clj_false;
     }
     
     return val_a == val_b ? clj_true : clj_false;
@@ -2333,7 +2339,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     
     // Get the sleep duration in seconds
     CljObject *duration_obj = args[0];
-    if (!is_fixnum((CljValue)duration_obj)) {
+    if (GET_TAG(duration_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
                        __FILE__, __LINE__, 0);
         return NULL;

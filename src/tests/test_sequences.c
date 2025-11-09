@@ -69,9 +69,8 @@ TEST(test_rest_arity_0) {
     // Test (rest) - should throw ArityException
     bool exception_caught = false;
     TRY {
-        CljObject *result = eval_string("(rest)", g_test_eval_state);
+        (void)eval_string("(rest)", g_test_eval_state);
         TEST_FAIL_MESSAGE("Expected ArityException for (rest)");
-        // Don't RELEASE result - eval_string returns autoreleased object
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
