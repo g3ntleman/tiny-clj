@@ -19,11 +19,12 @@ static inline CljSymbol* as_symbol(ID obj) {
 }
 
 // Check if an object is a keyword (symbol starting with ':')
-#define IS_KEYWORD(obj) \
-    (is_type((obj), CLJ_SYMBOL) && \
-     as_symbol((obj)) && \
-     as_symbol((obj))->name && \
-     as_symbol((obj))->name[0] == ':')
+static inline bool is_keyword(ID obj) {
+    if (!is_type((CljObject*)obj, CLJ_SYMBOL)) return false;
+    CljSymbol *sym = as_symbol(obj);
+    return sym && sym->name && sym->name[0] == ':';
+}
+#define IS_KEYWORD(obj) is_keyword(obj)
 
 // Globale Symbol-Pointer für Spezialformen (direkt als CljObject*)
 extern CljObject *SYM_TRY;

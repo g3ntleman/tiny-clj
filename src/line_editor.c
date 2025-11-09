@@ -15,7 +15,7 @@
 #include <stdio.h>
 
 // Global line editor instance
-__attribute__((unused)) static LineEditor *global_editor = NULL;
+static LineEditor *global_editor = NULL;
 
 // ANSI escape sequence constants
 static const char ESC_RIGHT[] = "\033[C";
