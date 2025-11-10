@@ -110,7 +110,7 @@ void benchmark_transient_map() {
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             ID key = make_string("key");
             ID value = fixnum(i);
-            conj_map(tmap, key, value);
+            map_conj(tmap, key, value);
         }
         
         CljMap * final_map = map_persistent(tmap);

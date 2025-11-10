@@ -185,14 +185,22 @@ ID parse_expr(Reader *reader, EvalState *st) {
         "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
     return NULL;
   }
-  // Handle nil literal
+  // Handle nil literal - parse as SYM_NIL symbol (not NULL)
+  // This allows nil to be properly handled in expressions like (do 42 nil)
+  // The symbol will be evaluated to NULL in eval_body
   if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
       reader_peek_ahead(reader, 2) == 'l' && 
       !is_alphanumeric(reader_peek_ahead(reader, 3))) {
     reader_consume(reader); // 'n'
     reader_consume(reader); // 'i'
     reader_consume(reader); // 'l'
-    return NULL;
+    CljSymbol *nil_sym = intern_symbol_global("nil");
+    // If SYM_NIL is initialized, it should match the interned symbol
+    if (SYM_NIL && nil_sym == SYM_NIL) {
+        return (ID)SYM_NIL;
+    }
+    // Return the interned symbol (will be SYM_NIL once initialized)
+    return AUTORELEASE(nil_sym);
   }
   
   // Handle true literal
@@ -345,13 +353,7 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     
     CljValue parsed = parse(expr_str, eval_state);
     if (parsed == NULL) {
-        // Check if this is a valid nil result vs a parsing error
-        // If the input is exactly "nil", then NULL is a valid result
-        if (strcmp(expr_str, "nil") == 0) {
-            return NULL; // nil is represented as NULL in our system
-        }
-        
-        // Otherwise, this is a parsing error
+        // NULL from parse() indicates a parsing error (nil is now parsed as SYM_NIL)
         throw_exception("ParseError", "Failed to parse expression", __FILE__, __LINE__, 0);
         return NULL;
     }

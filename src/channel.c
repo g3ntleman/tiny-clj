@@ -2,33 +2,103 @@
 #include "map.h"
 #include "value.h"
 #include "symbol.h"
+#include "exception.h"
 
+/** Create a channel (promise-like) as a transient map.
+ * @return New transient map channel with RC=1 (caller must release)
+ */
 CljMap* make_result_channel(void) {
-    // Use capacity 4 to ensure we have room for updates (even if key lookup fails)
-    CljMap *m = make_map(4);
-    // map_assoc always returns a new map (COW disabled)
-    CljObject *kw_value = intern_symbol(NULL, ":value");
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    // map_assoc returns a new map, so we need to use the return value
-    CljMap *new_m = map_assoc(m, (ID)kw_value, NULL);
-    RELEASE(m);  // Release old map
-    m = map_assoc(new_m, (ID)kw_closed, (ID)clj_false);
-    RELEASE(new_m);  // Release intermediate map
-    return m;
+    // Create a transient map directly (like map_copy_with_additions does)
+    // Allocate transient map with embedded data array
+    int capacity = 4;  // Enough for :value and :closed
+    size_t struct_size = sizeof(CljMap);
+    size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
+    CljMap *tmap = (CljMap*)malloc(struct_size + data_size);
+    if (!tmap) {
+        throw_oom(CLJ_TRANSIENT_MAP);
+        return NULL;
+    }
+    
+    // Initialize as transient map
+    tmap->base.type = CLJ_TRANSIENT_MAP;
+    tmap->base.rc = 1;
+    tmap->count = 0;
+    tmap->capacity = capacity;
+    
+    // Initialize data array
+    for (int i = 0; i < capacity * 2; i++) {
+        tmap->data[i] = NULL;
+    }
+    
+    // Initialize with :value = nil and :closed = false
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    
+    map_conj(tmap, (ID)kw_value, NULL);  // :value = nil
+    map_conj(tmap, (ID)kw_closed, (ID)clj_false);  // :closed = false
+    
+    return tmap;
 }
 
-ID result_channel_put(ID chan, ID value) {
-    if (!chan) return NULL;
-    CljObject *kw_value = intern_symbol(NULL, ":value");
-    // map_assoc always returns a new map (COW disabled)
-    return map_assoc(chan, (ID)kw_value, value);
+/** Put a value into the channel (mutates in-place using map_conj).
+ * @param chan Channel (transient map)
+ * @param value Value to put (can be NULL/nil or immediate)
+ */
+void result_channel_put(CljMap *chan, ID value) {
+    CLJ_ASSERT(chan != NULL);
+    
+    // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
+    CljObject *obj = (CljObject*)chan;
+    CLJ_ASSERT(obj != NULL);
+    CLJ_ASSERT(obj->type == CLJ_TRANSIENT_MAP || obj->type == CLJ_MAP);
+    
+    // In COW cases, persistent maps with RC=1 can be mutated, but we use transient maps for channels
+    if (obj->type == CLJ_MAP) {
+        CLJ_ASSERT(obj->rc == 1);
+    }
+    
+    // Store original pointer for verification
+    void *chan_ptr_before = (void*)chan;
+    
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CLJ_ASSERT(kw_value != NULL);
+    
+    CljMap *result = map_conj(chan, (ID)kw_value, value);
+    CLJ_ASSERT(result != NULL);
+    CLJ_ASSERT((void*)result == chan_ptr_before);  // Should return same pointer
 }
 
-ID result_channel_close(ID chan) {
-    if (!chan) return NULL;
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    // map_assoc always returns a new map (COW disabled)
-    return map_assoc(chan, (ID)kw_closed, (ID)clj_true);
+/** Close the channel (mutates in-place using map_conj).
+ * @param chan Channel (transient map)
+ */
+void result_channel_close(CljMap *chan) {
+    CLJ_ASSERT(chan != NULL);
+    
+    // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
+    CljObject *obj = (CljObject*)chan;
+    CLJ_ASSERT(obj != NULL);
+    CLJ_ASSERT(obj->type == CLJ_TRANSIENT_MAP || obj->type == CLJ_MAP);
+    
+    // In COW cases, persistent maps with RC=1 can be mutated, but we use transient maps for channels
+    if (obj->type == CLJ_MAP) {
+        CLJ_ASSERT(obj->rc == 1);
+    }
+    
+    // Store original pointer for verification
+    void *chan_ptr_before = (void*)chan;
+    
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    CLJ_ASSERT(kw_closed != NULL);
+    
+    CljMap *result = map_conj(chan, (ID)kw_closed, (ID)clj_true);
+    CLJ_ASSERT(result != NULL);
+    CLJ_ASSERT((void*)result == chan_ptr_before);  // Should return same pointer
+    
+    // Verify channel was actually mutated
+    CljValue closed_val = map_get(chan, (CljValue)kw_closed);
+    CLJ_ASSERT(closed_val != NULL);
+    CLJ_ASSERT(is_special(closed_val));
+    CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);
 }
 
 

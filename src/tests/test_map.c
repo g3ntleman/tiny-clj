@@ -5,7 +5,7 @@
 // Test that map_assoc correctly updates values for interned symbol keys
 TEST(test_map_assoc_updates_interned_symbol_key) {
     CljMap *map = (CljMap*)make_map(2);
-    CljObject *kw = intern_symbol(NULL, ":closed");
+    CljObject *kw = (CljObject*)intern_symbol(NULL, ":closed");
     
     // Set initial value
     map = map_assoc(map, kw, (CljValue)clj_false);
@@ -23,14 +23,14 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
 TEST(test_map_assoc_channel_pattern) {
     // Create channel like make_result_channel
     CljMap *chan = (CljMap*)make_map(2);
-    chan = map_assoc(chan, intern_symbol(NULL, ":value"), NULL);
-    chan = map_assoc(chan, intern_symbol(NULL, ":closed"), (CljValue)clj_false);
+    chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":value"), NULL);
+    chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":closed"), (CljValue)clj_false);
     
     // Update like channel_put_and_close does
-    chan = map_assoc(chan, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
+    chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":closed"), (CljValue)clj_true);
     
     // Verify closed is true
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)chan, (CljValue)kw_closed)) == SPECIAL_TRUE);
     
     RELEASE((CljObject*)chan);
@@ -70,7 +70,7 @@ TEST(test_assign_with_immediates) {
 // Test that ASSIGN with Immediates works in map context
 TEST(test_assign_immediates_in_map) {
     CljMap *map = (CljMap*)make_map(4);
-    CljObject *kw = intern_symbol(NULL, ":test");
+    CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Add immediate values using ASSIGN pattern
     map = map_assoc(map, kw, (CljValue)clj_false);
@@ -101,13 +101,12 @@ TEST(test_assign_immediates_in_map) {
     RELEASE((CljObject*)map);
 }
 
-// Hypothesis 1: intern_symbol returns different pointers for same symbol
+// Test that intern_symbol returns same pointer for same symbol
 TEST(test_intern_symbol_consistency_for_closed) {
-    
     // Call intern_symbol multiple times with same arguments
-    CljObject *kw1 = intern_symbol(NULL, ":closed");
-    CljObject *kw2 = intern_symbol(NULL, ":closed");
-    CljObject *kw3 = intern_symbol(NULL, ":closed");
+    CljObject *kw1 = (CljObject*)intern_symbol(NULL, ":closed");
+    CljObject *kw2 = (CljObject*)intern_symbol(NULL, ":closed");
+    CljObject *kw3 = (CljObject*)intern_symbol(NULL, ":closed");
     
     // All should return the same pointer
     TEST_ASSERT_EQUAL_PTR(kw1, kw2);
@@ -116,15 +115,15 @@ TEST(test_intern_symbol_consistency_for_closed) {
     
 }
 
-// Hypothesis 2: map_assoc fails when called from different contexts
+// Test that map_assoc works when called from different contexts
 TEST(test_map_assoc_with_different_intern_calls) {
     CljMap *map = (CljMap*)make_map(4);
     
     // Create channel like make_result_channel does
-    CljObject *kw_value = intern_symbol(NULL, ":value");
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    map = map_assoc(map, kw_value, NULL);
-    map = map_assoc(map, kw_closed, (CljValue)clj_false);
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    map = map_assoc(map, (CljValue)kw_value, NULL);
+    map = map_assoc(map, (CljValue)kw_closed, (CljValue)clj_false);
     
     // Verify initial state
     CljValue closed_val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw_closed);
@@ -133,8 +132,8 @@ TEST(test_map_assoc_with_different_intern_calls) {
     TEST_ASSERT_TRUE(as_special(closed_val1) == SPECIAL_FALSE);
     
     // Now update like channel_put_and_close does (with new intern_symbol call)
-    CljObject *kw_closed_new = intern_symbol(NULL, ":closed");
-    map = map_assoc(map, kw_closed_new, (CljValue)clj_true);
+    CljObject *kw_closed_new = (CljObject*)intern_symbol(NULL, ":closed");
+    map = map_assoc(map, (CljValue)kw_closed_new, (CljValue)clj_true);
     
     // Verify update worked
     CljValue closed_val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw_closed);
@@ -148,10 +147,10 @@ TEST(test_map_assoc_with_different_intern_calls) {
     RELEASE((CljObject*)map);
 }
 
-// Hypothesis 3: Problem with NULL value in map_assoc
+// Test that map_assoc works with NULL value
 TEST(test_map_assoc_with_null_value) {
     CljMap *map = (CljMap*)make_map(4);
-    CljObject *kw = intern_symbol(NULL, ":value");
+    CljObject *kw = (CljObject*)intern_symbol(NULL, ":value");
     
     // Set NULL value
     map = map_assoc(map, kw, NULL);
@@ -174,15 +173,14 @@ TEST(test_map_assoc_with_null_value) {
     RELEASE((CljObject*)map);
 }
 
-// Hypothesis 4: Test exact channel pattern from make_result_channel and channel_put_and_close
+// Test exact channel pattern from make_result_channel and channel_put_and_close
 TEST(test_exact_channel_pattern) {
-    
     // Exact replication of make_result_channel
     CljMap *chan = (CljMap*)make_map(4);
-    CljObject *kw_value = intern_symbol(NULL, ":value");
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
-    chan = map_assoc(chan, kw_value, NULL);
-    chan = map_assoc(chan, kw_closed, (CljValue)clj_false);
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    chan = map_assoc(chan, (CljValue)kw_value, NULL);
+    chan = map_assoc(chan, (CljValue)kw_closed, (CljValue)clj_false);
     
     // Verify initial state
     CljValue closed_initial = (CljValue)map_get((CljMap*)chan, (CljValue)kw_closed);
@@ -191,9 +189,9 @@ TEST(test_exact_channel_pattern) {
     TEST_ASSERT_TRUE(as_special(closed_initial) == SPECIAL_FALSE);
     
     // Exact replication of channel_put_and_close with NULL value
-    CljObject *kw_closed_new = intern_symbol(NULL, ":closed");
+    CljObject *kw_closed_new = (CljObject*)intern_symbol(NULL, ":closed");
     // if (value) { chan = map_assoc(chan, kw_value, value); } - skipped for NULL
-    chan = map_assoc(chan, kw_closed_new, (CljValue)clj_true);
+    chan = map_assoc(chan, (CljValue)kw_closed_new, (CljValue)clj_true);
     
     // Verify final state
     CljValue closed_final = (CljValue)map_get((CljMap*)chan, (CljValue)kw_closed);
@@ -204,26 +202,27 @@ TEST(test_exact_channel_pattern) {
     RELEASE((CljObject*)chan);
 }
 
-// Hypothesis 5: Channel object identity - is the channel returned by eval_list the same as the one in the queue?
+// Test channel object identity
 TEST(test_channel_object_identity) {
     CljMap *env = (CljMap*)make_map(4);
     
     // Create a channel manually
-    CljObject *chan1 = make_result_channel();
+    CljObject *chan1 = (CljObject*)make_result_channel();
     TEST_ASSERT_NOT_NULL(chan1);
     
     // Verify it's a map
-    TEST_ASSERT_TRUE(is_type(chan1, CLJ_MAP));
+    TEST_ASSERT_TRUE(is_type(chan1, CLJ_MAP) || is_type(chan1, CLJ_TRANSIENT_MAP));
     
     // Check initial state
-    CljObject *kw_closed = intern_symbol(NULL, ":closed");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     CljValue closed_initial = (CljValue)map_get((CljMap*)chan1, (CljValue)kw_closed);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_initial);
     TEST_ASSERT_TRUE(is_special(closed_initial));
     TEST_ASSERT_TRUE(as_special(closed_initial) == SPECIAL_FALSE);
     
     // Update it like channel_put_and_close would
-    chan1 = map_assoc(chan1, kw_closed, (CljValue)clj_true);
+    // Use map_conj for transient maps (map_assoc only works with CLJ_MAP)
+    map_conj((CljMap*)chan1, (CljValue)kw_closed, (CljValue)clj_true);
     
     // Verify update worked
     CljValue closed_final = (CljValue)map_get((CljMap*)chan1, (CljValue)kw_closed);
@@ -243,7 +242,7 @@ TEST(test_channel_object_identity) {
 // (verifies that removing redundant fast-path doesn't break functionality)
 TEST(test_map_assoc_with_pointer_equality) {
     CljMap *map = (CljMap*)make_map(4);
-    CljObject *kw = intern_symbol(NULL, ":test");
+    CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Set initial value
     map = map_assoc(map, kw, fixnum(42));
@@ -268,8 +267,8 @@ TEST(test_map_assoc_with_structural_equality) {
     CljMap *map = (CljMap*)make_map(4);
     
     // Create two different string objects with same content
-    CljObject *str1 = make_string("test-key");
-    CljObject *str2 = make_string("test-key");
+    CljObject *str1 = (CljObject*)make_string("test-key");
+    CljObject *str2 = (CljObject*)make_string("test-key");
     
     // Set initial value with str1
     map = map_assoc(map, str1, fixnum(42));
@@ -302,11 +301,11 @@ TEST(test_map_get_finds_let_binding) {
     TEST_ASSERT_NOT_NULL(step_sym);
     
     // Create a function value (simulating fn result)
-    CljObject *fn_value = fixnum(42); // Simplified: use fixnum as placeholder
+    CljObject *fn_value = (CljObject*)fixnum(42); // Simplified: use fixnum as placeholder
     TEST_ASSERT_NOT_NULL(fn_value);
     
     // Bind step in let_env
-    let_env = map_assoc(let_env, step_sym, fn_value);
+    let_env = map_assoc(let_env, (CljValue)step_sym, (CljValue)fn_value);
     
     // Verify step is in let_env
     CljValue found = map_get((CljMap*)let_env, (CljValue)step_sym);
@@ -314,7 +313,7 @@ TEST(test_map_get_finds_let_binding) {
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(found));
     
     // Create another "step" symbol (should be same pointer if interned)
-    CljObject *step_sym2 = intern_symbol_global("step");
+    CljObject *step_sym2 = (CljObject*)intern_symbol_global("step");
     TEST_ASSERT_NOT_NULL(step_sym2);
     
     // Verify both symbols are the same pointer (interned)
@@ -339,14 +338,14 @@ TEST(test_map_get_structural_comparison) {
     TEST_ASSERT_NOT_NULL(step_sym);
     
     // Create a function value
-    CljObject *fn_value = fixnum(42);
+    CljObject *fn_value = (CljObject*)fixnum(42);
     TEST_ASSERT_NOT_NULL(fn_value);
     
     // Bind step in let_env
-    let_env = map_assoc(let_env, step_sym, fn_value);
+    let_env = map_assoc(let_env, (CljValue)step_sym, (CljValue)fn_value);
     
     // Create another "step" symbol (should be same pointer if interned)
-    CljObject *step_sym2 = intern_symbol_global("step");
+    CljObject *step_sym2 = (CljObject*)intern_symbol_global("step");
     TEST_ASSERT_NOT_NULL(step_sym2);
     
     // Verify map_get finds step using second symbol (should work via pointer or structural comparison)
@@ -360,16 +359,16 @@ TEST(test_map_get_structural_comparison) {
 // Test that performance is unchanged (clj_equal() already does == check first)
 TEST(test_map_assoc_performance_unchanged) {
     CljMap *map = (CljMap*)make_map(100);
-    CljObject *kw = intern_symbol(NULL, ":test");
+    CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Fill map with many entries
     for (int i = 0; i < 50; i++) {
-        CljObject *key = intern_symbol(NULL, ":key");
-        map = map_assoc(map, key, fixnum(i));
+        CljObject *key = (CljObject*)intern_symbol(NULL, ":key");
+        map = map_assoc(map, (CljValue)key, fixnum(i));
     }
     
     // Update existing key - should be fast (clj_equal() does == check first)
-    map = map_assoc(map, kw, fixnum(42));
+    map = map_assoc(map, (CljValue)kw, fixnum(42));
     CljValue val = (CljValue)map_get((CljMap*)map, (CljValue)kw);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
@@ -1060,4 +1059,296 @@ TEST(test_map_assoc_direct) {
     }
     
     RELEASE((CljObject*)map);
+}
+
+// ============================================================================
+// Tests for map_transient() - Convert persistent map to transient
+// ============================================================================
+
+// Comprehensive test for map_transient() covering all cases
+TEST(test_map_transient_comprehensive) {
+    // Test 1: NULL input returns NULL
+    CljMap *result = map_transient(NULL);
+    TEST_ASSERT_NULL(result);
+    
+    // Test 2: Empty map conversion
+    CljMap *empty_map = (CljMap*)make_map(4);
+    TEST_ASSERT_EQUAL_INT(0, empty_map->count);
+    CljMap *empty_transient = map_transient(empty_map);
+    TEST_ASSERT_NOT_NULL(empty_transient);
+    TEST_ASSERT_TRUE(is_type((CljObject*)empty_transient, CLJ_TRANSIENT_MAP));
+    TEST_ASSERT_EQUAL_INT(0, empty_transient->count);
+    RELEASE((CljObject*)empty_map);
+    RELEASE((CljObject*)empty_transient);
+    
+    // Test 3: Map with entries - conversion and data preservation
+    CljMap *persistent_map = (CljMap*)make_map(8);
+    CljObject *keys[5];
+    for (int i = 0; i < 5; i++) {
+        char key_name[16];
+        snprintf(key_name, sizeof(key_name), ":key%d", i);
+        keys[i] = (CljObject*)intern_symbol(NULL, key_name);
+        persistent_map = map_assoc(persistent_map, (CljValue)keys[i], fixnum(i * 10));
+    }
+    TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
+    TEST_ASSERT_TRUE(is_type((CljObject*)persistent_map, CLJ_MAP));
+    
+    // Convert to transient
+    CljMap *transient_map = map_transient(persistent_map);
+    TEST_ASSERT_NOT_NULL(transient_map);
+    TEST_ASSERT_TRUE(is_type((CljObject*)transient_map, CLJ_TRANSIENT_MAP));
+    TEST_ASSERT_EQUAL_INT(5, transient_map->count);
+    
+    // Verify it's a different pointer (new map created)
+    TEST_ASSERT_NOT_EQUAL((CljValue)persistent_map, (CljValue)transient_map);
+    
+    // Verify original map is unchanged
+    TEST_ASSERT_TRUE(is_type((CljObject*)persistent_map, CLJ_MAP));
+    TEST_ASSERT_EQUAL_INT(5, persistent_map->count);
+    
+    // Verify all entries are preserved
+    for (int i = 0; i < 5; i++) {
+        CljValue val_persistent = map_get(persistent_map, (CljValue)keys[i]);
+        CljValue val_transient = map_get(transient_map, (CljValue)keys[i]);
+        TEST_ASSERT_NOT_NULL(val_persistent);
+        TEST_ASSERT_NOT_NULL(val_transient);
+        TEST_ASSERT_TRUE(is_fixnum(val_persistent));
+        TEST_ASSERT_TRUE(is_fixnum(val_transient));
+        TEST_ASSERT_EQUAL_INT(i * 10, as_fixnum(val_persistent));
+        TEST_ASSERT_EQUAL_INT(i * 10, as_fixnum(val_transient));
+    }
+    
+    // Test 4: Transient map input returns NULL
+    CljMap *result2 = map_transient(transient_map);
+    TEST_ASSERT_NULL(result2);
+    
+    // Cleanup
+    RELEASE((CljObject*)persistent_map);
+    RELEASE((CljObject*)transient_map);
+}
+
+// ============================================================================
+// Tests for map_conj() - In-place mutation of transient maps
+// ============================================================================
+
+// Comprehensive test for map_conj() covering all cases
+TEST(test_map_conj_comprehensive) {
+    // Test 1: NULL input returns NULL
+    CljMap *result = map_conj(NULL, (CljValue)intern_symbol(NULL, ":key"), fixnum(42));
+    TEST_ASSERT_NULL(result);
+    
+    CljMap *tmap = (CljMap*)make_map(4);
+    CljMap *transient = map_transient(tmap);
+    RELEASE((CljObject*)tmap);
+    
+    result = map_conj(transient, NULL, fixnum(42));
+    TEST_ASSERT_NULL(result);
+    
+    // Test 2: Add new key-value pair to empty transient map
+    CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+    CljMap *result2 = map_conj(transient, (CljValue)key1, fixnum(1));
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_PTR(transient, result2);  // Same pointer (in-place mutation)
+    TEST_ASSERT_EQUAL_INT(1, transient->count);
+    
+    CljValue val1 = map_get(transient, (CljValue)key1);
+    TEST_ASSERT_NOT_NULL(val1);
+    TEST_ASSERT_TRUE(is_fixnum(val1));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(val1));
+    
+    // Test 3: Update existing key
+    CljMap *result3 = map_conj(transient, (CljValue)key1, fixnum(100));
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_PTR(transient, result3);  // Same pointer
+    TEST_ASSERT_EQUAL_INT(1, transient->count);  // Count unchanged (update, not add)
+    
+    CljValue val1_updated = map_get(transient, (CljValue)key1);
+    TEST_ASSERT_NOT_NULL(val1_updated);
+    TEST_ASSERT_TRUE(is_fixnum(val1_updated));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(val1_updated));
+    
+    // Test 4: Add multiple key-value pairs
+    CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
+    CljObject *key3 = (CljObject*)intern_symbol(NULL, ":c");
+    map_conj(transient, (CljValue)key2, fixnum(2));
+    map_conj(transient, (CljValue)key3, fixnum(3));
+    
+    TEST_ASSERT_EQUAL_INT(3, transient->count);
+    
+    CljValue val2 = map_get(transient, (CljValue)key2);
+    CljValue val3 = map_get(transient, (CljValue)key3);
+    TEST_ASSERT_NOT_NULL(val2);
+    TEST_ASSERT_NOT_NULL(val3);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(val2));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(val3));
+    
+    // Test 5: NULL value (nil) is valid
+    CljObject *key4 = (CljObject*)intern_symbol(NULL, ":d");
+    map_conj(transient, (CljValue)key4, NULL);
+    TEST_ASSERT_EQUAL_INT(4, transient->count);
+    
+    CljValue val4 = map_get(transient, (CljValue)key4);
+    TEST_ASSERT_NULL(val4);  // NULL value is valid
+    
+    // Test 6: Capacity limit
+    CljObject *key5 = (CljObject*)intern_symbol(NULL, ":e");
+    CljMap *result6 = map_conj(transient, (CljValue)key5, fixnum(5));
+    // Should fail if capacity is exceeded (capacity is 4, we have 4 entries)
+    if (transient->count >= transient->capacity) {
+        TEST_ASSERT_NULL(result6);  // Out of capacity
+    } else {
+        TEST_ASSERT_NOT_NULL(result6);
+    }
+    
+    // Test 7: Persistent map with RC=1 (COW case) - should work but not recommended
+    CljMap *persistent = (CljMap*)make_map(4);
+    CljObject *key_p = (CljObject*)intern_symbol(NULL, ":p");
+    persistent = map_assoc(persistent, (CljValue)key_p, fixnum(10));
+    TEST_ASSERT_EQUAL_INT(1, persistent->base.rc);
+    
+    CljMap *result7 = map_conj(persistent, (CljValue)key_p, fixnum(20));
+    // Should work for persistent map with RC=1 (COW case)
+    if (result7) {
+        CljValue val_p = map_get(persistent, (CljValue)key_p);
+        TEST_ASSERT_NOT_NULL(val_p);
+        TEST_ASSERT_EQUAL_INT(20, as_fixnum(val_p));
+    }
+    
+    // Cleanup
+    RELEASE((CljObject*)transient);
+    RELEASE((CljObject*)persistent);
+}
+
+// Test that map_conj works correctly with interned symbols across different contexts
+// This tests the specific issue where :closed keyword is not found when called from different contexts
+TEST(test_map_conj_with_interned_symbols_across_contexts) {
+    // Create transient map (like make_result_channel does)
+    CljMap *tmap = (CljMap*)make_map(4);
+    TEST_ASSERT_NOT_NULL(tmap);
+    
+    // Initialize with :value and :closed (like make_result_channel does)
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    
+    // Use map_conj for in-place mutation (like make_result_channel does)
+    CljMap *result1 = map_conj(tmap, (ID)kw_value, NULL);  // :value = nil
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_PTR(tmap, result1);  // Should return same pointer
+    
+    CljMap *result2 = map_conj(tmap, (ID)kw_closed, (ID)clj_false);  // :closed = false
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_PTR(tmap, result2);  // Should return same pointer
+    
+    // Verify initial state
+    CljValue closed_val1 = map_get(tmap, (CljValue)kw_closed);
+    TEST_ASSERT_NOT_NULL((CljObject*)closed_val1);
+    TEST_ASSERT_TRUE(is_special(closed_val1));
+    TEST_ASSERT_TRUE(as_special(closed_val1) == SPECIAL_FALSE);
+    
+    // Now update :closed from a different context (like result_channel_close does)
+    // This simulates the problem where intern_symbol is called again
+    CljObject *kw_closed_new = (CljObject*)intern_symbol(NULL, ":closed");
+    
+    // CRITICAL: Both should be the same pointer (interned)
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(kw_closed, kw_closed_new, 
+                                  ":closed keyword should be interned (same pointer)");
+    
+    // Update :closed using the new keyword pointer
+    CljMap *result3 = map_conj(tmap, (ID)kw_closed_new, (ID)clj_true);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_PTR(tmap, result3);  // Should return same pointer
+    
+    // Verify update worked
+    CljValue closed_val2 = map_get(tmap, (CljValue)kw_closed);
+    TEST_ASSERT_NOT_NULL((CljObject*)closed_val2);
+    TEST_ASSERT_TRUE(is_special(closed_val2));
+    TEST_ASSERT_TRUE(as_special(closed_val2) == SPECIAL_TRUE);
+    
+    // Verify count didn't increase (should update, not add)
+    TEST_ASSERT_EQUAL_INT(2, tmap->count);
+    
+    // Cleanup
+    RELEASE((CljObject*)tmap);
+}
+
+// Test that map_conj finds existing keys by pointer equality (interned symbols)
+TEST(test_map_conj_finds_existing_key_by_pointer) {
+    // Create transient map
+    CljMap *tmap = (CljMap*)make_map(4);
+    TEST_ASSERT_NOT_NULL(tmap);
+    
+    // Create keyword once
+    CljObject *kw = (CljObject*)intern_symbol(NULL, ":test-key");
+    
+    // Add key-value pair
+    CljMap *result1 = map_conj(tmap, (ID)kw, fixnum(42));
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_PTR(tmap, result1);
+    TEST_ASSERT_EQUAL_INT(1, tmap->count);
+    
+    // Get keyword again (should be same pointer if interned)
+    CljObject *kw2 = (CljObject*)intern_symbol(NULL, ":test-key");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(kw, kw2, 
+                                  "Keyword should be interned (same pointer)");
+    
+    // Update using second keyword pointer
+    CljMap *result2 = map_conj(tmap, (ID)kw2, fixnum(100));
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_PTR(tmap, result2);
+    
+    // Verify value was updated (not added)
+    CljValue val = map_get(tmap, (CljValue)kw);
+    TEST_ASSERT_NOT_NULL(val);
+    TEST_ASSERT_TRUE(is_fixnum(val));
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(val));
+    
+    // Verify count didn't increase
+    TEST_ASSERT_EQUAL_INT(1, tmap->count);
+    
+    // Cleanup
+    RELEASE((CljObject*)tmap);
+}
+
+// Test that map_conj works correctly with channel pattern (make_result_channel + result_channel_close)
+TEST(test_map_conj_channel_pattern) {
+    // Create channel like make_result_channel does
+    CljMap *chan = (CljMap*)make_map(4);
+    TEST_ASSERT_NOT_NULL(chan);
+    
+    // Initialize with :value and :closed (like make_result_channel does)
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    
+    map_conj(chan, (ID)kw_value, NULL);  // :value = nil
+    map_conj(chan, (ID)kw_closed, (ID)clj_false);  // :closed = false
+    
+    // Verify initial state
+    CljValue closed_before = map_get(chan, (CljValue)kw_closed);
+    TEST_ASSERT_NOT_NULL((CljObject*)closed_before);
+    TEST_ASSERT_TRUE(is_special(closed_before));
+    TEST_ASSERT_TRUE(as_special(closed_before) == SPECIAL_FALSE);
+    
+    // Close channel (like result_channel_close does)
+    // This simulates calling intern_symbol again from a different context
+    CljObject *kw_closed_close = (CljObject*)intern_symbol(NULL, ":closed");
+    
+    // CRITICAL: Both should be the same pointer (interned)
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(kw_closed, kw_closed_close, 
+                                  ":closed keyword should be interned (same pointer)");
+    
+    CljMap *result = map_conj(chan, (ID)kw_closed_close, (ID)clj_true);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_PTR(chan, result);  // Should return same pointer
+    
+    // Verify channel was mutated
+    CljValue closed_after = map_get(chan, (CljValue)kw_closed);
+    TEST_ASSERT_NOT_NULL((CljObject*)closed_after);
+    TEST_ASSERT_TRUE(is_special(closed_after));
+    TEST_ASSERT_TRUE(as_special(closed_after) == SPECIAL_TRUE);
+    
+    // Verify count didn't increase
+    TEST_ASSERT_EQUAL_INT(2, chan->count);
+    
+    // Cleanup
+    RELEASE((CljObject*)chan);
 }

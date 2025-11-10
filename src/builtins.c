@@ -637,7 +637,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
         return (CljObject*)result;
     } else if (is_type(coll, CLJ_TRANSIENT_MAP)) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
-        return (CljObject*)conj_map((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
+        return (CljObject*)map_conj((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)

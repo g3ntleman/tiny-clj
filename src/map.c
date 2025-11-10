@@ -483,8 +483,8 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
             CljObject *key = KV_KEY(parent_map->data, i);
             CljObject *value = KV_VALUE(parent_map->data, i);
             if (key) {
-                // Use conj_map for in-place addition (no heap allocation)
-                conj_map(tmap, (ID)key, (ID)value);
+                // Use map_conj for in-place addition (no heap allocation)
+                map_conj(tmap, (ID)key, (ID)value);
             }
         }
     }
@@ -494,8 +494,8 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
         CljObject *key = additions[i * 2];
         CljObject *value = additions[i * 2 + 1];
         if (key) {
-                // Use conj_map for in-place addition/update (no heap allocation)
-                conj_map(tmap, (ID)key, (ID)value);
+                // Use map_conj for in-place addition/update (no heap allocation)
+                map_conj(tmap, (ID)key, (ID)value);
         }
     }
     
@@ -521,13 +521,36 @@ CljMap* map_transient(CljMap *map) {
 }
 
 /** Associate key->value in transient map (guaranteed in-place). */
-CljMap* conj_map(CljMap *tmap, ID key, ID value) {
+CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     // CRITICAL: value can be NULL (nil), which is a valid value in Clojure
     // Only check tmap and key, not value
     if (!tmap || !key) return NULL;
     CljObject *obj = (CljObject*)tmap;
+    
+    // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
+#ifdef DEBUG
+    if (obj->type != CLJ_TRANSIENT_MAP && obj->type != CLJ_MAP) {
+        fprintf(stderr, "Assertion failed: map_conj requires transient map or persistent map with RC=1, got type %d at %s:%d\n",
+                obj->type, __FILE__, __LINE__);
+        abort();
+    }
+    // In COW cases, persistent maps with RC=1 can be mutated, but map_conj is primarily for transient maps
+    if (obj->type == CLJ_MAP && obj->rc != 1) {
+        fprintf(stderr, "Assertion failed: map_conj on persistent map requires RC=1 for COW, got RC=%d at %s:%d\n",
+                obj->rc, __FILE__, __LINE__);
+        abort();
+    }
+#endif
+    
+    // Runtime check: map_conj is primarily for transient maps
     if (obj->type != CLJ_TRANSIENT_MAP) {
-        return NULL;
+        // Allow persistent maps with RC=1 for COW cases (but this should be rare)
+        if (obj->type == CLJ_MAP && obj->rc == 1) {
+            // COW case: persistent map with RC=1 can be mutated in-place
+            // This is allowed but not recommended - use transient maps instead
+        } else {
+            return NULL;  // Not a transient map and not a COW case
+        }
     }
     
     CljMap *m = tmap;
@@ -535,6 +558,9 @@ CljMap* conj_map(CljMap *tmap, ID key, ID value) {
     
     // Check if key already exists (pointer equality first, then structural)
     CljObject *key_obj = (CljObject*)key;
+    CLJ_ASSERT(key_obj != NULL);
+    
+    bool key_found = false;
     for (int i = 0; i < m->count; i++) {
         CljObject *existing_key = m->data[i * 2];
         // Fast path: pointer comparison first (for interned symbols/keywords)
@@ -544,7 +570,11 @@ CljMap* conj_map(CljMap *tmap, ID key, ID value) {
             if (m->data[i * 2 + 1]) {
                 RELEASE(m->data[i * 2 + 1]);
             }
-            m->data[i * 2 + 1] = value ? RETAIN((CljObject*)value) : NULL;
+            // CRITICAL: For immediate values (clj_true, clj_false, fixnums), 
+            // RETAIN is a no-op, so we can store them directly
+            m->data[i * 2 + 1] = value ? (CljObject*)RETAIN((CljObject*)value) : NULL;
+            key_found = true;
+            CLJ_ASSERT(m->data[i * 2 + 1] == (CljObject*)value || (value && IS_IMMEDIATE(value)));
             return tmap;
         }
         // Fallback: structural comparison for non-interned objects
@@ -554,9 +584,21 @@ CljMap* conj_map(CljMap *tmap, ID key, ID value) {
             if (m->data[i * 2 + 1]) {
                 RELEASE(m->data[i * 2 + 1]);
             }
-            m->data[i * 2 + 1] = value ? RETAIN((CljObject*)value) : NULL;
+            // CRITICAL: For immediate values (clj_true, clj_false, fixnums), 
+            // RETAIN is a no-op, so we can store them directly
+            m->data[i * 2 + 1] = value ? (CljObject*)RETAIN((CljObject*)value) : NULL;
+            key_found = true;
+            CLJ_ASSERT(m->data[i * 2 + 1] == (CljObject*)value || (value && IS_IMMEDIATE(value)));
             return tmap;
         }
+    }
+    
+    // If key was not found, we should add it (if capacity allows)
+    // This can happen if intern_symbol returns different pointers (symbol interning issue)
+    // We don't abort here, but return NULL if capacity is exceeded
+    if (!key_found && m->count >= m->capacity) {
+        // Capacity exceeded - cannot add new key-value pair
+        return NULL;
     }
     
     // Add new key-value pair

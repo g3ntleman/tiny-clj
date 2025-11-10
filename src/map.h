@@ -59,7 +59,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
 /** Convert persistent map to transient. */
 CljMap* map_transient(CljMap *map);
 /** Associate key->value in transient map (guaranteed in-place). */
-CljMap* conj_map(CljMap *tmap, ID key, ID value);
+CljMap* map_conj(CljMap *tmap, ID key, ID value);
 /** Convert transient map back to persistent. */
 CljMap* map_persistent(CljMap *tmap);
 

@@ -1071,6 +1071,11 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
                 return body;
             }
             
+            // Special case: nil should evaluate to NULL (not SYM_NIL)
+            if (SYM_NIL && body == (ID)SYM_NIL) {
+                return NULL; // nil evaluates to NULL
+            }
+            
             // Resolve symbol - first try local environment, then namespace
             // Note: We need to check if key exists, not just if value is non-NULL,
             // because nil (NULL) is a valid value
@@ -1097,6 +1102,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
             if (st) {
                 ID resolved = eval_symbol(body, st);
                 if (resolved) {
+                    // Special case: nil should evaluate to NULL (not SYM_NIL)
+                    if (resolved == (ID)SYM_NIL) {
+                        return NULL; // nil evaluates to NULL
+                    }
                     // eval_symbol returns AUTORELEASE, but eval_body should return retained
                     if (!IS_IMMEDIATE(resolved)) {
                         return RETAIN(resolved);
@@ -1453,6 +1462,24 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return eval_cond(list, env, st);
     }
     
+    if (original_op == SYM_DO) {
+        // (do expr1 expr2 ...)
+        // Evaluate all expressions in sequence, return the last one
+        int list_len = list_count(list);
+        CljObject *result = NULL;
+        
+        for (int i = 1; i < list_len; i++) {
+            CljObject *expr = list_get_element(list, i);
+            if (expr) {
+                ASSIGN(result, eval_body(expr, env, st));
+                // Note: result can be NULL (nil), which is valid
+            }
+        }
+        
+        // Return last result (or NULL if no expressions)
+        return result;
+    }
+    
     // Note: time special form is now handled earlier in eval_list (before symbol resolution)
     // to ensure it's recognized even if it's not in the namespace
 
@@ -1498,7 +1525,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         }
 
         // 2) Asynchron: Erzeuge Result-Channel, enqueuen und sofort Channel zurückgeben
-        CljObject *chan = (CljObject*)make_result_channel();
+        CljMap *chan = make_result_channel();
         event_loop_enqueue(fn_obj, chan);
 
         // Cleanup temporäre Objekte (Queue hält eigene Referenzen)
@@ -1506,7 +1533,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         RELEASE(fn_list);
         if (do_list) RELEASE(do_list);
 
-        return chan;
+        return (CljObject*)chan;
     }
     
     // Tier 3: Sequence operations
@@ -1978,9 +2005,18 @@ ID eval_symbol(ID symbol, EvalState *st) {
         return (ID)intern_symbol(NULL, "user");  // Default namespace
     }
     
+    // Special case: nil should evaluate to NULL (not SYM_NIL)
+    if (SYM_NIL && symbol == SYM_NIL) {
+        return NULL; // nil evaluates to NULL
+    }
+    
     // Lookup im aktuellen Namespace
     CljObject *value = ns_resolve(st, symbol);
     if (value) {
+        // Special case: If value is SYM_NIL, return NULL (nil evaluates to NULL)
+        if (value == (CljObject*)SYM_NIL) {
+            return NULL; // nil evaluates to NULL
+        }
         return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
     }
     

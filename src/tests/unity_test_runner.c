@@ -416,12 +416,10 @@ int main(int argc, char **argv) {
             printf("Note: Legacy command '%s' - running all registered tests\n", argv[1]);
             printf("Use --test <pattern> to filter tests, or --list to see available tests\n");
             run_tests_by_registry();
-            print_test_summary();
         }
     } else {
         // Run all tests by default using new registry system
         run_tests_by_registry();
-        print_test_summary();
     }
     
     // Memory leak summary only if there are leaks (JUnit-style: minimal output)
@@ -435,9 +433,6 @@ int main(int argc, char **argv) {
     // Free global test evalState at the end (no memory leaks)
     evalstate_free(g_test_eval_state);
     g_test_eval_state = NULL;
-    
-    // Print our test summary before Unity's summary
-    print_test_summary();
     
     // Unity will print its own summary (Tests X Failures Y Ignored Z)
     return UNITY_END();

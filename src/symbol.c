@@ -447,19 +447,27 @@ void init_special_symbols() {
 
 // Find symbol in the table
 static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
+    if (!name) return NULL;
+    
     SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
     while (entry) {
+        // Check namespace match first
+        bool ns_match = false;
         if (entry->ns && ns) {
-            if (strcmp(entry->ns, ns) == 0 && strcmp(entry->name, name) == 0) {
-                return entry;
-            }
+            ns_match = (strcmp(entry->ns, ns) == 0);
         } else if (!entry->ns && !ns) {
+            ns_match = true;
+        }
+        
+        // If namespace matches, check name
+        if (ns_match && entry->name) {
             if (strcmp(entry->name, name) == 0) {
                 return entry;
             }
         }
         entry = entry->next;
     }
+    
     return NULL;
 }
 

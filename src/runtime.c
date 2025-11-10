@@ -26,6 +26,7 @@ void runtime_init(void) {
     void *preserved_cache = g_runtime.clojure_core_cache;
     void *preserved_symbol_table = g_runtime.symbol_table;  // Always preserve if set
     
+    
     // Preserve clojure.core namespace in registry for test isolation
     // Only clojure.core should persist across tests, all other namespaces should be reset
     CljNamespace *clojure_core = (CljNamespace*)preserved_cache;
@@ -39,6 +40,7 @@ void runtime_init(void) {
     // clojure.core should persist across test runs
     g_runtime.clojure_core_cache = preserved_cache;
     g_runtime.symbol_table = preserved_symbol_table;
+    
     
     // CRITICAL: Reset namespace registry, but keep clojure.core for test isolation
     // This ensures that user namespaces and other test-specific namespaces don't leak
@@ -69,6 +71,7 @@ void runtime_free(void) {
     // This ensures that SYM_TIME, SYM_DEF, etc. remain consistent across tests
     void *preserved_symbol_table = g_runtime.symbol_table;
     
+    
     // CRITICAL: Never cleanup symbol table in tests - it must persist across test runs
     // Only cleanup if we're actually shutting down (preserved_cache is NULL)
     // In tests, preserved_cache is always set, so symbol table is never cleaned up
@@ -92,6 +95,7 @@ void runtime_free(void) {
     // Restore cache and symbol table if they were set (clojure.core should persist)
     g_runtime.clojure_core_cache = preserved_cache;
     g_runtime.symbol_table = preserved_symbol_table;
+    
 }
 
 // Legacy functions removed - all builtins now use namespace registration
