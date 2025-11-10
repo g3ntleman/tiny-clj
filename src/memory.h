@@ -69,6 +69,7 @@ CljObject *autorelease(CljObject *v);
  *  @param ptr Pointer to check
  *  @return true if pointer is on stack, false otherwise
  */
+bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
 
 /**

@@ -291,6 +291,7 @@ add_executable(unity-tests
     src/tests/test_keyword_evaluation.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
+    src/tests/test_timer.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c
@@ -506,8 +507,20 @@ add_test(NAME repl-error-divzero COMMAND tiny-clj-repl -e "(/ 1 0)")
 set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 
 # History test (test that REPL can handle multiple commands)
-add_test(NAME repl-history-multiple COMMAND bash -c "echo -e '(+ 1 2)\n(* 3 4)\n(str \"test\")' | timeout 5s ./tiny-clj-repl")
-set_tests_properties(repl-history-multiple PROPERTIES PASS_REGULAR_EXPRESSION "3.*12.*test" LABELS "repl;history")
+# Use RUNTIME_OUTPUT_DIRECTORY to get the path where tiny-clj-repl is built
+# This avoids hard-coded paths by using CMake variables
+# Note: We use the same path as RUNTIME_OUTPUT_DIRECTORY (${CMAKE_SOURCE_DIR}/build-test)
+get_target_property(REPL_OUTPUT_DIR tiny-clj-repl RUNTIME_OUTPUT_DIRECTORY)
+if(NOT REPL_OUTPUT_DIR)
+    set(REPL_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
+endif()
+add_test(NAME repl-history-multiple 
+    COMMAND bash -c "echo -e '(+ 1 2)\n(* 3 4)\n(str \"test\")' | timeout 5s \"${REPL_OUTPUT_DIR}/tiny-clj-repl\""
+)
+set_tests_properties(repl-history-multiple PROPERTIES 
+    PASS_REGULAR_EXPRESSION "3.*12.*\"test\""
+    LABELS "repl;history"
+)
 
 # Seq Benchmark (REMOVED - File no longer exists)
 # Use run-tests for sequence testing instead

@@ -310,6 +310,7 @@ CljObject* history_load_from_file(const char *path) {
             result = NULL;
         } END_TRY
     });  // Inner pool is popped here, but result is retained, so it's not freed
+    // Free buf after parsing is complete - parsed objects don't reference buf
     free(buf);
     evalstate_free(st);
     if (!result) {

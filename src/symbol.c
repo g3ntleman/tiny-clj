@@ -6,6 +6,7 @@
 #include "error_messages.h"
 #include "namespace.h"
 #include "types.h"  // For SINGLETON_RC
+#include "memory.h"  // For is_pointer_in_data_segment
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -587,9 +588,10 @@ void symbol_table_cleanup() {
         SymbolEntry *next = entry->next;
         if (entry->ns) free(entry->ns);
         
-        // Only free entry->name if it was strdup'd (heap symbols)
-        // Static symbols use string literals that shouldn't be freed
-        if (entry->name && entry->symbol && get_tag((CljValue)entry->symbol) == TAG_POINTER) {
+        // Only free entry->name if it's heap-allocated (not in data segment)
+        // Static symbols use string literals in data segment that shouldn't be freed
+        // Heap-allocated symbols (strdup'd) are on the heap and should be freed
+        if (entry->name && !is_pointer_in_data_segment(entry->name)) {
             free(entry->name);
         }
         

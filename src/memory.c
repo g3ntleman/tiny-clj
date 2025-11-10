@@ -698,9 +698,8 @@ static void release_object_deep(CljObject *v) {
                     printf("🔍 release_object_deep: Freeing SYMBOL object %p\n", v);
                 }
                 CljSymbol *sym = (CljSymbol*)v;
-                // Only free symbol name if it's a heap-allocated symbol (not a singleton)
-                // Static symbols (SINGLETON_RC) use string literals that shouldn't be freed
-                if (sym && sym->name && sym->base.rc != SINGLETON_RC) {
+                // Only free symbol name if it's heap-allocated (not in data segment)
+                if (sym && sym->name && !is_pointer_in_data_segment(sym->name)) {
                     if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
                         printf("🔍 release_object_deep: Freeing symbol name: '%s'\n", sym->name);
                     }
@@ -822,8 +821,50 @@ static void release_object_deep(CljObject *v) {
 }
 
 // ============================================================================
-// STACK DETECTION UTILITIES
+// MEMORY SEGMENT DETECTION UTILITIES
 // ============================================================================
+
+/** @brief Check if a pointer points to data segment (static/read-only memory)
+ * 
+ * @param ptr Pointer to check
+ * @return true if pointer is in data segment, false otherwise
+ * 
+ * This function detects if a pointer points to data segment memory (string literals,
+ * static variables) by checking if the address is in a typical data segment range.
+ * This is useful for detecting static strings that should not be freed with free().
+ * 
+ * Implementation:
+ * - On 64-bit systems, data segment is typically at low addresses (< 0x100000000)
+ * - On 32-bit systems, data segment is typically at low addresses (< 0x08000000)
+ * - Heap-allocated memory (malloc) is typically at higher addresses
+ * 
+ * Note: This is a heuristic and may not be 100% accurate, but works for
+ * typical cases where string literals are in data segment and malloc'd
+ * strings are on the heap.
+ */
+bool is_pointer_in_data_segment(const void *ptr) {
+    if (!ptr) return false;
+    
+    uintptr_t addr = (uintptr_t)ptr;
+    
+    // On 64-bit systems, data segment is typically below 0x100000000 (4GB)
+    // On 32-bit systems, data segment is typically below 0x08000000 (128MB)
+    // Heap-allocated memory (malloc) is typically at higher addresses
+    
+    // Check if address is in typical data segment range
+    // This is a heuristic - actual ranges may vary by platform
+#if UINTPTR_MAX == UINT64_MAX
+    // 64-bit system
+    // Data segment: typically < 0x100000000 (4GB)
+    // Heap: typically > 0x100000000
+    return addr < 0x100000000ULL;
+#else
+    // 32-bit system
+    // Data segment: typically < 0x08000000 (128MB)
+    // Heap: typically > 0x08000000
+    return addr < 0x08000000UL;
+#endif
+}
 
 /** @brief Check if a pointer points to stack memory
  * 

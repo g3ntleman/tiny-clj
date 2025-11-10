@@ -117,5 +117,5 @@ bool is_symbol(ID v, const char *name) {
     if (!compare_symbol) return false;
     
     // Pointer-Vergleich statt String-Vergleich!
-    return (CljObject*)v == compare_symbol;
+    return (CljObject*)v == (CljObject*)compare_symbol;
 }

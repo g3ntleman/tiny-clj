@@ -18,6 +18,12 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel);
 // Run next enqueued task. Returns true if a task was executed, false if queue empty.
 bool event_loop_run_next(CljMap *env, EvalState *st);
 
+// Timer API
+// Enqueue a timer task for execution after delay_ms milliseconds
+// If periodic is true, the task will be re-scheduled every period_ms milliseconds
+// Takes ownership via RETAIN; releases after run.
+void timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms);
+
 #endif
 
 

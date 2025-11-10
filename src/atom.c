@@ -45,11 +45,8 @@ ID atom_deref(CljAtom *atom) {
 ID atom_reset(CljAtom *atom, ID new_value) {
     if (!atom) return NULL;
     
-    // RELEASE handles nil and immediates safely (ignores them)
-    RELEASE(atom->value);
-    
-    // Set new value (RETAIN handles nil and immediates safely)
-    atom->value = RETAIN(new_value);
+    // Use ASSIGN to safely replace atom value (releases old, retains new)
+    ASSIGN(atom->value, new_value);
     
     // Return new value (RETAIN handles nil and immediates safely)
     return RETAIN(new_value);

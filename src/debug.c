@@ -76,7 +76,7 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
         
         case CLJ_STRING: {
             CljString *str = as_clj_string(v);
-            if (str && str->data) {
+            if (str && str->length > 0) {
                 size_t len = str->length < 20 ? str->length : 20;
                 *offset += snprintf(buf + *offset, buf_size - *offset, "\"%.*s%s\"", 
                                    (int)len, str->data, str->length > 20 ? "..." : "");

@@ -1060,6 +1060,108 @@ ID native_run_next_task(ID *args, unsigned int argc) {
     return ran ? clj_true : clj_false;
 }
 
+// Timer: schedule builtin - schedule a one-time timer
+ID native_schedule(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "schedule")) return NULL;
+    
+    // First argument: delay in milliseconds (must be integer)
+    CljObject *delay_obj = args[0];
+    if (!delay_obj || TAG(delay_obj) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule delay must be an integer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int delay_ms = as_fixnum((CljValue)delay_obj);
+    if (delay_ms < 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule delay must be non-negative",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Second argument: function to execute (must be a function)
+    CljObject *fn_obj = args[1];
+    if (!fn_obj || (TAG(fn_obj) != CLJ_FUNC && TAG(fn_obj) != CLJ_CLOSURE)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule requires a function as second argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Create zero-arity wrapper function: (fn [] (fn_obj))
+    // The function should be called with zero arguments
+    CljFunction *func = as_function((ID)fn_obj);
+    if (!func) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule requires a valid function",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // For now, use the function directly (it should be zero-arity or we'll handle it)
+    // Enqueue timer task
+    timer_enqueue(fn_obj, (int64_t)delay_ms, false, 0);
+    
+    // schedule returns nil (like go blocks)
+    return NULL;
+}
+
+// Timer: schedule-periodic builtin - schedule a periodic timer
+ID native_schedule_periodic(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 3, "schedule-periodic")) return NULL;
+    
+    // First argument: initial delay in milliseconds (must be integer)
+    CljObject *delay_obj = args[0];
+    if (!delay_obj || TAG(delay_obj) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule-periodic delay must be an integer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int delay_ms = as_fixnum((CljValue)delay_obj);
+    if (delay_ms < 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule-periodic delay must be non-negative",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Second argument: period in milliseconds (must be integer)
+    CljObject *period_obj = args[1];
+    if (!period_obj || TAG(period_obj) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule-periodic period must be an integer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int period_ms = as_fixnum((CljValue)period_obj);
+    if (period_ms <= 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule-periodic period must be positive",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Third argument: function to execute (must be a function)
+    CljObject *fn_obj = args[2];
+    if (!fn_obj || (TAG(fn_obj) != CLJ_FUNC && TAG(fn_obj) != CLJ_CLOSURE)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "schedule-periodic requires a function as third argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Enqueue periodic timer task
+    timer_enqueue(fn_obj, (int64_t)delay_ms, true, (int64_t)period_ms);
+    
+    // schedule-periodic returns nil (like go blocks)
+    return NULL;
+}
+
 
 // Legacy builtin table and apply_builtin removed - all builtins now use namespace registration
 
@@ -2783,6 +2885,10 @@ void register_builtins() {
     register_builtin_in_namespace("aclone", native_aclone);
     // Event-loop builtin
     register_builtin_in_namespace("run-next-task", native_run_next_task);
+    
+    // Timer builtins
+    register_builtin_in_namespace("schedule", native_schedule);
+    register_builtin_in_namespace("schedule-periodic", native_schedule_periodic);
     
     // Atom functions
     register_builtin_in_namespace("atom", native_atom);

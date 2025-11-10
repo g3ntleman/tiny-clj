@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef ENABLE_LINE_EDITING
 // Global line editor instance
 static LineEditor *global_editor = NULL;
 
@@ -22,9 +23,6 @@ static const char ESC_RIGHT[] = "\033[C";
 static const char ESC_LEFT[] = "\033[D";
 static const char ESC_CLEAR[] = "\033[K";
 static const char ESC_HOME[] = "\033[1G";
-
-
-#ifdef ENABLE_LINE_EDITING
 
 struct LineEditor {
     char buffer[512];
@@ -619,8 +617,6 @@ bool line_editor_history_save_default(CljObject *vec) {
     }
     return history_save_to_file(vec, path);
 }
-
-// (History-Persistenz jetzt in builtins.c für Test-Verfügbarkeit implementiert)
 
 #else
 // Stub implementations when line editing is disabled

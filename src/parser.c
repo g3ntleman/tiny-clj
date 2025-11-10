@@ -722,7 +722,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       }
       
       // Look up alias in current namespace
-      CljObject *ns_name_sym = ns_get_alias(st->current_ns, alias_sym);
+      CljObject *ns_name_sym = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
       if (ns_name_sym && TAG(ns_name_sym) == CLJ_SYMBOL) {
         // Get namespace name from symbol
         CljSymbol *ns_sym = as_symbol(ns_name_sym);

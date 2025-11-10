@@ -52,6 +52,22 @@ void runtime_init(void) {
     } else {
         g_runtime.ns_registry = NULL;
     }
+    
+    // Initialize event loop queues as transient vectors
+    if (!g_runtime.task_queue) {
+        CljVector task_vec = make_vector(8, false);
+        if (task_vec) {
+            g_runtime.task_queue = (CljPersistentVector*)transient((ID)task_vec);
+            RELEASE((ID)task_vec); // transient() retains the result
+        }
+    }
+    if (!g_runtime.timer_queue) {
+        CljVector timer_vec = make_vector(8, false);
+        if (timer_vec) {
+            g_runtime.timer_queue = (CljPersistentVector*)transient((ID)timer_vec);
+            RELEASE((ID)timer_vec); // transient() retains the result
+        }
+    }
 }
 
 void runtime_free(void) {
@@ -85,6 +101,34 @@ void runtime_free(void) {
     // For tests, we want clojure.core to persist across test runs
     if (!preserved_cache) {
         ns_cleanup();
+    }
+    
+    // Cleanup event loop queues
+    if (g_runtime.task_queue) {
+        CljPersistentVector *tvec = g_runtime.task_queue;
+        if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
+            // Release all elements in transient vector
+            for (int i = 0; i < tvec->count; i++) {
+                if (tvec->data[i]) {
+                    RELEASE(tvec->data[i]);
+                }
+            }
+            RELEASE((ID)tvec);
+        }
+        g_runtime.task_queue = NULL;
+    }
+    if (g_runtime.timer_queue) {
+        CljPersistentVector *tvec = g_runtime.timer_queue;
+        if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
+            // Release all elements in transient vector (timer tasks as maps)
+            for (int i = 0; i < tvec->count; i++) {
+                if (tvec->data[i]) {
+                    RELEASE(tvec->data[i]);
+                }
+            }
+            RELEASE((ID)tvec);
+        }
+        g_runtime.timer_queue = NULL;
     }
     
     // Reset Runtime (statisch alloziert, bleibt bestehen)

@@ -14,6 +14,7 @@
 
 #include "object.h"
 #include "memory.h"
+#include "vector.h"
 #include <alloca.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -55,6 +56,10 @@ typedef struct TinyClJRuntime {
     
     // Builtins
     bool builtins_registered;
+    
+    // Event Loop
+    CljPersistentVector *task_queue;    // transient vector for normal tasks
+    CljPersistentVector *timer_queue;  // transient vector for timer tasks
 } TinyClJRuntime;
 
 // Statisch alloziertes globales Runtime-Struct

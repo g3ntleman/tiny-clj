@@ -61,6 +61,10 @@ ID native_run_next_task(ID *args, unsigned int argc);
 ID native_identical(ID *args, unsigned int argc);
 ID native_vector_p(ID *args, unsigned int argc);
 
+// Timer builtins
+ID native_schedule(ID *args, unsigned int argc);
+ID native_schedule_periodic(ID *args, unsigned int argc);
+
 // Time functions
 // native_time removed: time is now only a special form
 ID native_time_micro(ID *args, unsigned int argc);

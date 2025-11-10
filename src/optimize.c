@@ -46,7 +46,8 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
     if (is_last_in_list(expr, body_list)) return true;
     
     // Check special forms
-    CljObject *head = body_list->first;
+    CljObject *head_obj = body_list->first;
+    CljSymbol *head = (CljSymbol*)head_obj;
     CljList *rest = as_list((ID)body_list->rest);
     if (!rest) return false;
     
@@ -104,7 +105,8 @@ void validate_recur_positions(CljObject *body, CljObject *parent_body) {
     CljList *body_list = as_list((ID)body);
     if (!body_list) return;
     
-    if (body_list->first == SYM_RECUR && !is_tail_position(body, parent_body)) {
+    CljSymbol *head = (CljSymbol*)body_list->first;
+    if (head == SYM_RECUR && !is_tail_position(body, parent_body)) {
         throw_exception(EXCEPTION_RUNTIME, "recur must be in tail position", __FILE__, __LINE__, 0);
         return;
     }
@@ -213,7 +215,8 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     
     CljList *body_list = as_list((ID)body);
     
-    CljObject *head = body_list->first;
+    CljObject *head_obj = body_list->first;
+    CljSymbol *head = (CljSymbol*)head_obj;
     CljObject *context = parent_body ? parent_body : body;
     
     // Transform recursive tail call
