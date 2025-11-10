@@ -49,8 +49,12 @@ TEST(test_history_trim_to_50) {
     TEST_ASSERT_NOT_NULL(v);
     TEST_ASSERT_EQUAL_INT(75, v->count);
 
+    // RETAIN vec to keep it alive while trimmed references its elements
+    RETAIN(vec);
     CljObject *trimmed = history_trim_last_n(vec, 50);
     TEST_ASSERT_NOT_NULL(trimmed);
+    // RETAIN trimmed to keep it alive outside of autorelease pool
+    RETAIN(trimmed);
     CljPersistentVector *tv = as_vector(trimmed);
     TEST_ASSERT_NOT_NULL(tv);
     TEST_ASSERT_EQUAL_INT(50, tv->count);
@@ -60,12 +64,15 @@ TEST(test_history_trim_to_50) {
     TEST_ASSERT_TRUE(ok);
     CljObject *loaded = history_load_from_file(tmp_hist_path);
     TEST_ASSERT_NOT_NULL(loaded);
+    // RETAIN loaded to keep it alive outside of autorelease pool
+    RETAIN(loaded);
     CljPersistentVector *lv = as_vector(loaded);
     TEST_ASSERT_NOT_NULL(lv);
     TEST_ASSERT_EQUAL_INT(50, lv->count);
 
     RELEASE(trimmed);
     RELEASE(loaded);
+    RELEASE(vec);
 }
 
 TEST(test_history_load_current_format) {
@@ -82,6 +89,8 @@ TEST(test_history_load_current_format) {
     // Load history from file
     CljObject *loaded = history_load_from_file(tmp_hist_path);
     TEST_ASSERT_NOT_NULL(loaded);
+    // RETAIN loaded to keep it alive outside of autorelease pool
+    RETAIN(loaded);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, loaded->type);
     
     // Verify vector structure
@@ -100,6 +109,7 @@ TEST(test_history_load_current_format) {
     free((void*)str_content);
     
     // Cleanup
+    RELEASE(loaded);
     unlink(tmp_hist_path);
 }
 
