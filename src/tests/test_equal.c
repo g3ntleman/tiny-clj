@@ -21,11 +21,6 @@ TEST(test_equal_null_pointers) {
     });
 }
 
-TEST(test_equal_same_objects) {
-    // Test same object reference - minimal test
-    TEST_ASSERT_TRUE(1 == 1); // Just test that the test framework works
-}
-
 TEST(test_equal_different_strings) {
     WITH_MEMORY_PROFILING({
     

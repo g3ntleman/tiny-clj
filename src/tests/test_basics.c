@@ -448,28 +448,6 @@ TEST(test_if_nil_in_function_regression) {
     } END_TRY
 }
 
-// Debug test: Check if nil is correctly stored and retrieved from function environment
-TEST(test_nil_in_function_environment_debug) {
-    // Test: Create a function that returns its parameter
-    // ((fn [x] x) nil) => nil (NULL)
-    CljObject *result = eval_string("((fn [x] x) nil)", g_test_eval_state);
-    // nil should be returned as NULL
-    TEST_ASSERT_NULL_MESSAGE(result, "((fn [x] x) nil) should return nil (NULL)");
-    
-    // Test: Check if nil parameter is correctly evaluated as falsy
-    // ((fn [x] (if x :truthy :falsy)) nil) => :falsy
-    CljObject *result2 = eval_string("((fn [x] (if x :truthy :falsy)) nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL_MESSAGE(result2, "if with nil should return :falsy, not NULL");
-    TEST_ASSERT_TRUE_MESSAGE(result2 && TAG(result2) == CLJ_SYMBOL, "Result should be a symbol");
-    CljSymbol *sym = as_symbol(result2);
-    TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-    TEST_ASSERT_EQUAL_STRING("falsy", sym->name + 1);
-    
-    // Test: Direct check of clj_is_truthy with NULL
-    TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(NULL), "clj_is_truthy(NULL) should return false");
-}
-
 // ============================================================================
 // SEQUENCE PERFORMANCE TESTS - MOVED TO test_sequences.c
 // ============================================================================
