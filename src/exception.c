@@ -45,8 +45,6 @@ static inline const char* shorten_file_path(const char *file) {
 // Forward declaration for stacktrace function
 #ifdef DEBUG
 struct CljString* stacktrace(void);
-#else
-static inline struct CljString* stacktrace(void) { return NULL; }
 #endif
 
 // Global storage for current exception

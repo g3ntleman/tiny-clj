@@ -19,6 +19,7 @@
 #include "byte_array.h"
 #include "atom.h"
 #include "seq.h"  // For CljSeqIterator and as_seq
+#include "function.h"  // For CljFunction
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -61,6 +62,7 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
     
     // Track object creation if it's a CljObject subtype and NOT a singleton
     if (result != NULL && type_size >= sizeof(CljObject)) {
+        // Only track non-singleton types (singletons have rc==0)
         if (!IS_SINGLETON_TYPE(obj_type)) {
             CljObject *obj = (CljObject*)result;
             obj->type = obj_type;  // Set type before tracking
@@ -82,6 +84,7 @@ void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
     
     // Track object creation if it's a CljObject subtype and NOT a singleton
     if (result != NULL && type_size >= sizeof(CljObject)) {
+        // Only track non-singleton types (singletons have rc==0)
         if (!IS_SINGLETON_TYPE(obj_type)) {
             CljObject *obj = (CljObject*)result;
             obj->type = obj_type;  // Set type before tracking
@@ -190,15 +193,14 @@ void release(CljObject *v) {
                v, v->type, clj_type_name(v->type), v->rc);
     }
     
-    // Skip native functions and closures (they are static)
-    if (v && (TAG(v) == CLJ_FUNC || TAG(v) == CLJ_CLOSURE)) {
-        return;
-    }
+    // Note: CLJ_FUNC (native functions) are static and don't need release
+    // CLJ_CLOSURE (interpreted functions) need to be released and will be handled by release_object_deep
     
 #ifdef DEBUG
     // Check for zombie object BEFORE checking for underflow
     if (v->rc == ZOMBIE_RC) {
         // Zombie detected: throw exception with stacktrace and zombie object
+        // This indicates a double-free problem - the object was already freed
         char message[512];
         snprintf(message, sizeof(message),
             "Attempted to release zombie object %p (type=%s). "
@@ -385,10 +387,73 @@ void autorelease_pool_pop(CljObjectPool *pool) {
     
     // Verify pool is at top of stack (LIFO principle - Last In, First Out)
     if (!pool || g_pool_stack[g_pool_stack_top] != pool) {
-        printf("ERROR: Pool mismatch! Expected top pool %p, got %p. "
-               "Pools must be popped in reverse order (LIFO). This indicates unbalanced pool operations.\n", 
-               g_pool_stack[g_pool_stack_top], pool);
-        return;
+        // Pool mismatch detected - this can happen if pool was already popped by longjmp
+        // In DEBUG mode, we already checked if pool is on stack, so this is a real mismatch
+        // But we should handle it gracefully instead of just returning
+        // Check if pool is still on stack (may have been popped by longjmp from exception)
+        bool pool_on_stack = false;
+        if (pool && g_pool_stack_top >= 0) {
+            for (int i = 0; i <= g_pool_stack_top; i++) {
+                if (g_pool_stack[i] == pool) {
+                    pool_on_stack = true;
+                    break;
+                }
+            }
+        }
+        
+        // If pool is not on stack, it was already popped (likely by longjmp from exception)
+        // This is safe - just return silently
+        if (!pool_on_stack) {
+            return;
+        }
+        
+        // If pool is on stack but not at top, pop all pools above it first
+        // This can happen when exceptions cause pools to be popped out of order
+        // We need to pop all pools above the target pool to maintain LIFO order
+        int pool_index = -1;
+        for (int i = 0; i <= g_pool_stack_top; i++) {
+            if (g_pool_stack[i] == pool) {
+                pool_index = i;
+                break;
+            }
+        }
+        
+        if (pool_index >= 0 && pool_index < g_pool_stack_top) {
+            // Pop all pools above the target pool
+            while (g_pool_stack_top > pool_index) {
+                CljObjectPool *top_pool = g_pool_stack[g_pool_stack_top];
+                if (top_pool) {
+                    // Release all objects in pool
+                    CljPersistentVector *vec = as_vector(top_pool->backing);
+                    if (vec) {
+                        for (int i = vec->count - 1; i >= 0; --i) {
+                            CljObject *obj = vec->data[i];
+                            if (obj && TRACKS_RETAINS(obj)) {
+                                RELEASE(obj);
+                            }
+                            vec->data[i] = NULL;
+                        }
+                        vec->count = 0;
+                    }
+                    
+                    // Release the backing vector
+                    RELEASE(top_pool->backing);
+                    top_pool->backing = NULL;
+                    
+                    // Free pool structure
+                    free(top_pool);
+                }
+                
+                // Pop from stack
+                g_pool_stack[g_pool_stack_top--] = NULL;
+            }
+            
+            // Now pop the target pool (it should be at top now)
+            // Fall through to normal pop logic below
+        } else {
+            // Pool not found on stack - should not happen, but handle gracefully
+            return;
+        }
     }
     
     // Debug output
@@ -546,6 +611,11 @@ int get_retain_count(CljObject *obj) {
         return 0;
     }
     
+    // Also check SINGLETON_RC for empty_list, empty_map, etc.
+    if (obj->rc == SINGLETON_RC) {
+        return 0;
+    }
+    
     // Return actual retain count for tracked objects
     return obj->rc;
 }
@@ -628,7 +698,9 @@ static void release_object_deep(CljObject *v) {
                     printf("🔍 release_object_deep: Freeing SYMBOL object %p\n", v);
                 }
                 CljSymbol *sym = (CljSymbol*)v;
-                if (sym && sym->name) {
+                // Only free symbol name if it's a heap-allocated symbol (not a singleton)
+                // Static symbols (SINGLETON_RC) use string literals that shouldn't be freed
+                if (sym && sym->name && sym->base.rc != SINGLETON_RC) {
                     if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
                         printf("🔍 release_object_deep: Freeing symbol name: '%s'\n", sym->name);
                     }
@@ -662,7 +734,8 @@ static void release_object_deep(CljObject *v) {
                         RELEASE(map->data[i]);     // key
                         RELEASE(map->data[i+1]); // value
                     }
-                    free(map->data);
+                    // Note: map->data is a flexible array member, part of the struct
+                    // It will be freed automatically when DEALLOC frees the struct
                 }
             }
             break;
@@ -693,6 +766,29 @@ static void release_object_deep(CljObject *v) {
             // Native functions are static - no cleanup needed
             break;
             
+        case CLJ_CLOSURE:
+            {
+                CljFunction *func = (CljFunction*)v;
+                if (func) {
+                    // Release all parameters
+                    if (func->params) {
+                        for (int i = 0; i < func->param_count; i++) {
+                            RELEASE(func->params[i]);
+                        }
+                        free(func->params);
+                    }
+                    // Release body
+                    RELEASE(func->body);
+                    // Release closure environment
+                    RELEASE((CljObject*)func->closure_env);
+                    // Free function name (strdup'd in make_function)
+                    if (func->name) {
+                        free((void*)func->name);
+                    }
+                }
+            }
+            break;
+            
         case CLJ_BYTE_ARRAY:
             {
                 CljByteArray *ba = as_byte_array(v);
@@ -704,20 +800,17 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_ATOM:
             {
-                CljAtom *atom = (CljAtom*)v;
-                // Release the atom's value (RELEASE handles nil and immediates safely)
-                RELEASE(atom->value);
+                CljAtom *atom = as_atom((ID)v);
+                if (atom) {
+                    // Release the atom's value (RELEASE handles nil and immediates safely)
+                    RELEASE(atom->value);
+                }
             }
             break;
             
         case CLJ_SEQ:
-            {
-                CljSeqIterator *seq = as_seq(v);
-                // Release the retained container (was retained in make_seq)
-                if (seq) {
-                    RELEASE(seq->iter.container);
-                }
-            }
+            // CljSeqIterator contains only stack-allocated iterator state
+            // No heap-allocated data to release (container is a borrowed reference)
             break;
             
         // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates

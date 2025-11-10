@@ -31,7 +31,6 @@ TEST(test_core_initialization_inc_loaded) {
     CljMap *map = (CljMap*)clojure_core->mappings;
     TEST_ASSERT_NOT_NULL(map);
     
-    // Debug: Count all symbols in mappings
     int symbol_count = 0;
     const char *first_symbol_name = NULL;
     bool found_inc = false;
@@ -140,7 +139,6 @@ TEST(test_clojure_core_loads_inc) {
         CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
         
         if (!inc_value) {
-            // Debug: Check what symbols ARE in the mappings
             CljMap *map = (CljMap*)clojure_core->mappings;
             int symbol_count = 0;
             const char *first_symbol = NULL;
@@ -260,13 +258,12 @@ TEST(test_def_inc_evaluation_during_load) {
         TEST_ASSERT_NOT_NULL(env);
         
         TRY {
-            CljValue result = eval_list(list, env, g_test_eval_state);
+            CljValue result = eval_list(list, env, g_test_eval_state, NULL);
             
             // Check if inc is now in the mappings
             CljObject *inc_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_interned);
             
             if (!inc_value) {
-                // Debug: Check what symbols ARE in the mappings
                 CljMap *map = (CljMap*)g_test_eval_state->current_ns->mappings;
                 int symbol_count = 0;
                 const char *first_symbol = NULL;
@@ -339,7 +336,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(form), env, g_test_eval_state);
+        CljValue result = eval_list(as_list(form), env, g_test_eval_state, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, 
                                     "fn expression should evaluate to a function");
         TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE,
@@ -374,7 +371,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(form), env, g_test_eval_state);
+        CljValue result = eval_list(as_list(form), env, g_test_eval_state, NULL);
         
         // Check if test-var is in the mappings (even if value is nil/NULL)
         CljSymbol *test_var_sym = intern_symbol_global("test-var");

@@ -10,7 +10,6 @@
 #include "../namespace.h"
 #include "../symbol.h"
 #include "../atom.h"
-#include "../debug.h"
 #include "../list.h"
 
 // ============================================================================
@@ -614,7 +613,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         // 4. eval_arg should find "i" in let_env (this is what we're testing)
         // 5. call_function_with_args should call eval_arg_retained_with_st(list, 2, let_env, st) for "inc"
         // 6. eval_arg should find "inc" in namespace (should work)
-        ID result2 = eval_list(list, let_env, g_test_eval_state);
+        ID result2 = eval_list(list, let_env, g_test_eval_state, NULL);
         
         // Check if eval_list returned NULL (indicates failure)
         if (!result2) {

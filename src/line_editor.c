@@ -466,7 +466,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     }
     
     // Create string object and add to history vector using transient conj
-    CljObject *line_obj = make_string(line);
+    CljObject *line_obj = (CljObject*)make_string(line);
     if (line_obj) {
         editor->history = clj_conj(editor->history, line_obj);
         // line_obj is now retained by the vector, we can release our reference
@@ -516,17 +516,17 @@ int line_editor_get_history_size(const LineEditor *editor) {
 }
 
 CljObject* line_editor_get_history_vector(LineEditor *editor) {
-    if (!editor || !editor->history) return make_vector(0, 0);
+    if (!editor || !editor->history) return (CljObject*)make_vector(0, 0);
     
     // Convert transient vector to persistent if needed
     CljObject *history_vec = (CljObject*)editor->history;
     if (TAG(history_vec) == CLJ_TRANSIENT_VECTOR) {
         history_vec = (CljObject*)persistent((CljValue)history_vec);
-        if (!history_vec) return make_vector(0, 0);
+        if (!history_vec) return (CljObject*)make_vector(0, 0);
     }
     
     CljPersistentVector *v = as_vector(history_vec);
-    if (!v) return make_vector(0, 0);
+    if (!v) return (CljObject*)make_vector(0, 0);
     
     int n = v->count;
     CljValue out = make_vector(n, 0);

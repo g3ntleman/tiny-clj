@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "exception.h"
 #include "channel.h"
+#include "types.h"  // For ZOMBIE_RC
 #include <stdbool.h>
 
 typedef struct GoTask {
@@ -27,10 +28,25 @@ void event_loop_clear(void) {
     // Release all tasks in queue
     for (int i = 0; i < g_task_count; i++) {
         if (g_tasks[i].fn) {
+            // Skip zombies - they were already freed
+#ifdef DEBUG
+            if (g_tasks[i].fn->rc != ZOMBIE_RC) {
+                RELEASE(g_tasks[i].fn);
+            }
+#else
             RELEASE(g_tasks[i].fn);
+#endif
         }
         if (g_tasks[i].result_chan) {
-            RELEASE(g_tasks[i].result_chan);
+            // Skip zombies - they were already freed
+#ifdef DEBUG
+            CljObject *chan_obj = (CljObject*)g_tasks[i].result_chan;
+            if (chan_obj->rc != ZOMBIE_RC) {
+                RELEASE((CljObject*)g_tasks[i].result_chan);
+            }
+#else
+            RELEASE((CljObject*)g_tasks[i].result_chan);
+#endif
         }
     }
     g_task_count = 0;

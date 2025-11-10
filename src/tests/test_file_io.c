@@ -49,8 +49,12 @@ TEST(test_history_trim_to_50) {
     TEST_ASSERT_NOT_NULL(v);
     TEST_ASSERT_EQUAL_INT(75, v->count);
 
+    // RETAIN vec to keep it alive while trimmed references its elements
+    RETAIN(vec);
     CljObject *trimmed = history_trim_last_n(vec, 50);
     TEST_ASSERT_NOT_NULL(trimmed);
+    // RETAIN trimmed to keep it alive outside of autorelease pool
+    RETAIN(trimmed);
     CljPersistentVector *tv = as_vector(trimmed);
     TEST_ASSERT_NOT_NULL(tv);
     TEST_ASSERT_EQUAL_INT(50, tv->count);
@@ -60,12 +64,122 @@ TEST(test_history_trim_to_50) {
     TEST_ASSERT_TRUE(ok);
     CljObject *loaded = history_load_from_file(tmp_hist_path);
     TEST_ASSERT_NOT_NULL(loaded);
+    // RETAIN loaded to keep it alive outside of autorelease pool
+    RETAIN(loaded);
     CljPersistentVector *lv = as_vector(loaded);
     TEST_ASSERT_NOT_NULL(lv);
     TEST_ASSERT_EQUAL_INT(50, lv->count);
 
     RELEASE(trimmed);
     RELEASE(loaded);
+    RELEASE(vec);
+}
+
+TEST(test_history_load_current_format) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create test file with exact current history format
+    const char *history_content = "[\"(list 1 1.0 \\\"1\\\" \\\"one\\\")\"]\n";
+    FILE *fp = fopen(tmp_hist_path, "w");
+    TEST_ASSERT_NOT_NULL(fp);
+    size_t n = fwrite(history_content, 1, strlen(history_content), fp);
+    fclose(fp);
+    TEST_ASSERT_TRUE(n > 0);
+    
+    // Load history from file
+    CljObject *loaded = history_load_from_file(tmp_hist_path);
+    TEST_ASSERT_NOT_NULL(loaded);
+    // RETAIN loaded to keep it alive outside of autorelease pool
+    RETAIN(loaded);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, loaded->type);
+    
+    // Verify vector structure
+    CljPersistentVector *v = as_vector(loaded);
+    TEST_ASSERT_NOT_NULL(v);
+    TEST_ASSERT_EQUAL_INT(1, v->count);
+    
+    // Verify first element is a string
+    TEST_ASSERT_NOT_NULL(v->data[0]);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(v->data[0]));
+    
+    // Verify string content using to_string
+    const char *str_content = to_string(v->data[0]);
+    TEST_ASSERT_NOT_NULL(str_content);
+    TEST_ASSERT_EQUAL_STRING("(list 1 1.0 \"1\" \"one\")", str_content);
+    free((void*)str_content);
+    
+    // Cleanup
+    RELEASE(loaded);
+    unlink(tmp_hist_path);
+}
+
+TEST(test_pr_str_escapes_quotes) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a string with quotes inside
+    const char *test_input = "(list 1 1.0 \"1\" \"one\")";
+    CljObject *str = (CljObject*)make_string(test_input);
+    TEST_ASSERT_NOT_NULL(str);
+    
+    // Test pr_str on the string
+    const char *result = pr_str(str);
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Verify that quotes are escaped
+    // Expected: "(list 1 1.0 \"1\" \"one\")"
+    // The quotes inside should be escaped as \"
+    TEST_ASSERT_EQUAL_STRING("\"(list 1 1.0 \\\"1\\\" \\\"one\\\")\"", result);
+    
+    // Verify that the result contains escaped quotes
+    const char *escaped_quote = strstr(result, "\\\"");
+    TEST_ASSERT_NOT_NULL(escaped_quote);
+    
+    free((void*)result);
+    RELEASE(str);
+}
+
+TEST(test_history_save_escapes_quotes) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a vector with a string containing quotes
+    const char *test_input = "(list 1 1.0 \"1\" \"one\")";
+    CljObject *str = (CljObject*)make_string(test_input);
+    TEST_ASSERT_NOT_NULL(str);
+    
+    CljObject *vec = (CljObject*)make_vector(1, 0);
+    CljPersistentVector *v = as_vector(vec);
+    v->data[0] = (ID)str;
+    v->count = 1;
+    
+    // Save to file
+    bool ok = history_save_to_file(vec, tmp_hist_path);
+    TEST_ASSERT_TRUE(ok);
+    
+    // Read file content
+    FILE *fp = fopen(tmp_hist_path, "r");
+    TEST_ASSERT_NOT_NULL(fp);
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    char *buf = (char*)malloc((size_t)sz + 1);
+    TEST_ASSERT_NOT_NULL(buf);
+    size_t n = fread(buf, 1, (size_t)sz, fp);
+    buf[n] = '\0';
+    fclose(fp);
+    
+    // Verify that quotes are escaped in the file
+    // Expected: ["(list 1 1.0 \"1\" \"one\")"]
+    // The quotes inside should be escaped as \"
+    const char *escaped_quote = strstr(buf, "\\\"");
+    TEST_ASSERT_NOT_NULL(escaped_quote);
+    
+    // Verify the exact format
+    TEST_ASSERT_EQUAL_STRING("[\"(list 1 1.0 \\\"1\\\" \\\"one\\\")\"]\n", buf);
+    
+    free(buf);
+    RELEASE(str);
+    RELEASE(vec);
+    unlink(tmp_hist_path);
 }
 
 /*

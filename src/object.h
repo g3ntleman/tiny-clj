@@ -24,7 +24,7 @@ typedef void* CljValue;
 #include "types.h"
 #include "common.h"
 
-// ZOMBIE_RC is defined in types.h (DEBUG builds only)
+// ZOMBIE_RC and SINGLETON_RC are defined in types.h
 
 
 // Type optimization constants
@@ -69,7 +69,7 @@ typedef struct CljObject CljObject;
 // 4-byte header for 32-bit architectures: 2 bytes type + 2 bytes rc
 struct CljObject {
     uint16_t type;  // Typ-Tag für Heap-Objekte (reduced from CljType)
-    int16_t rc;     // Reference Count (int16_t to support ZOMBIE_RC = -1)
+    int16_t rc;     // Reference Count (int16_t to support ZOMBIE_RC = -1, SINGLETON_RC = -2)
     // Keine Union! Daten in Substrukturen (CljString, CljVector, etc.)
 };
 
@@ -97,6 +97,7 @@ static inline CljType TAG(ID obj) {
 }
 
 // Check if an object is a singleton (should not be reference counted)
+// Singletons have the common characteristic: rc==0
 static inline bool is_singleton(CljObject *obj) {
     // Safety check: ensure the pointer is valid before accessing fields
     if (!obj || (uintptr_t)obj < 0x1000) {
@@ -120,13 +121,19 @@ static inline bool is_singleton(CljObject *obj) {
     // CRITICAL: Access obj->type only after pointer validation
     // If obj points to freed memory, AddressSanitizer will detect it here
     CljType obj_type = obj->type;
-    if (!IS_SINGLETON_TYPE(obj_type) && 
-        !(obj->rc == 0 && (obj_type == CLJ_MAP || obj_type == CLJ_LIST || obj_type == CLJ_STRING || obj_type == CLJ_VECTOR))) {
-        return false;
+    
+    // If it's a singleton type (SYMBOL, FUNC, etc.), it's a singleton
+    if (IS_SINGLETON_TYPE(obj_type)) {
+        return true;
     }
     
-    // All other cases are singletons
-    return true;
+    // Singletons have rc == SINGLETON_RC
+    if (obj->rc == SINGLETON_RC) {
+        return true;
+    }
+    
+    // All other cases are NOT singletons (should be reference counted)
+    return false;
 }
 
 // Struct definitions moved to specific headers:

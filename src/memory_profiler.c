@@ -347,6 +347,11 @@ void memory_profiler_track_object_creation(CljObject *obj) {
             return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
+        // Skip singletons - they don't use memory management
+        if (is_singleton(obj)) {
+            return;
+        }
+        
         g_memory_stats.total_allocations++;
         
         // Add memory tracking
@@ -371,7 +376,7 @@ void memory_profiler_track_object_destruction(CljObject *obj) {
             return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
         }
         
-        // Skip singletons (rc==0) - they are never freed
+        // Skip singletons - they are never freed and don't use memory management
         if (is_singleton(obj)) {
             return;
         }
@@ -436,9 +441,19 @@ void memory_profiler_track_autorelease(CljObject *obj) {
     if (!g_memory_profiling_enabled) return;
     
     if (obj) {
+        // Only track heap objects, not immediate values
+        if (is_immediate((CljValue)obj)) {
+            return; // Skip immediate values (FIXNUM, CHAR, SPECIAL, FIXED)
+        }
+        
+        // Skip singletons - they don't use memory management
+        if (is_singleton(obj)) {
+            return;
+        }
+        
         g_memory_stats.autorelease_calls++;
         // Track autorelease by type - only for heap-allocated objects
-        if (!is_immediate((CljValue)obj) && obj->type < CLJ_TYPE_COUNT) {
+        if (obj->type < CLJ_TYPE_COUNT) {
             g_memory_stats.autoreleases_by_type[obj->type]++;
         }
     }

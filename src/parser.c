@@ -324,7 +324,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
             CLJ_ASSERT(eval_state->current_ns != NULL);
             eval_env = (CljMap*)eval_state->current_ns->mappings;
         }
-        result = eval_list(as_list(parsed_expr), eval_env, eval_state);
+        result = eval_list(as_list(parsed_expr), eval_env, eval_state, NULL);
         // eval_list returns AUTORELEASE objects
     } else if (parsed_expr && TAG(parsed_expr) == CLJ_SYMBOL) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
@@ -878,21 +878,10 @@ CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
 CljValue parse_from_reader(Reader *reader, EvalState *st) {
   if (!reader || !st) return NULL;
   
-  CljValue result = NULL;
-  
-  // Create autorelease pool for parse operations
-  WITH_AUTORELEASE_POOL({
-    // Don't catch exceptions - let them propagate
-    result = value_by_parsing_expr(reader, st);
-    
-    // RETAIN to prevent inner pool from releasing the result
-    if (result && !IS_IMMEDIATE(result)) {
-      RETAIN(result);
-    }
-  });
-  
-  // AUTORELEASE to transfer ownership to outer pool
-  return AUTORELEASE(result);
+  // value_by_parsing_expr already returns AUTORELEASE objects
+  // No need for additional WITH_AUTORELEASE_POOL - just return the result
+  // The object is already in the caller's autorelease pool
+  return value_by_parsing_expr(reader, st);
 }
 
 /**

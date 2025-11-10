@@ -642,6 +642,53 @@ ID assoc3(ID *args, unsigned int argc) {
     return NULL;
 }
 
+// dissoc: Remove keys from map (supports multiple keys like Clojure)
+ID native_dissoc(ID *args, unsigned int argc) {
+    // dissoc requires at least 1 argument (the map)
+    if (argc < 1) {
+        throw_exception(EXCEPTION_ARITY, 
+                       "dissoc requires at least 1 argument (map), got 0", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *map = args[0];
+    if (!map) return NULL;
+    
+    // Only support maps
+    if (TAG(map) != CLJ_MAP && TAG(map) != CLJ_TRANSIENT_MAP) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "dissoc only works on maps", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // If no keys to remove, return the map as-is
+    if (argc == 1) {
+        return AUTORELEASE(RETAIN((CljObject*)map));
+    }
+    
+    // Remove keys one by one (Clojure semantics: multiple keys supported)
+    CljMap *result = (CljMap*)map;
+    for (unsigned int i = 1; i < argc; i++) {
+        CljObject *key = args[i];
+        if (!key) continue;  // Skip NULL keys
+        
+        // map_remove returns a new map (or original if key not found)
+        CljMap *new_result = map_remove(result, (ID)key);
+        if (new_result != (CljMap*)result) {
+            // New map was created - release old one if it was retained
+            if (i > 1 || result != (CljMap*)map) {
+                RELEASE((CljObject*)result);
+            }
+            result = new_result;
+        }
+    }
+    
+    // Return autoreleased result
+    return AUTORELEASE(RETAIN((CljObject*)result));
+}
+
 // Transient functions
 ID native_transient(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "transient")) return NULL;
@@ -2690,6 +2737,7 @@ void register_builtins() {
     register_builtin_in_namespace("count", native_count);
     register_builtin_in_namespace("reverse", native_reverse);
     register_builtin_in_namespace("assoc", assoc3);
+    register_builtin_in_namespace("dissoc", native_dissoc);
     register_builtin_in_namespace("transient", native_transient);
     register_builtin_in_namespace("persistent!", native_persistent);
     register_builtin_in_namespace("conj!", native_conj_bang);

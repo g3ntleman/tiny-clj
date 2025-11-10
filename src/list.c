@@ -4,13 +4,14 @@
 #include "symbol.h"
 #include "object.h"
 #include "exception.h"
+#include "types.h"  // For SINGLETON_RC
 
-// Empty-list singleton: CLJ_LIST with rc=0, statically initialized
+// Empty-list singleton: CLJ_LIST with rc=SINGLETON_RC, statically initialized
 static struct {
     CljList list;
 } clj_empty_list_singleton_data = {
     .list = {
-        .base = { .type = CLJ_LIST, .rc = 0 },
+        .base = { .type = CLJ_LIST, .rc = SINGLETON_RC },
         .first = NULL,
         .rest = NULL
     }

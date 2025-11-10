@@ -53,7 +53,7 @@ TEST(test_keyword_in_function_body) {
             TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
             TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
         } CATCH(ex2) {
-            TEST_FAIL_MESSAGE(ex2->message ? ex2->message : "Exception thrown");
+            TEST_FAIL_MESSAGE(ex2->message[0] ? ex2->message : "Exception thrown");
         } END_TRY
     } END_TRY
     
@@ -85,7 +85,7 @@ TEST(test_keyword_in_if_statement) {
         TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
         TEST_ASSERT_EQUAL_STRING("no", sym->name + 1);
     } CATCH(ex) {
-        TEST_FAIL_MESSAGE(ex->message ? ex->message : "Exception thrown");
+        TEST_FAIL_MESSAGE(ex->message[0] ? ex->message : "Exception thrown");
     } END_TRY
     
 }
@@ -117,7 +117,7 @@ TEST(test_keyword_in_recur_function) {
         TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
         TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
     } CATCH(ex) {
-        TEST_FAIL_MESSAGE(ex->message ? ex->message : "Exception thrown");
+        TEST_FAIL_MESSAGE(ex->message[0] ? ex->message : "Exception thrown");
     } END_TRY
     
 }
@@ -164,7 +164,7 @@ TEST(test_keyword_in_nested_function_call) {
         TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
         TEST_ASSERT_EQUAL_STRING("active", sym->name + 1);
     } CATCH(ex) {
-        TEST_FAIL_MESSAGE(ex->message ? ex->message : "Exception thrown");
+        TEST_FAIL_MESSAGE(ex->message[0] ? ex->message : "Exception thrown");
     } END_TRY
     
 }

@@ -621,6 +621,58 @@ When you see `autorelease_pool_pop() called on empty stack` warnings:
 3. **Check for exceptions** that jump out of pool scope
 4. **Verify pool nesting** - ensure every `push` has a corresponding `pop`
 
+### Transferring Objects Between Pools
+
+**When you need to return an object from an inner autorelease pool to an outer pool**, use the standard RETAIN/RELEASE/AUTORELEASE pattern. **Do NOT** create special functions to remove objects from pools.
+
+#### ✅ Correct Pattern: RETAIN Before Pool Pop
+
+```c
+CljValue parse_from_reader(Reader *reader, EvalState *st) {
+  CljValue result = NULL;
+  
+  // Create autorelease pool for parse operations
+  WITH_AUTORELEASE_POOL({
+    result = value_by_parsing_expr(reader, st);
+    
+    // RETAIN to prevent inner pool from releasing the result
+    if (result && !IS_IMMEDIATE(result)) {
+      RETAIN(result);  // Increases rc (e.g., from 1 to 2)
+    }
+  });  // Pool is popped, RELEASE is called, but rc > 0, so object is NOT freed
+  
+  // AUTORELEASE to transfer ownership to outer pool
+  return AUTORELEASE(result);
+}
+```
+
+#### Why This Works
+
+1. **`RETAIN(result)`** increases the reference count (e.g., from 1 to 2)
+2. **Pool is popped** - `RELEASE` is called on all objects in the pool
+3. **Object is NOT freed** because `rc > 0` (rc is now 1 after RELEASE)
+4. **`AUTORELEASE(result)`** adds the object to the outer pool
+
+#### ❌ Wrong Approach: Manual Pool Manipulation
+
+```c
+// ❌ WRONG: Don't create special functions to remove objects from pools
+void autorelease_pool_remove_object(CljObject *obj);  // ❌ Don't do this!
+
+CljValue parse_from_reader(Reader *reader, EvalState *st) {
+  WITH_AUTORELEASE_POOL({
+    result = value_by_parsing_expr(reader, st);
+    RETAIN(result);
+    autorelease_pool_remove_object(result);  // ❌ WRONG: Unnecessary!
+  });
+  return AUTORELEASE(result);
+}
+```
+
+#### Key Principle
+
+**Reference counting with RETAIN/RELEASE is sufficient.** No manual pool manipulation is needed. The standard mechanisms handle object transfer between pools correctly.
+
 ### Memory Policy Impact
 
 - **Unbalanced pools** cause memory leaks (objects never freed)

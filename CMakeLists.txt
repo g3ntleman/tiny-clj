@@ -268,7 +268,6 @@ add_executable(unity-tests
     src/tests/test_parser.c
     src/tests/test_exception.c
     src/tests/test_basics.c
-    src/tests/test_namespace_legacy.c
     src/tests/test_namespace.c
     src/tests/test_symbol_interning.c
     src/tests/test_core_initialization.c
@@ -282,10 +281,8 @@ add_executable(unity-tests
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_time.c
     src/tests/test_loops.c
-    src/tests/test_while_debug.c
     src/tests/test_map.c
     src/tests/test_vector.c
-    src/tests/test_fixed_point_legacy.c
     src/tests/test_fixed_point.c
     src/tests/test_arithmetic.c
     src/tests/test_sequences.c

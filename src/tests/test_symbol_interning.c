@@ -40,7 +40,6 @@ TEST(test_inc_symbol_interning_during_load) {
         CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym_after);
         
         if (!inc_value) {
-            // Debug: Check what symbols ARE in the mappings
             CljMap *map = (CljMap*)clojure_core->mappings;
             int symbol_count = 0;
             const char *first_symbol = NULL;
@@ -119,14 +118,13 @@ TEST(test_inc_symbol_pointer_consistency) {
         
         // Now evaluate the def
         CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
-        (void)eval_list(list, env, g_test_eval_state);  // Evaluate def - result not needed
+        (void)eval_list(list, env, g_test_eval_state, NULL);  // Evaluate def - result not needed
         
         // Check if inc is now in the mappings with the same symbol pointer
         if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
             CljObject *inc_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_after);
             
             if (!inc_value) {
-                // Debug: try with the symbol from the form
                 inc_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_in_form);
                 
                 if (!inc_value) {
