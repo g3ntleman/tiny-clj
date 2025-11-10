@@ -2,7 +2,6 @@
 #include "function_call.h"
 #include "value.h"
 #include "symbol.h"
-#include "map.h"
 
 // Test factorial with recur
 TEST(test_recur_factorial) {

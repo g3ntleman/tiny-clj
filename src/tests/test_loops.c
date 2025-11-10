@@ -1074,20 +1074,6 @@ TEST(test_hypothesis_channel_pointer_same_in_queue) {
     // 2. map_conj is not mutating the channel correctly
     // 3. The channel is being copied somewhere
     if (as_special(closed_after) == SPECIAL_FALSE) {
-        // Debug: Print channel pointer information
-        fprintf(stderr, "DEBUG: Channel pointer mismatch detected\n");
-        fprintf(stderr, "  Original channel pointer: %p\n", (void*)chan_ptr_original);
-        fprintf(stderr, "  Current channel pointer: %p\n", (void*)chan);
-        fprintf(stderr, "  Channel type: %d\n", obj->type);
-        fprintf(stderr, "  Channel RC: %d\n", obj->rc);
-        fprintf(stderr, "  Channel count: %d\n", ((CljMap*)chan)->count);
-        fprintf(stderr, "  Closed value: %p\n", (void*)closed_after);
-        if (closed_after) {
-            fprintf(stderr, "  Closed is special: %d\n", is_special(closed_after));
-            if (is_special(closed_after)) {
-                fprintf(stderr, "  Closed special value: %d\n", as_special(closed_after));
-            }
-        }
         TEST_FAIL_MESSAGE("Channel was not mutated - closed is still false after run_next. Check if channel pointer in queue is different from returned channel.");
     }
     
