@@ -1182,6 +1182,75 @@ ID native_str(ID *args, unsigned int argc) {
     return result;
 }
 
+// Create symbol from string (with optional namespace)
+ID native_symbol(ID *args, unsigned int argc) {
+    // symbol accepts 1 or 2 arguments: (symbol "name") or (symbol "ns" "name")
+    if (argc != 1 && argc != 2) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "symbol requires exactly 1 or 2 argument%s, got %u", 
+                argc == 1 ? "" : "s", argc);
+        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    const char *ns = NULL;
+    const char *name = NULL;
+    
+    if (argc == 2) {
+        // Two arguments: namespace (can be nil) and name
+        ID ns_arg = args[0];
+        ID name_arg = args[1];
+        
+        // Namespace can be nil (NULL) or a string
+        if (ns_arg && TAG(ns_arg) != CLJ_STRING) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "symbol namespace must be a string or nil");
+            return NULL;
+        }
+        
+        if (!name_arg || TAG(name_arg) != CLJ_STRING) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "symbol requires a string for name");
+            return NULL;
+        }
+        
+        // Extract namespace (can be NULL if nil was passed)
+        if (ns_arg) {
+            CljString *ns_str = (CljString*)ns_arg;
+            ns = clj_string_data(ns_str);
+        } else {
+            ns = NULL;  // nil namespace
+        }
+        
+        CljString *name_str = (CljString*)name_arg;
+        name = clj_string_data(name_str);
+    } else {
+        // One argument: name only
+        ID name_arg = args[0];
+        
+        if (!name_arg || TAG(name_arg) != CLJ_STRING) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "symbol requires a string argument");
+            return NULL;
+        }
+        
+        CljString *name_str = (CljString*)name_arg;
+        name = clj_string_data(name_str);
+    }
+    
+    // Create symbol from string(s)
+    CljSymbol *sym = intern_symbol(ns, name);
+    if (!sym) {
+        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+                "Failed to create symbol from string");
+        return NULL;
+    }
+    
+    // intern_symbol returns a retained symbol, but builtin functions should return AUTORELEASE
+    return AUTORELEASE((ID)sym);
+}
+
 // File I/O: slurp - read entire file as string
 #ifndef ESP32_BUILD
 ID native_slurp(ID *args, unsigned int argc) {
@@ -2598,6 +2667,7 @@ void register_builtins() {
     register_builtin_in_namespace("/", native_div_variadic);
     register_builtin_in_namespace("mod", native_mod);
     register_builtin_in_namespace("str", native_str);
+    register_builtin_in_namespace("symbol", native_symbol);
 #ifndef ESP32_BUILD
     register_builtin_in_namespace("slurp", native_slurp);
     register_builtin_in_namespace("spit", native_spit);

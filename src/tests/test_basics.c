@@ -448,7 +448,6 @@ TEST(test_if_nil_in_function_regression) {
     } END_TRY
 }
 
-// Debug test: Check if nil is correctly stored and retrieved from function environment
 TEST(test_nil_in_function_environment_debug) {
     // Test: Create a function that returns its parameter
     // ((fn [x] x) nil) => nil (NULL)

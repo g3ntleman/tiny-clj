@@ -424,7 +424,6 @@ TEST(test_defn_add_can_be_called) {
         TEST_ASSERT_NOT_NULL_MESSAGE(call_result, 
                                      "Calling (my-sum 3 4) should return a result");
         
-        // Debug: Check what type call_result actually is
         if (call_result) {
             CljObject *obj = (CljObject*)call_result;
             if (!is_fixnum(call_result)) {

@@ -225,16 +225,39 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
  *  @return true if successful
  */
 bool history_save_to_file(CljObject *vec, const char *path) {
-    if (!path || !vec || TAG(vec) != CLJ_VECTOR) return false;
-    CljObject *trimmed = history_trim_last_n(vec, 50);
+    if (!path || !vec) return false;
+    
+    // Convert transient vector to persistent if needed
+    CljObject *persistent_vec = vec;
+    if (TAG(vec) == CLJ_TRANSIENT_VECTOR) {
+        persistent_vec = (CljObject*)persistent((CljValue)vec);
+        if (!persistent_vec) return false;
+    }
+    
+    if (TAG(persistent_vec) != CLJ_VECTOR) {
+        if (persistent_vec != vec) RELEASE(persistent_vec);
+        return false;
+    }
+    
+    CljObject *trimmed = history_trim_last_n(persistent_vec, 50);
+    if (persistent_vec != vec) RELEASE(persistent_vec);
+    if (!trimmed) return false;
+    
     const char *s = pr_str(trimmed);
+    if (!s) { RELEASE(trimmed); return false; }
+    
     FILE *fp = fopen(path, "w");
-    if (!fp) { if (s) free((void*)s); RELEASE(trimmed); return false; }
-    size_t n = fwrite(s, 1, strlen(s), fp);
-    fclose(fp);
+    if (!fp) { free((void*)s); RELEASE(trimmed); return false; }
+    
+    size_t len = strlen(s);
+    size_t n = fwrite(s, 1, len, fp);
+    int close_result = fclose(fp);
+    
     free((void*)s);
     RELEASE(trimmed);
-    return n > 0;
+    
+    // Check both write success and close success
+    return (n == len && close_result == 0);
 }
 
 /** @brief Load vector from file (EDN format)
@@ -264,9 +287,12 @@ CljObject* history_load_from_file(const char *path) {
             CljPersistentVector *v = as_vector((CljObject*)form);
             bool all_strings = true;
             for (int i = 0; i < (v ? v->count : 0); i++) {
-                if (!v->data[i] || TAG(v->data[i]) != CLJ_STRING) { all_strings = false; break; }
+                if (!v->data[i] || TAG(v->data[i]) != CLJ_STRING) { 
+                    all_strings = false; 
+                    break; 
+                }
             }
-            if (all_strings) {
+            if (all_strings && v && v->count > 0) {
                 // form is already AUTORELEASEd from parse_expr (in the current pool)
                 // RETAIN to keep it alive, it will be released when test pool is popped
                 result = RETAIN((CljObject*)form);
@@ -438,6 +464,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
             LineEditor *editor = get_line_editor();
             if (editor) {
                 line_editor_add_to_history(editor, acc);
+                // Save history after each expression evaluation
+                WITH_AUTORELEASE_POOL({
+                    CljObject *vec = line_editor_get_history_vector(editor);
+                    if (vec) {
+                        line_editor_history_save_default(vec);
+                        RELEASE(vec);
+                    }
+                });
             }
 #endif
         }

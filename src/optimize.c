@@ -298,16 +298,31 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         CljList *body_exprs = as_list((ID)rest->rest);
         if (!body_exprs) return RETAIN(body), body;
         
-        CljList *t_body = transform_list(body_exprs, func_name, params, param_count, body);
-        if (!t_body) {
-            if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
-            return NULL;
+        // Transform body expressions - preserve structure
+        // If body_exprs has only one element, transform it directly
+        // Otherwise, transform the list
+        CljObject *t_body_obj = NULL;
+        if (body_exprs->first && !body_exprs->rest) {
+            // Single expression - transform directly
+            t_body_obj = transform_recursive_tail_calls(body_exprs->first, func_name, params, param_count, body);
+            if (!t_body_obj) {
+                if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
+                return NULL;
+            }
+        } else {
+            // Multiple expressions - transform list
+            CljList *t_body = transform_list(body_exprs, func_name, params, param_count, body);
+            if (!t_body) {
+                if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
+                return NULL;
+            }
+            t_body_obj = (CljObject*)t_body;
         }
         
-        CljList *new_let = build_list((CljObject*)SYM_LET, t_bindings ? t_bindings : bindings, (CljObject*)t_body);
+        CljList *new_let = build_list((CljObject*)SYM_LET, t_bindings ? t_bindings : bindings, t_body_obj);
         if (!new_let) {
             if (t_bindings && t_bindings != bindings) RELEASE(t_bindings);
-            RELEASE((CljObject*)t_body);
+            if (t_body_obj) RELEASE(t_body_obj);
             return NULL;
         }
         
@@ -344,16 +359,22 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     }
     
     // Transform nested expressions
-    CljList *t_rest = transform_list(rest, func_name, params, param_count, body);
-    if (t_rest) {
-        CljList *new_body = (CljList*)make_list(head, NULL);
-        if (new_body) {
-            new_body->rest = (CljObject*)t_rest;
-            RETAIN((CljObject*)new_body);
-            return (CljObject*)new_body;
+    // CRITICAL: Only transform recursive calls that are in tail position
+    // For function calls like (+ (fib ...) (fib ...)), neither argument is in tail position
+    // because the result of + is used, not the arguments directly
+    // Only transform if the entire expression is in tail position
+    if (is_tail_position(body, context)) {
+        // The entire expression is in tail position - check if it's a recursive call
+        if (is_recursive_call(body, func_name)) {
+            return transform_to_recur(body_list);
         }
-        RELEASE((CljObject*)t_rest);
+        // Not a recursive call, but in tail position - don't transform nested calls
+        // because they are not in tail position (e.g., arguments of + are not in tail position)
+        return RETAIN(body), body;
+    } else {
+        // Not in tail position - don't transform recursive calls
+        // For non-special forms (like +, -, etc.), don't transform nested calls
+        // because they are not in tail position
+        return RETAIN(body), body;
     }
-    
-    return RETAIN(body), body;
 }

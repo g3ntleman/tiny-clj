@@ -309,16 +309,7 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
 }
 
 // Generic arithmetic function (with parameter substitution)
-// 
-// FINDINGS from debugging parameter evaluation issues:
-// - eval_body_with_params now correctly returns values[i] even if NULL (nil is valid in Clojure)
-// - The original issue (args[0] being NULL when function is called) was fixed by allowing
-//   eval_body_with_params to return NULL for nil values
-// - However, nil cannot be used in arithmetic operations, so we validate here
-// - The caller (eval_list_with_param_substitution) must handle nil values appropriately
 ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const EvalContext *ctx) {
-    // TEST: Check if this function is called at all
-    assert(false && "eval_arithmetic_generic_with_substitution called");
     
     CLJ_ASSERT(ctx != NULL);
     CLJ_ASSERT(ctx->params != NULL);  // params are required for arithmetic
@@ -2073,11 +2064,14 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
         }
     }
     
-    // Validate recur positions (not in hot-path)
-    validate_recur_positions(body, body);
-    
     // Note: For anonymous functions (fn), we can't easily detect recursive calls
-    // because there's no function name. This transformation is mainly for defn.
+    // because there's no function name. However, we can still try to transform
+    // if the function is defined in a let binding with a name.
+    
+    // For now, skip automatic TCO transformation for anonymous functions
+    // (they would need a function name to detect recursive calls)
+    // Only validate recur positions
+    validate_recur_positions(body, body);
     
     // CRITICAL: Use env (which may be let_env with namespace mappings) if available,
     // otherwise fall back to namespace mappings
@@ -2761,8 +2755,17 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
+    // Transform recursive tail calls to recur (automatic TCO)
+    CljObject *transformed_body = transform_recursive_tail_calls(body_expr_obj, name_sym, 
+                                                                  (CljObject**)params, param_count, 
+                                                                  body_expr_obj);
+    if (!transformed_body) {
+        // Transformation failed - use original body
+        transformed_body = body_expr_obj;
+    }
+    
     // Validate recur positions (not in hot-path)
-    validate_recur_positions(body_expr_obj, body_expr_obj);
+    validate_recur_positions(transformed_body, transformed_body);
     
     // Create function object directly (skip fn list creation to save code)
     // Use current namespace mappings as environment for function evaluation
@@ -2780,7 +2783,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Create function object with namespace mappings as closure_env
-    CljFunction *fn_obj = make_function(params, param_count, (ID)body_expr_obj, fn_env, NULL);
+    CljFunction *fn_obj = make_function(params, param_count, (ID)transformed_body, fn_env, NULL);
     if (!fn_obj) {
         free_obj_array((ID*)params, params_stack);
         return NULL;
