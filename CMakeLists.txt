@@ -128,6 +128,8 @@ set(STM32_SOURCES
     src/optimize.c
     src/environment.c
     src/equality.c
+    src/event_loop.c
+    src/channel.c
     src/list.c
     src/vector.c
     src/map.c
@@ -218,6 +220,10 @@ add_executable(tiny-clj-repl
     src/platform_macos.c
     src/line_editor.c
     ${SOURCES}
+)
+# Set output directory to build-test/
+set_target_properties(tiny-clj-repl PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build-test"
 )
 # REPL Build - Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")

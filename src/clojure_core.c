@@ -79,7 +79,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
         if (is_type(form, CLJ_LIST)) {
           CljList *list = as_list(form);
           CljObject *first = LIST_FIRST(list);
-          if (first == SYM_DEF) {
+          if (is_type(first, CLJ_SYMBOL) && as_symbol(first) == SYM_DEF) {
             // def returns the symbol, not the value
             // Even if value evaluation failed, def might have stored nil
             success_count++;
@@ -93,7 +93,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
       if (is_type(form, CLJ_LIST)) {
         CljList *list = as_list(form);
         CljObject *first = LIST_FIRST(list);
-        if (first == SYM_DEF) {
+        if (is_type(first, CLJ_SYMBOL) && as_symbol(first) == SYM_DEF) {
           is_def_expr = true;
         }
       }

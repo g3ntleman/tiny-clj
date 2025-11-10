@@ -264,184 +264,184 @@ void init_special_symbols() {
     // Special forms - static structs with symbol table registration
     // Initialize names with strdup to avoid string literal issues
     sym_try_data.sym.name = strdup("try");
-    SYM_TRY = &sym_try_data;
+    SYM_TRY = &sym_try_data.sym;
     symbol_table_add(NULL, "try", SYM_TRY);
     
-    SYM_CATCH = &sym_catch_data;
+    SYM_CATCH = &sym_catch_data.sym;
     symbol_table_add(NULL, "catch", SYM_CATCH);
     
-    SYM_IF = &sym_if_data;
+    SYM_IF = &sym_if_data.sym;
     symbol_table_add(NULL, "if", SYM_IF);
     
-    SYM_COND = &sym_cond_data;
+    SYM_COND = &sym_cond_data.sym;
     symbol_table_add(NULL, "cond", SYM_COND);
     
-    SYM_WHEN = &sym_when_data;
+    SYM_WHEN = &sym_when_data.sym;
     symbol_table_add(NULL, "when", SYM_WHEN);
     
-    SYM_WHILE = &sym_while_data;
+    SYM_WHILE = &sym_while_data.sym;
     symbol_table_add(NULL, "while", SYM_WHILE);
     
-    SYM_LET = &sym_let_data;
+    SYM_LET = &sym_let_data.sym;
     symbol_table_add(NULL, "let", SYM_LET);
     
-    SYM_FN = &sym_fn_data;
+    SYM_FN = &sym_fn_data.sym;
     symbol_table_add(NULL, "fn", SYM_FN);
     
-    SYM_QUOTE = &sym_quote_data;
+    SYM_QUOTE = &sym_quote_data.sym;
     symbol_table_add(NULL, "quote", SYM_QUOTE);
     
-    SYM_QUASIQUOTE = &sym_quasiquote_data;
+    SYM_QUASIQUOTE = &sym_quasiquote_data.sym;
     symbol_table_add(NULL, "quasiquote", SYM_QUASIQUOTE);
     
-    SYM_UNQUOTE = &sym_unquote_data;
+    SYM_UNQUOTE = &sym_unquote_data.sym;
     symbol_table_add(NULL, "unquote", SYM_UNQUOTE);
     
-    SYM_SPLICE_UNQUOTE = &sym_splice_unquote_data;
+    SYM_SPLICE_UNQUOTE = &sym_splice_unquote_data.sym;
     symbol_table_add(NULL, "splice-unquote", SYM_SPLICE_UNQUOTE);
     
-    SYM_DO = &sym_do_data;
+    SYM_DO = &sym_do_data.sym;
     symbol_table_add(NULL, "do", SYM_DO);
     
-    SYM_LOOP = &sym_loop_data;
+    SYM_LOOP = &sym_loop_data.sym;
     symbol_table_add(NULL, "loop", SYM_LOOP);
     
-    SYM_RECUR = &sym_recur_data;
+    SYM_RECUR = &sym_recur_data.sym;
     symbol_table_add(NULL, "recur", SYM_RECUR);
     
-    SYM_THROW = &sym_throw_data;
+    SYM_THROW = &sym_throw_data.sym;
     symbol_table_add(NULL, "throw", SYM_THROW);
     
-    SYM_FINALLY = &sym_finally_data;
+    SYM_FINALLY = &sym_finally_data.sym;
     symbol_table_add(NULL, "finally", SYM_FINALLY);
     
-    SYM_DEFN = &sym_defn_data;
+    SYM_DEFN = &sym_defn_data.sym;
     symbol_table_add(NULL, "defn", SYM_DEFN);
     
-    SYM_DEREF = &sym_deref_data;
+    SYM_DEREF = &sym_deref_data.sym;
     symbol_table_add(NULL, "deref", SYM_DEREF);
     
-    SYM_NIL = &sym_nil_data;
+    SYM_NIL = &sym_nil_data.sym;
     symbol_table_add(NULL, "nil", SYM_NIL);
     
-    SYM_VAR = &sym_var_data;
+    SYM_VAR = &sym_var_data.sym;
     symbol_table_add(NULL, "var", SYM_VAR);
     
     // Built-in functions - static structs with symbol table registration
-    SYM_DEF = &sym_def_data;
+    SYM_DEF = &sym_def_data.sym;
     symbol_table_add(NULL, "def", SYM_DEF);
     
-    SYM_NS = &sym_ns_data;
+    SYM_NS = &sym_ns_data.sym;
     symbol_table_add(NULL, "ns", SYM_NS);
     
     sym_time_data.sym.name = strdup("time");
-    SYM_TIME = &sym_time_data;
+    SYM_TIME = &sym_time_data.sym;
     symbol_table_add(NULL, "time", SYM_TIME);
     
-    SYM_GO = &sym_go_data;
+    SYM_GO = &sym_go_data.sym;
     symbol_table_add(NULL, "go", SYM_GO);
     
-    SYM_PLUS = &sym_plus_data;
+    SYM_PLUS = &sym_plus_data.sym;
     symbol_table_add(NULL, "+", SYM_PLUS);
     
-    SYM_MINUS = &sym_minus_data;
+    SYM_MINUS = &sym_minus_data.sym;
     symbol_table_add(NULL, "-", SYM_MINUS);
     
-    SYM_MULTIPLY = &sym_multiply_data;
+    SYM_MULTIPLY = &sym_multiply_data.sym;
     symbol_table_add(NULL, "*", SYM_MULTIPLY);
     
-    SYM_DIVIDE = &sym_divide_data;
+    SYM_DIVIDE = &sym_divide_data.sym;
     symbol_table_add(NULL, "/", SYM_DIVIDE);
     
-    SYM_EQUALS = &sym_equals_data;
+    SYM_EQUALS = &sym_equals_data.sym;
     symbol_table_add(NULL, "=", SYM_EQUALS);
     
-    SYM_EQUAL = &sym_equal_data;
+    SYM_EQUAL = &sym_equal_data.sym;
     symbol_table_add(NULL, "equal", SYM_EQUAL);
     
-    SYM_LT = &sym_lt_data;
+    SYM_LT = &sym_lt_data.sym;
     symbol_table_add(NULL, "<", SYM_LT);
     
-    SYM_GT = &sym_gt_data;
+    SYM_GT = &sym_gt_data.sym;
     symbol_table_add(NULL, ">", SYM_GT);
     
-    SYM_LE = &sym_le_data;
+    SYM_LE = &sym_le_data.sym;
     symbol_table_add(NULL, "<=", SYM_LE);
     
-    SYM_GE = &sym_ge_data;
+    SYM_GE = &sym_ge_data.sym;
     symbol_table_add(NULL, ">=", SYM_GE);
     
-    SYM_PRINTLN = &sym_println_data;
+    SYM_PRINTLN = &sym_println_data.sym;
     symbol_table_add(NULL, "println", SYM_PRINTLN);
     
-    SYM_PRINT = &sym_print_data;
+    SYM_PRINT = &sym_print_data.sym;
     symbol_table_add(NULL, "print", SYM_PRINT);
     
-    SYM_STR = &sym_str_data;
+    SYM_STR = &sym_str_data.sym;
     symbol_table_add(NULL, "str", SYM_STR);
     
-    SYM_CONJ = &sym_conj_data;
+    SYM_CONJ = &sym_conj_data.sym;
     symbol_table_add(NULL, "conj", SYM_CONJ);
     
-    SYM_NTH = &sym_nth_data;
+    SYM_NTH = &sym_nth_data.sym;
     symbol_table_add(NULL, "nth", SYM_NTH);
     
-    SYM_FIRST = &sym_first_data;
+    SYM_FIRST = &sym_first_data.sym;
     symbol_table_add(NULL, "first", SYM_FIRST);
     
-    SYM_REST = &sym_rest_data;
+    SYM_REST = &sym_rest_data.sym;
     symbol_table_add(NULL, "rest", SYM_REST);
     
-    SYM_COUNT = &sym_count_data;
+    SYM_COUNT = &sym_count_data.sym;
     symbol_table_add(NULL, "count", SYM_COUNT);
     
     // Additional symbols - static structs with symbol table registration
-    SYM_CONS = &sym_cons_data;
+    SYM_CONS = &sym_cons_data.sym;
     symbol_table_add(NULL, "cons", SYM_CONS);
     
-    SYM_SEQ = &sym_seq_data;
+    SYM_SEQ = &sym_seq_data.sym;
     symbol_table_add(NULL, "seq", SYM_SEQ);
     
-    SYM_NEXT = &sym_next_data;
+    SYM_NEXT = &sym_next_data.sym;
     symbol_table_add(NULL, "next", SYM_NEXT);
     
-    SYM_LIST = &sym_list_data;
+    SYM_LIST = &sym_list_data.sym;
     symbol_table_add(NULL, "list", SYM_LIST);
     
-    SYM_AND = &sym_and_data;
+    SYM_AND = &sym_and_data.sym;
     symbol_table_add(NULL, "and", SYM_AND);
     
-    SYM_OR = &sym_or_data;
+    SYM_OR = &sym_or_data.sym;
     symbol_table_add(NULL, "or", SYM_OR);
     
-    SYM_FOR = &sym_for_data;
+    SYM_FOR = &sym_for_data.sym;
     symbol_table_add(NULL, "for", SYM_FOR);
     
     sym_doseq_data.sym.name = strdup("doseq");
-    SYM_DOSEQ = &sym_doseq_data;
+    SYM_DOSEQ = &sym_doseq_data.sym;
     symbol_table_add(NULL, "doseq", SYM_DOSEQ);
     
     sym_dotimes_data.sym.name = strdup("dotimes");
-    SYM_DOTIMES = &sym_dotimes_data;
+    SYM_DOTIMES = &sym_dotimes_data.sym;
     symbol_table_add(NULL, "dotimes", SYM_DOTIMES);
     
     // Keywords - static structs with symbol table registration
-    SYM_KW_LINE = &sym_kw_line_data;
+    SYM_KW_LINE = &sym_kw_line_data.sym;
     symbol_table_add(NULL, ":line", SYM_KW_LINE);
     
-    SYM_KW_FILE = &sym_kw_file_data;
+    SYM_KW_FILE = &sym_kw_file_data.sym;
     symbol_table_add(NULL, ":file", SYM_KW_FILE);
     
-    SYM_KW_DOC = &sym_kw_doc_data;
+    SYM_KW_DOC = &sym_kw_doc_data.sym;
     symbol_table_add(NULL, ":doc", SYM_KW_DOC);
     
-    SYM_KW_ERROR = &sym_kw_error_data;
+    SYM_KW_ERROR = &sym_kw_error_data.sym;
     symbol_table_add(NULL, ":error", SYM_KW_ERROR);
     
-    SYM_KW_STACK = &sym_kw_stack_data;
+    SYM_KW_STACK = &sym_kw_stack_data.sym;
     symbol_table_add(NULL, ":stack", SYM_KW_STACK);
     
-    SYM_KW_NS = &sym_kw_ns_data;
+    SYM_KW_NS = &sym_kw_ns_data.sym;
     symbol_table_add(NULL, ":ns", SYM_KW_NS);
 }
 
