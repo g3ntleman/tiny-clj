@@ -158,7 +158,7 @@ CljNamespace* ns_find(const char *name) {
     
     CljNamespace *cur = (CljNamespace*)g_runtime.ns_registry;
     while (cur) {
-        if (cur->name && is_type(cur->name, CLJ_SYMBOL)) {
+        if (cur->name && TAG(cur->name) == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(cur->name);
             if (strcmp(sym->name, name) == 0) {
                 return cur;

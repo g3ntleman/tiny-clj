@@ -72,7 +72,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     
     // Resolve symbol to function if necessary (Clojure/JVM behavior)
     // ns_resolve automatically searches clojure.core, so we don't need to set current_ns
-    if (is_type(fn, CLJ_SYMBOL)) {
+    if (fn && TAG(fn) == CLJ_SYMBOL) {
         // ns_resolve searches clojure.core even if current_ns is different
         // Pass NULL for st to use default namespace - ns_resolve will still search clojure.core
         ID resolved = ns_resolve(NULL, fn);
@@ -84,7 +84,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     }
     
     // Validate that fn is a valid function (Clojure/JVM throws IllegalArgumentException/ClassCastException)
-    if (!fn || (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE))) {
+    if (!fn || (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires a function", 
                        __FILE__, __LINE__, 0);
         return NULL;

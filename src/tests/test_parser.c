@@ -103,7 +103,7 @@ TEST(test_parse_metadata) {
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(is_type((CljObject*)meta, CLJ_MAP));
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
     
     // Test that metadata contains the key-value pair
     CljSymbol *kw_key = intern_symbol_global(":key");
@@ -382,13 +382,13 @@ TEST(test_meta_set_and_get) {
     // Get metadata
     ID retrieved_meta = meta_get(obj);
     TEST_ASSERT_NOT_NULL(retrieved_meta);
-    TEST_ASSERT_TRUE(is_type((CljObject*)retrieved_meta, CLJ_MAP));
+    TEST_ASSERT_TRUE((CljObject*)retrieved_meta && TAG((CljObject*)retrieved_meta) == CLJ_MAP);
     
     // Verify metadata content
     if (kw_doc) {
         CljValue doc_value = map_get((CljMap*)retrieved_meta, (CljValue)kw_doc);
         TEST_ASSERT_NOT_NULL(doc_value);
-        TEST_ASSERT_TRUE(is_type((CljObject*)doc_value, CLJ_STRING));
+        TEST_ASSERT_TRUE((CljObject*)doc_value && TAG((CljObject*)doc_value) == CLJ_STRING);
     }
     
     RELEASE(obj);
@@ -412,7 +412,7 @@ TEST(test_meta_automatic_sourcecode_references) {
     // Get metadata
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
-    TEST_ASSERT_TRUE(is_type((CljObject*)meta, CLJ_MAP));
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
     
     // Check for automatic source code references
     if (SYM_KW_LINE) {
@@ -434,14 +434,14 @@ TEST(test_meta_automatic_sourcecode_references) {
     if (SYM_KW_FILE && eval_state->file) {
         CljValue file_value = map_get((CljMap*)meta, (CljValue)SYM_KW_FILE);
         TEST_ASSERT_NOT_NULL(file_value);
-        TEST_ASSERT_TRUE(is_type((CljObject*)file_value, CLJ_STRING));
+        TEST_ASSERT_TRUE((CljObject*)file_value && TAG((CljObject*)file_value) == CLJ_STRING);
     }
     
     if (SYM_KW_NS && eval_state->current_ns && eval_state->current_ns->name) {
         CljValue ns_value = map_get((CljMap*)meta, (CljValue)SYM_KW_NS);
         TEST_ASSERT_NOT_NULL(ns_value);
         // Namespace name should be a symbol
-        TEST_ASSERT_TRUE(is_type((CljObject*)ns_value, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)ns_value && TAG((CljObject*)ns_value) == CLJ_SYMBOL);
     }
     
     // Don't RELEASE result - parse_from_reader returns autoreleased object

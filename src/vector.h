@@ -17,7 +17,7 @@ typedef CljPersistentVector* CljVector;
 
 // Type-safe casting
 static inline CljPersistentVector* as_vector(ID obj) {
-    if (!is_type((CljObject*)obj, CLJ_VECTOR) && !is_type((CljObject*)obj, CLJ_WEAK_VECTOR) && !is_type((CljObject*)obj, CLJ_TRANSIENT_VECTOR)) {
+    if (!obj || (TAG(obj) != CLJ_VECTOR && TAG(obj) != CLJ_WEAK_VECTOR && TAG(obj) != CLJ_TRANSIENT_VECTOR)) {
 #ifdef DEBUG
         const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 

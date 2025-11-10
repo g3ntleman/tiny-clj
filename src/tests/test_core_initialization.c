@@ -38,7 +38,7 @@ TEST(test_core_initialization_inc_loaded) {
     
     for (int i = 0; i < map->count; i++) {
         CljObject *key = KV_KEY(map->data, i);
-        if (key && is_type(key, CLJ_SYMBOL)) {
+        if (key && key && TAG(key) == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(key);
             symbol_count++;
             if (!first_symbol_name && sym->name) {
@@ -68,7 +68,7 @@ TEST(test_core_initialization_inc_loaded) {
     
     TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                 "inc should be in clojure.core mappings after initialization");
-    TEST_ASSERT_TRUE_MESSAGE(is_type(inc_value, CLJ_FUNC) || is_type(inc_value, CLJ_CLOSURE),
+    TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
                              "inc should be a function");
 }
 
@@ -149,7 +149,7 @@ TEST(test_clojure_core_loads_inc) {
             
             for (int i = 0; i < map->count; i++) {
                 CljObject *key = KV_KEY(map->data, i);
-                if (key && is_type(key, CLJ_SYMBOL)) {
+                if (key && key && TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
                     if (!first_symbol && sym->name) {
@@ -181,7 +181,7 @@ TEST(test_clojure_core_loads_inc) {
         
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, 
                                     "inc should be in clojure.core mappings after load");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(inc_value, CLJ_FUNC) || is_type(inc_value, CLJ_CLOSURE),
+        TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
                                 "inc should be a function");
     }
 }
@@ -241,13 +241,13 @@ TEST(test_def_inc_evaluation_during_load) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
-    if (is_type(form, CLJ_LIST)) {
+    if (form && TAG(form) == CLJ_LIST) {
         CljList *list = as_list(form);
         CljSymbol *inc_sym = as_symbol(list_nth(list, 1));
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);
         
         TEST_ASSERT_NOT_NULL(inc_sym);
-        TEST_ASSERT_TRUE(is_type(inc_sym, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE(inc_sym && TAG(inc_sym) == CLJ_SYMBOL);
         TEST_ASSERT_NOT_NULL(fn_expr);
         
         // Verify that inc_sym is the same as intern_symbol_global("inc")
@@ -272,7 +272,7 @@ TEST(test_def_inc_evaluation_during_load) {
                 const char *first_symbol = NULL;
                 for (int i = 0; i < map->count; i++) {
                     CljObject *key = KV_KEY(map->data, i);
-                    if (key && is_type(key, CLJ_SYMBOL)) {
+                    if (key && key && TAG(key) == CLJ_SYMBOL) {
                         CljSymbol *sym = as_symbol(key);
                         symbol_count++;
                         if (!first_symbol && sym->name) {
@@ -293,7 +293,7 @@ TEST(test_def_inc_evaluation_during_load) {
                                         "inc should be in mappings after def evaluation");
             
             // Verify that inc_value is a function
-            TEST_ASSERT_TRUE_MESSAGE(is_type(inc_value, CLJ_FUNC) || is_type(inc_value, CLJ_CLOSURE),
+            TEST_ASSERT_TRUE_MESSAGE(inc_value && TAG(inc_value) == CLJ_FUNC || inc_value && TAG(inc_value) == CLJ_CLOSURE,
                                     "inc should be a function");
             
             // Don't RELEASE result - eval_string returns autoreleased object
@@ -342,7 +342,7 @@ TEST(test_plus_available_during_fn_evaluation) {
         CljValue result = eval_list(as_list(form), env, g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, 
                                     "fn expression should evaluate to a function");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_FUNC) || is_type(result, CLJ_CLOSURE),
+        TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE,
                                 "fn expression should return a function");
         
         // Don't RELEASE result - eval_string returns autoreleased object

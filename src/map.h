@@ -14,7 +14,7 @@ typedef struct {
 
 // Type-safe casting
 static inline CljMap* as_map(ID obj) {
-    if (!is_type((CljObject*)obj, CLJ_MAP) && !is_type((CljObject*)obj, CLJ_TRANSIENT_MAP)) {
+    if (!obj || (TAG(obj) != CLJ_MAP && TAG(obj) != CLJ_TRANSIENT_MAP)) {
 #ifdef DEBUG
         const char *actual_type = obj ? "Vector" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 

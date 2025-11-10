@@ -191,7 +191,7 @@ void release(CljObject *v) {
     }
     
     // Skip native functions and closures (they are static)
-    if (is_type(v, CLJ_FUNC) || is_type(v, CLJ_CLOSURE)) {
+    if (v && (TAG(v) == CLJ_FUNC || TAG(v) == CLJ_CLOSURE)) {
         return;
     }
     

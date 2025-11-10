@@ -70,7 +70,6 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     if (g_task_count <= 0) return false;
     // Pop front (order is FIFO)
     GoTask task = g_tasks[0];
-    printf("DEBUG event_loop_run_next: Task channel pointer: %p\n", (void*)task.result_chan);
     for (int i = 1; i < g_task_count; ++i) g_tasks[i - 1] = g_tasks[i];
     g_task_count--;
 
@@ -80,21 +79,9 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     TRY {
         // zero-arity call
         result = eval_function_call(task.fn, NULL, 0, env, st);
-        // DEBUG: Print result
-        if (result) {
-            if (IS_IMMEDIATE(result)) {
-                printf("DEBUG event_loop_run_next: result is immediate: %d\n", as_fixnum((CljValue)result));
-            } else {
-                printf("DEBUG event_loop_run_next: result is heap object: %p, type: %d\n", 
-                       (void*)result, ((CljObject*)result)->type);
-            }
-        } else {
-            printf("DEBUG event_loop_run_next: result is NULL!\n");
-        }
     } CATCH(ex) {
         // On error: do not deliver a value, just close the channel
         ok = false;
-        printf("DEBUG event_loop_run_next: Exception caught, ok=false\n");
     } END_TRY
     
     // Channel handling: use map_conj (mutates transient map in-place)
@@ -118,34 +105,14 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         // Store original pointer for verification
         void *chan_ptr_before = (void*)chan;
         
-        printf("DEBUG event_loop_run_next: Channel before mutation: %p, type: %d, count: %d\n", 
-               (void*)chan, obj->type, chan->count);
-        
         // Put value into channel if result is available (mutates in-place)
         if (ok && result) {
-            printf("DEBUG event_loop_run_next: Calling result_channel_put with result\n");
             result_channel_put(chan, (ID)result);
             // Assertion: Channel pointer should not change after result_channel_put
             CLJ_ASSERT((void*)chan == chan_ptr_before);
-            
-            // Verify value was set
-            CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-            CljValue val_after_put = map_get(chan, (CljValue)kw_value);
-            if (val_after_put) {
-                if (IS_IMMEDIATE(val_after_put)) {
-                    printf("DEBUG event_loop_run_next: Value after put: %d\n", as_fixnum((CljValue)val_after_put));
-                } else {
-                    printf("DEBUG event_loop_run_next: Value after put: %p (heap object)\n", (void*)val_after_put);
-                }
-            } else {
-                printf("DEBUG event_loop_run_next: ERROR: Value is NULL after result_channel_put!\n");
-            }
-        } else {
-            printf("DEBUG event_loop_run_next: Skipping result_channel_put: ok=%d, result=%p\n", ok, (void*)result);
         }
         
         // Close channel (mutates in-place)
-        printf("DEBUG event_loop_run_next: Calling result_channel_close\n");
         result_channel_close(chan);
         // Assertion: Channel pointer should not change after result_channel_close
         CLJ_ASSERT((void*)chan == chan_ptr_before);
@@ -156,9 +123,6 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         CLJ_ASSERT(closed_val != NULL);
         CLJ_ASSERT(is_special(closed_val));
         CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);
-        
-        printf("DEBUG event_loop_run_next: Channel after mutation: count: %d, closed: %s\n", 
-               chan->count, as_special(closed_val) == SPECIAL_TRUE ? "true" : "false");
     } else {
         // Assertion: result_chan should not be NULL for go-blocks
         CLJ_ASSERT(0 && "event_loop_run_next: task.result_chan is NULL");

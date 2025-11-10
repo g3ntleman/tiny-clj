@@ -210,7 +210,7 @@ TEST(test_atom_builtin_creates_atom) {
     ID args[] = {fixnum(42)};
     ID result = native_atom(args, 1);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_ATOM));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_ATOM);
     RELEASE(result);
 }
 
@@ -428,7 +428,7 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
     const char *first_symbol_name = NULL;
     for (int i = 0; i < map->count; i++) {
         CljObject *stored_key = KV_KEY(map->data, i);
-        if (stored_key && is_type(stored_key, CLJ_SYMBOL)) {
+        if (stored_key && stored_key && TAG(stored_key) == CLJ_SYMBOL) {
             symbol_count++;
             CljSymbol *stored_sym = as_symbol(stored_key);
             if (stored_sym && stored_sym->name) {
@@ -477,7 +477,7 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
                                  "ns_resolve should find 'inc' in clojure.core");
     
     // Verify that resolved value is a function (CLJ_CLOSURE from clojure.core.clj)
-    TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_CLOSURE) || is_type(resolved, CLJ_FUNC),
+    TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_CLOSURE || resolved && TAG(resolved) == CLJ_FUNC,
                              "resolved 'inc' should be a function");
     
     // Don't free st - it's the global test evalState
@@ -550,7 +550,7 @@ TEST(test_atom_def_symbol_recognized) {
         TEST_ASSERT_NOT_NULL(list);
         CljObject *def_sym = LIST_FIRST(list);
         TEST_ASSERT_NOT_NULL(def_sym);
-        TEST_ASSERT_TRUE_MESSAGE(is_type(def_sym, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(def_sym && TAG(def_sym) == CLJ_SYMBOL, 
                                  "first element should be a symbol");
         
         // Check if def_sym matches SYM_DEF
@@ -593,14 +593,14 @@ TEST(test_atom_def_inc_parsed) {
         // Verify first element is 'def'
         CljObject *def_sym = LIST_FIRST(list);
         TEST_ASSERT_NOT_NULL_MESSAGE(def_sym, "first element should be 'def' symbol");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(def_sym, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(def_sym && TAG(def_sym) == CLJ_SYMBOL, 
                                 "first element should be a symbol");
         
         // Verify second element is 'inc'
         CljList *rest = as_list((ID)list->rest);
         CljObject *inc_sym = rest ? LIST_FIRST(rest) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_sym, "second element should be 'inc' symbol");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(inc_sym, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(inc_sym && TAG(inc_sym) == CLJ_SYMBOL, 
                                 "second element should be a symbol");
         
         CljSymbol *inc = as_symbol(inc_sym);
@@ -629,7 +629,7 @@ TEST(test_atom_def_inc_evaluated) {
         
         // Should return the symbol 'inc'
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_def should return the symbol");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_SYMBOL, 
                                 "eval_def should return a symbol");
         
         // Verify 'inc' is now in the namespace mappings

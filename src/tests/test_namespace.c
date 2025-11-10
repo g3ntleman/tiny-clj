@@ -23,7 +23,7 @@ TEST(test_namespace_lookup_core_functions) {
     CljObject *resolved = ns_resolve(g_test_eval_state, (CljObject *)map_sym);
     // For now, just test that we can resolve something (may be NULL if clojure.core not fully loaded)
     if (resolved) {
-        TEST_ASSERT_TRUE(is_type(resolved, CLJ_CLOSURE));
+        TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_CLOSURE);
     }
     
     // Cleanup
@@ -79,15 +79,15 @@ TEST(test_symbol_interning_consistency) {
 // Test symbol interning with namespace
 TEST(test_symbol_interning_with_namespace) {
     // Test that intern_symbol with namespace works correctly
-    CljObject *sym1 = intern_symbol("user", "test-symbol");
-    CljObject *sym2 = intern_symbol("user", "test-symbol");
+    CljSymbol *sym1 = intern_symbol("user", "test-symbol");
+    CljSymbol *sym2 = intern_symbol("user", "test-symbol");
     
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
     
     // Test different namespace returns different symbol
-    CljObject *sym3 = intern_symbol("clojure.core", "test-symbol");
+    CljSymbol *sym3 = intern_symbol("clojure.core", "test-symbol");
     TEST_ASSERT_NOT_NULL(sym3);
     TEST_ASSERT_TRUE(sym1 != sym3);
     
@@ -101,7 +101,7 @@ TEST(test_symbol_interning_with_namespace) {
 TEST(test_symbol_interning_global) {
     // Test that intern_symbol_global is equivalent to intern_symbol(NULL, name)
     CljSymbol *sym1 = intern_symbol_global("global-symbol");
-    CljObject *sym2 = intern_symbol(NULL, "global-symbol");
+    CljSymbol *sym2 = intern_symbol(NULL, "global-symbol");
     
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
@@ -214,7 +214,7 @@ TEST(test_symbol_resolution_fallback) {
     CljObject *resolved = eval_symbol(plus_sym, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(resolved);
-    TEST_ASSERT_TRUE(is_type(resolved, CLJ_FUNC)); // Should be a native function
+    TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_FUNC); // Should be a native function
     
     // Cleanup
     RELEASE((CljObject*)resolved);
@@ -342,12 +342,11 @@ TEST(test_ns_resolve_symbol_cache) {
     }
     
     gettimeofday(&end, NULL);
-    double elapsed_ms = (end.tv_sec - start.tv_sec) * 1000.0 + 
-                       (end.tv_usec - start.tv_usec) / 1000.0;
+    (void)((end.tv_sec - start.tv_sec) * 1000.0 + 
+           (end.tv_usec - start.tv_usec) / 1000.0);  // Suppress unused variable warning
     
     // Cache should make repeated lookups faster
     // This test establishes baseline - cache implementation will improve it further
-    printf("Baseline: 100 ns_resolve calls took %.2f ms\n", elapsed_ms);
     
     // Cleanup
     RELEASE((CljObject*)test_sym);
@@ -461,7 +460,7 @@ TEST(test_require_with_alias) {
     TEST_ASSERT_NOT_NULL(ta_alias);
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)ta_alias);
     TEST_ASSERT_NOT_NULL(ns_name);
-    TEST_ASSERT_TRUE(is_type(ns_name, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE(ns_name && TAG(ns_name) == CLJ_SYMBOL);
     CljSymbol *ns_sym = as_symbol(ns_name);
     TEST_ASSERT_EQUAL_STRING("test.alias", ns_sym->name);
 
@@ -547,8 +546,8 @@ TEST(test_require_multiple_namespaces) {
     CljObject *m2_ns = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)m2_alias);
     TEST_ASSERT_NOT_NULL(m1_ns);
     TEST_ASSERT_NOT_NULL(m2_ns);
-    TEST_ASSERT_TRUE(is_type(m1_ns, CLJ_SYMBOL));
-    TEST_ASSERT_TRUE(is_type(m2_ns, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE(m1_ns && TAG(m1_ns) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(m2_ns && TAG(m2_ns) == CLJ_SYMBOL);
     CljSymbol *m1_sym = as_symbol(m1_ns);
     CljSymbol *m2_sym = as_symbol(m2_ns);
     TEST_ASSERT_EQUAL_STRING("test.multi1", m1_sym->name);
@@ -579,7 +578,7 @@ TEST(test_require_alias_resolution) {
     // Test namespace-qualified symbol resolution: tar/resvar
     // This will be tested once parser supports alias/symbol syntax
     // For now, just verify the alias exists
-    TEST_ASSERT_TRUE(is_type(ns_name, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE(ns_name && TAG(ns_name) == CLJ_SYMBOL);
 
 }
 

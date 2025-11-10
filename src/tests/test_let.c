@@ -270,7 +270,7 @@ TEST(test_let_with_local_function_using_reverse) {
     // This tests if local functions can use namespace functions like reverse
     CljObject *result = eval_string("(let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
     
     // Verify first element is 3
     CljList *list = as_list((ID)result);
@@ -289,7 +289,7 @@ TEST(test_let_verify_step_binding) {
     // This should return the function itself, proving step is bound
     CljObject *result = eval_string("(let [step (fn [x] (+ x 1))] step)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_FUNC) || is_type(result, CLJ_CLOSURE));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE);
 }
 
 // Test that verifies step can be called after being bound
@@ -353,7 +353,7 @@ TEST(test_let_filter_function_call) {
     // Test if filter function exists and can be called
     CljObject *filter_fn = eval_string("filter", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(filter_fn);
-    TEST_ASSERT_TRUE(is_type(filter_fn, CLJ_FUNC) || is_type(filter_fn, CLJ_CLOSURE));
+    TEST_ASSERT_TRUE(filter_fn && TAG(filter_fn) == CLJ_FUNC || filter_fn && TAG(filter_fn) == CLJ_CLOSURE);
     
     // Test a simple filter call: (filter (fn [x] true) (list 1 2 3))
     // This should return (1 2 3) if filter works
@@ -362,7 +362,7 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with (fn [x] true) returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
     
     // Test if even? works: (even? 2) => true
     CljObject *even_result = eval_string("(even? 2)", g_test_eval_state);
@@ -396,7 +396,7 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with even? returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(is_type(result2, CLJ_LIST));
+    TEST_ASSERT_TRUE(result2 && TAG(result2) == CLJ_LIST);
     
     // Verify first element is 2
     CljList *list = as_list((ID)result2);
@@ -446,7 +446,7 @@ TEST(test_let_recursive_function_with_namespace_function) {
         return;
     }
     
-    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
     
     // Verify result is (1 2 3)
     CljList *list = as_list((ID)result);
@@ -483,7 +483,7 @@ TEST(test_let_filter_step_pattern) {
         return;
     }
     
-    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
     
     // Verify result is (2)
     CljList *list = as_list((ID)result);
@@ -527,7 +527,7 @@ TEST(test_let_recursive_function_namespace_access) {
         return;
     }
     
-    TEST_ASSERT_TRUE(is_type(result, CLJ_LIST));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
     
     // Verify result is (1 2 3)
     CljList *list = as_list((ID)result);
@@ -567,7 +567,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         // Verify i is in let_env using map_get
         CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym);
         TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
-        TEST_ASSERT_TRUE(is_type(found, CLJ_ATOM));
+        TEST_ASSERT_TRUE(found && TAG(found) == CLJ_ATOM);
         
         // Create another "i" symbol (should be same pointer if interned)
         CljObject *i_sym2 = intern_symbol_global("i");
@@ -583,20 +583,20 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         // Test map_get with second symbol
         CljValue found2 = map_get((CljMap*)let_env, (CljValue)i_sym2);
         TEST_ASSERT_NOT_NULL_MESSAGE(found2, "map_get should find symbol 'i' (second instance) in let_env");
-        TEST_ASSERT_TRUE(is_type(found2, CLJ_ATOM));
+        TEST_ASSERT_TRUE(found2 && TAG(found2) == CLJ_ATOM);
         
         // Now create a simple list with "i" as an element
         // This simulates (swap! i inc) where i is at index 1
         // Use parse() to build the list structure: (swap! i inc)
         ID parsed = parse("(swap! i inc)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(parsed);
-        TEST_ASSERT_TRUE(is_type(parsed, CLJ_LIST));
+        TEST_ASSERT_TRUE(parsed && TAG(parsed) == CLJ_LIST);
         CljList *list = as_list(parsed);
         
         // Test 1: Direct eval_arg call (should work)
         ID result = eval_arg(list, 1, let_env, g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_arg should resolve symbol 'i' from let_env (direct call)");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_ATOM), "eval_arg should return atom for symbol 'i' (direct call)");
+        TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_ATOM, "eval_arg should return atom for symbol 'i' (direct call)");
         TEST_ASSERT_EQUAL_PTR_MESSAGE(atom, result, "eval_arg should return the same atom (direct call)");
         
         // Test 2: Call via eval_list (which uses call_function_with_args internally)

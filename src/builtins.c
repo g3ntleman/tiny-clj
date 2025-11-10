@@ -49,35 +49,101 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
 
 ID nth2(ID *args, unsigned int argc) {
     // nth accepts 2 or 3 arguments: (nth coll index) or (nth coll index not-found)
+    // Clojure-compatible: supports vectors (O(1)), lists (O(n)), and sequences (O(n))
     if (argc != 2 && argc != 3) {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), 
-                "nth requires exactly 2 or 3 argument%s, got %u", 
+        snprintf(error_msg, sizeof(error_msg),
+                "nth requires exactly 2 or 3 argument%s, got %u",
                 argc == 1 ? "" : "s", argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
-    ID vec = args[0];
+    ID coll = args[0];
     ID idx = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
-    if (!vec || !idx || !is_type(vec, CLJ_VECTOR) || TAG(idx) != CLJ_INT) return NULL;
-    int i = AS_FIXNUM(idx);
-    CljPersistentVector *v = as_vector(vec);
-    if (!v || i < 0 || i >= v->count) {
-        // Index out of bounds: return not-found if provided, otherwise NULL
-        if (not_found) {
-            return RETAIN(not_found);
-        }
+
+    // Validate index
+    if (!idx || TAG(idx) != CLJ_INT) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "nth requires an integer index");
         return NULL;
     }
-    return (RETAIN(v->data[i]));
+    int i = AS_FIXNUM(idx);
+    if (i < 0) {
+        return not_found ? RETAIN(not_found) : NULL;
+    }
+
+    // Handle nil collection
+    if (!coll) {
+        return not_found ? RETAIN(not_found) : NULL;
+    }
+
+    // Fast path: Vectors (O(1) access)
+    if (TAG(coll) == CLJ_VECTOR) {
+        CljPersistentVector *v = as_vector(coll);
+        if (!v || i >= v->count) {
+            return not_found ? RETAIN(not_found) : NULL;
+        }
+        ID result = v->data[i];
+        if (!result || result == SYM_NIL) {
+            return NULL;
+        }
+        return RETAIN(result);
+    }
+
+    // Fast path: Lists (O(n) access via list_nth)
+    if (TAG(coll) == CLJ_LIST) {
+        CljList *list = as_list(coll);
+        if (!list) {
+            return not_found ? RETAIN(not_found) : NULL;
+        }
+        ID result = list_nth(list, i);
+        if (!result) {
+            return not_found ? RETAIN(not_found) : NULL;
+        }
+        if (result == SYM_NIL) {
+            return NULL;
+        }
+        return RETAIN(result);
+    }
+
+    // Slow path: Sequences (O(n) access via iterator)
+    if (!is_seqable(coll)) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "nth not supported on this type");
+        return NULL;
+    }
+
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, (CljObject*)coll)) {
+        return not_found ? RETAIN(not_found) : NULL;
+    }
+
+    // Iterate to index i
+    for (int j = 0; j < i; j++) {
+        if (seq_iter_empty(&iter)) {
+            return not_found ? RETAIN(not_found) : NULL;
+        }
+        seq_iter_next(&iter);
+    }
+
+    if (seq_iter_empty(&iter)) {
+        return not_found ? RETAIN(not_found) : NULL;
+    }
+
+    ID result = seq_iter_first(&iter);
+    if (!result || result == SYM_NIL) {
+        return NULL;
+    }
+
+    return RETAIN(result);
 }
 
 // peek: returns last element of vector, or nil if empty
 ID native_peek(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "peek")) return NULL;
     ID vec = args[0];
-    if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
+    if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     CljPersistentVector *v = as_vector(vec);
     if (!v || v->count == 0) return NULL;  // nil for empty vector
     return RETAIN(v->data[v->count - 1]);  // Return last element
@@ -88,7 +154,7 @@ ID native_peek(ID *args, unsigned int argc) {
 ID native_pop(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "pop")) return NULL;
     ID vec = args[0];
-    if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
+    if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     CljPersistentVector *v = as_vector(vec);
     if (!v || v->count == 0) {
         // Return empty vector singleton (no memory management needed)
@@ -143,7 +209,7 @@ ID native_subvec(ID *args, unsigned int argc) {
     ID end_idx = argc == 3 ? args[2] : NULL;
     
     // Type validation
-    if (!vec || !is_type(vec, CLJ_VECTOR)) {
+    if (!vec || TAG(vec) != CLJ_VECTOR) {
         throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
                 "subvec requires a vector as first argument");
         return NULL;
@@ -227,7 +293,7 @@ ID conj2_wrapper(ID *args, int argc) {
 }
 
 ID conj2(ID vec, ID val) {
-    if (!vec || !is_type(vec, CLJ_VECTOR)) return NULL;
+    if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
     CljVector result = vector_conj((CljVector)vec, val);
     if (!result) return NULL;
@@ -261,7 +327,7 @@ ID native_conj(ID *args, unsigned int argc) {
         return (result);
     }
     
-    if (is_type(coll, CLJ_VECTOR)) {
+    if (coll && TAG(coll) == CLJ_VECTOR) {
         CljObject *result = coll;
         for (unsigned int i = 1; i < argc; i++) {
             CljObject *val = args[i];
@@ -474,7 +540,7 @@ ID native_reverse(ID *args, unsigned int argc) {
     }
     
     // Handle lists
-    if (is_type(coll, CLJ_LIST)) {
+    if (coll && TAG(coll) == CLJ_LIST) {
         // Safe cast - we already checked is_type
         CljList *list = (CljList*)coll;
         // Use list_count to check if list is empty (handles nil elements correctly)
@@ -486,7 +552,7 @@ ID native_reverse(ID *args, unsigned int argc) {
         CljList *result = NULL;
         CljObject *current = coll;
         
-        while (current && is_type(current, CLJ_LIST)) {
+        while (current && TAG(current) == CLJ_LIST) {
             // Safe cast - we already checked is_type
             CljList *list = (CljList*)current;
             if (!list) break;
@@ -552,7 +618,7 @@ ID assoc3(ID *args, unsigned int argc) {
     if (!coll) return NULL;
     
     // Handle vectors
-    if (is_type(coll, CLJ_VECTOR)) {
+    if (coll && TAG(coll) == CLJ_VECTOR) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljPersistentVector *v = as_vector(coll);
@@ -564,7 +630,7 @@ ID assoc3(ID *args, unsigned int argc) {
     }
     
     // Handle maps
-    if (is_type(coll, CLJ_MAP)) {
+    if (coll && TAG(coll) == CLJ_MAP) {
         if (!key) return NULL;
         // Use COW-based map_assoc (automatically handles RC=1 in-place, RC>1 COW)
         // map_assoc always returns a map (either the same or a new one), never NULL
@@ -583,11 +649,11 @@ ID native_transient(ID *args, unsigned int argc) {
     CljObject *coll = args[0];
     if (!coll) return (NULL);
     
-    if (is_type(coll, CLJ_VECTOR)) {
+    if (coll && TAG(coll) == CLJ_VECTOR) {
         return ((CljObject*)transient((CljValue)coll));
-    } else if (is_type(coll, CLJ_MAP)) {
+    } else if (coll && TAG(coll) == CLJ_MAP) {
         return ((CljObject*)map_transient((CljMap*)coll));
-    } else if (is_type(coll, CLJ_TRANSIENT_VECTOR) || is_type(coll, CLJ_TRANSIENT_MAP)) {
+    } else if ((coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) || (coll && TAG(coll) == CLJ_TRANSIENT_MAP)) {
         // Clojure-compatible: transient on transient returns the same object
         return (coll);
     }
@@ -605,11 +671,11 @@ ID native_persistent(ID *args, unsigned int argc) {
     CljObject *coll = args[0];
     if (!coll) return (NULL);
     
-    if (is_type(coll, CLJ_TRANSIENT_VECTOR)) {
+    if (coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) {
         return ((CljObject*)persistent((CljValue)coll));
-    } else if (is_type(coll, CLJ_TRANSIENT_MAP)) {
+    } else if (coll && TAG(coll) == CLJ_TRANSIENT_MAP) {
         return ((CljObject*)map_persistent((CljMap*)coll));
-    } else if (is_type(coll, CLJ_VECTOR) || is_type(coll, CLJ_MAP)) {
+    } else if ((coll && TAG(coll) == CLJ_VECTOR) || (coll && TAG(coll) == CLJ_MAP)) {
         // Clojure-compatible: persistent! on persistent returns the same object
         return (coll);
     }
@@ -628,14 +694,14 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     if (!coll) return NULL;
     
     
-    if (is_type(coll, CLJ_TRANSIENT_VECTOR)) {
+    if (coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) {
         CljValue result = (CljValue)coll;
         for (unsigned int i = 1; i < argc; i++) {
             result = clj_conj(result, (CljValue)args[i]);
             if (!result) return NULL;
         }
         return (CljObject*)result;
-    } else if (is_type(coll, CLJ_TRANSIENT_MAP)) {
+    } else if (coll && TAG(coll) == CLJ_TRANSIENT_MAP) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
         return (CljObject*)map_conj((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
     }
@@ -653,7 +719,7 @@ ID native_get(ID *args, unsigned int argc) {
     CljObject *key = (CljObject*)args[1];
     if (!map || !key) return (NULL);
     
-    if (is_type(map, CLJ_MAP) || is_type(map, CLJ_TRANSIENT_MAP)) {
+    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
         return map_get((CljMap*)map, (ID)key);
     }
     
@@ -673,19 +739,19 @@ ID native_count(ID *args, unsigned int argc) {
     }
     
     // Handle CLJ_SEQ (sequences from rest, etc.)
-    if (is_type(coll, CLJ_SEQ)) {
+    if (coll && TAG(coll) == CLJ_SEQ) {
         return fixnum(seq_count((ID)coll));
     }
     
-    if (is_type(coll, CLJ_MAP) || is_type(coll, CLJ_TRANSIENT_MAP)) {
+    if (coll && (TAG(coll) == CLJ_MAP || TAG(coll) == CLJ_TRANSIENT_MAP)) {
         return (fixnum(map_count((CljMap*)coll)));
-    } else if (is_type(coll, CLJ_VECTOR) || is_type(coll, CLJ_TRANSIENT_VECTOR)) {
+    } else if (coll && (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_TRANSIENT_VECTOR)) {
         CljPersistentVector *vec = as_vector(coll);
         return (fixnum(vec ? vec->count : 0));
-    } else if (is_type(coll, CLJ_LIST)) {
+    } else if (coll && TAG(coll) == CLJ_LIST) {
         CljList *list = as_list(coll);
         return (fixnum(list_count(list)));
-    } else if (is_type(coll, CLJ_STRING)) {
+    } else if (coll && TAG(coll) == CLJ_STRING) {
         CljString *str = (CljString*)coll;
         
  
@@ -701,7 +767,7 @@ ID native_keys(ID *args, unsigned int argc) {
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
-    if (is_type(map, CLJ_MAP) || is_type(map, CLJ_TRANSIENT_MAP)) {
+    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
         return map_keys((ID)map);
     }
     
@@ -713,7 +779,7 @@ ID native_vals(ID *args, unsigned int argc) {
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
-    if (is_type(map, CLJ_MAP) || is_type(map, CLJ_TRANSIENT_MAP)) {
+    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
         return map_vals((ID)map);
     }
     
@@ -860,7 +926,7 @@ ID native_vec(ID *args, unsigned int argc) {
     // If already a vector, return same object (No-Op - Clojure behavior)
     // Note: coll is already AUTORELEASEd by eval_arg, so we need to AUTORELEASE it again
     // to ensure it's in the caller's pool
-    if (is_type(coll, CLJ_VECTOR)) {
+    if (coll && TAG(coll) == CLJ_VECTOR) {
         return AUTORELEASE(coll);
     }
     
@@ -1276,12 +1342,12 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
 static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *target_ns, CljObject *symbols) {
     if (!source_ns || !target_ns || !symbols) return;
     
-    if (!is_type(symbols, CLJ_VECTOR)) return;
+    if (!symbols || TAG(symbols) != CLJ_VECTOR) return;
     
     CljPersistentVector *vec = as_vector(symbols);
     for (int i = 0; i < vec->count; i++) {
         CljObject *sym = vec->data[i];
-        if (!sym || !is_type(sym, CLJ_SYMBOL)) continue;
+        if (!sym || TAG(sym) != CLJ_SYMBOL) continue;
         
         // Look up symbol in source namespace
         CljObject *val = (CljObject*)map_get((CljMap*)source_ns->mappings, (CljValue)sym);
@@ -1332,13 +1398,13 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     bool ns_name_allocated = false;
     
     // Handle simple Symbol case: (require 'namespace)
-    if (is_type(spec, CLJ_SYMBOL)) {
+    if (spec && TAG(spec) == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(spec);
         if (!sym || !sym->name) return false;
         ns_name = sym->name;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
-    else if (is_type(spec, CLJ_VECTOR)) {
+    else if (spec && TAG(spec) == CLJ_VECTOR) {
         vec = as_vector(spec);
         if (vec->count < 1) return false;
         
@@ -1346,7 +1412,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         CljObject *ns_obj = vec->data[0];
         if (!ns_obj) return false;
         
-        if (is_type(ns_obj, CLJ_SYMBOL)) {
+        if (ns_obj && TAG(ns_obj) == CLJ_SYMBOL) {
             CljSymbol *ns_sym = as_symbol(ns_obj);
             if (!ns_sym || !ns_sym->name) return false;
             ns_name = ns_sym->name;
@@ -1363,7 +1429,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             if (!elem) continue;
             
             // Check if it's a keyword (Symbol starting with :)
-            if (is_type(elem, CLJ_SYMBOL)) {
+            if (elem && TAG(elem) == CLJ_SYMBOL) {
                 CljSymbol *kw = as_symbol(elem);
                 if (!kw || !kw->name) continue;
                 
@@ -1377,12 +1443,12 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                     // :refer [symbols] or :refer :all
                     if (i + 1 < vec->count) {
                         CljObject *refer_arg = vec->data[i + 1];
-                        if (is_type(refer_arg, CLJ_SYMBOL)) {
+                        if (refer_arg && TAG(refer_arg) == CLJ_SYMBOL) {
                             CljSymbol *refer_sym = as_symbol(refer_arg);
                             if (refer_sym && refer_sym->name && strcmp(refer_sym->name, ":all") == 0) {
                                 refer_all = true;
                             }
-                        } else if (is_type(refer_arg, CLJ_VECTOR)) {
+                        } else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR) {
                             refer_syms = refer_arg;
                         }
                         i++; // Skip next element
@@ -1400,7 +1466,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljNamespace *existing = ns_find(ns_name);
     if (existing) {
         // Namespace already loaded - just set alias/refer if needed
-        if (alias_sym && is_type(alias_sym, CLJ_SYMBOL)) {
+        if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
             CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
             if (ns_name_sym) {
                 ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
@@ -1445,7 +1511,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     
     // Evaluate source in current state
     const char *orig_ns = NULL;
-    if (st && st->current_ns && st->current_ns->name && is_type(st->current_ns->name, CLJ_SYMBOL)) {
+    if (st && st->current_ns && st->current_ns->name && TAG(st->current_ns->name) == CLJ_SYMBOL) {
         orig_ns = as_symbol(st->current_ns->name)->name;
     }
     
@@ -1468,7 +1534,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     // Now that namespace is loaded, set alias/refer if needed
     CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns) {
-        if (alias_sym && is_type(alias_sym, CLJ_SYMBOL)) {
+        if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
             CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
             if (ns_name_sym) {
                 ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
@@ -2101,7 +2167,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
     }
     
     // For now, only support vectors as sequences
-    if (is_type(seq, CLJ_VECTOR)) {
+    if (seq && TAG(seq) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector(seq);
         CljValue arr = (CljValue)make_byte_array(vec->count);
         
@@ -2134,7 +2200,7 @@ ID native_aget(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "aget")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
-    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
+    if (!arr || TAG(arr) != CLJ_BYTE_ARRAY) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aget first argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2155,7 +2221,7 @@ ID native_aset(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 3, "aset")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
-    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
+    if (!arr || TAG(arr) != CLJ_BYTE_ARRAY) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aset first argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2190,7 +2256,7 @@ ID native_alength(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "alength")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
-    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
+    if (!arr || TAG(arr) != CLJ_BYTE_ARRAY) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "alength argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2204,7 +2270,7 @@ ID native_aclone(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "aclone")) return NULL;
     
     CljObject *arr = (CljObject*)args[0];
-    if (!arr || !is_type(arr, CLJ_BYTE_ARRAY)) {
+    if (!arr || TAG(arr) != CLJ_BYTE_ARRAY) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "aclone argument must be a byte-array",
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2308,7 +2374,7 @@ ID native_identical(ID *args, unsigned int argc) {
 
 ID native_vector_p(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "vector?")) return clj_false;
-    return is_type((CljObject*)args[0], CLJ_VECTOR) ? clj_true : clj_false;
+    return (args[0] && TAG(args[0]) == CLJ_VECTOR) ? clj_true : clj_false;
 }
 
 // native_time removed: time is now only a special form (eval_time)
@@ -2391,7 +2457,7 @@ ID native_deref(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "deref")) return NULL;
     
     ID obj = args[0];
-    if (!obj || !is_type((CljObject*)obj, CLJ_ATOM)) {
+    if (!obj || TAG(obj) != CLJ_ATOM) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "deref requires an atom", 
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2408,7 +2474,7 @@ ID native_reset_bang(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "reset!")) return NULL;
     
     ID obj = args[0];
-    if (!obj || !is_type((CljObject*)obj, CLJ_ATOM)) {
+    if (!obj || TAG(obj) != CLJ_ATOM) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "reset! requires an atom", 
                        __FILE__, __LINE__, 0);
         return NULL;
@@ -2431,7 +2497,7 @@ ID native_swap_bang(ID *args, unsigned int argc) {
     }
     
     CljObject *obj = args[0];
-    if (!obj || !is_type(obj, CLJ_ATOM)) {
+    if (!obj || TAG(obj) != CLJ_ATOM) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom", 
                        __FILE__, __LINE__, 0);
         return NULL;

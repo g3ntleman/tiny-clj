@@ -138,27 +138,7 @@ static inline bool is_singleton(CljObject *obj) {
 // - CljByteArray -> byte_array.h
 // - CLJException -> exception.h
 
-// Type checking helper (accepts ID for convenience)
-static inline bool is_type(ID obj, CljType expected_type) {
-    if (!obj) return false;
-    // Check if it's an immediate value (CljValue) being passed as CljObject*
-    // Immediate values have odd addresses (tagged pointers)
-    if ((uintptr_t)obj & 0x1) return false;
-    
-#ifdef DEBUG
-    // Check for zombie object before accessing type
-    CljObject *obj_ptr = (CljObject*)obj;
-    if (obj_ptr && (uintptr_t)obj_ptr >= 0x1000 && obj_ptr->rc == ZOMBIE_RC) {
-        // Zombie detected: throw exception with stacktrace and zombie object
-        // Note: We need to include exception.h for this, but to avoid circular dependency,
-        // we'll just return false here and let TAG() macro handle the exception
-        // Actually, TAG() macro will access obj->type, which will trigger zombie detection there
-        // So we can just let it fall through to TAG() macro
-    }
-#endif
-    
-    return TAG(obj) == expected_type;
-}
+// is_type() function removed - use TAG(obj) == expected_type directly
 
 // Equality comparison
 /** Structural equality for collections; pointer equality fast path. */
@@ -196,7 +176,7 @@ static inline bool clj_is_truthy(CljObject *v) {
 
 // Type-safe casting with exception throwing (DRY principle)
 static inline void* assert_type(CljObject *obj, CljType expected_type) {
-    if (!is_type(obj, expected_type)) {
+    if (!obj || TAG(obj) != expected_type) {
 #ifdef DEBUG
         // Direct error output with expected and actual types
         const char *actual_type = obj ? "Object" : "NULL";

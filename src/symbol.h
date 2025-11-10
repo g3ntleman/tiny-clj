@@ -20,7 +20,7 @@ static inline CljSymbol* as_symbol(ID obj) {
 
 // Check if an object is a keyword (symbol starting with ':')
 static inline bool is_keyword(ID obj) {
-    if (!is_type((CljObject*)obj, CLJ_SYMBOL)) return false;
+    if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
     CljSymbol *sym = as_symbol(obj);
     return sym && sym->name && sym->name[0] == ':';
 }

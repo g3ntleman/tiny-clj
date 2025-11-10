@@ -34,10 +34,7 @@ TEST(test_integer_overflow_detection) {
     bool exception_caught = false;
     TRY {
         CljObject *result = eval_string("(+ 2000000000 2000000000)", g_test_eval_state);
-        if (result) {
-            printf("WARNING: Addition overflow did not throw exception, result: %d\n", 
-                   (TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0);
-        }
+        (void)result;  // Suppress unused variable warning
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
@@ -50,10 +47,7 @@ TEST(test_integer_overflow_detection) {
     exception_caught = false;
     TRY {
         CljObject *result = eval_string("(+ 2147483640 10)", g_test_eval_state);
-        if (result) {
-            printf("WARNING: Addition overflow did not throw exception, result: %d\n", 
-                   (TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0);
-        }
+        (void)result;  // Suppress unused variable warning
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
@@ -65,10 +59,7 @@ TEST(test_integer_overflow_detection) {
     exception_caught = false;
     TRY {
         CljObject *result = eval_string("(+ -2000000000 -2000000000)", g_test_eval_state);
-        if (result) {
-            printf("WARNING: Addition underflow did not throw exception, result: %d\n", 
-                   is_fixnum((CljValue)result) ? as_fixnum((CljValue)result) : 0);
-        }
+        (void)result;  // Suppress unused variable warning
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
@@ -80,10 +71,7 @@ TEST(test_integer_overflow_detection) {
     exception_caught = false;
     TRY {
         CljObject *result = eval_string("(- -2000000000 2000000000)", g_test_eval_state);
-        if (result) {
-            printf("WARNING: Subtraction underflow did not throw exception, result: %d\n", 
-                   is_fixnum((CljValue)result) ? as_fixnum((CljValue)result) : 0);
-        }
+        (void)result;  // Suppress unused variable warning
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
@@ -95,10 +83,7 @@ TEST(test_integer_overflow_detection) {
     exception_caught = false;
     TRY {
         CljObject *result = eval_string("(- 2000000000 -2000000000)", g_test_eval_state);
-        if (result) {
-            printf("WARNING: Subtraction overflow did not throw exception, result: %d\n", 
-                   is_fixnum((CljValue)result) ? as_fixnum((CljValue)result) : 0);
-        }
+        (void)result;  // Suppress unused variable warning
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);
@@ -110,13 +95,7 @@ TEST(test_integer_overflow_detection) {
     exception_caught = false;
     TRY {
         CljObject *result = eval_string("(* 100000 100000)", g_test_eval_state);
-        if (result) {
-            int result_val = (TAG(result) == CLJ_INT) ? as_fixnum((CljValue)result) : 0;
-            // 100000 * 100000 = 10000000000, which exceeds INT_MAX (2147483647)
-            if (result_val > 0 && result_val < 10000000000) {
-                printf("WARNING: Multiplication may have overflowed without exception\n");
-            }
-        }
+        (void)result;  // Suppress unused variable warning
     } CATCH(ex) {
         exception_caught = true;
         TEST_ASSERT_NOT_NULL(ex);

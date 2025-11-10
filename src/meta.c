@@ -158,7 +158,7 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
     if (!existing_meta) return location_meta;
     
     // Check if both are maps
-    if (!is_type(existing_meta, CLJ_MAP) || !is_type(location_meta, CLJ_MAP)) {
+    if (!existing_meta || TAG(existing_meta) != CLJ_MAP || !location_meta || TAG(location_meta) != CLJ_MAP) {
         return existing_meta; // Return existing if types don't match
     }
     

@@ -46,7 +46,7 @@ TEST(test_inc_symbol_interning_during_load) {
             const char *first_symbol = NULL;
             for (int i = 0; i < map->count; i++) {
                 CljObject *key = KV_KEY(map->data, i);
-                if (key && is_type(key, CLJ_SYMBOL)) {
+                if (key && key && TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
                     if (!first_symbol && sym->name) {
@@ -55,7 +55,8 @@ TEST(test_inc_symbol_interning_during_load) {
                     // Check if this is inc by name
                     if (sym->name && strcmp(sym->name, "inc") == 0) {
                         // Found inc by name - check if it's the same pointer
-                        if (key != inc_sym_after) {
+                        CljSymbol *key_sym = (CljSymbol*)key;
+                        if (key_sym != inc_sym_after) {
                             char msg[256];
                             snprintf(msg, sizeof(msg),
                                     "Found 'inc' in mappings but with different symbol pointer! "
@@ -99,12 +100,12 @@ TEST(test_inc_symbol_pointer_consistency) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
-    if (is_type(form, CLJ_LIST)) {
+    if (form && TAG(form) == CLJ_LIST) {
         CljList *list = as_list(form);
         CljObject *inc_sym_in_form = (CljObject*)list_nth(list, 1);
         
         TEST_ASSERT_NOT_NULL(inc_sym_in_form);
-        TEST_ASSERT_TRUE(is_type(inc_sym_in_form, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE(inc_sym_in_form && TAG(inc_sym_in_form) == CLJ_SYMBOL);
         
         // Get inc symbol after parsing
         CljSymbol *inc_sym_after = intern_symbol_global("inc");
@@ -133,8 +134,8 @@ TEST(test_inc_symbol_pointer_consistency) {
                     snprintf(msg, sizeof(msg),
                             "inc not found in mappings after def. "
                             "Form symbol: %p, Interned symbol: %p, Equal: %d",
-                            inc_sym_in_form, inc_sym_after,
-                            (inc_sym_in_form == inc_sym_after) ? 1 : 0);
+                            (void*)inc_sym_in_form, (void*)inc_sym_after,
+                            ((CljSymbol*)inc_sym_in_form == inc_sym_after) ? 1 : 0);
                     TEST_FAIL_MESSAGE(msg);
                 }
             }

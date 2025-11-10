@@ -95,7 +95,7 @@ static void print_result(CljObject *v) {
     }
     
     // For symbols, print their name with namespace if present
-    if (is_type(v, CLJ_SYMBOL)) {
+    if (v && TAG(v) == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(v);
         if (sym && sym->name[0] != '\0') {
             // Delegate to pr_str for correct formatting (handles :: and ns/)
@@ -206,7 +206,7 @@ static bool eval_string_repl(const char *code, EvalState *st) {
  *  @return New vector with last N elements (or original if smaller)
  */
 CljObject* history_trim_last_n(CljObject *vec, int limit) {
-    if (!vec || !is_type(vec, CLJ_VECTOR) || limit <= 0) return (CljObject*)make_vector(0, 0);
+    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return (CljObject*)make_vector(0, 0);
     CljPersistentVector *v = as_vector(vec);
     if (!v || v->count <= limit) return RETAIN(vec);
     int start = v->count - limit;
@@ -225,7 +225,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
  *  @return true if successful
  */
 bool history_save_to_file(CljObject *vec, const char *path) {
-    if (!path || !vec || !is_type(vec, CLJ_VECTOR)) return false;
+    if (!path || !vec || TAG(vec) != CLJ_VECTOR) return false;
     CljObject *trimmed = history_trim_last_n(vec, 50);
     const char *s = pr_str(trimmed);
     FILE *fp = fopen(path, "w");
@@ -260,11 +260,11 @@ CljObject* history_load_from_file(const char *path) {
     EvalState *st = evalstate_new(false);
     TRY {
         ID form = value_by_parsing_expr(&rd, st);
-        if (form && is_type((CljObject*)form, CLJ_VECTOR)) {
+        if (form && TAG(form) == CLJ_VECTOR) {
             CljPersistentVector *v = as_vector((CljObject*)form);
             bool all_strings = true;
             for (int i = 0; i < (v ? v->count : 0); i++) {
-                if (!is_type(v->data[i], CLJ_STRING)) { all_strings = false; break; }
+                if (!v->data[i] || TAG(v->data[i]) != CLJ_STRING) { all_strings = false; break; }
             }
             if (all_strings) {
                 // form is already AUTORELEASEd from parse_expr (in the current pool)
@@ -300,26 +300,6 @@ __attribute__((unused)) static void usage(const char *prog) {
  *  @param exit_code Exit code to use
  */
 __attribute__((unused)) static void cleanup_and_exit(const char **eval_args, int exit_code) {
-    // Print memory profiling stats
-#ifdef ENABLE_MEMORY_PROFILING
-    printf("\n🔍 === REPL Memory Profiling Stats ===\n");
-    MEMORY_PROFILER_PRINT_STATS("REPL Session");
-    
-#ifdef DEBUG
-    // Also call the function directly to ensure it works
-    memory_profiler_print_stats("REPL Session Direct");
-    
-    // Force print some debug information
-    printf("🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
-           g_memory_stats.total_allocations, g_memory_stats.total_deallocations, 
-           g_memory_stats.retain_calls, g_memory_stats.release_calls, g_memory_stats.autorelease_calls);
-#endif
-    
-    printf("📊 Final memory state before exit\n");
-#else
-    printf("\n🔍 Memory profiling disabled - no stats available\n");
-#endif
-    
     if (eval_args) free(eval_args);
     exit(exit_code);
 }
@@ -334,13 +314,8 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
     
-    // Enable verbose memory mode for REPL
-    g_memory_verbose_mode = true;
-    
-    // Memory profiling is now initialized and ready
-    printf("🔍 Memory profiling initialized for REPL (Debug Build)\n");
-#else
-    printf("🔍 Memory profiling disabled for REPL (Release Build)\n");
+    // Disable verbose memory mode for REPL (memory logging disabled)
+    g_memory_verbose_mode = false;
 #endif
 
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
@@ -367,7 +342,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     WITH_AUTORELEASE_POOL({
         TRY {
             CljObject *loaded = line_editor_history_load_default();
-            if (loaded && is_type(loaded, CLJ_VECTOR)) {
+            if (loaded && TAG(loaded) == CLJ_VECTOR) {
                 line_editor_set_history_from_vector(editor, loaded);
             } else {
                 line_editor_clear_history(editor);
@@ -382,12 +357,6 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     while (true) {
         // Print prompt only once per input cycle to avoid flooding
         if (!prompt_shown) {
-#ifdef ENABLE_MEMORY_PROFILING
-            // Enable debug output AFTER the first prompt is about to be shown
-            if (!prompt_shown) {
-                enable_memory_debug_output();
-            }
-#endif
             print_prompt(st, form_balance(acc, NULL) == 0);
             prompt_shown = true;
         }
@@ -463,48 +432,6 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
         // Use eval_string_repl for proper exception handling
         bool success = eval_string_repl(acc, st);
         
-        // Show memory stats after each evaluation (if enabled)
-#ifdef ENABLE_MEMORY_PROFILING
-        if (g_memory_verbose_mode) {
-#ifdef DEBUG
-            printf("🔍 Memory: %zu allocs, %zu deallocs, %zu bytes\n", 
-                   g_memory_stats.total_allocations,
-                   g_memory_stats.total_deallocations,
-                   g_memory_stats.current_memory_usage);
-            
-            // Show detailed type breakdown - one line per type
-            if (g_memory_stats.allocations_by_type[CLJ_SYMBOL] > 0 || g_memory_stats.deallocations_by_type[CLJ_SYMBOL] > 0) {
-                printf("📋 Symbol: A:%zu/%zu R:%zu AR:%zu\n", 
-                       g_memory_stats.allocations_by_type[CLJ_SYMBOL], g_memory_stats.deallocations_by_type[CLJ_SYMBOL],
-                       g_memory_stats.retains_by_type[CLJ_SYMBOL], g_memory_stats.autoreleases_by_type[CLJ_SYMBOL]);
-            }
-            if (g_memory_stats.allocations_by_type[CLJ_STRING] > 0 || g_memory_stats.deallocations_by_type[CLJ_STRING] > 0) {
-                printf("📋 String: A:%zu/%zu R:%zu Rel:%zu AR:%zu\n", 
-                       g_memory_stats.allocations_by_type[CLJ_STRING], g_memory_stats.deallocations_by_type[CLJ_STRING],
-                       g_memory_stats.retains_by_type[CLJ_STRING], g_memory_stats.releases_by_type[CLJ_STRING], g_memory_stats.autoreleases_by_type[CLJ_STRING]);
-            }
-            if (g_memory_stats.allocations_by_type[CLJ_VECTOR] > 0 || g_memory_stats.deallocations_by_type[CLJ_VECTOR] > 0) {
-                printf("📋 Vector: A:%zu/%zu Rel:%zu\n", 
-                       g_memory_stats.allocations_by_type[CLJ_VECTOR], g_memory_stats.deallocations_by_type[CLJ_VECTOR],
-                       g_memory_stats.releases_by_type[CLJ_VECTOR]);
-            }
-            if (g_memory_stats.allocations_by_type[CLJ_LIST] > 0 || g_memory_stats.deallocations_by_type[CLJ_LIST] > 0) {
-                printf("📋 List: A:%zu/%zu R:%zu AR:%zu\n", 
-                       g_memory_stats.allocations_by_type[CLJ_LIST], g_memory_stats.deallocations_by_type[CLJ_LIST],
-                       g_memory_stats.retains_by_type[CLJ_LIST], g_memory_stats.autoreleases_by_type[CLJ_LIST]);
-            }
-#else
-            // In release builds, only show if there are actual allocations
-            if (g_memory_stats.total_allocations > 0) {
-                printf("🔍 Memory: %zu allocs, %zu deallocs, %zu bytes\n", 
-                       g_memory_stats.total_allocations,
-                       g_memory_stats.total_deallocations,
-                       g_memory_stats.current_memory_usage);
-            }
-#endif
-        }
-#endif
-        
         // Always add command to history (successful or failed) so user can correct it
         if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
@@ -534,25 +461,6 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     });
 #endif
 
-    // Print memory profiling stats before exiting REPL
-#ifdef ENABLE_MEMORY_PROFILING
-    printf("\n🔍 === REPL Memory Profiling Stats (EOF) ===\n");
-    MEMORY_PROFILER_PRINT_STATS("REPL Session");
-    
-#ifdef DEBUG
-    // Also call the function directly to ensure it works
-    memory_profiler_print_stats("REPL Session Direct");
-    
-    // Force print some debug information
-    printf("🔍 Debug: Total allocs=%zu, deallocs=%zu, retains=%zu, releases=%zu, autoreleases=%zu\n", 
-           g_memory_stats.total_allocations, g_memory_stats.total_deallocations, 
-           g_memory_stats.retain_calls, g_memory_stats.release_calls, g_memory_stats.autorelease_calls);
-#endif
-    
-    printf("📊 Final memory state before exit\n");
-#else
-    printf("\n🔍 Memory profiling disabled - no stats available\n");
-#endif
 
     return true;
 }

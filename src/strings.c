@@ -175,7 +175,7 @@ const char* to_string(CljObject *v) {
                 
                 // Tail-Elemente hinzufügen
                 CljObject *current = LIST_REST(list);
-                while (current && is_type(current, CLJ_LIST) && count < 1000) {
+                while (current && TAG(current) == CLJ_LIST && count < 1000) {
                     CljList *current_list = as_list(current);
                     if (current_list && current_list->first) {
                         elements[count++] = current_list->first;
@@ -397,7 +397,7 @@ const char* pr_str(CljObject *v) {
     }
     
     // pr_str adds quotes around strings
-    if (is_type(v, CLJ_STRING)) {
+    if (v && TAG(v) == CLJ_STRING) {
         const char *raw = to_string(v);
         if (!raw) return strdup("\"\"");
         

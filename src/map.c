@@ -76,7 +76,7 @@ ID map_get(CljMap *map, ID key) {
     if (stored_key && clj_equal(stored_key, key_obj)) {
       // DEBUG: Throw exception if structural equality but not pointer equality
       // This indicates that symbols are not correctly interned
-      if (is_type(stored_key, CLJ_SYMBOL) && is_type(key_obj, CLJ_SYMBOL)) {
+      if (stored_key && TAG(stored_key) == CLJ_SYMBOL && key_obj && TAG(key_obj) == CLJ_SYMBOL) {
         CljSymbol *stored_sym = as_symbol(stored_key);
         throw_exception_formatted("SymbolInterningError", __FILE__, __LINE__, 0,
             "Symbol '%s' found by structural equality but not pointer equality. "
@@ -97,7 +97,7 @@ ID map_get(CljMap *map, ID key) {
  * To re-enable COW: Change #if 0 to #if 1 below to enable RC=1 hot-path.
  */
 CljMap* map_assoc(CljMap* map, ID key, ID value) {
-  if (!map || !is_type((CljObject*)map, CLJ_MAP)) {
+  if (!map || TAG(map) != CLJ_MAP) {
     return map;  // Return original map on error
   }
   
@@ -205,7 +205,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
     new_idx++;
   }
   
-  // Set final count
+  // Set final count - new_idx is the number of entries copied/updated/added
   new_map->count = new_idx;
   
   return new_map;  // Return NEW map
@@ -315,7 +315,7 @@ int map_contains(CljMap *map, ID key) {
     if (stored_key && clj_equal(stored_key, key_obj)) {
       // DEBUG: Throw exception if structural equality but not pointer equality
       // This indicates that symbols are not correctly interned
-      if (is_type(stored_key, CLJ_SYMBOL) && is_type(key_obj, CLJ_SYMBOL)) {
+      if (stored_key && TAG(stored_key) == CLJ_SYMBOL && key_obj && TAG(key_obj) == CLJ_SYMBOL) {
         CljSymbol *stored_sym = as_symbol(stored_key);
         throw_exception_formatted("SymbolInterningError", __FILE__, __LINE__, 0,
             "Symbol '%s' found by structural equality but not pointer equality. "

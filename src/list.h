@@ -34,7 +34,7 @@ static inline CljList* as_list(ID obj) {
         // NULL is valid (e.g., end of list) - return NULL
         return NULL;
     }
-    if (!is_type((CljObject*)obj, CLJ_LIST)) {
+    if (TAG(obj) != CLJ_LIST) {
         char error_msg[128];
         const char *type_name = clj_type_name(((CljObject*)obj)->type);
         snprintf(error_msg, sizeof(error_msg), 

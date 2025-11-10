@@ -11,7 +11,7 @@ typedef struct {
 
 // Type-safe casting
 static inline CljAtom* as_atom(ID obj) {
-    if (!is_type(obj, CLJ_ATOM)) {
+    if (!obj || TAG(obj) != CLJ_ATOM) {
 #ifdef DEBUG
         const char *actual_type = obj ? "Atom" : "NULL";
         fprintf(stderr, "Assertion failed: Expected Atom, got %s at %s:%d\n", 

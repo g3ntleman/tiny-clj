@@ -76,10 +76,10 @@ static bool eval_core_source(const char *src, EvalState *st) {
         // NULL result could be nil (legitimate) or evaluation failure
         // For def expressions, the symbol should be stored even if result is NULL
         // Check if this was a def expression that might have stored something
-        if (is_type(form, CLJ_LIST)) {
+        if (form && TAG(form) == CLJ_LIST) {
           CljList *list = as_list(form);
           CljObject *first = LIST_FIRST(list);
-          if (is_type(first, CLJ_SYMBOL) && as_symbol(first) == SYM_DEF) {
+          if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
             // def returns the symbol, not the value
             // Even if value evaluation failed, def might have stored nil
             success_count++;
@@ -90,10 +90,10 @@ static bool eval_core_source(const char *src, EvalState *st) {
       // Exception occurred during evaluation
       // Log the exception for debugging (always log for def expressions to catch silent failures)
       bool is_def_expr = false;
-      if (is_type(form, CLJ_LIST)) {
-        CljList *list = as_list(form);
-        CljObject *first = LIST_FIRST(list);
-        if (is_type(first, CLJ_SYMBOL) && as_symbol(first) == SYM_DEF) {
+        if (form && TAG(form) == CLJ_LIST) {
+          CljList *list = as_list(form);
+          CljObject *first = LIST_FIRST(list);
+          if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
           is_def_expr = true;
         }
       }
@@ -172,7 +172,7 @@ int load_clojure_core(EvalState *st) {
           return 0;
         }
         // Verify it's a function
-        if (!is_type(inc_value, CLJ_FUNC) && !is_type(inc_value, CLJ_CLOSURE)) {
+        if (!inc_value || (TAG(inc_value) != CLJ_FUNC && TAG(inc_value) != CLJ_CLOSURE)) {
           fprintf(stderr, "[clojure.core] CRITICAL: 'inc' is not a function (type: %d)!\n", ((CljObject*)inc_value)->type);
           return 0;
         }

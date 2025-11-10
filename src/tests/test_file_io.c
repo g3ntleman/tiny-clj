@@ -31,9 +31,9 @@ TEST(test_history_roundtrip_basic) {
     CljPersistentVector *v = as_vector(loaded);
     TEST_ASSERT_NOT_NULL(v);
     TEST_ASSERT_EQUAL_INT(as_fixnum((CljValue)c), v->count);
-    TEST_ASSERT_TRUE(is_type(v->data[0], CLJ_STRING));
-    TEST_ASSERT_TRUE(is_type(v->data[1], CLJ_STRING));
-    TEST_ASSERT_TRUE(is_type(v->data[2], CLJ_STRING));
+    TEST_ASSERT_TRUE(v->data[0] && TAG(v->data[0]) == CLJ_STRING);
+    TEST_ASSERT_TRUE(v->data[1] && TAG(v->data[1]) == CLJ_STRING);
+    TEST_ASSERT_TRUE(v->data[2] && TAG(v->data[2]) == CLJ_STRING);
 
 }
 
@@ -134,7 +134,7 @@ TEST(test_slurp_reads_file) {
     
     // Verify result is a string
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_STRING));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
     
     // Verify content
     CljString *str = as_clj_string(result);
@@ -178,7 +178,7 @@ TEST(test_slurp_empty_file) {
     
     // Verify result is empty string
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_STRING));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
     
     CljString *str = as_clj_string(result);
     TEST_ASSERT_EQUAL_INT(0, string_length(str));
@@ -215,7 +215,7 @@ TEST(test_slurp_multiline_content) {
     
     // Verify result contains all lines
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_STRING));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_STRING);
     
     CljString *str = as_clj_string(result);
     TEST_ASSERT_EQUAL_STRING(content, clj_string_data(str));
@@ -245,7 +245,7 @@ TEST(test_spit_writes_file) {
     CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
-    TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
+    TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
     
     CljString *str = as_clj_string(read_result);
     TEST_ASSERT_EQUAL_STRING("Hello from spit!", clj_string_data(str));
@@ -271,7 +271,7 @@ TEST(test_spit_overwrites_file) {
     CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
-    TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
+    TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
     
     CljString *str = as_clj_string(read_result);
     TEST_ASSERT_EQUAL_STRING("New content", clj_string_data(str));
@@ -300,7 +300,7 @@ TEST(test_spit_multiline_content) {
     CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
-    TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
+    TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
     
     CljString *str = as_clj_string(read_result);
     TEST_ASSERT_EQUAL_STRING(content, clj_string_data(str));
@@ -326,7 +326,7 @@ TEST(test_spit_empty_string) {
     CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
-    TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
+    TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
     
     CljString *str = as_clj_string(read_result);
     TEST_ASSERT_EQUAL_INT(0, string_length(str));
@@ -355,7 +355,7 @@ TEST(test_spit_slurp_roundtrip) {
     CljObject *read_result = eval_string(expr, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(read_result);
-    TEST_ASSERT_TRUE(is_type(read_result, CLJ_STRING));
+    TEST_ASSERT_TRUE(read_result && TAG(read_result) == CLJ_STRING);
     
     CljString *str = as_clj_string(read_result);
     TEST_ASSERT_EQUAL_STRING(original_content, clj_string_data(str));

@@ -184,9 +184,6 @@ TEST(test_parameter_lookup_optimization) {
     gettimeofday(&end, NULL);
     double elapsed_ms = (end.tv_sec - start.tv_sec) * 1000.0 + 
                        (end.tv_usec - start.tv_usec) / 1000.0;
-    
-    printf("Baseline: 100 function calls with parameter lookups took %.2f ms\n", elapsed_ms);
-    
 }
 
 // ============================================================================
@@ -209,7 +206,7 @@ TEST(test_defn_symbol_recognized) {
         TEST_ASSERT_NOT_NULL(list);
         CljObject *defn_sym = LIST_FIRST(list);
         TEST_ASSERT_NOT_NULL(defn_sym);
-        TEST_ASSERT_TRUE_MESSAGE(is_type(defn_sym, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(defn_sym && TAG(defn_sym) == CLJ_SYMBOL, 
                                  "first element should be a symbol");
         
         // Check if defn_sym matches SYM_DEFN
@@ -252,14 +249,14 @@ TEST(test_defn_test_fn_parsed) {
         // Verify first element is 'defn'
         CljObject *defn_sym = LIST_FIRST(list);
         TEST_ASSERT_NOT_NULL_MESSAGE(defn_sym, "first element should be 'defn' symbol");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(defn_sym, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(defn_sym && TAG(defn_sym) == CLJ_SYMBOL, 
                                 "first element should be a symbol");
         
         // Verify second element is 'test-fn'
         CljList *rest = as_list((ID)list->rest);
         CljObject *test_fn_sym = rest ? LIST_FIRST(rest) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_sym, "second element should be 'test-fn' symbol");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(test_fn_sym, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(test_fn_sym && TAG(test_fn_sym) == CLJ_SYMBOL, 
                                 "second element should be a symbol");
         
         CljSymbol *test_fn = as_symbol(test_fn_sym);
@@ -296,7 +293,7 @@ TEST(test_defn_test_fn_evaluated) {
         
         // Should return the symbol 'test-fn'
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_defn should return the symbol");
-        TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_SYMBOL), 
+        TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_SYMBOL, 
                                 "eval_defn should return a symbol");
         
         // Verify 'test-fn' is now in the namespace mappings
@@ -310,7 +307,7 @@ TEST(test_defn_test_fn_evaluated) {
                                      "'test-fn' should be in namespace mappings after eval_defn");
         
         // Verify that test-fn_value is a function (CLJ_CLOSURE)
-        TEST_ASSERT_TRUE_MESSAGE(is_type(test_fn_value, CLJ_CLOSURE) || is_type(test_fn_value, CLJ_FUNC),
+        TEST_ASSERT_TRUE_MESSAGE(test_fn_value && TAG(test_fn_value) == CLJ_CLOSURE || test_fn_value && TAG(test_fn_value) == CLJ_FUNC,
                                  "test-fn should be a function");
         
         // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
@@ -342,7 +339,7 @@ TEST(test_defn_add_stored_in_namespace) {
                                      "'add' should be in namespace mappings after defn");
         
         // Verify that add_value is a function (CLJ_CLOSURE)
-        TEST_ASSERT_TRUE_MESSAGE(is_type(add_value, CLJ_CLOSURE) || is_type(add_value, CLJ_FUNC),
+        TEST_ASSERT_TRUE_MESSAGE(add_value && TAG(add_value) == CLJ_CLOSURE || add_value && TAG(add_value) == CLJ_FUNC,
                                  "add should be a function");
         
     });
@@ -369,7 +366,7 @@ TEST(test_defn_ns_resolve_finds_add) {
                                      "ns_resolve should find 'add' after defn");
         
         // Verify that resolved is a function
-        TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_CLOSURE) || is_type(resolved, CLJ_FUNC),
+        TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_CLOSURE || resolved && TAG(resolved) == CLJ_FUNC,
                                  "resolved 'add' should be a function");
         
     });
@@ -396,7 +393,7 @@ TEST(test_defn_eval_symbol_resolves_add) {
                                      "eval_symbol should resolve 'add' after defn");
         
         // Verify that resolved is a function
-        TEST_ASSERT_TRUE_MESSAGE(is_type(resolved, CLJ_CLOSURE) || is_type(resolved, CLJ_FUNC),
+        TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_CLOSURE || resolved && TAG(resolved) == CLJ_FUNC,
                                  "resolved 'add' should be a function");
         
     });

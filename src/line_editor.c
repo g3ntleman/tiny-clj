@@ -451,7 +451,7 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     if (!vec || index < 0 || index >= vec->count) return NULL;
     
     CljObject *line_obj = vec->data[index];
-    if (!line_obj || !is_type(line_obj, CLJ_STRING)) return NULL;
+    if (!line_obj || TAG(line_obj) != CLJ_STRING) return NULL;
     
     // String data is stored in CljString structure
     CljString *str = (CljString*)line_obj;
@@ -490,11 +490,11 @@ void line_editor_clear_history(LineEditor *editor) {
 }
 
 void line_editor_set_history_from_vector(LineEditor *editor, CljObject *vec) {
-    if (!editor || !vec || !is_type(vec, CLJ_VECTOR)) return;
+    if (!editor || !vec || TAG(vec) != CLJ_VECTOR) return;
     line_editor_clear_history(editor);
     CljPersistentVector *v = as_vector(vec);
     for (int i = 0; v && i < v->count; i++) {
-        if (v->data[i] && is_type(v->data[i], CLJ_STRING)) {
+        if (v->data[i] && TAG(v->data[i]) == CLJ_STRING) {
             const char *plain = to_string(v->data[i]);
             if (plain) {
                 line_editor_add_to_history(editor, plain);

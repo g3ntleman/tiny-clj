@@ -196,8 +196,8 @@ ID parse_expr(Reader *reader, EvalState *st) {
     reader_consume(reader); // 'l'
     CljSymbol *nil_sym = intern_symbol_global("nil");
     // If SYM_NIL is initialized, it should match the interned symbol
-    if (SYM_NIL && nil_sym == SYM_NIL) {
-        return (ID)SYM_NIL;
+    if (nil_sym == SYM_NIL) {
+        return SYM_NIL;
     }
     // Return the interned symbol (will be SYM_NIL once initialized)
     return AUTORELEASE(nil_sym);
@@ -317,7 +317,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
     if (IS_IMMEDIATE(parsed_expr)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
         result = parsed_expr;
-    } else if (is_type(parsed_expr, CLJ_LIST)) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_LIST) {
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
         if (!eval_env) {
@@ -326,7 +326,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
         }
         result = eval_list(as_list(parsed_expr), eval_env, eval_state);
         // eval_list returns AUTORELEASE objects
-    } else if (is_type(parsed_expr, CLJ_SYMBOL)) {
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_SYMBOL) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
         result = (CljObject*)eval_symbol((ID)parsed_expr, eval_state);
         // eval_symbol already returns autoreleased object
@@ -477,7 +477,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   
   // Check if first element is if-let symbol for macro expansion
-  if (first && is_type(first, CLJ_SYMBOL)) {
+  if (first && TAG(first) == CLJ_SYMBOL) {
     CljSymbol *sym = as_symbol((CljValue)first);
     if (sym && sym->name && strcmp(sym->name, "if-let") == 0) {
       // Macro expansion: (if-let [binding test] then else?)
@@ -498,7 +498,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
       
       ID binding_vec = rest_list->first;
-      if (!is_type(binding_vec, CLJ_VECTOR)) {
+      if (!binding_vec || TAG(binding_vec) != CLJ_VECTOR) {
         throw_parser_exception("if-let binding must be a vector", reader);
         return NULL;
       }
@@ -723,7 +723,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       
       // Look up alias in current namespace
       CljObject *ns_name_sym = ns_get_alias(st->current_ns, alias_sym);
-      if (ns_name_sym && is_type(ns_name_sym, CLJ_SYMBOL)) {
+      if (ns_name_sym && TAG(ns_name_sym) == CLJ_SYMBOL) {
         // Get namespace name from symbol
         CljSymbol *ns_sym = as_symbol(ns_name_sym);
         if (ns_sym && ns_sym->name) {

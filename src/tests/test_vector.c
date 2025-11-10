@@ -40,7 +40,252 @@ TEST(test_nth_with_default_and_bounds) {
     // Out-of-bounds mit Default
     CljObject *d = eval_string("(nth [10 20 30] 5 :na)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(d);
-    TEST_ASSERT_TRUE(is_type(d, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE(d && TAG(d) == CLJ_SYMBOL);
+
+}
+
+TEST(test_nth_with_lists) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Basic list access
+    // (nth '(10 20 30) 0) => 10
+    CljObject *n0 = eval_string("(nth '(10 20 30) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(n0);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)n0));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)n0));
+
+    // (nth '(10 20 30) 1) => 20
+    CljObject *n1 = eval_string("(nth '(10 20 30) 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(n1);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)n1));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)n1));
+
+    // (nth '(10 20 30) 2) => 30
+    CljObject *n2 = eval_string("(nth '(10 20 30) 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(n2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)n2));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)n2));
+
+    // Out-of-bounds without default => nil
+    CljObject *out = eval_string("(nth '(10 20 30) 5)", g_test_eval_state);
+    TEST_ASSERT_NULL(out);
+
+    // Out-of-bounds with default => default value
+    CljObject *out_default = eval_string("(nth '(10 20 30) 5 :not-found)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out_default);
+    TEST_ASSERT_TRUE(TAG(out_default) == CLJ_SYMBOL);
+
+    // Empty list => nil
+    CljObject *empty = eval_string("(nth '() 0)", g_test_eval_state);
+    TEST_ASSERT_NULL(empty);
+
+    // Empty list with default => default value
+    CljObject *empty_default = eval_string("(nth '() 0 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(empty_default);
+    TEST_ASSERT_TRUE(TAG(empty_default) == CLJ_SYMBOL);
+
+    // List with nil elements
+    // (nth '(1 nil 3) 1) => nil
+    CljObject *nil_elem = eval_string("(nth '(1 nil 3) 1)", g_test_eval_state);
+    if (nil_elem) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_elem), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(nil_elem);  // NULL is correct for nil
+    }
+
+    // (nth '(nil 2 nil) 0) => nil
+    CljObject *nil_first = eval_string("(nth '(nil 2 nil) 0)", g_test_eval_state);
+    if (nil_first) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_first), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(nil_first);  // NULL is correct for nil
+    }
+
+    // (nth '(nil 2 nil) 1) => 2
+    CljObject *nil_second = eval_string("(nth '(nil 2 nil) 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(nil_second);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)nil_second));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)nil_second));
+
+}
+
+TEST(test_nth_with_sequences) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // nth with rest (creates a sequence)
+    // (nth (rest '(10 20 30)) 0) => 20
+    CljObject *rest_nth = eval_string("(nth (rest '(10 20 30)) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rest_nth);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)rest_nth));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)rest_nth));
+
+    // (nth (rest '(10 20 30)) 1) => 30
+    CljObject *rest_nth2 = eval_string("(nth (rest '(10 20 30)) 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rest_nth2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)rest_nth2));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)rest_nth2));
+
+    // nth with next (creates a sequence)
+    // (nth (next '(10 20 30)) 0) => 20
+    CljObject *next_nth = eval_string("(nth (next '(10 20 30)) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(next_nth);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)next_nth));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)next_nth));
+
+    // nth with subvec (creates a vector, but tests sequence path)
+    // (nth (subvec [1 2 3 4] 1 3) 0) => 2
+    CljObject *subvec_nth = eval_string("(nth (subvec [1 2 3 4] 1 3) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(subvec_nth);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)subvec_nth));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)subvec_nth));
+
+    // Out-of-bounds with sequence
+    CljObject *seq_out = eval_string("(nth (rest '(10 20)) 5)", g_test_eval_state);
+    TEST_ASSERT_NULL(seq_out);
+
+    // Out-of-bounds with sequence and default
+    CljObject *seq_out_default = eval_string("(nth (rest '(10 20)) 5 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(seq_out_default);
+    TEST_ASSERT_TRUE(TAG(seq_out_default) == CLJ_SYMBOL);
+
+}
+
+TEST(test_nth_edge_cases) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Negative index => nil
+    CljObject *neg = eval_string("(nth [10 20 30] -1)", g_test_eval_state);
+    TEST_ASSERT_NULL(neg);
+
+    // Negative index with default => default value
+    CljObject *neg_default = eval_string("(nth [10 20 30] -1 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(neg_default);
+    TEST_ASSERT_TRUE(TAG(neg_default) == CLJ_SYMBOL);
+
+    // nil collection => nil
+    CljObject *nil_coll = eval_string("(nth nil 0)", g_test_eval_state);
+    TEST_ASSERT_NULL(nil_coll);
+
+    // nil collection with default => default value
+    CljObject *nil_coll_default = eval_string("(nth nil 0 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(nil_coll_default);
+    TEST_ASSERT_TRUE(TAG(nil_coll_default) == CLJ_SYMBOL);
+
+    // First element (index 0)
+    CljObject *first = eval_string("(nth [10 20 30] 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)first));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)first));
+
+    // Last element
+    CljObject *last = eval_string("(nth [10 20 30] 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(last);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)last));
+    TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)last));
+
+    // Just out of bounds
+    CljObject *just_out = eval_string("(nth [10 20 30] 3)", g_test_eval_state);
+    TEST_ASSERT_NULL(just_out);
+
+    // Just out of bounds with default
+    CljObject *just_out_default = eval_string("(nth [10 20 30] 3 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(just_out_default);
+    TEST_ASSERT_TRUE(TAG(just_out_default) == CLJ_SYMBOL);
+
+    // Large index
+    CljObject *large = eval_string("(nth [10 20 30] 1000)", g_test_eval_state);
+    TEST_ASSERT_NULL(large);
+
+    // Large index with default
+    CljObject *large_default = eval_string("(nth [10 20 30] 1000 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(large_default);
+    TEST_ASSERT_TRUE(TAG(large_default) == CLJ_SYMBOL);
+
+    // Single element vector
+    CljObject *single = eval_string("(nth [42] 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(single);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)single));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)single));
+
+    // Single element list
+    CljObject *single_list = eval_string("(nth '(42) 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(single_list);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)single_list));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)single_list));
+
+}
+
+TEST(test_nth_nil_elements) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Vector with nil elements
+    // (nth [1 nil 3] 1) => nil
+    CljObject *vec_nil = eval_string("(nth [1 nil 3] 1)", g_test_eval_state);
+    // nil is represented as NULL - check both NULL and TAG for robustness
+    if (vec_nil) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(vec_nil), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(vec_nil);  // NULL is correct for nil
+    }
+
+    // (nth [nil 2 nil] 0) => nil
+    CljObject *vec_nil_first = eval_string("(nth [nil 2 nil] 0)", g_test_eval_state);
+    if (vec_nil_first) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(vec_nil_first), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(vec_nil_first);  // NULL is correct for nil
+    }
+
+    // (nth [nil 2 nil] 1) => 2
+    CljObject *vec_nil_second = eval_string("(nth [nil 2 nil] 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(vec_nil_second);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)vec_nil_second));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)vec_nil_second));
+
+    // (nth [nil 2 nil] 2) => nil
+    CljObject *vec_nil_third = eval_string("(nth [nil 2 nil] 2)", g_test_eval_state);
+    if (vec_nil_third) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(vec_nil_third), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(vec_nil_third);  // NULL is correct for nil
+    }
+
+    // List with nil elements (already tested in test_nth_with_lists, but adding more)
+    // (nth '(nil nil nil) 1) => nil
+    CljObject *list_all_nil = eval_string("(nth '(nil nil nil) 1)", g_test_eval_state);
+    if (list_all_nil) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(list_all_nil), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(list_all_nil);  // NULL is correct for nil
+    }
+
+    // Distinguish between nil element and out-of-bounds
+    // (nth [1 nil 3] 1) => nil (nil element)
+    CljObject *nil_at_index = eval_string("(nth [1 nil 3] 1)", g_test_eval_state);
+    if (nil_at_index) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_at_index), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(nil_at_index);  // NULL is correct for nil
+    }
+
+    // (nth [1 nil 3] 3) => nil (out-of-bounds)
+    CljObject *out_of_bounds = eval_string("(nth [1 nil 3] 3)", g_test_eval_state);
+    TEST_ASSERT_NULL(out_of_bounds);  // Out-of-bounds should return NULL
+
+    // Using default to distinguish: nil element vs out-of-bounds
+    // When element is nil, default is NOT returned (element exists, it's just nil)
+    // This is Clojure behavior: (nth [1 nil 3] 1 :default) => nil (not :default)
+    CljObject *nil_with_default = eval_string("(nth [1 nil 3] 1 :default)", g_test_eval_state);
+    if (nil_with_default) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(nil_with_default), "nth should return nil (NULL or CLJ_NIL) for nil element, not default");
+    } else {
+        TEST_ASSERT_NULL(nil_with_default);  // nil element, not default
+    }
+
+    // Out-of-bounds with default => default
+    CljObject *out_with_default = eval_string("(nth [1 nil 3] 3 :default)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(out_with_default);
+    TEST_ASSERT_TRUE(TAG(out_with_default) == CLJ_SYMBOL);
 
 }
 
@@ -229,24 +474,26 @@ TEST(test_subvec_error_cases) {
     TEST_ASSERT_NULL(result6);  // Should fail
 
     // Arity error: only 1 argument
-    CljObject *result7 = NULL;
     TRY {
-        result7 = eval_string("(subvec [1 2 3])", g_test_eval_state);
+        CljObject *result7 = eval_string("(subvec [1 2 3])", g_test_eval_state);
+        // Should not reach here - exception should be thrown
+        TEST_FAIL_MESSAGE("Expected ArityException to be thrown");
     } CATCH(ex) {
-        // Expected: ArityError
+        // Expected: ArityException
         TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ARITY, ex->type);
     } END_TRY
-    TEST_ASSERT_NULL(result7);  // Should fail
 
     // Arity error: 4 arguments
-    CljObject *result8 = NULL;
     TRY {
-        result8 = eval_string("(subvec [1 2 3] 0 1 2)", g_test_eval_state);
+        CljObject *result8 = eval_string("(subvec [1 2 3] 0 1 2)", g_test_eval_state);
+        // Should not reach here - exception should be thrown
+        TEST_FAIL_MESSAGE("Expected ArityException to be thrown");
     } CATCH(ex) {
-        // Expected: ArityError
+        // Expected: ArityException
         TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ARITY, ex->type);
     } END_TRY
-    TEST_ASSERT_NULL(result8);  // Should fail
 
 }
 
@@ -308,7 +555,12 @@ TEST(test_vec_with_nil_elements) {
     
     // Check second element (should be nil)
     CljObject *second = eval_string("(nth (vec '(1 nil 3)) 1)", g_test_eval_state);
-    TEST_ASSERT_NULL(second);  // nil is represented as NULL
+    // nil is represented as NULL - check both NULL and TAG for robustness
+    if (second) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(second), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(second);  // NULL is correct for nil
+    }
     
     // Check third element (should be 3)
     CljObject *third = eval_string("(nth (vec '(1 nil 3)) 2)", g_test_eval_state);
@@ -327,7 +579,12 @@ TEST(test_vec_with_nil_elements) {
     
     // Check first element (should be nil)
     CljObject *first2 = eval_string("(nth (vec '(nil 2 nil)) 0)", g_test_eval_state);
-    TEST_ASSERT_NULL(first2);  // nil is represented as NULL
+    // nil is represented as NULL - check both NULL and TAG for robustness
+    if (first2) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(first2), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(first2);  // NULL is correct for nil
+    }
     
     // Check second element (should be 2)
     CljObject *second2 = eval_string("(nth (vec '(nil 2 nil)) 1)", g_test_eval_state);
@@ -337,7 +594,12 @@ TEST(test_vec_with_nil_elements) {
     
     // Check third element (should be nil)
     CljObject *third2 = eval_string("(nth (vec '(nil 2 nil)) 2)", g_test_eval_state);
-    TEST_ASSERT_NULL(third2);  // nil is represented as NULL
+    // nil is represented as NULL - check both NULL and TAG for robustness
+    if (third2) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_NIL, TAG(third2), "nth should return nil (NULL or CLJ_NIL) for nil element");
+    } else {
+        TEST_ASSERT_NULL(third2);  // NULL is correct for nil
+    }
 
 }
 
@@ -493,7 +755,6 @@ TEST(test_vector_conj_cow_memory_leak) {
         RELEASE(new_vec);
         
         // Memory should be clean (no leaks)
-        printf("✓ Keine Memory Leaks bei vector_conj COW-Operationen\n");
     });
 }
 

@@ -41,14 +41,14 @@ ID list_nth(CljList *list, int n) {
     CljObject *current = (CljObject*)list;
     
     // Traverse the list properly
-    for (int i = 0; i <= n && current && is_type(current, CLJ_LIST); i++) {
+    for (int i = 0; i <= n && current && TAG(current) == CLJ_LIST; i++) {
         if (i == n) {
             CljList *current_list = as_list(current);
             return (ID)LIST_FIRST(current_list);  // Return directly - no additional memory management
         }
         CljList *current_list = as_list(current);
         current = LIST_REST(current_list);
-        if (current && !is_type(current, CLJ_LIST)) {
+        if (current && TAG(current) != CLJ_LIST) {
             current = NULL; // Stop if rest is not a list
         }
     }
@@ -60,7 +60,7 @@ int list_count(CljList *list) {
     if (!list) return 0;
     
     // Check if it's actually a list before calling as_list
-    if (!is_type((CljObject*)list, CLJ_LIST)) {
+    if (!list || TAG(list) != CLJ_LIST) {
         return 0;  // Not a list, return 0
     }
     
@@ -76,13 +76,13 @@ int list_count(CljList *list) {
     
     int count = 0;
     CljObject *current = (CljObject*)list;
-    while (current && is_type(current, CLJ_LIST)) {
+    while (current && TAG(current) == CLJ_LIST) {
         CljList *current_list = as_list(current);
         // Count the element (first) of this list node
         // Even if LIST_FIRST is NULL (nil), it's still an element
         count++;
         current = LIST_REST(current_list);
-        if (current && !is_type(current, CLJ_LIST)) {
+        if (current && TAG(current) != CLJ_LIST) {
             current = NULL; // Stop if rest is not a list
         }
     }
@@ -105,11 +105,11 @@ CljList* make_list_from_stack(CljValue *stack, int count) {
 }
 
 bool is_list(ID v) {
-    return v && is_type((CljObject*)v, CLJ_LIST);
+    return v && TAG(v) == CLJ_LIST;
 }
 
 bool is_symbol(ID v, const char *name) {
-    if (!v || !is_type(v, CLJ_SYMBOL) || !name) return false;
+    if (!v || TAG(v) != CLJ_SYMBOL || !name) return false;
     
     // Erstelle Symbol für Vergleich (wird interniert)
     CljSymbol *compare_symbol = intern_symbol_global(name);

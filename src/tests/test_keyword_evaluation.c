@@ -18,7 +18,7 @@ TEST(test_keyword_evaluates_to_itself) {
     CljValue result = eval_string(":done", g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
     
     CljSymbol *sym = as_symbol(result);
     TEST_ASSERT_NOT_NULL(sym);
@@ -35,7 +35,7 @@ TEST(test_keyword_in_function_body) {
         CljValue result = eval_string("((fn [] :done))", g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -46,7 +46,7 @@ TEST(test_keyword_in_function_body) {
         TRY {
             CljValue result = eval_string("((fn [] :done))", g_test_eval_state);
             TEST_ASSERT_NOT_NULL(result);
-            TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+            TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
             
             CljSymbol *sym = as_symbol(result);
             TEST_ASSERT_NOT_NULL(sym);
@@ -67,7 +67,7 @@ TEST(test_keyword_in_if_statement) {
         CljValue result = eval_string("(if true :yes :no)", g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -78,7 +78,7 @@ TEST(test_keyword_in_if_statement) {
         result = eval_string("(if false :yes :no)", g_test_eval_state);
         
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -100,7 +100,7 @@ TEST(test_keyword_in_recur_function) {
         // This verifies that keywords work in conditional contexts
         CljValue result = eval_string("(if true :done :not-done)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -110,7 +110,7 @@ TEST(test_keyword_in_recur_function) {
         // Test keyword in another if statement
         result = eval_string("(if false :not-done :done)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -129,7 +129,7 @@ TEST(test_keyword_in_let_binding) {
     CljValue result = eval_string("(let [x :done] x)", g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
     
     CljSymbol *sym = as_symbol(result);
     TEST_ASSERT_NOT_NULL(sym);
@@ -147,7 +147,7 @@ TEST(test_keyword_in_nested_function_call) {
         // Test keyword in a simple fn call
         CljValue result = eval_string("((fn [] :active))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -157,7 +157,7 @@ TEST(test_keyword_in_nested_function_call) {
         // Test keyword in another fn call with parameter
         result = eval_string("((fn [x] (if x :active :inactive)) true)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+        TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
         
         sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
@@ -176,7 +176,7 @@ TEST(test_multiple_keywords_in_expression) {
     CljValue result = eval_string("(if true :yes :no)", g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type((CljObject*)result, CLJ_SYMBOL));
+    TEST_ASSERT_TRUE((CljObject*)result && TAG((CljObject*)result) == CLJ_SYMBOL);
     
     CljSymbol *sym = as_symbol(result);
     TEST_ASSERT_NOT_NULL(sym);

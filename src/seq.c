@@ -154,7 +154,7 @@ bool seq_iter_next(SeqIterator *iter) {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
                 CljObject *rest = LIST_REST(node);
-                if (rest && is_type(rest, CLJ_LIST)) {
+                if (rest && TAG(rest) == CLJ_LIST) {
                     iter->state.list.current = rest;
                     iter->state.list.index++;
                     return true;
@@ -258,16 +258,16 @@ CljSeqIterator* make_seq(ID obj) {
     if (!obj) return NULL;
     
     // If already a CLJ_SEQ, return it directly (no need to wrap again)
-    if (is_type((CljObject*)obj, CLJ_SEQ)) {
+    if (obj && TAG(obj) == CLJ_SEQ) {
         CljSeqIterator *seq = as_seq(obj);
         return seq;  // Already a seq, return as-is
     }
     
     // Check if collection is empty
-    if (is_type((CljObject*)obj, CLJ_VECTOR)) {
+    if (obj && TAG(obj) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector((CljObject*)obj);
         if (vec && vec->count == 0) return NULL;
-    } else if (is_type((CljObject*)obj, CLJ_LIST)) {
+    } else if (obj && TAG(obj) == CLJ_LIST) {
         CljList *list = as_list((CljObject*)obj);
         if (!LIST_FIRST(list)) return NULL;
     }
@@ -377,7 +377,7 @@ int seq_count(ID obj) {
     if (!obj) return 0;
     
     // If it's already a seq wrapper, count from iterator state
-    if (is_type((CljObject*)obj, CLJ_SEQ)) {
+    if (obj && TAG(obj) == CLJ_SEQ) {
         CljSeqIterator *seq = as_seq((ID)obj);
         if (!seq) return 0;
         
@@ -396,7 +396,7 @@ int seq_count(ID obj) {
     }
     
     // Fast path for vectors - O(1)
-    if (is_type((CljObject*)obj, CLJ_VECTOR)) {
+    if (obj && TAG(obj) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector((CljObject*)obj);
         return vec ? vec->count : 0;
     }

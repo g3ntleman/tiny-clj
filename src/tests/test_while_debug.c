@@ -17,7 +17,7 @@ TEST(thesis_atom_creation) {
     // Test: (atom 0) => atom with value 0
     ID atom = eval_string("(atom 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(atom);
-    TEST_ASSERT_TRUE(is_type(atom, CLJ_ATOM));
+    TEST_ASSERT_TRUE(atom && TAG(atom) == CLJ_ATOM);
 }
 
 TEST(thesis_atom_deref) {
@@ -173,7 +173,7 @@ TEST(thesis_symbol_resolution_in_let) {
     // Test: (let [i (atom 0)] i) => atom
     ID result = eval_string("(let [i (atom 0)] i)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_ATOM));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_ATOM);
 }
 
 // ============================================================================
@@ -228,12 +228,12 @@ TEST(lowlevel_eval_arg_symbol_resolution) {
     // Verify i is in let_env
     CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym);
     TEST_ASSERT_NOT_NULL(found);
-    TEST_ASSERT_TRUE(is_type(found, CLJ_ATOM));
+    TEST_ASSERT_TRUE(found && TAG(found) == CLJ_ATOM);
     
     // Create a list (swap! i inc) to test eval_arg using parser
     ID parsed = parse("(swap! i inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE(is_type(parsed, CLJ_LIST));
+    TEST_ASSERT_TRUE(parsed && TAG(parsed) == CLJ_LIST);
     CljList *list = as_list(parsed);
     TEST_ASSERT_NOT_NULL(list);
     
@@ -243,7 +243,7 @@ TEST(lowlevel_eval_arg_symbol_resolution) {
     
     // result should be the atom
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_type(result, CLJ_ATOM));
+    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_ATOM);
     TEST_ASSERT_EQUAL_PTR(atom, result);
     
     // Cleanup
@@ -276,7 +276,7 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     // Verify i is in let_env using map_get
     CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
-    TEST_ASSERT_TRUE(is_type(found, CLJ_ATOM));
+    TEST_ASSERT_TRUE(found && TAG(found) == CLJ_ATOM);
     
     // Create another "i" symbol (should be same pointer if interned)
     CljSymbol *i_sym2 = intern_symbol_global("i");
@@ -292,14 +292,14 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     // Test map_get with second symbol
     CljValue found2 = map_get((CljMap*)let_env, (CljValue)i_sym2);
     TEST_ASSERT_NOT_NULL_MESSAGE(found2, "map_get should find symbol 'i' (second instance) in let_env");
-    TEST_ASSERT_TRUE(is_type(found2, CLJ_ATOM));
+    TEST_ASSERT_TRUE(found2 && TAG(found2) == CLJ_ATOM);
     
     // Create list (swap! i inc) using parser to test eval_arg
     // For eval_arg, index 0 is the first element after the function
     // So we need a list like (swap! i inc) where index 1 is "i"
     ID parsed = parse("(swap! i inc)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_TRUE(is_type(parsed, CLJ_LIST));
+    TEST_ASSERT_TRUE(parsed && TAG(parsed) == CLJ_LIST);
     CljList *list = as_list(parsed);
     TEST_ASSERT_NOT_NULL(list);
     
@@ -308,7 +308,7 @@ TEST(lowlevel_eval_arg_symbol_resolution_direct) {
     
     // result should be the atom
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_arg should resolve symbol 'i' from let_env");
-    TEST_ASSERT_TRUE_MESSAGE(is_type(result, CLJ_ATOM), "eval_arg should return atom for symbol 'i'");
+    TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_ATOM, "eval_arg should return atom for symbol 'i'");
     TEST_ASSERT_EQUAL_PTR_MESSAGE(atom, result, "eval_arg should return the same atom");
     
     // Cleanup

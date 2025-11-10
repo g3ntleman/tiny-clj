@@ -189,10 +189,6 @@ static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, Comparison
     return result ? clj_true : clj_false;
 }
 
-/** @brief Compare symbol name directly (works for non-interned symbols) */
-// DEPRECATED: Use pointer comparison (op == SYM_*) instead for O(1) performance
-// This function is kept for backward compatibility but should not be used in new code
-// Function removed - use pointer comparison (op == SYM_*) instead
 
 /** @brief Allocate array with stack optimization (size <= 16 on stack, else heap) */
 static inline ID* alloc_obj_array(int size, CljObject **stack_buffer) {
@@ -212,7 +208,7 @@ static CljObject* list_get_element(CljList *list, int index) {
     int i = 0;
     while (i < index) {
         CljObject *rest = LIST_REST(node);
-        if (!rest || !is_type(rest, CLJ_LIST)) return NULL;
+        if (!rest || TAG(rest) != CLJ_LIST) return NULL;
         node = as_list((ID)rest);
         i++;
     }
@@ -224,10 +220,6 @@ typedef enum {
     ARITH_ADD, ARITH_SUB, ARITH_MUL, ARITH_DIV
 } ArithOp;
 
-// Arithmetic operation functions
-// Arithmetic helper functions removed - now using inline switch statements in eval_arithmetic_generic_with_substitution
-
-// Error messages - removed unused array
 
 // Helper function to check if a type is numeric
 static bool is_numeric_type(CljObject *obj) {
@@ -335,21 +327,14 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     CljObject *first_arg = list_get_element(as_list((ID)list), 1);
     CljObject *second_arg = list_get_element(as_list((ID)list), 2);
     
-    // CRITICAL ASSERTION: Arguments should exist
     CLJ_ASSERT(first_arg != NULL);
     CLJ_ASSERT(second_arg != NULL);
     
     ID a = eval_body_with_params(first_arg, ctx);
     ID b = eval_body_with_params(second_arg, ctx);
     
-    // CRITICAL ASSERTION: For arithmetic operations, arguments should not be NULL
-    // If the argument is a symbol (parameter), it should resolve to a value
-    // If the argument is a fixnum literal, it should return the fixnum
-    // If the argument is a function call, it should return a value
-    // OPTIMIZATION: Removed array iteration for parameter checks
-    // Parameters are now resolved via environment map, which is O(1) instead of O(n)
-    // These assertions are kept for debugging but no longer iterate over arrays
-    if (is_type(first_arg, CLJ_SYMBOL)) {
+    // For arithmetic operations, arguments should not be NULL
+    if (first_arg && TAG(first_arg) == CLJ_SYMBOL) {
         // If first argument is a symbol, it should resolve to a value (not NULL)
         // Exception: nil is valid, but we check for that separately
         // OPTIMIZATION: Parameter resolution now uses environment map (O(1)) instead of array iteration (O(n))
@@ -369,7 +354,7 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
         CLJ_ASSERT(a == (ID)first_arg);
     }
     
-    if (is_type(second_arg, CLJ_SYMBOL)) {
+    if (second_arg && TAG(second_arg) == CLJ_SYMBOL) {
         // If second argument is a symbol, it should resolve to a value (not NULL)
         // OPTIMIZATION: Parameter resolution now uses environment map (O(1)) instead of array iteration (O(n))
         if (b == NULL) {
@@ -551,7 +536,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
     
-    if (!is_type(fn, CLJ_FUNC) && !is_type(fn, CLJ_CLOSURE)) {
+    if (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE) {
         throw_exception(EXCEPTION_TYPE, "Attempt to call non-function value", NULL, 0, 0);
         return NULL;
     }
@@ -597,11 +582,6 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // CRITICAL: args are already retained by call_function_with_args, so we just copy them
     for (int i = 0; i < argc && i < 16; i++) {
         current_args[i] = args[i];
-        // ASSERTION: Debug coll argument after copy
-        if (current_args[i] && !IS_IMMEDIATE(current_args[i])) {
-            // Note: current_args[i] can be a symbol if argument evaluation failed
-            // This is checked and handled by the calling code
-        }
     }
     
     // CRITICAL: Extend closure environment with parameter bindings
@@ -741,7 +721,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
         
         case CLJ_LIST: {
             // Type check before calling
-            if (!is_type(body_obj, CLJ_LIST)) return NULL;
+            if (!body_obj || TAG(body_obj) != CLJ_LIST) return NULL;
             CljList *list_data = as_list(body);
             return eval_list_with_env(list_data, env, st);
         }
@@ -789,7 +769,7 @@ ID eval_body_with_local_env(ID body, CljMap *local_env, EvalState *st) {
         
         case CLJ_LIST: {
             // Type check before calling
-            if (!is_type(body, CLJ_LIST)) return NULL;
+            if (!body || TAG(body) != CLJ_LIST) return NULL;
             CljList *list_data = as_list((ID)body);
             
             // Use eval_list for full evaluation with namespace access
@@ -816,12 +796,12 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
     CljObject *op = head;
     
     // For symbols, look up in environment
-    if (is_type(op, CLJ_SYMBOL)) {
+    if (op && TAG(op) == CLJ_SYMBOL) {
         CljObject *resolved = (CljObject*)map_get((CljMap*)env, (CljValue)op);
         if (resolved) {
             // If it's a function, call it
             // CRITICAL: Check for both CLJ_FUNC (native) and CLJ_CLOSURE (Clojure functions)
-            if (is_type(resolved, CLJ_FUNC) || is_type(resolved, CLJ_CLOSURE)) {
+            if (TAG(resolved) == CLJ_FUNC || TAG(resolved) == CLJ_CLOSURE) {
                 // Count arguments
                 int total_count = list_count(as_list((ID)list));
                 int argc = total_count - 1;
@@ -853,13 +833,6 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
 }
 
 // Simplified body evaluation with parameter binding
-//
-// FINDINGS from debugging parameter evaluation issues:
-// - In Clojure, nil is a valid value and can be passed as an argument
-// - We return values[i] directly, even if it's NULL (nil), to distinguish from evaluation errors
-// - The caller must handle nil values appropriately (e.g., arithmetic operations reject nil)
-// - This fixes the original issue where args[0] was NULL when function was called,
-//   which was caused by eval_body_with_params returning NULL for nil values
 ID eval_body_with_params(ID body, const EvalContext *ctx) {
     // Handle nil body gracefully (represents Clojure nil)
     if (!body) {
@@ -872,7 +845,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         assert(ctx->params->values != NULL);
     }
     
-    if (is_type(body, CLJ_SYMBOL)) {
+    if (body && TAG(body) == CLJ_SYMBOL) {
         // Resolve symbol - check environment map first (contains parameter bindings)
         // OPTIMIZATION: Use environment map directly instead of iterating over arrays
         // The environment map already contains all parameter bindings (created by env_extend_stack)
@@ -905,7 +878,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // CRITICAL: If resolved_id is a symbol, it means the symbol wasn't properly resolved
                 // This can happen if a parameter is stored as a symbol in closure_env instead of its value
                 // In this case, we should throw an exception instead of returning the symbol
-                if (resolved_id && !IS_IMMEDIATE(resolved_id) && is_type((CljObject*)resolved_id, CLJ_SYMBOL)) {
+                if (resolved_id && !IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
                     // Symbol found in closure_env but value is also a symbol - this is an error
                     CljSymbol *sym = as_symbol(body);
                     const char *sym_name = sym && sym->name ? sym->name : "unknown";
@@ -940,7 +913,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // CRITICAL: If resolved_id is a symbol, it means the symbol wasn't properly resolved
                 // This can happen if a symbol is stored in namespace instead of its value
                 // In this case, we should throw an exception instead of returning the symbol
-                if (!IS_IMMEDIATE(resolved_id) && is_type((CljObject*)resolved_id, CLJ_SYMBOL)) {
+                if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
                     // Symbol found in namespace but value is also a symbol - this is an error
                     CljSymbol *sym = as_symbol(body);
                     const char *sym_name = sym && sym->name ? sym->name : "unknown";
@@ -956,6 +929,11 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         if (IS_KEYWORD(body)) {
             // Keywords evaluate to themselves (singletons need no memory management)
             return body;
+        }
+        // Special case: nil should evaluate to NULL (not SYM_NIL)
+        if (body == SYM_NIL) {
+            // nil is represented as NULL - return NULL directly
+            return NULL;
         }
         // Symbol not found - throw exception instead of returning symbol
         CljSymbol *sym_obj = as_symbol(body);
@@ -1021,9 +999,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     }
 }
 
-// REMOVED: eval_list_with_param_substitution - replaced by eval_list
-// This function was removed because it was redundant with eval_list
-
 // Simplified body evaluation (basic implementation)
 /** @brief Evaluate function body expressions */
 ID eval_body(ID body, CljMap *env, EvalState *st) {
@@ -1039,9 +1014,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
     // Simplified implementation - would normally evaluate the AST
     switch (((CljObject*)body)->type) {
         case CLJ_LIST: {
-            // ASSERTION: Debug if list is single symbol (r/c) instead of symbol r/c
             CljList *list_data = as_list((ID)body);
-            if (list_data && list_data->first && is_type(list_data->first, CLJ_SYMBOL) && !list_data->rest) {
+            if (list_data && list_data->first && TAG(list_data->first) == CLJ_SYMBOL && !list_data->rest) {
                 CljSymbol *sym = as_symbol((ID)list_data->first);
                 if (sym && sym->name && (strcmp(sym->name, "r") == 0 || strcmp(sym->name, "c") == 0)) {
                     // CRITICAL: If body is a single-element list (r/c), treat it as symbol r/c
@@ -1061,14 +1035,14 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
             }
             
             // Special case: nil should evaluate to NULL (not SYM_NIL)
-            if (SYM_NIL && body == (ID)SYM_NIL) {
+            if (body == SYM_NIL) {
                 return NULL; // nil evaluates to NULL
             }
             
             // Resolve symbol - first try local environment, then namespace
             // Note: We need to check if key exists, not just if value is non-NULL,
             // because nil (NULL) is a valid value
-            if (env && is_type((CljObject*)env, CLJ_MAP)) {
+            if (env && TAG(env) == CLJ_MAP) {
                 // Check if key exists in environment (even if value is nil/NULL)
                 if (map_contains((CljMap*)env, (CljValue)body)) {
                     CljObject *result = (CljObject*)map_get((CljMap*)env, (CljValue)body);
@@ -1092,7 +1066,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st) {
                 ID resolved = eval_symbol(body, st);
                 if (resolved) {
                     // Special case: nil should evaluate to NULL (not SYM_NIL)
-                    if (resolved == (ID)SYM_NIL) {
+                    if (resolved == SYM_NIL) {
                         return NULL; // nil evaluates to NULL
                     }
                     // eval_symbol returns AUTORELEASE - object survives until pool-pop
@@ -1154,15 +1128,17 @@ static CljObject* eval_cond(CljList *list, CljMap *env, EvalState *st) {
 }
 
 static CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, EvalState *st, CljObject *op) {
-    if (op == SYM_PLUS) return eval_arithmetic_generic(list, env, ARITH_ADD, st);
-    if (op == SYM_MINUS) return eval_arithmetic_generic(list, env, ARITH_SUB, st);
-    if (op == SYM_MULTIPLY) return eval_arithmetic_generic(list, env, ARITH_MUL, st);
-    if (op == SYM_DIVIDE) return eval_arithmetic_generic(list, env, ARITH_DIV, st);
+    CljSymbol *op_sym = (CljSymbol*)op;
+    if (op_sym == SYM_PLUS) return eval_arithmetic_generic(list, env, ARITH_ADD, st);
+    if (op_sym == SYM_MINUS) return eval_arithmetic_generic(list, env, ARITH_SUB, st);
+    if (op_sym == SYM_MULTIPLY) return eval_arithmetic_generic(list, env, ARITH_MUL, st);
+    if (op_sym == SYM_DIVIDE) return eval_arithmetic_generic(list, env, ARITH_DIV, st);
     return NULL;
 }
 
 static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject *op) {
-    if (op == SYM_EQUALS || op == SYM_EQUAL) {
+    CljSymbol *op_sym = (CljSymbol*)op;
+    if (op_sym == SYM_EQUALS || op_sym == SYM_EQUAL) {
         CljObject *a, *b;
         EVAL_TWO_ARGS(list, env, a, b);
         
@@ -1181,10 +1157,10 @@ static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject
         RELEASE_TWO_ARGS(a, b);
         return equal ? clj_true : clj_false;
     }
-    if (op == SYM_LT) return eval_numeric_comparison(list, env, COMP_LT);
-    if (op == SYM_GT) return eval_numeric_comparison(list, env, COMP_GT);
-    if (op == SYM_LE) return eval_numeric_comparison(list, env, COMP_LE);
-    if (op == SYM_GE) return eval_numeric_comparison(list, env, COMP_GE);
+    if (op_sym == SYM_LT) return eval_numeric_comparison(list, env, COMP_LT);
+    if (op_sym == SYM_GT) return eval_numeric_comparison(list, env, COMP_GT);
+    if (op_sym == SYM_LE) return eval_numeric_comparison(list, env, COMP_LE);
+    if (op_sym == SYM_GE) return eval_numeric_comparison(list, env, COMP_GE);
     return NULL;
 }
 
@@ -1192,14 +1168,15 @@ static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject
 static ID eval_and_call_native(CljList *list, CljMap *env, ID (*native_func)(ID*, unsigned int), int max_args);
 
 static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *op) {
-    if (op == SYM_FIRST) return eval_and_call_native(list, env, native_first, 1);
-    if (op == SYM_REST) {
+    CljSymbol *op_sym = (CljSymbol*)op;
+    if (op_sym == SYM_FIRST) return eval_and_call_native(list, env, native_first, 1);
+    if (op_sym == SYM_REST) {
         return eval_and_call_native(list, env, native_rest, 1);
     }
-    if (op == SYM_CONS) return eval_and_call_native(list, env, native_cons, 2);
-    if (op == SYM_SEQ) return eval_seq(list, env);
-    if (op == SYM_NEXT) return eval_and_call_native(list, env, native_next, 1); // Clojure-compatible: next returns nil if empty
-    if (op == SYM_COUNT) return eval_and_call_native(list, env, native_count, 1);
+    if (op_sym == SYM_CONS) return eval_and_call_native(list, env, native_cons, 2);
+    if (op_sym == SYM_SEQ) return eval_seq(list, env);
+    if (op_sym == SYM_NEXT) return eval_and_call_native(list, env, native_next, 1); // Clojure-compatible: next returns nil if empty
+    if (op_sym == SYM_COUNT) return eval_and_call_native(list, env, native_count, 1);
     return NULL;
 }
 
@@ -1207,9 +1184,10 @@ static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *
 static _Thread_local int g_eval_arg_depth = 0;
 
 static CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
-    if (op == SYM_FOR) return AUTORELEASE(eval_for(list, env));
-    if (op == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
-    if (op == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(list, env));
+    CljSymbol *op_sym = (CljSymbol*)op;
+    if (op_sym == SYM_FOR) return AUTORELEASE(eval_for(list, env));
+    if (op_sym == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
+    if (op_sym == SYM_DOTIMES) return AUTORELEASE(eval_dotimes(list, env));
     return NULL;
 }
 
@@ -1229,7 +1207,7 @@ static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *
     // eval_body calls eval_list for lists, which calls call_function_with_args again,
     // creating an infinite loop. eval_arg has depth protection (g_eval_arg_depth)
     // which prevents stack overflow when evaluating nested function calls like (update {:a 1} :a inc)
-    if (!env || !is_type((CljObject*)env, CLJ_MAP)) {
+    if (!env || TAG(env) != CLJ_MAP) {
         // Environment is NULL or not a map - this shouldn't happen
         // But we should handle it gracefully
         for (int i = 0; i < argc; i++) {
@@ -1277,7 +1255,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     // CRITICAL: Use eval_list_with_context recursively to preserve RecurContext
-    if (is_type(op, CLJ_LIST)) {
+    if (op && TAG(op) == CLJ_LIST) {
         op = eval_list_with_context(as_list((ID)op), env, st, ctx);
         if (!op) {
             return NULL;
@@ -1299,7 +1277,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     
     // CRITICAL: Check for recur FIRST, before any other special form handling
     // This ensures recur is handled correctly when RecurContext is available
-    if (is_type(op, CLJ_SYMBOL)) {
+    if (op && TAG(op) == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(op);
         if (sym && sym == SYM_RECUR) {
             // recur is valid if RecurContext is available
@@ -1357,14 +1335,14 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     // for nested evaluations to preserve RecurContext.
     
     // Handle maps as functions (for key lookup) - must be first
-    if (is_type(op, CLJ_MAP)) {
+    if (op && TAG(op) == CLJ_MAP) {
         return eval_map_lookup(list, env, op);
     }
     
     // Continue with symbol resolution (same as eval_list)
-    if (is_type(op, CLJ_SYMBOL)) {
+    if (op && TAG(op) == CLJ_SYMBOL) {
         CljObject *resolved = NULL;
-        if (env && is_type((CljObject*)env, CLJ_MAP)) {
+        if (env && TAG(env) == CLJ_MAP) {
             if (map_contains((CljValue)env, (CljValue)op)) {
                 resolved = (CljObject*)map_get(env, op);
             }
@@ -1387,7 +1365,8 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     if (result) return result;
     
     // Special forms that need RecurContext support
-    if (original_op == SYM_IF) {
+    CljSymbol *original_op_sym = (CljSymbol*)original_op;
+    if (original_op_sym == SYM_IF) {
         CljObject *cond_val = eval_arg(list, 1, env, NULL);
         bool truthy = clj_is_truthy(cond_val);
         RELEASE(cond_val);
@@ -1417,7 +1396,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     CljObject *op = head;
     
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
-    if (is_type(op, CLJ_LIST)) {
+    if (op && TAG(op) == CLJ_LIST) {
         op = eval_list(as_list((ID)op), env, st);
         if (!op) {
             return NULL;
@@ -1426,7 +1405,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Handle maps as functions (for key lookup) - must be first
-    if (is_type(op, CLJ_MAP)) {
+    if (op && TAG(op) == CLJ_MAP) {
         return eval_map_lookup(list, env, op);
     }
     
@@ -1441,13 +1420,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // they're not in the namespace or environment
     // CRITICAL: This must happen BEFORE symbol resolution, because special forms
     // are not in namespaces and should not be resolved
-    if (is_type(op, CLJ_SYMBOL)) {
+    if (op && TAG(op) == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(op);
         if (sym && sym->name) {
             // Check for time special form before resolving
             // Use both pointer comparison (fast) and string comparison (fallback)
             // to handle cases where the parsed symbol is not the same object as SYM_TIME
-            if (SYM_TIME && (op == SYM_TIME || strcmp(sym->name, "time") == 0)) {
+            CljSymbol *op_sym = (CljSymbol*)op;
+            if (SYM_TIME && (op_sym == SYM_TIME || strcmp(sym->name, "time") == 0)) {
                 // This is the time special form - handle it directly
                 // Use provided env or fall back to current_ns->mappings
                 CljMap *time_env = env;
@@ -1457,22 +1437,23 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
                 return eval_time(list, time_env, st);
             }
             // Check for def special form (requires non-evaluated first argument)
-            if (original_op == SYM_DEF || (sym->name && strcmp(sym->name, "def") == 0)) {
+            CljSymbol *original_op_sym = (CljSymbol*)original_op;
+            if (original_op_sym == SYM_DEF || (sym->name && strcmp(sym->name, "def") == 0)) {
                 return eval_def(list, env, st);
             }
             // Check for ns special form (requires non-evaluated first argument)
-            if (original_op == SYM_NS || (sym->name && strcmp(sym->name, "ns") == 0)) {
+            if (original_op_sym == SYM_NS || (sym->name && strcmp(sym->name, "ns") == 0)) {
                 return eval_ns(list, env, st);
             }
         }
     }
     
-    if (is_type(op, CLJ_SYMBOL)) {
+    if (op && TAG(op) == CLJ_SYMBOL) {
         // First try local environment (if provided)
         // CRITICAL: Use map_contains first (like eval_body) to ensure consistency
         // This ensures that symbols are found even if they're not pointer-equal
         CljObject *resolved = NULL;
-        if (env && is_type((CljObject*)env, CLJ_MAP)) {
+        if (env && TAG(env) == CLJ_MAP) {
             // Check if key exists in environment (even if value is nil/NULL)
             if (map_contains((CljValue)env, (CljValue)op)) {
                 resolved = (CljObject*)map_get(env, op);
@@ -1501,7 +1482,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     result = eval_comparison_dispatch(list, env, original_op);
     if (result) return result;
     
-    if (original_op == SYM_IF) {
+    CljSymbol *original_op_sym = (CljSymbol*)original_op;
+    if (original_op_sym == SYM_IF) {
         // (if cond then else?)
         // CRITICAL: With C stack, each function call has its own recur state
         // No need to save/restore - nested functions will have their own stack frames
@@ -1520,7 +1502,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return result;
     }
     
-    if (original_op == SYM_WHEN) {
+    if (original_op_sym == SYM_WHEN) {
         // (when condition body...)
         CljObject *cond_val = eval_arg(list, 1, env, NULL);
         if (!cond_val) return NULL;
@@ -1550,7 +1532,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return result;
     }
     
-    if (original_op == SYM_WHILE) {
+    if (original_op_sym == SYM_WHILE) {
         // (while condition body...)
         // Loop: while condition is true, evaluate body expressions
         int list_len = list_count(list);
@@ -1583,12 +1565,12 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         }
     }
     
-    if (original_op == SYM_COND) {
+    if (original_op_sym == SYM_COND) {
         // (cond test1 expr1 test2 expr2 ...)
         return eval_cond(list, env, st);
     }
     
-    if (original_op == SYM_DO) {
+    if (original_op_sym == SYM_DO) {
         // (do expr1 expr2 ...)
         // Evaluate all expressions in sequence, return the last one
         int list_len = list_count(list);
@@ -1609,7 +1591,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // Note: time special form is now handled earlier in eval_list (before symbol resolution)
     // to ensure it's recognized even if it's not in the namespace
 
-    if (original_op == SYM_GO) {
+    if (original_op_sym == SYM_GO) {
         // (go body...)
         // Minimal kompatible Semantik: Body auswerten und Result-Channel zurückgeben
         // 1) Body in nullstellige Funktion wrappen: (fn [] (do expr1 ... exprN))
@@ -1652,9 +1634,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
 
         // 2) Asynchron: Erzeuge Result-Channel, enqueuen und sofort Channel zurückgeben
         CljMap *chan = make_result_channel();
-        printf("DEBUG eval_go: Channel created: %p\n", (void*)chan);
         event_loop_enqueue(fn_obj, chan);
-        printf("DEBUG eval_go: Channel after enqueue: %p\n", (void*)chan);
 
         // Cleanup temporäre Objekte (Queue hält eigene Referenzen)
         RELEASE(fn_obj);
@@ -1669,7 +1649,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     if (result) return result;
     
     // Tier 4: String and I/O operations
-    if (original_op == SYM_STR) {
+    if (original_op_sym == SYM_STR) {
         int total_count = list_count(as_list((ID)list));
         int argc = total_count - 1;
         if (argc < 0) argc = 0;
@@ -1693,7 +1673,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     
     
     // Tier 4: Less frequent (10-30% of calls)
-    if (original_op == SYM_AND) {
+    if (original_op_sym == SYM_AND) {
         // (and expr1 expr2 ...) - short circuit evaluation
         // Returns first falsy value or last value
         int argc = list_count(list);
@@ -1712,7 +1692,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         return result; // Return last value
     }
     
-    if (original_op == SYM_OR) {
+    if (original_op_sym == SYM_OR) {
         // (or expr1 expr2 ...) - short circuit evaluation
         // Returns first truthy value or last value
         int argc = list_count(list);
@@ -1732,7 +1712,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Tier 5: Special forms and definitions
-    if (original_op == SYM_FN) {
+    if (original_op_sym == SYM_FN) {
         // CRITICAL: Use env (which may be let_env with namespace mappings) if available,
         // otherwise fall back to namespace mappings
         // This ensures that when fn is evaluated inside let, the closure environment
@@ -1748,26 +1728,26 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // Note: def and ns are now handled earlier (before symbol resolution)
     // to ensure they are recognized as special forms even if registered as builtins
     
-    if (original_op == SYM_DEFN) {
+    if (original_op_sym == SYM_DEFN) {
         return eval_defn(list, env, st);
     }
     
-    if (original_op == SYM_LET) {
+    if (original_op_sym == SYM_LET) {
         // (let [bindings*] body*)
         return eval_let(list, env, st);
     }
     
-    if (original_op == SYM_DOTIMES) {
+    if (original_op_sym == SYM_DOTIMES) {
         // (dotimes [var n] body*)
         return eval_dotimes(list, env);
     }
     
-    if (original_op == SYM_VAR) {
+    if (original_op_sym == SYM_VAR) {
         // (var symbol) - returns a var reference to the symbol
         return eval_var(list, env, st);
     }
     
-    if (original_op == SYM_QUOTE) {
+    if (original_op_sym == SYM_QUOTE) {
         // (quote expr) - return expr without evaluating
         CljObject *quoted_expr = list_get_element(list, 1);
         if (!quoted_expr) return NULL;
@@ -1777,24 +1757,24 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     // recur is only valid inside function bodies, not in top-level lists
     // Note: This check is for eval_list without RecurContext
     // When called from eval_body_with_params, recur is handled in eval_list_with_context
-    if (original_op == SYM_RECUR) {
+    if (original_op_sym == SYM_RECUR) {
         throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies", NULL, 0, 0);
         return NULL;
     }
     
     // Tier 6: Loop operations (for, doseq, dotimes)
-    if (original_op == SYM_FOR || original_op == SYM_DOSEQ || original_op == SYM_DOTIMES) {
+    if (original_op_sym == SYM_FOR || original_op_sym == SYM_DOSEQ || original_op_sym == SYM_DOTIMES) {
         result = eval_loop_dispatch(list, env, original_op);
         return result; // Return even if NULL
     }
     
     // Check if op (after resolution) is a function
-    if (is_type(op, CLJ_FUNC) || is_type(op, CLJ_CLOSURE)) {
+    if (op && (TAG(op) == CLJ_FUNC || TAG(op) == CLJ_CLOSURE)) {
         return call_function_with_args(op, list, env, st);
     }
     
     // Fallback: try to resolve symbol and call as function
-    if (is_type(op, CLJ_SYMBOL)) {
+    if (op && TAG(op) == CLJ_SYMBOL) {
         // Handle keywords as functions (for map lookup)
         if (IS_KEYWORD(op)) {
             // Keyword as function - perform map lookup
@@ -1805,7 +1785,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
                 CljObject *arg = eval_arg(list, 1, env, NULL);
                 
                 // If argument is a symbol, resolve it to get the actual value
-                if (is_type(arg, CLJ_SYMBOL)) {
+                if (arg && TAG(arg) == CLJ_SYMBOL) {
                     CljObject *resolved = eval_symbol(arg, st);
                     if (resolved) {
                         RELEASE(arg);  // Release the symbol
@@ -1813,7 +1793,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
                     }
                 }
                 
-                if (is_type(arg, CLJ_MAP)) {
+                if (arg && TAG(arg) == CLJ_MAP) {
                     CljObject *result = (CljObject*)map_get((CljValue)arg, (CljValue)op);
                     // RETAIN handles immediates and NULL safely - no checks needed
                     return RETAIN(result);
@@ -1829,24 +1809,25 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         }
         
         // Check if it's a map (for map lookup)
-        if (is_type(fn, CLJ_MAP)) {
+        if (fn && TAG(fn) == CLJ_MAP) {
             return eval_map_lookup(list, env, fn);
         }
         
         // Check if it's a function (native or interpreted)
-        if (is_type(fn, CLJ_FUNC) || is_type(fn, CLJ_CLOSURE)) {
+        if (fn && (TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) {
             // CRITICAL: Manage recursion depth here, not in eval_arg
             // This prevents double counting when eval_arg calls eval_list
             if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
-                // DEBUG: Print stack trace information
+#ifdef DEBUG
                 fprintf(stderr, "STACK OVERFLOW: g_eval_arg_depth=%d, MAX_CALL_STACK_DEPTH=%d\n", 
                         g_eval_arg_depth, MAX_CALL_STACK_DEPTH);
-                if (is_type(fn, CLJ_CLOSURE)) {
+                if (fn && TAG(fn) == CLJ_CLOSURE) {
                     CljFunction *func = as_function(fn);
                     if (func && func->name) {
                         fprintf(stderr, "  Function: %s\n", func->name);
                     }
                 }
+#endif
                 throw_exception(EXCEPTION_STACK_OVERFLOW, 
                               "Maximum evaluation depth exceeded in nested function calls", 
                               __FILE__, __LINE__, 0);
@@ -1866,7 +1847,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
         }
         
         // Error: resolved value is a list (cannot call as function)
-        if (is_type(fn, CLJ_LIST)) {
+        if (fn && TAG(fn) == CLJ_LIST) {
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                     "Cannot call list as a function");
             return NULL;
@@ -1877,14 +1858,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Error: first element is not a function
-    if (IS_IMMEDIATE(op) || is_type(op, CLJ_STRING)) {
+    if (IS_IMMEDIATE(op) || (op && TAG(op) == CLJ_STRING)) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call %s as a function", clj_type_name(op->type));
         return NULL;
     }
     
     // Error: op is a list (should have been evaluated earlier)
-    if (is_type(op, CLJ_LIST)) {
+    if (op && TAG(op) == CLJ_LIST) {
         throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call list as a function");
         return NULL;
@@ -1904,7 +1885,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     
     // Get the symbol name (second argument) - don't evaluate it, just get the symbol
     CljObject *symbol = list_get_element(list, 1);
-    if (!symbol || !is_type(symbol, CLJ_SYMBOL)) {
+    if (!symbol || TAG(symbol) != CLJ_SYMBOL) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "def requires a symbol as first argument", 
                        NULL, 0, 0);
@@ -1932,7 +1913,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     CljMap *eval_env = (st && st->current_ns) ? (CljMap*)st->current_ns->mappings : env;
     CljObject *value = NULL;
     if (value_expr) {
-        if (is_type(value_expr, CLJ_LIST)) {
+        if (value_expr && TAG(value_expr) == CLJ_LIST) {
             value = eval_list(as_list((ID)value_expr), eval_env, st);
         } else {
             value = (CljObject*)eval_parsed(value_expr, st, eval_env);
@@ -1945,7 +1926,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // If the value is a function, set its name
     // CRITICAL: Only set name for CLJ_CLOSURE (Clojure functions), not CLJ_FUNC (native functions)
     // as_function only works with CLJ_CLOSURE, not CLJ_FUNC
-    if (is_type(value, CLJ_CLOSURE)) {
+    if (value && TAG(value) == CLJ_CLOSURE) {
         CljFunction *func = as_function((ID)value);
         CljSymbol *sym = as_symbol((ID)symbol);
         if (func && sym && sym->name[0] && !func->name) {
@@ -1985,7 +1966,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
     
     // Get namespace name (first argument) - use list_get_element like eval_def
     CljObject *ns_name_obj = list_get_element(list, 1);
-    if (!ns_name_obj || !is_type(ns_name_obj, CLJ_SYMBOL)) {
+    if (!ns_name_obj || TAG(ns_name_obj) != CLJ_SYMBOL) {
         eval_error("ns expects a symbol", st);
         return NULL;
     }
@@ -2013,7 +1994,7 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
     
     // Get symbol name (first argument)
     CljObject *sym_obj = list_get_element(list, 1);
-    if (!sym_obj || !is_type(sym_obj, CLJ_SYMBOL)) {
+    if (!sym_obj || TAG(sym_obj) != CLJ_SYMBOL) {
         eval_error("var expects a symbol", st);
         return NULL;
     }
@@ -2056,7 +2037,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     // Get the parameter list (second argument) - don't evaluate it
     CljObject *params_list = list_get_element(list, 1);
     // Parameters can be a vector [a b] or a list (a b)
-    if (!params_list || (!is_type(params_list, CLJ_LIST) && !is_type(params_list, CLJ_VECTOR))) {
+    if (!params_list || (TAG(params_list) != CLJ_LIST && TAG(params_list) != CLJ_VECTOR)) {
         return NULL;
     }
     
@@ -2068,7 +2049,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     
     // Convert parameter list/vector to array
     int param_count = 0;
-    if (is_type(params_list, CLJ_VECTOR)) {
+    if (params_list && TAG(params_list) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector((ID)params_list);
         param_count = vec ? vec->count : 0;
     } else {
@@ -2079,13 +2060,13 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     ID *params = alloc_obj_array(param_count, params_stack);
     
     for (int i = 0; i < param_count; i++) {
-        if (is_type(params_list, CLJ_VECTOR)) {
+        if (params_list && TAG(params_list) == CLJ_VECTOR) {
             CljPersistentVector *vec = as_vector((ID)params_list);
             params[i] = vec->data[i];
         } else {
             params[i] = list_get_element(as_list((ID)params_list), i);
         }
-        if (!params[i] || !is_type(params[i], CLJ_SYMBOL)) {
+        if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
             // Invalid parameter
             free_obj_array((ID*)params, params_stack);
             return NULL;
@@ -2137,7 +2118,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
     }
     
     // Special case: nil should evaluate to NULL (not SYM_NIL)
-    if (SYM_NIL && symbol == SYM_NIL) {
+    if (symbol == SYM_NIL) {
         return NULL; // nil evaluates to NULL
     }
     
@@ -2145,7 +2126,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
     CljObject *value = ns_resolve(st, symbol);
     if (value) {
         // Special case: If value is SYM_NIL, return NULL (nil evaluates to NULL)
-        if (value == (CljObject*)SYM_NIL) {
+        if ((CljSymbol*)value == SYM_NIL) {
             return NULL; // nil evaluates to NULL
         }
         return AUTORELEASE(RETAIN(value));  // Gefunden - retain the value
@@ -2294,7 +2275,7 @@ ID eval_for(CljList *list, CljMap *env) {
     CljObject *binding_list = eval_arg(list, 1, env, NULL);
     CljObject *body = eval_arg(list, 2, env, NULL);
     
-    if (!binding_list || !is_type(binding_list, CLJ_LIST)) {
+    if (!binding_list || TAG(binding_list) != CLJ_LIST) {
         return NULL;
     }
     
@@ -2430,7 +2411,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
     // (list arg1 arg2 ...) - creates a list from the arguments
     // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
-    if (!is_type((CljObject*)list, CLJ_LIST)) return NULL;
+    if (!list || TAG(list) != CLJ_LIST) return NULL;
     
     CljList *list_data = as_list((ID)list);
     
@@ -2462,7 +2443,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
     
     // Get bindings vector (second element): (let [x 10 y 20] ...)
     CljObject *bindings_vec = list_get_element(list, 1);
-    if (!bindings_vec || !is_type(bindings_vec, CLJ_VECTOR)) {
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "let requires a vector for bindings", 
                        NULL, 0, 0);
@@ -2549,7 +2530,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
         CljValue sym_val = bindings->data[i];
         CljValue init_val = bindings->data[i + 1];
         
-        if (!sym_val || !is_type(sym_val, CLJ_SYMBOL)) {
+        if (!sym_val || TAG(sym_val) != CLJ_SYMBOL) {
             RELEASE(let_env);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                            "let binding must be a symbol", 
@@ -2581,7 +2562,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
         // CRITICAL: If value is a function (closure), update its closure_env to include itself
         // This allows recursive functions defined in let to find themselves
         // For example: (let [step (fn [x] (step x))] ...) - step needs to find itself
-        if (value && is_type(value, CLJ_CLOSURE)) {
+        if (value && TAG(value) == CLJ_CLOSURE) {
             CljFunction *func = as_function((ID)value);
             if (func && func->closure_env) {
                 // Add the function to its own closure environment so it can find itself recursively
@@ -2690,7 +2671,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     // Get function name (first element after defn)
     CljObject *name_sym = rest->first;
-    if (!name_sym || !is_type(name_sym, CLJ_SYMBOL)) {
+    if (!name_sym || TAG(name_sym) != CLJ_SYMBOL) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires a symbol for function name", 
                        NULL, 0, 0);
@@ -2708,7 +2689,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
     
     CljObject *params_vec = rest->first;
-    if (!params_vec || !is_type(params_vec, CLJ_VECTOR)) {
+    if (!params_vec || TAG(params_vec) != CLJ_VECTOR) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires a vector for parameters", 
                        NULL, 0, 0);
@@ -2740,7 +2721,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     for (int i = 0; i < param_count; i++) {
         params[i] = (ID)params_vec_data->data[i];
-        if (!params[i] || !is_type((CljObject*)params[i], CLJ_SYMBOL)) {
+        if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
             free_obj_array((ID*)params, params_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                            "defn parameters must be symbols", 
@@ -2836,7 +2817,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // ASSERTION: Verify that the function is now in closure_env
     // This tests the thesis that closure_env contains the function after ns_define
     CLJ_ASSERT(func->closure_env != NULL);
-    CLJ_ASSERT(is_type((CljObject*)func->closure_env, CLJ_MAP));
+    CLJ_ASSERT(TAG(func->closure_env) == CLJ_MAP);
     CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym);
     CLJ_ASSERT(func_in_closure != NULL);
     CLJ_ASSERT(func_in_closure == (CljObject*)fn_obj || func_in_closure == (CljObject*)func);
@@ -2850,7 +2831,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
 ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
     // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
-    if (!is_type((CljObject*)list, CLJ_LIST)) return NULL;
+    if (!list || TAG(list) != CLJ_LIST) return NULL;
     
     // Handle NULL environment gracefully
     if (env == NULL) {
@@ -2865,20 +2846,18 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
     if (!element) return NULL;
     
     // For simple types (numbers, strings, booleans), return as-is
-    if (IS_IMMEDIATE(element) || is_type(element, CLJ_STRING)) {
+    if (IS_IMMEDIATE(element) || (element && TAG(element) == CLJ_STRING)) {
         return element; // Don't retain - caller will handle retention
     }
     
     // For symbols, resolve them from environment
-    if (is_type(element, CLJ_SYMBOL)) {
-        // ASSERTION: Debug symbol resolution in eval_arg
-        CljSymbol *sym = as_symbol((ID)element);
-        // CRITICAL: Check if symbol is "nil" - nil is represented as NULL in our system
-        if (sym && sym->name && strcmp(sym->name, "nil") == 0) {
+    if (element && TAG(element) == CLJ_SYMBOL) {
+        // Special case: nil should evaluate to NULL (not SYM_NIL)
+        if ((CljSymbol*)element == SYM_NIL) {
             // nil is represented as NULL - return NULL directly
             return NULL;
         }
-        if (env && is_type((CljObject*)env, CLJ_MAP)) {
+        if (env && TAG(env) == CLJ_MAP) {
             // CRITICAL: When let is used inside a function, env should be let_env which contains function parameters
             // This allows eval_arg to resolve function parameters like 'coll' in (rest coll)
             // CRITICAL: Check if key exists first, because map_get returns NULL both when:
@@ -2894,8 +2873,6 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
                 return AUTORELEASE(RETAIN(resolved));
             }
             // Key doesn't exist in map - try namespace resolution below
-            // DEBUG: If symbol not found, check environment count and structure
-            // This helps identify if the environment is empty or malformed
             CljSymbol *sym = as_symbol((CljObject*)element);
             if (sym && sym->name && strcmp(sym->name, "i") == 0) {
                 // This is the symbol 'i' that we're looking for
@@ -2929,7 +2906,7 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
     // For lists, evaluate them directly
     // CRITICAL: eval_list manages recursion depth itself when calling functions,
     // so we don't need to increase g_eval_arg_depth here. This prevents double counting.
-    if (is_type(element, CLJ_LIST)) {
+    if (element && TAG(element) == CLJ_LIST) {
         // Evaluate nested list directly
         // CRITICAL: Use provided st if available, otherwise create a new one
         // This ensures that eval_list has access to the correct namespace
@@ -2991,7 +2968,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     CljObject *binding_list = NULL;
     CljObject *body_list = NULL;
     
-    if (list_data->rest && is_type(list_data->rest, CLJ_LIST)) {
+    if (list_data->rest && TAG(list_data->rest) == CLJ_LIST) {
         CljList *args_list = as_list(list_data->rest);
         binding_list = args_list->first;
         body_list = args_list->rest; // Rest contains all body expressions
@@ -3005,11 +2982,11 @@ ID eval_dotimes(CljList *list, CljMap *env) {
     CljObject *var = NULL;
     CljObject *n_obj = NULL;
     
-    if (is_type(binding_list, CLJ_VECTOR)) {
+    if (binding_list && TAG(binding_list) == CLJ_VECTOR) {
         // Use nth function to safely access vector elements
         var = nth2((ID[]){binding_list, fixnum(0)}, 2);
         n_obj = nth2((ID[]){binding_list, fixnum(1)}, 2);
-    } else if (is_type(binding_list, CLJ_LIST)) {
+    } else if (binding_list && TAG(binding_list) == CLJ_LIST) {
         CljList *binding_data = as_list(binding_list);
         if (!binding_data->first || !binding_data->rest) {
             return NULL;
@@ -3046,7 +3023,7 @@ ID eval_dotimes(CljList *list, CljMap *env) {
             // body_list can contain multiple expressions
             EvalState *st = evalstate_new(false);
             CljObject *body_result = NULL;
-            if (is_type(body_list, CLJ_LIST)) {
+            if (body_list && TAG(body_list) == CLJ_LIST) {
                 // Multiple expressions - evaluate all, return last
                 CljList *body_items = as_list(body_list);
                 while (body_items && body_items->first) {
@@ -3108,11 +3085,11 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     // Evaluate the expression using eval_list with the provided environment
     // This ensures that functions like + are available from the environment
     CljObject *result = NULL;
-    if (is_type(expr, CLJ_LIST)) {
+    if (expr && TAG(expr) == CLJ_LIST) {
         result = eval_list(as_list(expr), eval_env, st);
-    } else if (is_type(expr, CLJ_SYMBOL)) {
+    } else if (expr && TAG(expr) == CLJ_SYMBOL) {
         // For symbols, look up in environment (if provided) or namespace
-        if (eval_env && is_type((CljObject*)eval_env, CLJ_MAP)) {
+        if (eval_env && TAG(eval_env) == CLJ_MAP) {
             CljObject *resolved = (CljObject*)map_get((CljValue)eval_env, (CljValue)expr);
             // map_get returns retained values - use AUTORELEASE for eval_time
             result = resolved ? AUTORELEASE(resolved) : NULL;
@@ -3167,7 +3144,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
 // ============================================================================
 
 ID clj_call_function(ID fn, int argc, ID *argv) {
-    if (!is_type((CljObject*)fn, CLJ_FUNC)) return NULL;
+    if (!fn || TAG(fn) != CLJ_FUNC) return NULL;
     
     // Arity check
     CljFunction *func = as_function(fn);
@@ -3203,7 +3180,7 @@ ID clj_call_function(ID fn, int argc, ID *argv) {
 }
 
 ID clj_apply_function(ID fn, ID *args, int argc, ID env) {
-    if (!is_type((CljObject*)fn, CLJ_FUNC)) return NULL;
+    if (!fn || TAG(fn) != CLJ_FUNC) return NULL;
     (void)env;
     
     // Evaluate arguments (simplified; would normally call eval())

@@ -84,17 +84,11 @@ TEST(test_vector_memory) {
     {
         // Test vector creation and memory management
         CljValue vec = make_vector(5, 1);
-        if (!vec) {
-            printf("ERROR: make_vector(5, 1) returned NULL!\n");
-        }
         TEST_ASSERT_NOT_NULL(vec);
         
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         TEST_ASSERT_EQUAL_INT(5, vec_data->capacity);
-        if (!vec_data->data) {
-            printf("ERROR: vec_data->data is NULL! capacity=%d\n", vec_data->capacity);
-        }
         TEST_ASSERT_NOT_NULL(vec_data->data);
         
         // Add elements
@@ -173,33 +167,23 @@ TEST(test_autorelease_pool_nested) {
 
 TEST(test_cow_assumptions_rc_behavior) {
     // Test critical assumptions for Copy-on-Write implementation
-    printf("\n=== COW Assumptions: RC Behavior ===\n");
-    
     WITH_AUTORELEASE_POOL({
         // Test 1: AUTORELEASE does NOT increase RC
         CljMap *map = (CljMap*)make_map(4);
-        printf("After make_map: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         CljMap *same = (CljMap*)AUTORELEASE((CljValue)map);
-        printf("After AUTORELEASE: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // RC bleibt 1!
         TEST_ASSERT_EQUAL_PTR(map, same);
-        printf("✓ AUTORELEASE does NOT increase RC\n");
         
         // Test 2: RETAIN increases RC
         RETAIN(map);
-        printf("After RETAIN: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // Test 3: RC=2 would trigger COW in map_assoc
-        printf("✓ RC=2 would trigger COW in map_assoc\n");
         
         RELEASE(map);  // Back to RC=1
-        printf("After RELEASE: RC=%d\n", map->base.rc);
         TEST_ASSERT_EQUAL(1, map->base.rc);
-        
-        printf("✓ All COW assumptions verified!\n");
     });
 }
 
