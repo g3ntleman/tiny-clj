@@ -1723,8 +1723,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         CljMap *chan = make_result_channel();
         event_loop_enqueue(fn_obj, chan);
 
-        // Cleanup temporäre Objekte (Queue hält eigene Referenzen)
-        RELEASE(fn_obj);
+        // Cleanup temporäre Objekte (Queue hält Referenz auf fn_obj)
+        // fn_obj wird von event_loop_run_next freigegeben, wenn die Task ausgeführt wird
         RELEASE(fn_list);
         if (do_list) RELEASE(do_list);
 

@@ -951,6 +951,8 @@ TEST(test_hypothesis_eval_function_call_returns_value) {
     } END_TRY
     
     TEST_ASSERT_NOT_NULL(fn_obj);
+    // RETAIN fn_obj to keep it alive outside of autorelease pool
+    RETAIN(fn_obj);
     
     // Call the function directly
     CljObject *result = NULL;
@@ -988,6 +990,8 @@ TEST(test_hypothesis_channel_pointer_preserved) {
     } END_TRY
     
     TEST_ASSERT_NOT_NULL(chan);
+    // RETAIN chan to keep it alive outside of autorelease pool
+    RETAIN(chan);
     
     // Store original pointer
     CljMap *chan_ptr_original = (CljMap*)chan;
