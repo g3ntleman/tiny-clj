@@ -333,10 +333,12 @@ add_executable(unity-tests
 
 # Debug parser target removed - file not found
 # Unity Tests - Always in Debug mode for comprehensive testing
+# Force Debug build regardless of CMAKE_BUILD_TYPE
 apply_common_settings(unity-tests)
 set_target_properties(unity-tests PROPERTIES
     COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
     LINK_FLAGS "-fsanitize=address"
+    COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
 )
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c

@@ -7,6 +7,8 @@
 #include "tests_common.h"
 #include "../event_loop.h"
 #include "../channel.h"
+#include "../clj_strings.h"
+#include <stdio.h>
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -1111,6 +1113,146 @@ TEST(test_hypothesis_direct_channel_mutation_works) {
     
     // Cleanup
     RELEASE(chan);
+}
+
+// ============================================================================
+// DEBUG TEST: Verify channel mutation issue
+// ============================================================================
+
+// Debug test to verify why channel mutation is not working
+TEST(test_debug_channel_mutation_issue) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Step 1: Verify intern_symbol returns same pointer
+    CljObject *kw_value1 = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_value2 = (CljObject*)intern_symbol(NULL, ":value");
+    TEST_ASSERT_NOT_NULL(kw_value1);
+    TEST_ASSERT_NOT_NULL(kw_value2);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(kw_value1, kw_value2, 
+                                  "intern_symbol should return same pointer for :value");
+    
+    // Step 2: Create channel and verify initial state
+    CljMap *chan = make_result_channel();
+    TEST_ASSERT_NOT_NULL(chan);
+    
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljValue initial_val = map_get(chan, (CljValue)kw_value);
+    TEST_ASSERT_NULL_MESSAGE(initial_val, "Initial :value should be NULL");
+    
+    // Step 3: Put value using result_channel_put
+    CljValue val_42 = fixnum(42);
+    result_channel_put(chan, val_42);
+    
+    // Step 4: Verify value was set using same symbol pointer
+    CljValue val_after_put = map_get(chan, (CljValue)kw_value);
+    if (val_after_put == NULL) {
+        // Value is NULL - check if key exists at all
+        TEST_FAIL_MESSAGE("Value is NULL after result_channel_put - check if map_conj found the key");
+    } else {
+        TEST_ASSERT_TRUE(is_fixnum(val_after_put));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum(val_after_put));
+    }
+    
+    // Step 5: Verify using different symbol pointer (should still work via structural equality)
+    CljObject *kw_value_new = (CljObject*)intern_symbol(NULL, ":value");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(kw_value, kw_value_new, 
+                                  "intern_symbol should return same pointer");
+    CljValue val_with_new_ptr = map_get(chan, (CljValue)kw_value_new);
+    if (val_with_new_ptr == NULL) {
+        TEST_FAIL_MESSAGE("map_get failed with new symbol pointer - structural equality fallback not working");
+    } else {
+        TEST_ASSERT_TRUE(is_fixnum(val_with_new_ptr));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum(val_with_new_ptr));
+    }
+    
+    // Step 6: Test with go-block and run-next-task
+    printf("\n=== DEBUG: Testing go-block and run-next-task ===\n");
+    CljObject *go_chan = NULL;
+    TRY {
+        go_chan = eval_string("(go 42)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block should not throw exception");
+        RELEASE(chan);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(go_chan);
+    printf("DEBUG: go_chan created: %p, type: %d, count: %d\n", 
+           (void*)go_chan, ((CljObject*)go_chan)->type, ((CljMap*)go_chan)->count);
+    
+    // Verify initial state
+    CljValue go_initial_val = map_get((CljMap*)go_chan, (CljValue)kw_value);
+    TEST_ASSERT_NULL_MESSAGE(go_initial_val, "Initial :value should be NULL");
+    printf("DEBUG: Initial :value is NULL (correct)\n");
+    
+    // Check initial closed state
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    CljValue closed_before = map_get((CljMap*)go_chan, (CljValue)kw_closed);
+    if (closed_before) {
+        printf("DEBUG: Initial :closed = %s\n", is_special(closed_before) && as_special(closed_before) == SPECIAL_FALSE ? "false" : "true");
+    } else {
+        printf("DEBUG: Initial :closed is NULL\n");
+    }
+    
+    // Run next task
+    printf("DEBUG: Calling run-next-task with channel pointer: %p\n", (void*)go_chan);
+    CljObject *ran_result = NULL;
+    TRY {
+        ran_result = eval_string("(run-next-task)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        RELEASE(chan);
+        RELEASE(go_chan);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(ran_result);
+    if (ran_result) {
+        char *ran_result_str = print_str((CljObject*)ran_result);
+        printf("DEBUG: run-next-task returned: %s\n", ran_result_str ? ran_result_str : "NULL");
+        if (ran_result_str) free(ran_result_str);
+    }
+    
+    // Check if value was set after run-next-task
+    printf("DEBUG: Checking channel state after run-next-task...\n");
+    printf("DEBUG: Channel pointer after run-next-task: %p, type: %d, count: %d\n", 
+           (void*)go_chan, ((CljObject*)go_chan)->type, ((CljMap*)go_chan)->count);
+    CljValue go_val_after_run = map_get((CljMap*)go_chan, (CljValue)kw_value);
+    if (go_val_after_run == NULL) {
+        printf("DEBUG: ERROR: :value is NULL after run-next-task!\n");
+        // Debug: Check channel state
+        CljValue closed_val = map_get((CljMap*)go_chan, (CljValue)kw_closed);
+        if (closed_val == NULL) {
+            printf("DEBUG: ERROR: :closed is also NULL - channel was not mutated at all!\n");
+            printf("DEBUG: Channel pointer: %p, type: %d, count: %d\n", 
+                   (void*)go_chan, ((CljObject*)go_chan)->type, ((CljMap*)go_chan)->count);
+            TEST_FAIL_MESSAGE("Channel was not mutated at all - :closed is NULL");
+        } else {
+            char *closed_str = print_str((CljObject*)closed_val);
+            printf("DEBUG: :closed = %s\n", closed_str ? closed_str : "NULL");
+            if (closed_str) free(closed_str);
+            if (is_special(closed_val) && as_special(closed_val) == SPECIAL_TRUE) {
+                printf("DEBUG: ERROR: Channel was closed but :value was not set!\n");
+                printf("DEBUG: This means result_channel_put was not called or failed!\n");
+                printf("DEBUG: Channel pointer in test: %p\n", (void*)go_chan);
+                printf("DEBUG: Channel pointer in event_loop_run_next was different - check if channel was copied!\n");
+                TEST_FAIL_MESSAGE("Channel was closed but :value was not set - check result_channel_put");
+            } else {
+                printf("DEBUG: ERROR: Channel was not mutated - :closed is still false!\n");
+                TEST_FAIL_MESSAGE("Channel was not mutated - :closed is still false");
+            }
+        }
+    } else {
+        char *val_str = print_str((CljObject*)go_val_after_run);
+        printf("DEBUG: SUCCESS: :value = %s\n", val_str ? val_str : "NULL");
+        if (val_str) free(val_str);
+        TEST_ASSERT_TRUE(is_fixnum(go_val_after_run));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum(go_val_after_run));
+    }
+    
+    // Cleanup
+    RELEASE(chan);
+    RELEASE(go_chan);
 }
 
 // ============================================================================

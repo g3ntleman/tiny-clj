@@ -8,6 +8,7 @@
 #include "test_registry.h"
 #include "memory_profiler.h"
 #include "../tiny_clj.h"
+#include "../event_loop.h"
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -36,6 +37,10 @@ void setUp(void) {
     
     // Suppress time output in tests
     set_suppress_time_output(true);
+    
+    // CRITICAL: Clear event loop queue for test isolation
+    // This ensures that tasks from previous tests don't interfere with current test
+    event_loop_clear();
     
     runtime_init();
     

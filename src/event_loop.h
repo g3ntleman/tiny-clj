@@ -9,6 +9,9 @@
 // Initialize event loop (idempotent)
 void event_loop_init(void);
 
+// Clear event loop queue (for test isolation)
+void event_loop_clear(void);
+
 // Enqueue go task for later execution. Takes ownership via RETAIN; releases after run.
 void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel);
 

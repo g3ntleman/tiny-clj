@@ -1652,7 +1652,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st) {
 
         // 2) Asynchron: Erzeuge Result-Channel, enqueuen und sofort Channel zurückgeben
         CljMap *chan = make_result_channel();
+        printf("DEBUG eval_go: Channel created: %p\n", (void*)chan);
         event_loop_enqueue(fn_obj, chan);
+        printf("DEBUG eval_go: Channel after enqueue: %p\n", (void*)chan);
 
         // Cleanup temporäre Objekte (Queue hält eigene Referenzen)
         RELEASE(fn_obj);
