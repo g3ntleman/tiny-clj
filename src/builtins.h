@@ -12,6 +12,7 @@ typedef ID (*CljNativeFn)(ID *args, unsigned int argc);
 ID nth2(ID *args, unsigned int argc);
 ID conj2(ID vec, ID val);
 ID assoc3(ID *args, unsigned int argc);
+ID native_dissoc(ID *args, unsigned int argc);
 ID native_type(ID *args, unsigned int argc);
 ID native_array_map(ID *args, unsigned int argc);
 ID native_vector(ID *args, unsigned int argc);

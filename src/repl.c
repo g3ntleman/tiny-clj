@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 
 // Forward decls for line editor history persistence helpers
 extern CljObject* line_editor_history_load_default(void);
@@ -77,7 +78,7 @@ static void print_prompt(EvalState *st, bool balanced) {
     const char *ns_name = "user";  // Default
     if (st && st->current_ns && st->current_ns->name) {
         CljSymbol *sym = as_symbol(st->current_ns->name);
-        if (sym && sym->name[0] != '\0') {
+        if (sym && sym->name && sym->name[0] != '\0') {
             ns_name = sym->name;
         }
     }
@@ -163,16 +164,8 @@ static bool eval_multiline_string(const char *code, EvalState *st) {
                 // Print exception and continue with next expression
                 print_exception((CLJException*)ex);
                 result = false; // Mark as failed, but continue processing
-                // Auto-Save History on exception
-#ifdef ENABLE_LINE_EDITING
-                WITH_AUTORELEASE_POOL({
-                    LineEditor *ed = get_line_editor();
-                    if (ed) {
-                        CljObject *vec = line_editor_get_history_vector(ed);
-                        if (vec) { line_editor_history_save_default(vec); RELEASE(vec); }
-                    }
-                });
-#endif
+                // Note: History is saved after evaluation in run_interactive_repl
+                // No need to save here to avoid double-saving and memory issues
                 
                 // Skip to next line to avoid infinite loop on same expression
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
@@ -231,6 +224,13 @@ bool history_save_to_file(CljObject *vec, const char *path) {
     FILE *fp = fopen(path, "w");
     if (!fp) { if (s) free((void*)s); RELEASE(trimmed); return false; }
     size_t n = fwrite(s, 1, strlen(s), fp);
+    // Add newline at end of file for proper formatting
+    if (n > 0) {
+        fputc('\n', fp);
+    }
+    // Flush and sync to ensure data is written to disk immediately
+    fflush(fp);
+    fsync(fileno(fp));
     fclose(fp);
     free((void*)s);
     RELEASE(trimmed);
@@ -258,30 +258,39 @@ CljObject* history_load_from_file(const char *path) {
     CljObject *result = NULL;
     Reader rd; reader_init(&rd, buf);
     EvalState *st = evalstate_new(false);
-    TRY {
-        ID form = value_by_parsing_expr(&rd, st);
-        if (form && TAG(form) == CLJ_VECTOR) {
-            CljPersistentVector *v = as_vector((CljObject*)form);
-            bool all_strings = true;
-            for (int i = 0; i < (v ? v->count : 0); i++) {
-                if (!v->data[i] || TAG(v->data[i]) != CLJ_STRING) { all_strings = false; break; }
+    WITH_AUTORELEASE_POOL({
+        TRY {
+            ID form = value_by_parsing_expr(&rd, st);
+            if (form && !IS_IMMEDIATE(form) && TAG(form) == CLJ_VECTOR) {
+                CljPersistentVector *v = as_vector((CljObject*)form);
+                bool all_strings = true;
+                for (int i = 0; i < (v ? v->count : 0); i++) {
+                    if (!v->data[i] || TAG(v->data[i]) != CLJ_STRING) { all_strings = false; break; }
+                }
+                if (all_strings) {
+                    // RETAIN to keep it alive when inner pool is popped
+                    result = RETAIN((CljObject*)form);
+                } else {
+                    // Vector contains non-string elements - invalid history format
+                    fprintf(stderr, "Warning: Failed to load history file (%s). History has been reset.\n", path);
+                    result = NULL;
+                }
+            } else {
+                // Parsed form is not a vector or is NULL - invalid history format
+                fprintf(stderr, "Warning: Failed to load history file (%s). History has been reset.\n", path);
+                result = NULL;
             }
-            if (all_strings) {
-                // form is already AUTORELEASEd from parse_expr (in the current pool)
-                // RETAIN to keep it alive, it will be released when test pool is popped
-                result = RETAIN((CljObject*)form);
-                // Don't AUTORELEASE again - it's already in the test's pool
-                free(buf);
-                evalstate_free(st);
-                return result;
-            }
-        }
-    } CATCH(ex) {
-        result = NULL;
-    } END_TRY
+        } CATCH(ex) {
+            fprintf(stderr, "Warning: Failed to load history file (%s). History has been reset.\n", path);
+            result = NULL;
+        } END_TRY
+    });  // Inner pool is popped here, but result is retained, so it's not freed
     free(buf);
     evalstate_free(st);
-    if (!result) result = (CljObject*)make_vector(0, 0);
+    if (!result) {
+        // Create empty vector outside of autorelease pool to avoid double-free
+        result = (CljObject*)make_vector(0, 0);
+    }
     // Return with AUTORELEASE to add to caller's pool
     return AUTORELEASE(result);
 }
@@ -339,19 +348,26 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     }
     set_line_editor(editor);
     // Lade History aus Default-Datei und fülle Editor-History (mit Autorelease-Pool)
+    CljObject *history_vec = NULL;
     WITH_AUTORELEASE_POOL({
         TRY {
             CljObject *loaded = line_editor_history_load_default();
             if (loaded && TAG(loaded) == CLJ_VECTOR) {
-                line_editor_set_history_from_vector(editor, loaded);
-            } else {
-                line_editor_clear_history(editor);
+                // RETAIN to keep history alive when pool is popped
+                ASSIGN(history_vec, RETAIN(loaded));
             }
-        } CATCH(ex) {
-            // Ignoriere Ladefehler: starte mit leerer History
-            line_editor_clear_history(editor);
-        } END_TRY
-    });
+            } CATCH(ex) {
+                fprintf(stderr, "Warning: Failed to load history file. History has been reset.\n");
+                history_vec = NULL;
+            } END_TRY
+    });  // Pool is popped here, but history_vec is retained, so it's not freed
+    // Now use the retained history vector
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
+        line_editor_set_history_from_vector(editor, history_vec);
+        RELEASE(history_vec);  // Release after use
+    } else {
+        line_editor_clear_history(editor);
+    }
 #endif
 
     while (true) {
@@ -438,6 +454,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
             LineEditor *editor = get_line_editor();
             if (editor) {
                 line_editor_add_to_history(editor, acc);
+                // Auto-save history after each evaluation
+                WITH_AUTORELEASE_POOL({
+                    CljObject *vec = line_editor_get_history_vector(editor);
+                    if (vec) {
+                        line_editor_history_save_default(vec);
+                        RELEASE(vec);
+                    }
+                });
             }
 #endif
         }

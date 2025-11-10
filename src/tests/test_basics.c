@@ -619,84 +619,81 @@ TEST(test_map_function) {
     // Test the map higher-order function
     // NOTE: map needs to be implemented as a builtin function
     // This test is currently a placeholder that verifies the system is ready for map
-    {
-        
-        // Test map count
-        CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", g_test_eval_state);
-        if (map_count_result) {
-            TEST_ASSERT_TRUE(is_fixnum(map_count_result));
-            TEST_ASSERT_EQUAL_INT(3, as_fixnum(map_count_result));
-        }
-        
-        // Test nil count - (count nil) throws IllegalArgumentException (Clojure-compatible)
-        TRY {
-            (void)eval_string("(count nil)", g_test_eval_state);
-            TEST_FAIL_MESSAGE("(count nil) should throw IllegalArgumentException");
-        } CATCH(ex) {
-            // Exception expected for nil (Clojure behavior)
-            TEST_ASSERT_NOT_NULL_MESSAGE(ex, "Exception should be thrown");
-        } END_TRY
-        
-        // Test empty vector count
-        CljObject *empty_vec_count = eval_string("(count [])", g_test_eval_state);
-        if (empty_vec_count) {
-            TEST_ASSERT_TRUE(is_fixnum(empty_vec_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_vec_count));
-        }
-        
-        // Test empty list count
-        CljObject *empty_list_count = eval_string("(count (list))", g_test_eval_state);
-        if (empty_list_count) {
-            TEST_ASSERT_TRUE(is_fixnum(empty_list_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_list_count));
-        }
-        
-        // Test empty string count
-        CljObject *empty_string_count = eval_string("(count \"\")", g_test_eval_state);
-        if (empty_string_count) {
-            TEST_ASSERT_TRUE(is_fixnum(empty_string_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_string_count));
-        }
-        
-        // Test empty map count
-        CljObject *empty_map_count = eval_string("(count {})", g_test_eval_state);
-        if (empty_map_count) {
-            TEST_ASSERT_TRUE(is_fixnum(empty_map_count));
-            TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_map_count));
-        }
-        
-        // Test single element containers
-        CljObject *single_vec_count = eval_string("(count [42])", g_test_eval_state);
-        if (single_vec_count) {
-            TEST_ASSERT_TRUE(is_fixnum(single_vec_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_vec_count));
-        }
-        
-        CljObject *single_list_count = eval_string("(count (list 42))", g_test_eval_state);
-        if (single_list_count) {
-            TEST_ASSERT_TRUE(is_fixnum(single_list_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_list_count));
-        }
-        
-        CljObject *single_string_count = eval_string("(count \"x\")", g_test_eval_state);
-        if (single_string_count) {
-            TEST_ASSERT_TRUE(is_fixnum(single_string_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_string_count));
-        }
-        
-        CljObject *single_map_count = eval_string("(count {:a 1})", g_test_eval_state);
-        if (single_map_count) {
-            TEST_ASSERT_TRUE(is_fixnum(single_map_count));
-            TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_map_count));
-        }
-        
-        // TODO: When map is implemented as builtin, add tests like:
-        // (map inc [1 2 3]) => (2 3 4)
-        // (map square [1 2 3 4]) => (1 4 9 16)
-        // (map inc []) => ()
-        // (map (fn [x] (+ x 1)) [1 2 3]) => (2 3 4)
-        
+    
+    // Test map count
+    CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", g_test_eval_state);
+    if (map_count_result) {
+        TEST_ASSERT_TRUE(is_fixnum(map_count_result));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(map_count_result));
     }
+    
+    // Test nil count - (count nil) throws IllegalArgumentException (Clojure-compatible)
+    TRY {
+        (void)eval_string("(count nil)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("(count nil) should throw IllegalArgumentException");
+    } CATCH(ex) {
+        // Exception expected for nil (Clojure behavior)
+        TEST_ASSERT_NOT_NULL_MESSAGE(ex, "Exception should be thrown");
+    } END_TRY
+    
+    // Test empty vector count
+    CljObject *empty_vec_count = eval_string("(count [])", g_test_eval_state);
+    if (empty_vec_count) {
+        TEST_ASSERT_TRUE(is_fixnum(empty_vec_count));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_vec_count));
+    }
+    
+    // Test empty list count
+    CljObject *empty_list_count = eval_string("(count (list))", g_test_eval_state);
+    if (empty_list_count) {
+        TEST_ASSERT_TRUE(is_fixnum(empty_list_count));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_list_count));
+    }
+    
+    // Test empty string count
+    CljObject *empty_string_count = eval_string("(count \"\")", g_test_eval_state);
+    if (empty_string_count) {
+        TEST_ASSERT_TRUE(is_fixnum(empty_string_count));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_string_count));
+    }
+    
+    // Test empty map count
+    CljObject *empty_map_count = eval_string("(count {})", g_test_eval_state);
+    if (empty_map_count) {
+        TEST_ASSERT_TRUE(is_fixnum(empty_map_count));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum(empty_map_count));
+    }
+    
+    // Test single element containers
+    CljObject *single_vec_count = eval_string("(count [42])", g_test_eval_state);
+    if (single_vec_count) {
+        TEST_ASSERT_TRUE(is_fixnum(single_vec_count));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_vec_count));
+    }
+    
+    CljObject *single_list_count = eval_string("(count (list 42))", g_test_eval_state);
+    if (single_list_count) {
+        TEST_ASSERT_TRUE(is_fixnum(single_list_count));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_list_count));
+    }
+    
+    CljObject *single_string_count = eval_string("(count \"x\")", g_test_eval_state);
+    if (single_string_count) {
+        TEST_ASSERT_TRUE(is_fixnum(single_string_count));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_string_count));
+    }
+    
+    CljObject *single_map_count = eval_string("(count {:a 1})", g_test_eval_state);
+    if (single_map_count) {
+        TEST_ASSERT_TRUE(is_fixnum(single_map_count));
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(single_map_count));
+    }
+    
+    // TODO: When map is implemented as builtin, add tests like:
+    // (map inc [1 2 3]) => (2 3 4)
+    // (map square [1 2 3 4]) => (1 4 9 16)
+    // (map inc []) => ()
+    // (map (fn [x] (+ x 1)) [1 2 3]) => (2 3 4)
 }
 
 // ============================================================================

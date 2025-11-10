@@ -1,15 +1,16 @@
 #include "vector.h"
 #include "memory.h"
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
+#include "types.h"  // For SINGLETON_RC
 #include <stdlib.h>
 #include <stdbool.h>
 
-// Empty-vector singleton: CLJ_VECTOR with rc=0, statically initialized
+// Empty-vector singleton: CLJ_VECTOR with rc=SINGLETON_RC, statically initialized
 static struct {
     CljPersistentVector vec;
 } clj_empty_vector_singleton_data = {
     .vec = {
-        .base = { .type = CLJ_VECTOR, .rc = 0 },
+        .base = { .type = CLJ_VECTOR, .rc = SINGLETON_RC },
         .count = 0,
         .capacity = 0,
         .data = NULL
@@ -214,7 +215,7 @@ ID transient(ID vec) {
         tvec->data = NULL;
     }
     
-    return (ID)tvec;
+    return tvec;
 }
 
 /** Grow vector capacity in-place (for RC=1 or transient vectors).
@@ -243,7 +244,8 @@ void vector_grow_capacity(CljPersistentVector *v) {
 
 /** Append to transient vector (guaranteed in-place). */
 ID clj_conj(ID tvec, ID item) {
-    if (!tvec || !item) return NULL;
+    if (!tvec) return NULL;
+    // Note: item can be NULL (nil) - it's a valid value in Clojure collections
     CljObject *obj = (CljObject*)tvec;
     if (obj->type != CLJ_TRANSIENT_VECTOR) {
         return NULL;
@@ -257,7 +259,8 @@ ID clj_conj(ID tvec, ID item) {
         vector_grow_capacity(v);
     }
     
-    v->data[v->count++] = RETAIN(item);
+    // NULL (nil) is a valid value - store directly without RETAIN
+    v->data[v->count++] = item ? RETAIN(item) : NULL;
     
     return tvec; // In-place mutation
 }

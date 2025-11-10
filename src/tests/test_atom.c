@@ -392,7 +392,7 @@ TEST(test_atom_real_world_usage) {
 }
 
 // ============================================================================
-// TEST: clojure.core Loading Debugging Tests
+// clojure.core Loading Tests
 // ============================================================================
 
 // Test: Verify that clojure.core cache is set
@@ -413,16 +413,13 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
-    // Debug: Check if mappings exist
     CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core->mappings, 
                                   "clojure.core mappings should exist");
     
-    // Debug: Check if mappings are empty or if symbols exist
     CljMap *map = (CljMap*)clojure_core->mappings;
     TEST_ASSERT_NOT_NULL_MESSAGE(map, "clojure.core mappings should exist");
     
-    // Debug: Check all stored symbols to see what's actually there
     bool found_inc = false;
     int symbol_count = 0;
     const char *first_symbol_name = NULL;
@@ -432,7 +429,6 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
             symbol_count++;
             CljSymbol *stored_sym = as_symbol(stored_key);
             if (stored_sym && stored_sym->name) {
-                // Store first symbol name for debugging
                 if (!first_symbol_name) {
                     first_symbol_name = stored_sym->name;
                 }
@@ -452,7 +448,6 @@ TEST(test_atom_ns_resolve_inc_in_clojure_core) {
         }
     }
     
-    // Debug: Try direct map_get to see if symbol is found
     ID direct_lookup = map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
     if (!direct_lookup) {
         if (symbol_count == 0) {
@@ -625,7 +620,7 @@ TEST(test_atom_def_inc_evaluated) {
         
         // Evaluate the form
         CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
-        ID result = eval_list(as_list(form), env, g_test_eval_state);
+        ID result = eval_list(as_list(form), env, g_test_eval_state, NULL);
         
         // Should return the symbol 'inc'
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_def should return the symbol");

@@ -289,7 +289,7 @@ TEST(test_defn_test_fn_evaluated) {
         
         // Evaluate the form
         CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
-        ID result = eval_list(as_list(form), env, g_test_eval_state);
+        ID result = eval_list(as_list(form), env, g_test_eval_state, NULL);
         
         // Should return the symbol 'test-fn'
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_defn should return the symbol");
@@ -424,7 +424,6 @@ TEST(test_defn_add_can_be_called) {
         TEST_ASSERT_NOT_NULL_MESSAGE(call_result, 
                                      "Calling (my-sum 3 4) should return a result");
         
-        // Debug: Check what type call_result actually is
         if (call_result) {
             CljObject *obj = (CljObject*)call_result;
             if (!is_fixnum(call_result)) {

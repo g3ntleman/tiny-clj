@@ -6,23 +6,23 @@
 #include "value.h"
 #include "symbol.h"
 #include "exception.h"
+#include "types.h"  // For SINGLETON_RC
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
-// Empty-map singleton: CLJ_MAP with rc=0, statically initialized
+// Empty-map singleton: CLJ_MAP with rc=SINGLETON_RC, statically initialized
 // Note: Cannot use flexible array member in static initialization
 static struct {
     CljObject base;
     int count;
     int capacity;
 } clj_empty_map_singleton_data = {
-    .base = { .type = CLJ_MAP, .rc = 0 },
+    .base = { .type = CLJ_MAP, .rc = SINGLETON_RC },
     .count = 0,
     .capacity = 0
 };
 static CljMap *clj_empty_map_singleton = (CljMap*)&clj_empty_map_singleton_data;
-
 
 // === CljValue API (Phase 1: Parallel) ===
 

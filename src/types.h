@@ -15,6 +15,15 @@
 #endif
 #endif
 
+/** @brief Singleton RC marker value.
+ *  When an object's rc is set to SINGLETON_RC, it indicates the object is a singleton
+ *  (statically allocated, never freed). Singletons should not be retained or released.
+ *  Defined here to avoid circular dependencies between memory.h and object.h.
+ *  Note: Using -2 as singleton marker, which is safe since normal rc values are >= 0
+ *  and ZOMBIE_RC = -1.
+ */
+#define SINGLETON_RC -2
+
 typedef enum {
     // Immediate types - use their tag values for consistency
     CLJ_INT = 1,      // TAG_FIXNUM

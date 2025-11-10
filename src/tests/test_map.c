@@ -1276,3 +1276,107 @@ TEST(test_map_conj_channel_pattern) {
     // Cleanup
     RELEASE((CljObject*)chan);
 }
+
+// ============================================================================
+// Tests for dissoc() - Remove keys from map
+// ============================================================================
+
+// Test dissoc with single key
+TEST(test_dissoc_single_key) {
+    WITH_AUTORELEASE_POOL({
+        // Create map with multiple keys
+        CljMap *map = (CljMap*)make_map(4);
+        CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
+        CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
+        CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");
+        
+        map = map_assoc(map, (ID)key_a, fixnum(1));
+        map = map_assoc(map, (ID)key_b, fixnum(2));
+        map = map_assoc(map, (ID)key_c, fixnum(3));
+        
+        TEST_ASSERT_EQUAL_INT(3, map->count);
+        
+        // Remove key :b
+        CljObject *result = eval_string("(dissoc {:a 1 :b 2 :c 3} :b)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *result_map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(2, result_map->count);
+        
+        // Verify :a and :c are still present
+        CljValue val_a = map_get(result_map, (ID)key_a);
+        CljValue val_c = map_get(result_map, (ID)key_c);
+        TEST_ASSERT_NOT_NULL(val_a);
+        TEST_ASSERT_NOT_NULL(val_c);
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(val_c));
+        
+        // Verify :b is removed
+        CljValue val_b = map_get(result_map, (ID)key_b);
+        TEST_ASSERT_NULL(val_b);
+        
+        RELEASE((CljObject*)map);
+    });
+}
+
+// Test dissoc with multiple keys (Clojure semantics)
+TEST(test_dissoc_multiple_keys) {
+    WITH_AUTORELEASE_POOL({
+        // Remove multiple keys
+        CljObject *result = eval_string("(dissoc {:a 1 :b 2 :c 3} :a :c)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *result_map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(1, result_map->count);
+        
+        // Verify :b is still present
+        CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
+        CljValue val_b = map_get(result_map, (ID)key_b);
+        TEST_ASSERT_NOT_NULL(val_b);
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_b));
+        
+        // Verify :a and :c are removed
+        CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
+        CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");
+        CljValue val_a = map_get(result_map, (ID)key_a);
+        CljValue val_c = map_get(result_map, (ID)key_c);
+        TEST_ASSERT_NULL(val_a);
+        TEST_ASSERT_NULL(val_c);
+    });
+}
+
+// Test dissoc with no keys (returns map unchanged)
+TEST(test_dissoc_no_keys) {
+    WITH_AUTORELEASE_POOL({
+        CljObject *result = eval_string("(dissoc {:a 1 :b 2})", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *result_map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(2, result_map->count);
+    });
+}
+
+// Test dissoc with non-existent key (returns map unchanged)
+TEST(test_dissoc_non_existent_key) {
+    WITH_AUTORELEASE_POOL({
+        CljObject *result = eval_string("(dissoc {:a 1 :b 2} :c)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *result_map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(2, result_map->count);
+        
+        // Verify original keys are still present
+        CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
+        CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
+        CljValue val_a = map_get(result_map, (ID)key_a);
+        CljValue val_b = map_get(result_map, (ID)key_b);
+        TEST_ASSERT_NOT_NULL(val_a);
+        TEST_ASSERT_NOT_NULL(val_b);
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_b));
+    });
+}

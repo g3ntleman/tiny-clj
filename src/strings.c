@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <assert.h>
+#include <math.h>
 #include "object.h"
 #include "strings.h"
 #include "clj_strings.h"
@@ -18,6 +19,7 @@
 #include "byte_array.h"
 #include "memory.h"
 #include "kv_macros.h"
+#include "types.h"  // For SINGLETON_RC
 
 // Empty string singleton with CljString layout
 static struct {
@@ -25,7 +27,7 @@ static struct {
     uint16_t length;
     char data[1];  // Just the null terminator
 } empty_string_data = {
-    .base = { .type = CLJ_STRING, .rc = 0 },
+    .base = { .type = CLJ_STRING, .rc = SINGLETON_RC },
     .length = 0,
     .data = ""
 };
@@ -69,13 +71,15 @@ const char* to_string(CljObject *v) {
     if (is_immediate(v)) {
         if (is_fixnum(v)) {
             char buf[32];
+            // Print fixnums as integers (no decimal places)
             snprintf(buf, sizeof(buf), "%d", as_fixnum(v));
             return strdup(buf);
         }
         if (is_fixed(v)) {
             char buf[32];
-            double val = as_fixed(v);
-            snprintf(buf, sizeof(buf), "%.4g", val);
+            float val = as_fixed(v);
+            // Print fixed-point numbers with at least one decimal place
+            snprintf(buf, sizeof(buf), "%.1f", (double)val);
             return strdup(buf);
         }
         if (is_special(v)) {
@@ -396,14 +400,36 @@ const char* pr_str(CljObject *v) {
         return strdup("nil");
     }
     
-    // pr_str adds quotes around strings
+    // pr_str adds quotes around strings and escapes quotes inside
     if (v && TAG(v) == CLJ_STRING) {
         const char *raw = to_string(v);
         if (!raw) return strdup("\"\"");
         
-        size_t len = strlen(raw) + 3;  // +2 for quotes, +1 for \0
-        char *result = ALLOC(char, len);
-        snprintf(result, len, "\"%s\"", raw);
+        // Count escaped characters needed (each " and \ needs escaping)
+        size_t raw_len = strlen(raw);
+        size_t escaped_len = raw_len;
+        for (size_t i = 0; i < raw_len; i++) {
+            if (raw[i] == '"' || raw[i] == '\\') {
+                escaped_len++;  // Each needs a backslash
+            }
+        }
+        
+        // Allocate buffer: escaped string + 2 quotes + null terminator
+        char *result = ALLOC(char, escaped_len + 3);
+        char *out = result;
+        *out++ = '"';
+        
+        // Escape quotes and backslashes
+        for (size_t i = 0; i < raw_len; i++) {
+            if (raw[i] == '"' || raw[i] == '\\') {
+                *out++ = '\\';
+            }
+            *out++ = raw[i];
+        }
+        
+        *out++ = '"';
+        *out = '\0';
+        
         free((void*)raw);
         return result;
     }

@@ -209,7 +209,17 @@ void tearDown(void) {
 // ============================================================================
 
 static void print_new_usage(const char *program_name) {
-    (void)program_name;  // Suppress unused parameter warning
+    printf("Usage: %s [OPTIONS]\n", program_name);
+    printf("\nOptions:\n");
+    printf("  -h, --help              Show this help message\n");
+    printf("  --list                  List all available tests\n");
+    printf("  --test <test_name>      Run a specific test (supports wildcards)\n");
+    printf("  --quiet                 Reduce memory leak reporting for cleaner output\n");
+    printf("  --memory-summary        Show memory profiler summary after all tests\n");
+    printf("\nExamples:\n");
+    printf("  %s                      Run all tests\n", program_name);
+    printf("  %s --test test_atom/*   Run all atom tests\n", program_name);
+    printf("  %s --memory-summary     Run all tests with memory summary\n", program_name);
 }
 
 // JUnit-style test runner: simple progress indicator (. for pass, F for fail, I for ignore)
@@ -246,6 +256,7 @@ static void run_tests_by_registry(void) {
         
         if (failures_after > failures_before) {
             // Test failed - print name immediately (JUnit-style)
+            fprintf(stderr, "FAIL: %s\n", all_tests[i].qualified_name);
         } else if (ignores_after > ignores_before) {
             // Test ignored
         } else {
@@ -337,6 +348,11 @@ static void run_specific_test(const char *test_name_or_pattern) {
             RUN_TEST(test->func);
             // Summary will be printed at end of main()
         } else {
+            // Test not found - print error message
+            printf("ERROR: Test '%s' not found.\n", test_name_or_pattern);
+            printf("Use --list to see all available tests.\n");
+            Unity.NumberOfTests++;
+            Unity.TestFailures++;
         }
     }
 }
@@ -350,6 +366,7 @@ int main(int argc, char **argv) {
 #endif
     
     // Parse command line arguments
+    bool show_memory_summary = false;
     if (argc > 1) {
         if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
             print_new_usage(argv[0]);
@@ -360,6 +377,14 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[1], "--quiet") == 0) {
             // Reduce memory leak spam for cleaner output
             set_memory_leak_reporting_enabled(false);
+            run_tests_by_registry();
+        } else if (strcmp(argv[1], "--memory-summary") == 0) {
+            // Enable memory profiler summary
+            show_memory_summary = true;
+#ifdef ENABLE_MEMORY_PROFILING
+            set_memory_verbose_mode(true);
+            set_memory_leak_reporting_enabled(true);
+#endif
             run_tests_by_registry();
         } else if (strcmp(argv[1], "--test") == 0) {
             if (argc < 3) {
@@ -376,10 +401,21 @@ int main(int argc, char **argv) {
         run_tests_by_registry();
     }
     
-    // Memory leak summary only if there are leaks (JUnit-style: minimal output)
+    // Memory summary if requested
 #ifdef ENABLE_MEMORY_PROFILING
-    if (g_memory_stats.memory_leaks > 0) {
+    if (show_memory_summary) {
+        printf("\n");
+        printf("═══════════════════════════════════════════════════════════════\n");
+        printf("MEMORY PROFILER SUMMARY\n");
+        printf("═══════════════════════════════════════════════════════════════\n");
+        memory_profiler_print_stats("All Tests Complete");
         memory_profiler_check_leaks("All Tests Complete");
+        printf("═══════════════════════════════════════════════════════════════\n");
+    } else {
+        // Memory leak summary only if there are leaks (JUnit-style: minimal output)
+        if (g_memory_stats.memory_leaks > 0) {
+            memory_profiler_check_leaks("All Tests Complete");
+        }
     }
 #endif
     

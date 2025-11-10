@@ -164,14 +164,18 @@ int get_retain_count(CljObject *obj);
         typeof(obj) _tmp = (obj); \
         if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
             CljObject *_obj = (CljObject*)_tmp; \
-            if (g_zombie_enabled) { \
-                /* Zombie mode: mark object as zombie instead of freeing */ \
-                _obj->rc = ZOMBIE_RC; \
-                /* Type remains unchanged for printing */ \
-            } else { \
-                /* Normal mode: track and free */ \
+            /* Skip singletons - they don't use memory management */ \
+            if (!is_singleton(_obj)) { \
+                /* Always track object destruction for memory profiling, even in zombie mode */ \
                 memory_profiler_track_object_destruction(_obj); \
-                free(_obj); \
+                if (g_zombie_enabled) { \
+                    /* Zombie mode: mark object as zombie instead of freeing */ \
+                    _obj->rc = ZOMBIE_RC; \
+                    /* Type remains unchanged for printing */ \
+                } else { \
+                    /* Normal mode: free the object */ \
+                    free(_obj); \
+                } \
             } \
         } \
     } while(0)
