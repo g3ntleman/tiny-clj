@@ -356,8 +356,8 @@ TEST(test_eval_body_with_params_fixnum_literal) {
     
     // Test eval_body_with_params with Fixnum literal
     // No parameters, so param_count = 0
-    EvalEnv env_ctx = {NULL, g_test_eval_state};
-    EvalContext ctx = {NULL, &env_ctx, NULL};
+    EvalEnv env_ctx = eval_env_create(NULL, g_test_eval_state);
+    EvalContext ctx = eval_context_create_simple(NULL, &env_ctx);
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
     // Result should be the same Fixnum literal, not NULL
@@ -388,9 +388,9 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     int param_count = 1;
     
     // Test: When body is the parameter symbol, it should return the Fixnum value
-    ParamContext param_ctx = {params, values, param_count};
-    EvalEnv env_ctx = {NULL, g_test_eval_state};
-    EvalContext ctx = {&param_ctx, &env_ctx, NULL};
+    ParamContext param_ctx = param_context_create(params, values, param_count);
+    EvalEnv env_ctx = eval_env_create(NULL, g_test_eval_state);
+    EvalContext ctx = eval_context_create_simple(&param_ctx, &env_ctx);
     ID result = eval_body_with_params(param_sym_obj, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum value, not NULL");
@@ -422,9 +422,9 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     int param_count = 1;
     
     // Test: When body is a Fixnum literal (1), it should return the literal directly
-    ParamContext param_ctx = {params, values, param_count};
-    EvalEnv env_ctx = {NULL, g_test_eval_state};
-    EvalContext ctx = {&param_ctx, &env_ctx, NULL};
+    ParamContext param_ctx = param_context_create(params, values, param_count);
+    EvalEnv env_ctx = eval_env_create(NULL, g_test_eval_state);
+    EvalContext ctx = eval_context_create_simple(&param_ctx, &env_ctx);
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
@@ -448,8 +448,8 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
     
     // Test eval_body_with_params with Fixnum literal
-    EvalEnv env_ctx = {NULL, g_test_eval_state};
-    EvalContext ctx = {NULL, &env_ctx, NULL};
+    EvalEnv env_ctx = eval_env_create(NULL, g_test_eval_state);
+    EvalContext ctx = eval_context_create_simple(NULL, &env_ctx);
     ID result = eval_body_with_params(fixnum_one, &ctx);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");

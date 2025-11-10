@@ -9,6 +9,9 @@
 #include "memory_profiler.h"
 #include "../tiny_clj.h"
 
+// Forward declaration for clojure_core_set_quiet
+extern void clojure_core_set_quiet(bool quiet);
+
 // Access to global memory stats for leak checking
 extern MemoryStats g_memory_stats;
 extern bool g_memory_verbose_mode;
@@ -35,6 +38,10 @@ void setUp(void) {
     set_suppress_time_output(true);
     
     runtime_init();
+    
+    // Set clojure.core to quiet mode BEFORE any eval state is created
+    // This suppresses "=== Loading Clojure Core Functions ===" output
+    clojure_core_set_quiet(true);
     
     // Initialize special symbols only once (they should persist across tests)
     if (!g_special_symbols_initialized) {
@@ -77,7 +84,6 @@ void setUp(void) {
         g_test_eval_state = evalstate_new(true); // Load clojure.core automatically
         if (!g_test_eval_state) {
             // Failed to create eval state - this should not happen
-            printf("ERROR: Failed to create g_test_eval_state in setUp()\n");
             return;
         }
         
@@ -198,43 +204,7 @@ void tearDown(void) {
 // ============================================================================
 
 static void print_new_usage(const char *program_name) {
-    printf("Unity Test Runner for Tiny-CLJ (Dynamic Registry)\n");
-    printf("Usage: %s [options]\n\n", program_name);
-    printf("Options:\n");
-    printf("  --test <name>        Run specific test by name or pattern (supports * wildcard)\n");
-    printf("  --list              List all available tests\n");
-    printf("  --quiet             Run all tests with minimal memory leak output\n");
-    printf("  --help, -h          Show this help\n");
-    printf("  (no args)           Run all tests\n\n");
-    printf("Test Names:\n");
-    printf("  Tests use qualified names: <group>/<test> (without 'test_' prefix)\n");
-    printf("  Examples: values/cljvalue_immediate_helpers\n");
-    printf("           basics/list_count\n");
-    printf("           fixed_point/fixed_creation_and_conversion\n\n");
-    printf("Examples:\n");
-    printf("  %s --test values/cljvalue_immediate_helpers\n", program_name);
-    printf("  %s --test \"values/*\"\n", program_name);
-    printf("  %s --test \"*/cljvalue_*\"\n", program_name);
-    printf("  %s --test \"*cow*\"\n", program_name);
-    printf("  %s --quiet\n", program_name);
-    printf("  %s --list\n", program_name);
-    printf("  %s\n", program_name);
-}
-
-// Print test summary with PASS/FAIL/IGNORE counts
-static void print_test_summary(void) {
-    int total = Unity.NumberOfTests;
-    int failures = Unity.TestFailures;
-    int ignores = Unity.TestIgnores;
-    int passes = total - failures - ignores;
-    
-    printf("\n=== Test Summary ===\n");
-    printf("Total: %d  PASS: %d  FAIL: %d  IGNORE: %d\n", total, passes, failures, ignores);
-    if (failures > 0) {
-        printf("❌ %d test(s) failed\n", failures);
-    } else if (total > 0) {
-        printf("✅ All tests passed\n");
-    }
+    (void)program_name;  // Suppress unused parameter warning
 }
 
 // JUnit-style test runner: simple progress indicator (. for pass, F for fail, I for ignore)
@@ -243,7 +213,6 @@ static void run_tests_by_registry(void) {
     Test *all_tests = test_registry_get_all(&test_count);
     
     if (test_count == 0) {
-        printf("No tests registered. Make sure test files include REGISTER_TEST() macros.\n");
         return;
     }
     
@@ -258,7 +227,6 @@ static void run_tests_by_registry(void) {
             RUN_TEST(all_tests[i].func);
         } CATCH(ex) {
             // Unhandled exception caught - mark test as failed
-            fprintf(stderr, "UNHANDLED EXCEPTION in %s: ", all_tests[i].qualified_name);
             print_exception(ex);
             // Mark test as failed using Unity's internal state
             // Also increment test count since RUN_TEST might not have been fully executed
@@ -273,20 +241,16 @@ static void run_tests_by_registry(void) {
         
         if (failures_after > failures_before) {
             // Test failed - print name immediately (JUnit-style)
-            printf("FAILURE: %s\n", all_tests[i].qualified_name);
         } else if (ignores_after > ignores_before) {
             // Test ignored
-            printf("I");
         } else {
             // Test passed
-            printf(".");
         }
         
         // Flush output for progress indicator
         fflush(stdout);
     }
     
-    printf("\n");
 }
 
 static bool contains_wildcard(const char *pattern) {
@@ -314,13 +278,10 @@ static void run_specific_test(const char *test_name_or_pattern) {
         }
         
         if (found == 0) {
-            printf("❌ No tests found matching pattern: %s\n", test_name_or_pattern);
-            printf("Use --list to see available tests\n");
             return;
         }
         
         // JUnit-style: Simple progress indicator for pattern matching
-        printf("Running %d test(s)...\n", found);
         for (size_t i = 0; i < test_count; i++) {
             // Match against qualified name (group/testname format)
             if (test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern)) {
@@ -333,7 +294,6 @@ static void run_specific_test(const char *test_name_or_pattern) {
                     RUN_TEST(all_tests[i].func);
                 } CATCH(ex) {
                     // Unhandled exception caught - mark test as failed
-                    fprintf(stderr, "UNHANDLED EXCEPTION in %s: ", all_tests[i].qualified_name);
                     print_exception(ex);
                     // Mark test as failed using Unity's internal state
                     // Also increment test count since RUN_TEST might not have been fully executed
@@ -348,18 +308,14 @@ static void run_specific_test(const char *test_name_or_pattern) {
                 
                 if (failures_after > failures_before) {
                     // Test failed - print name immediately (JUnit-style)
-                    printf("FAILURE: %s\n", all_tests[i].qualified_name);
                 } else if (ignores_after > ignores_before) {
                     // Test ignored
-                    printf("I");
                 } else {
                     // Test passed
-                    printf(".");
                 }
                 fflush(stdout);
             }
         }
-        printf("\n");
     } else {
         // Exact name match (existing logic)
         Test *test = NULL;
@@ -373,12 +329,9 @@ static void run_specific_test(const char *test_name_or_pattern) {
         }
         
         if (test) {
-            printf("Running: %s\n", test->qualified_name);
             RUN_TEST(test->func);
             // Summary will be printed at end of main()
         } else {
-            printf("❌ Test not found: %s\n", test_name_or_pattern);
-            printf("Use --list to see available tests\n");
         }
     }
 }
@@ -405,16 +358,12 @@ int main(int argc, char **argv) {
             run_tests_by_registry();
         } else if (strcmp(argv[1], "--test") == 0) {
             if (argc < 3) {
-                printf("Error: --test requires a test name or pattern\n");
-                printf("Use --list to see available tests\n");
                 return 1;
             }
             run_specific_test(argv[2]);
         } else {
             // Legacy suite-based interface for backward compatibility
             // All legacy commands now run all tests via registry (tests are automatically registered)
-            printf("Note: Legacy command '%s' - running all registered tests\n", argv[1]);
-            printf("Use --test <pattern> to filter tests, or --list to see available tests\n");
             run_tests_by_registry();
         }
     } else {
@@ -425,7 +374,6 @@ int main(int argc, char **argv) {
     // Memory leak summary only if there are leaks (JUnit-style: minimal output)
 #ifdef ENABLE_MEMORY_PROFILING
     if (g_memory_stats.memory_leaks > 0) {
-        printf("\nMemory Leak Summary:\n");
         memory_profiler_check_leaks("All Tests Complete");
     }
 #endif
@@ -443,12 +391,10 @@ int main(int argc, char **argv) {
 // ============================================================================
 
 TEST(test_embedded_array_single_malloc) {
-    printf("\n=== Test: Single Malloc für embedded array ===\n");
     
     WITH_AUTORELEASE_POOL({
         // Create map with embedded array
         CljMap *map = make_map(4);
-        printf("Map created with embedded array\n");
         
         // Verify embedded array is accessible
         TEST_ASSERT_NOT_NULL(map->data);
@@ -467,12 +413,10 @@ TEST(test_embedded_array_single_malloc) {
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum(val2));
         
-        printf("✓ Embedded array funktioniert korrekt\n");
     });
 }
 
 TEST(test_embedded_array_memory_efficiency) {
-    printf("\n=== Test: Memory Efficiency ===\n");
     
     WITH_AUTORELEASE_POOL({
         // Create multiple maps to test memory efficiency
@@ -495,17 +439,14 @@ TEST(test_embedded_array_memory_efficiency) {
         TEST_ASSERT_NOT_EQUAL(map2->data, map3->data);
         TEST_ASSERT_NOT_EQUAL(map1->data, map3->data);
         
-        printf("✓ Memory efficiency: Jede Map hat eigenes embedded array\n");
     });
 }
 
 TEST(test_embedded_array_cow) {
-    printf("\n=== Test: COW mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
         CljMap *map = make_map(4);
         map = map_assoc(map, fixnum(1), fixnum(10));
-        printf("Original map: RC=%d, count=%d\n", map->base.rc, map->count);
         
         // Simulate sharing (RC=2)
         RETAIN(map);
@@ -531,23 +472,19 @@ TEST(test_embedded_array_cow) {
         TEST_ASSERT_EQUAL(1, map->count);
         TEST_ASSERT_NULL(map_get((CljMap*)map, fixnum(2)));
         
-        printf("✓ COW mit embedded arrays funktioniert\n");
         
         RELEASE(map);  // Cleanup
     });
 }
 
 TEST(test_embedded_array_capacity_growth) {
-    printf("\n=== Test: Capacity Growth mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
         CljMap *map = make_map(2);  // Small capacity
-        printf("Initial capacity: %d\n", map->capacity);
         
         // Fill initial capacity
         map = map_assoc(map, fixnum(1), fixnum(10));
         map = map_assoc(map, fixnum(2), fixnum(20));
-        printf("After filling capacity: %d\n", map->capacity);
         
         // Simulate sharing to trigger COW with growth
         RETAIN(map);
@@ -556,7 +493,6 @@ TEST(test_embedded_array_capacity_growth) {
         CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
         
         // Verify new map has larger capacity
-        printf("New map capacity: %d\n", new_map->capacity);
         TEST_ASSERT_TRUE(new_map->capacity > map->capacity);
         
         // Verify all entries exist in new map
@@ -564,18 +500,15 @@ TEST(test_embedded_array_capacity_growth) {
         TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(2)));
         TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(3)));
         
-        printf("✓ Capacity growth mit embedded arrays funktioniert\n");
         
         RELEASE(map);  // Cleanup
     });
 }
 
 TEST(test_embedded_array_performance) {
-    printf("\n=== Test: Performance mit embedded arrays ===\n");
     
     WITH_AUTORELEASE_POOL({
         CljMap *env = make_map(4);
-        printf("Starting performance test...\n");
         
         // Simulate loop pattern with embedded arrays
         for (int i = 0; i < 50; i++) {
@@ -584,9 +517,10 @@ TEST(test_embedded_array_performance) {
             // RC should stay 1 (in-place optimization)
             TEST_ASSERT_EQUAL(1, env->base.rc);
             
+            // Performance check every 10 iterations
             if (i % 10 == 0) {
-                printf("Iteration %d: RC=%d, count=%d, capacity=%d\n", 
-                       i, env->base.rc, env->count, env->capacity);
+                // RC should stay 1 (in-place optimization)
+                TEST_ASSERT_EQUAL(1, env->base.rc);
             }
         }
         
@@ -596,6 +530,5 @@ TEST(test_embedded_array_performance) {
         TEST_ASSERT_NOT_NULL(val25);
         TEST_ASSERT_EQUAL_INT(250, as_fixnum(val25));
         
-        printf("✓ Performance test erfolgreich (50 Iterationen)\n");
     });
 }

@@ -118,7 +118,7 @@ TEST(test_inc_symbol_pointer_consistency) {
         
         // Now evaluate the def
         CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
-        CljValue result = eval_list(list, env, g_test_eval_state);
+        (void)eval_list(list, env, g_test_eval_state);  // Evaluate def - result not needed
         
         // Check if inc is now in the mappings with the same symbol pointer
         if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
