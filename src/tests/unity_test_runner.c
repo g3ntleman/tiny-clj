@@ -75,90 +75,7 @@ void setUp(void) {
     // Load clojure.core for each test (refresh state between tests)
     // Use autorelease pool for load_clojure_core to handle AUTORELEASE calls
     WITH_AUTORELEASE_POOL({
-        // CRITICAL: Create/update global evalState for all tests with clojure.core loaded
-        // This ensures all tests can access clojure.core functions
-        // IMPORTANT: After runtime_free() in tearDown(), g_test_eval_state may become invalid
-        // (e.g., current_ns points to freed memory), so we always recreate it to be safe
-        if (g_test_eval_state) {
-            // Free existing eval state to avoid memory leaks
-            evalstate_free(g_test_eval_state);
-            g_test_eval_state = NULL;
-        }
-        
-        // Always create a fresh eval state for each test
-        g_test_eval_state = evalstate_new(true); // Load clojure.core automatically
-        if (!g_test_eval_state) {
-            // Failed to create eval state - this should not happen
-            return;
-        }
-        
-        // Ensure clojure.core is loaded (reload if cache was cleared or namespace is empty)
-        {
-            bool needs_reload = false;
-            if (!g_runtime.clojure_core_cache) {
-                needs_reload = true;
-            } else {
-                // Check if clojure.core namespace actually has functions loaded
-                CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
-                if (!clojure_core || !clojure_core->mappings) {
-                    needs_reload = true;
-                } else {
-                    // Check if 'inc' is in the namespace (quick check to verify functions are loaded)
-                    CljSymbol *inc_sym = intern_symbol_global("inc");
-                    if (inc_sym) {
-                        CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
-                        if (!inc_value) {
-                            needs_reload = true;
-                        }
-                    }
-                }
-            }
-            
-            if (needs_reload) {
-                // Set current_ns to clojure.core before loading
-                evalstate_set_ns(g_test_eval_state, "clojure.core");
-                load_clojure_core(g_test_eval_state);
-            }
-        }
-        
-        // Reset all fields of EvalState between tests
-        if (g_test_eval_state) {
-            g_test_eval_state->expr = NULL;
-            g_test_eval_state->result = NULL;
-            g_test_eval_state->pc = 0;
-            g_test_eval_state->step_budget = 0;
-            g_test_eval_state->sp = 0;
-            g_test_eval_state->finished = 0;
-            g_test_eval_state->file = NULL;
-            g_test_eval_state->line = 0;
-            g_test_eval_state->col = 0;
-            
-            // CRITICAL: After runtime_free() in tearDown(), current_ns may point to a freed namespace
-            // So we MUST reset it to NULL first, then set it to a valid namespace
-            // This ensures evalstate_set_ns doesn't try to access a freed namespace
-            g_test_eval_state->current_ns = NULL;
-            
-            // CRITICAL: Reset user namespace between tests for test isolation
-            // This ensures that variables/functions defined in one test don't leak to another test
-            CljNamespace *user_ns = ns_find("user");
-            if (user_ns && user_ns != (CljNamespace*)g_runtime.clojure_core_cache) {
-                // Clear user namespace mappings (but keep the namespace itself)
-                // This ensures each test starts with a clean user namespace
-                if (user_ns->mappings) {
-                    RELEASE((CljObject*)user_ns->mappings);
-                    user_ns->mappings = (CljObject*)make_map(16);
-                }
-            }
-            
-            // CRITICAL: Reset symbol resolution cache for test isolation
-            // This ensures that cached symbol resolutions from previous tests don't affect current test
-            ns_reset_resolve_cache();
-            
-            // CRITICAL: Set current_ns to "user" (not clojure.core)
-            // clojure.core functions are available via ns_resolve() from cached namespace
-            // This will create a new "user" namespace if it doesn't exist
-            evalstate_set_ns(g_test_eval_state, "user");
-        }
+        evalstate_reset(&g_test_eval_state, true);
     });
 }
 
@@ -176,7 +93,7 @@ void tearDown(void) {
     if (g_memory_verbose_mode) {
         memory_profiler_print_stats("Test Complete");
     }
-    // Check for leaks silently (only prints if leaks detected and reporting enabled)
+    // Check for leaks silently (reporting disabled by default - no output for passing tests)
     memory_profiler_check_leaks("Test Complete");
     
     runtime_free();
@@ -242,7 +159,8 @@ static void run_tests_by_registry(void) {
             RUN_TEST(all_tests[i].func);
         } CATCH(ex) {
             // Unhandled exception caught - mark test as failed
-            print_exception(ex);
+            // Don't print exception here - it's expected to be caught in tests
+            // Only unhandled exceptions (no TRY/CATCH) will be printed
             // Mark test as failed using Unity's internal state
             // Also increment test count since RUN_TEST might not have been fully executed
             Unity.NumberOfTests++;
@@ -294,6 +212,8 @@ static void run_specific_test(const char *test_name_or_pattern) {
         }
         
         if (found == 0) {
+            printf("❌ No tests found matching pattern: %s\n", test_name_or_pattern);
+            printf("Use --list to see available tests\n");
             return;
         }
         
@@ -363,6 +283,8 @@ int main(int argc, char **argv) {
     // Enable memory profiling for tests (only in DEBUG builds)
 #ifdef ENABLE_MEMORY_PROFILING
     enable_memory_profiling(true);
+    // Disable memory leak reporting by default (only show on failures)
+    set_memory_leak_reporting_enabled(false);
 #endif
     
     // Parse command line arguments

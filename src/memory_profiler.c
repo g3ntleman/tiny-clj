@@ -247,6 +247,8 @@ MemoryStats memory_profiler_get_stats(void) {
 static void print_memory_table(const MemoryStats *stats, const char *test_name, bool is_delta) {
     (void)test_name; // Suppress unused parameter warning
     if (!stats) return;
+    // Only print if verbose mode is enabled
+    if (!g_memory_verbose_mode) return;
     
     // Compact output - only show essential information
     if (is_delta) {
@@ -318,7 +320,7 @@ static void update_memory_leak_stats(void) {
         // Only warn if the difference is significant
         if (g_memory_stats.object_destructions > g_memory_stats.total_allocations + 2) {
             static bool double_free_warning_shown = false;
-            if (!double_free_warning_shown) {
+            if (!double_free_warning_shown && g_memory_verbose_mode) {
             LOGF(stdout, "⚠️  WARNING: Potential double-free detected! Object destructions (%zu) significantly exceed allocations (%zu).\n", 
                        g_memory_stats.object_destructions, g_memory_stats.total_allocations);
                 double_free_warning_shown = true;
@@ -489,10 +491,8 @@ void memory_profiler_check_leaks(const char *location) {
                     printf("🔍 %s: %zu leaks\n", type_name, leaks);
                 }
             }
-        } else {
-            // Minimal leak reporting
-            printf("⚠️  Memory leak detected at %s: %zu leaks\n", location ? location : "Unknown", g_memory_stats.memory_leaks);
         }
+        // If reporting is disabled, don't print anything (silent leak checking)
     }
 }
 
@@ -622,11 +622,7 @@ bool is_memory_profiling_enabled(void) {
 
 void set_memory_leak_reporting_enabled(bool enabled) {
     g_memory_leak_reporting_enabled = enabled;
-    if (enabled) {
-        printf("🔍 Memory leak reporting enabled\n");
-    } else {
-        printf("🔍 Memory leak reporting disabled (minimal mode)\n");
-    }
+    // Don't print status message - silent operation
 }
 
 bool is_memory_leak_reporting_enabled(void) {

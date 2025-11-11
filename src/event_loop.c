@@ -241,10 +241,13 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
 
     CljObject *result = NULL;
     bool ok = true;
+    CljObjectPool *_pool = autorelease_pool_push();
     TRY {
         result = eval_function_call(task.fn, NULL, 0, env, st);
+        autorelease_pool_pop(_pool);
     } CATCH(ex) {
         ok = false;
+        autorelease_pool_pop(_pool);
     } END_TRY
     
     if (task.result_chan) {

@@ -11,15 +11,17 @@ typedef struct CljPersistentVector CljPersistentVector;
 
 // Type-safe casting
 static inline CljPersistentVector* as_vector(ID obj) {
-    if (!obj || (TAG(obj) != CLJ_VECTOR && TAG(obj) != CLJ_WEAK_VECTOR && TAG(obj) != CLJ_TRANSIENT_VECTOR)) {
-#ifdef DEBUG
-        const char *actual_type = obj ? "Vector" : "NULL";
-        fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
-                actual_type, __FILE__, __LINE__);
-#endif
-        abort();
+    if (obj) {
+        int tag = TAG(obj);
+        if (tag == CLJ_VECTOR || tag == CLJ_WEAK_VECTOR || tag == CLJ_TRANSIENT_VECTOR) {
+            return (CljPersistentVector*)obj;
+        }
     }
-    return (CljPersistentVector*)obj;
+#ifdef DEBUG
+    fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
+            obj ? "invalid type" : "NULL", __FILE__, __LINE__);
+#endif
+    abort();
 }
 
 // === Legacy API removed - use CljValue API instead ===
@@ -28,7 +30,7 @@ static inline CljPersistentVector* as_vector(ID obj) {
 /** Empty vector singleton (rc=0, do not retain/release). */
 extern CljPersistentVector* empty_vector_singleton;
 /** Return empty vector singleton (rc=0, do not retain/release). */
-ID empty_vector(void);
+CljPersistentVector* empty_vector(void);
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
 CljPersistentVector* make_vector(unsigned int capacity, bool is_mutable);
 /** Return a new vector with item appended; original vector remains unchanged.

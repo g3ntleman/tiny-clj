@@ -342,10 +342,8 @@ void throw_exception_object(CLJException *ex) {
         free(ex); exit(1);
     }
     
-    // Print exception details (compact, includes zombie object if available)
-    fprintf(stderr, "Exception thrown: ");
-    print_exception(ex);
-    
+    // Don't print exception details if there's a handler (expected exceptions in tests)
+    // Only print for unhandled exceptions above
     // Store existing exception in thread-local variable
     // Note: We don't create a new exception, we reuse the existing one
     g_current_exception = ex;

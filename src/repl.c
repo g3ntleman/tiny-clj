@@ -16,6 +16,7 @@
 #include "memory.h"
 #include "value.h"
 #include "builtins.h"
+#include "event_loop.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -452,7 +453,13 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
                     got_input = true;
                 }
             }
-            if (!got_input) continue;
+            if (!got_input) {
+                for (int i = 0; i < 10; i++) {
+                    if (!event_loop_run_next(NULL, st)) break;
+                }
+                usleep(1000);
+                continue;
+            }
         }
 #else
         int once = 200;
@@ -461,7 +468,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
             char buf[512];
             int n = platform_readline_nb(buf, sizeof(buf));
             if (n < 0) { should_exit = true; break; }
-            if (n == 0) { usleep(1000); continue; }
+            if (n == 0) {
+                event_loop_run_next(NULL, st);
+                usleep(1000);
+                continue;
+            }
             if (n > 0) {
                 if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
                 for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
@@ -505,7 +516,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
 
         bool success = eval_multiline_string(acc, st);
         
-        // Always add command to history (successful or failed) so user can correct it
+        for (int i = 0; i < 10; i++) {
+            if (!event_loop_run_next(NULL, st)) break;
+        }
         if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
             LineEditor *editor = get_line_editor();
@@ -552,7 +565,6 @@ int main(int argc, char **argv) {
     runtime_init();
     init_special_symbols();  // Initialize special symbols like SYM_DEF
     EvalState *st = evalstate_new(false);
-    if (!st) return 1;
     // Note: set_global_eval_state() removed - Exception handling now independent
     evalstate_set_ns(st, "user");
     // Quiet mode for CLI eval (no banner)

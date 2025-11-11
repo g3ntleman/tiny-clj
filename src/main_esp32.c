@@ -29,10 +29,6 @@ int main() {
     
     // Create evaluation state
     EvalState *state = evalstate_new(false);
-    if (!state) {
-        DEBUG_PRINT("ERROR: Failed to create eval state");
-        return 1;
-    }
     
     // Load and execute startup code
     DEBUG_PRINT("Loading startup code...");
