@@ -37,10 +37,14 @@ TEST(test_nth_with_default_and_bounds) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)x));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)x));
 
-    // Out-of-bounds mit Default
-    CljObject *d = eval_string("(nth [10 20 30] 5 :na)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(d);
-    TEST_ASSERT_TRUE(d && TAG(d) == CLJ_SYMBOL);
+    // Out-of-bounds mit Default => exception (not default value)
+    CljObject *d = NULL;
+    TRY {
+        d = eval_string("(nth [10 20 30] 5 :na)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(d);
 
 }
 
@@ -66,23 +70,41 @@ TEST(test_nth_with_lists) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)n2));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)n2));
 
-    // Out-of-bounds without default => nil
-    CljObject *out = eval_string("(nth '(10 20 30) 5)", g_test_eval_state);
+    // Out-of-bounds without default => exception
+    CljObject *out = NULL;
+    TRY {
+        out = eval_string("(nth '(10 20 30) 5)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(out);
 
-    // Out-of-bounds with default => default value
-    CljObject *out_default = eval_string("(nth '(10 20 30) 5 :not-found)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(out_default);
-    TEST_ASSERT_TRUE(TAG(out_default) == CLJ_SYMBOL);
+    // Out-of-bounds with default => exception (not default value)
+    CljObject *out_default = NULL;
+    TRY {
+        out_default = eval_string("(nth '(10 20 30) 5 :not-found)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(out_default);
 
-    // Empty list => nil
-    CljObject *empty = eval_string("(nth '() 0)", g_test_eval_state);
+    // Empty list => exception
+    CljObject *empty = NULL;
+    TRY {
+        empty = eval_string("(nth '() 0)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(empty);
 
-    // Empty list with default => default value
-    CljObject *empty_default = eval_string("(nth '() 0 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(empty_default);
-    TEST_ASSERT_TRUE(TAG(empty_default) == CLJ_SYMBOL);
+    // Empty list with default => exception (not default value)
+    CljObject *empty_default = NULL;
+    TRY {
+        empty_default = eval_string("(nth '() 0 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(empty_default);
 
     // List with nil elements
     // (nth '(1 nil 3) 1) => nil
@@ -139,37 +161,64 @@ TEST(test_nth_with_sequences) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)subvec_nth));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)subvec_nth));
 
-    // Out-of-bounds with sequence
-    CljObject *seq_out = eval_string("(nth (rest '(10 20)) 5)", g_test_eval_state);
+    // Out-of-bounds with sequence => exception
+    CljObject *seq_out = NULL;
+    TRY {
+        seq_out = eval_string("(nth (rest '(10 20)) 5)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(seq_out);
 
-    // Out-of-bounds with sequence and default
-    CljObject *seq_out_default = eval_string("(nth (rest '(10 20)) 5 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(seq_out_default);
-    TEST_ASSERT_TRUE(TAG(seq_out_default) == CLJ_SYMBOL);
+    // Out-of-bounds with sequence and default => exception (not default value)
+    CljObject *seq_out_default = NULL;
+    TRY {
+        seq_out_default = eval_string("(nth (rest '(10 20)) 5 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(seq_out_default);
 
 }
 
 TEST(test_nth_edge_cases) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    // Negative index => nil
-    CljObject *neg = eval_string("(nth [10 20 30] -1)", g_test_eval_state);
+    // Negative index => exception
+    CljObject *neg = NULL;
+    TRY {
+        neg = eval_string("(nth [10 20 30] -1)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(neg);
 
-    // Negative index with default => default value
-    CljObject *neg_default = eval_string("(nth [10 20 30] -1 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(neg_default);
-    TEST_ASSERT_TRUE(TAG(neg_default) == CLJ_SYMBOL);
+    // Negative index with default => exception (not default value)
+    CljObject *neg_default = NULL;
+    TRY {
+        neg_default = eval_string("(nth [10 20 30] -1 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(neg_default);
 
-    // nil collection => nil
-    CljObject *nil_coll = eval_string("(nth nil 0)", g_test_eval_state);
+    // nil collection => exception
+    CljObject *nil_coll = NULL;
+    TRY {
+        nil_coll = eval_string("(nth nil 0)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(nil_coll);
 
-    // nil collection with default => default value
-    CljObject *nil_coll_default = eval_string("(nth nil 0 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(nil_coll_default);
-    TEST_ASSERT_TRUE(TAG(nil_coll_default) == CLJ_SYMBOL);
+    // nil collection with default => exception (not default value)
+    CljObject *nil_coll_default = NULL;
+    TRY {
+        nil_coll_default = eval_string("(nth nil 0 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(nil_coll_default);
 
     // First element (index 0)
     CljObject *first = eval_string("(nth [10 20 30] 0)", g_test_eval_state);
@@ -183,23 +232,41 @@ TEST(test_nth_edge_cases) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)last));
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)last));
 
-    // Just out of bounds
-    CljObject *just_out = eval_string("(nth [10 20 30] 3)", g_test_eval_state);
+    // Just out of bounds => exception
+    CljObject *just_out = NULL;
+    TRY {
+        just_out = eval_string("(nth [10 20 30] 3)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(just_out);
 
-    // Just out of bounds with default
-    CljObject *just_out_default = eval_string("(nth [10 20 30] 3 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(just_out_default);
-    TEST_ASSERT_TRUE(TAG(just_out_default) == CLJ_SYMBOL);
+    // Just out of bounds with default => exception (not default value)
+    CljObject *just_out_default = NULL;
+    TRY {
+        just_out_default = eval_string("(nth [10 20 30] 3 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(just_out_default);
 
-    // Large index
-    CljObject *large = eval_string("(nth [10 20 30] 1000)", g_test_eval_state);
+    // Large index => exception
+    CljObject *large = NULL;
+    TRY {
+        large = eval_string("(nth [10 20 30] 1000)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
     TEST_ASSERT_NULL(large);
 
-    // Large index with default
-    CljObject *large_default = eval_string("(nth [10 20 30] 1000 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(large_default);
-    TEST_ASSERT_TRUE(TAG(large_default) == CLJ_SYMBOL);
+    // Large index with default => exception (not default value)
+    CljObject *large_default = NULL;
+    TRY {
+        large_default = eval_string("(nth [10 20 30] 1000 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(large_default);
 
     // Single element vector
     CljObject *single = eval_string("(nth [42] 0)", g_test_eval_state);
@@ -268,9 +335,14 @@ TEST(test_nth_nil_elements) {
         TEST_ASSERT_NULL(nil_at_index);  // NULL is correct for nil
     }
 
-    // (nth [1 nil 3] 3) => nil (out-of-bounds)
-    CljObject *out_of_bounds = eval_string("(nth [1 nil 3] 3)", g_test_eval_state);
-    TEST_ASSERT_NULL(out_of_bounds);  // Out-of-bounds should return NULL
+    // (nth [1 nil 3] 3) => exception (out-of-bounds)
+    CljObject *out_of_bounds = NULL;
+    TRY {
+        out_of_bounds = eval_string("(nth [1 nil 3] 3)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(out_of_bounds);  // Out-of-bounds should throw exception
 
     // Using default to distinguish: nil element vs out-of-bounds
     // When element is nil, default is NOT returned (element exists, it's just nil)
@@ -282,10 +354,14 @@ TEST(test_nth_nil_elements) {
         TEST_ASSERT_NULL(nil_with_default);  // nil element, not default
     }
 
-    // Out-of-bounds with default => default
-    CljObject *out_with_default = eval_string("(nth [1 nil 3] 3 :default)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(out_with_default);
-    TEST_ASSERT_TRUE(TAG(out_with_default) == CLJ_SYMBOL);
+    // Out-of-bounds with default => exception (not default value)
+    CljObject *out_with_default = NULL;
+    TRY {
+        out_with_default = eval_string("(nth [1 nil 3] 3 :default)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_NULL(out_with_default);
 
 }
 

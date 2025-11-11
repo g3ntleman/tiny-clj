@@ -70,38 +70,54 @@ ID nth2(ID *args, unsigned int argc) {
     }
     int i = AS_FIXNUM(idx);
     if (i < 0) {
-        return not_found ? RETAIN(not_found) : NULL;
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "nth index %d is negative", i);
+        return NULL;
     }
 
     // Handle nil collection
     if (!coll) {
-        return not_found ? RETAIN(not_found) : NULL;
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for nil collection", i);
+        return NULL;
     }
 
     // Fast path: Vectors (O(1) access) - includes transient vectors
     if (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_TRANSIENT_VECTOR) {
         CljPersistentVector *v = as_vector(coll);
-        if (!v || i >= vector_count(v)) {
-            return not_found ? RETAIN(not_found) : NULL;
-        }
-        ID result = vector_nth(v, i);
-        if (!result) {
-            // For nil elements, return NULL (not not_found) - Clojure-compatible behavior
-            // nil is represented as NULL, so we return NULL directly
+        int count = vector_count(v);
+        if (!v || i >= count) {
+            // Out of bounds: throw exception
+            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                    "nth index %d is out of bounds for collection with %d elements", i, count);
             return NULL;
         }
-        return result;  // Already retained by vector_nth
+        // Index is valid - check if element is nil
+        // Use vector_get_element_no_retain to distinguish nil element from out-of-bounds
+        ID elem = vector_get_element_no_retain(v, i);
+        if (!elem || elem == SYM_NIL) {
+            // Element exists but is nil - return NULL (not not_found)
+            // This is Clojure behavior: (nth [1 nil 3] 1 :default) => nil (not :default)
+            return NULL;
+        }
+        // Element exists and is not nil - return retained
+        return RETAIN(elem);
     }
 
     // Fast path: Lists (O(n) access via list_nth)
     if (TAG(coll) == CLJ_LIST) {
         CljList *list = as_list(coll);
         if (!list) {
-            return not_found ? RETAIN(not_found) : NULL;
+            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                    "nth index %d is out of bounds for nil collection", i);
+            return NULL;
         }
         ID result = list_nth(list, i);
         if (!result) {
-            return not_found ? RETAIN(not_found) : NULL;
+            // Out of bounds for list
+            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                    "nth index %d is out of bounds for list", i);
+            return NULL;
         }
         if (result == SYM_NIL) {
             return NULL;
@@ -118,19 +134,25 @@ ID nth2(ID *args, unsigned int argc) {
 
     SeqIterator iter;
     if (!seq_iter_init(&iter, (CljObject*)coll)) {
-        return not_found ? RETAIN(not_found) : NULL;
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for empty sequence", i);
+        return NULL;
     }
 
     // Iterate to index i
     for (int j = 0; j < i; j++) {
         if (seq_iter_empty(&iter)) {
-            return not_found ? RETAIN(not_found) : NULL;
+            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                    "nth index %d is out of bounds for sequence (reached end at index %d)", i, j);
+            return NULL;
         }
         seq_iter_next(&iter);
     }
 
     if (seq_iter_empty(&iter)) {
-        return not_found ? RETAIN(not_found) : NULL;
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for sequence", i);
+        return NULL;
     }
 
     ID result = seq_iter_first(&iter);
