@@ -734,11 +734,12 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
     return NULL;
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
-  while (!reader_eof(reader) && reader_peek_char(reader) != '"' &&
+  while (!reader_eof(reader) && reader_peek(reader) != '"' &&
          pos < MAX_STACK_STRING_SIZE - 1) {
-    char c = reader_next(reader);
-    if (c == '\\') {
-      c = reader_next(reader);
+    // Check for escape sequence
+    if (reader_peek(reader) == '\\') {
+      reader_next(reader); // consume '\'
+      char c = reader_next(reader);
       switch (c) {
       case 'n':
         buf[pos++] = '\n';
@@ -760,7 +761,31 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
         break;
       }
     } else {
-      buf[pos++] = c;
+      // Read UTF-8 codepoint as complete sequence
+      const char *current = reader->src + reader->index;
+      const char *next = utf8codepoint(current, NULL);
+      if (!next || next <= current) {
+        // Invalid UTF-8 sequence - skip one byte to avoid infinite loop
+        buf[pos++] = reader_next(reader);
+      } else {
+        // Copy complete UTF-8 sequence
+        size_t bytes_to_copy = next - current;
+        if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE) break;
+        for (size_t i = 0; i < bytes_to_copy; i++) {
+          buf[pos++] = current[i];
+        }
+        // Advance reader by codepoint
+        // Update line/column tracking for newlines
+        for (size_t i = 0; i < bytes_to_copy; i++) {
+            if (current[i] == '\n') {
+                reader->line++;
+                reader->column = 1;
+            } else {
+                reader->column++;
+            }
+        }
+        reader->index += bytes_to_copy;
+      }
     }
   }
   if (reader_eof(reader) || reader_next(reader) != '"') {

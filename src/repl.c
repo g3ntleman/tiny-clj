@@ -381,9 +381,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
 #ifdef DEBUG
     // Enable zombie mode for debugging use-after-free errors
     enable_zombie_mode();
-    // Enable verbose memory mode for debugging
-    set_memory_verbose_mode(true);
-    enable_memory_debug_output();
+    // Verbose memory mode and debug output disabled in REPL
+    // set_memory_verbose_mode(true);
+    // enable_memory_debug_output();
 #endif
 
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());

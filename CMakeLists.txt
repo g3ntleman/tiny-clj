@@ -267,6 +267,7 @@ add_executable(unity-tests
     src/tests/test_registry.c
     src/tests/test_memory.c
     src/tests/test_parser.c
+    src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
     src/tests/test_basics.c
     src/tests/test_namespace.c

@@ -51,6 +51,13 @@ static inline bool utf8valid(const char *s) {
         
         if (len == 0) return false;  // Invalid first byte
         
+        // Basic validation for overlong sequences and invalid ranges (before checking continuation bytes)
+        if (len == 2 && first < 0xC2) return false;
+        if (len == 3 && first == 0xE0 && s[1] && (unsigned char)s[1] < 0xA0) return false;
+        if (len == 3 && first == 0xED && s[1] && (unsigned char)s[1] >= 0xA0) return false;
+        if (len == 4 && first == 0xF0 && s[1] && (unsigned char)s[1] < 0x90) return false;
+        if (len == 4 && first > 0xF4) return false;  // F0-F4 are valid, F5+ are invalid
+        
         // Check continuation bytes
         for (int i = 1; i < len; i++) {
             s++;
@@ -59,14 +66,7 @@ static inline bool utf8valid(const char *s) {
             }
         }
         
-        // Basic validation for overlong sequences and invalid ranges
-        if (len == 2 && first < 0xC2) return false;
-        if (len == 3 && first == 0xE0 && (unsigned char)s[1] < 0xA0) return false;
-        if (len == 3 && first == 0xED && (unsigned char)s[1] >= 0xA0) return false;
-        if (len == 4 && first == 0xF0 && (unsigned char)s[1] < 0x90) return false;
-        if (len == 4 && first >= 0xF5) return false;
-        
-        s++;
+        s++;  // Move to next sequence
     }
     return true;
 }
