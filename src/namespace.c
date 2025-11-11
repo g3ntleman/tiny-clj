@@ -20,7 +20,7 @@ static CljObject *g_resolve_cache = NULL;
 // Function to reset resolve cache (for test isolation)
 void ns_reset_resolve_cache(void) {
     if (g_resolve_cache) {
-        RELEASE((CljObject*)g_resolve_cache);
+        RELEASE(g_resolve_cache);
         g_resolve_cache = NULL;
     }
 }
@@ -45,8 +45,8 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!ns) return NULL;
     
     ns->name = (CljObject*)intern_symbol(NULL, name);
-    ns->mappings = (CljObject*)make_map(64); // Increased capacity for clojure.core
-    ns->aliases = (CljObject*)make_map(16);
+    ns->mappings = make_map(64); // Increased capacity for clojure.core
+    ns->aliases = make_map(16);
     ns->filename = file ? strdup(file) : NULL;
     ns->next = (CljNamespace*)g_runtime.ns_registry;
     g_runtime.ns_registry = (void*)ns;
@@ -72,7 +72,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
     
     // Initialize cache on first use (DRY: reuse array-map)
     if (!g_resolve_cache) {
-        g_resolve_cache = (CljObject*)make_map(RESOLVE_CACHE_SIZE);
+        g_resolve_cache = make_map(RESOLVE_CACHE_SIZE);
     }
     
     // CRITICAL: Always check current namespace first (before cache)
@@ -83,7 +83,7 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
         if (g_resolve_cache) {
             ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
-            ASSIGN(g_resolve_cache, (CljObject*)updated_cache);
+            ASSIGN(g_resolve_cache, updated_cache);
         }
         return v;
     }
@@ -103,8 +103,8 @@ ID ns_resolve(EvalState *st, CljObject *sym) {
             // Cache the result
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
             ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
-            ASSIGN(g_resolve_cache, (CljObject*)updated_cache);
-            return (ID)v;
+            ASSIGN(g_resolve_cache, updated_cache);
+            return v;
         }
     }
     
@@ -180,8 +180,8 @@ void ns_cleanup() {
         // Don't free clojure.core namespace if it's cached (preserve for tests)
         if (cur != preserved_clojure_core) {
             if (cur->filename) free((void*)cur->filename);
-            if (cur->mappings) RELEASE((CljObject*)cur->mappings);
-            if (cur->aliases) RELEASE((CljObject*)cur->aliases);
+            if (cur->mappings) RELEASE(cur->mappings);
+            if (cur->aliases) RELEASE(cur->aliases);
             free(cur);
         }
         cur = next;
@@ -196,7 +196,8 @@ void ns_cleanup() {
 EvalState* evalstate_new(bool load_core) {
     EvalState *st = (EvalState*)malloc(sizeof(EvalState));
     if (!st) {
-        return NULL;
+        throw_exception(EXCEPTION_RUNTIME, "Failed to allocate EvalState", NULL, 0, 0);
+        return NULL; // Never reached, but compiler doesn't know
     }
     
     memset(st, 0, sizeof(EvalState));
@@ -205,7 +206,8 @@ EvalState* evalstate_new(bool load_core) {
     st->current_ns = ns_get_or_create("user", NULL); // Default namespace
     if (!st->current_ns) {
         free(st);
-        return NULL;
+        throw_exception(EXCEPTION_RUNTIME, "Failed to create user namespace", NULL, 0, 0);
+        return NULL; // Never reached, but compiler doesn't know
     }
     
     st->file = NULL;
@@ -249,6 +251,74 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
     if (ns) {
         st->current_ns = ns;
     }
+}
+
+void evalstate_reset(EvalState **st_ptr, bool load_core) {
+    if (!st_ptr) return;
+    
+    // Free existing eval state if present
+    if (*st_ptr) {
+        evalstate_free(*st_ptr);
+        *st_ptr = NULL;
+    }
+    
+    // Create new eval state
+    *st_ptr = evalstate_new(load_core);
+    
+    if (!*st_ptr) return;
+    
+    // Ensure clojure.core is loaded if requested
+    if (load_core) {
+        bool needs_reload = false;
+        if (!g_runtime.clojure_core_cache) {
+            needs_reload = true;
+        } else {
+            CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+            if (!clojure_core || !clojure_core->mappings) {
+                needs_reload = true;
+            } else {
+                CljSymbol *inc_sym = intern_symbol_global("inc");
+                if (inc_sym) {
+                    CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
+                    if (!inc_value) {
+                        needs_reload = true;
+                    }
+                }
+            }
+        }
+        
+        if (needs_reload) {
+            evalstate_set_ns(*st_ptr, "clojure.core");
+            load_clojure_core(*st_ptr);
+        }
+    }
+    
+    // Reset all fields
+    (*st_ptr)->expr = NULL;
+    (*st_ptr)->result = NULL;
+    (*st_ptr)->pc = 0;
+    (*st_ptr)->step_budget = 0;
+    (*st_ptr)->sp = 0;
+    (*st_ptr)->finished = 0;
+    (*st_ptr)->file = NULL;
+    (*st_ptr)->line = 0;
+    (*st_ptr)->col = 0;
+    (*st_ptr)->current_ns = NULL;
+    
+    // Reset user namespace for isolation
+    CljNamespace *user_ns = ns_find("user");
+    if (user_ns && user_ns != (CljNamespace*)g_runtime.clojure_core_cache) {
+        if (user_ns->mappings) {
+            RELEASE(user_ns->mappings);
+            user_ns->mappings = make_map(16);
+        }
+    }
+    
+    // Reset symbol resolution cache
+    ns_reset_resolve_cache();
+    
+    // Set current_ns to "user"
+    evalstate_set_ns(*st_ptr, "user");
 }
 
 // Exception handling
@@ -322,7 +392,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     
     // Create or update mappings
     if (!ns->mappings) {
-        ns->mappings = (CljObject*)make_map(16);
+        ns->mappings = make_map(16);
     }
     
     // Store symbol-value binding (overwrites existing)
@@ -332,8 +402,8 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     CljMap *new_mappings = map_assoc((CljMap*)ns->mappings, (ID)symbol, (ID)value);
     if (new_mappings != (CljMap*)ns->mappings) {
         // Map was copied (COW) - update reference
-        RELEASE((CljObject*)ns->mappings);
-        ns->mappings = (CljObject*)new_mappings;
+        RELEASE(ns->mappings);
+        ns->mappings = new_mappings;
         // new_mappings is already retained by map_assoc
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
@@ -344,7 +414,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     if (g_resolve_cache) {
         // Remove the symbol from cache to force re-resolution
         ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)symbol, NULL);
-        ASSIGN(g_resolve_cache, (CljObject*)updated_cache);
+        ASSIGN(g_resolve_cache, updated_cache);
     }
 }
 
@@ -373,7 +443,7 @@ void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
     
     // Create or update aliases map
     if (!ns->aliases) {
-        ns->aliases = (CljObject*)make_map(16);
+        ns->aliases = make_map(16);
     }
     
     // Store alias-namespace binding (overwrites existing)

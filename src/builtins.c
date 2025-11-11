@@ -1193,6 +1193,9 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
     if (newline) {
         printf("\n");
     }
+    
+    // Flush stdout to ensure output appears immediately (important for timers/go blocks)
+    fflush(stdout);
 }
 
 // ============================================================================
@@ -1780,7 +1783,6 @@ ID native_require(ID *args, unsigned int argc) {
     }
 
     EvalState *st = evalstate_new(false);
-    if (!st) return NULL;
 
     // Process each require spec (support multiple specs: (require '[ns1 :as n1] '[ns2 :as n2]))
     for (unsigned int i = 0; i < argc; i++) {
@@ -2779,7 +2781,6 @@ ID native_do(ID *args, unsigned int argc) {
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     EvalState *st = evalstate_new(false);
-    if (!st) return;
     
     // Get or create clojure.core namespace
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);

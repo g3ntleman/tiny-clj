@@ -21,8 +21,8 @@ static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singl
 CljPersistentVector* empty_vector_singleton = (CljPersistentVector*)&clj_empty_vector_singleton_data.vec;
 
 /** Return empty vector singleton (rc=0, do not retain/release). */
-ID empty_vector(void) {
-    return (ID)clj_empty_vector_singleton;
+CljPersistentVector* empty_vector(void) {
+    return clj_empty_vector_singleton;
 }
 
 // Creates a CljVector.

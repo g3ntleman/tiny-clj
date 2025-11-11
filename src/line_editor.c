@@ -362,6 +362,10 @@ int line_editor_process_input(LineEditor *editor) {
     if (c == -1) {
         return LINE_EDITOR_EOF;
     }
+    if (c == -2) {
+        // No input available (non-blocking mode)
+        return LINE_EDITOR_SUCCESS; // Return success but no input processed
+    }
     
     // Handle ANSI escape sequences
     if (c == '\033') {

@@ -92,9 +92,18 @@ int platform_readline_nb(char *buf, int max) {
 // Line editor platform functions
 int platform_get_char(void) {
     char c;
-    // Use blocking read for line editor
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    bool was_nonblocking = (flags & O_NONBLOCK) != 0;
+    if (!was_nonblocking) {
+        fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    }
     ssize_t n = read(STDIN_FILENO, &c, 1);
-    if (n <= 0) return -1;
+    if (!was_nonblocking) {
+        fcntl(STDIN_FILENO, F_SETFL, flags);
+    }
+    if (n <= 0) {
+        return (n == 0 || (n < 0 && errno == EAGAIN)) ? -2 : -1;
+    }
     return (unsigned char)c;
 }
 
@@ -119,10 +128,8 @@ void platform_set_raw_mode(int enable) {
         tcgetattr(STDIN_FILENO, &original_termios);
         
         struct termios raw = original_termios;
-        // Disable canonical mode and echo
         raw.c_lflag &= ~(ICANON | ECHO);
-        // Set minimum characters to read
-        raw.c_cc[VMIN] = 1;
+        raw.c_cc[VMIN] = 0;
         raw.c_cc[VTIME] = 0;
         
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);

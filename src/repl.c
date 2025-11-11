@@ -13,6 +13,7 @@
 #include "runtime.h"
 #include "vector.h"
 #include "memory.h"
+#include "event_loop.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -199,7 +200,7 @@ static bool eval_string_repl(const char *code, EvalState *st) {
  *  @return New vector with last N elements (or original if smaller)
  */
 CljObject* history_trim_last_n(CljObject *vec, int limit) {
-    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return (CljObject*)make_vector(0, 0);
+    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return make_vector(0, 0);
     CljPersistentVector *v = as_vector(vec);
     if (!v || v->count <= limit) return RETAIN(vec);
     int start = v->count - limit;
@@ -315,7 +316,7 @@ CljObject* history_load_from_file(const char *path) {
     evalstate_free(st);
     if (!result) {
         // Create empty vector outside of autorelease pool to avoid double-free
-        result = (CljObject*)make_vector(0, 0);
+        result = make_vector(0, 0);
     }
     // Return with AUTORELEASE to add to caller's pool
     return AUTORELEASE(result);
@@ -373,27 +374,8 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
         return false;
     }
     set_line_editor(editor);
-    // Lade History aus Default-Datei und fülle Editor-History (mit Autorelease-Pool)
-    CljObject *history_vec = NULL;
-    WITH_AUTORELEASE_POOL({
-        TRY {
-            CljObject *loaded = line_editor_history_load_default();
-            if (loaded && TAG(loaded) == CLJ_VECTOR) {
-                // RETAIN to keep history alive when pool is popped
-                ASSIGN(history_vec, RETAIN(loaded));
-            }
-            } CATCH(ex) {
-                fprintf(stderr, "Warning: Failed to load history file. History has been reset.\n");
-                history_vec = NULL;
-            } END_TRY
-    });  // Pool is popped here, but history_vec is retained, so it's not freed
-    // Now use the retained history vector
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
-        line_editor_set_history_from_vector(editor, history_vec);
-        RELEASE(history_vec);  // Release after use
-    } else {
-        line_editor_clear_history(editor);
-    }
+    // History loading disabled - start with empty history
+    line_editor_clear_history(editor);
 #endif
 
     while (true) {
@@ -420,7 +402,13 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
                     got_input = true;
                 }
             }
-            if (!got_input) continue;
+            if (!got_input) {
+                for (int i = 0; i < 10; i++) {
+                    if (!event_loop_run_next(NULL, st)) break;
+                }
+                usleep(1000);
+                continue;
+            }
         }
 #else
         int once = 200;
@@ -429,7 +417,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
             char buf[512];
             int n = platform_readline_nb(buf, sizeof(buf));
             if (n < 0) { should_exit = true; break; }
-            if (n == 0) { usleep(1000); continue; }
+            if (n == 0) {
+                event_loop_run_next(NULL, st);
+                usleep(1000);
+                continue;
+            }
             if (n > 0) {
                 if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
                 for (int i = 0; i < n; i++) if (buf[i] == '\r') buf[i] = '\n';
@@ -471,10 +463,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
 
         // (Entfernt) REPL interne History-Kommandos
 
-        // Use eval_string_repl for proper exception handling
         bool success = eval_string_repl(acc, st);
         
-        // Always add command to history (successful or failed) so user can correct it
+        for (int i = 0; i < 10; i++) {
+            if (!event_loop_run_next(NULL, st)) break;
+        }
         if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
             LineEditor *editor = get_line_editor();
@@ -521,7 +514,6 @@ int main(int argc, char **argv) {
     runtime_init();
     init_special_symbols();  // Initialize special symbols like SYM_DEF
     EvalState *st = evalstate_new(false);
-    if (!st) return 1;
     // Note: set_global_eval_state() removed - Exception handling now independent
     evalstate_set_ns(st, "user");
     // Quiet mode for CLI eval (no banner)

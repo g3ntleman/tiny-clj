@@ -56,6 +56,7 @@ void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name);
 EvalState* evalstate_new(bool load_core);
 void evalstate_free(EvalState *st);
 void evalstate_set_ns(EvalState *st, const char *ns_name);
+void evalstate_reset(EvalState **st_ptr, bool load_core);
 
 // Optimized EvalState functions
 EvalState* evalstate_new_lazy();
