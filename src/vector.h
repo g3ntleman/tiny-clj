@@ -48,6 +48,10 @@ int vector_count(CljPersistentVector *vec);
 ID vector_nth(CljPersistentVector *vec, int index);
 /** Set element at index. Returns new vector with updated element (COW if needed). */
 CljPersistentVector* vector_set_nth(CljPersistentVector* vec, int index, ID value);
+/** Copy vector with specified capacity. */
+CljPersistentVector* vector_copy(CljPersistentVector* vec, int capacity);
+/** Remove last element from vector (in-place if RC=1, COW if RC>1). */
+CljPersistentVector* vector_pop(CljPersistentVector* vec);
 /** Initialize seq iterator for vector (internal use by seq.c). */
 bool vector_init_seq_iterator(SeqIterator *iter, CljPersistentVector *vec);
 /** Get element at index without RETAIN (internal use for seq iterator). */

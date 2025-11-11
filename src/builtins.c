@@ -9,7 +9,6 @@
 #include <inttypes.h>
 #include "object.h"
 #include "vector.h"
-#include "vector_internal.h"  // For direct manipulation in native_pop (performance-critical)
 #include "map.h"
 #include "atom.h"
 #include "kv_macros.h"
@@ -166,39 +165,10 @@ ID native_pop(ID *args, unsigned int argc) {
         return make_vector(0, false);
     }
     
-    // OPTIMIZATION: If RC=1, mutate in-place (O(1))
-    // This is the hot path - most common case when vector is not shared
-    if (v->base.rc == 1) {
-        // Release last element
-        ID last_elem = vector_nth(v, count - 1);
-        if (last_elem) {
-            RELEASE(last_elem);
-        }
-        // Use vector_internal for direct manipulation in this special case (pop needs in-place mutation)
-        // This is a performance-critical path, so we use internal header (already included at top)
-        v->count--;
-        return AUTORELEASE(vec);  // Return same vector (in-place mutation)
-    }
-    
-    // RC>1: Copy-on-Write (O(n))
-    // Original vector is shared, so we must create a new copy
-    CljValue new_vec = (CljValue)make_vector(count - 1, false);
-    CljPersistentVector *new_v = as_vector((CljObject*)new_vec);
-    if (!new_v) return NULL;
-    
-    // Copy all elements except the last one using vector_conj
-    for (int i = 0; i < count - 1; i++) {
-        ID elem = vector_nth(v, i);
-        if (elem) {
-            new_v = vector_conj(new_v, elem);
-            RELEASE(elem);  // vector_conj retains, so release our copy
-        } else {
-            new_v = vector_conj(new_v, NULL);
-        }
-        new_vec = (CljValue)new_v;
-    }
-    
-    return AUTORELEASE(new_vec);
+    // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
+    CljPersistentVector *result = vector_pop(v);
+    if (!result) return NULL;
+    return (ID)result;  // vec is retained by caller, result is already retained
 }
 
 // subvec: returns sub-vector from start (inclusive) to end (exclusive)
