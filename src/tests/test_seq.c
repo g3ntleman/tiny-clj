@@ -35,10 +35,10 @@ TEST(test_make_seq_vector) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = TEST_VECTOR_SIZE;
+        // Add elements using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(1));
+        vec_data = vector_conj(vec_data, (ID)fixnum(2));
+        vec_data = vector_conj(vec_data, (ID)fixnum(3));
         
         // Create sequence iterator
         CljSeqIterator *seq = make_seq((CljObject*)vec);
@@ -98,10 +98,10 @@ TEST(test_seq_first) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = fixnum(42);
-        vec_data->data[1] = fixnum(43);
-        vec_data->data[2] = fixnum(44);
-        vec_data->count = 3;
+        // Add elements using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(42));
+        vec_data = vector_conj(vec_data, (ID)fixnum(43));
+        vec_data = vector_conj(vec_data, (ID)fixnum(44));
         
         // Create sequence and test first
         CljSeqIterator *seq = make_seq((CljObject*)vec);
@@ -120,10 +120,10 @@ TEST(test_seq_rest) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = fixnum(42);
-        vec_data->data[1] = fixnum(43);
-        vec_data->data[2] = fixnum(44);
-        vec_data->count = 3;
+        // Add elements using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(42));
+        vec_data = vector_conj(vec_data, (ID)fixnum(43));
+        vec_data = vector_conj(vec_data, (ID)fixnum(44));
         
         // Create sequence and test rest
         CljSeqIterator *seq = make_seq((CljObject*)vec);
@@ -141,10 +141,10 @@ TEST(test_seq_next) {
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
-        vec_data->data[0] = fixnum(42);
-        vec_data->data[1] = fixnum(43);
-        vec_data->data[2] = fixnum(44);
-        vec_data->count = 3;
+        // Add elements using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(42));
+        vec_data = vector_conj(vec_data, (ID)fixnum(43));
+        vec_data = vector_conj(vec_data, (ID)fixnum(44));
         
         // Create sequence and test next
         CljSeqIterator *seq = make_seq((CljObject*)vec);
@@ -161,9 +161,8 @@ TEST(test_seq_rest_vs_next_difference) {
         {
             CljValue vec = make_vector(2, 1);
             CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-            vec_data->data[0] = fixnum(1);
-            vec_data->data[1] = fixnum(2);
-            vec_data->count = 2;
+            vec_data = vector_conj(vec_data, (ID)fixnum(1));
+            vec_data = vector_conj(vec_data, (ID)fixnum(2));
             
             CljSeqIterator *seq = make_seq((CljObject*)vec);
             
@@ -186,8 +185,7 @@ TEST(test_seq_rest_vs_next_difference) {
         {
             CljValue vec = make_vector(1, 1);
             CljPersistentVector *vec_data = as_vector((CljObject*)vec);
-            vec_data->data[0] = fixnum(42);
-            vec_data->count = 1;
+            vec_data = vector_conj(vec_data, (ID)fixnum(42));
             
             CljSeqIterator *seq = make_seq((CljObject*)vec);
             
@@ -226,13 +224,11 @@ TEST(test_seq_equality) {
         TEST_ASSERT_NOT_NULL(vec1_data);
         TEST_ASSERT_NOT_NULL(vec2_data);
         
-        vec1_data->data[0] = fixnum(1);
-        vec1_data->data[1] = fixnum(2);
-        vec1_data->count = 2;
+        vec1_data = vector_conj(vec1_data, (ID)fixnum(1));
+        vec1_data = vector_conj(vec1_data, (ID)fixnum(2));
         
-        vec2_data->data[0] = fixnum(1);
-        vec2_data->data[1] = fixnum(2);
-        vec2_data->count = 2;
+        vec2_data = vector_conj(vec2_data, (ID)fixnum(1));
+        vec2_data = vector_conj(vec2_data, (ID)fixnum(2));
         
         // Create sequences
         CljSeqIterator *seq1 = make_seq((CljObject*)vec1);

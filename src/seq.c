@@ -69,18 +69,14 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         
         case CLJ_VECTOR: {
             CljPersistentVector *vec = as_vector(obj);
-            // Check if empty: either empty_vector_singleton or count == 0 with singleton check
-            if (!vec || vec->count == 0 || vec == empty_vector_singleton || 
-                (vec->count == 0 && is_singleton((CljObject*)vec))) {
-                // Empty vector - don't set seq_type, leave it as 0
+            if (!vec) {
                 return true;  // Empty vector
             }
             
-            // Zero-copy: direct pointer to vector data
-            iter->state.vec.data = vec->data;
-            iter->state.vec.index = 0;
-            iter->state.vec.count = vec->count;
-            iter->seq_type = CLJ_VECTOR;
+            // Use vector_init_seq_iterator to avoid exposing internal data pointer
+            if (!vector_init_seq_iterator(iter, vec)) {
+                return true;  // Empty vector
+            }
             return true;
         }
         
@@ -125,7 +121,9 @@ ID seq_iter_first(const SeqIterator *iter) {
         
         case CLJ_VECTOR: {
             if (iter->state.vec.index < iter->state.vec.count) {
-                return (ID)iter->state.vec.data[iter->state.vec.index];
+                // Use vector_get_element_no_retain to avoid exposing internal data pointer
+                CljPersistentVector *vec = (CljPersistentVector*)iter->container;
+                return vector_get_element_no_retain(vec, iter->state.vec.index);
             }
             return NULL;
         }
@@ -202,7 +200,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
         switch (iter->container->type) {
             case CLJ_VECTOR: {
                 CljPersistentVector *vec = (CljPersistentVector*)iter->container;
-                return vec->count == 0 || vec == empty_vector_singleton;
+                return vector_count(vec) == 0 || vec == empty_vector_singleton;
             }
             case CLJ_LIST: {
                 CljList *list = (CljList*)iter->container;
@@ -266,7 +264,7 @@ CljSeqIterator* make_seq(ID obj) {
     // Check if collection is empty
     if (obj && TAG(obj) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector((CljObject*)obj);
-        if (vec && vec->count == 0) return NULL;
+        if (vec && vector_count(vec) == 0) return NULL;
     } else if (obj && TAG(obj) == CLJ_LIST) {
         CljList *list = as_list((CljObject*)obj);
         if (!LIST_FIRST(list)) return NULL;
@@ -398,7 +396,7 @@ int seq_count(ID obj) {
     // Fast path for vectors - O(1)
     if (obj && TAG(obj) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector((CljObject*)obj);
-        return vec ? vec->count : 0;
+        return vec ? vector_count(vec) : 0;
     }
     
     // Fallback: iterate and count - O(n)

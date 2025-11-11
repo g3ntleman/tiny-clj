@@ -83,3 +83,21 @@
 // Old memory management functions removed - use RETAIN/RELEASE macros instead
 
 // Type-safe Casting now provided as static inline in header
+
+/**
+ * @brief Get the reference count of an object
+ * @param obj The object to check (can be NULL)
+ * @return The reference count, or -1 if obj is NULL, SINGLETON_RC if it's a singleton, or ZOMBIE_RC if it's a zombie
+ */
+int reference_count(CljObject *obj) {
+    if (!obj) {
+        return -1;  // NULL has no reference count
+    }
+    
+    // Check if it's an immediate value (tagged pointer)
+    if ((uintptr_t)obj & 0x1) {
+        return -1;  // Immediate values don't have reference counts
+    }
+    
+    return obj->rc;
+}

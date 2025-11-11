@@ -2,8 +2,19 @@
 #include "memory.h"
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "types.h"  // For SINGLETON_RC
+#include "symbol.h"  // For SYM_NIL
+#include "seq.h"  // For SeqIterator
 #include <stdlib.h>
 #include <stdbool.h>
+
+// CljPersistentVector struct definition (opaque pointer - only visible in vector.c)
+struct CljPersistentVector {
+    CljObject base;
+    int count;
+    int capacity;
+    // mutable_flag removed: COW (RC-based) handles mutability automatically
+    CljObject **data;
+};
 
 // Empty-vector singleton: CLJ_VECTOR with rc=SINGLETON_RC, statically initialized
 static struct {
@@ -25,7 +36,76 @@ ID empty_vector(void) {
     return (ID)clj_empty_vector_singleton;
 }
 
-// Creates a CljVector.
+/** Get vector count. Returns 0 if vec is NULL. */
+int vector_count(CljPersistentVector *vec) {
+    if (!vec) return 0;
+    return vec->count;
+}
+
+/** Get element at index. Returns retained element or NULL if index out of bounds or nil.
+ * @param vec Vector to access
+ * @param index Index (0-based)
+ * @return Retained element or NULL (nil)
+ */
+ID vector_nth(CljPersistentVector *vec, int index) {
+    if (!vec || index < 0 || index >= vec->count) return NULL;
+    ID result = vec->data[index];
+    if (!result || result == SYM_NIL) return NULL;
+    return RETAIN(result);
+}
+
+/** Initialize seq iterator for vector (internal use by seq.c).
+ * Sets up iterator state without exposing internal data pointer.
+ * @param iter Iterator to initialize
+ * @param vec Vector to iterate over
+ * @return true if successful, false if vector is empty
+ */
+bool vector_init_seq_iterator(SeqIterator *iter, CljPersistentVector *vec) {
+    if (!iter || !vec) return false;
+    
+    // Check if empty
+    if (vec->count == 0 || vec == empty_vector_singleton || 
+        (vec->count == 0 && is_singleton((CljObject*)vec))) {
+        return false;  // Empty vector
+    }
+    
+    // Store vector in container (already set by seq_iter_init)
+    // Set index and count, but NOT data pointer
+    iter->state.vec.index = 0;
+    iter->state.vec.count = vec->count;
+    iter->state.vec.data = NULL;  // Don't expose internal pointer
+    iter->seq_type = CLJ_VECTOR;
+    
+    return true;
+}
+
+/** Get element at index without RETAIN (internal use for seq iterator).
+ * @param vec Vector to access
+ * @param index Index (0-based)
+ * @return Element or NULL (nil), NOT retained
+ */
+ID vector_get_element_no_retain(CljPersistentVector *vec, int index) {
+    if (!vec || index < 0 || index >= vec->count) return NULL;
+    ID result = vec->data[index];
+    if (!result || result == SYM_NIL) return NULL;
+    return result;  // No RETAIN - caller must handle reference counting
+}
+
+
+/** Set element at index. Returns new vector with updated element (COW if needed).
+ * @param vec Vector to update
+ * @param index Index (0-based)
+ * @param value New value (will be retained)
+ * @return New vector with updated element, or NULL on error
+ */
+CljPersistentVector* vector_set_nth(CljPersistentVector* vec, int index, ID value) {
+    if (!vec || index < 0) return NULL;
+    CljPersistentVector *v = as_vector((ID)vec);
+    if (!v || index >= v->count) return NULL;
+    return vector_assoc(vec, index, value);
+}
+
+// Creates a CljPersistentVector*.
 // Notes:
 // - When capacity <= 0, returns empty-vector singleton (rc=0, data=NULL); do
 // not retain/release.
@@ -46,7 +126,7 @@ ID empty_vector(void) {
 // === Neue CljValue API (Phase 1: Parallel) ===
 
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
-CljVector make_vector(unsigned int capacity, bool is_mutable) {
+CljPersistentVector* make_vector(unsigned int capacity, bool is_mutable) {
     if (capacity == 0 && !is_mutable) {
         return clj_empty_vector_singleton;
     }
@@ -76,7 +156,7 @@ CljVector make_vector(unsigned int capacity, bool is_mutable) {
  * Uses Copy-on-Write: RC=1 → in-place mutation, RC>1 → COW.
  * Hot-path (RC=1, capacity OK): No branches, direct in-place mutation.
  */
-CljVector vector_conj(CljVector vec, ID item) {
+CljPersistentVector* vector_conj(CljPersistentVector* vec, ID item) {
     if (!vec || vec->base.type != CLJ_VECTOR)
         return NULL;
     // Note: item can be NULL (nil) - it's a valid value in Clojure collections
@@ -96,7 +176,7 @@ CljVector vector_conj(CljVector vec, ID item) {
     // Early returns for uncommon cases
     if (old_vec->base.rc == 0) {
         // Empty vector singleton: create new vector
-        CljVector new_vec = make_vector(4, false);
+        CljPersistentVector* new_vec = make_vector(4, false);
         if (!new_vec)
             return vec;
         // NULL (nil) is a valid value - store directly without RETAIN
@@ -112,7 +192,7 @@ CljVector vector_conj(CljVector vec, ID item) {
         if (new_capacity < 4) new_capacity = 4;
     }
 
-    CljVector new_vec = make_vector(new_capacity, false);
+    CljPersistentVector* new_vec = make_vector(new_capacity, false);
     if (!new_vec)
         return vec;
 
@@ -134,12 +214,12 @@ CljVector vector_conj(CljVector vec, ID item) {
 }
 
 /** Update element at index with COW: RC=1 → in-place, RC>1 → COW. */
-CljVector vector_assoc(CljVector vec, int index, ID value) {
+CljPersistentVector* vector_assoc(CljPersistentVector* vec, int index, ID value) {
     if (!vec || vec->base.type != CLJ_VECTOR || !value)
         return NULL;
 
     CljPersistentVector *old_vec = as_vector((ID)vec);
-    if (!old_vec || index < 0 || index >= old_vec->count)
+    if (!old_vec || index < 0 || index >= vector_count(old_vec))
         return NULL;
 
     // Empty vector singleton (RC=0): Not applicable (index >= count)
@@ -149,18 +229,18 @@ CljVector vector_assoc(CljVector vec, int index, ID value) {
 
     // OPTIMIZATION: If RC=1, mutate in-place
     if (old_vec->base.rc == 1) {
-        RELEASE(old_vec->data[index]);
-        old_vec->data[index] = RETAIN(value);
+        ASSIGN(old_vec->data[index], RETAIN(value));
         return vec;  // Return same vector (in-place mutation)
     }
 
     // RC>1: Copy-on-Write
-    CljVector new_vec = make_vector(old_vec->capacity, false);
+    int count = vector_count(old_vec);
+    CljPersistentVector* new_vec = make_vector(old_vec->capacity, false);
     if (!new_vec)
         return vec;  // Return original vector on OOM
 
     // Copy existing elements with RETAIN
-    for (int i = 0; i < old_vec->count; i++) {
+    for (int i = 0; i < count; i++) {
         if (old_vec->data[i]) {
             if (i == index) {
                 new_vec->data[i] = RETAIN(value);  // New value
@@ -168,9 +248,11 @@ CljVector vector_assoc(CljVector vec, int index, ID value) {
                 new_vec->data[i] = old_vec->data[i];
                 RETAIN(old_vec->data[i]);
             }
+        } else {
+            new_vec->data[i] = NULL;
         }
     }
-    new_vec->count = old_vec->count;
+    new_vec->count = count;
 
     return new_vec;  // Return new vector (COW)
 }
@@ -219,6 +301,7 @@ ID transient(ID vec) {
 }
 
 /** Grow vector capacity in-place (for RC=1 or transient vectors).
+ * Only grows if count >= capacity. Safe to call even if growth is not needed.
  * @param v Vector to grow
  * @note Throws exception on OOM
  */
@@ -226,6 +309,11 @@ void vector_grow_capacity(CljPersistentVector *v) {
     if (!v) {
         throw_oom(CLJ_VECTOR);
         return;
+    }
+    
+    // Only grow if capacity is insufficient
+    if (v->count < v->capacity) {
+        return;  // No growth needed
     }
     
     int newcap = v->capacity ? v->capacity * 2 : 4;
@@ -277,7 +365,7 @@ ID persistent(ID tvec) {
     if (!v) return NULL;
     
     // Clojure-Semantik: Erstelle NEUE persistent collection
-    CljVector new_vec = make_vector(v->capacity, 0);  // Neue Instanz
+    CljPersistentVector* new_vec = make_vector(v->capacity, 0);  // Neue Instanz
     
     // Kopiere alle Elemente
     for (int i = 0; i < v->count; i++) {

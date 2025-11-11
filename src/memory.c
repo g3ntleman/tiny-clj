@@ -10,6 +10,7 @@
 #include "object.h"
 #include "symbol.h"
 #include "vector.h"
+#include "vector_internal.h"  // For direct manipulation of autorelease pool vectors
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "memory_profiler.h"
 #include "types.h"

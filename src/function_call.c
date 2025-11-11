@@ -1697,7 +1697,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
 
         // Erzeuge (fn [] (do ...))
-        CljVector empty_params_vec = make_vector(0, 0);
+        CljPersistentVector* empty_params_vec = make_vector(0, 0);
         CljList *fn_list = (CljList*)make_list((CljObject*)SYM_FN, NULL);
         if (!fn_list) return NULL;
         fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
@@ -2171,7 +2171,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     int param_count = 0;
     if (params_list && TAG(params_list) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector((ID)params_list);
-        param_count = vec ? vec->count : 0;
+        param_count = vec ? vector_count(vec) : 0;
     } else {
         param_count = list_count(as_list(params_list));
     }
@@ -2182,7 +2182,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     for (int i = 0; i < param_count; i++) {
         if (params_list && TAG(params_list) == CLJ_VECTOR) {
             CljPersistentVector *vec = as_vector((ID)params_list);
-            params[i] = vec->data[i];
+            params[i] = vector_nth(vec, i);
         } else {
             params[i] = list_get_element(as_list((ID)params_list), i);
         }
@@ -2577,7 +2577,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                        NULL, 0, 0);
         return NULL;
     }
-    int binding_count = bindings->count;
+    int binding_count = vector_count(bindings);
     
     // Bindings must come in pairs (symbol value symbol value ...)
     if (binding_count % 2 != 0) {
@@ -2647,8 +2647,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
     
     // Process bindings sequentially (each binding can reference previous ones)
     for (int i = 0; i < binding_count; i += 2) {
-        CljValue sym_val = bindings->data[i];
-        CljValue init_val = bindings->data[i + 1];
+        CljValue sym_val = (CljValue)vector_nth(bindings, i);
+        CljValue init_val = (CljValue)vector_nth(bindings, i + 1);
         
         if (!sym_val || TAG(sym_val) != CLJ_SYMBOL) {
             RELEASE(let_env);
@@ -2835,12 +2835,12 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    int param_count = params_vec_data->count;
+    int param_count = vector_count(params_vec_data);
     CljObject *params_stack[16];
     ID *params = alloc_obj_array(param_count, params_stack);
     
     for (int i = 0; i < param_count; i++) {
-        params[i] = (ID)params_vec_data->data[i];
+        params[i] = vector_nth(params_vec_data, i);
         if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
             free_obj_array((ID*)params, params_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
@@ -3320,4 +3320,39 @@ ID clj_apply_function(ID fn, ID *args, int argc, ID env) {
     }
     
     return clj_call_function(fn, argc, eval_args);
+}
+
+// ============================================================================
+// EVAL_STRING IMPLEMENTATION
+// ============================================================================
+
+/**
+ * @brief Parse and evaluate a Clojure expression from a string (convenience)
+ * @param expr_str The Clojure expression as a string
+ * @param eval_state The evaluation state
+ * @return The evaluated result (autoreleased) or NULL only if result is nil
+ */
+ID eval_string(const char* expr_str, EvalState *eval_state) {
+    CLJ_ASSERT(expr_str != NULL);
+    CLJ_ASSERT(eval_state != NULL);
+    
+    CljValue parsed = parse(expr_str, eval_state);
+    if (parsed == NULL) {
+        // NULL from parse() indicates a parsing error (nil is now parsed as SYM_NIL)
+        throw_exception("ParseError", "Failed to parse expression", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Check if parsed is an immediate value
+    if (IS_IMMEDIATE(parsed)) {
+        // For immediate values, return them as CljObject* (they're already evaluated)
+        return parsed;
+    }
+    
+    // For heap objects, evaluate them (use NULL env to use current_ns->mappings)
+    ID result = eval_parsed(parsed, eval_state, NULL);
+    
+    // result can be NULL only if the evaluation result is nil
+    // If eval_parsed fails, it should throw an exception, not return NULL
+    return result;
 }

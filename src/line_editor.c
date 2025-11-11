@@ -10,6 +10,7 @@
 #include "memory.h"
 #include "memory_profiler.h"
 #include "value.h"
+#include "builtins.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -39,7 +40,7 @@ struct LineEditor {
     bool in_escape_sequence;
     
     // History support using CljPersistentVector
-    CljObject *history;        // CljPersistentVector für History
+    CljPersistentVector *history;        // CljPersistentVector für History
     int history_index;         // Current position in history (-1 = new line)
     char temp_buffer[512];     // Backup of current line when browsing history
 };
@@ -281,9 +282,9 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     editor->in_escape_sequence = false;
     
     // Initialize history support with transient vector for efficient in-place operations
-    CljValue persistent_vec = make_vector(50, 0);  // Start with persistent vector
-    editor->history = transient(persistent_vec);      // Convert to transient for efficient operations
-    RELEASE((CljObject*)persistent_vec);  // Release the persistent version
+    CljPersistentVector *persistent_vec = make_vector(50, 0);  // Start with persistent vector
+    editor->history = (CljPersistentVector*)transient((ID)persistent_vec);      // Convert to transient for efficient operations
+    RELEASE(persistent_vec);  // Release the persistent version
     editor->history_index = -1;  // -1 means we're on a new line
     editor->temp_buffer[0] = '\0';
     
@@ -293,9 +294,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
 void line_editor_free(LineEditor *editor) {
     if (editor) {
         // Release history vector (automatically frees all contained strings)
-        if (editor->history) {
-            RELEASE(editor->history);
-        }
+        if (editor->history) RELEASE(editor->history);
         free(editor);
     }
 }
@@ -432,18 +431,18 @@ void line_editor_reset(LineEditor *editor) {
 }
 
 void line_editor_add_to_history(LineEditor *editor, const char *line) {
-    if (!editor || !line || !editor->history) return;
+    if (!editor || !line) return;
     
     // Check if this line is identical to the last history entry
     // Convert transient to persistent temporarily for checking
-    CljObject *history_vec = (CljObject*)editor->history;
-    CljObject *temp_persistent = NULL;
-    if (TAG(history_vec) == CLJ_TRANSIENT_VECTOR) {
-        temp_persistent = (CljObject*)persistent((CljValue)history_vec);
+    CljPersistentVector *history_vec = editor->history;
+    CljPersistentVector *temp_persistent = NULL;
+    if (history_vec && TAG((ID)history_vec) == CLJ_TRANSIENT_VECTOR) {
+        temp_persistent = (CljPersistentVector*)persistent((ID)history_vec);
         if (temp_persistent) {
-            CljPersistentVector *vec = as_vector(temp_persistent);
-            if (vec && vec->count > 0) {
-                const char *last_line = line_editor_get_history_line(editor, vec->count - 1);
+            int count = vector_count(temp_persistent);
+            if (count > 0) {
+                const char *last_line = line_editor_get_history_line(editor, count - 1);
                 if (last_line && strcmp(line, last_line) == 0) {
                     // Duplicate of last entry - skip adding
                     RELEASE(temp_persistent);
@@ -453,9 +452,9 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
             RELEASE(temp_persistent);
         }
     } else {
-        CljPersistentVector *vec = as_vector(history_vec);
-        if (vec && vec->count > 0) {
-            const char *last_line = line_editor_get_history_line(editor, vec->count - 1);
+        int count = vector_count(history_vec);
+        if (count > 0) {
+            const char *last_line = line_editor_get_history_line(editor, count - 1);
             if (last_line && strcmp(line, last_line) == 0) {
                 // Duplicate of last entry - skip adding
                 return;
@@ -466,32 +465,37 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     // Create string object and add to history vector using transient conj
     CljObject *line_obj = (CljObject*)make_string(line);
     if (line_obj) {
-        editor->history = clj_conj(editor->history, line_obj);
+        editor->history = (CljPersistentVector*)clj_conj((ID)editor->history, line_obj);
         // line_obj is now retained by the vector, we can release our reference
         RELEASE(line_obj);
     }
 }
 
 const char* line_editor_get_history_line(LineEditor *editor, int index) {
-    if (!editor || !editor->history) return NULL;
+    if (!editor) return NULL;
     
     // Convert transient vector to persistent if needed
-    CljObject *history_vec = (CljObject*)editor->history;
-    CljObject *temp_persistent = NULL;
-    if (TAG(history_vec) == CLJ_TRANSIENT_VECTOR) {
-        temp_persistent = (CljObject*)persistent((CljValue)history_vec);
+    CljPersistentVector *history_vec = editor->history;
+    CljPersistentVector *temp_persistent = NULL;
+    if (history_vec && TAG((ID)history_vec) == CLJ_TRANSIENT_VECTOR) {
+        temp_persistent = (CljPersistentVector*)persistent((ID)history_vec);
         if (!temp_persistent) return NULL;
         history_vec = temp_persistent;
     }
     
-    CljPersistentVector *vec = as_vector(history_vec);
-    if (!vec || index < 0 || index >= vec->count) {
+    int count = vector_count(history_vec);
+    if (index < 0 || index >= count) {
         if (temp_persistent) RELEASE(temp_persistent);
         return NULL;
     }
     
-    CljObject *line_obj = vec->data[index];
+    // Use nth2 to access element (Clojure-compatible API)
+    ID nth_args[2];
+    nth_args[0] = (ID)history_vec;
+    nth_args[1] = fixnum(index);
+    ID line_obj = nth2(nth_args, 2);
     if (!line_obj || TAG(line_obj) != CLJ_STRING) {
+        if (line_obj) RELEASE(line_obj);
         if (temp_persistent) RELEASE(temp_persistent);
         return NULL;
     }
@@ -500,64 +504,67 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     CljString *str = (CljString*)line_obj;
     const char *result = str->data;
     
+    RELEASE(line_obj);
     if (temp_persistent) RELEASE(temp_persistent);
     return result;
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {
-    if (!editor || !editor->history) return 0;
-    
-    // as_vector works with both CLJ_VECTOR and CLJ_TRANSIENT_VECTOR
-    // Both have the same structure (CljPersistentVector)
-    CljPersistentVector *vec = as_vector(editor->history);
-    return vec ? vec->count : 0;
+    return editor ? vector_count(editor->history) : 0;
 }
 
-CljObject* line_editor_get_history_vector(LineEditor *editor) {
-    if (!editor || !editor->history) return (CljObject*)make_vector(0, 0);
+CljPersistentVector* line_editor_get_history_vector(LineEditor *editor) {
+    if (!editor) return empty_vector();
     
     // Convert transient vector to persistent if needed
-    CljObject *history_vec = (CljObject*)editor->history;
-    if (TAG(history_vec) == CLJ_TRANSIENT_VECTOR) {
-        history_vec = (CljObject*)persistent((CljValue)history_vec);
-        if (!history_vec) return (CljObject*)make_vector(0, 0);
+    CljPersistentVector *history_vec = editor->history;
+    if (history_vec && TAG((ID)history_vec) == CLJ_TRANSIENT_VECTOR) {
+        history_vec = (CljPersistentVector*)persistent((ID)history_vec);
+        if (!history_vec) return empty_vector();
     }
     
-    CljPersistentVector *v = as_vector(history_vec);
-    if (!v) return (CljObject*)make_vector(0, 0);
+    int n = vector_count(history_vec);
+    if (!n) return empty_vector();
     
-    int n = v->count;
-    CljValue out = make_vector(n, 0);
-    CljPersistentVector *o = as_vector((CljObject*)out);
+    CljPersistentVector *out = make_vector(n, 0);
+    ID nth_args[2];
+    nth_args[0] = (ID)history_vec;
     for (int i = 0; i < n; i++) {
-        o->data[i] = (RETAIN(v->data[i]), v->data[i]);
+        nth_args[1] = fixnum(i);
+        ID elem = nth2(nth_args, 2);
+        if (elem) {
+            out = vector_conj(out, elem);
+            RELEASE(elem);
+        }
     }
-    o->count = n;
-    return (CljObject*)out;
+    return out;
 }
 
 void line_editor_clear_history(LineEditor *editor) {
     if (!editor) return;
-    if (editor->history) {
-        RELEASE(editor->history);
-    }
-    CljValue persistent_vec = make_vector(50, 0);
-    editor->history = transient(persistent_vec);
-    RELEASE((CljObject*)persistent_vec);
+    if (editor->history) RELEASE(editor->history);
+    CljPersistentVector *persistent_vec = make_vector(50, 0);
+    editor->history = (CljPersistentVector*)transient((ID)persistent_vec);
+    RELEASE(persistent_vec);
     editor->history_index = -1;
 }
 
-void line_editor_set_history_from_vector(LineEditor *editor, CljObject *vec) {
-    if (!editor || !vec || TAG(vec) != CLJ_VECTOR) return;
+void line_editor_set_history_from_vector(LineEditor *editor, CljPersistentVector *vec) {
+    if (!editor || !vec || TAG((ID)vec) != CLJ_VECTOR) return;
     line_editor_clear_history(editor);
-    CljPersistentVector *v = as_vector(vec);
-    for (int i = 0; v && i < v->count; i++) {
-        if (v->data[i] && TAG(v->data[i]) == CLJ_STRING) {
-            const char *plain = to_string(v->data[i]);
+    int count = vector_count(vec);
+    ID nth_args[2];
+    nth_args[0] = (ID)vec;
+    for (int i = 0; i < count; i++) {
+        nth_args[1] = fixnum(i);
+        ID elem = nth2(nth_args, 2);
+        if (elem && TAG(elem) == CLJ_STRING) {
+            const char *plain = to_string(elem);
             if (plain) {
                 line_editor_add_to_history(editor, plain);
                 free((void*)plain);
             }
+            RELEASE(elem);
         }
     }
 }
@@ -587,8 +594,7 @@ void line_editor_reset_history_index(LineEditor *editor) {
 
 // Optional: Default-Persistenzpfad (~/.tiny-clj/history.edn)
 static void build_default_history_path(char *out, size_t out_sz) {
-    const char *home = getenv("HOME");
-    if (!home) home = ".";
+    const char *home = getenv("HOME") ? getenv("HOME") : ".";
     snprintf(out, out_sz, "%s/.tiny-clj", home);
     // Ensure directory exists
     mkdir(out, 0700);

@@ -341,36 +341,6 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
     return result;
 }
 
-/**
- * @brief Parse and evaluate a Clojure expression from a string (convenience)
- * @param expr_str The Clojure expression as a string
- * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL only if result is nil
- */
-ID eval_string(const char* expr_str, EvalState *eval_state) {
-    CLJ_ASSERT(expr_str != NULL);
-    CLJ_ASSERT(eval_state != NULL);
-    
-    CljValue parsed = parse(expr_str, eval_state);
-    if (parsed == NULL) {
-        // NULL from parse() indicates a parsing error (nil is now parsed as SYM_NIL)
-        throw_exception("ParseError", "Failed to parse expression", __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Check if parsed is an immediate value
-    if (IS_IMMEDIATE(parsed)) {
-        // For immediate values, return them as CljObject* (they're already evaluated)
-        return parsed;
-    }
-    
-    // For heap objects, evaluate them (use NULL env to use current_ns->mappings)
-    ID result = eval_parsed(parsed, eval_state, NULL);
-    
-    // result can be NULL only if the evaluation result is nil
-    // If eval_parsed fails, it should throw an exception, not return NULL
-    return result;
-}
 
 /**
  * @brief Parse vector literal [a b c] using Reader
@@ -385,9 +355,10 @@ static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
     
-    // Create vector with initial capacity
+    // Create transient vector for efficient building
     CljValue vec = make_vector(6, false);
-    CljPersistentVector *v = as_vector((CljObject*)vec);
+    CljValue tvec = transient((ID)vec);
+    RELEASE((CljObject*)vec);  // Release original, use transient
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
@@ -397,19 +368,18 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       // Check if parser made progress - if not, it's an error
       // If parser made progress, NULL means nil (which is valid)
       if (!value && after <= before && !reader_eof(reader)) {
-        RELEASE((CljObject*)vec);
+        RELEASE((CljObject*)tvec);
         return NULL;
       }
       
-      // Grow capacity if needed
-      if (v->count >= v->capacity) {
-        vector_grow_capacity(v);
-      }
-      
-      // Store element - NULL (nil) is valid, non-NULL values need RETAIN
-      v->data[v->count++] = value ? RETAIN(value) : NULL;
+      // Use clj_conj for transient vector (guaranteed in-place)
+      tvec = clj_conj((ID)tvec, value);
       reader_skip_all(reader);
     }
+    
+    // Convert back to persistent vector
+    vec = persistent((ID)tvec);
+    RELEASE((CljObject*)tvec);
     
     if (reader_eof(reader) || !reader_match(reader, ']')) {
       RELEASE((CljObject*)vec);
@@ -505,12 +475,12 @@ static ID parse_list(Reader *reader, EvalState *st) {
       
       // Extract binding and test from vector [binding test]
       CljPersistentVector *vec = as_vector((CljValue)binding_vec);
-      if (!vec || vec->count < 2) {
+      if (!vec || vector_count(vec) < 2) {
         throw_parser_exception("if-let binding vector must have exactly 2 elements", reader);
         return NULL;
       }
       
-      ID binding = (CljValue)vec->data[0];
+      ID binding = vector_nth(vec, 0);
       // Note: test is in binding_vec, we use binding_vec directly in the expansion
       
       // Extract then expression

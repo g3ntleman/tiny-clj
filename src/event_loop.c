@@ -7,6 +7,7 @@
 #include "types.h"  // For ZOMBIE_RC
 #include "runtime.h"
 #include "vector.h"
+#include "vector_internal.h"  // For direct manipulation of timer queue vectors
 #include "map.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -132,7 +133,7 @@ static void timer_insert_sorted_map(CljMap *task_map);
 // Helper function to ensure timer queue is initialized
 static CljPersistentVector* timer_queue_get(void) {
     if (!g_runtime.timer_queue) {
-        CljVector timer_vec = make_vector(8, false);
+        CljPersistentVector* timer_vec = make_vector(8, false);
         if (timer_vec) {
             g_runtime.timer_queue = (CljPersistentVector*)transient((ID)timer_vec);
             RELEASE(timer_vec);
@@ -307,9 +308,8 @@ static void timer_insert_sorted_map(CljMap *task_map) {
         }
     }
     
-    if (timer_vec->count >= timer_vec->capacity) {
-        vector_grow_capacity(timer_vec);
-    }
+    // vector_grow_capacity checks capacity internally and only grows if needed
+    vector_grow_capacity(timer_vec);
     
     for (int i = timer_vec->count; i > insert_pos; i--) {
         timer_vec->data[i] = timer_vec->data[i - 1];

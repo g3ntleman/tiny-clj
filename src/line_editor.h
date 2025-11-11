@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "object.h"
+#include "vector.h"
 
 // Forward declarations
 typedef struct LineEditor LineEditor;
@@ -46,8 +47,8 @@ const char* line_editor_get_history_line(LineEditor *editor, int index);
 int line_editor_get_history_size(const LineEditor *editor);
 
 // History bulk operations
-CljObject* line_editor_get_history_vector(LineEditor *editor); // returns persistent vector (rc=1)
-void line_editor_set_history_from_vector(LineEditor *editor, CljObject *vec);
+CljPersistentVector* line_editor_get_history_vector(LineEditor *editor); // returns persistent vector (rc=1)
+void line_editor_set_history_from_vector(LineEditor *editor, CljPersistentVector *vec);
 void line_editor_clear_history(LineEditor *editor);
 
 // Global line editor management

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include "object.h"
 #include "vector.h"
+#include "vector_internal.h"  // For direct manipulation in native_pop (performance-critical)
 #include "map.h"
 #include "atom.h"
 #include "kv_macros.h"
@@ -78,17 +79,19 @@ ID nth2(ID *args, unsigned int argc) {
         return not_found ? RETAIN(not_found) : NULL;
     }
 
-    // Fast path: Vectors (O(1) access)
-    if (TAG(coll) == CLJ_VECTOR) {
+    // Fast path: Vectors (O(1) access) - includes transient vectors
+    if (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_TRANSIENT_VECTOR) {
         CljPersistentVector *v = as_vector(coll);
-        if (!v || i >= v->count) {
+        if (!v || i >= vector_count(v)) {
             return not_found ? RETAIN(not_found) : NULL;
         }
-        ID result = v->data[i];
-        if (!result || result == SYM_NIL) {
+        ID result = vector_nth(v, i);
+        if (!result) {
+            // For nil elements, return NULL (not not_found) - Clojure-compatible behavior
+            // nil is represented as NULL, so we return NULL directly
             return NULL;
         }
-        return RETAIN(result);
+        return result;  // Already retained by vector_nth
     }
 
     // Fast path: Lists (O(n) access via list_nth)
@@ -145,8 +148,9 @@ ID native_peek(ID *args, unsigned int argc) {
     ID vec = args[0];
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     CljPersistentVector *v = as_vector(vec);
-    if (!v || v->count == 0) return NULL;  // nil for empty vector
-    return RETAIN(v->data[v->count - 1]);  // Return last element
+    int count = vector_count(v);
+    if (!count) return NULL;  // nil for empty vector
+    return vector_nth(v, count - 1);  // Return last element (already retained)
 }
 
 // pop: returns new vector without last element, or empty vector if empty
@@ -156,7 +160,8 @@ ID native_pop(ID *args, unsigned int argc) {
     ID vec = args[0];
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     CljPersistentVector *v = as_vector(vec);
-    if (!v || v->count == 0) {
+    int count = vector_count(v);
+    if (!v || count == 0) {
         // Return empty vector singleton (no memory management needed)
         return make_vector(0, false);
     }
@@ -165,25 +170,32 @@ ID native_pop(ID *args, unsigned int argc) {
     // This is the hot path - most common case when vector is not shared
     if (v->base.rc == 1) {
         // Release last element
-        if (v->data[v->count - 1]) {
-            RELEASE(v->data[v->count - 1]);
+        ID last_elem = vector_nth(v, count - 1);
+        if (last_elem) {
+            RELEASE(last_elem);
         }
+        // Use vector_internal for direct manipulation in this special case (pop needs in-place mutation)
+        // This is a performance-critical path, so we use internal header (already included at top)
         v->count--;
         return AUTORELEASE(vec);  // Return same vector (in-place mutation)
     }
     
     // RC>1: Copy-on-Write (O(n))
     // Original vector is shared, so we must create a new copy
-    CljValue new_vec = (CljValue)make_vector(v->count - 1, false);
+    CljValue new_vec = (CljValue)make_vector(count - 1, false);
     CljPersistentVector *new_v = as_vector((CljObject*)new_vec);
     if (!new_v) return NULL;
     
-    // Copy all elements except the last one
-    for (int i = 0; i < v->count - 1; i++) {
-        if (v->data[i]) {
-            new_v->data[i] = RETAIN(v->data[i]);
-            new_v->count++;
+    // Copy all elements except the last one using vector_conj
+    for (int i = 0; i < count - 1; i++) {
+        ID elem = vector_nth(v, i);
+        if (elem) {
+            new_v = vector_conj(new_v, elem);
+            RELEASE(elem);  // vector_conj retains, so release our copy
+        } else {
+            new_v = vector_conj(new_v, NULL);
         }
+        new_vec = (CljValue)new_v;
     }
     
     return AUTORELEASE(new_vec);
@@ -236,7 +248,7 @@ ID native_subvec(ID *args, unsigned int argc) {
         }
         end = AS_FIXNUM(end_idx);
     } else {
-        end = v->count;
+        end = vector_count(v);
     }
     
     // Bounds validation
@@ -246,9 +258,10 @@ ID native_subvec(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    if (end > v->count) {
+    int v_count = vector_count(v);
+    if (end > v_count) {
         throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
-                "subvec end index %d is greater than vector count %d", end, v->count);
+                "subvec end index %d is greater than vector count %d", end, v_count);
         return NULL;
     }
     
@@ -266,19 +279,21 @@ ID native_subvec(ID *args, unsigned int argc) {
         return make_vector(0, false);  // Returns empty-vector singleton (no memory management needed)
     }
     
-    // Create new vector with exact capacity needed
+    // Create new vector and add elements using vector_conj
     CljValue new_vec_obj = (CljValue)make_vector(subvec_count, false);
     CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
     if (!new_vec) return NULL;
     
-    // Copy elements from start to end with RETAIN
+    // Copy elements from start to end using vector_conj
     for (int i = 0; i < subvec_count; i++) {
-        if (v->data[start + i]) {
-            new_vec->data[i] = RETAIN(v->data[start + i]);
+        ID elem = vector_nth(v, start + i);
+        if (elem) {
+            new_vec = vector_conj(new_vec, elem);
+            RELEASE(elem);  // vector_conj retains, so release our retained copy
         } else {
-            new_vec->data[i] = NULL;  // nil elements
+            new_vec = vector_conj(new_vec, NULL);  // nil elements
         }
-        new_vec->count++;
+        new_vec_obj = (CljValue)new_vec;
     }
     
     return AUTORELEASE(new_vec_obj);
@@ -295,7 +310,7 @@ ID conj2_wrapper(ID *args, int argc) {
 ID conj2(ID vec, ID val) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
-    CljVector result = vector_conj((CljVector)vec, val);
+    CljPersistentVector* result = vector_conj((CljPersistentVector*)vec, val);
     if (!result) return NULL;
     return (ID)RETAIN(result);
 }
@@ -622,9 +637,9 @@ ID assoc3(ID *args, unsigned int argc) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljPersistentVector *v = as_vector(coll);
-        if (!v || i < 0 || i >= v->count) return NULL;
+        if (!v || i < 0 || i >= vector_count(v)) return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljVector result = vector_assoc((CljVector)coll, i, val);
+        CljPersistentVector* result = vector_assoc((CljPersistentVector*)coll, i, val);
         if (!result) return NULL;
         return (ID)RETAIN(result);
     }
@@ -794,7 +809,7 @@ ID native_count(ID *args, unsigned int argc) {
         return (fixnum(map_count((CljMap*)coll)));
     } else if (coll && (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_TRANSIENT_VECTOR)) {
         CljPersistentVector *vec = as_vector(coll);
-        return (fixnum(vec ? vec->count : 0));
+        return (fixnum(vec ? vector_count(vec) : 0));
     } else if (coll && TAG(coll) == CLJ_LIST) {
         CljList *list = as_list(coll);
         return (fixnum(list_count(list)));
@@ -941,15 +956,11 @@ ID native_vector(ID *args, unsigned int argc) {
     CljPersistentVector *v = as_vector((CljObject*)vec);
     if (!v) return NULL;
     
-    // Add all elements with RETAIN (Clojure-compatible: all args are retained)
+    // Add all elements using vector_conj (Clojure-compatible: all args are retained)
     for (unsigned int i = 0; i < argc; i++) {
         CljObject *elem = (CljObject*)args[i];
-        if (elem) {
-            v->data[i] = RETAIN(elem);
-        } else {
-            v->data[i] = NULL;  // nil is represented as NULL
-        }
-        v->count++;
+        v = vector_conj(v, (ID)(elem ? RETAIN((ID)elem) : NULL));
+        if (elem) RELEASE((ID)elem);  // vector_conj retains, so release our copy
     }
     
     return AUTORELEASE(vec);
@@ -1000,7 +1011,7 @@ ID native_vec(ID *args, unsigned int argc) {
     
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
-    CljVector vec = (CljVector)make_vector(4, false);
+    CljPersistentVector* vec = make_vector(4, false);
     if (!vec) {
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
                 "Failed to create vector");
@@ -1563,9 +1574,13 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     if (!symbols || TAG(symbols) != CLJ_VECTOR) return;
     
     CljPersistentVector *vec = as_vector(symbols);
-    for (int i = 0; i < vec->count; i++) {
-        CljObject *sym = vec->data[i];
-        if (!sym || TAG(sym) != CLJ_SYMBOL) continue;
+    int count = vector_count(vec);
+    for (int i = 0; i < count; i++) {
+        CljObject *sym = (CljObject*)vector_nth(vec, i);
+        if (!sym || TAG(sym) != CLJ_SYMBOL) {
+            if (sym) RELEASE((ID)sym);
+            continue;
+        }
         
         // Look up symbol in source namespace
         CljObject *val = (CljObject*)map_get((CljMap*)source_ns->mappings, (CljValue)sym);
@@ -1573,6 +1588,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
             // Copy to target namespace
             ns_define(target_ns, sym, val);
         }
+        RELEASE((ID)sym);  // vector_nth returns retained element
     }
 }
 
@@ -1624,54 +1640,78 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
     else if (spec && TAG(spec) == CLJ_VECTOR) {
         vec = as_vector(spec);
-        if (vec->count < 1) return false;
+        if (vector_count(vec) < 1) return false;
         
         // First element should be namespace name (Symbol or String)
-        CljObject *ns_obj = vec->data[0];
+        CljObject *ns_obj = (CljObject*)vector_nth(vec, 0);
         if (!ns_obj) return false;
         
         if (ns_obj && TAG(ns_obj) == CLJ_SYMBOL) {
             CljSymbol *ns_sym = as_symbol(ns_obj);
-            if (!ns_sym || !ns_sym->name) return false;
+            if (!ns_sym || !ns_sym->name) {
+                RELEASE((ID)ns_obj);
+                return false;
+            }
             ns_name = ns_sym->name;
         } else {
             const char *ns_str = to_string(ns_obj);
-            if (!ns_str) return false;
+            if (!ns_str) {
+                RELEASE((ID)ns_obj);
+                return false;
+            }
             ns_name = ns_str;
             ns_name_allocated = true;
         }
+        RELEASE((ID)ns_obj);  // vector_nth returns retained element
         
         // Parse keywords: :as, :refer
-        for (int i = 1; i < vec->count; i++) {
-            CljObject *elem = vec->data[i];
+        int vec_count = vector_count(vec);
+        for (int i = 1; i < vec_count; i++) {
+            CljObject *elem = (CljObject*)vector_nth(vec, i);
             if (!elem) continue;
             
             // Check if it's a keyword (Symbol starting with :)
             if (elem && TAG(elem) == CLJ_SYMBOL) {
                 CljSymbol *kw = as_symbol(elem);
-                if (!kw || !kw->name) continue;
+                if (!kw || !kw->name) {
+                    RELEASE((ID)elem);
+                    continue;
+                }
                 
                 if (kw->name[0] == ':' && strcmp(kw->name, ":as") == 0) {
                     // :as alias
-                    if (i + 1 < vec->count) {
-                        alias_sym = vec->data[i + 1];
+                    if (i + 1 < vec_count) {
+                        alias_sym = (CljObject*)vector_nth(vec, i + 1);
+                        // Don't release alias_sym - it's stored for later use
                         i++; // Skip next element
                     }
+                    RELEASE((ID)elem);
                 } else if (kw->name[0] == ':' && strcmp(kw->name, ":refer") == 0) {
                     // :refer [symbols] or :refer :all
-                    if (i + 1 < vec->count) {
-                        CljObject *refer_arg = vec->data[i + 1];
+                    if (i + 1 < vec_count) {
+                        CljObject *refer_arg = (CljObject*)vector_nth(vec, i + 1);
                         if (refer_arg && TAG(refer_arg) == CLJ_SYMBOL) {
                             CljSymbol *refer_sym = as_symbol(refer_arg);
                             if (refer_sym && refer_sym->name && strcmp(refer_sym->name, ":all") == 0) {
                                 refer_all = true;
+                                RELEASE((ID)refer_arg);
+                            } else {
+                                RELEASE((ID)refer_arg);
                             }
                         } else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR) {
                             refer_syms = refer_arg;
+                            // Don't release refer_syms - it's stored for later use
+                        } else {
+                            if (refer_arg) RELEASE((ID)refer_arg);
                         }
                         i++; // Skip next element
                     }
+                    RELEASE((ID)elem);
+                } else {
+                    RELEASE((ID)elem);
                 }
+            } else {
+                RELEASE((ID)elem);
             }
         }
     } else {
@@ -2387,16 +2427,20 @@ ID native_byte_array(ID *args, unsigned int argc) {
     // For now, only support vectors as sequences
     if (seq && TAG(seq) == CLJ_VECTOR) {
         CljPersistentVector *vec = as_vector(seq);
-        CljValue arr = (CljValue)make_byte_array(vec->count);
+        int count = vector_count(vec);
+        CljValue arr = (CljValue)make_byte_array(count);
         
-        for (int i = 0; i < vec->count; i++) {
-            if (TAG(vec->data[i]) != CLJ_INT) {
+        for (int i = 0; i < count; i++) {
+            ID elem = vector_nth(vec, i);
+            if (!elem || TAG(elem) != CLJ_INT) {
                 RELEASE((CljObject*)arr);
+                if (elem) RELEASE(elem);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "byte-array sequence elements must be numbers",
                                __FILE__, __LINE__, 0);
                 return NULL;
             }
-            int val = AS_FIXNUM(vec->data[i]);
+            int val = AS_FIXNUM(elem);
+            RELEASE(elem);  // vector_nth returns retained element
             if (val < 0 || val > 255) {
                 RELEASE((CljObject*)arr);
                 throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,

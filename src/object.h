@@ -207,4 +207,12 @@ static inline void* assert_type(CljObject *obj, CljType expected_type) {
 // - is_native_fn() -> function.h
 // - is_autorelease_pool_active() -> memory.h
 
+/**
+ * @brief Get the reference count of an object
+ * @param obj The object to check (can be NULL)
+ * @return The reference count, or -1 if obj is NULL or an immediate value, 
+ *         SINGLETON_RC if it's a singleton, or ZOMBIE_RC if it's a zombie
+ */
+int reference_count(CljObject *obj);
+
 #endif

@@ -218,13 +218,13 @@ ID map_keys(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljVector keys_vec = make_vector(map_data->count, 0);
+  CljPersistentVector* keys_vec = make_vector(map_data->count, 0);
   if (!keys_vec)
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
     CljObject *key = KV_KEY(map_data->data, i);
-    if ((keys_vec->data[i] = RETAIN(key))) {
-      keys_vec->count++;
+    if (key) {
+      keys_vec = vector_conj(keys_vec, (ID)RETAIN(key));
     }
   }
   return (ID)keys_vec;
@@ -237,13 +237,13 @@ ID map_vals(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljVector vals_vec = make_vector(map_data->count, 0);
+  CljPersistentVector* vals_vec = make_vector(map_data->count, 0);
   if (!vals_vec)
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
     CljObject *val = KV_VALUE(map_data->data, i);
-    if ((vals_vec->data[i] = RETAIN(val))) {
-      vals_vec->count++;
+    if (val) {
+      vals_vec = vector_conj(vals_vec, (ID)RETAIN(val));
     }
   }
   return (ID)vals_vec;

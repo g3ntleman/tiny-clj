@@ -137,19 +137,24 @@ const char* to_string(CljObject *v) {
             {
                 CljPersistentVector *vec = as_vector(v);
                 if (!vec) return strdup("[]");
+                int count = vector_count(vec);
                 size_t cap = 2; // [ ]
-                for (int i = 0; i < vec->count; i++) {
-                    const char *el = pr_str(vec->data[i]);
+                for (int i = 0; i < count; i++) {
+                    ID elem = vector_nth(vec, i);
+                    const char *el = pr_str(elem);
                     cap += strlen(el) + 1;
                     free((void*)el);
+                    if (elem) RELEASE(elem);
                 }
                 char *s = ALLOC(char, cap+1);
                 strcpy(s, "[");
-                for (int i = 0; i < vec->count; i++) {
-                    const char *el = pr_str(vec->data[i]);
+                for (int i = 0; i < count; i++) {
+                    ID elem = vector_nth(vec, i);
+                    const char *el = pr_str(elem);
                     strcat(s, el);
-                    if (i < vec->count-1) strcat(s, " ");
+                    if (i < count-1) strcat(s, " ");
                     free((void*)el);
+                    if (elem) RELEASE(elem);
                 }
                 strcat(s, "]");
                 

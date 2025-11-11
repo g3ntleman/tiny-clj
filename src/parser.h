@@ -34,14 +34,6 @@
  */
 ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env);
 
-/**
- * @brief Parse and evaluate a Clojure expression from a string (convenience)
- * @param expr_str The Clojure expression as a string
- * @param eval_state The evaluation state
- * @return The evaluated result (autoreleased) or NULL on error
- */
-ID eval_string(const char* expr_str, EvalState *eval_state);
-
 // === CljValue API (Phase 1: Immediates) ===
 
 /**

@@ -68,10 +68,17 @@ bool clj_equal(ID a, ID b) {
             CljPersistentVector *vec_a = (CljPersistentVector*)a;
             CljPersistentVector *vec_b = (CljPersistentVector*)b;
             if (!vec_a || !vec_b) return false;
-            if (vec_a->count != vec_b->count) return false;
-            for (int i = 0; i < vec_a->count; i++) {
+            int count_a = vector_count(vec_a);
+            int count_b = vector_count(vec_b);
+            if (count_a != count_b) return false;
+            for (int i = 0; i < count_a; i++) {
                 // Vektorelemente können immediates oder heap objects sein
-                if (!clj_equal(vec_a->data[i], vec_b->data[i])) return false;
+                ID elem_a = vector_nth(vec_a, i);
+                ID elem_b = vector_nth(vec_b, i);
+                bool equal = clj_equal(elem_a, elem_b);
+                if (elem_a) RELEASE(elem_a);
+                if (elem_b) RELEASE(elem_b);
+                if (!equal) return false;
             }
             return true;
         }

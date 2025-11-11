@@ -206,9 +206,9 @@ TEST(test_time_with_dotimes) {
     // Create binding vector: [i 1000]
     CljObject *binding_vector = make_vector(2, true);
     CljPersistentVector *vec_data = as_vector(binding_vector);
-    vec_data->data[0] = i_symbol;
-    vec_data->data[1] = thousand;
-    vec_data->count = 2; // Set the count manually
+    // Add elements using vector_conj
+    vec_data = vector_conj(vec_data, (ID)i_symbol);
+    vec_data = vector_conj(vec_data, (ID)thousand);
     
     // Create arithmetic expression: (+ 1 2 3 4 5)
     CljObject *arithmetic_expr = make_list((ID)plus_symbol, 

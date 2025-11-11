@@ -88,20 +88,21 @@ TEST(test_vector_memory) {
         
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
-        TEST_ASSERT_EQUAL_INT(5, vec_data->capacity);
-        TEST_ASSERT_NOT_NULL(vec_data->data);
+        // Capacity is implementation detail, only test that vector was created
+        TEST_ASSERT_NOT_NULL(vec_data);
         
-        // Add elements
+        // Add elements using vector_conj
         for (int i = 0; i < 5; i++) {
             CljValue elem = fixnum(i);
-            vec_data->data[i] = (CljObject*)elem;
+            vec_data = vector_conj(vec_data, (ID)elem);
         }
-        vec_data->count = 5;
         
         // Test vector operations
-        TEST_ASSERT_NOT_NULL(vec_data->data[0]);
-        TEST_ASSERT_TRUE(is_fixnum((CljValue)vec_data->data[0]));
-        TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vec_data->data[0]));
+        ID elem0 = vector_nth(vec_data, 0);
+        TEST_ASSERT_NOT_NULL(elem0);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)elem0));
+        TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)elem0));
+        RELEASE(elem0);
         
         // Clean up
         RELEASE((CljObject*)vec);

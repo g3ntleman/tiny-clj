@@ -27,7 +27,7 @@ void benchmark_persistent_vector() {
         
         for (int i = 0; i < BENCHMARK_SIZE; i++) {
             CljValue item = fixnum(i);
-            vec = (CljValue)vector_conj((CljVector)vec, (ID)item);
+            vec = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)item);
         }
         
         RELEASE(vec);

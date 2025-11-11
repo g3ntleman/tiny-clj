@@ -44,40 +44,56 @@ TEST(test_cljvalue_vector_api) {
         
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
-        TEST_ASSERT_EQUAL_INT(3, vec_data->capacity);
+        // Capacity is implementation detail, only test that vector was created
         
-        // Test vector operations
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = 3;
+        // Test vector operations using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(1));
+        vec_data = vector_conj(vec_data, (ID)fixnum(2));
+        vec_data = vector_conj(vec_data, (ID)fixnum(3));
         
-        TEST_ASSERT_EQUAL_INT(3, vec_data->count);
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum(vec_data->data[0]));
-        TEST_ASSERT_EQUAL_INT(2, as_fixnum(vec_data->data[1]));
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum(vec_data->data[2]));
+        TEST_ASSERT_EQUAL_INT(3, vector_count(vec_data));
+        ID elem0 = vector_nth(vec_data, 0);
+        ID elem1 = vector_nth(vec_data, 1);
+        ID elem2 = vector_nth(vec_data, 2);
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)elem2));
+        if (elem0) RELEASE(elem0);
+        if (elem1) RELEASE(elem1);
+        if (elem2) RELEASE(elem2);
     });
 }
 
 TEST(test_cljvalue_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Test transient vector operations
-        CljValue tvec = make_vector(5, 1);  // 1 = mutable
+        CljValue vec = make_vector(5, 0);  // Create persistent vector first
+        TEST_ASSERT_NOT_NULL(vec);
+        CljValue tvec = transient((ID)vec);  // Convert to transient
+        RELEASE((CljObject*)vec);  // Release original
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_TRANSIENT_VECTOR, ((CljObject*)tvec)->type);
         
         CljPersistentVector *tvec_data = as_vector((CljObject*)tvec);
         TEST_ASSERT_NOT_NULL(tvec_data);
-        TEST_ASSERT_EQUAL_INT(5, tvec_data->capacity);
+        // Capacity is implementation detail, only test that vector was created
         
-        // Test transient operations
-        tvec_data->data[0] = fixnum(10);
-        tvec_data->data[1] = fixnum(20);
-        tvec_data->count = 2;
-        
-        TEST_ASSERT_EQUAL_INT(2, tvec_data->count);
-        TEST_ASSERT_EQUAL_INT(10, as_fixnum(tvec_data->data[0]));
-        TEST_ASSERT_EQUAL_INT(20, as_fixnum(tvec_data->data[1]));
+        // Test transient operations using clj_conj
+        // clj_conj returns the same transient vector (in-place mutation)
+        ID tvec1 = clj_conj((ID)tvec_data, (ID)fixnum(10));
+        TEST_ASSERT_NOT_NULL(tvec1);
+        TEST_ASSERT_EQUAL_PTR((ID)tvec_data, tvec1);  // Should be same pointer
+        ID tvec2 = clj_conj(tvec1, (ID)fixnum(20));
+        TEST_ASSERT_NOT_NULL(tvec2);
+        TEST_ASSERT_EQUAL_PTR(tvec1, tvec2);  // Should be same pointer
+        // tvec_data should still be valid since clj_conj does in-place mutation
+        TEST_ASSERT_EQUAL_INT(2, vector_count(tvec_data));
+        ID elem0 = vector_nth(tvec_data, 0);
+        ID elem1 = vector_nth(tvec_data, 1);
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
+        TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
+        if (elem0) RELEASE(elem0);
+        if (elem1) RELEASE(elem1);
     });
 }
 
@@ -87,16 +103,20 @@ TEST(test_cljvalue_clojure_semantics) {
         CljValue vec = make_vector(2, 1);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->count = 2;
+        // Add elements using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(1));
+        vec_data = vector_conj(vec_data, (ID)fixnum(2));
         
         // Test vector access
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum(vec_data->data[0]));
-        TEST_ASSERT_EQUAL_INT(2, as_fixnum(vec_data->data[1]));
+        ID elem0 = vector_nth(vec_data, 0);
+        ID elem1 = vector_nth(vec_data, 1);
+        TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
+        TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
+        if (elem0) RELEASE(elem0);
+        if (elem1) RELEASE(elem1);
         
         // Test vector count
-        TEST_ASSERT_EQUAL_INT(2, vec_data->count);
+        TEST_ASSERT_EQUAL_INT(2, vector_count(vec_data));
     });
 }
 
@@ -263,16 +283,15 @@ TEST(test_cljvalue_vectors_high_level) {
         
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
-        TEST_ASSERT_EQUAL_INT(3, vec_data->capacity);
-        TEST_ASSERT_EQUAL_INT(0, vec_data->count);
+        // Capacity is implementation detail, only test that vector was created
+        TEST_ASSERT_EQUAL_INT(0, vector_count(vec_data));
         
-        // Test vector operations
-        vec_data->data[0] = fixnum(1);
-        vec_data->data[1] = fixnum(2);
-        vec_data->data[2] = fixnum(3);
-        vec_data->count = 3;
+        // Test vector operations using vector_conj
+        vec_data = vector_conj(vec_data, (ID)fixnum(1));
+        vec_data = vector_conj(vec_data, (ID)fixnum(2));
+        vec_data = vector_conj(vec_data, (ID)fixnum(3));
         
-        TEST_ASSERT_EQUAL_INT(3, vec_data->count);
+        TEST_ASSERT_EQUAL_INT(3, vector_count(vec_data));
     });
 }
 
@@ -380,8 +399,7 @@ TEST(test_truthiness_comprehensive) {
         // Non-empty vector is truthy
         CljPersistentVector *non_empty_vec = make_vector(1, 1);
         TEST_ASSERT_NOT_NULL(non_empty_vec);
-        non_empty_vec->data[0] = fixnum(1);
-        non_empty_vec->count = 1;
+        non_empty_vec = vector_conj(non_empty_vec, (ID)fixnum(1));
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_vec));
         RELEASE(non_empty_vec);
         

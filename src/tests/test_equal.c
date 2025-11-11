@@ -94,13 +94,13 @@ TEST(test_vector_equal_same_vectors) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val1);
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val2);
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val3);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val1);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val2);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val3);
     
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val1);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val2);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val3);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val1);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val2);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -129,12 +129,12 @@ TEST(test_vector_equal_different_lengths) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val1);
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val2);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val1);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val2);
     
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val1);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val2);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val3);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val1);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val2);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -162,10 +162,10 @@ TEST(test_vector_equal_different_values) {
     CljValue int4 = fixnum(4);
     
     // Build vectors with different values using conj
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)int1);
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)int2);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)int3);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)int4);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)int1);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)int2);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)int3);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)int4);
     
     // Verify vectors were created successfully
     TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
@@ -234,11 +234,11 @@ TEST(test_vector_equal_with_strings) {
     CljObject *str4 = make_string("world");
     
     // Fill vectors with strings
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)str1);
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)str2);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)str1);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)str2);
     
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)str3);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)str4);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)str3);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)str4);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -407,11 +407,11 @@ TEST(test_map_equal_with_nested_vectors) {
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);
     
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val1);
-    vec1_val = (CljValue)vector_conj((CljVector)vec1_val, (ID)val2);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val1);
+    vec1_val = (CljValue)vector_conj((CljPersistentVector*)vec1_val, (ID)val2);
     
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val1);
-    vec2_val = (CljValue)vector_conj((CljVector)vec2_val, (ID)val2);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val1);
+    vec2_val = (CljValue)vector_conj((CljPersistentVector*)vec2_val, (ID)val2);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;

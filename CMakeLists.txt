@@ -232,7 +232,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 else()
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
     set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING"
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer -fsanitize=address"
+        LINK_FLAGS "-fsanitize=address"
     )
 endif()
 

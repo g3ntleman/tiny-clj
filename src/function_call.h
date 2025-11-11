@@ -99,4 +99,13 @@ bool is_symbol(ID v, const char *name);
 // Time output suppression (for tests)
 void set_suppress_time_output(bool suppress);
 
+// Convenience function for string evaluation
+/**
+ * @brief Parse and evaluate a Clojure expression from a string (convenience)
+ * @param expr_str The Clojure expression as a string
+ * @param eval_state The evaluation state
+ * @return The evaluated result (autoreleased) or NULL on error
+ */
+ID eval_string(const char* expr_str, EvalState *eval_state);
+
 #endif

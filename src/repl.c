@@ -9,10 +9,13 @@
 #include "line_editor.h"
 #include "symbol.h"
 #include "clj_strings.h"
+#include "strings.h"
 #include "reader.h"
 #include "runtime.h"
 #include "vector.h"
 #include "memory.h"
+#include "value.h"
+#include "builtins.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -28,7 +31,7 @@ extern CljObject* line_editor_history_load_default(void);
 extern bool line_editor_history_save_default(CljObject *vec);
 extern void set_line_editor(LineEditor *editor);
 extern LineEditor* get_line_editor(void);
-extern CljObject* line_editor_get_history_vector(LineEditor *editor);
+extern CljPersistentVector* line_editor_get_history_vector(LineEditor *editor);
 extern int line_editor_get_history_size(const LineEditor *editor);
 extern void line_editor_clear_history(LineEditor *editor);
 
@@ -94,23 +97,11 @@ static void print_result(CljObject *v) {
         printf("nil\n");
         return;
     }
-    
-    // For symbols, print their name with namespace if present
-    if (v && TAG(v) == CLJ_SYMBOL) {
-        CljSymbol *sym = as_symbol(v);
-        if (sym && sym->name[0] != '\0') {
-            // Delegate to pr_str for correct formatting (handles :: and ns/)
-            const char *s = pr_str(v);
-            if (s) {
-                printf("%s\n", s);
-                free((void*)s);
-            }
-            return;
-        }
-    }
-    
     const char *s = pr_str(v);
-    if (s) { printf("%s\n", s); free((void*)s); }
+    if (s) {
+        printf("%s\n", s);
+        free((void*)s);
+    }
 }
 
 /** @brief Evaluate multiple expressions from a multiline string.
@@ -181,15 +172,6 @@ static bool eval_multiline_string(const char *code, EvalState *st) {
     return result;
 }
 
-/** @brief Evaluate a string expression in the REPL context.
- *  @param code Expression string to evaluate
- *  @param st Evaluation state
- *  @return true if successful, false on parse or evaluation error
- */
-static bool eval_string_repl(const char *code, EvalState *st) {
-    // Use the new multiline evaluation function
-    return eval_multiline_string(code, st);
-}
 
 // History-Persistenz Funktionen (konsolidiert aus repl_history.c)
 
@@ -199,16 +181,22 @@ static bool eval_string_repl(const char *code, EvalState *st) {
  *  @return New vector with last N elements (or original if smaller)
  */
 CljObject* history_trim_last_n(CljObject *vec, int limit) {
-    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return (CljObject*)make_vector(0, 0);
+    if (!vec || TAG(vec) != CLJ_VECTOR || limit <= 0) return (CljObject*)empty_vector();
     CljPersistentVector *v = as_vector(vec);
-    if (!v || v->count <= limit) return RETAIN(vec);
-    int start = v->count - limit;
-    CljValue out = (CljValue)make_vector(limit, 0);
-    CljPersistentVector *o = as_vector((CljObject*)out);
+    int count = vector_count(v);
+    if (count <= limit) return RETAIN(vec);
+    int start = count - limit;
+    CljPersistentVector* out = make_vector(limit, false);
+    ID nth_args[2];
+    nth_args[0] = (ID)v;
     for (int i = 0; i < limit; i++) {
-        o->data[i] = (RETAIN(v->data[start + i]), v->data[start + i]);
+        nth_args[1] = fixnum(start + i);
+        ID elem = nth2(nth_args, 2);
+        if (elem) {
+            out = vector_conj(out, elem);
+            RELEASE(elem);
+        }
     }
-    o->count = limit;
     return (CljObject*)out;
 }
 
@@ -220,11 +208,13 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
 bool history_save_to_file(CljObject *vec, const char *path) {
     if (!path || !vec) return false;
     
-    // Convert transient vector to persistent if needed
     CljObject *persistent_vec = vec;
     if (TAG(vec) == CLJ_TRANSIENT_VECTOR) {
         persistent_vec = (CljObject*)persistent((CljValue)vec);
-        if (!persistent_vec) return false;
+        if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR) {
+            if (persistent_vec != vec) RELEASE(persistent_vec);
+            return false;
+        }
     }
     
     if (TAG(persistent_vec) != CLJ_VECTOR) {
@@ -237,25 +227,23 @@ bool history_save_to_file(CljObject *vec, const char *path) {
     if (!trimmed) return false;
     
     const char *s = pr_str(trimmed);
-    if (!s) { RELEASE(trimmed); return false; }
+    RELEASE(trimmed);
+    if (!s) return false;
     
     FILE *fp = fopen(path, "w");
-    if (!fp) { free((void*)s); RELEASE(trimmed); return false; }
+    if (!fp) {
+        free((void*)s);
+        return false;
+    }
     
     size_t len = strlen(s);
     size_t n = fwrite(s, 1, len, fp);
-    // Add newline at end of file for proper formatting
-    if (n > 0) {
-        fputc('\n', fp);
-    }
-    // Flush and sync to ensure data is written to disk immediately
+    if (n > 0) fputc('\n', fp);
     fflush(fp);
     fsync(fileno(fp));
     int close_result = fclose(fp);
     free((void*)s);
-    RELEASE(trimmed);
     
-    // Check both write success and close success
     return (n == len && close_result == 0);
 }
 
@@ -263,62 +251,98 @@ bool history_save_to_file(CljObject *vec, const char *path) {
  *  @param path File path
  *  @return Vector loaded from file, or empty vector on error
  */
-CljObject* history_load_from_file(const char *path) {
-    if (!path) return AUTORELEASE(make_vector(0, 0));
-    FILE *fp = fopen(path, "r");
-    if (!fp) return AUTORELEASE(make_vector(0, 0));
-    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return AUTORELEASE(make_vector(0, 0)); }
-    long sz = ftell(fp);
-    if (sz < 0) { fclose(fp); return AUTORELEASE(make_vector(0, 0)); }
-    rewind(fp);
-    char *buf = (char*)malloc((size_t)sz + 1);
-    if (!buf) { fclose(fp); return AUTORELEASE(make_vector(0, 0)); }
-    size_t n = fread(buf, 1, (size_t)sz, fp);
-    buf[n] = '\0';
-    fclose(fp);
-
-    CljObject *result = NULL;
-    Reader rd; reader_init(&rd, buf);
+ID history_load_from_file(const char *path) {
+    if (!path) return empty_vector();
+    
     EvalState *st = evalstate_new(false);
+    if (!st) return empty_vector();
+    
+    ID result = NULL;
+    ID form = NULL;
+    char *buf_copy = NULL;
+    
     WITH_AUTORELEASE_POOL({
         TRY {
-            ID form = value_by_parsing_expr(&rd, st);
-            if (form && !IS_IMMEDIATE(form) && TAG(form) == CLJ_VECTOR) {
-                CljPersistentVector *v = as_vector((CljObject*)form);
-                bool all_strings = true;
-                for (int i = 0; i < (v ? v->count : 0); i++) {
-                    if (!v->data[i] || TAG(v->data[i]) != CLJ_STRING) { 
-                        all_strings = false; 
-                        break; 
+            char expr[512];
+            snprintf(expr, sizeof(expr), "(slurp \"%s\")", path);
+            ID slurp_result = eval_string(expr, st);
+            
+            if (!slurp_result || TAG(slurp_result) != CLJ_STRING) {
+                // slurp returned nil or non-string - file doesn't exist or error
+                result = NULL;
+            } else {
+                // Copy string buffer to avoid dependency on inner pool
+                // The string from slurp is in the inner pool (from eval_string)
+                // We need to copy the buffer before the inner pool is popped
+                CljString *content = as_clj_string((CljObject*)slurp_result);
+                const char *buf = clj_string_data(content);
+                size_t buf_len = strlen(buf);
+                buf_copy = (char*)malloc(buf_len + 1);
+                if (!buf_copy) {
+                    result = NULL;
+                } else {
+                    memcpy(buf_copy, buf, buf_len + 1);
+                    
+                    // Parse in our own pool to avoid dependency on inner pool
+                    // The parsed objects will be in our pool, not the inner pool
+                    Reader rd; reader_init(&rd, buf_copy);
+                    form = value_by_parsing_expr(&rd, st);
+                    
+                    // RETAIN form to keep it alive after pool is popped
+                    // The form contains strings that need to survive the pool pop
+                    if (form && !IS_IMMEDIATE(form)) {
+                        RETAIN((CljObject*)form);
                     }
                 }
-                if (all_strings && v && v->count > 0) {
-                    // RETAIN to keep it alive when inner pool is popped
-                    result = RETAIN((CljObject*)form);
-                } else {
-                    // Vector contains non-string elements or is empty - invalid history format
-                    fprintf(stderr, "Warning: Failed to load history file (%s). History has been reset.\n", path);
-                    result = NULL;
-                }
-            } else {
-                // Parsed form is not a vector or is NULL - invalid history format
-                fprintf(stderr, "Warning: Failed to load history file (%s). History has been reset.\n", path);
-                result = NULL;
             }
         } CATCH(ex) {
-            fprintf(stderr, "Warning: Failed to load history file (%s). History has been reset.\n", path);
+            // Exception during slurp or parsing - return empty vector
             result = NULL;
         } END_TRY
-    });  // Inner pool is popped here, but result is retained, so it's not freed
-    // Free buf after parsing is complete - parsed objects don't reference buf
-    free(buf);
-    evalstate_free(st);
-    if (!result) {
-        // Create empty vector outside of autorelease pool to avoid double-free
-        result = (CljObject*)make_vector(0, 0);
+    }); // Pool is popped here, but form is retained
+    
+    // Free buffer copy after parsing (outside pool)
+    if (buf_copy) {
+        free(buf_copy);
     }
-    // Return with AUTORELEASE to add to caller's pool
-    return AUTORELEASE(result);
+    
+    // Process form after pool is popped
+    if (form && !IS_IMMEDIATE(form) && TAG(form) == CLJ_VECTOR) {
+        CljPersistentVector *v = as_vector((CljObject*)form);
+        int count = vector_count(v);
+        bool all_strings = count > 0;
+        ID nth_args[2];
+        nth_args[0] = form;
+        for (int i = 0; i < count && all_strings; i++) {
+            nth_args[1] = fixnum(i);
+            ID elem = nth2(nth_args, 2);
+            if (elem && TAG(elem) != CLJ_STRING) {
+                all_strings = false;
+            }
+            if (elem) RELEASE(elem);
+        }
+        if (all_strings) {
+            CljPersistentVector* new_vec = make_vector(count, false);
+            for (int i = 0; i < count; i++) {
+                nth_args[1] = fixnum(i);
+                ID elem = nth2(nth_args, 2);
+                if (elem) {
+                    ASSIGN(new_vec, vector_conj(new_vec, elem));
+                    RELEASE(elem);
+                }
+            }
+            result = new_vec;
+        }
+        
+        // RELEASE form after we've copied its contents to the new vector
+        RELEASE((CljObject*)form);
+    } else if (form && !IS_IMMEDIATE(form)) {
+        // RELEASE form if it's not a vector
+        RELEASE((CljObject*)form);
+    }
+    
+    evalstate_free(st);
+    return result ? AUTORELEASE(result) : empty_vector();
 }
 
 
@@ -351,6 +375,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     
     // Disable verbose memory mode for REPL (memory logging disabled)
     g_memory_verbose_mode = false;
+#endif
+
+#ifdef DEBUG
+    // Enable zombie mode for debugging use-after-free errors
+    enable_zombie_mode();
+    // Enable verbose memory mode for debugging
+    set_memory_verbose_mode(true);
+    enable_memory_debug_output();
 #endif
 
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
@@ -389,7 +421,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     });  // Pool is popped here, but history_vec is retained, so it's not freed
     // Now use the retained history vector
     if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
-        line_editor_set_history_from_vector(editor, history_vec);
+        line_editor_set_history_from_vector(editor, (CljPersistentVector*)history_vec);
         RELEASE(history_vec);  // Release after use
     } else {
         line_editor_clear_history(editor);
@@ -471,8 +503,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
 
         // (Entfernt) REPL interne History-Kommandos
 
-        // Use eval_string_repl for proper exception handling
-        bool success = eval_string_repl(acc, st);
+        bool success = eval_multiline_string(acc, st);
         
         // Always add command to history (successful or failed) so user can correct it
         if (acc[0] != '\0') {
@@ -482,9 +513,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
                 line_editor_add_to_history(editor, acc);
                 // Save history after each expression evaluation
                 WITH_AUTORELEASE_POOL({
-                    CljObject *vec = line_editor_get_history_vector(editor);
+                    CljPersistentVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
-                        line_editor_history_save_default(vec);
+                        line_editor_history_save_default((CljObject*)vec);
                         RELEASE(vec);
                     }
                 });
@@ -505,8 +536,8 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
     WITH_AUTORELEASE_POOL({
         LineEditor *ed = get_line_editor();
         if (ed) {
-            CljObject *vec = line_editor_get_history_vector(ed);
-            if (vec) { line_editor_history_save_default(vec); RELEASE(vec); }
+            CljPersistentVector *vec = line_editor_get_history_vector(ed);
+            if (vec) { line_editor_history_save_default((CljObject*)vec); RELEASE(vec); }
         }
     });
 #endif
@@ -603,7 +634,7 @@ int main(int argc, char **argv) {
             strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
             if (form_balance(acc, NULL) != 0) continue;
             
-            bool success = eval_string_repl(acc, st);
+            bool success = eval_multiline_string(acc, st);
             if (!success) {
                 // Parse error or evaluation failed
                 fclose(fp);
@@ -623,7 +654,7 @@ int main(int argc, char **argv) {
     int i = 0;
     while (i < eval_count) {
         // Simple eval-args without TRY/CATCH
-        bool success = eval_string_repl(eval_args[i], st);
+        bool success = eval_multiline_string(eval_args[i], st);
         if (!success) {
             // Parse error or evaluation failed
             cleanup_and_exit(eval_args, 1);

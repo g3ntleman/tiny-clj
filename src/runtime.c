@@ -55,14 +55,14 @@ void runtime_init(void) {
     
     // Initialize event loop queues as transient vectors
     if (!g_runtime.task_queue) {
-        CljVector task_vec = make_vector(8, false);
+        CljPersistentVector* task_vec = make_vector(8, false);
         if (task_vec) {
             g_runtime.task_queue = (CljPersistentVector*)transient((ID)task_vec);
             RELEASE((ID)task_vec); // transient() retains the result
         }
     }
     if (!g_runtime.timer_queue) {
-        CljVector timer_vec = make_vector(8, false);
+        CljPersistentVector* timer_vec = make_vector(8, false);
         if (timer_vec) {
             g_runtime.timer_queue = (CljPersistentVector*)transient((ID)timer_vec);
             RELEASE((ID)timer_vec); // transient() retains the result
@@ -108,9 +108,11 @@ void runtime_free(void) {
         CljPersistentVector *tvec = g_runtime.task_queue;
         if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
             // Release all elements in transient vector
-            for (int i = 0; i < tvec->count; i++) {
-                if (tvec->data[i]) {
-                    RELEASE(tvec->data[i]);
+            int count = vector_count(tvec);
+            for (int i = 0; i < count; i++) {
+                ID elem = vector_nth(tvec, i);
+                if (elem) {
+                    RELEASE(elem);
                 }
             }
             RELEASE((ID)tvec);
@@ -121,9 +123,11 @@ void runtime_free(void) {
         CljPersistentVector *tvec = g_runtime.timer_queue;
         if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
             // Release all elements in transient vector (timer tasks as maps)
-            for (int i = 0; i < tvec->count; i++) {
-                if (tvec->data[i]) {
-                    RELEASE(tvec->data[i]);
+            int count = vector_count(tvec);
+            for (int i = 0; i < count; i++) {
+                ID elem = vector_nth(tvec, i);
+                if (elem) {
+                    RELEASE(elem);
                 }
             }
             RELEASE((ID)tvec);
