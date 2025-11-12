@@ -4,6 +4,7 @@
 #include "types.h"  // For SINGLETON_RC
 #include "symbol.h"  // For SYM_NIL
 #include "seq.h"  // For SeqIterator
+#include "common.h"  // For CLJ_ASSERT
 #include <stdlib.h>
 #include <stdbool.h>
 
@@ -108,25 +109,23 @@ CljPersistentVector* vector_set_nth(CljPersistentVector* vec, int index, ID valu
 /** Copy vector with specified capacity.
  * @param vec Vector to copy
  * @param capacity Capacity for new vector (must be >= number of elements to copy)
- * @return New vector with copied elements, or NULL on error
+ * @return New vector with copied elements, throws on error. 
  */
-CljPersistentVector* vector_copy(CljPersistentVector* vec, int capacity) {
+CljPersistentVector* make_vector_copy(CljPersistentVector* vec, int capacity) {
     if (!vec) return NULL;
     CljPersistentVector *v = as_vector((ID)vec);
     if (!v) return NULL;
     
-    int count_to_copy = v->count;
     // Ensure capacity is at least the number of elements to copy
-    capacity = MAX(capacity, count_to_copy);
+    capacity = MIN(capacity, v->count);
     
     // Create new vector with specified capacity
-    CljPersistentVector *new_vec = make_vector(capacity, false);
+    CljPersistentVector *new_vec = make_vector(capacity, false);    
+    new_vec->count = v->count;  // Copy count, not capacity
     
     // Copy all elements (including nil/NULL - nil is a valid value in Clojure)
-    for (int i = 0; i < count_to_copy; i++) {
-        ID elem = vector_nth(v, i);
-        new_vec->data[i] = elem;  // elem is already retained by vector_nth (or NULL for nil)
-        new_vec->count++;
+    for (int i = 0; i < capacity; i++) {
+        new_vec->data[i] = RETAIN(v->data[i]);  // RETAIN is NULL-safe
     }
     
     return new_vec;
@@ -144,23 +143,64 @@ CljPersistentVector* vector_pop(CljPersistentVector* vec) {
     // OPTIMIZATION: If RC=1, mutate in-place (O(1))
     if (v->base.rc == 1) {
         // Release last element
-        ID last_elem = vector_nth(v, v->count - 1);
-        if (last_elem) {
-            RELEASE(last_elem);
-        }
+        RELEASE(vector_nth(v, v->count - 1));
         // Set last element to NULL and decrement count
-        v->data[v->count - 1] = NULL;
         v->count--;
         return vec;  // Return same vector (in-place mutation)
     }
     
     // RC>1: Copy-on-Write (O(n))
-    // Create new vector with count-1 elements using vector_copy
+    // Create new vector with count-1 elements using make_vector_copy
     // First, temporarily reduce count to copy only first count-1 elements
     int original_count = v->count;
     v->count = original_count - 1;
-    CljPersistentVector *new_vec = vector_copy(v, original_count - 1);
+    CljPersistentVector *new_vec = make_vector_copy(v, original_count - 1);
     v->count = original_count;  // Restore original count
+    
+    return new_vec;
+}
+
+/** Remove element at index from vector (in-place if RC=1, COW if RC>1).
+ * @param vec Vector to remove from
+ * @param index Index of element to remove (0-based)
+ * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
+ */
+CljPersistentVector* vector_remove_at(CljPersistentVector* vec, int index) {
+    if (!vec) return NULL;
+    CljPersistentVector *v = as_vector((ID)vec);
+    if (!v || index < 0 || index >= v->count) return vec;  // Invalid index, return as-is
+    
+    // OPTIMIZATION: If RC=1, mutate in-place (O(n) due to shifting)
+    if (v->base.rc == 1) {
+        // Release element at index
+        if (v->data[index]) {
+            RELEASE(v->data[index]);
+        }
+        // Shift elements left
+        for (int i = index + 1; i < v->count; i++) {
+            v->data[i - 1] = v->data[i];
+        }
+        v->count--;
+        return vec;  // Return same vector (in-place mutation)
+    }
+    
+    // RC>1: Copy-on-Write (O(n))
+    // Create new vector without the element at index
+    int new_count = v->count - 1;
+    CljPersistentVector *new_vec = make_vector(v->capacity, false);
+    if (!new_vec) return vec;  // Return original vector on OOM
+    
+    new_vec->count = new_count;
+    
+    // Copy elements before index
+    for (int i = 0; i < index; i++) {
+        new_vec->data[i] = RETAIN(v->data[i]);
+    }
+    
+    // Copy elements after index
+    for (int i = index + 1; i < v->count; i++) {
+        new_vec->data[i - 1] = RETAIN(v->data[i]);
+    }
     
     return new_vec;
 }
@@ -252,8 +292,8 @@ CljPersistentVector* vector_conj(CljPersistentVector* vec, ID item) {
         if (new_capacity < 4) new_capacity = 4;
     }
 
-    // Use vector_copy to copy existing elements
-    CljPersistentVector* new_vec = vector_copy(old_vec, new_capacity);
+    // Use make_vector_copy to copy existing elements
+    CljPersistentVector* new_vec = make_vector_copy(old_vec, new_capacity);
     if (!new_vec)
         return vec;
 
@@ -283,8 +323,8 @@ CljPersistentVector* vector_assoc(CljPersistentVector* vec, int index, ID value)
         return vec;  // Return same vector (in-place mutation)
     }
 
-    // RC>1: Copy-on-Write - use vector_copy for efficiency
-    CljPersistentVector* new_vec = vector_copy(old_vec, old_vec->capacity);
+    // RC>1: Copy-on-Write - use make_vector_copy for efficiency
+    CljPersistentVector* new_vec = make_vector_copy(old_vec, old_vec->capacity);
     if (!new_vec)
         return vec;  // Return original vector on OOM
 
@@ -346,10 +386,7 @@ ID transient(ID vec) {
  * @note Throws exception on OOM
  */
 void vector_grow_capacity(CljPersistentVector *v) {
-    if (!v) {
-        throw_oom(CLJ_VECTOR);
-        return;
-    }
+    CLJ_ASSERT(v != NULL);
     
     // Only grow if capacity is insufficient
     if (v->count < v->capacity) {
@@ -405,8 +442,8 @@ ID persistent(ID tvec) {
     if (!v) return NULL;
     
     // Clojure-Semantik: Erstelle NEUE persistent collection
-    // Use vector_copy to copy all elements efficiently
-    CljPersistentVector* new_vec = vector_copy(v, v->capacity);
+    // Use make_vector_copy to copy all elements efficiently
+    CljPersistentVector* new_vec = make_vector_copy(v, v->capacity);
     if (!new_vec) return NULL;
     
     // Original transient wird "invalidated" (kann später implementiert werden)

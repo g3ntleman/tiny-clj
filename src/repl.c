@@ -17,6 +17,7 @@
 #include "value.h"
 #include "builtins.h"
 #include "event_loop.h"
+#include "file_utils.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -206,7 +207,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
  *  @param path File path
  *  @return true if successful
  */
-bool history_save_to_file(CljObject *vec, const char *path) {
+bool history_save_to_file(CljPersistentVector *vec, const char *path) {
     if (!path || !vec) return false;
     
     CljObject *persistent_vec = vec;
@@ -241,7 +242,8 @@ bool history_save_to_file(CljObject *vec, const char *path) {
     size_t n = fwrite(s, 1, len, fp);
     if (n > 0) fputc('\n', fp);
     fflush(fp);
-    fsync(fileno(fp));
+    // Don't use fsync - it can block and cause REPL to hang
+    // fsync(fileno(fp));
     int close_result = fclose(fp);
     free((void*)s);
     
@@ -252,107 +254,62 @@ bool history_save_to_file(CljObject *vec, const char *path) {
  *  @param path File path
  *  @return Vector loaded from file, or empty vector on error
  */
-ID history_load_from_file(const char *path) {
+CljPersistentVector* history_load_from_file(const char *path) {
     if (!path) return empty_vector();
     
     EvalState *st = evalstate_new(false);
     if (!st) return empty_vector();
     
-    ID result = NULL;
-    ID form = NULL;
-    char *buf_copy = NULL;
+    CljPersistentVector *string_history = NULL;
     
     WITH_AUTORELEASE_POOL({
         TRY {
-            char expr[512];
-            snprintf(expr, sizeof(expr), "(slurp \"%s\")", path);
-            ID slurp_result = eval_string(expr, st);
+            // Use file_slurp utility function directly (no eval_string needed)
+            // file_slurp throws exceptions on errors
+            CljString *content = file_slurp(path);
             
-            if (!slurp_result || TAG(slurp_result) != CLJ_STRING) {
-                // slurp returned nil or non-string - file doesn't exist or error
-                result = NULL;
-            } else {
-                // Copy string buffer to avoid dependency on inner pool
-                // The string from slurp is in the inner pool (from eval_string)
-                // We need to copy the buffer before the inner pool is popped
-                CljString *content = as_clj_string((CljObject*)slurp_result);
+            if (content) {
+                // Read directly from the CljString buffer
+                // The Reader only reads from the buffer, it doesn't store the pointer
                 const char *buf = clj_string_data(content);
-                size_t buf_len = strlen(buf);
-                buf_copy = (char*)malloc(buf_len + 1);
-                if (!buf_copy) {
-                    result = NULL;
-                } else {
-                    memcpy(buf_copy, buf, buf_len + 1);
+                Reader rd; reader_init(&rd, buf);
+                ID parsed = value_by_parsing_expr(&rd, st);
+                
+                // Validate it's a vector
+                if (parsed && TAG(parsed) == CLJ_VECTOR) {
+                    string_history = as_vector((CljObject*)parsed);
                     
-                    // Parse in our own pool to avoid dependency on inner pool
-                    // The parsed objects will be in our pool, not the inner pool
-                    Reader rd; reader_init(&rd, buf_copy);
-                    form = value_by_parsing_expr(&rd, st);
-                    
-                    // RETAIN form to keep it alive after pool is popped
-                    // The form contains strings that need to survive the pool pop
-                    if (form && !IS_IMMEDIATE(form)) {
-                        RETAIN((CljObject*)form);
-                    }
+                    // RETAIN before pool pop to keep it alive
+                    RETAIN(string_history);
                 }
             }
         } CATCH(ex) {
-            // Exception during slurp or parsing - return empty vector
-            result = NULL;
+            // Exception during file_slurp or parsing - return empty vector
+            string_history = NULL;
         } END_TRY
-    }); // Pool is popped here, but form is retained
-    
-    // Free buffer copy after parsing (outside pool)
-    if (buf_copy) {
-        free(buf_copy);
-    }
-    
-    // Process form after pool is popped
-    if (form && !IS_IMMEDIATE(form) && TAG(form) == CLJ_VECTOR) {
-        CljPersistentVector *v = as_vector((CljObject*)form);
-        int count = vector_count(v);
-        bool all_strings = count > 0;
-        ID nth_args[2];
-        nth_args[0] = form;
-        for (int i = 0; i < count && all_strings; i++) {
-            nth_args[1] = fixnum(i);
-            ID elem = nth2(nth_args, 2);
-            if (elem && TAG(elem) != CLJ_STRING) {
-                all_strings = false;
-            }
-            if (elem) RELEASE(elem);
-        }
-        if (all_strings) {
-            CljPersistentVector* new_vec = make_vector(count, false);
-            for (int i = 0; i < count; i++) {
-                nth_args[1] = fixnum(i);
-                ID elem = nth2(nth_args, 2);
-                if (elem) {
-                    ASSIGN(new_vec, vector_conj(new_vec, elem));
-                    RELEASE(elem);
-                }
-            }
-            result = new_vec;
-        }
-        
-        // RELEASE form after we've copied its contents to the new vector
-        RELEASE((CljObject*)form);
-    } else if (form && !IS_IMMEDIATE(form)) {
-        // RELEASE form if it's not a vector
-        RELEASE((CljObject*)form);
-    }
+    }); // Pool popped, but string_history is retained (rc > 0), so it survives
     
     evalstate_free(st);
-    return result ? AUTORELEASE(result) : empty_vector();
+    
+    // Transfer to outer pool and return
+    return string_history ? AUTORELEASE((ID)string_history) : empty_vector();
 }
-
 
 
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display
  */
 __attribute__((unused)) static void usage(const char *prog) {
-    printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl]\n", prog);
+    printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
+    printf("\nOptions:\n");
+    printf("  -n, --ns NS          Set namespace\n");
+    printf("  -e, --eval EXPR      Evaluate expression (can be used multiple times)\n");
+    printf("  -f, --file FILE      Evaluate file\n");
+    printf("  --no-core            Don't load clojure.core\n");
+    printf("  --repl               Start REPL after evaluating files/expressions\n");
+    printf("  --zombie             Enable zombie mode for memory debugging\n");
+    printf("  --memory-debug       Enable verbose memory debugging\n");
+    printf("  -h, --help           Show this help message\n");
 }
 
 /** @brief Clean up resources and exit with specified code.
@@ -366,24 +323,30 @@ __attribute__((unused)) static void cleanup_and_exit(const char **eval_args, int
 
 /** @brief Run the interactive REPL loop with input handling and evaluation.
  *  @param st Evaluation state for the REPL session
+ *  @param zombie_mode Enable zombie mode for memory debugging
+ *  @param memory_debug Enable verbose memory debugging
  *  @return true on successful completion
  */
-__attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
+__attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
     // Initialize memory profiling DIRECTLY before the first prompt
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
     
-    // Disable verbose memory mode for REPL (memory logging disabled)
-    g_memory_verbose_mode = false;
+    // Set verbose memory mode based on command line argument
+    g_memory_verbose_mode = memory_debug;
 #endif
 
 #ifdef DEBUG
-    // Enable zombie mode for debugging use-after-free errors
-    enable_zombie_mode();
-    // Verbose memory mode and debug output disabled in REPL
-    // set_memory_verbose_mode(true);
-    // enable_memory_debug_output();
+    // Enable zombie mode if requested via command line
+    if (zombie_mode) {
+        enable_zombie_mode();
+    }
+    // Enable verbose memory debugging if requested
+    if (memory_debug) {
+        set_memory_verbose_mode(true);
+        enable_memory_debug_output();
+    }
 #endif
 
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
@@ -398,6 +361,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
 
     char acc[4096]; acc[0] = '\0';
     bool prompt_shown = false;
+    
+    // Print initial prompt immediately (before history loading to ensure it's visible)
+    print_prompt(st, true);
+    prompt_shown = true;
+    
 #ifdef ENABLE_LINE_EDITING
     // Initialize line editor
     LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string);
@@ -406,24 +374,23 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
         return false;
     }
     set_line_editor(editor);
-    // Lade History aus Default-Datei und fülle Editor-History (mit Autorelease-Pool)
+    // Lade History aus Default-Datei und fülle Editor-History (mit Exception-Handling)
     CljObject *history_vec = NULL;
-    WITH_AUTORELEASE_POOL({
-        TRY {
-            CljObject *loaded = line_editor_history_load_default();
-            if (loaded && TAG(loaded) == CLJ_VECTOR) {
-                // RETAIN to keep history alive when pool is popped
-                ASSIGN(history_vec, RETAIN(loaded));
-            }
-            } CATCH(ex) {
-                fprintf(stderr, "Warning: Failed to load history file. History has been reset.\n");
-                history_vec = NULL;
-            } END_TRY
-    });  // Pool is popped here, but history_vec is retained, so it's not freed
-    // Now use the retained history vector
+    TRY {
+        CljObject *loaded = line_editor_history_load_default();
+        if (loaded && TAG(loaded) == CLJ_VECTOR) {
+            // RETAIN to keep history alive
+            ASSIGN(history_vec, RETAIN(loaded));
+        }
+    } CATCH(ex) {
+        // Exception beim History-Laden - starte mit leerer History
+        // Exception wird automatisch freigegeben durch CATCH-Macro
+        history_vec = NULL;
+    } END_TRY
+    // Verwende die geladene History
     if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
         line_editor_set_history_from_vector(editor, (CljPersistentVector*)history_vec);
-        RELEASE(history_vec);  // Release after use
+        RELEASE(history_vec);  // Release nach Verwendung
     } else {
         line_editor_clear_history(editor);
     }
@@ -519,12 +486,14 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st) {
         for (int i = 0; i < 10; i++) {
             if (!event_loop_run_next(NULL, st)) break;
         }
+        
+        // Add to history and save after each expression evaluation (success or failure)
         if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
             LineEditor *editor = get_line_editor();
             if (editor) {
                 line_editor_add_to_history(editor, acc);
-                // Save history after each expression evaluation
+                // Save history after each expression (fsync removed to avoid blocking)
                 WITH_AUTORELEASE_POOL({
                     CljPersistentVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
@@ -576,6 +545,8 @@ int main(int argc, char **argv) {
     int eval_count = 0;
     const char *file_arg = NULL;
     bool start_repl = false;
+    bool zombie_mode = false;
+    bool memory_debug = false;
     
     // First pass: count -e arguments
     for (int i = 1; i < argc; i++) {
@@ -604,6 +575,10 @@ int main(int argc, char **argv) {
             no_core = true;
         } else if (strcmp(argv[i], "--repl") == 0) {
             start_repl = true;
+        } else if (strcmp(argv[i], "--zombie") == 0) {
+            zombie_mode = true;
+        } else if (strcmp(argv[i], "--memory-debug") == 0) {
+            memory_debug = true;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             cleanup_and_exit(eval_args, 0);
@@ -679,7 +654,7 @@ int main(int argc, char **argv) {
     }
 
     // Interactive REPL
-    run_interactive_repl(st);
+    run_interactive_repl(st, zombie_mode, memory_debug);
     
 #ifdef ENABLE_LINE_EDITING
     // Restore terminal settings

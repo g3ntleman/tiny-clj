@@ -195,3 +195,156 @@ TEST(test_schedule_periodic_validates_arguments) {
     TEST_FAIL_MESSAGE("schedule-periodic should throw exception for non-integer delay");
 }
 
+// Test that schedule-periodic returns a timer ID (integer)
+TEST(test_schedule_periodic_returns_timer_id) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(schedule-periodic 0 1000 (fn [] (println \"Tick\")))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
+        return;
+    } END_TRY
+    
+    // schedule-periodic should return a timer ID (integer), not nil
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    
+    // Timer ID should be a positive integer
+    int32_t timer_id = as_fixnum((CljValue)result);
+    TEST_ASSERT_TRUE(timer_id > 0);
+    
+    // Clean up
+    event_loop_clear();
+}
+
+// Test that cancel-timer stops a periodic timer
+TEST(test_cancel_timer_stops_periodic_timer) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a periodic timer
+    CljObject *timer_id_obj = NULL;
+    TRY {
+        timer_id_obj = eval_string("(schedule-periodic 0 100 (fn [] 42))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(timer_id_obj);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)timer_id_obj));
+    
+    // Cancel the timer
+    char cancel_expr[256];
+    int32_t timer_id = as_fixnum((CljValue)timer_id_obj);
+    snprintf(cancel_expr, sizeof(cancel_expr), "(cancel-timer %d)", timer_id);
+    
+    CljObject *cancel_result = NULL;
+    TRY {
+        cancel_result = eval_string(cancel_expr, g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("cancel-timer should not throw exception");
+        return;
+    } END_TRY
+    
+    // cancel-timer should return true
+    TEST_ASSERT_NOT_NULL(cancel_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)cancel_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)cancel_result) == SPECIAL_TRUE);
+    
+    // Wait a bit - timer should not execute anymore
+    usleep(150000); // 150ms
+    
+    // Try to run task - should be empty (timer was cancelled)
+    CljObject *ran_val = NULL;
+    TRY {
+        ran_val = eval_string("(run-next-task)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        return;
+    } END_TRY
+    
+    // Should return false (no task to run)
+    TEST_ASSERT_NOT_NULL(ran_val);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_val));
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_val) == SPECIAL_FALSE);
+    
+    // Clean up
+    event_loop_clear();
+}
+
+// Test that cancel-timer returns true when timer is found
+TEST(test_cancel_timer_returns_true_when_found) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a periodic timer
+    CljObject *timer_id_obj = NULL;
+    TRY {
+        timer_id_obj = eval_string("(schedule-periodic 0 1000 (fn [] 42))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(timer_id_obj);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)timer_id_obj));
+    
+    int32_t timer_id = as_fixnum((CljValue)timer_id_obj);
+    char cancel_expr[256];
+    snprintf(cancel_expr, sizeof(cancel_expr), "(cancel-timer %d)", timer_id);
+    
+    CljObject *cancel_result = NULL;
+    TRY {
+        cancel_result = eval_string(cancel_expr, g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("cancel-timer should not throw exception");
+        return;
+    } END_TRY
+    
+    // Should return true
+    TEST_ASSERT_NOT_NULL(cancel_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)cancel_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)cancel_result) == SPECIAL_TRUE);
+    
+    // Clean up
+    event_loop_clear();
+}
+
+// Test that cancel-timer returns false when timer is not found
+TEST(test_cancel_timer_returns_false_when_not_found) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Try to cancel a non-existent timer
+    CljObject *cancel_result = NULL;
+    TRY {
+        cancel_result = eval_string("(cancel-timer 99999)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("cancel-timer should not throw exception");
+        return;
+    } END_TRY
+    
+    // Should return false
+    TEST_ASSERT_NOT_NULL(cancel_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)cancel_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)cancel_result) == SPECIAL_FALSE);
+}
+
+// Test that cancel-timer validates argument
+TEST(test_cancel_timer_validates_argument) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test with non-integer argument
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(cancel-timer \"123\")", g_test_eval_state);
+    } CATCH(ex) {
+        // Should throw exception
+        TEST_PASS();
+        return;
+    } END_TRY
+    
+    // Should have thrown exception
+    TEST_FAIL_MESSAGE("cancel-timer should throw exception for non-integer argument");
+}
+

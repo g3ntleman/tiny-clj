@@ -89,6 +89,7 @@ list(APPEND SOURCES
     src/map.c
     src/atom.c
     src/strings.c
+    src/file_utils.c
     src/debug.c
     src/seq.c
     src/memory.c

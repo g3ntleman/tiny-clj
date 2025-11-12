@@ -765,7 +765,44 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
       const char *current = reader->src + reader->index;
       const char *next = utf8codepoint(current, NULL);
       if (!next || next <= current) {
-        // Invalid UTF-8 sequence - skip one byte to avoid infinite loop
+        // Invalid UTF-8 sequence - validate before copying to avoid corrupt buffer
+        // Check if we have enough bytes for a valid sequence
+        unsigned char first = (unsigned char)*current;
+        int expected_len = utf8_sequence_length(first);
+        if (expected_len > 0 && expected_len <= 4) {
+          // Try to read the complete sequence even if utf8codepoint failed
+          size_t bytes_to_copy = expected_len;
+          // Check if we have enough bytes in the source
+          if (reader->index + bytes_to_copy <= reader->length) {
+            // Validate continuation bytes before copying
+            bool valid = true;
+            for (size_t i = 1; i < bytes_to_copy; i++) {
+              if (reader->index + i >= reader->length || 
+                  !utf8_is_continuation_byte((unsigned char)reader->src[reader->index + i])) {
+                valid = false;
+                break;
+              }
+            }
+            if (valid && pos + bytes_to_copy < MAX_STACK_STRING_SIZE) {
+              // Copy complete UTF-8 sequence
+              for (size_t i = 0; i < bytes_to_copy; i++) {
+                buf[pos++] = current[i];
+              }
+              // Advance reader by codepoint
+              for (size_t i = 0; i < bytes_to_copy; i++) {
+                if (current[i] == '\n') {
+                  reader->line++;
+                  reader->column = 1;
+                } else {
+                  reader->column++;
+                }
+              }
+              reader->index += bytes_to_copy;
+              continue;
+            }
+          }
+        }
+        // Fallback: skip one byte to avoid infinite loop
         buf[pos++] = reader_next(reader);
       } else {
         // Copy complete UTF-8 sequence
@@ -793,8 +830,13 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
     return NULL;
   }
   buf[pos] = '\0';
-  if (!utf8valid(buf))
+  // Validate UTF-8 before creating string object
+  // This ensures we don't create a string with invalid UTF-8 data
+  if (!utf8valid(buf)) {
     throw_parser_exception("Invalid UTF-8 in string", reader);
+    return NULL;
+  }
+  // Create string object - memory is managed via AUTORELEASE
   ID result = AUTORELEASE(make_string(buf));
   return result;
 }

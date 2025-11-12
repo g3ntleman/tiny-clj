@@ -432,11 +432,10 @@ static CljMap* map_copy(CljMap *src, CljType new_type) {
         new_map->data[i] = NULL;
     }
     
-    // Copy all entries with RETAIN
+    // Copy all entries with ASSIGN (handles RETAIN automatically)
     for (int i = 0; i < src->count * 2; i++) {
         if (src->data[i]) {
-            new_map->data[i] = src->data[i];
-            RETAIN(src->data[i]);
+            ASSIGN(new_map->data[i], src->data[i]);
         }
     }
     
@@ -570,9 +569,8 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
             if (m->data[i * 2 + 1]) {
                 RELEASE(m->data[i * 2 + 1]);
             }
-            // CRITICAL: For immediate values (clj_true, clj_false, fixnums), 
-            // RETAIN is a no-op, so we can store them directly
-            m->data[i * 2 + 1] = value ? (CljObject*)RETAIN((CljObject*)value) : NULL;
+            // CRITICAL: ASSIGN handles RETAIN automatically
+            ASSIGN(m->data[i * 2 + 1], value ? (CljObject*)value : NULL);
             key_found = true;
             CLJ_ASSERT(m->data[i * 2 + 1] == (CljObject*)value || (value && IS_IMMEDIATE(value)));
             return tmap;
@@ -584,9 +582,8 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
             if (m->data[i * 2 + 1]) {
                 RELEASE(m->data[i * 2 + 1]);
             }
-            // CRITICAL: For immediate values (clj_true, clj_false, fixnums), 
-            // RETAIN is a no-op, so we can store them directly
-            m->data[i * 2 + 1] = value ? (CljObject*)RETAIN((CljObject*)value) : NULL;
+            // CRITICAL: ASSIGN handles RETAIN automatically
+            ASSIGN(m->data[i * 2 + 1], value ? (CljObject*)value : NULL);
             key_found = true;
             CLJ_ASSERT(m->data[i * 2 + 1] == (CljObject*)value || (value && IS_IMMEDIATE(value)));
             return tmap;
@@ -608,13 +605,8 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
         return NULL;  // Out of capacity
     }
     
-    m->data[m->count * 2] = (CljObject*)key;
-    m->data[m->count * 2 + 1] = value ? (CljObject*)value : NULL;
-    RETAIN((CljObject*)key);
-    // CRITICAL: value can be NULL (nil), which is valid - don't RETAIN NULL
-    if (value) {
-        RETAIN((CljObject*)value);
-    }
+    ASSIGN(m->data[m->count * 2], (CljObject*)key);
+    ASSIGN(m->data[m->count * 2 + 1], value ? (CljObject*)value : NULL);
     m->count++;
     
     return tmap; // In-place mutation

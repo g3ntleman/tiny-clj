@@ -22,7 +22,10 @@ bool event_loop_run_next(CljMap *env, EvalState *st);
 // Enqueue a timer task for execution after delay_ms milliseconds
 // If periodic is true, the task will be re-scheduled every period_ms milliseconds
 // Takes ownership via RETAIN; releases after run.
-void timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms);
+// Returns unique timer ID (int32_t) or 0 on error.
+int32_t timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic, int64_t period_ms);
+// Cancel a timer by ID. Returns true if timer was found and cancelled, false otherwise.
+bool timer_cancel(int32_t timer_id);
 
 #endif
 

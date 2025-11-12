@@ -15,7 +15,8 @@ TinyClJRuntime g_runtime = {
     .meta_registry = NULL,
     .pool_stack = {NULL},
     .pool_stack_top = -1,
-    .builtins_registered = false
+    .builtins_registered = false,
+    .timer_id_counter = 0
 };
 
 void runtime_init(void) {
@@ -34,6 +35,7 @@ void runtime_init(void) {
     memset(&g_runtime, 0, sizeof(TinyClJRuntime));
     g_runtime.pool_stack_top = -1;
     g_runtime.builtins_registered = false;
+    g_runtime.timer_id_counter = 0;
     
     // Restore cache and symbol table if they were set
     // Symbol table is needed for symbol interning to work correctly

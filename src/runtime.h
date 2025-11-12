@@ -60,6 +60,7 @@ typedef struct TinyClJRuntime {
     // Event Loop
     CljPersistentVector *task_queue;    // transient vector for normal tasks
     CljPersistentVector *timer_queue;  // transient vector for timer tasks
+    int32_t timer_id_counter;          // counter for unique timer IDs
 } TinyClJRuntime;
 
 // Statisch alloziertes globales Runtime-Struct

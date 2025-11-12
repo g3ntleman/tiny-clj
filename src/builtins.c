@@ -1103,9 +1103,16 @@ ID native_schedule(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    // For now, use the function directly (it should be zero-arity or we'll handle it)
+    // CRITICAL: Retain the function before passing to timer_enqueue
+    // The function may be in an autorelease pool that will be popped when this function returns
+    // timer_enqueue will retain it again, but we need to ensure it survives until then
+    RETAIN(fn_obj);
+    
     // Enqueue timer task
     timer_enqueue(fn_obj, (int64_t)delay_ms, false, 0);
+    
+    // Release our reference - timer_enqueue has retained it
+    RELEASE(fn_obj);
     
     // schedule returns nil (like go blocks)
     return NULL;
@@ -1158,11 +1165,47 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    // Enqueue periodic timer task
-    timer_enqueue(fn_obj, (int64_t)delay_ms, true, (int64_t)period_ms);
+    // CRITICAL: Retain the function before passing to timer_enqueue
+    // The function may be in an autorelease pool that will be popped when this function returns
+    // timer_enqueue will retain it again, but we need to ensure it survives until then
+    RETAIN(fn_obj);
     
-    // schedule-periodic returns nil (like go blocks)
-    return NULL;
+    // Enqueue periodic timer task and get timer ID
+    int32_t timer_id = timer_enqueue(fn_obj, (int64_t)delay_ms, true, (int64_t)period_ms);
+    
+    // Release our reference - timer_enqueue has retained it
+    RELEASE(fn_obj);
+    
+    // schedule-periodic returns timer ID as integer
+    return timer_id > 0 ? (ID)fixnum(timer_id) : NULL;
+}
+
+// Timer: cancel-timer builtin - cancel a timer by ID
+ID native_cancel_timer(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "cancel-timer")) return NULL;
+    
+    // First argument: timer ID (must be integer)
+    CljObject *timer_id_obj = args[0];
+    if (!timer_id_obj || TAG(timer_id_obj) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "cancel-timer timer-id must be an integer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int32_t timer_id = as_fixnum((CljValue)timer_id_obj);
+    if (timer_id <= 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "cancel-timer timer-id must be positive",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Cancel the timer
+    bool cancelled = timer_cancel(timer_id);
+    
+    // Return true if cancelled, false if not found
+    return cancelled ? (ID)clj_true : (ID)clj_false;
 }
 
 
@@ -1408,6 +1451,8 @@ ID native_symbol(ID *args, unsigned int argc) {
 
 // File I/O: slurp - read entire file as string
 #ifndef ESP32_BUILD
+#include "file_utils.h"
+
 ID native_slurp(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "slurp")) return NULL;
     
@@ -1420,77 +1465,13 @@ ID native_slurp(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    // Open file
-    FILE *fp = fopen(filename_str, "r");
-    if (!fp) {
-        // Graceful: return nil on missing file (test expects non-fatal failure)
-        free((void*)filename_str);
-        return NULL;
-    }
-    
-    // Get file size
-    if (fseek(fp, 0, SEEK_END) != 0) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), 
-                "Cannot seek in file '%s': %s", filename_str, strerror(errno));
-        free((void*)filename_str);
-        fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    long file_size = ftell(fp);
-    if (file_size < 0) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), 
-                "Cannot determine size of file '%s': %s", filename_str, strerror(errno));
-        free((void*)filename_str);
-        fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Reset to beginning
-    rewind(fp);
-    
-    // Read file content
-    char *buffer = ALLOC(char, file_size + 1);
-    if (!buffer) {
-        free((void*)filename_str);
-        fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
-                       "Out of memory reading file",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    size_t bytes_read = fread(buffer, 1, (size_t)file_size, fp);
-    buffer[bytes_read] = '\0';  // Null-terminate
-    
-    // Check for read errors
-    if (bytes_read != (size_t)file_size && !feof(fp)) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), 
-                "Error reading file '%s': %s", filename_str, strerror(errno));
-        free(buffer);
-        free((void*)filename_str);
-        fclose(fp);
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Create Clojure string and cleanup
-    CljObject *result = (CljObject*)make_string(buffer);
-    
-    free(buffer);
+    // Use file_slurp utility function
+    // file_slurp throws exceptions on errors (file not found, etc.)
+    CljString *result = file_slurp(filename_str);
     free((void*)filename_str);
-    fclose(fp);
     
-    // make_string returns object with rc=1 - caller takes ownership
-    return result;
+    // file_slurp throws exception on errors, so if we get here, result is valid
+    return result ? AUTORELEASE((ID)result) : NULL;
 }
 #endif // ESP32_BUILD
 
@@ -2926,6 +2907,7 @@ void register_builtins() {
     // Timer builtins
     register_builtin_in_namespace("schedule", native_schedule);
     register_builtin_in_namespace("schedule-periodic", native_schedule_periodic);
+    register_builtin_in_namespace("cancel-timer", native_cancel_timer);
     
     // Atom functions
     register_builtin_in_namespace("atom", native_atom);
