@@ -78,8 +78,8 @@ const char* to_string(CljObject *v) {
         if (is_fixed(v)) {
             char buf[32];
             float val = as_fixed(v);
-            // Print fixed-point numbers with at least one decimal place
-            snprintf(buf, sizeof(buf), "%.1f", (double)val);
+            // Print fixed-point numbers with two decimal places
+            snprintf(buf, sizeof(buf), "%.2f", (double)val);
             return strdup(buf);
         }
         if (is_special(v)) {

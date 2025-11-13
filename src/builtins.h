@@ -33,6 +33,15 @@ ID native_sub_variadic(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
 ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
+ID native_quot(ID *args, unsigned int argc);
+ID native_bit_shift_left(ID *args, unsigned int argc);
+ID native_range(ID *args, unsigned int argc);
+ID native_repeat(ID *args, unsigned int argc);
+ID native_math_sqrt(ID *args, unsigned int argc);
+ID native_format(ID *args, unsigned int argc);
+ID native_eval(ID *args, unsigned int argc);
+ID native_read_string(ID *args, unsigned int argc);
+void builtin_set_eval_state(EvalState *st);
 
 // Transient functions
 ID native_transient(ID *args, unsigned int argc);
@@ -55,6 +64,7 @@ ID native_gt(ID *args, unsigned int argc);
 ID native_le(ID *args, unsigned int argc);
 ID native_ge(ID *args, unsigned int argc);
 ID native_eq(ID *args, unsigned int argc);
+ID native_not_eq(ID *args, unsigned int argc);
 
 // Event-loop builtins
 ID native_run_next_task(ID *args, unsigned int argc);

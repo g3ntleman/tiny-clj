@@ -1157,4 +1157,54 @@ TEST(test_type_check_all_types) {
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
 
+// ============================================================================
+// EVAL TESTS
+// ============================================================================
+
+TEST(test_eval) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (eval '(+ 1 2)) => 3
+    CljObject *result1 = eval_string("(eval '(+ 1 2))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result1));
+    
+    // Test: (eval '(def x 42)) => should define x
+    CljObject *result2 = eval_string("(eval '(def x 42))", g_test_eval_state);
+    // def returns the var, so result should not be NULL
+    TEST_ASSERT_NOT_NULL(result2);
+    
+    // Test: (eval 'x) => 42 (after defining x)
+    CljObject *result3 = eval_string("(eval 'x)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result3));
+}
+
+// ============================================================================
+// READ-STRING TESTS
+// ============================================================================
+
+TEST(test_read_string) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (read-string "(+ 1 2)") => list (+ 1 2)
+    CljObject *result1 = eval_string("(read-string \"(+ 1 2)\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(result1));
+    
+    // Test: (read-string "42") => 42
+    CljObject *result2 = eval_string("(read-string \"42\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result2));
+}
+
 // Register all tests

@@ -121,6 +121,7 @@ static char reader_consume(Reader *reader) {
 // Forward declarations for Reader-based parser functions
 static ID parse_meta(Reader *reader, EvalState *st);
 static ID parse_meta_map(Reader *reader, EvalState *st);
+static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
@@ -153,127 +154,150 @@ ID parse_expr(Reader *reader, EvalState *st) {
   if (reader_is_eof(reader))
     return NULL;
   char c = reader_current(reader);
-  if (c == '^')
-    return parse_meta(reader, st);
-  if (c == '#' && reader_peek_ahead(reader, 1) == '^')
-    return parse_meta_map(reader, st);
-  if (c == '[')
-    return parse_vector(reader, st);
-  if (c == '{')
-    return parse_map(reader, st);
-  if (c == '(')
-    return parse_list(reader, st);
-  if (c == '"')
-    return parse_string_internal(reader, st);
-  if (c == '-' && isdigit(reader_peek_ahead(reader, 1)))
-    return make_number_by_parsing(reader, st);
+  
+  switch (c) {
+    case '^':
+      return parse_meta(reader, st);
+    
+    case '#': {
+      char next = reader_peek_ahead(reader, 1);
+      if (next == '^')
+        return parse_meta_map(reader, st);
+      if (next == '(')
+        return parse_anon_fn(reader, st);
+      break;
+    }
+    
+    case '[':
+      return parse_vector(reader, st);
+    
+    case '{':
+      return parse_map(reader, st);
+    
+    case '(':
+      return parse_list(reader, st);
+    
+    case '"':
+      return parse_string_internal(reader, st);
+    
+    case '-':
+      if (isdigit(reader_peek_ahead(reader, 1)))
+        return make_number_by_parsing(reader, st);
+      break;
+    
+    case '.':
+      if (isdigit(reader_peek_ahead(reader, 1))) {
+        // Check for invalid decimal syntax like .01 (should be 0.01)
+        char invalid_decimal[64];
+        int pos = 0;
+        invalid_decimal[pos++] = c; // include the '.'
+        reader_next(reader); // consume '.'
+        while (isdigit(reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
+          invalid_decimal[pos++] = reader_next(reader);
+        }
+        invalid_decimal[pos] = '\0';
+        
+        throw_exception_formatted("ParseError", __FILE__, __LINE__, 0, 
+            "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
+        return NULL;
+      }
+      break;
+    
+    case 'n':
+      // Handle nil literal - parse as SYM_NIL symbol (not NULL)
+      if (reader_peek_ahead(reader, 1) == 'i' && 
+          reader_peek_ahead(reader, 2) == 'l' && 
+          !is_alphanumeric(reader_peek_ahead(reader, 3))) {
+        reader_consume(reader); // 'n'
+        reader_consume(reader); // 'i'
+        reader_consume(reader); // 'l'
+        CljSymbol *nil_sym = intern_symbol_global("nil");
+        if (nil_sym == SYM_NIL) {
+          return SYM_NIL;
+        }
+        return AUTORELEASE(nil_sym);
+      }
+      break;
+    
+    case 't':
+      // Handle true literal
+      if (reader_peek_ahead(reader, 1) == 'r' && 
+          reader_peek_ahead(reader, 2) == 'u' && 
+          reader_peek_ahead(reader, 3) == 'e' && 
+          !is_alphanumeric(reader_peek_ahead(reader, 4))) {
+        reader_consume(reader); // 't'
+        reader_consume(reader); // 'r'
+        reader_consume(reader); // 'u'
+        reader_consume(reader); // 'e'
+        return clj_true;
+      }
+      break;
+    
+    case 'f':
+      // Handle false literal
+      if (reader_peek_ahead(reader, 1) == 'a' && 
+          reader_peek_ahead(reader, 2) == 'l' && 
+          reader_peek_ahead(reader, 3) == 's' && 
+          reader_peek_ahead(reader, 4) == 'e' && 
+          !is_alphanumeric(reader_peek_ahead(reader, 5))) {
+        reader_consume(reader); // 'f'
+        reader_consume(reader); // 'a'
+        reader_consume(reader); // 'l'
+        reader_consume(reader); // 's'
+        reader_consume(reader); // 'e'
+        return clj_false;
+      }
+      break;
+    
+    case '\'':
+      // Handle quote 'x => (quote x)
+      reader_consume(reader); // consume '
+      reader_skip_all(reader);
+      size_t qb_before = reader_offset(reader);
+      ID quoted = parse_expr(reader, st);
+      size_t qb_after = reader_offset(reader);
+      if (qb_after <= qb_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after quote", reader);
+        return NULL;
+      }
+      if (!quoted) return NULL;
+      // Create (quote <expr>) list: (quote expr)
+      ID elements[2] = {SYM_QUOTE, quoted};
+      return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
+    
+    case '@':
+      // Handle deref @x => (deref x)
+      reader_consume(reader); // consume @
+      reader_skip_all(reader);
+      size_t db_before = reader_offset(reader);
+      ID atom_expr = parse_expr(reader, st);
+      size_t db_after = reader_offset(reader);
+      if (db_after <= db_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after @", reader);
+        return NULL;
+      }
+      if (!atom_expr) return NULL;
+      // Create (deref <expr>) list: (deref expr)
+      ID deref_elements[2] = {SYM_DEREF, atom_expr};
+      return AUTORELEASE(make_list_from_stack((CljValue*)deref_elements, 2));
+    
+    default:
+      break;
+  }
+  
+  // Handle digits
   if (isdigit(c))
     return make_number_by_parsing(reader, st);
-  // Check for invalid decimal syntax like .01 (should be 0.01)
-  if (c == '.' && isdigit(reader_peek_ahead(reader, 1))) {
-    // Read the full invalid decimal to include in error message
-    char invalid_decimal[64];
-    int pos = 0;
-    invalid_decimal[pos++] = c; // include the '.'
-    reader_next(reader); // consume '.'
-    while (isdigit(reader_peek_char(reader)) && pos < (int)sizeof(invalid_decimal) - 1) {
-      invalid_decimal[pos++] = reader_next(reader);
-    }
-    invalid_decimal[pos] = '\0';
-    
-    throw_exception_formatted("ParseError", __FILE__, __LINE__, 0, 
-        "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
-    return NULL;
-  }
-  // Handle nil literal - parse as SYM_NIL symbol (not NULL)
-  // This allows nil to be properly handled in expressions like (do 42 nil)
-  // The symbol will be evaluated to NULL in eval_body
-  if (c == 'n' && reader_peek_ahead(reader, 1) == 'i' && 
-      reader_peek_ahead(reader, 2) == 'l' && 
-      !is_alphanumeric(reader_peek_ahead(reader, 3))) {
-    reader_consume(reader); // 'n'
-    reader_consume(reader); // 'i'
-    reader_consume(reader); // 'l'
-    CljSymbol *nil_sym = intern_symbol_global("nil");
-    // If SYM_NIL is initialized, it should match the interned symbol
-    if (nil_sym == SYM_NIL) {
-        return SYM_NIL;
-    }
-    // Return the interned symbol (will be SYM_NIL once initialized)
-    return AUTORELEASE(nil_sym);
-  }
   
-  // Handle true literal
-  if (c == 't' && reader_peek_ahead(reader, 1) == 'r' && 
-      reader_peek_ahead(reader, 2) == 'u' && 
-      reader_peek_ahead(reader, 3) == 'e' && 
-      !is_alphanumeric(reader_peek_ahead(reader, 4))) {
-    reader_consume(reader); // 't'
-    reader_consume(reader); // 'r'
-    reader_consume(reader); // 'u'
-    reader_consume(reader); // 'e'
-    return clj_true;
-  }
-  
-  // Handle false literal
-  if (c == 'f' && reader_peek_ahead(reader, 1) == 'a' && 
-      reader_peek_ahead(reader, 2) == 'l' && 
-      reader_peek_ahead(reader, 3) == 's' && 
-      reader_peek_ahead(reader, 4) == 'e' && 
-      !is_alphanumeric(reader_peek_ahead(reader, 5))) {
-    reader_consume(reader); // 'f'
-    reader_consume(reader); // 'a'
-    reader_consume(reader); // 'l'
-    reader_consume(reader); // 's'
-    reader_consume(reader); // 'e'
-    return clj_false;
-  }
-  
-  // Handle quote 'x => (quote x)
-  if (c == '\'') {
-    reader_consume(reader); // consume '
-    reader_skip_all(reader);
-    size_t qb_before = reader_offset(reader);
-    ID quoted = parse_expr(reader, st);
-    size_t qb_after = reader_offset(reader);
-    if (qb_after <= qb_before && !reader_eof(reader)) {
-      throw_parser_exception("Parser made no progress after quote", reader);
-      return NULL;
-    }
-    if (!quoted) return NULL;
-    // Create (quote <expr>) list: (quote expr)
-    // Build list using the same pattern as parse_list
-    ID elements[2] = {SYM_QUOTE, quoted};
-    return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
-  }
-  
-  // Handle deref @x => (deref x)
-  if (c == '@') {
-    reader_consume(reader); // consume @
-    reader_skip_all(reader);
-    size_t db_before = reader_offset(reader);
-    ID atom_expr = parse_expr(reader, st);
-    size_t db_after = reader_offset(reader);
-    if (db_after <= db_before && !reader_eof(reader)) {
-      throw_parser_exception("Parser made no progress after @", reader);
-      return NULL;
-    }
-    if (!atom_expr) return NULL;
-    // Create (deref <expr>) list: (deref expr)
-    // Build list using the same pattern as parse_list
-    ID elements[2] = {SYM_DEREF, atom_expr};
-    return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
-  }
-  
-  if (c == ':' || is_alphanumeric(c) || c == '.' || (unsigned char)c >= 0x80) {
-    // For colon, we need to ensure parse_symbol sees it correctly
-    // reader_current already peeked the character, so parse_symbol should see the same
+  // Handle symbols starting with :, alphanumeric, ., %, or Unicode
+  if (c == ':' || is_alphanumeric(c) || c == '.' || c == '%' || (unsigned char)c >= 0x80) {
     return parse_symbol(reader, st);
   }
+  
+  // Handle single-character operators
   if (strchr("+*/=<>", c)) {
-    // Check if next character is also a symbol character (e.g., *ns* not just *)
     char next = reader_peek_ahead(reader, 1);
-    if (next && (is_alphanumeric(next) || next == '*' || next == '+' || next == '/' || next == '=' || next == '<' || next == '>' || next == '-' || next == '_' || next == '?' || next == '!' || (unsigned char)next >= 0x80)) {
+    if (next && (is_alphanumeric(next) || next == '*' || next == '+' || next == '/' || next == '=' || next == '<' || next == '>' || next == '-' || next == '_' || next == '?' || next == '!' || next == '%' || (unsigned char)next >= 0x80)) {
       // Multi-character symbol like *ns* or *out*
       return parse_symbol(reader, st);
     }
@@ -332,7 +356,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
         // eval_list returns AUTORELEASE objects
     } else if (parsed_expr && TAG(parsed_expr) == CLJ_SYMBOL) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
-        result = (CljObject*)eval_symbol(as_symbol(parsed_expr), eval_state);
+        result = eval_symbol(as_symbol(parsed_expr), eval_state);
         // eval_symbol already returns autoreleased object
     } else {
         // Literal value (vector, map, etc.) - return as-is
@@ -362,7 +386,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     // Create transient vector for efficient building
     CljValue vec = make_vector(6, false);
     CljValue tvec = transient((ID)vec);
-    RELEASE((CljObject*)vec);  // Release original, use transient
+    RELEASE(vec);  // Release original, use transient
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
@@ -372,7 +396,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       // Check if parser made progress - if not, it's an error
       // If parser made progress, NULL means nil (which is valid)
       if (!value && after <= before && !reader_eof(reader)) {
-        RELEASE((CljObject*)tvec);
+        RELEASE(tvec);
         return NULL;
       }
       
@@ -383,10 +407,10 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     
     // Convert back to persistent vector
     vec = persistent((ID)tvec);
-    RELEASE((CljObject*)tvec);
+    RELEASE(tvec);
     
     if (reader_eof(reader) || !reader_match(reader, ']')) {
-      RELEASE((CljObject*)vec);
+      RELEASE(vec);
       throw_parser_exception("Unclosed vector - missing closing ']'", reader);
       return NULL;
     }
@@ -417,8 +441,8 @@ static ID parse_map(Reader *reader, EvalState *st) {
     if (!value)
       return NULL;
     reader_skip_all(reader);
-    pairs[pair_count * 2] = (key);
-    pairs[pair_count * 2 + 1] = (value);
+    pairs[pair_count * 2] = key;
+    pairs[pair_count * 2 + 1] = value;
     pair_count++;
   }
   if (reader_eof(reader) || !reader_match(reader, '}')) {
@@ -708,7 +732,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             CljSymbol *symbol_sym = intern_symbol_global(symbol_str);
             if (symbol_sym) {
               // Look up symbol in target namespace
-              CljObject *resolved = (CljObject*)map_get((CljMap*)target_ns->mappings, (CljValue)symbol_sym);
+              ID resolved = map_get((CljMap*)target_ns->mappings, (ID)symbol_sym);
               if (resolved) {
                 // Return resolved value (already retained by map_get)
                 return AUTORELEASE(RETAIN(resolved));
@@ -981,6 +1005,65 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   
   RELEASE(meta);
   return AUTORELEASE(obj);
+}
+
+/**
+ * @brief Parse anonymous function #(...) => (fn [params...] ...)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed (fn [params...] body) list or NULL on error
+ */
+static ID parse_anon_fn(Reader *reader, EvalState *st) {
+  // Consume '#'
+  if (reader_next(reader) != '#')
+    return NULL;
+  // Consume '('
+  if (reader_next(reader) != '(')
+    return NULL;
+  
+  reader_skip_all(reader);
+  
+  // Parse the body (list contents)
+  // Note: parse_list_rest does NOT consume the closing ')', so we need to do it
+  ID body = parse_list_rest(reader, st);
+  
+  // Consume closing ')'
+  reader_skip_all(reader);
+  if (reader_peek_char(reader) != ')') {
+    throw_parser_exception("Unclosed anonymous function - expected ')'", reader);
+    if (body) RELEASE(body);
+    return NULL;
+  }
+  reader_next(reader); // Consume ')'
+  
+  if (!body) {
+    // Empty function body - return (fn [] ())
+    CljSymbol *fn_sym = intern_symbol_global("fn");
+    CljValue empty_vec = make_vector(0, false);
+    ID empty_list_val = NULL; // () is nil in Clojure
+    ID elements[3] = {fn_sym, empty_vec, empty_list_val};
+    return AUTORELEASE(make_list_from_stack((CljValue*)elements, 3));
+  }
+  
+  // Collect all % and %N references in the body to determine parameters
+  // For simplicity, we'll scan for % and create parameters [% %1 %2 ...]
+  // This is a simplified implementation - full version would need proper AST traversal
+  
+  // For now, create a simple version that handles % and %1, %2, etc.
+  // We'll create parameters based on what we find
+  // This is a simplified approach - in a full implementation, we'd traverse the AST
+  
+  // Simple approach: create (fn [%] body) for #(...)
+  // This handles the most common case: #(+ % 1)
+  // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
+  CljSymbol *fn_sym = intern_symbol_global("fn");
+  CljSymbol *percent_sym = intern_symbol_global("%");
+  CljValue param_vec = make_vector(1, false);
+  vector_conj((CljPersistentVector*)param_vec, (ID)percent_sym);
+  
+  // Create (fn [%] body)
+  ID elements[3] = {fn_sym, param_vec, body};
+  return AUTORELEASE(make_list_from_stack((CljValue*)elements, 3));
 }
 
 /**

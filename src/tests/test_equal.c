@@ -493,4 +493,45 @@ TEST(test_list_equal_empty_lists) {
     });
 }
 
+// ============================================================================
+// NOT= TESTS
+// ============================================================================
+
+TEST(test_not_eq) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (not= 1 2) => true
+    CljObject *result1 = eval_string("(not= 1 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(clj_is_truthy(result1));
+    
+    // Test: (not= 1 1) => false
+    CljObject *result2 = eval_string("(not= 1 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_FALSE(clj_is_truthy(result2));
+    
+    // Test: (not= nil nil) => false
+    CljObject *result3 = eval_string("(not= nil nil)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_FALSE(clj_is_truthy(result3)); // false is falsy
+    
+    // Test: (not= 1 nil) => true
+    CljObject *result4 = eval_string("(not= 1 nil)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_TRUE(clj_is_truthy(result4));
+    
+    // Test: (not= "a" "b") => true
+    CljObject *result5 = eval_string("(not= \"a\" \"b\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result5);
+    TEST_ASSERT_TRUE(clj_is_truthy(result5));
+    
+    // Test: (not= "a" "a") => false
+    CljObject *result6 = eval_string("(not= \"a\" \"a\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result6);
+    TEST_ASSERT_FALSE(clj_is_truthy(result6));
+}
+
 // Register all tests

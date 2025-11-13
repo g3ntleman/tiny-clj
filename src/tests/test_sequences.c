@@ -859,3 +859,82 @@ TEST(test_rest_with_parameter_let) {
     // Don't RELEASE result - eval_string returns autoreleased object
 }
 
+
+// ============================================================================
+// RANGE TESTS
+// ============================================================================
+
+TEST(test_range) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (range 5) => [0 1 2 3 4]
+    CljObject *result1 = eval_string("(range 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result1));
+    CljPersistentVector *vec1 = as_vector(result1);
+    TEST_ASSERT_EQUAL_INT(5, vector_count(vec1));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vector_nth(vec1, 0)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(vec1, 4)));
+    
+    // Test: (range 2 5) => [2 3 4]
+    CljObject *result2 = eval_string("(range 2 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result2));
+    CljPersistentVector *vec2 = as_vector(result2);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec2));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)vector_nth(vec2, 0)));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(vec2, 2)));
+    
+    // Test: (range 0 10 2) => [0 2 4 6 8]
+    CljObject *result3 = eval_string("(range 0 10 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result3));
+    CljPersistentVector *vec3 = as_vector(result3);
+    TEST_ASSERT_EQUAL_INT(5, vector_count(vec3));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vector_nth(vec3, 0)));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)vector_nth(vec3, 4)));
+    
+    // Test: (range 0) => []
+    CljObject *result4 = eval_string("(range 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result4));
+    CljPersistentVector *vec4 = as_vector(result4);
+    TEST_ASSERT_EQUAL_INT(0, vector_count(vec4));
+}
+
+// ============================================================================
+// REPEAT TESTS
+// ============================================================================
+
+TEST(test_repeat) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (repeat 3 "x") => ["x" "x" "x"]
+    CljObject *result1 = eval_string("(repeat 3 \"x\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result1));
+    CljPersistentVector *vec1 = as_vector(result1);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec1));
+    
+    // Test: (repeat 0 "x") => []
+    CljObject *result2 = eval_string("(repeat 0 \"x\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result2));
+    CljPersistentVector *vec2 = as_vector(result2);
+    TEST_ASSERT_EQUAL_INT(0, vector_count(vec2));
+    
+    // Test: (repeat 2 42) => [42 42]
+    CljObject *result3 = eval_string("(repeat 2 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result3));
+    CljPersistentVector *vec3 = as_vector(result3);
+    TEST_ASSERT_EQUAL_INT(2, vector_count(vec3));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 0)));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 1)));
+}
