@@ -42,7 +42,7 @@ void setUp(void) {
     // This ensures that tasks from previous tests don't interfere with current test
     event_loop_clear();
     
-    runtime_init();
+    runtime_init(&g_runtime);
     
     // Set clojure.core to quiet mode BEFORE any eval state is created
     // This suppresses "=== Loading Clojure Core Functions ===" output
@@ -88,6 +88,9 @@ void tearDown(void) {
     // Reset time output suppression (for consistency)
     set_suppress_time_output(false);
     
+    // Reset eval arg depth (for test isolation)
+    reset_eval_arg_depth();
+    
     // JUnit-style: Only print memory stats if verbose mode is enabled
     // (memory_profiler_check_leaks already handles leak reporting)
     if (g_memory_verbose_mode) {
@@ -96,7 +99,7 @@ void tearDown(void) {
     // Check for leaks silently (reporting disabled by default - no output for passing tests)
     memory_profiler_check_leaks("Test Complete");
     
-    runtime_free();
+    runtime_free(&g_runtime);
 }
 
 // ============================================================================
@@ -159,8 +162,15 @@ static void run_tests_by_registry(void) {
             RUN_TEST(all_tests[i].func);
         } CATCH(ex) {
             // Unhandled exception caught - mark test as failed
-            // Don't print exception here - it's expected to be caught in tests
-            // Only unhandled exceptions (no TRY/CATCH) will be printed
+            // Print exception details for debugging
+            if (ex) {
+                fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
+                        all_tests[i].qualified_name, ex->type, ex->message);
+                if (ex->stacktrace) {
+                    // Use print_exception to print stacktrace (it handles CljString properly)
+                    print_exception(ex);
+                }
+            }
             // Mark test as failed using Unity's internal state
             // Also increment test count since RUN_TEST might not have been fully executed
             Unity.NumberOfTests++;

@@ -15,9 +15,16 @@
 #include "object.h"
 #include "memory.h"
 #include "vector.h"
+#include "map.h"
 #include <alloca.h>
 #include <stdlib.h>
 #include <stdbool.h>
+
+// Forward declarations to avoid circular dependencies
+struct CljNamespace;
+typedef struct CljNamespace CljNamespace;
+struct SymbolEntry;
+typedef struct SymbolEntry SymbolEntry;
 
 // Memory allocation macros
 // Allocate `count` objects of type `type` on the stack
@@ -41,14 +48,14 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 // Runtime state management
 typedef struct TinyClJRuntime {
     // Namespaces
-    void *ns_registry;              // CljNamespace*
-    void *clojure_core_cache;       // CljNamespace*
+    CljNamespace *ns_registry;
+    CljNamespace *clojure_core_cache;
     
     // Symbol Table
-    void *symbol_table;             // SymbolEntry*
+    SymbolEntry *symbol_table;
     
     // Meta Registry
-    void *meta_registry;            // CljObject*
+    CljMap *meta_registry;
     
     // Autorelease Pool Stack
     void *pool_stack[MAX_POOL_DEPTH];
@@ -66,8 +73,8 @@ typedef struct TinyClJRuntime {
 // Statisch alloziertes globales Runtime-Struct
 extern TinyClJRuntime g_runtime;
 
-void runtime_init(void);
-void runtime_free(void);
+void runtime_init(TinyClJRuntime *runtime);
+void runtime_free(TinyClJRuntime *runtime);
 
 // Legacy builtin functions removed - all builtins now use namespace registration
 

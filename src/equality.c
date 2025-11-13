@@ -14,8 +14,8 @@
 #include "strings.h"
 #include "kv_macros.h"
 
-// Forward declaration for empty_string_singleton
-extern CljString* empty_string_singleton;
+// Forward declaration for string_empty_singleton
+extern CljString* string_empty_singleton;
 
 bool clj_equal(ID a, ID b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
@@ -56,7 +56,7 @@ bool clj_equal(ID a, ID b) {
             if (!str_a || !str_b) return false;
             
             // Special case: empty string singleton comparison
-            if (str_a == empty_string_singleton && str_b == empty_string_singleton) {
+            if (str_a == string_empty_singleton && str_b == string_empty_singleton) {
                 return true;
             }
             
@@ -111,8 +111,8 @@ bool clj_equal(ID a, ID b) {
             if (!sym_a->ns || !sym_b->ns) return false;
             
             // Both have namespaces - compare their names
-            CljSymbol *ns_a = as_symbol(sym_a->ns->name);
-            CljSymbol *ns_b = as_symbol(sym_b->ns->name);
+            CljSymbol *ns_a = sym_a->ns->name;
+            CljSymbol *ns_b = sym_b->ns->name;
             if (!ns_a || !ns_b) return false;
             return strcmp(ns_a->name, ns_b->name) == 0;
         }

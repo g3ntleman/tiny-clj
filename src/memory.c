@@ -48,6 +48,11 @@ void enable_memory_debug_output(void) {
     g_debug_output_enabled = true;
 }
 
+// Function to disable debug output
+void disable_memory_debug_output(void) {
+    g_debug_output_enabled = false;
+}
+
 // ============================================================================
 // MEMORY ALLOCATION WITH PROFILING
 // ============================================================================
@@ -274,7 +279,7 @@ CljObject *autorelease(CljObject *v) {
                 v, v ? v->type : -1);
     } else {
         // Only show debug output if memory profiling is enabled and verbose mode is on
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
             printf("🔍 autorelease: Object %p, type=%d (%s), rc=%d\n", 
                    v, v->type, clj_type_name(v->type), v->rc);
         }
@@ -285,11 +290,11 @@ CljObject *autorelease(CljObject *v) {
     CljPersistentVector *backing = as_vector(g_pool_stack[g_pool_stack_top]->backing);
     if (backing && backing->count < backing->capacity) {
         backing->data[backing->count++] = v;
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
             printf("🔍 autorelease: Added object %p to pool (count=%d)\n", v, backing->count);
         }
     } else {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
             printf("🔍 autorelease: Pool full or invalid backing for object %p\n", v);
         }
     }
@@ -337,7 +342,7 @@ CljObjectPool *autorelease_pool_push() {
     g_pool_stack[++g_pool_stack_top] = p;
     
     // Debug output if verbose mode enabled
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
         printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%d)\n", 
                p, g_pool_stack_top + 1);
     }
@@ -458,7 +463,7 @@ void autorelease_pool_pop(CljObjectPool *pool) {
     }
     
     // Debug output
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
         printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%d)\n", 
                pool, g_pool_stack_top + 1);
     }
@@ -511,7 +516,7 @@ void autorelease_pool_pop(CljObjectPool *pool) {
     free(pool);
     
     // Debug output to verify stack state
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
         printf("🔍 autorelease_pool_pop: After pop, stack_top=%d\n", g_pool_stack_top);
     }
 }
@@ -636,7 +641,7 @@ int get_retain_count(CljObject *obj) {
 static void release_object_deep(CljObject *v) {
     
     if (!v) {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
             printf("🔍 release_object_deep: NULL object\n");
         }
         return;
@@ -675,18 +680,18 @@ static void release_object_deep(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
             {
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                     printf("🔍 release_object_deep: Freeing STRING object %p\n", v);
                 }
                 // Free string data stored directly after CljObject header
                 char **str_ptr = (char**)((char*)v + sizeof(CljObject));
                 if (*str_ptr) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                         printf("🔍 release_object_deep: Freeing string data: '%s'\n", *str_ptr);
                     }
                     free(*str_ptr);
                 } else {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                         printf("🔍 release_object_deep: String data is NULL\n");
                     }
                 }
@@ -695,13 +700,13 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_SYMBOL:
             {
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                     printf("🔍 release_object_deep: Freeing SYMBOL object %p\n", v);
                 }
                 CljSymbol *sym = (CljSymbol*)v;
                 // Only free symbol name if it's heap-allocated (not in data segment)
                 if (sym && sym->name && !is_pointer_in_data_segment(sym->name)) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                         printf("🔍 release_object_deep: Freeing symbol name: '%s'\n", sym->name);
                     }
                     free((void*)sym->name);
@@ -713,13 +718,11 @@ static void release_object_deep(CljObject *v) {
         case CLJ_WEAK_VECTOR:
             {
                 CljPersistentVector *vec = as_vector(v);
+                // Release all vector elements
+                VECTOR_FOR_EACH(vec, elem) {
+                    RELEASE(elem);
+                }
                 if (vec && vec->data) {
-                    // Release all vector elements
-                    for (int i = 0; i < vec->count; i++) {
-                        if (vec->data[i]) {
-                            RELEASE(vec->data[i]);
-                        }
-                    }
                     free(vec->data);
                 }
             }
@@ -743,18 +746,18 @@ static void release_object_deep(CljObject *v) {
         case CLJ_LIST:
             {
                 CljList *list = as_list(v);
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                     printf("🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n", v, list->first, list->rest);
                 }
                 // Release head and tail elements
                 if (list->first) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                         printf("🔍 release_object_deep: Releasing list first element %p\n", list->first);
                     }
                     RELEASE(list->first);
                 }
                 if (list->rest) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode) {
+                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                         printf("🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
                     }
                     RELEASE(list->rest);
@@ -770,13 +773,8 @@ static void release_object_deep(CljObject *v) {
             {
                 CljFunction *func = (CljFunction*)v;
                 if (func) {
-                    // Release all parameters
-                    if (func->params) {
-                        for (int i = 0; i < func->param_count; i++) {
-                            RELEASE(func->params[i]);
-                        }
-                        free(func->params);
-                    }
+                    // Release parameter vector (vector will release all elements)
+                    RELEASE((CljObject*)func->params);
                     // Release body
                     RELEASE(func->body);
                     // Release closure environment
@@ -892,9 +890,25 @@ bool is_pointer_on_stack(const void *ptr) {
 // OUT OF MEMORY HELPER
 // ============================================================================
 
-void throw_oom(CljType type) {
-    char msg[128];
-    snprintf(msg, sizeof(msg), "Failed to allocate %s", clj_type_name(type));
-    throw_exception(EXCEPTION_OUT_OF_MEMORY, msg, __FILE__, __LINE__, 0);
+void throw_oom(void) {
+    // Use static OOM exception - no allocation needed!
+    // This is critical: when we're out of memory, we can't allocate more memory
+    extern CLJException *clj_oom_exception;
+    
+    // Update message (using static buffer in exception)
+    // Note: We can safely modify the static exception's message field
+    // since it's a singleton and won't be freed
+    // Type information is available from stack trace
+    strncpy(clj_oom_exception->message, "Out of memory", sizeof(clj_oom_exception->message) - 1);
+    clj_oom_exception->message[sizeof(clj_oom_exception->message) - 1] = '\0';
+    
+    // Update file and line info
+    strncpy(clj_oom_exception->file, __FILE__, sizeof(clj_oom_exception->file) - 1);
+    clj_oom_exception->file[sizeof(clj_oom_exception->file) - 1] = '\0';
+    clj_oom_exception->line = __LINE__;
+    clj_oom_exception->col = 0;
+    
+    // Throw the static exception (no allocation)
+    throw_exception_object(clj_oom_exception);
     abort(); // Ensure no return
 }

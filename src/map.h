@@ -28,6 +28,11 @@ static inline CljMap* as_map(ID obj) {
 // Map operations (optimized with pointer fast paths)
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
 CljMap* make_map(int capacity);
+/** Return the empty map singleton (inline for performance). */
+static inline CljMap* map_empty(void) {
+    extern CljMap *clj_empty_map_singleton;
+    return clj_empty_map_singleton;
+}
 /** Get value for key or NULL if absent (structural key equality). */
 ID map_get(CljMap *map, ID key);
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
@@ -48,6 +53,13 @@ int map_contains(CljMap *map, ID key);
  * Returns the original map if key is not found.
  */
 CljMap* map_remove(CljMap *map, ID key);
+/** Create a transient map from variable number of key-value pairs.
+ * @param count Number of key-value pairs
+ * @param ... Alternating key and value arguments (ID type)
+ * @return Transient map with all key-value pairs, or NULL on error
+ * @note Example: make_transient_map_from_kv(3, key1, val1, key2, val2, key3, val3)
+ */
+CljMap* make_transient_map_from_kv(unsigned int count, ...);
 /** Construct map from stack of key/value pairs (rc=1). */
 CljMap* make_map_from_stack(CljObject **pairs, int pair_count);
 /** Copy map and add/update key-value pairs in one operation (optimized for embedded).

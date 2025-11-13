@@ -17,6 +17,8 @@
  * @return CljString with file content, or NULL on error (caller must release)
  * @note Returns NULL if file doesn't exist or cannot be read
  * @note Caller is responsible for releasing the returned string
+ * @warning This function loads the entire file into memory. Only use for small files
+ *          that fit in RAM. For large files, use a streaming approach instead.
  */
 CljString* file_slurp(const char *path) {
     if (!path) {
@@ -68,7 +70,7 @@ CljString* file_slurp(const char *path) {
     char *buffer = (char*)malloc((size_t)file_size + 1);
     if (!buffer) {
         fclose(fp);
-        throw_oom(CLJ_STRING);
+        throw_oom();
         return NULL;
     }
     

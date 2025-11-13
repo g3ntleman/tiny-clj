@@ -106,7 +106,9 @@ TEST(test_schedule_periodic_repeats) {
         return;
     } END_TRY
     
-    TEST_ASSERT_NULL(result);
+    // schedule-periodic should return a timer ID (integer), not nil
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     
     // First execution should be immediate
     CljObject *ran_val = NULL;

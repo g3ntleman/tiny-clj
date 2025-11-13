@@ -77,23 +77,15 @@ static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan
 // Helper functions for Timer-Tasks as Maps
 // Timer-Task Map keys: :fn, :scheduled-sec, :scheduled-msec, :periodic, :period-ms, :timer-id
 static CljMap* timer_task_to_map(CljObject *fn, int32_t scheduled_sec, int32_t scheduled_msec, bool periodic, int32_t period_ms, int32_t timer_id) {
-    CljMap *task_map = make_map(6);
-    if (!task_map) return NULL;
-    
-    CljMap *tmap = map_transient(task_map);
-    RELEASE(task_map);
-    if (!tmap) return NULL;
-    
     task_init_keywords();
     
-    map_conj(tmap, (ID)g_task_keywords.kw_fn, (ID)fn);
-    map_conj(tmap, (ID)g_task_keywords.kw_scheduled_sec, fixnum(scheduled_sec));
-    map_conj(tmap, (ID)g_task_keywords.kw_scheduled_msec, fixnum(scheduled_msec));
-    map_conj(tmap, (ID)g_task_keywords.kw_periodic, periodic ? clj_true : clj_false);
-    map_conj(tmap, (ID)g_task_keywords.kw_period_ms, fixnum(period_ms));
-    map_conj(tmap, (ID)g_task_keywords.kw_timer_id, fixnum(timer_id));
-    
-    return tmap;
+    return make_transient_map_from_kv(6,
+        (ID)g_task_keywords.kw_fn, (ID)fn,
+        (ID)g_task_keywords.kw_scheduled_sec, fixnum(scheduled_sec),
+        (ID)g_task_keywords.kw_scheduled_msec, fixnum(scheduled_msec),
+        (ID)g_task_keywords.kw_periodic, periodic ? clj_true : clj_false,
+        (ID)g_task_keywords.kw_period_ms, fixnum(period_ms),
+        (ID)g_task_keywords.kw_timer_id, fixnum(timer_id));
 }
 
 static bool timer_task_from_map(CljMap *task_map, CljObject **fn, int32_t *scheduled_sec, int32_t *scheduled_msec, bool *periodic, int32_t *period_ms, int32_t *timer_id) {
@@ -171,8 +163,8 @@ void event_loop_init(void) {
 void event_loop_clear(void) {
     CljPersistentVector *task_vec = task_queue_get();
     if (task_vec) {
-        for (int i = 0; i < task_vec->count; i++) {
-            CljMap *task_map = (CljMap*)task_vec->data[i];
+        VECTOR_FOR_EACH(task_vec, task_elem) {
+            CljMap *task_map = (CljMap*)task_elem;
             CljObject *fn;
             CljMap *result_chan;
             if (task_from_map(task_map, &fn, &result_chan)) {

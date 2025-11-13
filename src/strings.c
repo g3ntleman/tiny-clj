@@ -32,7 +32,7 @@ static struct {
     .data = ""
 };
 
-CljString* empty_string_singleton = (CljString*)&empty_string_data;
+CljString* string_empty_singleton = (CljString*)&empty_string_data;
 
 /**
  * @brief Create a string value
@@ -41,7 +41,7 @@ CljString* empty_string_singleton = (CljString*)&empty_string_data;
  */
 struct CljString* make_string(const char *str) {
     if (!str || str[0] == '\0') {
-        return empty_string_singleton;
+        return string_empty_singleton;
     }
     
     // Allocate CljString + space for string data + null terminator
@@ -51,7 +51,7 @@ struct CljString* make_string(const char *str) {
     assert(len <= UINT16_MAX && "String length exceeds 16-bit limit (65,535 chars)");
     
     CljString *s = (CljString*)alloc(sizeof(CljString) + len + 1, 1, CLJ_STRING);
-    if (!s) throw_oom(CLJ_STRING);
+    if (!s) throw_oom();
     
     s->base.type = CLJ_STRING;
     s->base.rc = 1;
@@ -104,7 +104,7 @@ const char* to_string(CljObject *v) {
         case CLJ_STRING:
             {
                 // Special handling for empty string singleton
-                if (v == (CljObject*)empty_string_singleton) {
+                if (v == (CljObject*)string_empty_singleton) {
                     return strdup("");
                 }
                 
@@ -119,10 +119,10 @@ const char* to_string(CljObject *v) {
                 if (!sym) return strdup("nil");
                 
                 // Handle namespace-qualified symbols
-                if (sym->ns) {  // Check if namespace exists
+                if (sym->ns && sym->ns->name) {  // Check if namespace exists
                     // Get namespace name from the namespace object
-                    CljSymbol *ns_sym = as_symbol(sym->ns->name);
-                    if (ns_sym) {
+                    CljSymbol *ns_sym = sym->ns->name;
+                    if (ns_sym && ns_sym->name) {
                         size_t len = strlen(ns_sym->name) + 1 + strlen(sym->name) + 1;
                         char *s = ALLOC(char, len);
                         snprintf(s, len, "%s/%s", ns_sym->name, sym->name);
@@ -260,8 +260,8 @@ const char* to_string(CljObject *v) {
 
         case CLJ_FUNC:
             {
-                // Native C function (CljFunc)
-                CljFunc *native_func = (CljFunc*)v;
+                // Native C function (CljCFunc)
+                CljCFunc *native_func = (CljCFunc*)v;
                 if (native_func->name) {
                     char buf[256];
                     snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);

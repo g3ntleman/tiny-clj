@@ -28,7 +28,7 @@ static inline CljPersistentVector* as_vector(ID obj) {
 
 // === CljValue API ===
 /** Empty vector singleton (rc=0, do not retain/release). */
-extern CljPersistentVector* empty_vector_singleton;
+extern CljPersistentVector* vector_empty_singleton;
 /** Return empty vector singleton (rc=0, do not retain/release). */
 CljPersistentVector* empty_vector(void);
 /** Create a vector with given capacity; capacity<=0 returns empty-vector singleton. */
@@ -73,5 +73,11 @@ ID clj_conj(ID tvec, ID item);
 /** Convert transient vector back to persistent. */
 ID persistent(ID tvec);
 
-#endif
+/* Verwendung: VECTOR_FOR_EACH(vec, elem) { ... } */
+#define VECTOR_FOR_EACH(vector, elem_var) \
+    for (int _i = 0, _cnt = vector_count(vector); \
+         (vector) && (vector)->data && _i < _cnt; ++_i) \
+        for (bool _once = true; _once; _once = false) \
+            for (__auto_type elem_var = (vector)->data[_i]; _once; _once = false)
 
+#endif

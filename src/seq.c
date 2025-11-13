@@ -84,7 +84,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             CljString *str = (CljString*)obj;
             
             // Special case: empty string singleton
-            if (str == empty_string_singleton) {
+            if (str == string_empty_singleton) {
                 // Empty string - don't set seq_type, leave it as 0
                 return true;  // Empty string
             }
@@ -200,7 +200,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
         switch (iter->container->type) {
             case CLJ_VECTOR: {
                 CljPersistentVector *vec = (CljPersistentVector*)iter->container;
-                return vector_count(vec) == 0 || vec == empty_vector_singleton;
+                return vector_count(vec) == 0;
             }
             case CLJ_LIST: {
                 CljList *list = (CljList*)iter->container;
@@ -208,7 +208,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
             }
             case CLJ_STRING: {
                 CljString *str = (CljString*)iter->container;
-                return str == empty_string_singleton || str->length == 0;
+                return str == string_empty_singleton || str->length == 0;
             }
             default:
                 return true;
@@ -341,7 +341,10 @@ ID seq_next(ID seq_obj) {
             if (current_list) {
                 CljObject *rest = LIST_REST(current_list);
                 // next returns nil if rest is empty, otherwise rest
-                return rest ? (ID)rest : NULL;  // nil
+                // CRITICAL: RETAIN and AUTORELEASE the rest list because it's part of the original list structure
+                // and may be freed when the original list is freed
+                // RETAIN and AUTORELEASE handle NULL safely
+                return AUTORELEASE(RETAIN(rest));
             }
         }
         // Empty list - return nil

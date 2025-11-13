@@ -15,7 +15,7 @@
 CljAtom* make_atom(ID value) {
     CljAtom *atom = ALLOC(CljAtom, 1);
     if (!atom) {
-        throw_oom(CLJ_ATOM);
+        throw_oom();
         return NULL;
     }
     
@@ -72,7 +72,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     if (fn && TAG(fn) == CLJ_SYMBOL) {
         // ns_resolve searches clojure.core even if current_ns is different
         // Pass NULL for st to use default namespace - ns_resolve will still search clojure.core
-        ID resolved = ns_resolve(NULL, fn);
+        ID resolved = ns_resolve(NULL, as_symbol(fn));
         if (resolved) {
             // resolved is retained by the map, so we can use it directly
             // No need to RELEASE old fn (it's a parameter) or RETAIN resolved (already retained)
@@ -94,7 +94,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     ID *fn_args = (ID*)calloc(argc + 1, sizeof(ID));
     if (!fn_args) {
         RELEASE(current_value);
-        throw_oom(CLJ_ATOM);
+        throw_oom();
         return NULL;
     }
     

@@ -558,10 +558,34 @@ TEST(test_reduce_large_collection) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (reduce + (list 1 2 3 4 5 6 7 8 9 10)) => 55
-    CljObject *result = eval_string("(reduce + (list 1 2 3 4 5 6 7 8 9 10))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(55, as_fixnum(result));
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(reduce + (list 1 2 3 4 5 6 7 8 9 10))", g_test_eval_state);
+        if (!result) {
+            TEST_FAIL_MESSAGE("reduce returned NULL");
+            return;
+        }
+        // eval_string returns AUTORELEASE objects - no manual RETAIN/RELEASE needed
+        if (!is_fixnum(result)) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "reduce returned non-fixnum: type=%d", result ? result->type : -1);
+            TEST_FAIL_MESSAGE(msg);
+            return;
+        }
+        int value = as_fixnum(result);
+        if (value != 55) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "reduce returned %d, expected 55", value);
+            TEST_FAIL_MESSAGE(msg);
+            return;
+        }
+        // No manual cleanup needed - result is autoreleased
+    } CATCH(ex) {
+        char msg[512];
+        snprintf(msg, sizeof(msg), "reduce threw exception: %s - %s", 
+                ex ? ex->type : "unknown", ex ? ex->message : "no message");
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
 }
 
 // EDGE CASE 13: Reduce with identity function (should work like identity)
@@ -569,10 +593,32 @@ TEST(test_reduce_with_identity_function) {
     // Use global st from setUp (clojure.core already loaded)
     
     // Test: (reduce identity (list 42)) => 42
-    CljObject *result = eval_string("(reduce identity (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+    CljObject *result = NULL;
+    TRY {
+        result = eval_string("(reduce identity (list 42))", g_test_eval_state);
+        if (!result) {
+            TEST_FAIL_MESSAGE("reduce returned NULL");
+            return;
+        }
+        if (!is_fixnum(result)) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "reduce returned non-fixnum: type=%d", result ? result->type : -1);
+            TEST_FAIL_MESSAGE(msg);
+            return;
+        }
+        int value = as_fixnum(result);
+        if (value != 42) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "reduce returned %d, expected 42", value);
+            TEST_FAIL_MESSAGE(msg);
+            return;
+        }
+    } CATCH(ex) {
+        char msg[512];
+        snprintf(msg, sizeof(msg), "reduce threw exception: %s - %s", 
+                ex ? ex->type : "unknown", ex ? ex->message : "no message");
+        TEST_FAIL_MESSAGE(msg);
+    } END_TRY
 }
 
 // EDGE CASE 14: Reduce with two elements

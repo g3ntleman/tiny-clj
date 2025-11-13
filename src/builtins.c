@@ -15,14 +15,14 @@
 #include "numeric_utils.h"
 #include "runtime.h"
 #include "memory.h"
-#include "namespace.h"
 #include "value.h"
 #include "error_messages.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
+#include "namespace.h"
 #include "seq.h"
 #include "byte_array.h"
 #include "exception.h"
 #include "list.h"
-#include "symbol.h"
 #include "function.h"
 #include "function_call.h"
 #include "clj_strings.h"
@@ -446,20 +446,21 @@ ID native_next(ID *args, unsigned int argc) {
     // Return next of the created seq
     ID result = seq_next((ID)seq);
     
-    // seq_next returns new objects (rc=1) or existing objects - need to AUTORELEASE new ones
-    // For CLJ_LIST, seq_next returns existing objects directly (no memory management needed)
+    // seq_next now returns AUTORELEASE objects (already in pool) or NULL
+    // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
     // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
     // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
     if (result) {
         CljObject *obj = (CljObject*)result;
-        // If it's a CLJ_LIST, it's an existing object - no AUTORELEASE needed
-        // If it's a CLJ_SEQ, it's a new object - need AUTORELEASE
+        // If it's a CLJ_SEQ, it's a new object (rc=1) - need AUTORELEASE
+        // If it's a CLJ_LIST, it's already AUTORELEASE'd by seq_next
         if (obj->type == CLJ_SEQ) {
             // CRITICAL: AUTORELEASE before releasing the original seq
             // This ensures the result is properly managed before we free the original seq
             // AUTORELEASE already has IS_IMMEDIATE check, so no need to check here
             result = AUTORELEASE(result);
         }
+        // CLJ_LIST is already AUTORELEASE'd by seq_next, so no need to do it again
     }
     
     // Only release the seq if we created it (not if it was the original object)
@@ -1031,7 +1032,7 @@ ID native_vec(ID *args, unsigned int argc) {
 // make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
 
 ID make_named_func(BuiltinFn fn, void *env, const char *name) {
-    CljFunc *func = ALLOC(CljFunc, 1);
+    CljCFunc *func = ALLOC(CljCFunc, 1);
     if (!func) return NULL;
     
     func->base.type = CLJ_FUNC;
@@ -1745,8 +1746,8 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     
     // Evaluate source in current state
     const char *orig_ns = NULL;
-    if (st && st->current_ns && st->current_ns->name && TAG(st->current_ns->name) == CLJ_SYMBOL) {
-        orig_ns = as_symbol(st->current_ns->name)->name;
+    if (st && st->current_ns && st->current_ns->name && st->current_ns->name->name) {
+        orig_ns = st->current_ns->name->name;
     }
     
     // Temporarily switch to target namespace
@@ -2757,7 +2758,7 @@ ID native_swap_bang(ID *args, unsigned int argc) {
         fn_argc = argc - 2;
         fn_args = (ID*)calloc(fn_argc, sizeof(ID));
         if (!fn_args) {
-            throw_oom(CLJ_ATOM);
+            throw_oom();
             return NULL;
         }
         
@@ -2808,9 +2809,10 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     
     // Explicitly set clojure.core cache if not already set
     // This ensures cache is set even if register_builtins is called before load_clojure_core
+    // Note: CljNamespace is a plain C struct (not CljObject), so direct assignment is correct
     extern TinyClJRuntime g_runtime;
     if (!g_runtime.clojure_core_cache) {
-        g_runtime.clojure_core_cache = (void*)clojure_core;
+        g_runtime.clojure_core_cache = clojure_core;
     }
     
     // Register the builtin in clojure.core namespace

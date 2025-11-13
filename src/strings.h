@@ -22,7 +22,7 @@ typedef struct CljString {
 } CljString;
 
 // Forward declaration for empty string singleton
-extern CljString* empty_string_singleton;
+extern CljString* string_empty_singleton;
 
 /**
  * @brief Accessor macros for CljString

@@ -22,7 +22,7 @@ static inline CljSymbol* as_symbol(ID obj) {
 static inline bool is_keyword(ID obj) {
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
     CljSymbol *sym = as_symbol(obj);
-    return sym && sym->name && sym->name[0] == ':';
+    return sym->name && sym->name[0] == ':';
 }
 #define IS_KEYWORD(obj) is_keyword(obj)
 
@@ -91,6 +91,9 @@ extern CljSymbol *SYM_KW_DOC;
 extern CljSymbol *SYM_KW_ERROR;
 extern CljSymbol *SYM_KW_STACK;
 extern CljSymbol *SYM_KW_NS;
+
+// Global symbol for clojure.core namespace name (for fast comparison)
+extern CljSymbol *SYM_CLOJURE_CORE;
 
 // Symbol interning with a real symbol table
 typedef struct SymbolEntry {

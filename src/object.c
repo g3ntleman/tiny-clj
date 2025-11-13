@@ -32,7 +32,7 @@
 #include "symbol.h"
 #include "vector.h"
 #include "byte_array.h"
-#include "value.h"  // For empty_string_singleton
+#include "value.h"  // For string_empty_singleton
 #include "strings.h"  // For CljString structure
 
 // release_object_deep() function moved to memory.c

@@ -3,6 +3,7 @@
 
 #include "object.h"
 #include "exception.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 
 extern const char *clojure_core_code;

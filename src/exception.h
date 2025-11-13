@@ -51,12 +51,17 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 void throw_exception_object(CLJException *ex);
 
 // ============================================================================
-// GLOBAL EXCEPTION STACK (independent of EvalState)
+// STATIC OUT OF MEMORY EXCEPTION
 // ============================================================================
 
-// Global storage for current exception (defined in exception.c)
-extern CLJException *g_current_exception;
+/** Get static OOM exception (no allocation needed).
+ *  This is critical: when we're out of memory, we can't allocate more memory.
+ */
+extern CLJException *clj_oom_exception;
 
+// ============================================================================
+// GLOBAL EXCEPTION STACK (independent of EvalState)
+// ============================================================================
 
 // Forward declaration to avoid circular dependency with memory.h
 // Note: CljObjectPool is typedef'd in memory.h
@@ -70,6 +75,7 @@ typedef struct ExceptionHandler {
     jmp_buf jump_state;                  // Jump target for longjmp
     struct ExceptionHandler *next;       // Previous handler (stack)
     CljObjectPool *pool;                 // Autorelease pool for cleanup after longjmp
+    CLJException *exception;              // Exception stored in handler (replaces g_current_exception)
 } ExceptionHandler;
 
 /**
@@ -107,6 +113,7 @@ extern GlobalExceptionStack global_exception_stack;
 #define TRY { \
     ExceptionHandler *_h = (ExceptionHandler*)malloc(sizeof(ExceptionHandler)); \
     _h->next = global_exception_stack.top; \
+    _h->exception = NULL; \
     global_exception_stack.top = _h; \
     if (setjmp(_h->jump_state) == 0) {
 
@@ -116,10 +123,9 @@ extern GlobalExceptionStack global_exception_stack;
         global_exception_stack.top = _success_handler->next; \
         free(_success_handler); \
     } else { \
-        /* Exception path: get exception from global */ \
-        extern CLJException *g_current_exception; \
+        /* Exception path: get exception from handler */ \
         ExceptionHandler *_caught_h = global_exception_stack.top; \
-        CLJException *ex = g_current_exception; \
+        CLJException *ex = _caught_h ? _caught_h->exception : NULL; \
         global_exception_stack.top = _caught_h->next; \
         free(_caught_h); \
         if (ex) { \

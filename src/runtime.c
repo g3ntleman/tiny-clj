@@ -1,13 +1,13 @@
-#include <string.h>
 #include <stdlib.h>
 #include "runtime.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include "symbol.h"
 #include "meta.h"
 #include "vector.h"
 #include "value.h"
+#include "memory.h"
 
-// Statisch alloziertes globales Runtime-Struct
+// Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
     .clojure_core_cache = NULL,
@@ -16,98 +16,84 @@ TinyClJRuntime g_runtime = {
     .pool_stack = {NULL},
     .pool_stack_top = -1,
     .builtins_registered = false,
+    .task_queue = NULL,
+    .timer_queue = NULL,
     .timer_id_counter = 0
 };
 
-void runtime_init(void) {
-    // Preserve clojure_core_cache and symbol_table across init calls (important for tests)
-    // Symbol table should ALWAYS be preserved if set (SYM_DEF, SYM_FN, etc. are needed
-    // even before clojure.core is loaded, to parse and evaluate def expressions)
-    // clojure.core cache should also be preserved if set
-    void *preserved_cache = g_runtime.clojure_core_cache;
-    void *preserved_symbol_table = g_runtime.symbol_table;  // Always preserve if set
+void runtime_init(TinyClJRuntime *runtime) {
+    if (!runtime) return;
     
+    // Initialize all fields individually using ASSIGN (allows multiple calls with same pointer)
+    // ASSIGN automatically handles releasing old values, so multiple calls are safe
+    // Caches are automatically rebuilt when needed, so no need to preserve them
     
-    // Preserve clojure.core namespace in registry for test isolation
-    // Only clojure.core should persist across tests, all other namespaces should be reset
-    CljNamespace *clojure_core = (CljNamespace*)preserved_cache;
+    // Reset namespace registry
+    // Note: ns_registry is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
+    runtime->ns_registry = NULL;
     
-    memset(&g_runtime, 0, sizeof(TinyClJRuntime));
-    g_runtime.pool_stack_top = -1;
-    g_runtime.builtins_registered = false;
-    g_runtime.timer_id_counter = 0;
+    // Reset caches (will be automatically rebuilt when needed)
+    // Note: clojure_core_cache is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
+    runtime->clojure_core_cache = NULL;
+    // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
+    // The symbol table is cleaned up by symbol_table_cleanup() if needed
+    // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
+    // ASSIGN(runtime->symbol_table, NULL);  // DON'T reset - preserves SYM_CLOJURE_CORE
     
-    // Restore cache and symbol table if they were set
-    // Symbol table is needed for symbol interning to work correctly
-    // clojure.core should persist across test runs
-    g_runtime.clojure_core_cache = preserved_cache;
-    g_runtime.symbol_table = preserved_symbol_table;
+    // Reset meta registry
+    ASSIGN(runtime->meta_registry, NULL);
     
-    
-    // CRITICAL: Reset namespace registry, but keep clojure.core for test isolation
-    // This ensures that user namespaces and other test-specific namespaces don't leak
-    // between tests. Only clojure.core should persist.
-    if (clojure_core) {
-        // Re-register clojure.core in registry (it's the only namespace that should persist)
-        clojure_core->next = NULL;
-        g_runtime.ns_registry = (void*)clojure_core;
-    } else {
-        g_runtime.ns_registry = NULL;
+    // Reset pool stack (array of pointers)
+    for (int i = 0; i < MAX_POOL_DEPTH; i++) {
+        ASSIGN(runtime->pool_stack[i], NULL);
     }
+    runtime->pool_stack_top = -1;
     
-    // Initialize event loop queues as transient vectors
-    if (!g_runtime.task_queue) {
+    // Reset builtins flag
+    runtime->builtins_registered = false;
+    
+    // Reset timer counter
+    runtime->timer_id_counter = 0;
+    
+    // Initialize event loop queues as transient vectors using ASSIGN
+    // Only create if not already set (allows multiple calls)
+    if (!runtime->task_queue) {
         CljPersistentVector* task_vec = make_vector(8, false);
         if (task_vec) {
-            g_runtime.task_queue = (CljPersistentVector*)transient((ID)task_vec);
+            CljPersistentVector* transient_task = (CljPersistentVector*)transient((ID)task_vec);
             RELEASE((ID)task_vec); // transient() retains the result
+            ASSIGN(runtime->task_queue, (ID)transient_task);
         }
     }
-    if (!g_runtime.timer_queue) {
+    if (!runtime->timer_queue) {
         CljPersistentVector* timer_vec = make_vector(8, false);
         if (timer_vec) {
-            g_runtime.timer_queue = (CljPersistentVector*)transient((ID)timer_vec);
+            CljPersistentVector* transient_timer = (CljPersistentVector*)transient((ID)timer_vec);
             RELEASE((ID)timer_vec); // transient() retains the result
+            ASSIGN(runtime->timer_queue, (ID)transient_timer);
         }
     }
 }
 
-void runtime_free(void) {
+void runtime_free(TinyClJRuntime *runtime) {
+    if (!runtime) return;
+    
     // Cleanup in korrekter Reihenfolge
     // Pools werden automatisch beim nächsten Test geleert
     
-    // Preserve clojure_core_cache across free calls (important for tests)
-    // clojure.core should persist across test runs
-    // Note: We preserve the cache pointer, but ns_cleanup() will free the namespace
-    // So we need to preserve it BEFORE ns_cleanup() and restore it AFTER
-    void *preserved_cache = g_runtime.clojure_core_cache;
-    
-    // Preserve symbol table ALWAYS if set (important for tests)
-    // Symbol table is needed for symbol interning to work correctly
-    // If we clean it up, new symbols will have different pointers than stored symbols
-    // CRITICAL: Symbol table should ALWAYS be preserved if set, not just when cache is set
-    // This ensures that SYM_TIME, SYM_DEF, etc. remain consistent across tests
-    void *preserved_symbol_table = g_runtime.symbol_table;
-    
-    
-    // CRITICAL: Never cleanup symbol table in tests - it must persist across test runs
-    // Only cleanup if we're actually shutting down (preserved_cache is NULL)
-    // In tests, preserved_cache is always set, so symbol table is never cleaned up
-    if (!preserved_cache && !preserved_symbol_table) {
-        symbol_table_cleanup();
-    }
+    // Cleanup symbol table and meta registry
+    // CRITICAL: Don't cleanup symbol table - it contains SYM_CLOJURE_CORE and other symbols
+    // that are used by namespaces. If we clean it up, intern_symbol will create new symbols
+    // that don't match the ones stored in namespace mappings, causing lookup failures.
+    // The symbol table will persist across tests, which is fine since symbols are interned.
     meta_registry_cleanup();
     
-    // Don't cleanup namespaces if clojure.core cache is set (preserve for tests)
-    // ns_cleanup() would free the namespace, making the cache pointer invalid
-    // For tests, we want clojure.core to persist across test runs
-    if (!preserved_cache) {
-        ns_cleanup();
-    }
+    // Cleanup namespaces (caches will be automatically rebuilt when needed)
+    ns_cleanup();
     
     // Cleanup event loop queues
-    if (g_runtime.task_queue) {
-        CljPersistentVector *tvec = g_runtime.task_queue;
+    if (runtime->task_queue) {
+        CljPersistentVector *tvec = runtime->task_queue;
         if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
             // Release all elements in transient vector
             int count = vector_count(tvec);
@@ -119,10 +105,10 @@ void runtime_free(void) {
             }
             RELEASE((ID)tvec);
         }
-        g_runtime.task_queue = NULL;
+        runtime->task_queue = NULL;
     }
-    if (g_runtime.timer_queue) {
-        CljPersistentVector *tvec = g_runtime.timer_queue;
+    if (runtime->timer_queue) {
+        CljPersistentVector *tvec = runtime->timer_queue;
         if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
             // Release all elements in transient vector (timer tasks as maps)
             int count = vector_count(tvec);
@@ -134,17 +120,48 @@ void runtime_free(void) {
             }
             RELEASE((ID)tvec);
         }
-        g_runtime.timer_queue = NULL;
+        runtime->timer_queue = NULL;
     }
     
-    // Reset Runtime (statisch alloziert, bleibt bestehen)
-    memset(&g_runtime, 0, sizeof(TinyClJRuntime));
-    g_runtime.pool_stack_top = -1;
-    g_runtime.builtins_registered = false; // Reset builtins_registered flag
+    // CRITICAL: Drain all autorelease pools before resetting runtime
+    // This ensures that objects from previous tests don't leak into the next test
+    while (runtime->pool_stack_top >= 0) {
+        CljObjectPool *pool = ((CljObjectPool**)runtime->pool_stack)[runtime->pool_stack_top];
+        if (pool) {
+            // Use autorelease_pool_pop to properly release all objects
+            autorelease_pool_pop(pool);
+        } else {
+            // Pool pointer is NULL, just decrement stack
+            runtime->pool_stack_top--;
+        }
+    }
     
-    // Restore cache and symbol table if they were set (clojure.core should persist)
-    g_runtime.clojure_core_cache = preserved_cache;
-    g_runtime.symbol_table = preserved_symbol_table;
+    // Reset all fields individually using ASSIGN
+    // Caches will be automatically rebuilt when needed
+    // Reset namespace registry
+    // Note: ns_registry is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
+    runtime->ns_registry = NULL;
+    
+    // Reset caches (will be automatically rebuilt when needed)
+    // Note: clojure_core_cache is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
+    runtime->clojure_core_cache = NULL;
+    // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
+    // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
+    
+    // Reset meta registry
+    ASSIGN(runtime->meta_registry, NULL);
+    
+    // Reset pool stack (array of pointers)
+    for (int i = 0; i < MAX_POOL_DEPTH; i++) {
+        ASSIGN(runtime->pool_stack[i], NULL);
+    }
+    runtime->pool_stack_top = -1;
+    
+    // Reset builtins flag
+    runtime->builtins_registered = false;
+    
+    // Reset timer counter
+    runtime->timer_id_counter = 0;
     
 }
 

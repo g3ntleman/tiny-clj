@@ -15,13 +15,13 @@
 #include "memory.h"
 #include "kv_macros.h"
 #include "reader.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include "symbol.h"
 #include "value.h"
 
 void meta_registry_init() {
     {
-        g_runtime.meta_registry = (void*)make_map(32); // Initial capacity for metadata entries
+        g_runtime.meta_registry = make_map(32); // Initial capacity for metadata entries
     }
 }
 
@@ -40,33 +40,33 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    CljMap *new_registry = map_assoc((CljMap*)g_runtime.meta_registry, (ID)v, (ID)meta);
+    CljMap *new_registry = map_assoc(g_runtime.meta_registry, (ID)v, (ID)meta);
     
     // If map_assoc returned a new map (Copy-on-Write), update registry
     // When RC=1, map_assoc mutates in-place and returns the same map
     // When RC>1 or capacity full, map_assoc creates a new map
-    if (new_registry != (ID)g_runtime.meta_registry) {
+    if (new_registry != g_runtime.meta_registry) {
         // New map was created (Copy-on-Write), update registry
         // Old map is automatically handled by map_assoc (released if RC>1)
-        g_runtime.meta_registry = (void*)new_registry;
+        g_runtime.meta_registry = new_registry;
     }
 }
 
 ID meta_get(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return NULL;
     
-    return (ID)map_get((CljMap*)g_runtime.meta_registry, (CljValue)v);
+    return (ID)map_get(g_runtime.meta_registry, (CljValue)v);
 }
 
 void meta_clear(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return;
     
     // Use map_remove which always returns a new map (COW disabled)
-    CljMap *new_registry = map_remove((CljMap*)g_runtime.meta_registry, (ID)v);
-    if (new_registry != (CljMap*)g_runtime.meta_registry) {
+    CljMap *new_registry = map_remove(g_runtime.meta_registry, (ID)v);
+    if (new_registry != g_runtime.meta_registry) {
         // New map was created, update registry
         RELEASE((CljObject*)g_runtime.meta_registry);
-        g_runtime.meta_registry = (void*)new_registry;
+        g_runtime.meta_registry = new_registry;
     }
     // If key was not found, map_remove returns original map (no change needed)
 }
@@ -98,7 +98,7 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     
     // Get namespace from EvalState (if available)
     CljNamespace *current_ns = st ? st->current_ns : NULL;
-    CljObject *ns_name = current_ns ? current_ns->name : NULL;
+    CljSymbol *ns_name = current_ns ? current_ns->name : NULL;
     
     // Ensure special symbols are initialized
     if (!SYM_KW_LINE || !SYM_KW_FILE || !SYM_KW_NS) {

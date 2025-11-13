@@ -32,7 +32,7 @@ CljByteArray* make_byte_array(int length) {
     
     CljByteArray *ba = ALLOC(CljByteArray, 1);
     if (!ba) {
-        throw_oom(CLJ_BYTE_ARRAY);
+        throw_oom();
     }
     
     ba->base.type = CLJ_BYTE_ARRAY;
@@ -43,7 +43,7 @@ CljByteArray* make_byte_array(int length) {
         ba->data = (uint8_t*)calloc(length, sizeof(uint8_t));
         if (!ba->data) {
             free(ba);
-            throw_oom(CLJ_BYTE_ARRAY);
+            throw_oom();
         }
     } else {
         ba->data = NULL;

@@ -2,8 +2,8 @@
 #define TINY_CLJ_VALUE_H
 
 #include "object.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include "symbol.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
@@ -13,7 +13,7 @@
 
 // Forward declarations for string functions
 struct CljString;
-extern struct CljString* empty_string_singleton;
+extern struct CljString* string_empty_singleton;
 
 // Forward declarations for namespace functions
 extern struct CljNamespace* ns_get_or_create(const char *name, const char *file);

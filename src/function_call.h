@@ -2,8 +2,8 @@
 #define FUNCTION_CALL_H
 
 #include "object.h"
+#include "map.h"  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
 #include "namespace.h"
-#include "map.h"
 #include "list.h"
 
 // Evaluation context structures for parameter substitution
@@ -76,7 +76,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st);
 ID eval_var(CljList *list, CljMap *env, EvalState *st);
 ID eval_list_function(CljList *list, CljMap *env);
 ID eval_fn(CljList *list, CljMap *env, EvalState *st);
-ID eval_symbol(ID symbol, EvalState *st);
+ID eval_symbol(CljSymbol *symbol, EvalState *st);
 
 // Weitere Built-in Funktionen
 ID eval_seq(CljList *list, CljMap *env);
@@ -98,6 +98,9 @@ bool is_symbol(ID v, const char *name);
 
 // Time output suppression (for tests)
 void set_suppress_time_output(bool suppress);
+
+// Reset eval arg depth (for test isolation)
+void reset_eval_arg_depth(void);
 
 // Convenience function for string evaluation
 /**

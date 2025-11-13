@@ -1,13 +1,13 @@
 #include "platform.h"
 #include "tiny_clj.h"
 #include "parser.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "object.h"
 #include "exception.h"
 #include "builtins.h"
 #include "memory_profiler.h"
 #include "line_editor.h"
-#include "symbol.h"
 #include "clj_strings.h"
 #include "strings.h"
 #include "reader.h"
@@ -27,6 +27,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
+// Maximum number of event loop iterations per REPL cycle
+// This limits processing to prevent blocking while still processing pending tasks
+#define REPL_EVENT_LOOP_MAX_ITERATIONS 10
 
 // Forward decls for line editor history persistence helpers
 extern CljObject* line_editor_history_load_default(void);
@@ -81,10 +85,9 @@ static int form_balance(const char *s, int *error_pos) {
  */
 static void print_prompt(EvalState *st, bool balanced) {
     const char *ns_name = "user";  // Default
-    if (st && st->current_ns && st->current_ns->name) {
-        CljSymbol *sym = as_symbol(st->current_ns->name);
-        if (sym && sym->name && sym->name[0] != '\0') {
-            ns_name = sym->name;
+    if (st && st->current_ns && st->current_ns->name && st->current_ns->name->name) {
+        if (st->current_ns->name->name[0] != '\0') {
+            ns_name = st->current_ns->name->name;
         }
     }
     printf("%s%s ", ns_name, balanced ? "=>" : "...");
@@ -103,6 +106,18 @@ static void print_result(CljObject *v) {
     if (s) {
         printf("%s\n", s);
         free((void*)s);
+    }
+}
+
+/** @brief Process pending event loop tasks (up to max iterations).
+ *  @param st Evaluation state
+ *  
+ *  This function processes up to REPL_EVENT_LOOP_MAX_ITERATIONS tasks from
+ *  the event loop queue, stopping early if the queue becomes empty.
+ */
+static void repl_process_event_loop(EvalState *st) {
+    for (int i = 0; i < REPL_EVENT_LOOP_MAX_ITERATIONS; i++) {
+        if (!event_loop_run_next(NULL, st)) break;
     }
 }
 
@@ -134,24 +149,16 @@ static bool eval_multiline_string(const char *code, EvalState *st) {
                 // Parse one expression using the new parse_from_reader function
                 CljValue parsed = parse_from_reader(&reader, st);
                 
-                // Check if parsing failed (NULL could mean EOF or parsing error)
-                if (parsed == NULL) {
-                    // Check if we're at EOF
-                    if (reader_is_eof(&reader)) {
-                        break; // Normal EOF, exit loop
-                    } else {
-                        // Parsing error - this should have thrown an exception
-                        // If we get here, it's unexpected
-                        result = false;
-                        break;
-                    }
-                }
-                
-                // Evaluate the parsed expression
+                // Evaluate the parsed expression (can be NULL for nil, e.g., () parses to nil)
                 ID eval_result = eval_parsed(parsed, st, NULL);
                 
                 // Print the result (can be NULL for nil)
                 print_result(eval_result);
+                
+                // Check for EOF after processing (in case this was the last expression)
+                if (reader_is_eof(&reader)) {
+                    break; // Normal EOF, exit loop
+                }
                 
             } CATCH(ex) {
                 // Print exception and continue with next expression
@@ -421,9 +428,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                 }
             }
             if (!got_input) {
-                for (int i = 0; i < 10; i++) {
-                    if (!event_loop_run_next(NULL, st)) break;
-                }
+                repl_process_event_loop(st);
                 usleep(1000);
                 continue;
             }
@@ -475,6 +480,8 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             }
             acc[0] = '\0';
             prompt_shown = false;
+            // Run event loop to process any pending tasks before continuing
+            repl_process_event_loop(st);
             continue;
         }
         // balance == 0: evaluate form
@@ -483,9 +490,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
         bool success = eval_multiline_string(acc, st);
         
-        for (int i = 0; i < 10; i++) {
-            if (!event_loop_run_next(NULL, st)) break;
-        }
+        repl_process_event_loop(st);
         
         // Add to history and save after each expression evaluation (success or failure)
         if (acc[0] != '\0') {
@@ -531,7 +536,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #ifndef UNITY_TESTS
 int main(int argc, char **argv) {
     platform_init();
-    runtime_init();
+    runtime_init(&g_runtime);
     init_special_symbols();  // Initialize special symbols like SYM_DEF
     EvalState *st = evalstate_new(false);
     // Note: set_global_eval_state() removed - Exception handling now independent

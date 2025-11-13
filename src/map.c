@@ -7,29 +7,28 @@
 #include "symbol.h"
 #include "exception.h"
 #include "types.h"  // For SINGLETON_RC
+#include "common.h"  // For CLJ_ASSERT
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdarg.h>
 
 // Empty-map singleton: CLJ_MAP with rc=SINGLETON_RC, statically initialized
-// Note: Cannot use flexible array member in static initialization
-static struct {
-    CljObject base;
-    int count;
-    int capacity;
-} clj_empty_map_singleton_data = {
+// Note: Flexible array member data[] is not used when capacity=0
+static CljMap map_empty_singleton_data = {
     .base = { .type = CLJ_MAP, .rc = SINGLETON_RC },
     .count = 0,
     .capacity = 0
+    // data[] flexible array member not initialized (not needed for capacity=0)
 };
-static CljMap *clj_empty_map_singleton = (CljMap*)&clj_empty_map_singleton_data;
+CljMap *clj_empty_map_singleton = &map_empty_singleton_data;
 
 // === CljValue API (Phase 1: Parallel) ===
 
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */
 CljMap* make_map(int capacity) {
   if (capacity <= 0) {
-    return clj_empty_map_singleton;
+    return map_empty();
   }
   
   // Allocate struct + data array in ONE malloc
@@ -39,7 +38,7 @@ CljMap* make_map(int capacity) {
   
   CljMap *map = (CljMap*)malloc(total_size);
   if (!map) {
-    throw_oom(CLJ_MAP);
+    throw_oom();
   }
   
   map->base.type = CLJ_MAP;
@@ -158,7 +157,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
   CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
   if (!new_map) {
-    return map;  // Return original map on OOM
+    throw_oom();
   }
   
   new_map->base.type = CLJ_MAP;
@@ -356,7 +355,7 @@ CljMap* map_remove(CljMap *map, ID key) {
   size_t data_size = (size_t)map_data->capacity * 2 * sizeof(CljObject*);
   CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
   if (!new_map) {
-    return map;  // Return original map on OOM
+    throw_oom();
   }
   
   new_map->base.type = CLJ_MAP;
@@ -382,16 +381,47 @@ CljMap* map_remove(CljMap *map, ID key) {
   return new_map;  // Return NEW map
 }
 
+/** Create a transient map from variable number of key-value pairs.
+ * @param count Number of key-value pairs
+ * @param ... Alternating key and value arguments (ID type)
+ * @return Transient map with all key-value pairs, or NULL on error
+ * @note Example: make_transient_map_from_kv(3, key1, val1, key2, val2, key3, val3)
+ */
+CljMap* make_transient_map_from_kv(unsigned int count, ...) {
+    if (count == 0) {
+        CljMap *empty = map_empty();
+        CljMap *tmap = map_transient(empty);
+        return tmap;
+    }
+    
+    CljMap *map = make_map(count);  // throws OOM exception if allocation fails
+    
+    CljMap *tmap = map_transient(map);
+    RELEASE(map);
+    // map_transient throws OOM exception if allocation fails, so no NULL check needed
+    
+    va_list args;
+    va_start(args, count);
+    
+    for (unsigned int i = 0; i < count; i++) {
+        ID key = va_arg(args, ID);
+        ID value = va_arg(args, ID);
+        map_conj(tmap, key, value);
+    }
+    
+    va_end(args);
+    
+    return tmap;
+}
+
 CljMap* make_map_from_stack(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
-        return make_map(0);
+        return map_empty();
     }
     // Create map with extra capacity to allow adding new keys
     // Capacity should be at least pair_count + some headroom for growth
-    int capacity = pair_count * 2;
-    if (capacity < 4) capacity = 4;  // Minimum capacity
+    int capacity = MAX(4, pair_count * 2);
     CljMap *map = make_map(capacity);
-    if (!map) return NULL;
     for (int i = 0; i < pair_count; i++) {
         CljObject *key = KV_KEY(pairs, i);
         CljObject *value = KV_VALUE(pairs, i);
@@ -418,7 +448,7 @@ static CljMap* map_copy(CljMap *src, CljType new_type) {
     size_t data_size = (size_t)src->capacity * 2 * sizeof(CljObject*);
     CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
     if (!new_map) {
-        return NULL;  // OOM
+        throw_oom();
     }
     
     // Initialize new map

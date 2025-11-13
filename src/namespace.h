@@ -5,11 +5,19 @@
 #include "memory.h"
 #include <stdbool.h>
 
-// Use CljObject* instead of specific types to avoid circular dependencies
+// Forward declaration to avoid circular dependency
+// If symbol.h is already included, CljSymbol is fully defined and can be used directly
+// Otherwise, use struct CljSymbol (incomplete type, but OK for pointers)
+#ifndef TINY_CLJ_SYMBOLS_H
+struct CljSymbol;
+typedef struct CljSymbol CljSymbol;
+#else
+// symbol.h already included, CljSymbol is fully defined - can access members
+#endif
 
 // Namespace structure
 typedef struct CljNamespace {
-    CljObject *name;          // z.B. 'user', 'math'
+    CljSymbol *name;          // z.B. 'user', 'math' (Symbol instead of CljObject* for type safety)
     CljObject *mappings;      // Map: Symbol → CljObject (def, defn, vars)
     CljObject *aliases;       // Map: Symbol → Symbol (Alias → vollständiger Namespace-Name)
     const char *filename;    // optional: zugeordnetes File
@@ -40,7 +48,7 @@ extern CljNamespace *ns_registry;
 
 // Namespace functions
 CljNamespace* ns_get_or_create(const char *name, const char *file);
-ID ns_resolve(EvalState *st, CljObject *sym);
+ID ns_resolve(EvalState *st, CljSymbol *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);

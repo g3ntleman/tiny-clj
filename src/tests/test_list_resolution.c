@@ -72,7 +72,7 @@ TEST(test_list_via_symbol_resolution) {
     TEST_ASSERT_NOT_NULL(list_sym);
     
     // Use eval_symbol to resolve (like eval_list does)
-    CljObject *resolved = eval_symbol((ID)list_sym, g_test_eval_state);
+    CljObject *resolved = eval_symbol(list_sym, g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(resolved, "list should be resolvable via eval_symbol");
     
     // Check if it's a function

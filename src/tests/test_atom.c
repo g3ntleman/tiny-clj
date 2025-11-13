@@ -109,7 +109,7 @@ TEST(test_atom_swap_simple) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    ID inc_func = ns_resolve(g_test_eval_state, (CljObject*)inc_sym);
+    ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
         ID args[] = {};
@@ -132,7 +132,7 @@ TEST(test_atom_swap_with_args) {
     // Get '+' function from clojure.core using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljSymbol *plus_sym = intern_symbol_global("+");
-    ID plus_func = ns_resolve(g_test_eval_state, (CljObject*)plus_sym);
+    ID plus_func = ns_resolve(g_test_eval_state, plus_sym);
     
     if (plus_func) {
         ID args[] = {fixnum(5)};
@@ -155,7 +155,7 @@ TEST(test_atom_swap_persists) {
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    ID inc_func = ns_resolve(g_test_eval_state, (CljObject*)inc_sym);
+    ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
         ID args[] = {};
@@ -178,7 +178,7 @@ TEST(test_atom_swap_multiple_times) {
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    ID inc_func = ns_resolve(g_test_eval_state, (CljObject*)inc_sym);
+    ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
         ID args[] = {};
@@ -236,7 +236,7 @@ TEST(test_atom_builtin_swap_bang) {
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    ID inc_func = ns_resolve(g_test_eval_state, (CljObject*)inc_sym);
+    ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
         ID args[] = {(ID)atom, inc_func};
@@ -335,7 +335,7 @@ TEST(test_atom_reset_invalid) {
 TEST(test_atom_swap_invalid_atom) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    ID inc_func = ns_resolve(g_test_eval_state, (CljObject*)inc_sym);
+    ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
         ID args[] = {fixnum(42), inc_func};
@@ -365,7 +365,7 @@ TEST(test_atom_real_world_usage) {
     // Get 'inc' function using global test evalState
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljSymbol *inc_sym = intern_symbol_global("inc");
-    ID inc_func = ns_resolve(g_test_eval_state, (CljObject*)inc_sym);
+    ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
         ID args[] = {};

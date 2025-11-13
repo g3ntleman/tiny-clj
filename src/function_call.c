@@ -38,6 +38,25 @@
 // Use C stack for recur state - each function call has its own stack frame
 // No global variables needed - local variables in eval_function_call are automatically isolated
 
+/**
+ * @brief Convert parameter vector to temporary array for env_extend_stack/param_context_create
+ * @param params_vec Parameter vector (can be NULL)
+ * @param param_count Number of parameters
+ * @param temp_array Output array (must have space for at least param_count elements)
+ * @return Pointer to temp_array, or NULL if params_vec is NULL
+ */
+static ID* params_vector_to_array(CljPersistentVector *params_vec, int param_count, ID *temp_array) {
+    if (!params_vec || param_count == 0) {
+        return NULL;
+    }
+    
+    for (int i = 0; i < param_count; i++) {
+        temp_array[i] = vector_nth(params_vec, i);
+    }
+    
+    return temp_array;
+}
+
 // Evaluation context structures are defined in function_call.h
 
 #include "map.h"
@@ -532,10 +551,10 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    // Check if it's a native function (CljFunc) or Clojure function (CljFunction)
+    // Check if it's a native function (CljCFunc) or Clojure function (CljFunction)
     if (is_native_fn(fn)) {
-        // It's a native function (CljFunc)
-        CljFunc *native_func = (CljFunc*)fn;
+        // It's a native C function (CljCFunc)
+        CljCFunc *native_func = (CljCFunc*)fn;
         if (!native_func || !native_func->fn) {
             throw_exception(EXCEPTION_TYPE, "Invalid native function", NULL, 0, 0);
             return NULL;
@@ -550,7 +569,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     }
     
     // Arity check
-    if (argc != func->param_count) {
+    int param_count = func->params ? vector_count(func->params) : 0;
+    if (argc != param_count) {
         throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
         return NULL;
     }
@@ -577,21 +597,20 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     
     // CRITICAL: Extend closure environment with parameter bindings
     // This ensures that when eval_list is called, it can find parameters in the environment
+    // Convert parameter vector to temporary array for env_extend_stack
+    int param_count_stack = func->params ? vector_count(func->params) : 0;
+    ID params_array_stack[MAX_FUNCTION_PARAMS];
+    ID *params_array = params_vector_to_array(func->params, param_count_stack, params_array_stack);
+    
     CljMap *call_env = NULL;
     if (func->closure_env) {
         // Use env_extend_stack to add parameters to the environment
-        call_env = env_extend_stack(func->closure_env, (ID*)func->params, (ID*)current_args, current_argc);
-        if (!call_env) {
-            throw_exception(EXCEPTION_RUNTIME, "Failed to create function call environment", NULL, 0, 0);
-            return NULL;
-        }
+        call_env = env_extend_stack(func->closure_env, params_array, (ID*)current_args, current_argc);
+
     } else {
         // No closure environment - create new environment with parameters
-        call_env = env_extend_stack(NULL, (ID*)func->params, (ID*)current_args, current_argc);
-        if (!call_env) {
-            throw_exception(EXCEPTION_RUNTIME, "Failed to create function call environment", NULL, 0, 0);
-            return NULL;
-        }
+        call_env = env_extend_stack(NULL, params_array, (ID*)current_args, current_argc);
+
     }
     
     // TCO Loop - iterate on recur
@@ -600,9 +619,21 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = kein Tail Call
         
+        // CRITICAL: Clean up any leftover recur_args from previous iteration or exception
+        // This ensures that if an exception occurred in the previous iteration, recur_args are freed
+        // Check all 16 slots to ensure nothing is left over
+        for (int i = 0; i < 16; i++) {
+            RELEASE(recur_args[i]);
+            recur_args[i] = NULL;
+        }
+        
         // Evaluate function body
         // Pass pointer to local recur state - nested functions will have their own stack frames
-        ParamContext param_ctx = param_context_create(func->params, current_args, current_argc);
+        // Convert parameter vector to temporary array for param_context_create
+        int param_count_loop = func->params ? vector_count(func->params) : 0;
+        ID params_array_loop[MAX_FUNCTION_PARAMS];
+        ID *params_array_loop_ptr = params_vector_to_array(func->params, param_count_loop, params_array_loop);
+        ParamContext param_ctx = param_context_create(params_array_loop_ptr, current_args, current_argc);
         EvalEnv env_ctx = eval_env_create(call_env, st);  // Use call_env instead of func->closure_env
         RecurContext recur_ctx = recur_context_create(recur_args, &recur_arg_count);
         EvalContext ctx = eval_context_create_with_recur(&param_ctx, &env_ctx, &recur_ctx);
@@ -617,12 +648,9 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         if (recur_arg_count >= 0) {
             // Tail Call erkannt - recur was used in THIS function
             CLJ_ASSERT(recur_arg_count <= 16);  // Assertion für max 16 Argumente
-            // ✅ CRITICAL: Release intermediate result from recur iteration
-            // RELEASE/RETAIN macros handle immediates automatically - no guard needed
-            // new_result can be NULL when recur is used (recur returns NULL), so check before releasing
-            if (new_result) {
-                RELEASE(new_result);
-            }
+            // CRITICAL: Release intermediate result from recur iteration
+            // RELEASE handles NULL and immediates automatically
+            RELEASE(new_result);
             
             // Update argc and copy new arguments from recur_args
             CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= 16);  // Validierung
@@ -635,21 +663,16 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             
             // CRITICAL: Recreate call_env with new arguments for recur iteration
             // eval_body_with_params uses call_env for parameter lookups, so we must update it
-            // Create new call_env first (this will retain new parameter values)
-            CljMap *new_call_env;
-            if (func->closure_env) {
-                new_call_env = env_extend_stack(func->closure_env, (ID*)func->params, (ID*)current_args, current_argc);
-                if (!new_call_env) {
-                    throw_exception(EXCEPTION_RUNTIME, "Failed to create function call environment", NULL, 0, 0);
-                    return NULL;
-                }
-            } else {
-                new_call_env = env_extend_stack(NULL, (ID*)func->params, (ID*)current_args, current_argc);
-                if (!new_call_env) {
-                    throw_exception(EXCEPTION_RUNTIME, "Failed to create function call environment", NULL, 0, 0);
-                    return NULL;
-                }
-            }
+            // Convert parameter vector to temporary array for env_extend_stack
+            int param_count_recur = func->params ? vector_count(func->params) : 0;
+            ID params_array_recur[MAX_FUNCTION_PARAMS];
+            ID *params_array_recur_ptr = params_vector_to_array(func->params, param_count_recur, params_array_recur);
+            CljMap *new_call_env = env_extend_stack(
+                func->closure_env, 
+                params_array_recur_ptr, 
+                (ID*)current_args, 
+                current_argc
+            );
             // Use ASSIGN to safely replace call_env (releases old, retains new)
             ASSIGN(call_env, new_call_env);
             
@@ -671,23 +694,15 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // The call_env will be released below, which will properly release all stored values.
     
     // Cleanup recur args (if any were set but not used)
-    if (recur_arg_count >= 0 && recur_arg_count <= 16) {
-        for (int i = 0; i < recur_arg_count; i++) {
-            if (recur_args[i]) {
-                RELEASE(recur_args[i]);
-            }
-        }
+    // Check all 16 slots to ensure nothing is left over
+    for (int i = 0; i < 16; i++) {
+        RELEASE(recur_args[i]);
     }
     
     // Cleanup call_env (created by env_extend_stack)
     // This will properly release all stored values (including current_args[i])
-    if (call_env) {
-        RELEASE((CljObject*)call_env);
-    }
+    RELEASE(call_env);
     
-    // Return result with proper memory management
-    // Note: result is already retained by ASSIGN, just return it
-    // Local variables (recur_args, recur_arg_count) are automatically cleaned up by C stack
     return result;
 }
 
@@ -753,7 +768,7 @@ ID eval_body_with_local_env(ID body, CljMap *local_env, EvalState *st) {
             }
             
             // If still not found, try global symbol resolution
-            result = eval_symbol(body, st);
+            result = eval_symbol(as_symbol(body), st);
             // eval_symbol returns AUTORELEASE - object survives until pool-pop
             return result;
         }
@@ -845,7 +860,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         if (!body_sym) {
             // This should never happen, but if it does, try to resolve from namespace
             if (ctx->env && ctx->env->st) {
-                CljObject *resolved = ns_resolve(ctx->env->st, body);
+                CljObject *resolved = ns_resolve(ctx->env->st, body_sym);
                 // ns_resolve returns retained values - object survives until pool-pop
                 return resolved;
             }
@@ -899,7 +914,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         // ns_resolve takes CljObject* (only objects, not immediates) and returns ID
         // body is a symbol (CljObject*), so we can pass it directly
         if (ctx->env && ctx->env->st) {
-            ID resolved_id = ns_resolve(ctx->env->st, (CljObject*)body);
+            ID resolved_id = ns_resolve(ctx->env->st, as_symbol(body));
             if (resolved_id) {
                 // CRITICAL: If resolved_id is a symbol, it means the symbol wasn't properly resolved
                 // This can happen if a symbol is stored in namespace instead of its value
@@ -1060,7 +1075,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // If still not found, try global symbol resolution (includes clojure.core)
             // This is important for built-in functions like inc, dec, etc.
             if (st) {
-                ID resolved = eval_symbol(body, st);
+                ID resolved = eval_symbol(as_symbol(body), st);
                 if (resolved) {
                     // Special case: nil should evaluate to NULL (not SYM_NIL)
                     if (resolved == SYM_NIL) {
@@ -1179,6 +1194,11 @@ static CljObject* eval_sequence_dispatch(CljList *list, CljMap *env, CljObject *
 
 // Thread-local recursion depth tracking for eval_arg and eval_list
 static _Thread_local int g_eval_arg_depth = 0;
+
+// Reset eval arg depth (for test isolation)
+void reset_eval_arg_depth(void) {
+    g_eval_arg_depth = 0;
+}
 
 static CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
     CljSymbol *op_sym = (CljSymbol*)op;
@@ -1347,7 +1367,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         if (resolved) {
             op = resolved;
         } else {
-            resolved = eval_symbol(op, st);
+            resolved = eval_symbol(as_symbol(op), st);
             if (resolved) {
                 op = resolved;
             }
@@ -1542,7 +1562,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             op = resolved;
         } else {
             // Fallback to global namespace
-            resolved = eval_symbol(op, st);
+            // op is still a symbol at this point (TAG(op) == CLJ_SYMBOL)
+            resolved = eval_symbol(as_symbol(op), st);
             if (resolved) {
                 op = resolved;
             }
@@ -1906,7 +1927,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
                 
                 // If argument is a symbol, resolve it to get the actual value
                 if (arg && TAG(arg) == CLJ_SYMBOL) {
-                    CljObject *resolved = eval_symbol(arg, st);
+                    CljObject *resolved = eval_symbol(as_symbol(arg), st);
                     if (resolved) {
                         RELEASE(arg);  // Release the symbol
                         arg = resolved;  // Use the resolved value
@@ -1923,7 +1944,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             // Invalid usage - fall through to error handling
         }
         // Resolve the symbol to get the function
-        CljObject *fn = eval_symbol(op, st);
+        CljObject *fn = eval_symbol(as_symbol(op), st);
         if (!fn) {
             return NULL;
         }
@@ -2126,7 +2147,7 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Look up the symbol in the current namespace
-    CljObject *value = ns_resolve(st, sym_obj);
+    ID value = ns_resolve(st, sym);
     if (!value) {
         // Try to find the symbol in the current namespace mappings
         CljMap *mappings = (CljMap*)st->current_ns->mappings;
@@ -2217,22 +2238,20 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     return fn;
 }
 
-ID eval_symbol(ID symbol, EvalState *st) {
+ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     if (!symbol) {
         return NULL;
     }
     
-    CljSymbol *sym = as_symbol((ID)symbol);
-    
     // Keywords evaluate to themselves (singletons need no memory management)
-    if (IS_KEYWORD(symbol)) {
-        return symbol;
+    if (IS_KEYWORD((ID)symbol)) {
+        return (ID)symbol;
     }
     
     // Special handling for *ns* - return current namespace name as symbol
-    if (sym && strcmp(sym->name, "*ns*") == 0) {
+    if (symbol->name && strcmp(symbol->name, "*ns*") == 0) {
         if (st && st->current_ns && st->current_ns->name) {
-            return st->current_ns->name;  // Return the namespace symbol (e.g., 'user')
+            return (ID)st->current_ns->name;  // Return the namespace symbol (e.g., 'user')
         }
         return (ID)intern_symbol(NULL, "user");  // Default namespace
     }
@@ -2243,7 +2262,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
     }
     
     // Lookup im aktuellen Namespace
-    CljObject *value = ns_resolve(st, symbol);
+    ID value = ns_resolve(st, symbol);
     if (value) {
         // Special case: If value is SYM_NIL, return NULL (nil evaluates to NULL)
         if ((CljSymbol*)value == SYM_NIL) {
@@ -2253,7 +2272,7 @@ ID eval_symbol(ID symbol, EvalState *st) {
     }
     
     // Fallback: Try global namespace lookup for special forms and builtins
-    if (sym) {
+    if (symbol) {
         
         // Check against cached symbol pointers for O(1) lookup (only if initialized)
         if ((SYM_IF && symbol == SYM_IF) || (SYM_COND && symbol == SYM_COND) || 
@@ -2278,12 +2297,12 @@ ID eval_symbol(ID symbol, EvalState *st) {
             (SYM_NEXT && symbol == SYM_NEXT) ||
             (SYM_FOR && symbol == SYM_FOR) || (SYM_DOSEQ && symbol == SYM_DOSEQ) || 
             (SYM_DOTIMES && symbol == SYM_DOTIMES) || (SYM_TIME && symbol == SYM_TIME)) {
-            return symbol;  // Return the symbol itself for special forms (singletons need no memory management)
+            return (ID)symbol;  // Return the symbol itself for special forms (singletons need no memory management)
         }
     }
     
     // Fehler: Symbol kann nicht aufgelöst werden
-    const char *name = sym ? sym->name : "unknown";
+    const char *name = symbol ? symbol->name : "unknown";
     throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
     return NULL;
 }
@@ -3021,7 +3040,7 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
         
         // If not found in local environment, try namespace
         // CRITICAL: Use provided st if available, otherwise use NULL (uses default "user" namespace)
-        CljObject *resolved = ns_resolve(st, element);
+        CljObject *resolved = ns_resolve(st, as_symbol(element));
         if (resolved) {
             // CRITICAL: ns_resolve returns AUTORELEASE objects.
             // eval_arg should return AUTORELEASE objects, so we just return it as-is.
@@ -3226,7 +3245,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
         }
         // If not found in environment, try namespace lookup
         if (!result && st) {
-            CljObject *resolved = ns_resolve(st, expr);
+            CljObject *resolved = ns_resolve(st, as_symbol(expr));
             // ns_resolve returns retained values - use AUTORELEASE for eval_time
             result = resolved ? AUTORELEASE(resolved) : NULL;
         }
@@ -3281,7 +3300,8 @@ ID clj_call_function(ID fn, int argc, ID *argv) {
     if (!func) {
         return (ID)make_exception("Error", "Invalid function object", NULL, 0, 0);
     }
-    if (argc != func->param_count) {
+    int param_count_clj_call = func->params ? vector_count(func->params) : 0;
+    if (argc != param_count_clj_call) {
         return (ID)make_exception("Error", "Arity mismatch in function call", NULL, 0, 0);
     }
     
@@ -3292,7 +3312,11 @@ ID clj_call_function(ID fn, int argc, ID *argv) {
     }
     
     // Extend environment with parameters
-    CljMap *call_env = env_extend_stack(func->closure_env, (ID*)func->params, heap_params, argc);
+    // Convert parameter vector to temporary array for env_extend_stack
+    int param_count_clj = func->params ? vector_count(func->params) : 0;
+    ID params_array_clj[MAX_FUNCTION_PARAMS];
+    ID *params_array_clj_ptr = params_vector_to_array(func->params, param_count_clj, params_array_clj);
+    CljMap *call_env = env_extend_stack(func->closure_env, params_array_clj_ptr, heap_params, argc);
     if (!call_env) {
         free(heap_params);
         return (ID)make_exception("Error", "Failed to create function environment", NULL, 0, 0);

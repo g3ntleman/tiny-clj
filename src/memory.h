@@ -58,6 +58,12 @@ void release(CljObject *v);
  */
 void enable_memory_debug_output(void);
 
+/** @brief Disable memory debug output
+ * 
+ * Call this to disable debug output.
+ */
+void disable_memory_debug_output(void);
+
 /** @brief Add object to autorelease pool for deferred cleanup.
  *  @param v Object to autorelease
  *  @return The same object (for chaining)
@@ -73,11 +79,11 @@ bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
 
 /**
- * @brief Throw OutOfMemoryError with type tag and abort
- * @param type The CljType being allocated (e.g., CLJ_BYTE_ARRAY)
+ * @brief Throw OutOfMemoryError and abort
  * @note This function never returns
+ * @note Type information is available from stack trace
  */
-void throw_oom(CljType type) __attribute__((noreturn));
+void throw_oom(void) __attribute__((noreturn));
 
 // ============================================================================
 // AUTORELEASE POOL MANAGEMENT
@@ -371,11 +377,38 @@ int get_retain_count(CljObject *obj);
 #endif
 
 /** @brief Safe object assignment with automatic retain/release management.
- *  @param var Variable to assign to
- *  @param new_obj New object to assign (can be NULL or Immediate)
+ * 
  *  Follows classic Objective-C pattern: retains new object, releases old one.
  *  Works with both heap objects and Immediates (clj_true, clj_false, fixnums).
  *  Works in both DEBUG and RELEASE builds using RETAIN/RELEASE macros.
+ * 
+ *  @param var Variable or struct field to assign to (must be an lvalue)
+ *  @param new_obj New object to assign (can be NULL or Immediate)
+ * 
+ *  @note CRITICAL: Use ASSIGN directly on the target variable/field, NOT on temporary variables.
+ *        The macro modifies the variable in-place.
+ * 
+ *  @code
+ *  // ✅ CORRECT: Direct assignment to struct field
+ *  ASSIGN(runtime->ns_registry, NULL);
+ *  ASSIGN(obj->value, new_value);
+ * 
+ *  // ✅ CORRECT: Direct assignment to variable
+ *  CljObject *obj = NULL;
+ *  ASSIGN(obj, make_int(42));
+ * 
+ *  // ❌ WRONG: Using temporary variable (doesn't work correctly)
+ *  ID tmp = (ID)runtime->ns_registry;
+ *  ASSIGN(tmp, NULL);  // Wrong! tmp is modified, but runtime->ns_registry is not
+ *  runtime->ns_registry = tmp;  // Manual assignment needed - defeats the purpose
+ *  @endcode
+ * 
+ *  Behavior:
+ *  - Retains the new object (if not NULL and not immediate)
+ *  - Releases the old object (if not NULL and not immediate)
+ *  - Assigns the new object to the variable
+ *  - Optimizes self-assignment (skips operations if new_obj == var)
+ *  - Handles NULL safely in both var and new_obj parameters
  */
 #define ASSIGN(var, new_obj) do { \
     ID _new_val = (ID)(new_obj); \

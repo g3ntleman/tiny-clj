@@ -11,8 +11,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DENABLE_META")
-# Disable Unity's setjmp/longjmp to avoid conflict with our exception system
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNITY_EXCLUDE_SETJMP")
+# Unity's setjmp/longjmp should be compatible with our exception system
+# Both use separate jmp_buf stacks, so they should work together
+# Enable stdout flushing in Unity to ensure error messages are visible
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUNITY_USE_FLUSH_STDOUT")
 # Production/Release: platform-specific optimization policy
 if(APPLE)
   # macOS: favor size for benchmarks, speed for general release

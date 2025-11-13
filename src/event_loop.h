@@ -2,8 +2,8 @@
 #define TINY_CLJ_EVENT_LOOP_H
 
 #include "object.h"
+#include "map.h"  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
 #include "namespace.h"
-#include "map.h"
 #include <stdbool.h>
 
 // Initialize event loop (idempotent)

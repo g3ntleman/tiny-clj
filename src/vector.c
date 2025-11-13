@@ -14,7 +14,7 @@ struct CljPersistentVector {
     int count;
     int capacity;
     // mutable_flag removed: COW (RC-based) handles mutability automatically
-    CljObject **data;
+    ID *data;
 };
 
 // Empty-vector singleton: CLJ_VECTOR with rc=SINGLETON_RC, statically initialized
@@ -29,8 +29,8 @@ static struct {
     }
 };
 static CljPersistentVector *clj_empty_vector_singleton = &clj_empty_vector_singleton_data.vec;
-// Export as external symbol (similar to empty_string_singleton pattern)
-CljPersistentVector* empty_vector_singleton = (CljPersistentVector*)&clj_empty_vector_singleton_data.vec;
+// Export as external symbol (similar to string_empty_singleton pattern)
+CljPersistentVector* vector_empty_singleton = (CljPersistentVector*)&clj_empty_vector_singleton_data.vec;
 
 /** Return empty vector singleton (rc=0, do not retain/release). */
 CljPersistentVector* empty_vector(void) {
@@ -65,8 +65,7 @@ bool vector_init_seq_iterator(SeqIterator *iter, CljPersistentVector *vec) {
     if (!iter || !vec) return false;
     
     // Check if empty
-    if (vec->count == 0 || vec == empty_vector_singleton || 
-        (vec->count == 0 && is_singleton((CljObject*)vec))) {
+    if (vec->count == 0) {
         return false;  // Empty vector
     }
     
@@ -117,15 +116,33 @@ CljPersistentVector* make_vector_copy(CljPersistentVector* vec, int capacity) {
     if (!v) return NULL;
     
     // Ensure capacity is at least the number of elements to copy
-    capacity = MIN(capacity, v->count);
+    capacity = MAX(capacity, v->count);
     
     // Create new vector with specified capacity
-    CljPersistentVector *new_vec = make_vector(capacity, false);    
-    new_vec->count = v->count;  // Copy count, not capacity
-    
-    // Copy all elements (including nil/NULL - nil is a valid value in Clojure)
-    for (int i = 0; i < capacity; i++) {
-        new_vec->data[i] = RETAIN(v->data[i]);  // RETAIN is NULL-safe
+    // Never use empty singleton if we need to store elements (v->count > 0)
+    CljPersistentVector *new_vec;
+    if (capacity == 0 && v->count == 0) {
+        // Empty vector: use singleton
+        new_vec = make_vector(0, false);
+    } else {
+        // Create real vector with data array
+        new_vec = ALLOC(CljPersistentVector, 1);
+        if (!new_vec)
+            throw_oom();
+        new_vec->base.type = CLJ_VECTOR;
+        new_vec->base.rc = 1;
+        new_vec->count = v->count;
+        new_vec->capacity = capacity;
+        new_vec->data = (ID*)calloc((size_t)capacity, sizeof(ID));
+        if (!new_vec->data) {
+            free(new_vec);
+            throw_oom();
+        }
+        
+        // Copy all elements (including nil/NULL - nil is a valid value in Clojure)
+        VECTOR_FOR_EACH(v, elem) {
+            new_vec->data[_i] = RETAIN(elem);
+        }
     }
     
     return new_vec;
@@ -232,7 +249,7 @@ CljPersistentVector* make_vector(unsigned int capacity, bool is_mutable) {
     }
     CljPersistentVector *vec = ALLOC(CljPersistentVector, 1);
     if (!vec)
-        throw_oom(CLJ_VECTOR);
+        throw_oom();
 
     vec->base.type = CLJ_VECTOR;
     vec->base.rc = 1;
@@ -240,10 +257,10 @@ CljPersistentVector* make_vector(unsigned int capacity, bool is_mutable) {
     vec->capacity = capacity;
     // mutable_flag removed: COW (RC-based) handles mutability automatically
     if (capacity > 0) {
-        vec->data = (CljObject **)calloc((size_t)capacity, sizeof(CljObject *));
+        vec->data = (ID*)calloc((size_t)capacity, sizeof(ID));
         if (!vec->data) {
             free(vec);
-            throw_oom(CLJ_VECTOR);
+            throw_oom();
         }
     } else {
         vec->data = NULL;
@@ -367,10 +384,10 @@ ID transient(ID vec) {
             free(tvec);
             return NULL;
         }
-        for (int i = 0; i < v->count; i++) {
-            if (v->data[i]) {
-                tvec->data[i] = v->data[i];
-                RETAIN(v->data[i]);
+        VECTOR_FOR_EACH(v, elem) {
+            if (elem) {
+                tvec->data[_i] = elem;
+                RETAIN(elem);
             }
         }
     } else {
@@ -394,9 +411,9 @@ void vector_grow_capacity(CljPersistentVector *v) {
     }
     
     int newcap = v->capacity ? v->capacity * 2 : 4;
-    void *p = realloc(v->data, (size_t)newcap * sizeof(CljObject *));
+    void *p = realloc(v->data, (size_t)newcap * sizeof(ID));
     if (!p) {
-        throw_oom(CLJ_VECTOR);
+        throw_oom();
         return;
     }
     

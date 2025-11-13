@@ -307,8 +307,12 @@ ID parse_expr(Reader *reader, EvalState *st) {
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
 ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
-    CLJ_ASSERT(parsed_expr != NULL);
     CLJ_ASSERT(eval_state != NULL);
+    
+    // NULL means nil (e.g., () parses to nil) - return NULL
+    if (parsed_expr == NULL) {
+        return NULL;
+    }
     
     CljObject *result = NULL;
     
@@ -328,7 +332,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
         // eval_list returns AUTORELEASE objects
     } else if (parsed_expr && TAG(parsed_expr) == CLJ_SYMBOL) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
-        result = (CljObject*)eval_symbol((ID)parsed_expr, eval_state);
+        result = (CljObject*)eval_symbol(as_symbol(parsed_expr), eval_state);
         // eval_symbol already returns autoreleased object
     } else {
         // Literal value (vector, map, etc.) - return as-is

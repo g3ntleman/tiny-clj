@@ -398,12 +398,18 @@ TEST(test_slurp_nonexistent_file) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
   // Test slurp with non-existent file
-  // This should throw an exception or return nil
-  // Note: Depending on implementation, this might throw exception
-  // or return nil. For now, we test that it doesn't crash.
-  // The actual behavior will be verified after implementation.
-  (void)eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")",
-                    g_test_eval_state);
+  // This should throw an exception
+  CljObject *result = NULL;
+  TRY {
+    result = eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")",
+                        g_test_eval_state);
+    // Should not reach here - exception should be thrown
+    TEST_FAIL_MESSAGE("slurp should throw exception for nonexistent file");
+  } CATCH(ex) {
+    // Expected: exception should be thrown
+    TEST_PASS();
+    return;
+  } END_TRY
 }
 
 TEST(test_slurp_multiline_content) {

@@ -78,6 +78,9 @@ CljSymbol *SYM_KW_ERROR = NULL;
 CljSymbol *SYM_KW_STACK = NULL;
 CljSymbol *SYM_KW_NS = NULL;
 
+// Global symbol for clojure.core namespace name (for fast comparison)
+CljSymbol *SYM_CLOJURE_CORE = NULL;
+
 // Static symbol structs for special forms (compile-time initialization)
 // These symbols have rc = SINGLETON_RC and use string literals (no strdup needed)
 static struct { CljSymbol sym; } sym_try_data = {
@@ -441,13 +444,17 @@ void init_special_symbols() {
     
     SYM_KW_NS = &sym_kw_ns_data.sym;
     symbol_table_add(NULL, ":ns", SYM_KW_NS);
+    
+    // Global symbol for clojure.core namespace name (for fast comparison)
+    // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
+    SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
 }
 
 // Find symbol in the table
 static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
     if (!name) return NULL;
     
-    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    SymbolEntry *entry = g_runtime.symbol_table;
     while (entry) {
         // Check namespace match first
         bool ns_match = false;
@@ -487,8 +494,8 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbo
     }
     
     entry->symbol = (CljObject*)symbol;
-    entry->next = (SymbolEntry*)g_runtime.symbol_table;
-    g_runtime.symbol_table = (void*)entry;
+    entry->next = g_runtime.symbol_table;
+    g_runtime.symbol_table = entry;
     
     return entry;
 }
@@ -583,7 +590,7 @@ CljSymbol* intern_symbol_global(const char *name) {
 // This function will be eliminated by dead-code-elimination in production builds
 // since it's only called from test files
 void symbol_table_cleanup() {
-    SymbolEntry *entry = (SymbolEntry*)g_runtime.symbol_table;
+    SymbolEntry *entry = g_runtime.symbol_table;
     while (entry) {
         SymbolEntry *next = entry->next;
         if (entry->ns) free(entry->ns);

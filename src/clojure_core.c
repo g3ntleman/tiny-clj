@@ -1,10 +1,10 @@
 // clojure.core.c
 
 #include "exception.h"
+#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include "symbol.h"
 #include "value.h"  // For IS_IMMEDIATE macro
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
@@ -37,12 +37,14 @@ static bool eval_core_source(const char *src, EvalState *st) {
   // This ensures we use the same namespace object that was cached
   CljNamespace *original_ns = st->current_ns;
   
-  // CRITICAL: Use the cached namespace if it exists, otherwise get/create it
+  // CRITICAL: Use the cached namespace if it exists, otherwise use current_ns
   // This ensures we use the same namespace object that register_builtins() may have created
-  // NOTE: load_clojure_core() already set st->current_ns to clojure.core,
-  // so we just need to ensure we're using the cached one
+  // NOTE: load_clojure_core() already set st->current_ns to clojure.core and cached it,
+  // so we should use the cached one to ensure consistency
+  CljNamespace *target_ns = st->current_ns;
   if (g_runtime.clojure_core_cache) {
-    st->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
+    target_ns = (CljNamespace*)g_runtime.clojure_core_cache;
+    st->current_ns = target_ns;
   }
   
   // Use Reader to parse multiple expressions
@@ -110,10 +112,16 @@ static bool eval_core_source(const char *src, EvalState *st) {
     expr_count++;
   }
   
-  // Switch back to original namespace object (not just the name)
-  // This ensures we restore the exact same namespace object
-  if (original_ns) {
-    st->current_ns = original_ns;
+  // CRITICAL: Ensure cache is set to the namespace we just loaded into
+  // This ensures that the cache points to the namespace with the loaded functions
+  // NOTE: target_ns is the namespace we loaded into (either cache or current_ns)
+  // We must ensure cache points to target_ns, not original_ns
+  if (target_ns) {
+    // Always update cache to point to target_ns (the namespace we loaded into)
+    g_runtime.clojure_core_cache = target_ns;
+    // CRITICAL: Keep st->current_ns pointing to target_ns until after verification
+    // Don't restore original_ns here - let load_clojure_core handle it after verification
+    // This ensures the verification can check the correct namespace
   }
   
   if (!g_core_quiet) {
@@ -135,22 +143,36 @@ int load_clojure_core(EvalState *st) {
     return 0;
   }
 
-  // Ensure clojure.core namespace exists and cache is set
-  // evalstate_set_ns will create the namespace if it doesn't exist
+  // CRITICAL: Ensure clojure.core namespace exists and cache is set
+  // evalstate_set_ns will create the namespace if it doesn't exist and set the cache
   evalstate_set_ns(st, "clojure.core");
   
-  // CRITICAL: Use the cached namespace if it exists, otherwise cache the new one
-  // This ensures that if register_builtins() already created clojure.core,
-  // we use the same namespace object for loading
-  if (g_runtime.clojure_core_cache && st->current_ns != (CljNamespace*)g_runtime.clojure_core_cache) {
-    // Cache already exists but points to different namespace - use cached one
-    st->current_ns = (CljNamespace*)g_runtime.clojure_core_cache;
-  } else if (st->current_ns && !g_runtime.clojure_core_cache) {
-    // No cache yet - set it
-    g_runtime.clojure_core_cache = (void*)st->current_ns;
+  // CRITICAL: Always use the cached namespace for loading
+  // This ensures we load into the same namespace that will be used for lookups
+  // evalstate_set_ns should have set both st->current_ns and g_runtime.clojure_core_cache
+  if (!g_runtime.clojure_core_cache) {
+    // Cache should have been set by evalstate_set_ns, but if not, set it now
+    if (st->current_ns && st->current_ns->name == SYM_CLOJURE_CORE) {
+      g_runtime.clojure_core_cache = st->current_ns;
+    } else {
+      fprintf(stderr, "[clojure.core] CRITICAL: Failed to get clojure.core namespace!\n");
+      return 0;
+    }
   }
+  
+  // CRITICAL: Ensure st->current_ns points to the cached namespace
+  // This ensures all def operations store in the cached namespace
+  st->current_ns = g_runtime.clojure_core_cache;
 
+  // Save original namespace to restore after loading
+  CljNamespace *original_ns = st->current_ns;
+  
   bool ok = eval_core_source(clojure_core_code, st);
+  
+  // Restore original namespace after loading (but cache still points to clojure.core)
+  if (original_ns && original_ns != g_runtime.clojure_core_cache) {
+    st->current_ns = original_ns;
+  }
 
   if (!ok) {
     // Note: last_error removed - Exception handling now uses global exception stack
@@ -159,7 +181,9 @@ int load_clojure_core(EvalState *st) {
 
   // CRITICAL ASSERTION: Verify that 'inc' was loaded successfully
   // This ensures that the loading process actually stored the function
-  if (st->current_ns && g_runtime.clojure_core_cache) {
+  // NOTE: Use g_runtime.clojure_core_cache directly, not st->current_ns,
+  // because st->current_ns may have been restored to original_ns after eval_core_source
+  if (g_runtime.clojure_core_cache) {
     CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
     if (clojure_core && clojure_core->mappings) {
       CljSymbol *inc_sym = intern_symbol_global("inc");
@@ -177,7 +201,13 @@ int load_clojure_core(EvalState *st) {
           return 0;
         }
       }
+    } else {
+      fprintf(stderr, "[clojure.core] CRITICAL: clojure_core_cache has no mappings!\n");
+      return 0;
     }
+  } else {
+    fprintf(stderr, "[clojure.core] CRITICAL: clojure_core_cache is NULL after loading!\n");
+    return 0;
   }
 
   return ok ? 1 : 0;

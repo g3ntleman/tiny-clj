@@ -25,7 +25,7 @@ CljList* empty_list(void) {
 
 CljList* make_list(ID first, CljList *rest) {
     CljList *list = ALLOC(CljList, 1);
-    if (!list) throw_oom(CLJ_LIST);
+    if (!list) throw_oom();
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;

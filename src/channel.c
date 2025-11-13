@@ -15,7 +15,7 @@ CljMap* make_result_channel(void) {
     size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
     CljMap *tmap = (CljMap*)malloc(struct_size + data_size);
     if (!tmap) {
-        throw_oom(CLJ_TRANSIENT_MAP);
+        throw_oom();
         return NULL;
     }
     

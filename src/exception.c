@@ -8,10 +8,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <setjmp.h>
-#include "namespace.h"  // Must be before exception.h for EvalState definition
 #include "exception.h"
 #include "error_messages.h"
-#include "runtime.h"
 #include "object.h"
 #include "memory.h"
 #include "clj_strings.h"  // For to_string
@@ -46,9 +44,6 @@ static inline const char* shorten_file_path(const char *file) {
 #ifdef DEBUG
 struct CljString* stacktrace(void);
 #endif
-
-// Global storage for current exception
-CLJException *g_current_exception = NULL;
 
 // Global exception stack (independent of EvalState)
 GlobalExceptionStack global_exception_stack = {0};
@@ -108,6 +103,27 @@ const char *EXCEPTION_TYPE = "TypeError";
 
 /** @brief Static exception type: OutOfMemoryError */
 const char *EXCEPTION_OUT_OF_MEMORY = "OutOfMemoryError";
+
+// ============================================================================
+// STATIC OUT OF MEMORY EXCEPTION (no allocation needed)
+// ============================================================================
+
+// Static OOM exception singleton - statically initialized, never freed
+// This is critical: when we're out of memory, we can't allocate more memory
+static CLJException clj_oom_exception_data = {
+    .base = { .type = CLJ_EXCEPTION, .rc = SINGLETON_RC },
+    .type = "OutOfMemoryError",
+    .message = "Out of memory",
+    .file = "",
+    .line = 0,
+    .col = 0
+#ifdef DEBUG
+    , .stacktrace = NULL,
+    .object = NULL
+#endif
+};
+
+CLJException *clj_oom_exception = &clj_oom_exception_data;
 
 /** @brief Static exception type: StackOverflowError */
 const char *EXCEPTION_STACK_OVERFLOW = "StackOverflowError";
@@ -208,9 +224,10 @@ struct CljString* stacktrace(void) {
         return NULL;
     }
     
-    // Build stacktrace string
+    // Build stacktrace string, skipping the last line (usually contains "dyld" on macOS)
     size_t pos = 0;
-    for (size_t i = 0; i < size; i++) {
+    size_t last_index = (size > 0) ? size - 1 : 0;
+    for (size_t i = 0; i < last_index; i++) {
         if (symbols[i]) {
             size_t len = strlen(symbols[i]);
             memcpy(buffer + pos, symbols[i], len);
@@ -253,9 +270,10 @@ struct CljString* stacktrace(void) {
         return NULL;
     }
     
-    // Build stacktrace string
+    // Build stacktrace string, skipping the last line (usually contains "dyld" on macOS)
     size_t pos = 0;
-    for (size_t i = 0; i < size; i++) {
+    size_t last_index = (size > 0) ? size - 1 : 0;
+    for (size_t i = 0; i < last_index; i++) {
         if (symbols[i]) {
             size_t len = strlen(symbols[i]);
             memcpy(buffer + pos, symbols[i], len);
@@ -344,9 +362,8 @@ void throw_exception_object(CLJException *ex) {
     
     // Don't print exception details if there's a handler (expected exceptions in tests)
     // Only print for unhandled exceptions above
-    // Store existing exception in thread-local variable
-    // Note: We don't create a new exception, we reuse the existing one
-    g_current_exception = ex;
+    // Store exception in handler
+    global_exception_stack.top->exception = ex;
     longjmp(global_exception_stack.top->jump_state, 1);
 }
 

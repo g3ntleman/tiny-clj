@@ -3,19 +3,19 @@
 
 #include "object.h"
 #include "map.h"
+#include "vector.h"
 
 typedef struct {
     CljObject base;
     CljObject* (*fn)(CljObject **args, int argc);
     void *env;
     const char *name;
-} CljFunc;
+} CljCFunc;
 
 typedef struct {
     CljObject base;
-    ID *params;
-    int param_count;
-    ID body;
+    CljPersistentVector *params;  // Parameter vector (can be NULL if no parameters)
+    ID body;  // Function body (AST to evaluate)
     CljMap *closure_env;  // Closure environment map (can be NULL)
     const char *name;
 } CljFunction;
@@ -33,13 +33,13 @@ static inline CljFunction* as_function(ID obj) {
     return (CljFunction*)assert_type((CljObject*)obj, CLJ_CLOSURE);
 }
 
-// Helper: check if a function object is native (CljFunc) or interpreted (CljFunction)
+// Helper: check if a function object is native (CljCFunc) or interpreted (CljFunction)
 static inline int is_native_fn(CljObject *fn) {
-    // Native builtins are represented as CljFunc; interpreted functions as CljFunction
+    // Native builtins are represented as CljCFunc; interpreted functions as CljFunction
     if (TAG(fn) != CLJ_FUNC) return 0;
     
     // Additional check: native functions have a function pointer
-    CljFunc *native_func = (CljFunc*)fn;
+    CljCFunc *native_func = (CljCFunc*)fn;
     return native_func->fn != NULL;
 }
 
