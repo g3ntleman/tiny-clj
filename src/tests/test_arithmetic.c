@@ -203,3 +203,111 @@ TEST(test_multiplication_with_negative_numbers) {
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result5));
     TEST_ASSERT_EQUAL_INT(-6, as_fixnum((CljValue)result5));
 }
+
+// Test quot (integer division)
+TEST(test_quot) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (quot 10 3) => 3
+    CljObject *result1 = eval_string("(quot 10 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result1));
+    
+    // Test: (quot -10 3) => -3 (Clojure behavior: truncates toward zero)
+    CljObject *result2 = eval_string("(quot -10 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(-3, as_fixnum((CljValue)result2));
+    
+    // Test: (quot 10 -3) => -3
+    CljObject *result3 = eval_string("(quot 10 -3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(-3, as_fixnum((CljValue)result3));
+    
+    // Test: (quot -10 -3) => 3
+    CljObject *result4 = eval_string("(quot -10 -3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result4));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result4));
+    
+    // Test: (quot 0 5) => 0
+    CljObject *result5 = eval_string("(quot 0 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result5);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result5));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result5));
+    
+    // Test division by zero exception
+    bool exception_caught = false;
+    TRY {
+        CljObject *result = eval_string("(quot 10 0)", g_test_eval_state);
+        (void)result;
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Division by zero should throw exception");
+}
+
+// Test bit-shift-left
+TEST(test_bit_shift_left) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (bit-shift-left 1 3) => 8
+    CljObject *result1 = eval_string("(bit-shift-left 1 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result1));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)result1));
+    
+    // Test: (bit-shift-left 2 1) => 4
+    CljObject *result2 = eval_string("(bit-shift-left 2 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)result2));
+    
+    // Test: (bit-shift-left 1 0) => 1
+    CljObject *result3 = eval_string("(bit-shift-left 1 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)result3));
+    
+    // Test: (bit-shift-left 0 5) => 0
+    CljObject *result4 = eval_string("(bit-shift-left 0 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result4));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result4));
+}
+
+// Test Math/sqrt
+TEST(test_math_sqrt) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (Math/sqrt 4) => 2.0
+    CljObject *result1 = eval_string("(Math/sqrt 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    // Result should be a fixed-point number (float)
+    float val1 = as_fixed((CljValue)result1);
+    TEST_ASSERT_FLOAT_WITHIN(0.01, 2.0, val1);
+    
+    // Test: (Math/sqrt 2) => ~1.414
+    CljObject *result2 = eval_string("(Math/sqrt 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    float val2 = as_fixed((CljValue)result2);
+    TEST_ASSERT_FLOAT_WITHIN(0.01, 1.414, val2);
+    
+    // Test: (Math/sqrt 0) => 0.0
+    CljObject *result3 = eval_string("(Math/sqrt 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    float val3 = as_fixed((CljValue)result3);
+    TEST_ASSERT_FLOAT_WITHIN(0.01, 0.0, val3);
+}

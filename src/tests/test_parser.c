@@ -627,6 +627,34 @@ TEST(test_meta_clear) {
 #endif // ENABLE_META
 
 // ============================================================================
+// READER MACRO #() TESTS
+// ============================================================================
+
+TEST(test_anon_fn_reader_macro) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: #(+ % 1) => (fn [%] (+ % 1))
+    CljObject *result1 = eval_string("#(+ % 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_EQUAL_INT(CLJ_CLOSURE, TAG(result1));
+    
+    // Test: Call the anonymous function: (#(+ % 1) 5) => 6
+    CljObject *result2 = eval_string("(#(+ % 1) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result2));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result2));
+    
+    // Test: #(* % 2) => (fn [%] (* % 2))
+    CljObject *result3 = eval_string("(#(* % 2) 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result3));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result3));
+}
+
+// ============================================================================
 // TEST GROUPS
 // ============================================================================
 // (Unused test groups removed for cleanup)

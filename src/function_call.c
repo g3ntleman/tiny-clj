@@ -541,7 +541,12 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             throw_exception(EXCEPTION_TYPE, "Invalid native function", NULL, 0, 0);
             return NULL;
         }
-        return native_func->fn((CljObject**)args, argc);
+        // Set EvalState for builtins that need it (eval, read-string)
+        extern void builtin_set_eval_state(EvalState *st);
+        builtin_set_eval_state(st);
+        ID result = native_func->fn((CljObject**)args, argc);
+        builtin_set_eval_state(NULL); // Clear after call
+        return result;
     }
     
     // It's a Clojure function (CljFunction)

@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <math.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -2240,6 +2241,439 @@ ID native_mod(ID *args, unsigned int argc) {
     return create_fixnum_result(a_int % b_int);
 }
 
+ID native_quot(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "quot")) return NULL;
+    
+    if (!validate_numeric_args(args, argc)) return NULL;
+    
+    uint16_t tag_a = TAG(args[0]);
+    uint16_t tag_b = TAG(args[1]);
+    if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
+        int a = AS_FIXNUM(args[0]);
+        int b = AS_FIXNUM(args[1]);
+        if (b == 0) {
+            throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+                "Division by zero: %d / %d", a, b);
+            return NULL;
+        }
+        // Clojure quot truncates toward zero (C integer division already does this)
+        return create_fixnum_result(a / b);
+    }
+    
+    // For fixed-point or mixed types, convert to fixed and compute
+    int32_t a_fixed;
+    switch (TAG(args[0])) {
+        case CLJ_INT:
+            a_fixed = fixnum_to_fixed(AS_FIXNUM(args[0]));
+            break;
+        default:
+            a_fixed = extract_fixed_value(args[0]);
+            break;
+    }
+    int32_t b_fixed;
+    switch (TAG(args[1])) {
+        case CLJ_INT:
+            b_fixed = fixnum_to_fixed(AS_FIXNUM(args[1]));
+            break;
+        default:
+            b_fixed = extract_fixed_value(args[1]);
+            break;
+    }
+    
+    if (b_fixed == 0) {
+        throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+            "Division by zero in quot");
+        return NULL;
+    }
+    
+    // For fixed-point, compute quotient at the fixed-point scale
+    int a_int = a_fixed >> 13;
+    int b_int = b_fixed >> 13;
+    if (b_int == 0) {
+        throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+            "Division by zero: %d / %d", a_int, b_int);
+        return NULL;
+    }
+    return create_fixnum_result(a_int / b_int);
+}
+
+ID native_bit_shift_left(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "bit-shift-left")) return NULL;
+    
+    if (!validate_numeric_args(args, argc)) return NULL;
+    
+    // Both arguments must be integers
+    if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-left requires integer arguments",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int a = AS_FIXNUM(args[0]);
+    int b = AS_FIXNUM(args[1]);
+    
+    // Clojure bit-shift-left: shift left by b bits
+    // Note: C left shift is undefined for negative shift amounts or shift >= width
+    if (b < 0 || b >= 32) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-left shift amount must be 0-31",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return create_fixnum_result(a << b);
+}
+
+ID native_range(ID *args, unsigned int argc) {
+    if (argc < 1 || argc > 3) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+            "range requires 1-3 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    if (!validate_numeric_args(args, argc)) return NULL;
+    
+    int start = 0, end = 0, step = 1;
+    
+    if (argc == 1) {
+        // (range end) => [0 1 2 ... end-1]
+        end = AS_FIXNUM(args[0]);
+        start = 0;
+        step = 1;
+    } else if (argc == 2) {
+        // (range start end) => [start start+1 ... end-1]
+        start = AS_FIXNUM(args[0]);
+        end = AS_FIXNUM(args[1]);
+        step = 1;
+    } else {
+        // (range start end step) => [start start+step ... end-step]
+        start = AS_FIXNUM(args[0]);
+        end = AS_FIXNUM(args[1]);
+        step = AS_FIXNUM(args[2]);
+        if (step == 0) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "range step cannot be zero",
+                           __FILE__, __LINE__, 0);
+            return NULL;
+        }
+    }
+    
+    // Calculate size
+    int size = 0;
+    if (step > 0) {
+        if (start >= end) size = 0;
+        else size = (end - start + step - 1) / step;
+    } else {
+        if (start <= end) size = 0;
+        else size = (start - end - step - 1) / (-step);
+    }
+    
+    if (size < 0) size = 0;
+    
+    // Create vector with calculated capacity
+    CljValue vec = (CljValue)make_vector(size, false);
+    CljPersistentVector *v = as_vector((CljObject*)vec);
+    if (!v) return NULL;
+    
+    // Fill vector
+    for (int i = start; (step > 0) ? (i < end) : (i > end); i += step) {
+        ID val = create_fixnum_result(i);
+        v = vector_conj(v, val);
+    }
+    
+    return AUTORELEASE(vec);
+}
+
+ID native_repeat(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "repeat")) return NULL;
+    
+    // First argument must be integer (count)
+    if (TAG(args[0]) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count must be an integer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    int count = AS_FIXNUM(args[0]);
+    if (count < 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count cannot be negative",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    ID value = args[1]; // Second argument is the value to repeat
+    
+    // Create vector with exact capacity
+    CljValue vec = (CljValue)make_vector(count, false);
+    CljPersistentVector *v = as_vector((CljObject*)vec);
+    if (!v) return NULL;
+    
+    // Fill vector with repeated value
+    for (int i = 0; i < count; i++) {
+        ID val = value ? RETAIN(value) : NULL;
+        v = vector_conj(v, val);
+        if (val) RELEASE(val); // vector_conj retains, so release our copy
+    }
+    
+    return AUTORELEASE(vec);
+}
+
+ID native_math_sqrt(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "Math/sqrt")) return NULL;
+    
+    if (!validate_numeric_args(args, argc)) return NULL;
+    
+    // Extract numeric value
+    float val;
+    switch (TAG(args[0])) {
+        case CLJ_INT:
+            val = (float)AS_FIXNUM(args[0]);
+            break;
+        case CLJ_FLOAT:
+            val = as_fixed((CljValue)args[0]);
+            break;
+        default:
+            val = extract_fixed_value(args[0]);
+            break;
+    }
+    
+    if (val < 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Math/sqrt argument cannot be negative",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    double sqrt_result = sqrt((double)val);
+    return create_fixed_result((int32_t)round(sqrt_result * (1 << 13)));
+}
+
+ID native_format(ID *args, unsigned int argc) {
+    if (argc < 1) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+            "format requires at least 1 argument, got %u", argc);
+        return NULL;
+    }
+    
+    // First argument must be a string (format string)
+    if (TAG(args[0]) != CLJ_STRING) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "format first argument must be a string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljString *fmt_str = (CljString*)args[0];
+    if (!fmt_str || TAG(args[0]) != CLJ_STRING) return NULL;
+    
+    // Allocate buffer for formatted string (start with reasonable size)
+    size_t buf_size = 256;
+    char *buffer = malloc(buf_size);
+    if (!buffer) {
+        throw_exception(EXCEPTION_RUNTIME, "format: failed to allocate buffer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Format arguments based on format string
+    int result_len = 0;
+    if (argc == 1) {
+        // No arguments, just copy format string
+        result_len = snprintf(buffer, buf_size, "%s", fmt_str->data);
+    } else {
+        // We need to handle variadic arguments
+        // For simplicity, support common format specifiers: %d, %f, %s
+        // This is a simplified version - full implementation would need to parse format string
+        const char *fmt = fmt_str->data;
+        const char *p = fmt;
+        char *out = buffer;
+        size_t remaining = buf_size - 1;
+        int arg_idx = 1;
+        
+        while (*p && arg_idx < argc && remaining > 0) {
+            if (*p == '%' && *(p + 1) != '\0') {
+                p++; // Skip '%'
+                char spec = *p++;
+                
+                switch (spec) {
+                    case 'd': {
+                        // Integer
+                        int val = AS_FIXNUM(args[arg_idx]);
+                        int n = snprintf(out, remaining, "%d", val);
+                        if (n < 0 || n >= (int)remaining) {
+                            // Buffer too small, reallocate
+                            size_t used = out - buffer;
+                            buf_size *= 2;
+                            buffer = realloc(buffer, buf_size);
+                            if (!buffer) {
+                                throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                                               __FILE__, __LINE__, 0);
+                                return NULL;
+                            }
+                            out = buffer + used;
+                            remaining = buf_size - used - 1;
+                            n = snprintf(out, remaining, "%d", val);
+                        }
+                        out += n;
+                        remaining -= n;
+                        arg_idx++;
+                        break;
+                    }
+                    case 'f': {
+                        // Float
+                        float val = (TAG(args[arg_idx]) == CLJ_INT) ? 
+                                   (float)AS_FIXNUM(args[arg_idx]) : 
+                                   as_fixed((CljValue)args[arg_idx]);
+                        int n = snprintf(out, remaining, "%f", val);
+                        if (n < 0 || n >= (int)remaining) {
+                            size_t used = out - buffer;
+                            buf_size *= 2;
+                            buffer = realloc(buffer, buf_size);
+                            if (!buffer) {
+                                throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                                               __FILE__, __LINE__, 0);
+                                return NULL;
+                            }
+                            out = buffer + used;
+                            remaining = buf_size - used - 1;
+                            n = snprintf(out, remaining, "%f", val);
+                        }
+                        out += n;
+                        remaining -= n;
+                        arg_idx++;
+                        break;
+                    }
+                    case 's': {
+                        // String
+                        CljString *str = (TAG(args[arg_idx]) == CLJ_STRING) ? (CljString*)args[arg_idx] : NULL;
+                        if (!str) {
+                            // Try to convert to string
+                            char *str_repr = print_str(args[arg_idx]);
+                            if (str_repr) {
+                                int n = snprintf(out, remaining, "%s", str_repr);
+                                if (n < 0 || n >= (int)remaining) {
+                                    size_t used = out - buffer;
+                                    buf_size *= 2;
+                                    buffer = realloc(buffer, buf_size);
+                                    if (!buffer) {
+                                        free(str_repr);
+                                        throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                                                       __FILE__, __LINE__, 0);
+                                        return NULL;
+                                    }
+                                    out = buffer + used;
+                                    remaining = buf_size - used - 1;
+                                    n = snprintf(out, remaining, "%s", str_repr);
+                                }
+                                out += n;
+                                remaining -= n;
+                                free(str_repr);
+                            }
+                        } else {
+                            int n = snprintf(out, remaining, "%s", str->data);
+                            if (n < 0 || n >= (int)remaining) {
+                                size_t used = out - buffer;
+                                buf_size *= 2;
+                                buffer = realloc(buffer, buf_size);
+                                if (!buffer) {
+                                    throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
+                                                   __FILE__, __LINE__, 0);
+                                    return NULL;
+                                }
+                                out = buffer + used;
+                                remaining = buf_size - used - 1;
+                                n = snprintf(out, remaining, "%s", str->data);
+                            }
+                            out += n;
+                            remaining -= n;
+                        }
+                        arg_idx++;
+                        break;
+                    }
+                    case '%': {
+                        // Literal %
+                        *out++ = '%';
+                        remaining--;
+                        break;
+                    }
+                    default: {
+                        // Unknown specifier, copy as-is
+                        *out++ = '%';
+                        *out++ = spec;
+                        remaining -= 2;
+                        break;
+                    }
+                }
+            } else {
+                *out++ = *p++;
+                remaining--;
+            }
+        }
+        *out = '\0';
+        result_len = out - buffer;
+    }
+    
+    // Create string object from buffer
+    CljString *result = make_string(buffer);
+    free(buffer);
+    
+    if (!result) {
+        throw_exception(EXCEPTION_RUNTIME, "format: failed to create string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return AUTORELEASE((ID)result);
+}
+
+// Thread-local EvalState for builtins that need it (eval, read-string)
+static _Thread_local EvalState *g_current_eval_state = NULL;
+
+// Set current EvalState (called by eval_function_call before calling builtins)
+void builtin_set_eval_state(EvalState *st) {
+    g_current_eval_state = st;
+}
+
+ID native_eval(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "eval")) return NULL;
+    
+    if (!g_current_eval_state) {
+        throw_exception(EXCEPTION_RUNTIME, "eval: EvalState not available",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Evaluate the argument (which should be a quoted form)
+    // In Clojure, (eval 'form) means the form is already quoted
+    // So we just evaluate it directly
+    ID form = args[0];
+    
+    // Use eval_parsed to evaluate the form
+    return eval_parsed((CljObject*)form, g_current_eval_state, NULL);
+}
+
+ID native_read_string(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "read-string")) return NULL;
+    
+    if (!g_current_eval_state) {
+        throw_exception(EXCEPTION_RUNTIME, "read-string: EvalState not available",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // First argument must be a string
+    if (TAG(args[0]) != CLJ_STRING) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "read-string argument must be a string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljString *str = (CljString*)args[0];
+    if (!str) return NULL;
+    
+    // Parse the string using parse from parser.c
+    ID parsed = parse(str->data, g_current_eval_state);
+    
+    // parse returns AUTORELEASE objects
+    return parsed;
+}
+
 ID native_div_variadic(ID *args, unsigned int argc) {
     if (argc == 0) { 
         throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO); 
@@ -2604,6 +3038,58 @@ ID native_eq(ID *args, unsigned int argc) {
     return val_a == val_b ? clj_true : clj_false;
 }
 
+ID native_not_eq(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "not=")) return NULL;
+    
+    CljObject *a = (CljObject*)args[0];
+    CljObject *b = (CljObject*)args[1];
+    
+    if (!a || !b) {
+        // Both nil: equal, so not= returns false
+        if (!a && !b) return clj_false;
+        // One nil, one not: not equal, so not= returns true
+        return clj_true;
+    }
+    
+    // Try numeric comparison first
+    float val_a, val_b;
+    bool a_numeric = false, b_numeric = false;
+    switch (TAG(a)) {
+        case CLJ_INT:
+            val_a = (float)as_fixnum((CljValue)a);
+            a_numeric = true;
+            break;
+        case CLJ_FLOAT:
+            val_a = as_fixed((CljValue)a);
+            a_numeric = true;
+            break;
+        default:
+            break;
+    }
+    
+    switch (TAG(b)) {
+        case CLJ_INT:
+            val_b = (float)as_fixnum((CljValue)b);
+            b_numeric = true;
+            break;
+        case CLJ_FLOAT:
+            val_b = as_fixed((CljValue)b);
+            b_numeric = true;
+            break;
+        default:
+            break;
+    }
+    
+    // If both numeric, compare numerically
+    if (a_numeric && b_numeric) {
+        return val_a != val_b ? clj_true : clj_false;
+    }
+    
+    // Otherwise use general equality, then invert
+    bool equal = clj_equal((ID)a, (ID)b);
+    return equal ? clj_false : clj_true;
+}
+
 ID native_identical(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "identical?")) return clj_false;
     return (args[0] == args[1]) ? clj_true : clj_false;
@@ -2834,6 +3320,14 @@ void register_builtins() {
     register_builtin_in_namespace("*", native_mul_variadic);
     register_builtin_in_namespace("/", native_div_variadic);
     register_builtin_in_namespace("mod", native_mod);
+    register_builtin_in_namespace("quot", native_quot);
+    register_builtin_in_namespace("bit-shift-left", native_bit_shift_left);
+    register_builtin_in_namespace("range", native_range);
+    register_builtin_in_namespace("repeat", native_repeat);
+    register_builtin_in_namespace("Math/sqrt", native_math_sqrt);
+    register_builtin_in_namespace("format", native_format);
+    register_builtin_in_namespace("eval", native_eval);
+    register_builtin_in_namespace("read-string", native_read_string);
     register_builtin_in_namespace("str", native_str);
     register_builtin_in_namespace("symbol", native_symbol);
 #ifndef ESP32_BUILD
@@ -2878,6 +3372,7 @@ void register_builtins() {
     register_builtin_in_namespace("<=", native_le);
     register_builtin_in_namespace(">=", native_ge);
     register_builtin_in_namespace("=", native_eq);
+    register_builtin_in_namespace("not=", native_not_eq);
     register_builtin_in_namespace("identical?", native_identical);
     register_builtin_in_namespace("vector?", native_vector_p);
     
