@@ -156,15 +156,20 @@ CljPersistentVector* make_vector_copy(CljPersistentVector* vec, unsigned capacit
     if (!vec) return NULL;
     CljPersistentVector *v = as_vector(vec);
     unsigned count = MIN(capacity, v->count); // trunkate as requested
-    printf("make_vector_copy: %zu, vector_count: %u, RC: %d, capacity: %d, new_capacity: %d\n", 
-           g_make_vector_copy_count, vector_count(v), v->base.rc, v->capacity, capacity);
     
     
     // Create new vector with specified capacity using make_vector
     // make_vector handles singleton case automatically (capacity==0 && type==CLJ_VECTOR)
-    CljPersistentVector *vec_copy = make_vector(capacity, v->base.type);
+    // For transient vectors, use CLJ_VECTOR and convert to transient afterwards
+    CljType base_type = (v->base.type == CLJ_TRANSIENT_VECTOR) ? CLJ_VECTOR : v->base.type;
+    CljPersistentVector *vec_copy = make_vector(capacity, base_type);
     if (!vec_copy)
         return NULL;
+    
+    // If original was transient, convert copy to transient
+    if (v->base.type == CLJ_TRANSIENT_VECTOR) {
+        vec_copy->base.type = CLJ_TRANSIENT_VECTOR;
+    }
     
     // Set count to match original vector (make_vector sets count=0)
     vec_copy->count = count;
@@ -304,7 +309,6 @@ CljPersistentVector* make_vector(unsigned int capacity, CljType type) {
     // data[] is flexible array member - already allocated at end of struct
     // No need to set vec->data - it's already part of the struct
 
-    printf("make_vector: %zu, capacity: %u, type: %d\n", g_make_vector_count, capacity, type);
     return vec;
 }
 
@@ -460,19 +464,6 @@ static size_t g_transient_count = 0;
 ID transient(ID vec) {
     g_transient_count++;
     
-    // Print stack trace for first few calls
-    if (g_transient_count <= 10) {
-        void *array[20];
-        size_t size = backtrace(array, 20);
-        char **strings = backtrace_symbols(array, size);
-        printf("transient: %zu - Stack trace:\n", g_transient_count);
-        for (size_t i = 0; i < size && i < 10; i++) {
-            printf("  [%zu] %s\n", i, strings[i]);
-        }
-        free(strings);
-    } else {
-        printf("transient: %zu\n", g_transient_count);
-    }
     
     if (!vec) return NULL;
     CljObject *obj = (CljObject*)vec;
@@ -524,6 +515,8 @@ CljPersistentVector* vector_conj_bang(CljPersistentVector *tvec, ID item) {
         int newcap = MAX(v->capacity * 2, 4);
         CljPersistentVector *new_v = make_vector_copy(v, newcap);
         if (!new_v) { throw_oom(); return NULL; }
+        // Ensure new vector is still transient
+        new_v->base.type = CLJ_TRANSIENT_VECTOR;
         RELEASE((CljObject*)v);
         v = new_v;  // Use new vector for adding item
         tvec = new_v;  // Update return value
@@ -541,7 +534,6 @@ static size_t g_persistent_count = 0;
 /** Convert transient vector back to persistent. */
 ID persistent(ID tvec) {
     g_persistent_count++;
-    printf("persistent: %zu\n", g_persistent_count);
     
     if (!tvec) return NULL;
     CljObject *obj = (CljObject*)tvec;

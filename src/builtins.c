@@ -2368,8 +2368,13 @@ ID native_range(ID *args, unsigned int argc) {
     
     if (size < 0) size = 0;
     
+    // Return empty vector singleton if size is 0
+    if (size == 0) {
+        return empty_vector();
+    }
+    
     // Create vector with calculated capacity
-    CljValue vec = (CljValue)make_vector(size, false);
+    CljValue vec = (CljValue)make_vector(size, CLJ_VECTOR);
     CljPersistentVector *v = as_vector((CljObject*)vec);
     if (!v) return NULL;
     
@@ -2401,8 +2406,13 @@ ID native_repeat(ID *args, unsigned int argc) {
     
     ID value = args[1]; // Second argument is the value to repeat
     
+    // Return empty vector singleton if count is 0
+    if (count == 0) {
+        return empty_vector();
+    }
+    
     // Create vector with exact capacity
-    CljValue vec = (CljValue)make_vector(count, false);
+    CljValue vec = (CljValue)make_vector(count, CLJ_VECTOR);
     CljPersistentVector *v = as_vector((CljObject*)vec);
     if (!v) return NULL;
     
