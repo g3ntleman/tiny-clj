@@ -6,6 +6,7 @@
  */
 
 #include "tests_common.h"
+#include "../symbol.h"
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
@@ -351,6 +352,72 @@ TEST(test_parse_from_reader_multiple_expressions) {
     evalstate_free(eval_state);
 }
 
+TEST(test_parse_quote_form_with_nil) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test: Parse '(1 nil 3) and check how nil is stored
+    // Quote forms should parse to (quote (1 nil 3))
+    CljObject *parsed = parse("'(1 nil 3)", eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(parsed));
+    
+    // The parsed form should be (quote (1 nil 3))
+    CljList *quote_list = as_list(parsed);
+    TEST_ASSERT_NOT_NULL(quote_list);
+    
+    // First element should be 'quote' symbol
+    CljObject *first = LIST_FIRST(quote_list);
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(first));
+    
+    // Second element should be the quoted list (1 nil 3)
+    CljList *rest = as_list(LIST_REST(quote_list));
+    TEST_ASSERT_NOT_NULL(rest);
+    CljObject *quoted_list = LIST_FIRST(rest);
+    TEST_ASSERT_NOT_NULL(quoted_list);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(quoted_list));
+    
+    // Check the quoted list structure: (1 nil 3)
+    CljList *inner_list = as_list(quoted_list);
+    TEST_ASSERT_NOT_NULL(inner_list);
+    
+    // First element should be 1
+    CljObject *elem0 = LIST_FIRST(inner_list);
+    TEST_ASSERT_NOT_NULL(elem0);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)elem0));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
+    
+    // Second element should be nil (stored as SYM_NIL symbol)
+    CljList *inner_rest = as_list(LIST_REST(inner_list));
+    TEST_ASSERT_NOT_NULL(inner_rest);
+    CljObject *elem1 = LIST_FIRST(inner_rest);
+    TEST_ASSERT_NOT_NULL(elem1);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(elem1));
+    TEST_ASSERT_EQUAL_PTR(SYM_NIL, elem1);
+    
+    // Third element should be 3
+    CljList *inner_rest2 = as_list(LIST_REST(inner_rest));
+    TEST_ASSERT_NOT_NULL(inner_rest2);
+    CljObject *elem2 = LIST_FIRST(inner_rest2);
+    TEST_ASSERT_NOT_NULL(elem2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)elem2));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)elem2));
+    
+    evalstate_free(eval_state);
+}
+
+TEST(test_parse_nil_literal) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test: Parse nil literal
+    CljObject *parsed = parse("nil", eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(parsed));
+    TEST_ASSERT_EQUAL_PTR(SYM_NIL, parsed);
+    
+    evalstate_free(eval_state);
+}
+
 // ============================================================================
 // META INFORMATION TESTS
 // ============================================================================
@@ -361,7 +428,7 @@ TEST(test_meta_set_and_get) {
     EvalState *eval_state = evalstate_new(false);
     
     // Create a test object
-    struct CljString *obj = make_string("test");
+    ID obj = make_string("test");
     TEST_ASSERT_NOT_NULL(obj);
     
     // Create metadata map
@@ -369,7 +436,7 @@ TEST(test_meta_set_and_get) {
     TEST_ASSERT_NOT_NULL(meta_map);
     
     CljSymbol *kw_doc = intern_symbol_global(":doc");
-    struct CljString *doc_str = make_string("Test documentation");
+    ID doc_str = make_string("Test documentation");
     if (kw_doc && doc_str) {
         meta_map = map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str);
         RELEASE(doc_str);
@@ -527,13 +594,13 @@ TEST(test_meta_clear) {
     EvalState *eval_state = evalstate_new(false);
     
     // Create a test object
-    struct CljString *obj = make_string("test");
+    ID obj = make_string("test");
     TEST_ASSERT_NOT_NULL(obj);
     
     // Create and set metadata
     CljMap *meta_map = make_map(1);
     CljSymbol *kw_doc = intern_symbol_global(":doc");
-    struct CljString *doc_str = make_string("Test");
+    ID doc_str = make_string("Test");
     if (kw_doc && doc_str) {
         meta_map = map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str);
         RELEASE(doc_str);

@@ -35,7 +35,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
   
   // CRITICAL: Save the original namespace object (not just the name)
   // This ensures we use the same namespace object that was cached
-  CljNamespace *original_ns = st->current_ns;
+  (void)st;  // original_ns is saved but not used in this function
   
   // CRITICAL: Use the cached namespace if it exists, otherwise use current_ns
   // This ensures we use the same namespace object that register_builtins() may have created
@@ -188,7 +188,7 @@ int load_clojure_core(EvalState *st) {
     if (clojure_core && clojure_core->mappings) {
       CljSymbol *inc_sym = intern_symbol_global("inc");
       if (inc_sym) {
-        CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
+        CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym);
         if (!inc_value) {
           // inc not found - this is a critical error
           fprintf(stderr, "[clojure.core] CRITICAL: 'inc' not found in mappings after loading!\n");

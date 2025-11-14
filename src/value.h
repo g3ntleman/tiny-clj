@@ -3,19 +3,18 @@
 
 #include "object.h"
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
-#include "namespace.h"
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
 
-// CljNamespace is already defined in namespace.h
-
 // Forward declarations for string functions
 struct CljString;
 extern struct CljString* string_empty_singleton;
 
-// Forward declarations for namespace functions
+// Forward declarations for namespace functions (to avoid circular dependency)
+// namespace.h includes map.h, which would include value.h again
+struct CljNamespace;
 extern struct CljNamespace* ns_get_or_create(const char *name, const char *file);
 
 // CljValue is already defined in object.h to avoid circular dependency

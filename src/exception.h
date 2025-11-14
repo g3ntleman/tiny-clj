@@ -64,8 +64,8 @@ extern CLJException *clj_oom_exception;
 // ============================================================================
 
 // Forward declaration to avoid circular dependency with memory.h
-// Note: CljObjectPool is typedef'd in memory.h
-struct CljObjectPool;
+// Note: CljPersistentVector is typedef'd in vector.h
+struct CljPersistentVector;
 
 /**
  * @brief Exception handler for TRY/CATCH blocks.
@@ -74,7 +74,7 @@ struct CljObjectPool;
 typedef struct ExceptionHandler {
     jmp_buf jump_state;                  // Jump target for longjmp
     struct ExceptionHandler *next;       // Previous handler (stack)
-    CljObjectPool *pool;                 // Autorelease pool for cleanup after longjmp
+    struct CljPersistentVector *pool;                 // Autorelease pool (weak vector) for cleanup after longjmp
     CLJException *exception;              // Exception stored in handler (replaces g_current_exception)
 } ExceptionHandler;
 

@@ -6,6 +6,7 @@
 #include <math.h>
 #include "object.h"
 #include "strings.h"
+#include "namespace.h"  // For CljNamespace definition
 #include "clj_strings.h"
 #include "value.h"
 #include "symbol.h"
@@ -134,6 +135,7 @@ const char* to_string(CljObject *v) {
 
         case CLJ_VECTOR:
         case CLJ_TRANSIENT_VECTOR:
+        case CLJ_WEAK_VECTOR:
             {
                 CljPersistentVector *vec = as_vector(v);
                 if (!vec) return strdup("[]");

@@ -50,7 +50,7 @@ CljString* make_clj_string(const char *str);
  * @param str String to create
  * @return CljString object (caller must release)
  */
-struct CljString* make_string(const char *str);
+CljString* make_string(const char *str);
 
 /**
  * @brief Get string length

@@ -21,10 +21,18 @@
 #include <stdbool.h>
 
 // Forward declarations to avoid circular dependencies
+// Note: These are only needed when runtime.h is included before namespace.h/symbol.h
+#ifndef TINY_CLJ_NAMESPACE_H
 struct CljNamespace;
-typedef struct CljNamespace CljNamespace;
+// Don't typedef here - let namespace.h define it to avoid redefinition warning
+#endif
+// SymbolEntry is defined in symbol.h - only forward declare if not included
+#ifndef TINY_CLJ_SYMBOL_H
 struct SymbolEntry;
-typedef struct SymbolEntry SymbolEntry;
+// Don't typedef here - let symbol.h define it to avoid redefinition warning
+#else
+// symbol.h already included - SymbolEntry is fully defined
+#endif
 
 // Memory allocation macros
 // Allocate `count` objects of type `type` on the stack
@@ -48,17 +56,17 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 // Runtime state management
 typedef struct TinyClJRuntime {
     // Namespaces
-    CljNamespace *ns_registry;
-    CljNamespace *clojure_core_cache;
+    struct CljNamespace *ns_registry;
+    struct CljNamespace *clojure_core_cache;
     
     // Symbol Table
-    SymbolEntry *symbol_table;
+    struct SymbolEntry *symbol_table;
     
     // Meta Registry
     CljMap *meta_registry;
     
-    // Autorelease Pool Stack
-    void *pool_stack[MAX_POOL_DEPTH];
+    // Autorelease Pool Stack (direct weak vectors)
+    CljPersistentVector *pool_stack[MAX_POOL_DEPTH];
     int pool_stack_top;
     
     // Builtins

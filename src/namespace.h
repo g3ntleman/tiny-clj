@@ -3,23 +3,19 @@
 
 #include "object.h"
 #include "memory.h"
+#include "symbol.h"  // Include symbol.h for CljSymbol definition
 #include <stdbool.h>
 
-// Forward declaration to avoid circular dependency
-// If symbol.h is already included, CljSymbol is fully defined and can be used directly
-// Otherwise, use struct CljSymbol (incomplete type, but OK for pointers)
-#ifndef TINY_CLJ_SYMBOLS_H
-struct CljSymbol;
-typedef struct CljSymbol CljSymbol;
-#else
-// symbol.h already included, CljSymbol is fully defined - can access members
-#endif
+// Include map.h for CljMap type
+// Note: This may create a circular dependency if value.h includes namespace.h
+// But since CljMap is an anonymous struct typedef, we can't use forward declaration
+#include "map.h"
 
 // Namespace structure
 typedef struct CljNamespace {
     CljSymbol *name;          // z.B. 'user', 'math' (Symbol instead of CljObject* for type safety)
-    CljObject *mappings;      // Map: Symbol → CljObject (def, defn, vars)
-    CljObject *aliases;       // Map: Symbol → Symbol (Alias → vollständiger Namespace-Name)
+    CljMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
+    CljMap *aliases;          // Map: Symbol → Symbol (Alias → vollständiger Namespace-Name)
     const char *filename;    // optional: zugeordnetes File
     struct CljNamespace *next;
 } CljNamespace;
@@ -33,7 +29,7 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    struct CljObjectPool *pool;
+    struct CljPersistentVector *pool;
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
     

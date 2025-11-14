@@ -16,7 +16,7 @@
 // Symbol resolution cache - uses array-map for DRY principle
 // Cache size: 16 entries (good balance between hit rate and memory usage)
 #define RESOLVE_CACHE_SIZE 16
-static CljObject *g_resolve_cache = NULL;
+static CljMap *g_resolve_cache = NULL;
 
 // Function to reset resolve cache (for test isolation)
 void ns_reset_resolve_cache(void) {
@@ -74,7 +74,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // CRITICAL: Always check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
-    ID v = map_get((CljMap*)current_ns->mappings, sym);
+    ID v = map_get((CljValue)current_ns->mappings, sym);
     if (v) {
         // Found in current namespace - update cache and return
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
@@ -87,7 +87,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // Not in current namespace - check cache (fast path for repeated lookups)
     if (g_resolve_cache) {
-        ID cached = map_get((CljMap*)g_resolve_cache, (CljValue)sym);
+        ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym);
         if (cached) {
             return cached;
         }
@@ -95,7 +95,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
 
     // Search clojure.core first (most common)
     if (g_runtime.clojure_core_cache && g_runtime.clojure_core_cache->mappings) {
-        v = (CljObject*)map_get((CljMap*)g_runtime.clojure_core_cache->mappings, (CljValue)sym);
+        v = (CljObject*)map_get((CljValue)g_runtime.clojure_core_cache->mappings, (CljValue)sym);
         if (v) {
             // Cache the result
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
@@ -109,7 +109,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     CljNamespace *cur = g_runtime.ns_registry;
     while (cur) {
         if (cur != g_runtime.clojure_core_cache && cur->mappings) {
-            v = (CljObject*)map_get((CljMap*)cur->mappings, (CljValue)sym);
+            v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
             if (v) {
                 // Cache the result
                 (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
@@ -406,8 +406,8 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
-    CljMap *new_mappings = map_assoc((CljMap*)ns->mappings, (ID)symbol, (ID)value);
-    if (new_mappings != (CljMap*)ns->mappings) {
+    CljMap *new_mappings = map_assoc(ns->mappings, (ID)symbol, (ID)value);
+    if (new_mappings != ns->mappings) {
         // Map was copied (COW) - update reference
         RELEASE(ns->mappings);
         ns->mappings = new_mappings;
@@ -435,7 +435,7 @@ CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
     
     // Look up alias in aliases map
-    CljObject *ns_name = (CljObject*)map_get((CljMap*)ns->aliases, (CljValue)alias);
+    CljObject *ns_name = (CljObject*)map_get((CljValue)ns->aliases, (CljValue)alias);
     return ns_name;
 }
 
@@ -457,11 +457,11 @@ void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
     // NOTE: map_assoc() already does RETAIN(ns_name) and RETAIN(alias) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->aliases
-    CljMap *new_aliases = map_assoc((CljMap*)ns->aliases, (ID)alias, (ID)ns_name);
-    if (new_aliases != (CljMap*)ns->aliases) {
+    CljMap *new_aliases = map_assoc(ns->aliases, (ID)alias, (ID)ns_name);
+    if (new_aliases != ns->aliases) {
         // Map was copied (COW) - update reference
-        RELEASE((CljObject*)ns->aliases);
-        ns->aliases = (CljObject*)new_aliases;
+        RELEASE((ID)ns->aliases);
+        ns->aliases = new_aliases;
         // new_aliases is already retained by map_assoc
     }
     // If new_aliases == ns->aliases, it was in-place mutation (RC=1), no update needed

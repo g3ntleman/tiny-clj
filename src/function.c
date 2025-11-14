@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "function.h"
+#include "value.h"  // For IS_IMMEDIATE macro
 #include "memory.h"
 #include "runtime.h"
 #include "object.h"
@@ -22,7 +23,7 @@
 static int allocate_function_params(CljFunction *func, ID *params, int param_count) {
     if (param_count > 0 && params) {
         // Create vector for parameters
-        CljPersistentVector *vec = make_vector(param_count, false);
+        CljPersistentVector *vec = make_vector(param_count, CLJ_VECTOR);
         if (!vec) {
             DEALLOC(func);
             throw_oom();

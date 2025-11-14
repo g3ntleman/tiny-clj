@@ -9,6 +9,7 @@
 #include "object.h"
 #include "value.h"
 #include "symbol.h"
+#include "namespace.h"  // For CljNamespace definition
 #include "vector.h"
 #include "map.h"
 #include "strings.h"
@@ -64,7 +65,9 @@ bool clj_equal(ID a, ID b) {
             return strcmp(str_a->data, str_b->data) == 0;
         }
         
-        case CLJ_VECTOR: {
+        case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR: {
             CljPersistentVector *vec_a = (CljPersistentVector*)a;
             CljPersistentVector *vec_b = (CljPersistentVector*)b;
             if (!vec_a || !vec_b) return false;

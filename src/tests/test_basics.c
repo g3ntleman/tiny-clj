@@ -124,7 +124,7 @@ TEST(test_array_map_builtin) {
         
         TEST_ASSERT_NOT_NULL(eval1);
         TEST_ASSERT_EQUAL_INT(CLJ_MAP, eval1->type);
-        TEST_ASSERT_EQUAL_INT(1, map_count(eval1));
+        TEST_ASSERT_EQUAL_INT(1, map_count((CljMap*)eval1));
         // result1 and eval1 are automatically managed by parse() and eval_parsed()
 
         // Test multiple pairs: (array-map "a" 1 "b" 2)
@@ -849,7 +849,7 @@ TEST(test_def_isolated_problem) {
     TEST_ASSERT_NOT_NULL(test_value_sym);
     TEST_ASSERT_TRUE(test_value_sym && TAG(test_value_sym) == CLJ_SYMBOL);
     
-    CljObject *resolved = ns_resolve(g_test_eval_state, test_value_sym);
+    CljObject *resolved = ns_resolve(g_test_eval_state, (CljSymbol*)test_value_sym);
     if (resolved) {
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "Resolved value should be a fixnum");
         TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)resolved), "Resolved value should be 42");

@@ -273,6 +273,7 @@ add_executable(unity-tests
     src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
     src/tests/test_basics.c
+    src/tests/test_list.c
     src/tests/test_namespace.c
     src/tests/test_symbol_interning.c
     src/tests/test_core_initialization.c
@@ -338,11 +339,21 @@ add_executable(unity-tests
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE
 apply_common_settings(unity-tests)
-set_target_properties(unity-tests PROPERTIES
-    COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-    LINK_FLAGS "-fsanitize=address"
-    COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
-)
+# Option to disable ASAN for profiling
+option(ENABLE_ASAN "Enable AddressSanitizer for unity-tests" ON)
+if(ENABLE_ASAN)
+    set_target_properties(unity-tests PROPERTIES
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
+        LINK_FLAGS "-fsanitize=address"
+        COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+    )
+else()
+    set_target_properties(unity-tests PROPERTIES
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
+        LINK_FLAGS ""
+        COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+    )
+endif()
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c
 

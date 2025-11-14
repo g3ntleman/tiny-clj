@@ -2,7 +2,9 @@
 #define TINY_CLJ_MAP_H
 
 #include "object.h"
-#include "value.h"
+// Forward declaration for IS_IMMEDIATE macro (defined in value.h)
+// We can't include value.h here due to circular dependency: map.h -> value.h -> namespace.h -> map.h
+// map.c includes value.h where IS_IMMEDIATE is actually needed
 
 // CljMap struct definition
 typedef struct {
