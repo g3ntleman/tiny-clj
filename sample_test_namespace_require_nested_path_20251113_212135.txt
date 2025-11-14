@@ -1,0 +1,443 @@
+Analysis of sampling unity-tests (pid 80962) every 1 millisecond
+Process:         unity-tests [80962]
+Path:            /Users/USER/*/unity-tests
+Load Address:    0x100588000
+Identifier:      unity-tests
+Version:         0
+Code Type:       ARM64
+Platform:        macOS
+Parent Process:  gtimeout [80959]
+Target Type:     live task
+
+Date/Time:       2025-11-13 21:21:36.204 +0100
+Launch Time:     2025-11-04 07:32:43.180 +0100
+OS Version:      macOS 15.7.1 (24G231)
+Report Version:  7
+Analysis Tool:   /usr/bin/sample
+
+Physical footprint:         19.7M
+Physical footprint (peak):  19.8M
+Idle exit:                  untracked
+----
+
+Call graph:
+    8502 Thread_25332122   DispatchQueue_1: com.apple.main-thread  (serial)
+      8502 start  (in dyld) + 6076  [0x18e086b98]
+        8502 main  (in unity-tests) + 1320  [0x100589770]
+          8502 run_specific_test  (in unity-tests) + 76  [0x100589d6c]
+            8502 run_filtered_tests  (in unity-tests) + 944  [0x10058c940]
+              8502 UnityDefaultTestRun  (in unity-tests) + 404  [0x1005e5248]
+                7300 test_special_form_and  (in unity-tests) + 540  [0x1005915dc]
+                + 2855 throw_exception_object  (in unity-tests) + 344  [0x1005e74a4]
+                + ! 2763 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100d9f094]
+                + ! : 1909 __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib) + 88  [0x100d98c40]
+                + ! : | 1430 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 116  [0x100db9538]
+                + ! : | + 1420 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 132  [0x100db9f5c]
+                + ! : | + ! 1413 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 28  [0x100db0e2c]
+                + ! : | + ! : 1408 __sanitizer::internal_mmap(void*, unsigned long, int, int, int, unsigned long long)  (in libclang_rt.asan_osx_dynamic.dylib) + 40  [0x100dadb50]
+                + ! : | + ! : | 1408 __mmap  (in libsystem_kernel.dylib) + 8  [0x18e3e68d8]
+                + ! : | + ! : 5 __sanitizer::internal_mmap(void*, unsigned long, int, int, int, unsigned long long)  (in libclang_rt.asan_osx_dynamic.dylib) + 40  [0x100dadb50]
+                + ! : | + ! 3 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 40  [0x100db0e38]
+                + ! : | + ! : 3 __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100dadaec]
+                + ! : | + ! 3 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,8  [0x100db0e2c,0x100db0e18]
+                + ! : | + ! 1 __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 60  [0x100dadb20]
+                + ! : | + 9 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 136,60,...  [0x100db9f60,0x100db9f14,...]
+                + ! : | + 1 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100db0e40]
+                + ! : | 305 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 784  [0x100d97154]
+                + ! : | + 304 _platform_memset  (in libsystem_platform.dylib) + 140,160,...  [0x18e46107c,0x18e461090,...]
+                + ! : | + 1 DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 12  [0x100de29d0]
+                + ! : | 121 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 764  [0x100d97140]
+                + ! : | + 119 _platform_memset  (in libsystem_platform.dylib) + 140,12,...  [0x18e46107c,0x18e460ffc,...]
+                + ! : | + 2 DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 0,8  [0x100de29c4,0x100de29cc]
+                + ! : | 16 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 772,60,...  [0x100d97148,0x100d96e80,...]
+                + ! : | 15 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 68  [0x100db9508]
+                + ! : | + 5 DYLD-STUB$$sysconf  (in libclang_rt.asan_osx_dynamic.dylib) + 8,0  [0x100de322c,0x100de3224]
+                + ! : | + 5 sysconf  (in libsystem_c.dylib) + 808  [0x18e2c3a68]
+                + ! : | + ! 5 getpagesize  (in libsystem_c.dylib) + 40,128  [0x18e2c6030,0x18e2c6088]
+                + ! : | + 5 sysconf  (in libsystem_c.dylib) + 92,48,...  [0x18e2c379c,0x18e2c3770,...]
+                + ! : | 14 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100db94f4]
+                + ! : | + 6 sysconf  (in libsystem_c.dylib) + 808  [0x18e2c3a68]
+                + ! : | + ! 6 getpagesize  (in libsystem_c.dylib) + 40,0,...  [0x18e2c6030,0x18e2c6008,...]
+                + ! : | + 6 sysconf  (in libsystem_c.dylib) + 0,92,...  [0x18e2c3740,0x18e2c379c,...]
+                + ! : | + 1 DYLD-STUB$$sysconf  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100de322c]
+                + ! : | + 1 __sanitizer::GetMmapGranularity()  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100db0d24]
+                + ! : | 3 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 240  [0x100db9fc8]
+                + ! : | 2 __asan::UnpoisonStack(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d9efe8]
+                + ! : | 2 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 20  [0x100db94d8]
+                + ! : | 1 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 96  [0x100db9524]
+                + ! : |   1 __sanitizer::DecreaseTotalMmap(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100da6338]
+                + ! : 845 __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib) + 52  [0x100d98c1c]
+                + ! : | 841 __sigaltstack  (in libsystem_kernel.dylib) + 8,0  [0x18e3e92c4,0x18e3e92bc]
+                + ! : | 2 DYLD-STUB$$__sigaltstack  (in libsystem_c.dylib) + 8  [0x18e331574]
+                + ! : | 1 DYLD-STUB$$sigaltstack  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100de2fac]
+                + ! : | 1 sigaltstack  (in libsystem_c.dylib) + 0  [0x18e2ebcd8]
+                + ! : 4 __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib) + 52,28,...  [0x100d98c1c,0x100d98c04,...]
+                + ! : 2 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 812  [0x100d97170]
+                + ! : 1 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100d9f094]
+                + ! : 1 __sigaltstack  (in libsystem_kernel.dylib) + 40  [0x18e3e92e4]
+                + ! : 1 sigaltstack  (in libsystem_c.dylib) + 52  [0x18e2ebd0c]
+                + ! 62 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 284  [0x100d9f180]
+                + ! : 54 _platform_memset  (in libsystem_platform.dylib) + 140,12,...  [0x18e46107c,0x18e460ffc,...]
+                + ! : 5 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 0,624,...  [0x100d96e44,0x100d970b4,...]
+                + ! : 3 DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 8,0  [0x100de29cc,0x100de29c4]
+                + ! 16 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 288  [0x100d9f184]
+                + ! : 16 __asan::GetCurrentThread()  (in libclang_rt.asan_osx_dynamic.dylib) + 16  [0x100da1798]
+                + ! :   13 pthread_getspecific  (in libsystem_pthread.dylib) + 0  [0x18e422bf0]
+                + ! :   3 __asan::AsanTSDGet()  (in libclang_rt.asan_osx_dynamic.dylib) + 4,16  [0x100d98cf8,0x100d98d04]
+                + ! 6 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 64  [0x100d9f0a4]
+                + ! : 5 __asan::GetCurrentThread()  (in libclang_rt.asan_osx_dynamic.dylib) + 16  [0x100da1798]
+                + ! : | 4 pthread_getspecific  (in libsystem_pthread.dylib) + 0  [0x18e422bf0]
+                + ! : | 1 __asan::AsanTSDGet()  (in libclang_rt.asan_osx_dynamic.dylib) + 16  [0x100d98d04]
+                + ! : 1 __asan::GetCurrentThread()  (in libclang_rt.asan_osx_dynamic.dylib) + 4  [0x100da178c]
+                + ! 3 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 864  [0x100d971a4]
+                + ! 3 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 320  [0x100d9f1a4]
+                + ! 2 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 108  [0x100d9f0d0]
+                + !   2 __asan::AsanThread::stack_top()  (in libclang_rt.asan_osx_dynamic.dylib) + 0,60  [0x100da1a3c,0x100da1a78]
+                + 2619 throw_exception_object  (in unity-tests) + 356  [0x1005e74b0]
+                + ! 2614 wrap_longjmp  (in libclang_rt.asan_osx_dynamic.dylib) + 28  [0x100d8dfbc]
+                + ! : 2552 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100d9f094]
+                + ! : | 1714 __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib) + 88  [0x100d98c40]
+                + ! : | + 1270 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 116  [0x100db9538]
+                + ! : | + ! 1260 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 132  [0x100db9f5c]
+                + ! : | + ! : 1250 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 28  [0x100db0e2c]
+                + ! : | + ! : | 1243 __sanitizer::internal_mmap(void*, unsigned long, int, int, int, unsigned long long)  (in libclang_rt.asan_osx_dynamic.dylib) + 40  [0x100dadb50]
+                + ! : | + ! : | + 1240 __mmap  (in libsystem_kernel.dylib) + 8,0  [0x18e3e68d8,0x18e3e68d0]
+                + ! : | + ! : | + 3 DYLD-STUB$$__mmap  (in libclang_rt.asan_osx_dynamic.dylib) + 8,0  [0x100de1f1c,0x100de1f14]
+                + ! : | + ! : | 7 __sanitizer::internal_mmap(void*, unsigned long, int, int, int, unsigned long long)  (in libclang_rt.asan_osx_dynamic.dylib) + 40,28  [0x100dadb50,0x100dadb44]
+                + ! : | + ! : 7 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,8  [0x100db0e2c,0x100db0e18]
+                + ! : | + ! : 2 __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 60  [0x100dadb20]
+                + ! : | + ! : 1 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 40  [0x100db0e38]
+                + ! : | + ! :   1 __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100dadaec]
+                + ! : | + ! 6 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 104,44,...  [0x100db9f40,0x100db9f04,...]
+                + ! : | + ! 2 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 148  [0x100db9f6c]
+                + ! : | + ! : 2 __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100dadaec]
+                + ! : | + ! 1 __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100db0e40]
+                + ! : | + ! 1 __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 60  [0x100dadb20]
+                + ! : | + 304 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 784  [0x100d97154]
+                + ! : | + ! 302 _platform_memset  (in libsystem_platform.dylib) + 140,160,...  [0x18e46107c,0x18e461090,...]
+                + ! : | + ! 2 DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 0,8  [0x100de29c4,0x100de29cc]
+                + ! : | + 87 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 764  [0x100d97140]
+                + ! : | + ! 85 _platform_memset  (in libsystem_platform.dylib) + 140,28,...  [0x18e46107c,0x18e46100c,...]
+                + ! : | + ! 2 DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 0,8  [0x100de29c4,0x100de29cc]
+                + ! : | + 13 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 44,656,...  [0x100d96e70,0x100d970d4,...]
+                + ! : | + 12 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 68  [0x100db9508]
+                + ! : | + ! 5 DYLD-STUB$$sysconf  (in libclang_rt.asan_osx_dynamic.dylib) + 8,0  [0x100de322c,0x100de3224]
+                + ! : | + ! 5 sysconf  (in libsystem_c.dylib) + 888,48,...  [0x18e2c3ab8,0x18e2c3770,...]
+                + ! : | + ! 2 sysconf  (in libsystem_c.dylib) + 808  [0x18e2c3a68]
+                + ! : | + !   2 getpagesize  (in libsystem_c.dylib) + 40,128  [0x18e2c6030,0x18e2c6088]
+                + ! : | + 10 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100db94f4]
+                + ! : | + ! 4 sysconf  (in libsystem_c.dylib) + 808  [0x18e2c3a68]
+                + ! : | + ! : 4 getpagesize  (in libsystem_c.dylib) + 0,40,...  [0x18e2c6008,0x18e2c6030,...]
+                + ! : | + ! 3 sysconf  (in libsystem_c.dylib) + 92,48  [0x18e2c379c,0x18e2c3770]
+                + ! : | + ! 1 __sanitizer::GetMmapGranularity()  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100db0d24]
+                + ! : | + ! 1 __sanitizer::GetPageSize()  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100dae6fc]
+                + ! : | + ! 1 getpagesize  (in libsystem_c.dylib) + 144  [0x18e2c6098]
+                + ! : | + 10 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 128,20,...  [0x100db9544,0x100db94d8,...]
+                + ! : | + 2 __asan::UnpoisonStack(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d9efe8]
+                + ! : | + 2 __sanitizer::DontDumpShadowMemory(unsigned long, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 4  [0x100db97f8]
+                + ! : | + 2 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 96  [0x100db9524]
+                + ! : | + ! 2 __sanitizer::DecreaseTotalMmap(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100da6330]
+                + ! : | + 1 __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 240  [0x100db9fc8]
+                + ! : | + 1 sysconf  (in libsystem_c.dylib) + 908  [0x18e2c3acc]
+                + ! : | 825 __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib) + 52  [0x100d98c1c]
+                + ! : | + 823 __sigaltstack  (in libsystem_kernel.dylib) + 8,0  [0x18e3e92c4,0x18e3e92bc]
+                + ! : | + 2 sigaltstack  (in libsystem_c.dylib) + 0  [0x18e2ebcd8]
+                + ! : | 7 __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib) + 52,180,...  [0x100d98c1c,0x100d98c9c,...]
+                + ! : | 2 sigaltstack  (in libsystem_c.dylib) + 52  [0x18e2ebd0c]
+                + ! : | 1 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 812  [0x100d97170]
+                + ! : | 1 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100d9f094]
+                + ! : | 1 __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 160  [0x100db9564]
+                + ! : | 1 __sigaltstack  (in libsystem_kernel.dylib) + 40  [0x18e3e92e4]
+                + ! : 44 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 284  [0x100d9f180]
+                + ! : | 37 _platform_memset  (in libsystem_platform.dylib) + 140,0,...  [0x18e46107c,0x18e460ff0,...]
+                + ! : | 5 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 44,344,...  [0x100d96e70,0x100d96f9c,...]
+                + ! : | 2 DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100de29cc]
+                + ! : 6 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 64  [0x100d9f0a4]
+                + ! : | 6 __asan::GetCurrentThread()  (in libclang_rt.asan_osx_dynamic.dylib) + 16  [0x100da1798]
+                + ! : |   5 pthread_getspecific  (in libsystem_pthread.dylib) + 0  [0x18e422bf0]
+                + ! : |   1 DYLD-STUB$$pthread_getspecific  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100de2c74]
+                + ! : 5 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 288  [0x100d9f184]
+                + ! : | 5 __asan::GetCurrentThread()  (in libclang_rt.asan_osx_dynamic.dylib) + 16  [0x100da1798]
+                + ! : |   3 pthread_getspecific  (in libsystem_pthread.dylib) + 0  [0x18e422bf0]
+                + ! : |   1 DYLD-STUB$$pthread_getspecific  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100de2c7c]
+                + ! : |   1 __asan::AsanTSDGet()  (in libclang_rt.asan_osx_dynamic.dylib) + 4  [0x100d98cf8]
+                + ! : 3 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 8,36,...  [0x100d9f06c,0x100d9f088,...]
+                + ! : 2 __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 864  [0x100d971a4]
+                + ! : 2 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 108  [0x100d9f0d0]
+                + ! :   1 __asan::AsanThread::stack_top()  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100da1a3c]
+                + ! :   1 __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 128  [0x100d9f0e4]
+                + ! 3 longjmp  (in libsystem_platform.dylib) + 0,12  [0x18e45f7f8,0x18e45f804]
+                + ! 2 wrap_longjmp  (in libclang_rt.asan_osx_dynamic.dylib) + 28  [0x100d8dfbc]
+                + 1230 longjmp  (in libsystem_platform.dylib) + 36  [0x18e45f81c]
+                + ! 1213 wrap_sigprocmask  (in libclang_rt.asan_osx_dynamic.dylib) + 136  [0x100d81288]
+                + ! : 1213 sigprocmask  (in libsystem_kernel.dylib) + 8,0  [0x18e3e9298,0x18e3e9290]
+                + ! 15 wrap_sigprocmask  (in libclang_rt.asan_osx_dynamic.dylib) + 20,0,...  [0x100d81214,0x100d81200,...]
+                + ! 2 wrap_sigprocmask  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100d81230]
+                + !   2 __asan::AsanInited()  (in libclang_rt.asan_osx_dynamic.dylib) + 12,16  [0x100d9d7fc,0x100d9d800]
+                + 592 longjmp  (in libsystem_platform.dylib) + 44  [0x18e45f824]
+                + ! 591 __sigreturn  (in libsystem_kernel.dylib) + 8  [0x18e3f1564]
+                + ! 1 _longjmp  (in libsystem_platform.dylib) + 44  [0x18e45f774]
+                + 3 throw_exception_object  (in unity-tests) + 292,316,...  [0x1005e7470,0x1005e7488,...]
+                + 1 wrap_sigprocmask  (in libclang_rt.asan_osx_dynamic.dylib) + 220  [0x100d812dc]
+                1186 test_special_form_and  (in unity-tests) + 532  [0x1005915d4]
+                + 1178 autorelease_pool_pop  (in unity-tests) + 384  [0x10061d458]
+                + ! 742 wrap_printf  (in libclang_rt.asan_osx_dynamic.dylib) + 120  [0x100d745ac]
+                + ! : 683 vfprintf_l  (in libsystem_c.dylib) + 156  [0x18e2c9a5c]
+                + ! : | 214 __vfprintf  (in libsystem_c.dylib) + 11156  [0x18e2bc5fc]
+                + ! : | + 147 __sfvwrite  (in libsystem_c.dylib) + 372  [0x18e2bcaf0]
+                + ! : | + ! 60 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 156  [0x100dddd9c]
+                + ! : | + ! : 56 __sanitizer_internal_memmove  (in libclang_rt.asan_osx_dynamic.dylib) + 388,52,...  [0x100dabff8,0x100dabea8,...]
+                + ! : | + ! : 4 OUTLINED_FUNCTION_15  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d93a90]
+                + ! : | + ! 47 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 24,132,...  [0x100dddd18,0x100dddd84,...]
+                + ! : | + ! 27 __sfvwrite  (in libsystem_c.dylib) + 180,156,...  [0x18e2bca30,0x18e2bca18,...]
+                + ! : | + ! 4 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 112  [0x100dddd70]
+                + ! : | + ! : 4 <deduplicated_symbol>  (in libclang_rt.asan_osx_dynamic.dylib) + 16  [0x100d92540]
+                + ! : | + ! 3 DYLD-STUB$$mkdtempat_np  (in libsystem_c.dylib) + 8  [0x18e331d64]
+                + ! : | + ! 2 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 40  [0x100dddd28]
+                + ! : | + ! : 2 <deduplicated_symbol>  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d92c90]
+                + ! : | + ! 2 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 104  [0x100dddd68]
+                + ! : | + ! : 2 <deduplicated_symbol>  (in libclang_rt.asan_osx_dynamic.dylib) + 4  [0x100d92d80]
+                + ! : | + ! 1 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 140  [0x100dddd8c]
+                + ! : | + ! : 1 <deduplicated_symbol>  (in libclang_rt.asan_osx_dynamic.dylib) + 4  [0x100d92d80]
+                + ! : | + ! 1 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 404  [0x100ddde94]
+                + ! : | + !   1 <deduplicated_symbol>  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d92b74]
+                + ! : | + 37 __sfvwrite  (in libsystem_c.dylib) + 224  [0x18e2bca5c]
+                + ! : | + ! 37 __sflush  (in libsystem_c.dylib) + 232  [0x18e2c7d6c]
+                + ! : | + !   37 _swrite  (in libsystem_c.dylib) + 108  [0x18e2c9ccc]
+                + ! : | + !     36 __swrite  (in libsystem_c.dylib) + 24  [0x18e2e8d78]
+                + ! : | + !     : 36 __write_nocancel  (in libsystem_kernel.dylib) + 8  [0x18e3e9aa4]
+                + ! : | + !     1 __swrite  (in libsystem_c.dylib) + 24  [0x18e2e8d78]
+                + ! : | + 12 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 180,172  [0x100ddddb4,0x100ddddac]
+                + ! : | + 9 __vfprintf  (in libsystem_c.dylib) + 11156  [0x18e2bc5fc]
+                + ! : | + ! 9 __sfvwrite  (in libsystem_c.dylib) + 48,168,...  [0x18e2bc9ac,0x18e2bca24,...]
+                + ! : | + 8 __sfvwrite  (in libsystem_c.dylib) + 912,0,...  [0x18e2bcd0c,0x18e2bc97c,...]
+                + ! : | + 1 __sfvwrite  (in libsystem_c.dylib) + 204  [0x18e2bca48]
+                + ! : | +   1 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 156  [0x100dddd9c]
+                + ! : | +     1 __sanitizer_internal_memmove  (in libclang_rt.asan_osx_dynamic.dylib) + 408  [0x100dac00c]
+                + ! : | 196 __vfprintf  (in libsystem_c.dylib) + 328,336,...  [0x18e2b9bb0,0x18e2b9bb8,...]
+                + ! : | 188 __vfprintf  (in libsystem_c.dylib) + 11400  [0x18e2bc6f0]
+                + ! : | + 104 __sfvwrite  (in libsystem_c.dylib) + 372  [0x18e2bcaf0]
+                + ! : | + ! 49 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 596  [0x100dddf54]
+                + ! : | + ! : 23 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 812  [0x100d97cc4]
+                + ! : | + ! : | 23 __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 676,1240,...  [0x100dad024,0x100dad258,...]
+                + ! : | + ! : 16 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 96,16,...  [0x100d979f8,0x100d979a8,...]
+                + ! : | + ! : 5 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 720  [0x100d97c68]
+                + ! : | + ! : | 5 __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 8,52,...  [0x100d64cf4,0x100d64d20,...]
+                + ! : | + ! : 3 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 732  [0x100d97c74]
+                + ! : | + ! : | 3 __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 52,280  [0x100d64d20,0x100d64e04]
+                + ! : | + ! : 2 __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 1284  [0x100dad284]
+                + ! : | + ! 27 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 436  [0x100dddeb4]
+                + ! : | + ! : 13 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 812  [0x100d97cc4]
+                + ! : | + ! : | 13 __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 1240,112,...  [0x100dad258,0x100dacdf0,...]
+                + ! : | + ! : 7 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 748,796,...  [0x100d97c84,0x100d97cb4,...]
+                + ! : | + ! : 3 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 720  [0x100d97c68]
+                + ! : | + ! : | 3 __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 8,280  [0x100d64cf4,0x100d64e04]
+                + ! : | + ! : 2 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 732  [0x100d97c74]
+                + ! : | + ! : | 2 __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100d64cf4]
+                + ! : | + ! : 2 __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 1284  [0x100dad284]
+                + ! : | + ! 11 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 156  [0x100dddd9c]
+                + ! : | + ! : 10 __sanitizer_internal_memmove  (in libclang_rt.asan_osx_dynamic.dylib) + 0,344,...  [0x100dabe74,0x100dabfcc,...]
+                + ! : | + ! : 1 OUTLINED_FUNCTION_15  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d93a90]
+                + ! : | + ! 11 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 152,236,...  [0x100dddd98,0x100ddddec,...]
+                + ! : | + ! 3 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 840  [0x100d97ce0]
+                + ! : | + ! 2 __sfvwrite  (in libsystem_c.dylib) + 484  [0x18e2bcb60]
+                + ! : | + ! 1 DYLD-STUB$$mkdtempat_np  (in libsystem_c.dylib) + 8  [0x18e331d64]
+                + ! : | + 78 __sfvwrite  (in libsystem_c.dylib) + 224  [0x18e2bca5c]
+                + ! : | + ! 78 __sflush  (in libsystem_c.dylib) + 232  [0x18e2c7d6c]
+                + ! : | + !   78 _swrite  (in libsystem_c.dylib) + 108  [0x18e2c9ccc]
+                + ! : | + !     78 __swrite  (in libsystem_c.dylib) + 24  [0x18e2e8d78]
+                + ! : | + !       78 __write_nocancel  (in libsystem_kernel.dylib) + 8  [0x18e3e9aa4]
+                + ! : | + 3 __sfvwrite  (in libsystem_c.dylib) + 0,904,...  [0x18e2bc97c,0x18e2bcd04,...]
+                + ! : | + 2 __vfprintf  (in libsystem_c.dylib) + 11400  [0x18e2bc6f0]
+                + ! : | + ! 2 __sfvwrite  (in libsystem_c.dylib) + 88,104  [0x18e2bc9d4,0x18e2bc9e4]
+                + ! : | + 1 wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib) + 180  [0x100ddddb4]
+                + ! : | 29 __vfprintf  (in libsystem_c.dylib) + 168  [0x18e2b9b10]
+                + ! : | + 14 localeconv_l  (in libsystem_c.dylib) + 60  [0x18e2bc824]
+                + ! : | + ! 10 os_unfair_lock_lock  (in libsystem_platform.dylib) + 4  [0x18e45eb6c]
+                + ! : | + ! 4 DYLD-STUB$$os_unfair_lock_lock  (in libsystem_c.dylib) + 8  [0x18e331e74]
+                + ! : | + 12 localeconv_l  (in libsystem_c.dylib) + 256,44,...  [0x18e2bc8e8,0x18e2bc814,...]
+                + ! : | + 3 localeconv_l  (in libsystem_c.dylib) + 308  [0x18e2bc91c]
+                + ! : | +   3 os_unfair_lock_unlock  (in libsystem_platform.dylib) + 0  [0x18e45e884]
+                + ! : | 22 __v2printf  (in libsystem_c.dylib) + 356,52,...  [0x18e2b9824,0x18e2b96f4,...]
+                + ! : | 19 __vfprintf  (in libsystem_c.dylib) + 5396  [0x18e2baf7c]
+                + ! : | + 19 __ultoa  (in libsystem_c.dylib) + 52,248,...  [0x18e2bcdc4,0x18e2bce88,...]
+                + ! : | 10 __vfprintf  (in libsystem_c.dylib) + 11432  [0x18e2bc710]
+                + ! : | + 7 wrap_free  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d95404]
+                + ! : | + 2 DYLD-STUB$$free  (in libsystem_c.dylib) + 8  [0x18e3319f4]
+                + ! : | + 1 wrap_free  (in libclang_rt.asan_osx_dynamic.dylib) + 36  [0x100d95428]
+                + ! : | +   1 __asan::AsanInitFromRtl()  (in libclang_rt.asan_osx_dynamic.dylib) + 12  [0x100d9ef10]
+                + ! : | 3 __xvprintf  (in libsystem_c.dylib) + 12,368  [0x18e2c9a88,0x18e2c9bec]
+                + ! : | 2 localeconv_l  (in libsystem_c.dylib) + 324  [0x18e2bc92c]
+                + ! : 26 vfprintf_l  (in libsystem_c.dylib) + 128  [0x18e2c9a40]
+                + ! : | 16 flockfile  (in libsystem_c.dylib) + 40  [0x18e2c7c70]
+                + ! : | + 9 _pthread_mutex_firstfit_lock_slow  (in libsystem_pthread.dylib) + 40,8,...  [0x18e42278c,0x18e42276c,...]
+                + ! : | + 5 _pthread_mutex_lock_init_slow  (in libsystem_pthread.dylib) + 24,76  [0x18e422478,0x18e4224ac]
+                + ! : | + 2 pthread_mutex_lock  (in libsystem_pthread.dylib) + 12,168  [0x18e422364,0x18e422400]
+                + ! : | 4 flockfile  (in libsystem_c.dylib) + 44  [0x18e2c7c74]
+                + ! : | + 4 __error  (in libsystem_kernel.dylib) + 0  [0x18e3e65fc]
+                + ! : | 2 flockfile  (in libsystem_c.dylib) + 24  [0x18e2c7c60]
+                + ! : | + 2 __error  (in libsystem_kernel.dylib) + 0  [0x18e3e65fc]
+                + ! : | 2 flockfile  (in libsystem_c.dylib) + 0  [0x18e2c7c48]
+                + ! : | 1 _pthread_mutex_firstfit_lock_slow  (in libsystem_pthread.dylib) + 312  [0x18e42289c]
+                + ! : | 1 _pthread_mutex_lock_init_slow  (in libsystem_pthread.dylib) + 108  [0x18e4224cc]
+                + ! : 14 vfprintf_l  (in libsystem_c.dylib) + 168  [0x18e2c9a68]
+                + ! : | 6 funlockfile  (in libsystem_c.dylib) + 40  [0x18e2c7e1c]
+                + ! : | + 5 _pthread_mutex_firstfit_unlock_slow  (in libsystem_pthread.dylib) + 48,204,...  [0x18e422a48,0x18e422ae4,...]
+                + ! : | + 1 _pthread_mutex_unlock_init_slow  (in libsystem_pthread.dylib) + 72  [0x18e4229bc]
+                + ! : | 4 funlockfile  (in libsystem_c.dylib) + 24  [0x18e2c7e0c]
+                + ! : | + 2 DYLD-STUB$$__error  (in libsystem_c.dylib) + 0,8  [0x18e33139c,0x18e3313a4]
+                + ! : | + 2 __error  (in libsystem_kernel.dylib) + 0  [0x18e3e65fc]
+                + ! : | 4 funlockfile  (in libsystem_c.dylib) + 44  [0x18e2c7e20]
+                + ! : |   2 DYLD-STUB$$__error  (in libsystem_c.dylib) + 8  [0x18e3313a4]
+                + ! : |   2 __error  (in libsystem_kernel.dylib) + 0  [0x18e3e65fc]
+                + ! : 8 vprintf  (in libsystem_c.dylib) + 28,0  [0x18e2e4c34,0x18e2e4c18]
+                + ! : 6 __v2printf  (in libsystem_c.dylib) + 384,396,...  [0x18e2b9840,0x18e2b984c,...]
+                + ! : 3 vfprintf_l  (in libsystem_c.dylib) + 0,120,...  [0x18e2c99c0,0x18e2c9a38,...]
+                + ! : 2 DYLD-STUB$$vprintf  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100de33d4]
+                + ! 428 wrap_printf  (in libclang_rt.asan_osx_dynamic.dylib) + 108  [0x100d745a0]
+                + ! : 147 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 276,288,...  [0x100d732cc,0x100d732d8,...]
+                + ! : 94 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 268  [0x100d732c4]
+                + ! : | 94 __sanitizer_internal_memset  (in libclang_rt.asan_osx_dynamic.dylib) + 24,0,...  [0x100dac028,0x100dac010,...]
+                + ! : 80 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 56  [0x100d731f0]
+                + ! : | 80 __sanitizer::internal_strlen(char const*)  (in libclang_rt.asan_osx_dynamic.dylib) + 4,16,...  [0x100dac238,0x100dac244,...]
+                + ! : 35 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 992  [0x100d73598]
+                + ! : | 17 format_get_value_size(char, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 132  [0x100d914f0]
+                + ! : | + 17 __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 20,48,...  [0x100dac124,0x100dac140,...]
+                + ! : | 11 format_get_value_size(char, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 48  [0x100d9149c]
+                + ! : | + 11 __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,4,...  [0x100dac12c,0x100dac114,...]
+                + ! : | 7 format_get_value_size(char, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib) + 40,216,...  [0x100d91494,0x100d91544,...]
+                + ! : 23 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 2164  [0x100d73a2c]
+                + ! : | 9 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 40,696,...  [0x100d979c0,0x100d97c50,...]
+                + ! : | 7 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 812  [0x100d97cc4]
+                + ! : | + 7 __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 44,828,...  [0x100dacdac,0x100dad0bc,...]
+                + ! : | 6 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 732  [0x100d97c74]
+                + ! : | + 6 __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 8,280  [0x100d64cf4,0x100d64e04]
+                + ! : | 1 __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib) + 720  [0x100d97c68]
+                + ! : |   1 __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 8  [0x100d64cf4]
+                + ! : 20 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 200  [0x100d73280]
+                + ! : | 20 __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,4,...  [0x100dac12c,0x100dac114,...]
+                + ! : 13 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 416  [0x100d73358]
+                + ! : | 13 __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,48,...  [0x100dac12c,0x100dac140,...]
+                + ! : 9 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 712  [0x100d73480]
+                + ! : | 9 __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,4,...  [0x100dac12c,0x100dac114,...]
+                + ! : 7 printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib) + 864  [0x100d73518]
+                + ! :   7 __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 28,20  [0x100dac12c,0x100dac124]
+                + ! 6 wrap_printf  (in libclang_rt.asan_osx_dynamic.dylib) + 52,80,...  [0x100d74568,0x100d74584,...]
+                + ! 1 DYLD-STUB$$printf  (in unity-tests) + 4  [0x100625ef4]
+                + ! 1 wrap_printf  (in libclang_rt.asan_osx_dynamic.dylib) + 60  [0x100d74570]
+                + !   1 __asan::AsanInited()  (in libclang_rt.asan_osx_dynamic.dylib) + 12  [0x100d9d7fc]
+                + 8 autorelease_pool_pop  (in unity-tests) + 228,40,...  [0x10061d3bc,0x10061d300,...]
+                15 test_special_form_and  (in unity-tests) + 352,440,...  [0x100591520,0x100591578,...]
+                1 autorelease_pool_pop  (in unity-tests) + 1544  [0x10061d8e0]
+
+Total number in stack (recursive counted multiple, when >=5):
+        8       __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d96e44]
+        6       DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100de29c4]
+        6       __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d64cec]
+        6       __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100dadae4]
+        6       __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100dac110]
+        6       __sfvwrite  (in libsystem_c.dylib) + 0  [0x18e2bc97c]
+        6       _platform_memset  (in libsystem_platform.dylib) + 0  [0x18e460ff0]
+        5       __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100d9f064]
+        5       __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib) + 0  [0x100dacd80]
+        5       getpagesize  (in libsystem_c.dylib) + 0  [0x18e2c6008]
+        5       sysconf  (in libsystem_c.dylib) + 0  [0x18e2c3740]
+
+Sort by top of stack, same collapsed (when >= 5):
+        __mmap  (in libsystem_kernel.dylib)        2648
+        __sigaltstack  (in libsystem_kernel.dylib)        1666
+        sigprocmask  (in libsystem_kernel.dylib)        1213
+        _platform_memset  (in libsystem_platform.dylib)        901
+        __sigreturn  (in libsystem_kernel.dylib)        591
+        __vfprintf  (in libsystem_c.dylib)        196
+        printf_common(void*, char const*, char*)  (in libclang_rt.asan_osx_dynamic.dylib)        147
+        __write_nocancel  (in libsystem_kernel.dylib)        114
+        __sanitizer_internal_memset  (in libclang_rt.asan_osx_dynamic.dylib)        94
+        __sanitizer::internal_strlen(char const*)  (in libclang_rt.asan_osx_dynamic.dylib)        80
+        __sanitizer::internal_strchr(char const*, int)  (in libclang_rt.asan_osx_dynamic.dylib)        77
+        wrap_memcpy  (in libclang_rt.asan_osx_dynamic.dylib)        71
+        __sanitizer_internal_memmove  (in libclang_rt.asan_osx_dynamic.dylib)        67
+        __sfvwrite  (in libsystem_c.dylib)        51
+        __asan::PoisonShadow(unsigned long, unsigned long, unsigned char)  (in libclang_rt.asan_osx_dynamic.dylib)        47
+        __sanitizer::mem_is_zero(char const*, unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib)        47
+        __asan_region_is_poisoned  (in libclang_rt.asan_osx_dynamic.dylib)        35
+        __v2printf  (in libsystem_c.dylib)        28
+        pthread_getspecific  (in libsystem_pthread.dylib)        25
+        __asan::MemToShadow(unsigned long)  (in libclang_rt.asan_osx_dynamic.dylib)        20
+        sysconf  (in libsystem_c.dylib)        20
+        __sanitizer::MmapFixedNoReserve(unsigned long, unsigned long, char const*)  (in libclang_rt.asan_osx_dynamic.dylib)        19
+        __ultoa  (in libsystem_c.dylib)        19
+        getpagesize  (in libsystem_c.dylib)        18
+        wrap_sigprocmask  (in libclang_rt.asan_osx_dynamic.dylib)        16
+        test_special_form_and  (in unity-tests)        15
+        localeconv_l  (in libsystem_c.dylib)        14
+        __sanitizer::ReserveShadowMemoryRange(unsigned long, unsigned long, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib)        13
+        DYLD-STUB$$memset  (in libclang_rt.asan_osx_dynamic.dylib)        12
+        __sanitizer::MmapNamed(void*, unsigned long, int, int, char const*)  (in libclang_rt.asan_osx_dynamic.dylib)        12
+        __sanitizer::internal_mmap(void*, unsigned long, int, int, int, unsigned long long)  (in libclang_rt.asan_osx_dynamic.dylib)        12
+        DYLD-STUB$$sysconf  (in libclang_rt.asan_osx_dynamic.dylib)        11
+        __asan::PlatformUnpoisonStacks()  (in libclang_rt.asan_osx_dynamic.dylib)        11
+        <deduplicated_symbol>  (in libclang_rt.asan_osx_dynamic.dylib)        10
+        __error  (in libsystem_kernel.dylib)        10
+        __sanitizer::internal_iserror(unsigned long, int*)  (in libclang_rt.asan_osx_dynamic.dylib)        10
+        _pthread_mutex_firstfit_lock_slow  (in libsystem_pthread.dylib)        10
+        os_unfair_lock_lock  (in libsystem_platform.dylib)        10
+        __asan_handle_no_return  (in libclang_rt.asan_osx_dynamic.dylib)        9
+        autorelease_pool_pop  (in unity-tests)        9
+        vprintf  (in libsystem_c.dylib)        8
+        format_get_value_size(char, char const*, bool)  (in libclang_rt.asan_osx_dynamic.dylib)        7
+        wrap_free  (in libclang_rt.asan_osx_dynamic.dylib)        7
+        _pthread_mutex_lock_init_slow  (in libsystem_pthread.dylib)        6
+        sigaltstack  (in libsystem_c.dylib)        6
+        wrap_printf  (in libclang_rt.asan_osx_dynamic.dylib)        6
+        OUTLINED_FUNCTION_15  (in libclang_rt.asan_osx_dynamic.dylib)        5
+        __asan::AsanTSDGet()  (in libclang_rt.asan_osx_dynamic.dylib)        5
+        _pthread_mutex_firstfit_unlock_slow  (in libsystem_pthread.dylib)        5
+
+Binary Images:
+       0x100588000 -        0x1006561ff +unity-tests (0) <CBC0A5E7-35F0-4BF0-B952-89F70779704B> /Users/*/unity-tests
+       0x100d58000 -        0x100df8543 +libclang_rt.asan_osx_dynamic.dylib (1700.0.13.5) <B21B5046-5980-3245-8BE2-BE3E327ACBEF> /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/lib/darwin/libclang_rt.asan_osx_dynamic.dylib
+       0x18e02c000 -        0x18e07f893  libobjc.A.dylib (940.4) <E6F30EB4-FACF-3381-AE46-10E556F1FC39> /usr/lib/libobjc.A.dylib
+       0x18e080000 -        0x18e11b57b  dyld (1.0.0 - 1286.10) <8598F4C3-8CC9-38AC-B886-4D0FDF275A30> /usr/lib/dyld
+       0x18e11c000 -        0x18e11f168  libsystem_blocks.dylib (96) <EFADF6A6-C85B-37E9-9514-8E7A1EBAC882> /usr/lib/system/libsystem_blocks.dylib
+       0x18e120000 -        0x18e16a8ff  libxpc.dylib (2894.140.12) <91D744C7-E2CD-36E7-8D30-CF89E06F9EBF> /usr/lib/system/libxpc.dylib
+       0x18e16b000 -        0x18e1867ff  libsystem_trace.dylib (1643.120.5) <9DBBEE92-6C08-39F7-A05E-5054A79D28F6> /usr/lib/system/libsystem_trace.dylib
+       0x18e187000 -        0x18e2253b7  libcorecrypto.dylib (1736.140.2) <00D81A3B-8152-35CF-B1AE-7364B4832072> /usr/lib/system/libcorecrypto.dylib
+       0x18e226000 -        0x18e26d06f  libsystem_malloc.dylib (715.140.5) <3CE1E59C-91C8-3259-93D8-7DED66842979> /usr/lib/system/libsystem_malloc.dylib
+       0x18e26e000 -        0x18e2b475f  libdispatch.dylib (1521.140.2) <63A54CE1-2AB6-3673-82E4-D8489D811475> /usr/lib/system/libdispatch.dylib
+       0x18e2b5000 -        0x18e2b7d1b  libsystem_featureflags.dylib (97) <9AF1C2C7-1C15-3F0E-9C0F-4524BD4EB4CF> /usr/lib/system/libsystem_featureflags.dylib
+       0x18e2b8000 -        0x18e3391f7  libsystem_c.dylib (1698.140.3.700.2) <E098CB59-2C56-395C-ADE1-6EF590E61199> /usr/lib/system/libsystem_c.dylib
+       0x18e33a000 -        0x18e3c6ff7  libc++.1.dylib (1900.181) <EB94C9FE-91DA-3E9F-9C45-7B476FEAAEAE> /usr/lib/libc++.1.dylib
+       0x18e3c7000 -        0x18e3e4fff  libc++abi.dylib (1900.181) <BC670272-BF32-38AC-AE3F-F06EDA80BE30> /usr/lib/libc++abi.dylib
+       0x18e3e5000 -        0x18e420663  libsystem_kernel.dylib (11417.140.69.701.11) <CDE60D83-932D-33CB-9CCA-6BD9A3AECF04> /usr/lib/system/libsystem_kernel.dylib
+       0x18e421000 -        0x18e42da77  libsystem_pthread.dylib (536.0.0.701.1) <022DC315-CF35-38DA-939E-03800B5BEFF2> /usr/lib/system/libsystem_pthread.dylib
+       0x18e42e000 -        0x18e45dba3  libdyld.dylib (1286.10) <E4FE35C9-8AEE-3728-89B9-89A64239ED74> /usr/lib/system/libdyld.dylib
+       0x18e45e000 -        0x18e465e0b  libsystem_platform.dylib (349.140.6) <C26E58A4-34A1-3F9C-BDBC-EBC34426633A> /usr/lib/system/libsystem_platform.dylib
+       0x18e466000 -        0x18e495d83  libsystem_info.dylib (597.0.0.701.2) <3B2CAC89-F7B9-3111-9EB6-84A87EEBBAD7> /usr/lib/system/libsystem_info.dylib
+       0x191f2c000 -        0x191f36397  libsystem_darwin.dylib (1698.140.3.700.2) <62C85958-8310-3625-ADF0-DCD58D08BEB9> /usr/lib/system/libsystem_darwin.dylib
+       0x19238e000 -        0x19239ffeb  libsystem_notify.dylib (342) <CA2AAD14-C438-30E8-9699-5A947E2DF021> /usr/lib/system/libsystem_notify.dylib
+       0x194391000 -        0x1943abe8f  libsystem_networkextension.dylib (2063.140.6) <5C0C1505-266B-3544-B970-BE347DAF2AAF> /usr/lib/system/libsystem_networkextension.dylib
+       0x194428000 -        0x19443ffdb  libsystem_asl.dylib (402) <0574F75C-FB20-3114-8C16-E17D821FFCBD> /usr/lib/system/libsystem_asl.dylib
+       0x195f85000 -        0x195f8d3a7  libsystem_symptoms.dylib (2022.140.4) <FDBF294D-E745-3E89-B474-DADA17135BEE> /usr/lib/system/libsystem_symptoms.dylib
+       0x1997d2000 -        0x19980238f  libsystem_containermanager.dylib (689.100.6) <4D61C2A7-2F1E-3BB9-9E35-C8ED5D6A39B0> /usr/lib/system/libsystem_containermanager.dylib
+       0x19aa38000 -        0x19aa3c5df  libsystem_configuration.dylib (1351.140.5) <C4D21F14-12DA-3BD8-861C-8FC76209B3DC> /usr/lib/system/libsystem_configuration.dylib
+       0x19aa3d000 -        0x19aa4347f  libsystem_sandbox.dylib (2401.140.15) <D50ACF75-9906-3F4C-BE00-F5C010DEF07A> /usr/lib/system/libsystem_sandbox.dylib
+       0x19ba48000 -        0x19ba4afe3  libquarantine.dylib (181.120.2) <B274436C-379E-3E0F-B8E2-A7AA69E46E73> /usr/lib/system/libquarantine.dylib
+       0x19c15e000 -        0x19c165123  libsystem_coreservices.dylib (178.6.3) <5EEC12AE-DB7C-3C62-BE55-061C49D22463> /usr/lib/system/libsystem_coreservices.dylib
+       0x19c5dd000 -        0x19c61a2b7  libsystem_m.dylib (3291.100.4) <5F5F2F2E-557D-3441-8566-8B2009538753> /usr/lib/system/libsystem_m.dylib
+       0x19c61c000 -        0x19c61f4e7  libmacho.dylib (1024.3) <CD255FF9-4E35-347A-B7E9-304517D3A871> /usr/lib/system/libmacho.dylib
+       0x19c639000 -        0x19c6465ef  libcommonCrypto.dylib (600035) <65A3AFCF-9611-35C1-9697-8CF5409F0C83> /usr/lib/system/libcommonCrypto.dylib
+       0x19c647000 -        0x19c650ad7  libunwind.dylib (1900.125) <FA046DDB-1518-353B-A9B6-CD622328B746> /usr/lib/system/libunwind.dylib
+       0x19c659000 -        0x19c66369f  libcopyfile.dylib (224) <459F7A49-1FEF-329E-8FC0-0A5FF6FBD902> /usr/lib/system/libcopyfile.dylib
+       0x19c664000 -        0x19c66798f  libcompiler_rt.dylib (103.3) <7720A496-7B7A-33C1-B7F3-9E8B7DEA0622> /usr/lib/system/libcompiler_rt.dylib
+       0x19c668000 -        0x19c66ca1b  libsystem_collections.dylib (1698.140.3.700.2) <04F3AE1A-0F6D-3F68-84E0-EAFFBC0CE0A5> /usr/lib/system/libsystem_collections.dylib
+       0x19c66d000 -        0x19c6702c7  libsystem_secinit.dylib (153.140.2) <63965812-869C-3C3C-A950-FA563CE8EB1E> /usr/lib/system/libsystem_secinit.dylib
+       0x19c671000 -        0x19c673b6f  libremovefile.dylib (81) <E34EF2FA-1C55-3222-B1A2-CEEEC4B02F3D> /usr/lib/system/libremovefile.dylib
+       0x19c674000 -        0x19c674f27  libkeymgr.dylib (31) <EE1B8708-02B1-385D-B648-E87B4D25391B> /usr/lib/system/libkeymgr.dylib
+       0x19c675000 -        0x19c67dd57  libsystem_dnssd.dylib (2600.140.3) <EE79FBDA-E408-3D4C-A0EE-C56BE107CC06> /usr/lib/system/libsystem_dnssd.dylib
+       0x19c67e000 -        0x19c6830b3  libcache.dylib (95) <4242CCFB-F060-3493-B555-C26217B4F080> /usr/lib/system/libcache.dylib
+       0x19c684000 -        0x19c685ca3  libSystem.B.dylib (1351) <068263F7-CF15-3E1C-A305-5DF8F9C51AD5> /usr/lib/libSystem.B.dylib
+       0x275a3e000 -        0x275a45109  libRosetta.dylib (349) <CD13AF03-27E5-387A-8DF1-7016C957167A> /usr/lib/libRosetta.dylib
+       0x276e69000 -        0x276e6cdeb  libsystem_darwindirectory.dylib (122) <8627B2A8-CE68-3F9A-B3E8-2F4E4E35CF66> /usr/lib/system/libsystem_darwindirectory.dylib
+       0x276e6d000 -        0x276e74523  libsystem_eligibility.dylib (181.140.5) <B76C1C04-8001-3113-BE6E-FDDEA1118104> /usr/lib/system/libsystem_eligibility.dylib
+       0x276e75000 -        0x276e7a6c5  libsystem_sanitizers.dylib (19) <6143DE0A-A328-3649-AF7D-8FC8781B86E7> /usr/lib/system/libsystem_sanitizers.dylib

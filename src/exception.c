@@ -313,12 +313,20 @@ void print_exception(CLJException *ex) {
             ex->type, ex->message, shorten_file_path(ex->file), ex->line, ex->col);
     
 #ifdef DEBUG
-    // Print object if available (very important for zombie objects)
+    // Print object if available (but skip for zombie objects to avoid secondary errors)
     if (ex->object) {
-        const char *obj_str = to_string(ex->object);
-        if (obj_str) {
-            fprintf(stderr, " object: %s @%p", obj_str, (void*)ex->object);
-            free((void*)obj_str);  // to_string returns allocated C-string
+        // Check if object is a zombie before trying to print it
+        // Zombie objects have rc == ZOMBIE_RC (-1)
+        CljObject *obj = ex->object;
+        if (obj->rc != ZOMBIE_RC) {
+            const char *obj_str = to_string(ex->object);
+            if (obj_str) {
+                fprintf(stderr, " object: %s @%p", obj_str, (void*)ex->object);
+                free((void*)obj_str);  // to_string returns allocated C-string
+            }
+        } else {
+            // Zombie object - print address and type name
+            fprintf(stderr, " object: <zombie %s> @%p", clj_type_name(obj->type), (void*)ex->object);
         }
     }
     

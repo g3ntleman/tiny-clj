@@ -31,7 +31,7 @@ TEST(test_make_seq_vector) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector(TEST_VECTOR_SIZE, 1);
+        CljValue vec = make_vector(TEST_VECTOR_SIZE, CLJ_VECTOR);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -94,7 +94,7 @@ TEST(test_seq_first) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector(3, 1);
+        CljValue vec = make_vector(3, CLJ_VECTOR);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -116,7 +116,7 @@ TEST(test_seq_rest) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector(3, 1);
+        CljValue vec = make_vector(3, CLJ_VECTOR);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -137,7 +137,7 @@ TEST(test_seq_next) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create a test vector
-        CljValue vec = make_vector(3, 1);
+        CljValue vec = make_vector(3, CLJ_VECTOR);
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
@@ -159,7 +159,7 @@ TEST(test_seq_rest_vs_next_difference) {
     {
         // Test 1: Non-empty sequence - both should return non-empty sequences
         {
-            CljValue vec = make_vector(2, 1);
+            CljValue vec = make_vector(2, CLJ_VECTOR);
             CljPersistentVector *vec_data = as_vector((CljObject*)vec);
             vec_data = vector_conj(vec_data, (ID)fixnum(1));
             vec_data = vector_conj(vec_data, (ID)fixnum(2));
@@ -183,7 +183,7 @@ TEST(test_seq_rest_vs_next_difference) {
         
         // Test 2: Single-element sequence - rest should return empty sequence, next should return nil
         {
-            CljValue vec = make_vector(1, 1);
+            CljValue vec = make_vector(1, CLJ_VECTOR);
             CljPersistentVector *vec_data = as_vector((CljObject*)vec);
             vec_data = vector_conj(vec_data, (ID)fixnum(42));
             
@@ -215,8 +215,8 @@ TEST(test_seq_equality) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Create two identical vectors
-        CljValue vec1 = make_vector(2, 1);
-        CljValue vec2 = make_vector(2, 1);
+        CljValue vec1 = make_vector(2, CLJ_VECTOR);
+        CljValue vec2 = make_vector(2, CLJ_VECTOR);
         
         CljPersistentVector *vec1_data = as_vector((CljObject*)vec1);
         CljPersistentVector *vec2_data = as_vector((CljObject*)vec2);

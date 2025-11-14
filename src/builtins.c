@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -61,6 +62,7 @@ ID nth2(ID *args, unsigned int argc) {
     ID coll = args[0];
     ID idx = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
+    (void)not_found;  // Unused - nth ignores default value (Clojure behavior)
 
     // Validate index
     if (!idx || TAG(idx) != CLJ_INT) {
@@ -112,16 +114,13 @@ ID nth2(ID *args, unsigned int argc) {
                     "nth index %d is out of bounds for nil collection", i);
             return NULL;
         }
+        // list_nth throws exception if index is out-of-bounds
+        // Return what's actually stored (may be NULL or SYM_NIL for nil elements)
         ID result = list_nth(list, i);
         if (!result) {
-            // Out of bounds for list
-            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
-                    "nth index %d is out of bounds for list", i);
-            return NULL;
+            return NULL;  // nil element stored as NULL
         }
-        if (result == SYM_NIL) {
-            return NULL;
-        }
+        // Return SYM_NIL as-is (will be converted to NULL during evaluation)
         return RETAIN(result);
     }
 
@@ -155,12 +154,7 @@ ID nth2(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    ID result = seq_iter_first(&iter);
-    if (!result || result == SYM_NIL) {
-        return NULL;
-    }
-
-    return RETAIN(result);
+    return seq_iter_first(&iter);
 }
 
 // peek: returns last element of vector, or nil if empty
@@ -184,7 +178,7 @@ ID native_pop(ID *args, unsigned int argc) {
     int count = vector_count(v);
     if (!v || count == 0) {
         // Return empty vector singleton (no memory management needed)
-        return make_vector(0, false);
+        return make_vector(0, CLJ_VECTOR);
     }
     
     // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
@@ -268,11 +262,11 @@ ID native_subvec(ID *args, unsigned int argc) {
     
     // Special case: empty sub-vector (start == end)
     if (subvec_count == 0) {
-        return make_vector(0, false);  // Returns empty-vector singleton (no memory management needed)
+        return make_vector(0, CLJ_VECTOR);  // Returns empty-vector singleton (no memory management needed)
     }
     
     // Create new vector and add elements using vector_conj
-    CljValue new_vec_obj = (CljValue)make_vector(subvec_count, false);
+    CljValue new_vec_obj = (CljValue)make_vector(subvec_count, CLJ_VECTOR);
     CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
     if (!new_vec) return NULL;
     
@@ -319,19 +313,19 @@ ID native_conj(ID *args, unsigned int argc) {
     
     if (argc == 1) {
         // conj with one arg returns the collection unchanged
-        return args[0];
+        return args[0]; // caller gave us a retained instance. just return it.
     }
     
     // For 2+ args, conj all values to the collection
-    CljObject *coll = args[0];
+    ID coll = args[0];
     if (!coll) {
         // conj nil with values creates a list
-        CljObject *result = NULL;
+        CljList *result = NULL;
         for (unsigned int i = argc - 1; i >= 1; i--) {
             CljObject *val = args[i];
-            result = (CljObject*)make_list((ID)val, (CljList*)result);
+            result = make_list((ID)val, result);
         }
-        return (result);
+        return (ID)result;
     }
     
     if (coll && TAG(coll) == CLJ_VECTOR) {
@@ -381,8 +375,8 @@ ID native_first(ID *args, unsigned int argc) {
             CljSeqIterator *seq = make_seq(coll);
             if (!seq) return NULL;
             
-            CljObject *result = seq_first((CljObject*)seq);
-            RELEASE((ID)seq);
+            ID result = seq_first((CljObject*)seq);
+            RELEASE(seq);
             
             return result;
         }
@@ -630,7 +624,7 @@ ID assoc3(ID *args, unsigned int argc) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljPersistentVector *v = as_vector(coll);
-        if (!v || i < 0 || i >= vector_count(v)) return NULL;
+        if (!v || i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
         CljPersistentVector* result = vector_assoc((CljPersistentVector*)coll, i, val);
         if (!result) return NULL;
@@ -750,7 +744,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     
     
     if (coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) {
-        CljValue result = (CljValue)coll;
+        CljPersistentVector *result = (CljPersistentVector*)coll;
         for (unsigned int i = 1; i < argc; i++) {
             result = clj_conj(result, (CljValue)args[i]);
             if (!result) return NULL;
@@ -887,6 +881,7 @@ ID native_type(ID *args, unsigned int argc) {
         case CLJ_STRING:
             return (CljObject*)intern_symbol("clojure.lang", "String");
         case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
             return (CljObject*)intern_symbol("clojure.lang", "PersistentVector");
         case CLJ_TRANSIENT_VECTOR:
             return (CljObject*)intern_symbol("clojure.lang", "TransientVector");
@@ -939,24 +934,21 @@ ID native_array_map(ID *args, unsigned int argc) {
 
 ID native_vector(ID *args, unsigned int argc) {
     // Clojure-compatible: (vector) returns empty vector singleton
-    // This is the same singleton returned by make_vector(0, false)
+    // This is the same singleton returned by make_vector(0, CLJ_VECTOR)
     if (argc == 0) {
-        return make_vector(0, false);  // Returns empty-vector singleton (no memory management needed)
+        return vector_empty_singleton;  // Returns empty-vector singleton (no memory management needed)
     }
     
-    // Create vector with exact capacity (no growth needed)
-    CljValue vec = (CljValue)make_vector(argc, false);
-    CljPersistentVector *v = as_vector((CljObject*)vec);
-    if (!v) return NULL;
+    // Create vector with capacity+1 to avoid COW when adding all elements
+    // (vector_conj uses COW when count >= capacity, so we need capacity > argc)
+    CljPersistentVector *v = make_vector(argc + 1, CLJ_VECTOR);
     
     // Add all elements using vector_conj (Clojure-compatible: all args are retained)
     for (unsigned int i = 0; i < argc; i++) {
-        CljObject *elem = (CljObject*)args[i];
-        v = vector_conj(v, (ID)(elem ? RETAIN((ID)elem) : NULL));
-        if (elem) RELEASE((ID)elem);  // vector_conj retains, so release our copy
+        ASSIGN(v, vector_conj(v, args[i]));
     }
     
-    return AUTORELEASE(vec);
+    return AUTORELEASE(v);
 }
 
 // vec: converts a sequence to a vector
@@ -1004,7 +996,7 @@ ID native_vec(ID *args, unsigned int argc) {
     
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
-    CljPersistentVector* vec = make_vector(4, false);
+    CljPersistentVector* vec = make_vector(4, CLJ_VECTOR);
     if (!vec) {
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
                 "Failed to create vector");
@@ -1059,7 +1051,14 @@ ID native_run_next_task(ID *args, unsigned int argc) {
     if (argc != 0) return NULL;
     EvalState *st = evalstate_new(false);
     CljMap *env = NULL;
-    bool ran = event_loop_run_next(env, st);
+    bool ran = false;
+    TRY {
+        ran = event_loop_run_next(env, st);
+    } CATCH(ex) {
+        // Exception occurred - return false (no task was executed)
+        // Don't propagate exception to caller
+        ran = false;
+    } END_TRY
     evalstate_free(st);
     return ran ? clj_true : clj_false;
 }
@@ -1560,7 +1559,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
         }
         
         // Look up symbol in source namespace
-        CljObject *val = (CljObject*)map_get((CljMap*)source_ns->mappings, (CljValue)sym);
+        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)sym);
         if (val) {
             // Copy to target namespace
             ns_define(target_ns, sym, val);
@@ -1577,7 +1576,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
 static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *target_ns) {
     if (!source_ns || !target_ns || !source_ns->mappings) return;
     
-    CljMap *map = as_map(source_ns->mappings);
+        CljMap *map = source_ns->mappings;
     if (!map) return;
     
     // Iterate through all mappings in source namespace

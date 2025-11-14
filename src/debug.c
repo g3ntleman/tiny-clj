@@ -5,6 +5,7 @@
 #include "symbol.h"
 #include "value.h"
 #include "memory.h"
+#include "types.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -99,6 +100,8 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
             break;
             
         case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR:
             *offset += snprintf(buf + *offset, buf_size - *offset, "#<vector>");
             break;
             
@@ -118,6 +121,26 @@ const char* print_ast(CljObject *v) {
     buf[offset] = '\0';
     
     return buf;
+}
+
+/**
+ * @brief Check if an object is a zombie (freed but not deallocated)
+ * @param o Object to check (can be NULL or immediate)
+ * @return true if object is a zombie, false otherwise
+ * @note Zombie objects have rc == ZOMBIE_RC (-1) and are only present in DEBUG builds
+ */
+bool is_zombie(ID o) {
+    if (!o || IS_IMMEDIATE(o)) {
+        return false;  // NULL and immediates cannot be zombies
+    }
+    
+    CljObject *obj = (CljObject*)o;
+#ifdef DEBUG
+    return obj->rc == ZOMBIE_RC;
+#else
+    // In release builds, zombie mode is not available
+    return false;
+#endif
 }
 
 

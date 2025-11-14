@@ -13,6 +13,7 @@
 #include "list.h"
 #include "memory.h"
 #include <string.h>
+#include <stdio.h>
 
 // Helper: Check if two symbols are equal
 static bool symbols_equal(CljSymbol *sym1, CljSymbol *sym2) {
@@ -122,7 +123,9 @@ void validate_recur_positions(CljObject *body, CljObject *parent_body) {
 }
 
 // Helper: Transform call to (recur ...)
-static CljObject* transform_to_recur(CljList *call_list) {
+static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
+    (void)func_sym;  // Unused parameter (kept for API consistency)
+    
     CljObject *rest_obj = call_list->rest;
     CljList *new_list = (CljList*)make_list((CljObject*)SYM_RECUR, NULL);
     if (!new_list) return NULL;
@@ -220,8 +223,11 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     CljObject *context = parent_body ? parent_body : body;
     
     // Transform recursive tail call
-    if (is_recursive_call(body, func_name) && is_tail_position(body, context)) {
-        return transform_to_recur(body_list);
+    bool is_recursive = is_recursive_call(body, func_name);
+    bool is_tail = is_tail_position(body, context);
+    if (is_recursive && is_tail) {
+        CljSymbol *func_sym = func_name && TAG(func_name) == CLJ_SYMBOL ? as_symbol((ID)func_name) : NULL;
+        return transform_to_recur(body_list, func_sym);
     }
     
     // Transform special forms
@@ -369,7 +375,8 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
     if (is_tail_position(body, context)) {
         // The entire expression is in tail position - check if it's a recursive call
         if (is_recursive_call(body, func_name)) {
-            return transform_to_recur(body_list);
+            CljSymbol *func_sym = func_name && TAG(func_name) == CLJ_SYMBOL ? as_symbol((ID)func_name) : NULL;
+            return transform_to_recur(body_list, func_sym);
         }
         // Not a recursive call, but in tail position - don't transform nested calls
         // because they are not in tail position (e.g., arguments of + are not in tail position)

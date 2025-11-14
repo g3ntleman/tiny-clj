@@ -9,6 +9,7 @@
 #include "memory_profiler.h"
 #include "../tiny_clj.h"
 #include "../event_loop.h"
+#include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -142,7 +143,40 @@ static void print_new_usage(const char *program_name) {
     printf("  %s --memory-summary     Run all tests with memory summary\n", program_name);
 }
 
-// JUnit-style test runner: simple progress indicator (. for pass, F for fail, I for ignore)
+// Helper function to set Unity's TestFile and CurrentTestLineNumber for correct error reporting
+static void set_unity_test_file_info(const Test *test) {
+    if (test->file) {
+        Unity.TestFile = test->file;
+    }
+    if (test->line > 0) {
+        Unity.CurrentTestLineNumber = (UNITY_LINE_TYPE)test->line;
+    }
+}
+
+// Helper function to run a single test with exception handling
+static void run_test_with_exception_handling(const Test *test) {
+    TRY {
+        RUN_TEST(test->func);
+    } CATCH(ex) {
+        // Unhandled exception caught - mark test as failed
+        // Print exception details for debugging
+        if (ex) {
+            fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
+                    test->qualified_name, ex->type, ex->message);
+            if (ex->stacktrace) {
+                // Use print_exception to print stacktrace (it handles CljString properly)
+                print_exception(ex);
+            }
+        }
+        // Mark test as failed using Unity's internal state
+        // Note: UnityDefaultTestRun already incremented NumberOfTests at the start (before execution),
+        // so we don't need to increment it here
+        Unity.TestFailures++;
+        Unity.CurrentTestFailed = 1;
+    } END_TRY
+}
+
+// JUnit-style test runner: print both PASS and FAIL messages with correct file paths
 static void run_tests_by_registry(void) {
     size_t test_count;
     Test *all_tests = test_registry_get_all(&test_count);
@@ -151,50 +185,25 @@ static void run_tests_by_registry(void) {
         return;
     }
     
-    // JUnit-style: Simple progress indicator
     for (size_t i = 0; i < test_count; i++) {
         // Capture Unity test state before running
         int failures_before = Unity.TestFailures;
-        int ignores_before = Unity.TestIgnores;
         
-        // Wrap test in TRY/CATCH to catch unhandled exceptions
-        TRY {
-            RUN_TEST(all_tests[i].func);
-        } CATCH(ex) {
-            // Unhandled exception caught - mark test as failed
-            // Print exception details for debugging
-            if (ex) {
-                fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
-                        all_tests[i].qualified_name, ex->type, ex->message);
-                if (ex->stacktrace) {
-                    // Use print_exception to print stacktrace (it handles CljString properly)
-                    print_exception(ex);
-                }
-            }
-            // Mark test as failed using Unity's internal state
-            // Also increment test count since RUN_TEST might not have been fully executed
-            Unity.NumberOfTests++;
-            Unity.TestFailures++;
-            Unity.CurrentTestFailed = 1;
-        } END_TRY
+        // Set Unity's TestFile and CurrentTestLineNumber for correct error reporting
+        set_unity_test_file_info(&all_tests[i]);
+        
+        // Run test with exception handling
+        run_test_with_exception_handling(&all_tests[i]);
         
         // Check if test failed
         int failures_after = Unity.TestFailures;
-        int ignores_after = Unity.TestIgnores;
         
         if (failures_after > failures_before) {
-            // Test failed - print name immediately (JUnit-style)
+            // Test failed - Unity already printed the error with file path
+            // Print the test name for consistency on stderr
             fprintf(stderr, "FAIL: %s\n", all_tests[i].qualified_name);
-        } else if (ignores_after > ignores_before) {
-            // Test ignored
-        } else {
-            // Test passed
         }
-        
-        // Flush output for progress indicator
-        fflush(stdout);
     }
-    
 }
 
 static bool contains_wildcard(const char *pattern) {
@@ -233,33 +242,21 @@ static void run_specific_test(const char *test_name_or_pattern) {
             if (test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern)) {
                 // Capture Unity test state before running
                 int failures_before = Unity.TestFailures;
-                int ignores_before = Unity.TestIgnores;
                 
-                // Wrap test in TRY/CATCH to catch unhandled exceptions
-                TRY {
-                    RUN_TEST(all_tests[i].func);
-                } CATCH(ex) {
-                    // Unhandled exception caught - mark test as failed
-                    print_exception(ex);
-                    // Mark test as failed using Unity's internal state
-                    // Also increment test count since RUN_TEST might not have been fully executed
-                    Unity.NumberOfTests++;
-                    Unity.TestFailures++;
-                    Unity.CurrentTestFailed = 1;
-                } END_TRY
+                // Set Unity's TestFile and CurrentTestLineNumber for correct error reporting
+                set_unity_test_file_info(&all_tests[i]);
+                
+                // Run test with exception handling
+                run_test_with_exception_handling(&all_tests[i]);
                 
                 // Check if test failed
                 int failures_after = Unity.TestFailures;
-                int ignores_after = Unity.TestIgnores;
                 
                 if (failures_after > failures_before) {
-                    // Test failed - print name immediately (JUnit-style)
-                } else if (ignores_after > ignores_before) {
-                    // Test ignored
-                } else {
-                    // Test passed
+                    // Test failed - Unity already printed the error with file path
+                    // Print the test name for consistency on stderr
+                    fprintf(stderr, "FAIL: %s\n", all_tests[i].qualified_name);
                 }
-                fflush(stdout);
             }
         }
     } else {
@@ -275,7 +272,39 @@ static void run_specific_test(const char *test_name_or_pattern) {
         }
         
         if (test) {
-            RUN_TEST(test->func);
+            // Redirect Unity's stdout to /dev/null to suppress PASS messages
+            FILE *original_stdout = stdout;
+            FILE *devnull = fopen("/dev/null", "w");
+            if (devnull) {
+                stdout = devnull;
+            }
+            
+            // Capture Unity test state before running
+            int failures_before = Unity.TestFailures;
+            
+            // Set Unity's TestFile and CurrentTestLineNumber for correct error reporting
+            set_unity_test_file_info(test);
+            
+            // Run test with exception handling
+            run_test_with_exception_handling(test);
+            
+            // Check if test failed
+            int failures_after = Unity.TestFailures;
+            
+            if (failures_after > failures_before) {
+                // Restore stdout for FAIL message
+                if (devnull) {
+                    stdout = original_stdout;
+                }
+                // Test failed - print name only (no path/line number)
+                fprintf(stderr, "FAIL: %s\n", test->qualified_name);
+            }
+            
+            // Restore stdout
+            if (devnull) {
+                stdout = original_stdout;
+                fclose(devnull);
+            }
             // Summary will be printed at end of main()
         } else {
             // Test not found - print error message
@@ -295,6 +324,13 @@ int main(int argc, char **argv) {
     enable_memory_profiling(true);
     // Disable memory leak reporting by default (only show on failures)
     set_memory_leak_reporting_enabled(false);
+    // Only enable zombie mode for debugging use-after-free errors
+    // Memory verbose mode and debug output are disabled to reduce noise
+    set_memory_verbose_mode(false);
+    // enable_memory_debug_output(); // Disabled - too verbose
+#ifdef DEBUG
+    enable_zombie_mode(); // Keep zombie mode for debugging
+#endif
 #endif
     
     // Parse command line arguments
@@ -314,7 +350,7 @@ int main(int argc, char **argv) {
             // Enable memory profiler summary
             show_memory_summary = true;
 #ifdef ENABLE_MEMORY_PROFILING
-            set_memory_verbose_mode(true);
+            set_memory_verbose_mode(false); // Disabled - too verbose
             set_memory_leak_reporting_enabled(true);
 #endif
             run_tests_by_registry();
@@ -343,6 +379,7 @@ int main(int argc, char **argv) {
         memory_profiler_print_stats("All Tests Complete");
         memory_profiler_check_leaks("All Tests Complete");
         printf("═══════════════════════════════════════════════════════════════\n");
+        printf("Total allocations: %zu\n", g_memory_stats.total_allocations);
     } else {
         // Memory leak summary only if there are leaks (JUnit-style: minimal output)
         if (g_memory_stats.memory_leaks > 0) {

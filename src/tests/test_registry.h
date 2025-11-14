@@ -20,11 +20,14 @@ typedef struct {
     const char *qualified_name; // Fully qualified name (e.g., "values/test_cljvalue_immediate_helpers")
     TestFunc func;          // Test function pointer
     const char *group;      // Test group (derived from filename)
+    const char *file;       // Source file path (for Unity error reporting)
+    int line;               // Source line number (for Unity error reporting)
 } Test;
 
 // Registry API
 void test_registry_add(const char *name, TestFunc func);
 void test_registry_add_with_group(const char *name, TestFunc func, const char *group);
+void test_registry_add_with_file_info(const char *name, TestFunc func, const char *group, const char *file, int line);
 Test *test_registry_find(const char *name);
 Test *test_registry_find_by_qualified_name(const char *qualified_name);
 Test *test_registry_find_by_pattern(const char *pattern);

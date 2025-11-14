@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include "runtime.h"
-#include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
+// Note: symbol.h is included indirectly via namespace.h's forward declaration
+// It's not directly used in runtime.c, but namespace.h needs it for CljSymbol definition
 #include "namespace.h"
 #include "meta.h"
 #include "vector.h"
-#include "value.h"
 #include "memory.h"
 
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
@@ -44,8 +44,9 @@ void runtime_init(TinyClJRuntime *runtime) {
     ASSIGN(runtime->meta_registry, NULL);
     
     // Reset pool stack (array of pointers)
+    // runtime_free() should have already freed all pools and set them to NULL
     for (int i = 0; i < MAX_POOL_DEPTH; i++) {
-        ASSIGN(runtime->pool_stack[i], NULL);
+        runtime->pool_stack[i] = NULL;
     }
     runtime->pool_stack_top = -1;
     
@@ -58,7 +59,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Initialize event loop queues as transient vectors using ASSIGN
     // Only create if not already set (allows multiple calls)
     if (!runtime->task_queue) {
-        CljPersistentVector* task_vec = make_vector(8, false);
+        CljPersistentVector* task_vec = make_vector(8, CLJ_VECTOR);
         if (task_vec) {
             CljPersistentVector* transient_task = (CljPersistentVector*)transient((ID)task_vec);
             RELEASE((ID)task_vec); // transient() retains the result
@@ -66,7 +67,7 @@ void runtime_init(TinyClJRuntime *runtime) {
         }
     }
     if (!runtime->timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, false);
+        CljPersistentVector* timer_vec = make_vector(8, CLJ_VECTOR);
         if (timer_vec) {
             CljPersistentVector* transient_timer = (CljPersistentVector*)transient((ID)timer_vec);
             RELEASE((ID)timer_vec); // transient() retains the result
@@ -126,7 +127,7 @@ void runtime_free(TinyClJRuntime *runtime) {
     // CRITICAL: Drain all autorelease pools before resetting runtime
     // This ensures that objects from previous tests don't leak into the next test
     while (runtime->pool_stack_top >= 0) {
-        CljObjectPool *pool = ((CljObjectPool**)runtime->pool_stack)[runtime->pool_stack_top];
+        CljPersistentVector *pool = runtime->pool_stack[runtime->pool_stack_top];
         if (pool) {
             // Use autorelease_pool_pop to properly release all objects
             autorelease_pool_pop(pool);
@@ -152,8 +153,10 @@ void runtime_free(TinyClJRuntime *runtime) {
     ASSIGN(runtime->meta_registry, NULL);
     
     // Reset pool stack (array of pointers)
+    // Note: Pools were already released in the loop above (lines 128-137),
+    // so just set to NULL without releasing again to avoid double-free
     for (int i = 0; i < MAX_POOL_DEPTH; i++) {
-        ASSIGN(runtime->pool_stack[i], NULL);
+        runtime->pool_stack[i] = NULL;
     }
     runtime->pool_stack_top = -1;
     

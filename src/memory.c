@@ -10,7 +10,6 @@
 #include "object.h"
 #include "symbol.h"
 #include "vector.h"
-#include "vector_internal.h"  // For direct manipulation of autorelease pool vectors
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "memory_profiler.h"
 #include "types.h"
@@ -19,13 +18,8 @@
 #include "list.h"
 #include "byte_array.h"
 #include "atom.h"
-#include "seq.h"  // For CljSeqIterator and as_seq
 #include "function.h"  // For CljFunction
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
 
 // External reference to verbose mode
 extern bool g_memory_verbose_mode;
@@ -106,21 +100,11 @@ void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
 // AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
 
-// Autorelease pool structure backed by weak vector for efficiency
-struct CljObjectPool { 
-    CljObject *backing;
-    // No prev pointer needed - using array-based stack instead
-};
-
-// Array-based pool stack (exception-safe, survives longjmp) - jetzt in g_runtime
 #define MAX_POOL_DEPTH 24
-// static CljObjectPool *g_pool_stack[MAX_POOL_DEPTH] = {NULL};
-// static int g_pool_stack_top = -1;  // -1 = empty stack
-#define g_pool_stack ((CljObjectPool**)g_runtime.pool_stack)
-#define g_pool_stack_top (g_runtime.pool_stack_top)
 
-// Forward declaration
+// Forward declarations
 static void release_object_deep(CljObject *v);
+static void autorelease_pool_clear(CljPersistentVector *pool);
 
 // ============================================================================
 // REFERENCE COUNTING IMPLEMENTATION
@@ -146,6 +130,7 @@ void retain(CljObject *v) {
     // Check for zombie object
     if (v->rc == ZOMBIE_RC) {
         // Zombie detected: throw exception with stacktrace and zombie object
+        // Don't try to print object representation (may fail if object is corrupted)
         char message[512];
         snprintf(message, sizeof(message),
             "Attempted to retain zombie object %p (type=%s). "
@@ -207,6 +192,7 @@ void release(CljObject *v) {
     if (v->rc == ZOMBIE_RC) {
         // Zombie detected: throw exception with stacktrace and zombie object
         // This indicates a double-free problem - the object was already freed
+        // Don't try to print object representation (may fail if object is corrupted)
         char message[512];
         snprintf(message, sizeof(message),
             "Attempted to release zombie object %p (type=%s). "
@@ -272,32 +258,18 @@ CljObject *autorelease(CljObject *v) {
     
 
     // Require active autorelease pool
-    if (g_pool_stack_top < 0) {
+    if (g_runtime.pool_stack_top < 0) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
                 v, v ? v->type : -1);
-    } else {
-        // Only show debug output if memory profiling is enabled and verbose mode is on
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-            printf("🔍 autorelease: Object %p, type=%d (%s), rc=%d\n", 
-                   v, v->type, clj_type_name(v->type), v->rc);
-        }
-    }
+    } 
     
-    // Add to pool (weak reference, no retain)
-    // Use direct manipulation for autorelease pool
-    CljPersistentVector *backing = as_vector(g_pool_stack[g_pool_stack_top]->backing);
-    if (backing && backing->count < backing->capacity) {
-        backing->data[backing->count++] = v;
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-            printf("🔍 autorelease: Added object %p to pool (count=%d)\n", v, backing->count);
-        }
-    } else {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-            printf("🔍 autorelease: Pool full or invalid backing for object %p\n", v);
-        }
-    }
+    
+    // Update g_runtime.pool_stack[g_runtime.pool_stack_top with an enlarged pool:
+    // Use vector_conj to append (now supports CLJ_WEAK_VECTOR)
+    CljPersistentVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
+    ASSIGN(g_runtime.pool_stack[g_runtime.pool_stack_top], vector_conj(pool, v));
     
     // Track for memory profiling
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
@@ -317,12 +289,25 @@ CljObject *autorelease(CljObject *v) {
  * added via autorelease() will be added to this pool and released when
  * the pool is popped.
  */
-// CFAutoreleasePool: Exception-safe pool management
-// Compatible with setjmp/longjmp by using array-based stack (already defined above)
+static void autorelease_pool_clear(CljPersistentVector *pool) {
+    if (!pool) return;
+    // For CLJ_WEAK_VECTOR, don't RELEASE elements (weak reference)
+    if (TAG((ID)pool) == CLJ_WEAK_VECTOR) {
+        vector_clear(pool);
+    } else {
+        VECTOR_FOR_EACH(pool, elem) {
+            RELEASE(elem);
+        }
+        vector_clear(pool);
+    }
+    // Ensure count is set to 0 (vector_clear should do this, but be explicit)
+    vector_reset_count(pool);
+}
 
-CljObjectPool *autorelease_pool_push() {
+
+CljPersistentVector *autorelease_pool_push() {
     // Check for stack overflow
-    if (g_pool_stack_top >= MAX_POOL_DEPTH - 1) {
+    if (g_runtime.pool_stack_top >= MAX_POOL_DEPTH - 1) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
             "Autorelease pool stack overflow! Maximum depth of %d exceeded. "
             "This indicates too many nested WITH_AUTORELEASE_POOL blocks.", 
@@ -330,194 +315,53 @@ CljObjectPool *autorelease_pool_push() {
         return NULL;
     }
     
-    // Allocate new pool
-    CljObjectPool *p = (CljObjectPool*)malloc(sizeof(CljObjectPool));
-    if (!p) return NULL;
+    CljPersistentVector *pool = make_vector(1024, CLJ_WEAK_VECTOR);
     
-    // Create weak vector using new API - increase capacity for core loading
-    CljValue backing_val = make_vector(1024, 1); // mutable, larger capacity
-    p->backing = (CljObject*)backing_val;
+    g_runtime.pool_stack[++g_runtime.pool_stack_top] = pool;
     
-    // Push to array stack
-    g_pool_stack[++g_pool_stack_top] = p;
-    
-    // Debug output if verbose mode enabled
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
         printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%d)\n", 
-               p, g_pool_stack_top + 1);
+               pool, g_runtime.pool_stack_top + 1);
     }
     
-    return p;
+    return pool;
 }
 
 
-void autorelease_pool_pop(CljObjectPool *pool) {
-    // Use current pool if none specified
-    if (!pool) {
-        // Check for stack underflow first
-        if (g_pool_stack_top < 0) {
-            printf("WARNING: autorelease_pool_pop() called on empty stack! "
-                   "This indicates more pop() calls than push() calls.\n");
-            return; // Safe return instead of throwing exception
-        }
-        pool = g_pool_stack[g_pool_stack_top];
-    }
-    
-#ifdef DEBUG
-    // Check if pool is still on the stack (may have been popped by longjmp from exception)
-    // This check is only in debug mode to avoid performance impact in release builds
-    bool pool_on_stack = false;
-    if (pool && g_pool_stack_top >= 0) {
-        for (int i = 0; i <= g_pool_stack_top; i++) {
-            if (g_pool_stack[i] == pool) {
-                pool_on_stack = true;
-                break;
-            }
-        }
-    }
-    
-    // If pool was already popped (likely by longjmp from exception), just return silently
-    if (pool && !pool_on_stack) {
-        // Pool was already popped (likely by longjmp from exception)
-        // This is safe - just return without warning
-        return;
-    }
-#endif
-    
+void autorelease_pool_pop(CljPersistentVector *pool) {
     // Check for stack underflow
-    if (g_pool_stack_top < 0) {
+    if (g_runtime.pool_stack_top < 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
                "This indicates more pop() calls than push() calls.\n");
-        return; // Safe return instead of throwing exception
+        return;
     }
     
-    // Verify pool is at top of stack (LIFO principle - Last In, First Out)
-    if (!pool || g_pool_stack[g_pool_stack_top] != pool) {
-        // Pool mismatch detected - this can happen if pool was already popped by longjmp
-        // In DEBUG mode, we already checked if pool is on stack, so this is a real mismatch
-        // But we should handle it gracefully instead of just returning
-        // Check if pool is still on stack (may have been popped by longjmp from exception)
-        bool pool_on_stack = false;
-        if (pool && g_pool_stack_top >= 0) {
-            for (int i = 0; i <= g_pool_stack_top; i++) {
-                if (g_pool_stack[i] == pool) {
-                    pool_on_stack = true;
-                    break;
-                }
-            }
-        }
-        
-        // If pool is not on stack, it was already popped (likely by longjmp from exception)
-        // This is safe - just return silently
-        if (!pool_on_stack) {
-            return;
-        }
-        
-        // If pool is on stack but not at top, pop all pools above it first
-        // This can happen when exceptions cause pools to be popped out of order
-        // We need to pop all pools above the target pool to maintain LIFO order
-        int pool_index = -1;
-        for (int i = 0; i <= g_pool_stack_top; i++) {
-            if (g_pool_stack[i] == pool) {
-                pool_index = i;
-                break;
-            }
-        }
-        
-        if (pool_index >= 0 && pool_index < g_pool_stack_top) {
-            // Pop all pools above the target pool
-            while (g_pool_stack_top > pool_index) {
-                CljObjectPool *top_pool = g_pool_stack[g_pool_stack_top];
-                if (top_pool) {
-                    // Release all objects in pool
-                    CljPersistentVector *vec = as_vector(top_pool->backing);
-                    if (vec) {
-                        for (int i = vec->count - 1; i >= 0; --i) {
-                            CljObject *obj = vec->data[i];
-                            if (obj && TRACKS_RETAINS(obj)) {
-                                RELEASE(obj);
-                            }
-                            vec->data[i] = NULL;
-                        }
-                        vec->count = 0;
-                    }
-                    
-                    // Release the backing vector
-                    RELEASE(top_pool->backing);
-                    top_pool->backing = NULL;
-                    
-                    // Free pool structure
-                    free(top_pool);
-                }
-                
-                // Pop from stack
-                g_pool_stack[g_pool_stack_top--] = NULL;
-            }
-            
-            // Now pop the target pool (it should be at top now)
-            // Fall through to normal pop logic below
-        } else {
-            // Pool not found on stack - should not happen, but handle gracefully
-            return;
-        }
-    }
+    // Always use the pool from the top of the stack
+    // The provided pool parameter may be outdated if autorelease() replaced the pool
+    pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
     
     // Debug output
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
         printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%d)\n", 
-               pool, g_pool_stack_top + 1);
+               pool, g_runtime.pool_stack_top + 1);
     }
     
-    // Release all objects in pool
-    // Note: Multiple AUTORELEASE calls on the same object are allowed,
-    // so we need to track which objects have already been released
-    CljPersistentVector *vec = as_vector(pool->backing);
-    if (vec) {
-        // Track released objects to prevent double-release from duplicates
-        CljObject *released_objects[1024];  // Stack-allocated for performance
-        int released_count = 0;
-        
-        for (int i = vec->count - 1; i >= 0; --i) {
-            CljObject *obj = vec->data[i];
-            if (obj) {
-                // Check if object was already released in this pop
-                bool already_released = false;
-                for (int j = 0; j < released_count; j++) {
-                    if (released_objects[j] == obj) {
-                        already_released = true;
-                        break;
-                    }
-                }
-                
-                if (!already_released && released_count < 1024) {
-                    released_objects[released_count++] = obj;
-                    vec->data[i] = NULL;  // Prevent double-free
-                    if (TRACKS_RETAINS(obj)) {
-                        RELEASE(obj);
-                    }
-                } else {
-                    vec->data[i] = NULL;  // Clear even if already released
-                }
-            } else {
-                vec->data[i] = NULL;  // Clear NULL entries
-            }
+    // Remove pool from stack BEFORE releasing (to avoid double-free if called multiple times)
+    g_runtime.pool_stack[g_runtime.pool_stack_top--] = NULL;
+    
+    // Clear and release the pool (only if not already a zombie)
+    if (pool) {
+        // Check if pool is already a zombie (already freed)
+        if (get_retain_count(pool) != ZOMBIE_RC) {
+            autorelease_pool_clear(pool);
+            RELEASE((ID)pool);
         }
-        vec->count = 0;
+        // If pool is already a zombie, skip release (already freed)
     }
-    
-    // Release the backing vector
-    RELEASE(pool->backing);
-    pool->backing = NULL;
-    
-    // Pop from stack (LIFO - Last In, First Out)
-    g_pool_stack[g_pool_stack_top--] = NULL;
-    
-    // Free pool structure
-    free(pool);
     
     // Debug output to verify stack state
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-        printf("🔍 autorelease_pool_pop: After pop, stack_top=%d\n", g_pool_stack_top);
+        printf("🔍 autorelease_pool_pop: After pop, stack_top=%d\n", g_runtime.pool_stack_top);
     }
 }
 
@@ -525,36 +369,17 @@ void autorelease_pool_pop(CljObjectPool *pool) {
 // Call this from CATCH blocks to clean up pools after exceptions
 void autorelease_pool_cleanup_after_exception() {
     // Clean up all pools from array stack
-    while (g_pool_stack_top >= 0) {
-        CljObjectPool *pool = g_pool_stack[g_pool_stack_top];
+    while (g_runtime.pool_stack_top >= 0) {
+        CljPersistentVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
         if (pool) {
-            // Clean up pool contents
-            CljPersistentVector *vec = as_vector(pool->backing);
-            if (vec) {
-                for (int j = vec->count - 1; j >= 0; --j) {
-                    CljObject *obj = vec->data[j];
-                    if (obj) {
-                        vec->data[j] = NULL;  // Prevent double-free
-                        RELEASE(obj);         // Release object
-                    }
-                }
-                vec->count = 0;
-            }
-            
-            // Release the weak vector backing
-            if (pool->backing) {
-                RELEASE(pool->backing);
-            }
-            
-            free(pool);
+            autorelease_pool_clear(pool);
+            RELEASE((ID)pool);
         }
         
-        // Pop from stack
-        g_pool_stack[g_pool_stack_top--] = NULL;
+        g_runtime.pool_stack[g_runtime.pool_stack_top--] = NULL;
     }
     
-    // Reset stack to empty state
-    g_pool_stack_top = -1;
+    g_runtime.pool_stack_top = -1;
 }
 
 /** @brief Pop and drain current autorelease pool (most common usage)
@@ -585,8 +410,8 @@ void autorelease_pool_cleanup_after_exception() {
  * at program termination or when you need to ensure all pools are drained.
  */
 void autorelease_pool_cleanup_all() {
-    while (g_pool_stack_top >= 0) {
-        autorelease_pool_pop(g_pool_stack[g_pool_stack_top]);
+    while (g_runtime.pool_stack_top >= 0) {
+        autorelease_pool_pop(g_runtime.pool_stack[g_runtime.pool_stack_top]);
     }
 }
 
@@ -597,7 +422,7 @@ void autorelease_pool_cleanup_all() {
  * Useful for debugging and ensuring proper pool management.
  */
 bool is_autorelease_pool_active(void) {
-    return g_pool_stack_top >= 0;
+    return g_runtime.pool_stack_top >= 0;
 }
 
 /** @brief Get retain count of object
@@ -609,21 +434,23 @@ bool is_autorelease_pool_active(void) {
  * reference counting. For other objects, returns the actual reference count.
  * Note: AUTORELEASE objects are not counted as they are deferred.
  */
-int get_retain_count(CljObject *obj) {
-    if (!obj) return 0;
+int get_retain_count(ID obj) {
+    if (!obj || IS_IMMEDIATE(obj)) return 0;
+    
+    CljObject *obj_ptr = (CljObject*)obj;
     
     // Singletons don't use retain counting
-    if (IS_SINGLETON_TYPE(obj->type)) {
+    if (IS_SINGLETON_TYPE(obj_ptr->type)) {
         return 0;
     }
     
     // Also check SINGLETON_RC for empty_list, empty_map, etc.
-    if (obj->rc == SINGLETON_RC) {
+    if (obj_ptr->rc == SINGLETON_RC) {
         return 0;
     }
     
     // Return actual retain count for tracked objects
-    return obj->rc;
+    return obj_ptr->rc;
 }
 
 // ============================================================================
@@ -715,16 +542,20 @@ static void release_object_deep(CljObject *v) {
             break;
             
         case CLJ_VECTOR:
-        case CLJ_WEAK_VECTOR:
             {
                 CljPersistentVector *vec = as_vector(v);
                 // Release all vector elements
                 VECTOR_FOR_EACH(vec, elem) {
                     RELEASE(elem);
                 }
-                if (vec && vec->data) {
-                    free(vec->data);
-                }
+                // Note: data array wird automatisch freigegeben
+            }
+            break;
+            
+        case CLJ_WEAK_VECTOR:
+            {
+                // For CLJ_WEAK_VECTOR, elements are not retained or released (weak references)
+                // Note: data array wird automatisch freigegeben
             }
             break;
             

@@ -195,7 +195,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
     int count = vector_count(v);
     if (count <= limit) return RETAIN(vec);
     int start = count - limit;
-    CljPersistentVector* out = make_vector(limit, false);
+    CljPersistentVector* out = make_vector(limit, CLJ_VECTOR);
     ID nth_args[2];
     nth_args[0] = (ID)v;
     for (int i = 0; i < limit; i++) {

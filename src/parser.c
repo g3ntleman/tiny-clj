@@ -359,10 +359,10 @@ static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
     
-    // Create transient vector for efficient building
-    CljValue vec = make_vector(6, false);
-    CljValue tvec = transient((ID)vec);
-    RELEASE((CljObject*)vec);  // Release original, use transient
+    // Create persistent vector with RC=1 - COW will use in-place mutation
+    CljValue vec = make_vector(6, CLJ_VECTOR);
+    if (!vec) return NULL;
+    // RC=1 means we're the only owner, so vector_conj will mutate in-place
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
@@ -372,18 +372,19 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       // Check if parser made progress - if not, it's an error
       // If parser made progress, NULL means nil (which is valid)
       if (!value && after <= before && !reader_eof(reader)) {
-        RELEASE((CljObject*)tvec);
+        RELEASE((CljObject*)vec);
         return NULL;
       }
       
-      // Use clj_conj for transient vector (guaranteed in-place)
-      tvec = clj_conj((ID)tvec, value);
+      // Use vector_conj with COW: RC=1 → in-place mutation, RC>1 → COW
+      // Since we just created vec with RC=1, this will be in-place (no copy)
+      vec = vector_conj((CljPersistentVector*)vec, value);
+      if (!vec) {
+        throw_parser_exception("Failed to append to vector", reader);
+        return NULL;
+      }
       reader_skip_all(reader);
     }
-    
-    // Convert back to persistent vector
-    vec = persistent((ID)tvec);
-    RELEASE((CljObject*)tvec);
     
     if (reader_eof(reader) || !reader_match(reader, ']')) {
       RELEASE((CljObject*)vec);

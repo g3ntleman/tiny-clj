@@ -59,6 +59,7 @@ extern EvalState* test_get_eval_state(void);
 // Simple TEST macro that defines and registers a test function
 // Automatically wraps test in WITH_AUTORELEASE_POOL for memory management
 // Extracts filename from __FILE__ to use as group name
+// Stores file path and line number for Unity error reporting
 // Note: The global variable g_test_eval_state (or st via #define) is available in all tests
 #define TEST(name) \
     static void name##_body(void); \
@@ -70,7 +71,7 @@ extern EvalState* test_get_eval_state(void);
     static void register_##name(void) __attribute__((constructor)); \
     static void register_##name(void) { \
         const char *filename = test_extract_filename_from_path(__FILE__); \
-        test_registry_add_with_group(#name, name, filename); \
+        test_registry_add_with_file_info(#name, name, filename, __FILE__, __LINE__); \
     } \
     static void name##_body(void)
 

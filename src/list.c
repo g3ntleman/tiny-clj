@@ -37,7 +37,19 @@ CljList* make_list(ID first, CljList *rest) {
 
 // List-Operationen für try/catch
 ID list_nth(CljList *list, int n) {
-    if (!list || n < 0) return NULL;
+    if (!list || n < 0) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for list", n);
+        return NULL;
+    }
+    
+    // Check if list is empty (both first and rest are NULL)
+    if (list_empty(list)) {
+        // Empty list - index is out of bounds
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "nth index %d is out of bounds for list", n);
+        return NULL;
+    }
     
     CljObject *current = (CljObject*)list;
     
@@ -45,6 +57,7 @@ ID list_nth(CljList *list, int n) {
     for (int i = 0; i <= n && current && TAG(current) == CLJ_LIST; i++) {
         if (i == n) {
             CljList *current_list = as_list(current);
+            // Element found - return it (may be NULL if element is nil)
             return (ID)LIST_FIRST(current_list);  // Return directly - no additional memory management
         }
         CljList *current_list = as_list(current);
@@ -54,6 +67,9 @@ ID list_nth(CljList *list, int n) {
         }
     }
     
+    // Index not found - out of bounds
+    throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+            "nth index %d is out of bounds for list", n);
     return NULL;
 }
 
@@ -71,7 +87,7 @@ int list_count(CljList *list) {
     if (!list_data) return 0;
     
     // Check if this is the empty list singleton (both first and rest are NULL)
-    if (LIST_FIRST(list_data) == NULL && LIST_REST(list_data) == NULL) {
+    if (list_empty(list_data)) {
         return 0;
     }
     

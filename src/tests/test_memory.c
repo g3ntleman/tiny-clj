@@ -83,7 +83,7 @@ TEST(test_vector_memory) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
         // Test vector creation and memory management
-        CljValue vec = make_vector(5, 1);
+        CljValue vec = make_vector(5, CLJ_VECTOR);
         TEST_ASSERT_NOT_NULL(vec);
         
         CljPersistentVector *vec_data = as_vector((CljObject*)vec);

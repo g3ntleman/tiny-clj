@@ -122,7 +122,7 @@ TEST(test_seq_rest_performance) {
     // Use global st from setUp
     
     // Test direct vector creation first
-    CljValue vec_val = make_vector(10, 0);
+    CljValue vec_val = make_vector(10, CLJ_VECTOR);
     TEST_ASSERT_NOT_NULL(vec_val);
     
     // Create large vector

@@ -204,7 +204,7 @@ TEST(test_time_with_dotimes) {
     CljObject *five = fixnum(5);
     
     // Create binding vector: [i 1000]
-    CljObject *binding_vector = make_vector(2, true);
+    CljObject *binding_vector = make_vector(2, CLJ_VECTOR);
     CljPersistentVector *vec_data = as_vector(binding_vector);
     // Add elements using vector_conj
     vec_data = vector_conj(vec_data, (ID)i_symbol);

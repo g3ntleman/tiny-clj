@@ -17,9 +17,67 @@ static size_t test_capacity = 0;
 // Initial capacity for registry
 #define INITIAL_CAPACITY 64
 
+// Forward declaration
+static char* create_qualified_name(const char *group, const char *name);
+
 // Add a test to the registry (legacy function for backward compatibility)
 void test_registry_add(const char *name, TestFunc func) {
     test_registry_add_with_group(name, func, "unknown");
+}
+
+// Add a test to the registry with file information
+void test_registry_add_with_file_info(const char *name, TestFunc func, const char *group, const char *file, int line) {
+    // Grow registry if needed
+    if (test_count >= test_capacity) {
+        size_t new_capacity = test_capacity == 0 ? INITIAL_CAPACITY : test_capacity * 2;
+        Test *new_registry = realloc(test_registry, new_capacity * sizeof(Test));
+        if (!new_registry) {
+            fprintf(stderr, "Error: Failed to allocate memory for test registry\n");
+            return;
+        }
+        test_registry = new_registry;
+        test_capacity = new_capacity;
+    }
+    
+    // Copy group name FIRST to ensure it's permanently stored before any other operations
+    // This is critical because group might point to a static buffer that could be overwritten
+    size_t group_len = strlen(group);
+    char *group_copy = malloc(group_len + 1);
+    if (!group_copy) {
+        fprintf(stderr, "Error: Failed to allocate memory for group name\n");
+        return;
+    }
+    strcpy(group_copy, group);
+    
+    // Create qualified name using the copied group name
+    char *qualified_name = create_qualified_name(group_copy, name);
+    if (!qualified_name) {
+        free(group_copy);
+        return;
+    }
+    
+    // Copy file path to ensure it's permanently stored
+    char *file_copy = NULL;
+    if (file) {
+        size_t file_len = strlen(file);
+        file_copy = malloc(file_len + 1);
+        if (!file_copy) {
+            fprintf(stderr, "Error: Failed to allocate memory for file path\n");
+            free(qualified_name);
+            free(group_copy);
+            return;
+        }
+        strcpy(file_copy, file);
+    }
+    
+    // Add test to registry
+    test_registry[test_count].name = name;
+    test_registry[test_count].qualified_name = qualified_name;
+    test_registry[test_count].func = func;
+    test_registry[test_count].group = group_copy;
+    test_registry[test_count].file = file_copy;
+    test_registry[test_count].line = line;
+    test_count++;
 }
 
 // Helper function to create qualified name (removes "test_" prefix if present)
@@ -80,6 +138,8 @@ void test_registry_add_with_group(const char *name, TestFunc func, const char *g
     test_registry[test_count].qualified_name = qualified_name;
     test_registry[test_count].func = func;
     test_registry[test_count].group = group_copy;
+    test_registry[test_count].file = NULL;  // Legacy: no file info
+    test_registry[test_count].line = 0;     // Legacy: no line info
     test_count++;
 }
 
@@ -193,10 +253,13 @@ void test_registry_list_groups(void) {
 
 // Clear the registry (for cleanup)
 void test_registry_clear(void) {
-    // Free all allocated strings (qualified_name and group)
+    // Free all allocated strings (qualified_name, group, and file)
     for (size_t i = 0; i < test_count; i++) {
         free((void*)test_registry[i].qualified_name);
         free((void*)test_registry[i].group);
+        if (test_registry[i].file) {
+            free((void*)test_registry[i].file);
+        }
     }
     free(test_registry);
     test_registry = NULL;
@@ -224,6 +287,7 @@ const char *test_extract_filename_from_path(const char *file_path) {
         // Allocate a static buffer to hold the filename without extension
         // Note: This is per-call, so each call gets its own buffer
         // For registration, we'll copy this string anyway
+        // FIX: Use thread-local storage or allocate dynamically to avoid overwriting
         static char buffer[256];
         size_t len = last_dot - filename;
         if (len >= sizeof(buffer)) {

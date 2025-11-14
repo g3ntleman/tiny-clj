@@ -3,6 +3,7 @@
 
 #include "object.h"
 #include <stdio.h>
+#include <stdbool.h>
 
 /**
  * @brief Print AST structure for debugging
@@ -10,6 +11,14 @@
  * @return Newly allocated C-string representation (caller must free)
  */
 const char* print_ast(CljObject *v);
+
+/**
+ * @brief Check if an object is a zombie (freed but not deallocated)
+ * @param o Object to check (can be NULL or immediate)
+ * @return true if object is a zombie, false otherwise
+ * @note Zombie objects have rc == ZOMBIE_RC (-1) and are only present in DEBUG builds
+ */
+bool is_zombie(ID o);
 
 // Debug print macro
 #ifdef DEBUG

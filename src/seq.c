@@ -67,7 +67,9 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             return true;
         }
         
-        case CLJ_VECTOR: {
+        case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR: {
             CljPersistentVector *vec = as_vector(obj);
             if (!vec) {
                 return true;  // Empty vector
@@ -119,7 +121,9 @@ ID seq_iter_first(const SeqIterator *iter) {
             return NULL;
         }
         
-        case CLJ_VECTOR: {
+        case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR: {
             if (iter->state.vec.index < iter->state.vec.count) {
                 // Use vector_get_element_no_retain to avoid exposing internal data pointer
                 CljPersistentVector *vec = (CljPersistentVector*)iter->container;
@@ -163,7 +167,9 @@ bool seq_iter_next(SeqIterator *iter) {
             return false;
         }
         
-        case CLJ_VECTOR: {
+        case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR: {
             if (iter->state.vec.index < iter->state.vec.count - 1) {
                 iter->state.vec.index++;
                 return true;
@@ -198,7 +204,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
     if (is_singleton(iter->container)) {
         // Check if it's actually empty based on type
         switch (iter->container->type) {
-            case CLJ_VECTOR: {
+            case CLJ_VECTOR:
+            case CLJ_WEAK_VECTOR:
+            case CLJ_TRANSIENT_VECTOR: {
                 CljPersistentVector *vec = (CljPersistentVector*)iter->container;
                 return vector_count(vec) == 0;
             }
@@ -221,6 +229,8 @@ bool seq_iter_empty(const SeqIterator *iter) {
             return iter->state.list.current == NULL;
         
         case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR:
             return iter->state.vec.index >= iter->state.vec.count;
         
         case CLJ_STRING:
@@ -239,6 +249,8 @@ int seq_iter_position(const SeqIterator *iter) {
         case CLJ_LIST:
             return iter->state.list.index;
         case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR:
             return iter->state.vec.index;
         case CLJ_STRING:
             return iter->state.str.index;
@@ -385,6 +397,8 @@ int seq_count(ID obj) {
         // Get count from embedded iterator state
         switch (seq->iter.seq_type) {
             case CLJ_VECTOR:
+            case CLJ_WEAK_VECTOR:
+            case CLJ_TRANSIENT_VECTOR:
                 return seq->iter.state.vec.count;
             case CLJ_LIST:
                 // List doesn't have direct count in state, fall through to iterate
@@ -424,6 +438,8 @@ bool is_seqable(ID obj) {
     switch (((CljObject*)obj)->type) {
         case CLJ_LIST:
         case CLJ_VECTOR:
+        case CLJ_WEAK_VECTOR:
+        case CLJ_TRANSIENT_VECTOR:
         case CLJ_MAP:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable

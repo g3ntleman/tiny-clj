@@ -428,16 +428,24 @@ TEST(test_require_nonexistent_file) {
 TEST(test_require_nested_path) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    // This file exists in the repo under libs/clojure/benchmarksgame/fibonacci_simple.clj
-    // Namespace: clojure.benchmarksgame.fibonacci_simple
-    // Our resolver uses libs/ as base, so it should find libs/clojure/...
-    (void)eval_string("(require 'clojure.benchmarksgame.fibonacci_simple)", g_test_eval_state);
+    // Create a test file with nested path structure (no computation on load)
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test/nested"));
+    const char *file_path = "libs/test/nested/path.clj";
+    const char *src = "(ns test.nested.path)\n(def nested-var 42)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
 
-    // After require, we can switch into ns and test a simple def if present
-    evalstate_set_ns(g_test_eval_state, "clojure.benchmarksgame.fibonacci_simple");
-    // Not asserting specific functions (depends on file), just ensure no crash switching
-    CljObject *nil_expr = eval_string("nil", g_test_eval_state);
-    (void)nil_expr;
+    // Test require with nested path: test.nested.path
+    // Our resolver uses libs/ as base, so it should find libs/test/nested/path.clj
+    (void)eval_string("(require 'test.nested.path)", g_test_eval_state);
+
+    // After require, we can switch into ns and test the var
+    evalstate_set_ns(g_test_eval_state, "test.nested.path");
+    ID val = eval_string("nested-var", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(val);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)val));
+    TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)val));
 
 }
 
@@ -483,7 +491,7 @@ TEST(test_require_with_refer) {
     // Verify func was copied to current namespace
     CljSymbol *func_sym = intern_symbol_global("func");
     TEST_ASSERT_NOT_NULL(func_sym);
-    CljObject *func_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)func_sym);
+    CljObject *func_val = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)func_sym);
     TEST_ASSERT_NOT_NULL(func_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
@@ -510,8 +518,8 @@ TEST(test_require_with_refer_all) {
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
     
-    CljObject *var1_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)var1_sym);
-    CljObject *var2_val = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)var2_sym);
+    CljObject *var1_val = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)var1_sym);
+    CljObject *var2_val = (CljObject*)map_get((CljValue)g_test_eval_state->current_ns->mappings, (CljValue)var2_sym);
     TEST_ASSERT_NOT_NULL(var1_val);
     TEST_ASSERT_NOT_NULL(var2_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));

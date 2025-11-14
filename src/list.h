@@ -22,6 +22,11 @@ typedef struct CljList {
 #define LIST_FIRST(list) ((list) ? (list)->first : NULL)
 #define LIST_REST(list) ((list) ? (list)->rest : NULL)
 
+// Check if a list is empty (both first and rest are NULL)
+static inline bool list_empty(CljList *list) {
+    return list == NULL || (LIST_FIRST(list) == NULL && LIST_REST(list) == NULL);
+}
+
 // List creation and operations
 CljList* make_list(ID first, CljList *rest);
 CljList* empty_list(void);

@@ -237,7 +237,7 @@ TEST(test_history_save_escapes_quotes) {
   CljObject *str = (CljObject *)make_string(test_input);
   TEST_ASSERT_NOT_NULL(str);
 
-  CljObject *vec = (CljObject *)make_vector(1, 0);
+  CljObject *vec = (CljObject *)make_vector(1, CLJ_VECTOR);
   CljPersistentVector *v = as_vector(vec);
   v = vector_conj(v, (ID)str);
 
@@ -693,7 +693,7 @@ TEST(test_history_load_from_file_scenario) {
         if (elem) RELEASE(elem);
       }
       if (all_strings) {
-        CljPersistentVector* new_vec = make_vector(count, false);
+        CljPersistentVector* new_vec = make_vector(count, CLJ_VECTOR);
         for (int i = 0; i < count; i++) {
           ID elem = vector_nth(v, i);
           new_vec = vector_conj(new_vec, elem);

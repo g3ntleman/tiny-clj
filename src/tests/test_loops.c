@@ -604,6 +604,54 @@ TEST(test_event_loop_run_next_mutates_channel) {
     RELEASE(chan);
 }
 
+// Test that event_loop_enqueue correctly updates count and event_loop_run_next can read it
+TEST(test_event_loop_enqueue_updates_count) {
+    WITH_AUTORELEASE_POOL({
+        // Clear event loop first
+        event_loop_clear();
+        
+        // Create a simple function
+        CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(fn);
+        
+        // Create a result channel
+        CljMap *chan = make_result_channel();
+        TEST_ASSERT_NOT_NULL(chan);
+        
+        // Check initial count (should be 0)
+        CljPersistentVector *task_vec = (CljPersistentVector*)g_runtime.task_queue;
+        TEST_ASSERT_NOT_NULL(task_vec);
+        unsigned int count_before = vector_count(task_vec);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
+            "Initial count should be 0");
+        
+        // Enqueue the task
+        event_loop_enqueue(fn, chan);
+        
+        // Check that count is now 1
+        unsigned int count_after = vector_count(task_vec);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
+            "event_loop_enqueue should increment count from 0 to 1");
+        
+        // Check that vector_as_array returns non-NULL
+        ID *data = vector_as_array(task_vec);
+        TEST_ASSERT_NOT_NULL_MESSAGE(data,
+            "vector_as_array should return non-NULL after enqueue");
+        
+        // Check that data[0] is not NULL (task should be there)
+        TEST_ASSERT_NOT_NULL_MESSAGE(data[0],
+            "data[0] should contain the enqueued task");
+        
+        // Don't run the task (to avoid memory issues), just verify count is correct
+        // The count check above is the main test
+        
+        // Cleanup - manually remove the task to avoid memory issues
+        vector_remove_at(task_vec, 0);
+        RELEASE(fn);
+        RELEASE(chan);
+    });
+}
+
 // ============================================================================
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================

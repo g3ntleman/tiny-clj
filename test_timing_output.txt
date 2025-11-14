@@ -1,0 +1,9 @@
+Testing each group individually to find slow tests...
+==================================================
+
+Testing group: 20 ... ✓ 0.05s
+
+==================================================
+Total time: 0.05s
+
+No groups took longer than 1 second.

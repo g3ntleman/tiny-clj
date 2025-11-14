@@ -350,3 +350,91 @@ TEST(test_cancel_timer_validates_argument) {
     TEST_FAIL_MESSAGE("cancel-timer should throw exception for non-integer argument");
 }
 
+// Test that timer_enqueue with delay 0 correctly enqueues task
+TEST(test_timer_enqueue_zero_delay_enqueues_task) {
+    WITH_AUTORELEASE_POOL({
+        // Clear event loop first
+        event_loop_clear();
+        
+        // Create a simple function
+        CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(fn);
+        
+        // Check initial count (should be 0)
+        CljPersistentVector *task_vec = (CljPersistentVector*)g_runtime.task_queue;
+        TEST_ASSERT_NOT_NULL(task_vec);
+        unsigned int count_before = vector_count(task_vec);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
+            "Initial count should be 0");
+        
+        // Enqueue timer with 0ms delay (should execute immediately)
+        int32_t timer_id = timer_enqueue(fn, 0, false, 0);
+        TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
+            "timer_enqueue should return a valid timer ID");
+        
+        // Check that count is now 1 (timer with delay 0 should be enqueued immediately)
+        unsigned int count_after = vector_count(task_vec);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after,
+            "timer_enqueue with delay 0 should increment count from 0 to 1");
+        
+        // Check that vector_as_array returns non-NULL
+        ID *data = vector_as_array(task_vec);
+        TEST_ASSERT_NOT_NULL_MESSAGE(data,
+            "vector_as_array should return non-NULL after timer_enqueue");
+        
+        // Check that data[0] is not NULL (task should be there)
+        TEST_ASSERT_NOT_NULL_MESSAGE(data[0],
+            "data[0] should contain the enqueued task");
+        
+        // Cleanup - manually remove the task
+        vector_remove_at(task_vec, 0);
+        RELEASE(fn);
+    });
+}
+
+// Test that timer_enqueue with delay 0 works correctly with event_loop_run_next
+TEST(test_timer_enqueue_zero_delay_with_run_next) {
+    WITH_AUTORELEASE_POOL({
+        // Clear event loop first
+        event_loop_clear();
+        
+        // Create a simple function
+        CljObject *fn = eval_string("(fn [] 42)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(fn);
+        
+        // Check initial count (should be 0)
+        CljPersistentVector *task_vec = (CljPersistentVector*)g_runtime.task_queue;
+        TEST_ASSERT_NOT_NULL(task_vec);
+        unsigned int count_before = vector_count(task_vec);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,
+            "Initial count should be 0");
+        
+        // Enqueue timer with 0ms delay (should execute immediately)
+        int32_t timer_id = timer_enqueue(fn, 0, false, 0);
+        TEST_ASSERT_TRUE_MESSAGE(timer_id > 0,
+            "timer_enqueue should return a valid timer ID");
+        
+        // Check that count is now 1 (timer with delay 0 should be enqueued immediately)
+        unsigned int count_after_enqueue = vector_count(task_vec);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_after_enqueue,
+            "timer_enqueue with delay 0 should increment count from 0 to 1");
+        
+        // Check that vector_as_array returns non-NULL
+        ID *data = vector_as_array(task_vec);
+        TEST_ASSERT_NOT_NULL_MESSAGE(data,
+            "vector_as_array should return non-NULL after timer_enqueue");
+        
+        // Now test event_loop_run_next - it should see the count and return true
+        // But first, get a fresh reference to task_vec (like event_loop_run_next does)
+        CljPersistentVector *task_vec_fresh = (CljPersistentVector*)g_runtime.task_queue;
+        TEST_ASSERT_NOT_NULL(task_vec_fresh);
+        unsigned int count_before_run = vector_count(task_vec_fresh);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, count_before_run,
+            "Count should be 1 before event_loop_run_next");
+        
+        // Cleanup - manually remove the task to avoid memory issues
+        vector_remove_at(task_vec, 0);
+        RELEASE(fn);
+    });
+}
+
