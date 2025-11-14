@@ -231,6 +231,95 @@ static bool is_numeric_type(CljObject *obj) {
     return IS_IMMEDIATE(obj);
 }
 
+// Optimized overflow checking using compiler intrinsics
+// Fast-path: Skip checks for small values where overflow is impossible
+// Use compiler intrinsics when available for better performance
+#if defined(__GNUC__) || defined(__clang__)
+    // GCC/Clang: Use builtin overflow functions
+    #define USE_BUILTIN_OVERFLOW 1
+#else
+    #define USE_BUILTIN_OVERFLOW 0
+#endif
+
+// Fast-path threshold: values in this range cannot overflow with normal operations
+#define SAFE_ADD_THRESHOLD 1000000  // Safe if both |a|, |b| < 1M
+#define SAFE_MUL_THRESHOLD 46340    // Safe if both |a|, |b| < sqrt(INT_MAX) ≈ 46340
+
+// Optimized addition with overflow check
+static inline bool checked_add(int a, int b, int *result) {
+    // Fast-path: If both values are small, overflow is impossible
+    if (a >= -SAFE_ADD_THRESHOLD && a <= SAFE_ADD_THRESHOLD &&
+        b >= -SAFE_ADD_THRESHOLD && b <= SAFE_ADD_THRESHOLD) {
+        *result = a + b;
+        return false;  // No overflow
+    }
+    
+#if USE_BUILTIN_OVERFLOW
+    return __builtin_add_overflow(a, b, result);
+#else
+    // Fallback: Manual check
+    if (a > 0 && b > INT_MAX - a) return true;  // Overflow
+    if (a < 0 && b < INT_MIN - a) return true;  // Underflow
+    *result = a + b;
+    return false;
+#endif
+}
+
+// Optimized subtraction with overflow check
+static inline bool checked_sub(int a, int b, int *result) {
+    // Fast-path: If both values are small, underflow is impossible
+    if (a >= -SAFE_ADD_THRESHOLD && a <= SAFE_ADD_THRESHOLD &&
+        b >= -SAFE_ADD_THRESHOLD && b <= SAFE_ADD_THRESHOLD) {
+        *result = a - b;
+        return false;  // No overflow
+    }
+    
+#if USE_BUILTIN_OVERFLOW
+    return __builtin_sub_overflow(a, b, result);
+#else
+    // Fallback: Manual check
+    if (a > 0 && b < a - INT_MAX) return true;  // Overflow
+    if (a < 0 && b > a - INT_MIN) return true;  // Underflow
+    *result = a - b;
+    return false;
+#endif
+}
+
+// Optimized multiplication with overflow check
+static inline bool checked_mul(int a, int b, int *result) {
+    // Fast-path: If both values are small, overflow is impossible
+    if (a >= -SAFE_MUL_THRESHOLD && a <= SAFE_MUL_THRESHOLD &&
+        b >= -SAFE_MUL_THRESHOLD && b <= SAFE_MUL_THRESHOLD) {
+        *result = a * b;
+        return false;  // No overflow
+    }
+    
+    // Special case: multiplication by 0 or 1
+    if (a == 0 || b == 0) {
+        *result = 0;
+        return false;
+    }
+    if (a == 1) {
+        *result = b;
+        return false;
+    }
+    if (b == 1) {
+        *result = a;
+        return false;
+    }
+    
+#if USE_BUILTIN_OVERFLOW
+    return __builtin_mul_overflow(a, b, result);
+#else
+    // Fallback: Manual check
+    if (a != 0 && b != 0) {
+        if (a > INT_MAX / b || a < INT_MIN / b) return true;  // Overflow
+    }
+    *result = a * b;
+    return false;
+#endif
+}
+
 /** @brief Generic arithmetic function (variadic version) */
 CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalState *st) {
     // Clojure-compatible: Accept NULL environment - eval_arg handles it
@@ -396,41 +485,28 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
         
         switch (op) {
             case ARITH_ADD:
-                // Check for overflow
-                if (a_val > 0 && b_val > INT_MAX - a_val) {
+                // Optimized overflow check using compiler intrinsics
+                if (checked_add(a_val, b_val, &result)) {
                     throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
                         ERR_INTEGER_OVERFLOW_ADDITION, a_val, b_val);
                     return NULL;
-                } else if (a_val < 0 && b_val < INT_MIN - a_val) {
-                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                        ERR_INTEGER_UNDERFLOW_ADDITION, a_val, b_val);
-                    return NULL;
                 }
-                result = a_val + b_val;
                 break;
             case ARITH_SUB:
-                // Check for overflow/underflow
-                if (a_val > 0 && b_val < a_val - INT_MAX) {
+                // Optimized overflow check using compiler intrinsics
+                if (checked_sub(a_val, b_val, &result)) {
                     throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
                         ERR_INTEGER_OVERFLOW_SUBTRACTION, a_val, b_val);
                     return NULL;
-                } else if (a_val < 0 && b_val > a_val - INT_MIN) {
-                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                        ERR_INTEGER_UNDERFLOW_SUBTRACTION, a_val, b_val);
-                    return NULL;
                 }
-                result = a_val - b_val;
                 break;
             case ARITH_MUL:
-                // Check for overflow
-                if (a_val != 0 && b_val != 0) {
-                    if (a_val > INT_MAX / b_val || a_val < INT_MIN / b_val) {
-                        throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                            ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
-                        return NULL;
-                    }
+                // Optimized overflow check using compiler intrinsics
+                if (checked_mul(a_val, b_val, &result)) {
+                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                        ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
+                    return NULL;
                 }
-                result = a_val * b_val;
                 break;
             case ARITH_DIV:
                 result = a_val / b_val;
@@ -478,41 +554,28 @@ ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const Ev
     
     switch (op) {
         case ARITH_ADD:
-            // Check for integer overflow before addition
-            if (a_val > 0 && b_val > INT_MAX - a_val) {
+            // Optimized overflow check using compiler intrinsics
+            if (checked_add(a_val, b_val, &result)) {
                 throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
                     ERR_INTEGER_OVERFLOW_ADDITION, a_val, b_val);
                 return NULL;
-            } else if (a_val < 0 && b_val < INT_MIN - a_val) {
-                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                    ERR_INTEGER_UNDERFLOW_ADDITION, a_val, b_val);
-                return NULL;
             }
-            result = a_val + b_val;
             break;
         case ARITH_SUB:
-            // Check for integer overflow/underflow before subtraction
-            if (a_val > 0 && b_val < a_val - INT_MAX) {
+            // Optimized overflow check using compiler intrinsics
+            if (checked_sub(a_val, b_val, &result)) {
                 throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
                     ERR_INTEGER_OVERFLOW_SUBTRACTION, a_val, b_val);
                 return NULL;
-            } else if (a_val < 0 && b_val > a_val - INT_MIN) {
-                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                    ERR_INTEGER_UNDERFLOW_SUBTRACTION, a_val, b_val);
-                return NULL;
             }
-            result = a_val - b_val;
             break;
         case ARITH_MUL:
-            // Check for integer overflow before multiplication
-            if (a_val != 0 && b_val != 0) {
-                if (a_val > INT_MAX / b_val || a_val < INT_MIN / b_val) {
-                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                        ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
-                    return NULL;
-                }
+            // Optimized overflow check using compiler intrinsics
+            if (checked_mul(a_val, b_val, &result)) {
+                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
+                    ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
+                return NULL;
             }
-            result = a_val * b_val;
             break;
         case ARITH_DIV:
             result = a_val / b_val;
