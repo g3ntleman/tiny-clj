@@ -55,7 +55,7 @@ void meta_set(CljObject *v, CljObject *meta) {
 ID meta_get(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return NULL;
     
-    return (ID)map_get(g_runtime.meta_registry, (CljValue)v);
+    return (ID)map_get(g_runtime.meta_registry, (CljValue)v, NULL);
 }
 
 void meta_clear(CljObject *v) {
@@ -178,7 +178,7 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
         if (!key) continue;
         
         // Check if key already exists in existing map
-        ID existing_value = map_get((CljMap*)existing_meta, (ID)key);
+        ID existing_value = map_get((CljMap*)existing_meta, (ID)key, NULL);
         if (!existing_value) {
             // Key doesn't exist, add it using map_assoc
             CljMap *new_result = map_assoc((CljMap*)result, (ID)key, (ID)value);

@@ -95,7 +95,7 @@ void result_channel_close(CljMap *chan) {
     CLJ_ASSERT((void*)result == chan_ptr_before);  // Should return same pointer
     
     // Verify channel was actually mutated
-    CljValue closed_val = map_get(chan, (CljValue)kw_closed);
+    CljValue closed_val = map_get(chan, (CljValue)kw_closed, NULL);
     CLJ_ASSERT(closed_val != NULL);
     CLJ_ASSERT(is_special(closed_val));
     CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);

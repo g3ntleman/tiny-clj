@@ -763,16 +763,22 @@ ID native_conj_bang(ID *args, unsigned int argc) {
 }
 
 ID native_get(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 2, "get")) return NULL;
+    if (argc < 2 || argc > 3) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                       "get requires 2 or 3 arguments", 
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
     CljObject *map = (CljObject*)args[0];
     CljObject *key = (CljObject*)args[1];
+    ID not_found = argc == 3 ? args[2] : NULL;
     if (!map || !key) return (NULL);
     
     if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
-        return map_get((CljMap*)map, (ID)key);
+        return map_get((CljMap*)map, (ID)key, not_found);
     }
     
-    return NULL; // Return nil for unsupported types
+    return not_found ? not_found : NULL; // Return not_found or nil for unsupported types
 }
 
 ID native_count(ID *args, unsigned int argc) {
@@ -1559,7 +1565,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
         }
         
         // Look up symbol in source namespace
-        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)sym);
+        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)sym, NULL);
         if (val) {
             // Copy to target namespace
             ns_define(target_ns, sym, val);

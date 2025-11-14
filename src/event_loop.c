@@ -62,8 +62,8 @@ static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan
     
     task_init_keywords();
     
-    ID fn_val = map_get(task_map, (ID)g_task_keywords.kw_fn);
-    ID result_chan_val = map_get(task_map, (ID)g_task_keywords.kw_result_chan);
+    ID fn_val = map_get(task_map, (ID)g_task_keywords.kw_fn, NULL);
+    ID result_chan_val = map_get(task_map, (ID)g_task_keywords.kw_result_chan, NULL);
     
     if (!fn_val) return false;
     
@@ -92,12 +92,12 @@ static bool timer_task_from_map(CljMap *task_map, CljObject **fn, int32_t *sched
     
     task_init_keywords();
     
-    ID fn_val = map_get(task_map, (ID)g_task_keywords.kw_fn);
-    ID scheduled_sec_val = map_get(task_map, (ID)g_task_keywords.kw_scheduled_sec);
-    ID scheduled_msec_val = map_get(task_map, (ID)g_task_keywords.kw_scheduled_msec);
-    ID periodic_val = map_get(task_map, (ID)g_task_keywords.kw_periodic);
-    ID period_ms_val = map_get(task_map, (ID)g_task_keywords.kw_period_ms);
-    ID timer_id_val = map_get(task_map, (ID)g_task_keywords.kw_timer_id);
+    ID fn_val = map_get(task_map, (ID)g_task_keywords.kw_fn, NULL);
+    ID scheduled_sec_val = map_get(task_map, (ID)g_task_keywords.kw_scheduled_sec, NULL);
+    ID scheduled_msec_val = map_get(task_map, (ID)g_task_keywords.kw_scheduled_msec, NULL);
+    ID periodic_val = map_get(task_map, (ID)g_task_keywords.kw_periodic, NULL);
+    ID period_ms_val = map_get(task_map, (ID)g_task_keywords.kw_period_ms, NULL);
+    ID timer_id_val = map_get(task_map, (ID)g_task_keywords.kw_timer_id, NULL);
     
     if (!fn_val || !scheduled_sec_val || !scheduled_msec_val || !periodic_val || !period_ms_val || !timer_id_val) {
         return false;
@@ -309,7 +309,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         CLJ_ASSERT((void*)chan == chan_ptr_before);
         
         CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
-        CljValue closed_val = map_get(chan, (CljValue)kw_closed);
+        CljValue closed_val = map_get(chan, (CljValue)kw_closed, NULL);
         CLJ_ASSERT(closed_val != NULL);
         CLJ_ASSERT(is_special(closed_val));
         CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);

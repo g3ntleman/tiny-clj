@@ -703,7 +703,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
     switch (body_obj->type) {
         case CLJ_SYMBOL: {
             // Look up symbol in environment
-            return (ID)map_get((CljMap*)env, (CljValue)body);
+            return (ID)map_get((CljMap*)env, (CljValue)body, NULL);
         }
         
         case CLJ_LIST: {
@@ -735,14 +735,14 @@ ID eval_body_with_local_env(ID body, CljMap *local_env, EvalState *st) {
     switch (body_obj->type) {
         case CLJ_SYMBOL: {
             // First try local environment
-            CljObject *result = (CljObject*)map_get((CljMap*)local_env, (CljValue)body);
+            CljObject *result = (CljObject*)map_get((CljMap*)local_env, (CljValue)body, NULL);
             if (result) {
                 return AUTORELEASE(RETAIN(result));
             }
             
             // If not found in local environment, try namespace
             if (st && st->current_ns && st->current_ns->mappings) {
-                result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body);
+                result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body, NULL);
                 if (result) {
                     return AUTORELEASE(RETAIN(result));
                 }
@@ -784,7 +784,7 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
     
     // For symbols, look up in environment
     if (op && TAG(op) == CLJ_SYMBOL) {
-        CljObject *resolved = (CljObject*)map_get((CljMap*)env, (CljValue)op);
+        CljObject *resolved = (CljObject*)map_get((CljMap*)env, (CljValue)op, NULL);
         if (resolved) {
             // If it's a function, call it
             // CRITICAL: Check for both CLJ_FUNC (native) and CLJ_CLOSURE (Clojure functions)
@@ -857,7 +857,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             // map_contains and map_get take ID (can handle both objects and immediates)
             if (map_contains(ctx->env->closure_env, body)) {
                 // map_get returns ID (can be object or immediate)
-                ID resolved_id = map_get(ctx->env->closure_env, (ID)body);
+                ID resolved_id = map_get(ctx->env->closure_env, (ID)body, NULL);
                 // CRITICAL: resolved_id can be NULL (nil), which is valid in Clojure
                 // We need to distinguish between nil (valid) and not found (error)
                 // map_contains already checked that the key exists, so resolved_id can be NULL (nil)
@@ -1029,7 +1029,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             if (env && TAG(env) == CLJ_MAP) {
                 // Check if key exists in environment (even if value is nil/NULL)
                 if (map_contains((CljMap*)env, (CljValue)body)) {
-                    CljObject *result = (CljObject*)map_get((CljMap*)env, (CljValue)body);
+                    CljObject *result = (CljObject*)map_get((CljMap*)env, (CljValue)body, NULL);
                     // result can be NULL (nil), which is valid
                     return result;
                 }
@@ -1038,7 +1038,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // If not found in local environment, try namespace
             if (st && st->current_ns && st->current_ns->mappings) {
                 if (map_contains((CljValue)st->current_ns->mappings, (CljValue)body)) {
-                    CljObject *result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body);
+                    CljObject *result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body, NULL);
                     // result can be NULL (nil), which is valid
                     return result;
                 }
@@ -1084,7 +1084,7 @@ static CljObject* eval_map_lookup(CljList *list, CljMap *env, CljObject *map) {
     CljObject *key = eval_arg(list, 1, env, NULL);
     if (!key) return NULL;
     
-    CljObject *result = (CljObject*)map_get((CljValue)map, (CljValue)key);
+    CljObject *result = (CljObject*)map_get((CljValue)map, (CljValue)key, NULL);
     RELEASE(key);
     // RETAIN and AUTORELEASE handle immediates and NULL safely - no checks needed
     return AUTORELEASE(RETAIN(result));
@@ -1338,7 +1338,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         ID resolved = NULL;
         if (env && TAG(env) == CLJ_MAP) {
             if (map_contains(env, op)) {
-                resolved = map_get(env, op);
+                resolved = map_get(env, op, NULL);
             }
         }
         if (resolved) {
@@ -1530,7 +1530,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (env && TAG(env) == CLJ_MAP) {
             // Check if key exists in environment (even if value is nil/NULL)
             if (map_contains((CljValue)env, (CljValue)op)) {
-                resolved = (CljObject*)map_get(env, op);
+                resolved = (CljObject*)map_get(env, op, NULL);
             }
         }
         if (resolved) {
@@ -1910,7 +1910,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
                 }
                 
                 if (arg && TAG(arg) == CLJ_MAP) {
-                    CljObject *result = (CljObject*)map_get((CljValue)arg, (CljValue)op);
+                    CljObject *result = (CljObject*)map_get((CljValue)arg, (CljValue)op, NULL);
                     // RETAIN handles immediates and NULL safely - no checks needed
                     return RETAIN(result);
                 }
@@ -2127,7 +2127,7 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
         // Try to find the symbol in the current namespace mappings
         CljMap *mappings = st->current_ns->mappings;
         if (mappings) {
-            value = map_get((CljValue)mappings, sym_obj);
+            value = map_get((CljValue)mappings, sym_obj, NULL);
         }
     }
     
@@ -2729,7 +2729,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                 // CRITICAL: map_assoc may return a new map (COW or capacity growth), so we must update closure_env
                 // Always update closure_env to ensure the function can find itself recursively
                 // Check if function is already in closure_env before adding
-                CljObject *existing = (CljObject*)map_get((CljValue)func_env, (CljValue)sym_val);
+                CljObject *existing = (CljObject*)map_get((CljValue)func_env, (CljValue)sym_val, NULL);
                 if (existing != value) {
                     // Function not in closure_env - add it
                     CljMap *new_func_env = map_assoc(func_env, (ID)sym_val, (ID)value);
@@ -2741,7 +2741,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                     } else {
                         // map_assoc returned same map but should have added the function
                         // Verify it's there now
-                        CljObject *verify = (CljObject*)map_get((CljValue)func_env, (CljValue)sym_val);
+                        CljObject *verify = (CljObject*)map_get((CljValue)func_env, (CljValue)sym_val, NULL);
                         if (verify != value) {
                             // Still not there - force update
                             // This shouldn't happen, but handle it
@@ -2987,7 +2987,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // This tests the thesis that closure_env contains the function after ns_define
     CLJ_ASSERT(func->closure_env != NULL);
     CLJ_ASSERT(TAG(func->closure_env) == CLJ_MAP);
-    CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym);
+    CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym, NULL);
     CLJ_ASSERT(func_in_closure != NULL);
     CLJ_ASSERT(func_in_closure == (CljObject*)fn_obj || func_in_closure == (CljObject*)func);
     
@@ -3039,7 +3039,7 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
             // We need to distinguish between these two cases
             if (map_contains((CljValue)env, (CljValue)element)) {
                 // Key exists in map - get the value (which may be NULL/nil)
-                CljObject *resolved = (CljObject*)map_get((CljValue)env, (CljValue)element);
+                CljObject *resolved = (CljObject*)map_get((CljValue)env, (CljValue)element, NULL);
                 // CRITICAL: map_get returns a value that is already retained by the map.
                 // eval_arg should return AUTORELEASE objects, so we need to autorelease it.
                 // RETAIN and AUTORELEASE handle immediates and NULL safely - no check needed
@@ -3249,7 +3249,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     } else if (expr && TAG(expr) == CLJ_SYMBOL) {
         // For symbols, look up in environment (if provided) or namespace
         if (eval_env && TAG(eval_env) == CLJ_MAP) {
-            CljObject *resolved = (CljObject*)map_get((CljValue)eval_env, (CljValue)expr);
+            CljObject *resolved = (CljObject*)map_get((CljValue)eval_env, (CljValue)expr, NULL);
             // map_get returns retained values - use AUTORELEASE for eval_time
             result = resolved ? AUTORELEASE(resolved) : NULL;
         }

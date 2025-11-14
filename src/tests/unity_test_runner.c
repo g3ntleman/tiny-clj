@@ -416,8 +416,8 @@ TEST(test_embedded_array_single_malloc) {
         map = map_assoc(map, fixnum(2), fixnum(20));
         
         // Verify entries in embedded array
-        CljValue val1 = map_get((CljMap*)map, fixnum(1));
-        CljValue val2 = map_get((CljMap*)map, fixnum(2));
+        CljValue val1 = map_get((CljMap*)map, fixnum(1), NULL);
+        CljValue val2 = map_get((CljMap*)map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1);
         TEST_ASSERT_NOT_NULL(val2);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
@@ -440,9 +440,9 @@ TEST(test_embedded_array_memory_efficiency) {
         map3 = map_assoc(map3, fixnum(3), fixnum(30));
         
         // Verify all maps work independently
-        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map1, fixnum(1)));
-        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map2, fixnum(2)));
-        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map3, fixnum(3)));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map1, fixnum(1), NULL));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map2, fixnum(2), NULL));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map3, fixnum(3), NULL));
         
         // Verify embedded arrays are separate
         TEST_ASSERT_NOT_EQUAL(map1->data, map2->data);
@@ -471,8 +471,8 @@ TEST(test_embedded_array_cow) {
         TEST_ASSERT_EQUAL(2, new_map->count);
         
         // Verify entries in new map
-        CljValue val1 = map_get(new_map, fixnum(1));
-        CljValue val2 = map_get(new_map, fixnum(2));
+        CljValue val1 = map_get(new_map, fixnum(1), NULL);
+        CljValue val2 = map_get(new_map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1);
         TEST_ASSERT_NOT_NULL(val2);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
@@ -480,7 +480,7 @@ TEST(test_embedded_array_cow) {
         
         // Verify original unchanged
         TEST_ASSERT_EQUAL(1, map->count);
-        TEST_ASSERT_NULL(map_get((CljMap*)map, fixnum(2)));
+        TEST_ASSERT_NULL(map_get((CljMap*)map, fixnum(2), NULL));
         
         
         RELEASE(map);  // Cleanup
@@ -506,9 +506,9 @@ TEST(test_embedded_array_capacity_growth) {
         TEST_ASSERT_TRUE(new_map->capacity > map->capacity);
         
         // Verify all entries exist in new map
-        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(1)));
-        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(2)));
-        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(3)));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(1), NULL));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(2), NULL));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(3), NULL));
         
         
         RELEASE(map);  // Cleanup
@@ -536,7 +536,7 @@ TEST(test_embedded_array_performance) {
         
         // Verify final state
         TEST_ASSERT_EQUAL(50, env->count);
-        CljValue val25 = map_get((CljMap*)env, fixnum(25));
+        CljValue val25 = map_get((CljMap*)env, fixnum(25), NULL);
         TEST_ASSERT_NOT_NULL(val25);
         TEST_ASSERT_EQUAL_INT(250, as_fixnum(val25));
         

@@ -28,7 +28,7 @@ TEST(test_core_initialization_inc_loaded) {
     TEST_ASSERT_NOT_NULL(inc_sym);
     
     // Check if inc is in clojure.core mappings
-    CljMap *map = (CljMap*)clojure_core->mappings;
+    CljMap *map = clojure_core->mappings;
     TEST_ASSERT_NOT_NULL(map);
     
     int symbol_count = 0;
@@ -50,7 +50,7 @@ TEST(test_core_initialization_inc_loaded) {
     }
     
     // Try direct map_get
-    CljObject *inc_value = (CljObject*)map_get((CljMap*)map, (CljValue)inc_sym);
+    CljObject *inc_value = map_get(map, inc_sym, NULL);
     
     if (!inc_value && !found_inc) {
         char msg[512];
@@ -82,7 +82,7 @@ TEST(test_core_initialization_arithmetic_functions) {
     
     for (int i = 0; i < 7; i++) {
         CljSymbol *sym = intern_symbol_global(functions[i]);
-        CljObject *value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)sym);
+        CljObject *value = map_get(clojure_core->mappings, sym, NULL);
         
         if (!value) {
             missing_count++;
@@ -112,7 +112,7 @@ TEST(test_core_initialization_plus_available) {
     TEST_ASSERT_NOT_NULL(plus_sym);
     
     // Check if + is in clojure.core mappings (should be registered by register_builtins)
-    CljObject *plus_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)plus_sym);
+    CljObject *plus_value = map_get(clojure_core->mappings, plus_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(plus_value, 
                                  "+ should be in clojure.core mappings (registered by register_builtins)");
 }
@@ -136,10 +136,10 @@ TEST(test_clojure_core_loads_inc) {
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core cache should be set");
     
     if (clojure_core && clojure_core->mappings) {
-        CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
+        CljObject *inc_value = map_get(clojure_core->mappings, inc_sym, NULL);
         
         if (!inc_value) {
-            CljMap *map = (CljMap*)clojure_core->mappings;
+            CljMap *map = clojure_core->mappings;
             int symbol_count = 0;
             const char *first_symbol = NULL;
             const char *inc_symbol_found = NULL;
@@ -173,7 +173,7 @@ TEST(test_clojure_core_loads_inc) {
                     inc_sym,
                     inc_symbol_found ? inc_symbol_found : "no",
                     inc_symbol_ptr,
-                    (inc_sym == inc_symbol_ptr) ? 1 : 0);
+                    (inc_sym == (CljSymbol*)inc_symbol_ptr) ? 1 : 0);
             TEST_FAIL_MESSAGE(msg);
         }
         
@@ -202,7 +202,7 @@ TEST(test_clojure_core_loads_all_functions) {
         
         for (int i = 0; i < 7; i++) {
             CljSymbol *sym = intern_symbol_global(functions[i]);
-            CljObject *value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)sym);
+            CljObject *value = map_get(clojure_core->mappings, sym, NULL);
             
             if (!value) {
                 missing_count++;
@@ -249,22 +249,22 @@ TEST(test_def_inc_evaluation_during_load) {
         TEST_ASSERT_NOT_NULL(fn_expr);
         
         // Verify that inc_sym is the same as intern_symbol_global("inc")
-        CljObject *inc_sym_interned = intern_symbol_global("inc");
+        CljSymbol *inc_sym_interned = intern_symbol_global("inc");
         TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym, inc_sym_interned,
                                       "inc symbol should be interned");
         
         // Evaluate the def expression
-        CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
+        CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
         TEST_ASSERT_NOT_NULL(env);
         
         TRY {
             CljValue result = eval_list(list, env, g_test_eval_state, NULL);
             
             // Check if inc is now in the mappings
-            CljObject *inc_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)inc_sym_interned);
+            CljObject *inc_value = map_get(g_test_eval_state->current_ns->mappings, inc_sym_interned, NULL);
             
             if (!inc_value) {
-                CljMap *map = (CljMap*)g_test_eval_state->current_ns->mappings;
+                CljMap *map = g_test_eval_state->current_ns->mappings;
                 int symbol_count = 0;
                 const char *first_symbol = NULL;
                 for (int i = 0; i < map->count; i++) {
@@ -320,7 +320,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core should exist");
     
     if (clojure_core && clojure_core->mappings) {
-        CljObject *plus_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)plus_sym);
+        CljObject *plus_value = map_get(clojure_core->mappings, plus_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(plus_value, 
                                     "+ should be in clojure.core mappings");
     }
@@ -332,7 +332,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Evaluate the fn expression
-    CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
+    CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
@@ -367,7 +367,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Evaluate the def expression
-    CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
+    CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
@@ -378,14 +378,14 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         TEST_ASSERT_NOT_NULL(test_var_sym);
         
         // test_var_value can be NULL if nil was stored
-        (void)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)test_var_sym);
+        (void)map_get(g_test_eval_state->current_ns->mappings, test_var_sym, NULL);
         // But the key should be in the map
         // Let's check if the key exists by iterating
-        CljMap *map = (CljMap*)g_test_eval_state->current_ns->mappings;
+        CljMap *map = g_test_eval_state->current_ns->mappings;
         bool found_key = false;
         for (int i = 0; i < map->count; i++) {
             CljObject *key = KV_KEY(map->data, i);
-            if (key == test_var_sym) {
+            if (key && TAG(key) == CLJ_SYMBOL && (CljSymbol*)key == test_var_sym) {
                 found_key = true;
                 break;
             }

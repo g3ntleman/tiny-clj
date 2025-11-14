@@ -35,8 +35,12 @@ static inline CljMap* map_empty(void) {
     extern CljMap *clj_empty_map_singleton;
     return clj_empty_map_singleton;
 }
-/** Get value for key or NULL if absent (structural key equality). */
-ID map_get(CljMap *map, ID key);
+/** Get value for key or not_found if absent (structural key equality).
+ * If not_found is NULL, returns NULL when key is absent (backward compatible).
+ * If not_found is provided, returns not_found when key is absent.
+ * Returns the value (which may be NULL/nil) when key exists.
+ */
+ID map_get(CljMap *map, ID key, ID not_found);
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
 CljMap* map_assoc(CljMap* map, ID key, ID value);
 /** Return a vector of keys (retained). */

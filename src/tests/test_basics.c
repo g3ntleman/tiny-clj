@@ -105,9 +105,9 @@ TEST(test_vector_creation) {
 
 TEST(test_map_creation) {
     // Test map creation using CljValue API
-    CljObject *map = AUTORELEASE(make_map(16));
+    CljMap *map = AUTORELEASE(make_map(16));
     TEST_ASSERT_NOT_NULL(map);
-    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->type);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
 }
 
 TEST(test_array_map_builtin) {
@@ -861,7 +861,7 @@ TEST(test_def_isolated_problem) {
     // Step 5: Try to resolve via eval_symbol (what eval_string uses)
     CljObject *eval_resolved = NULL;
     TRY {
-        eval_resolved = eval_symbol(test_value_sym, g_test_eval_state);
+        eval_resolved = eval_symbol(as_symbol(test_value_sym), g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined symbol");
         RELEASE(test_value_sym);
@@ -928,7 +928,7 @@ TEST(test_def_function_isolated_problem) {
     }
     
     // Step 5: Try to get the value directly from the map
-    CljObject *direct_map_value = (CljObject*)map_get((CljMap*)g_test_eval_state->current_ns->mappings, (CljValue)test_fn_sym);
+    CljObject *direct_map_value = map_get(g_test_eval_state->current_ns->mappings, test_fn_sym, NULL);
     if (direct_map_value) {
         TEST_ASSERT_TRUE_MESSAGE(direct_map_value && TAG(direct_map_value) == CLJ_FUNC || direct_map_value && TAG(direct_map_value) == CLJ_CLOSURE, 
                                  "Direct map lookup should return a function");
@@ -937,7 +937,7 @@ TEST(test_def_function_isolated_problem) {
     }
     
     // Step 6: Try to resolve the symbol directly via ns_resolve
-    CljObject *resolved = ns_resolve(g_test_eval_state, test_fn_sym);
+    CljObject *resolved = ns_resolve(g_test_eval_state, as_symbol(test_fn_sym));
     if (resolved) {
         TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_FUNC || resolved && TAG(resolved) == CLJ_CLOSURE, 
                                  "Resolved value should be a function");
@@ -948,7 +948,7 @@ TEST(test_def_function_isolated_problem) {
     // Step 4: Try to resolve via eval_symbol
     CljObject *eval_resolved = NULL;
     TRY {
-        eval_resolved = eval_symbol(test_fn_sym, g_test_eval_state);
+        eval_resolved = eval_symbol(as_symbol(test_fn_sym), g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined function");
         RELEASE(test_fn_sym);

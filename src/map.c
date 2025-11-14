@@ -55,15 +55,15 @@ CljMap* make_map(int capacity) {
 }
 
 /** Get value for key or NULL if absent (structural key equality). */
-ID map_get(CljMap *map, ID key) {
+ID map_get(CljMap *map, ID key, ID not_found) {
   if (!map || !key)
-    return NULL;
+    return not_found;
   CljObject *key_obj = (CljObject*)key;
   if (!key_obj)
-    return NULL;
+    return not_found;
   CljMap *map_data = map;
   if (!map_data)
-    return NULL;
+    return not_found;
   
   for (int i = 0; i < map_data->count; i++) {
     CljObject *stored_key = KV_KEY(map_data->data, i);
@@ -88,7 +88,7 @@ ID map_get(CljMap *map, ID key) {
     }
   }
   
-  return NULL;
+  return not_found;
 }
 
 

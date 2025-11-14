@@ -74,7 +74,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // CRITICAL: Always check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
-    ID v = map_get((CljValue)current_ns->mappings, sym);
+    ID v = map_get((CljValue)current_ns->mappings, sym, NULL);
     if (v) {
         // Found in current namespace - update cache and return
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
@@ -87,7 +87,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // Not in current namespace - check cache (fast path for repeated lookups)
     if (g_resolve_cache) {
-        ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym);
+        ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym, NULL);
         if (cached) {
             return cached;
         }
@@ -95,7 +95,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
 
     // Search clojure.core first (most common)
     if (g_runtime.clojure_core_cache && g_runtime.clojure_core_cache->mappings) {
-        v = (CljObject*)map_get((CljValue)g_runtime.clojure_core_cache->mappings, (CljValue)sym);
+        v = (CljObject*)map_get((CljValue)g_runtime.clojure_core_cache->mappings, (CljValue)sym, NULL);
         if (v) {
             // Cache the result
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
@@ -109,7 +109,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     CljNamespace *cur = g_runtime.ns_registry;
     while (cur) {
         if (cur != g_runtime.clojure_core_cache && cur->mappings) {
-            v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym);
+            v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym, NULL);
             if (v) {
                 // Cache the result
                 (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
@@ -286,7 +286,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
             } else {
                 CljSymbol *inc_sym = intern_symbol_global("inc");
                 if (inc_sym) {
-                    CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym);
+                    CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym, NULL);
                     if (!inc_value) {
                         needs_reload = true;
                     }
@@ -435,7 +435,7 @@ CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
     
     // Look up alias in aliases map
-    CljObject *ns_name = (CljObject*)map_get((CljValue)ns->aliases, (CljValue)alias);
+    CljObject *ns_name = (CljObject*)map_get((CljValue)ns->aliases, (CljValue)alias, NULL);
     return ns_name;
 }
 

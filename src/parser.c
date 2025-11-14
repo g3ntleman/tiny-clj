@@ -736,7 +736,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             CljSymbol *symbol_sym = intern_symbol_global(symbol_str);
             if (symbol_sym) {
               // Look up symbol in target namespace
-              ID resolved = map_get((CljMap*)target_ns->mappings, (ID)symbol_sym);
+              ID resolved = map_get((CljMap*)target_ns->mappings, (ID)symbol_sym, NULL);
               if (resolved) {
                 // Return resolved value (already retained by map_get)
                 return AUTORELEASE(RETAIN(resolved));

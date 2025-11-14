@@ -9,11 +9,11 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
     
     // Set initial value
     map = map_assoc(map, kw, (CljValue)clj_false);
-    TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)map, (CljValue)kw)) == SPECIAL_FALSE);
+    TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)map, (CljValue)kw, NULL)) == SPECIAL_FALSE);
     
     // Update value (should update, not add)
     map = map_assoc(map, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
-    TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)map, (CljValue)kw)) == SPECIAL_TRUE);
+    TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)map, (CljValue)kw, NULL)) == SPECIAL_TRUE);
     TEST_ASSERT_EQUAL_INT(1, map->count); // Should update, not add
     
     RELEASE((CljObject*)map);
@@ -31,7 +31,7 @@ TEST(test_map_assoc_channel_pattern) {
     
     // Verify closed is true
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
-    TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)chan, (CljValue)kw_closed)) == SPECIAL_TRUE);
+    TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)chan, (CljValue)kw_closed, NULL)) == SPECIAL_TRUE);
     
     RELEASE((CljObject*)chan);
 }
@@ -74,25 +74,25 @@ TEST(test_assign_immediates_in_map) {
     
     // Add immediate values using ASSIGN pattern
     map = map_assoc(map, kw, (CljValue)clj_false);
-    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(is_special(val1));
     TEST_ASSERT_TRUE(as_special(val1) == SPECIAL_FALSE);
     
     // Update to clj_true
     map = map_assoc(map, kw, (CljValue)clj_true);
-    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(is_special(val2));
     TEST_ASSERT_TRUE(as_special(val2) == SPECIAL_TRUE);
     
     // Update to fixnum
     map = map_assoc(map, kw, fixnum(123));
-    CljValue val3 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val3 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val3));
     TEST_ASSERT_EQUAL_INT(123, as_fixnum(val3));
     
     // Update back to clj_false
     map = map_assoc(map, kw, (CljValue)clj_false);
-    CljValue val4 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val4 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(is_special(val4));
     TEST_ASSERT_TRUE(as_special(val4) == SPECIAL_FALSE);
     
@@ -126,7 +126,7 @@ TEST(test_map_assoc_with_different_intern_calls) {
     map = map_assoc(map, (CljValue)kw_closed, (CljValue)clj_false);
     
     // Verify initial state
-    CljValue closed_val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw_closed);
+    CljValue closed_val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val1);
     TEST_ASSERT_TRUE(is_special(closed_val1));
     TEST_ASSERT_TRUE(as_special(closed_val1) == SPECIAL_FALSE);
@@ -136,7 +136,7 @@ TEST(test_map_assoc_with_different_intern_calls) {
     map = map_assoc(map, (CljValue)kw_closed_new, (CljValue)clj_true);
     
     // Verify update worked
-    CljValue closed_val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw_closed);
+    CljValue closed_val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val2);
     TEST_ASSERT_TRUE(is_special(closed_val2));
     TEST_ASSERT_TRUE(as_special(closed_val2) == SPECIAL_TRUE);
@@ -154,18 +154,18 @@ TEST(test_map_assoc_with_null_value) {
     
     // Set NULL value
     map = map_assoc(map, kw, NULL);
-    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(val1 == NULL);
     
     // Update to non-NULL
     map = map_assoc(map, kw, fixnum(42));
-    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val2));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val2));
     
     // Update back to NULL
     map = map_assoc(map, kw, NULL);
-    CljValue val3 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val3 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_TRUE(val3 == NULL);
     
     TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -183,7 +183,7 @@ TEST(test_exact_channel_pattern) {
     chan = map_assoc(chan, (CljValue)kw_closed, (CljValue)clj_false);
     
     // Verify initial state
-    CljValue closed_initial = (CljValue)map_get((CljMap*)chan, (CljValue)kw_closed);
+    CljValue closed_initial = (CljValue)map_get((CljMap*)chan, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_initial);
     TEST_ASSERT_TRUE(is_special(closed_initial));
     TEST_ASSERT_TRUE(as_special(closed_initial) == SPECIAL_FALSE);
@@ -194,7 +194,7 @@ TEST(test_exact_channel_pattern) {
     chan = map_assoc(chan, (CljValue)kw_closed_new, (CljValue)clj_true);
     
     // Verify final state
-    CljValue closed_final = (CljValue)map_get((CljMap*)chan, (CljValue)kw_closed);
+    CljValue closed_final = (CljValue)map_get((CljMap*)chan, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_final);
     TEST_ASSERT_TRUE(is_special(closed_final));
     TEST_ASSERT_TRUE(as_special(closed_final) == SPECIAL_TRUE);
@@ -207,7 +207,7 @@ TEST(test_channel_object_identity) {
     CljMap *env = (CljMap*)make_map(4);
     
     // Create a channel manually
-    CljObject *chan1 = (CljObject*)make_result_channel();
+    CljMap *chan1 = make_result_channel();
     TEST_ASSERT_NOT_NULL(chan1);
     
     // Verify it's a map
@@ -215,7 +215,7 @@ TEST(test_channel_object_identity) {
     
     // Check initial state
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
-    CljValue closed_initial = (CljValue)map_get((CljMap*)chan1, (CljValue)kw_closed);
+    CljValue closed_initial = (CljValue)map_get((CljMap*)chan1, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_initial);
     TEST_ASSERT_TRUE(is_special(closed_initial));
     TEST_ASSERT_TRUE(as_special(closed_initial) == SPECIAL_FALSE);
@@ -225,7 +225,7 @@ TEST(test_channel_object_identity) {
     map_conj((CljMap*)chan1, (CljValue)kw_closed, (CljValue)clj_true);
     
     // Verify update worked
-    CljValue closed_final = (CljValue)map_get((CljMap*)chan1, (CljValue)kw_closed);
+    CljValue closed_final = (CljValue)map_get((CljMap*)chan1, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_final);
     TEST_ASSERT_TRUE(is_special(closed_final));
     TEST_ASSERT_TRUE(as_special(closed_final) == SPECIAL_TRUE);
@@ -246,13 +246,13 @@ TEST(test_map_assoc_with_pointer_equality) {
     
     // Set initial value
     map = map_assoc(map, kw, fixnum(42));
-    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_NOT_NULL(val1);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
     
     // Update with same pointer (should work via clj_equal() == check)
     map = map_assoc(map, kw, fixnum(100));
-    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_NOT_NULL(val2);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val2));
     
@@ -272,13 +272,13 @@ TEST(test_map_assoc_with_structural_equality) {
     
     // Set initial value with str1
     map = map_assoc(map, str1, fixnum(42));
-    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)str1);
+    CljValue val1 = (CljValue)map_get((CljMap*)map, (CljValue)str1, NULL);
     TEST_ASSERT_NOT_NULL(val1);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
     
     // Update with str2 (different pointer, same content) - should work via clj_equal()
     map = map_assoc(map, str2, fixnum(100));
-    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)str1);
+    CljValue val2 = (CljValue)map_get((CljMap*)map, (CljValue)str1, NULL);
     TEST_ASSERT_NOT_NULL(val2);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val2));
     
@@ -308,7 +308,7 @@ TEST(test_map_get_finds_let_binding) {
     let_env = map_assoc(let_env, (CljValue)step_sym, (CljValue)fn_value);
     
     // Verify step is in let_env
-    CljValue found = map_get((CljMap*)let_env, (CljValue)step_sym);
+    CljValue found = map_get((CljMap*)let_env, (CljValue)step_sym, NULL);
     TEST_ASSERT_NOT_NULL(found);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(found));
     
@@ -320,7 +320,7 @@ TEST(test_map_get_finds_let_binding) {
     TEST_ASSERT_EQUAL_PTR(step_sym, step_sym2);
     
     // Verify map_get finds step using second symbol
-    CljValue found2 = map_get((CljMap*)let_env, (CljValue)step_sym2);
+    CljValue found2 = map_get((CljMap*)let_env, (CljValue)step_sym2, NULL);
     TEST_ASSERT_NOT_NULL(found2);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(found2));
     
@@ -349,7 +349,7 @@ TEST(test_map_get_structural_comparison) {
     TEST_ASSERT_NOT_NULL(step_sym2);
     
     // Verify map_get finds step using second symbol (should work via pointer or structural comparison)
-    CljValue found = map_get((CljMap*)let_env, (CljValue)step_sym2);
+    CljValue found = map_get((CljMap*)let_env, (CljValue)step_sym2, NULL);
     TEST_ASSERT_NOT_NULL(found);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(found));
     
@@ -369,7 +369,7 @@ TEST(test_map_assoc_performance_unchanged) {
     
     // Update existing key - should be fast (clj_equal() does == check first)
     map = map_assoc(map, (CljValue)kw, fixnum(42));
-    CljValue val = (CljValue)map_get((CljMap*)map, (CljValue)kw);
+    CljValue val = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
     
@@ -485,8 +485,8 @@ TEST(test_cow_inplace_mutation_rc_one) {
         map = new_map2; // Update map reference
         
         // Verify entries
-        CljValue val1 = map_get((CljMap*)map, fixnum(1));
-        CljValue val2 = map_get((CljMap*)map, fixnum(2));
+        CljValue val1 = map_get((CljMap*)map, fixnum(1), NULL);
+        CljValue val2 = map_get((CljMap*)map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1);
         TEST_ASSERT_NOT_NULL(val2);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
@@ -515,15 +515,15 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map); // NEUER Pointer!
         
         // Verify original map unchanged
-        CljValue val1_orig = map_get((CljMap*)map, fixnum(1));
-        CljValue val2_orig = map_get((CljMap*)map, fixnum(2));
+        CljValue val1_orig = map_get((CljMap*)map, fixnum(1), NULL);
+        CljValue val2_orig = map_get((CljMap*)map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1_orig);
         TEST_ASSERT_NULL(val2_orig);  // Original hat key=2 nicht
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1_orig));
         
         // Verify new map has both entries
-        CljValue val1_new = map_get((CljMap*)new_map, fixnum(1));
-        CljValue val2_new = map_get((CljMap*)new_map, fixnum(2));
+        CljValue val1_new = map_get((CljMap*)new_map, fixnum(1), NULL);
+        CljValue val2_new = map_get((CljMap*)new_map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1_new);
         TEST_ASSERT_NOT_NULL(val2_new);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1_new));
@@ -553,7 +553,7 @@ TEST(test_cow_original_map_unchanged) {
         TEST_ASSERT_EQUAL(2, map->count); // Original unchanged
         
         // New map should have 3 entries
-        CljValue val3 = map_get((CljMap*)new_map, fixnum(3));
+        CljValue val3 = map_get((CljMap*)new_map, fixnum(3), NULL);
         TEST_ASSERT_NOT_NULL(val3);
         TEST_ASSERT_EQUAL_INT(30, as_fixnum(val3));
         
@@ -641,8 +641,8 @@ TEST(test_cow_closure_environment_sharing) {
         TEST_ASSERT_NOT_EQUAL((CljValue)env, (CljValue)new_env); // NEUER Pointer!
         
         // Verify original env unchanged
-        CljValue orig_x = map_get((CljMap*)env, intern_symbol_global("x"));
-        CljValue orig_y = map_get((CljMap*)env, intern_symbol_global("y"));
+        CljValue orig_x = map_get((CljMap*)env, intern_symbol_global("x"), NULL);
+        CljValue orig_y = map_get((CljMap*)env, intern_symbol_global("y"), NULL);
         TEST_ASSERT_NOT_NULL(orig_x);
         TEST_ASSERT_NULL(orig_y);  // Original hat y nicht
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(orig_x));
@@ -689,7 +689,7 @@ TEST(test_cow_real_clojure_simulation) {
         
         // Verify some entries in the final map
         for (int i = 0; i < 100; i += 20) {
-            CljValue val = map_get(current_env, fixnum(i));
+            CljValue val = map_get((CljMap*)current_env, fixnum(i), NULL);
             TEST_ASSERT_NOT_NULL(val);
             TEST_ASSERT_EQUAL_INT(i * 10, as_fixnum(val));
         }
@@ -717,13 +717,13 @@ TEST(test_cow_actual_cow_demonstration) {
         TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map);
         
         // Verify original unchanged
-        CljValue val3_orig = map_get((CljMap*)map, fixnum(3));
+        CljValue val3_orig = map_get((CljMap*)map, fixnum(3), NULL);
         TEST_ASSERT_NULL(val3_orig);
         
         // Verify new map has all entries
-        CljValue val1_new = map_get((CljMap*)new_map, fixnum(1));
-        CljValue val2_new = map_get((CljMap*)new_map, fixnum(2));
-        CljValue val3_new = map_get((CljMap*)new_map, fixnum(3));
+        CljValue val1_new = map_get((CljMap*)new_map, fixnum(1), NULL);
+        CljValue val2_new = map_get((CljMap*)new_map, fixnum(2), NULL);
+        CljValue val3_new = map_get((CljMap*)new_map, fixnum(3), NULL);
         TEST_ASSERT_NOT_NULL(val1_new);
         TEST_ASSERT_NOT_NULL(val2_new);
         TEST_ASSERT_NOT_NULL(val3_new);
@@ -749,7 +749,7 @@ TEST(test_update_basic) {
     
     // Verify the updated value
     CljSymbol *key = intern_symbol(NULL, ":a");
-    CljValue val = map_get((CljMap*)result, (CljValue)key);
+    CljValue val = map_get((CljMap*)result, (CljValue)key, NULL);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(val));
@@ -763,7 +763,7 @@ TEST(test_update_with_function) {
     
     // Verify the updated value
     CljSymbol *key = intern_symbol(NULL, ":count");
-    CljValue val = map_get((CljMap*)result, (CljValue)key);
+    CljValue val = map_get((CljMap*)result, (CljValue)key, NULL);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(val));
@@ -781,7 +781,7 @@ TEST(test_update_missing_key_simple) {
     
     // Step 2: Get value for missing key :b (should return NULL)
     CljSymbol *key_b = intern_symbol(NULL, ":b");
-    CljValue val_b_before = map_get((CljMap*)map, (CljValue)key_b);
+    CljValue val_b_before = map_get((CljMap*)map, (CljValue)key_b, NULL);
     TEST_ASSERT_NULL_MESSAGE(val_b_before, "key :b should not exist before update");
     
     // Step 3: Apply function to missing key (nil -> 0)
@@ -796,7 +796,7 @@ TEST(test_update_missing_key_simple) {
     TEST_ASSERT_EQUAL_INT(2, result_map->count);
     
     // Step 5: Verify the new key was added
-    CljValue val_b_after = map_get(result, (CljValue)key_b);
+    CljValue val_b_after = map_get((CljMap*)result, (CljValue)key_b, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(val_b_after, "key :b should exist after update");
     if (val_b_after) {
         TEST_ASSERT_TRUE(is_fixnum(val_b_after));
@@ -805,7 +805,7 @@ TEST(test_update_missing_key_simple) {
     
     // Step 6: Verify original key still exists
     CljSymbol *key_a = intern_symbol(NULL, ":a");
-    CljValue val_a = map_get(result, (CljValue)key_a);
+    CljValue val_a = map_get((CljMap*)result, (CljValue)key_a, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(val_a, "key :a should still exist");
     if (val_a) {
         TEST_ASSERT_TRUE(is_fixnum(val_a));
@@ -890,7 +890,7 @@ TEST(test_update_missing_key) {
     
     // Verify the new key was added
     CljSymbol *key_b = intern_symbol(NULL, ":b");
-    CljValue val_b = map_get((CljMap*)result, (CljValue)key_b);
+    CljValue val_b = map_get((CljMap*)result, (CljValue)key_b, NULL);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(val_b, "update should add missing key");
     if (val_b) {
@@ -900,7 +900,7 @@ TEST(test_update_missing_key) {
     
     // Verify original key still exists
     CljSymbol *key_a = intern_symbol(NULL, ":a");
-    CljValue val_a = map_get((CljMap*)result, (CljValue)key_a);
+    CljValue val_a = map_get((CljMap*)result, (CljValue)key_a, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(val_a, "update should preserve existing keys");
     if (val_a) {
         TEST_ASSERT_TRUE(is_fixnum(val_a));
@@ -930,7 +930,7 @@ TEST(test_assoc_map_isolated) {
 
     // Verify the new key was added
     CljSymbol *key_b = intern_symbol(NULL, ":b");
-    CljValue val_b = map_get((CljMap*)result, (CljValue)key_b);
+    CljValue val_b = map_get((CljMap*)result, (CljValue)key_b, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(val_b, "assoc should add new key :b");
     if (val_b) {
         TEST_ASSERT_TRUE(is_fixnum(val_b));
@@ -939,7 +939,7 @@ TEST(test_assoc_map_isolated) {
 
     // Verify original key still exists
     CljSymbol *key_a = intern_symbol(NULL, ":a");
-    CljValue val_a = map_get((CljMap*)result, (CljValue)key_a);
+    CljValue val_a = map_get((CljMap*)result, (CljValue)key_a, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(val_a, "assoc should preserve existing key :a");
     if (val_a) {
         TEST_ASSERT_TRUE(is_fixnum(val_a));
@@ -966,7 +966,7 @@ TEST(test_map_assoc_direct) {
     TEST_ASSERT_NOT_NULL(result);
     
     // Verify the new key was added
-    CljValue retrieved_val_b = map_get((CljMap*)result, (CljValue)key_b);
+    CljValue retrieved_val_b = map_get((CljMap*)result, (CljValue)key_b, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved_val_b, "map_assoc should add new key :b");
     if (retrieved_val_b) {
         TEST_ASSERT_TRUE(is_fixnum(retrieved_val_b));
@@ -975,7 +975,7 @@ TEST(test_map_assoc_direct) {
     
     // Verify original key still exists
     CljSymbol *key_a = intern_symbol(NULL, ":a");
-    CljValue retrieved_val_a = map_get((CljMap*)result, (CljValue)key_a);
+    CljValue retrieved_val_a = map_get((CljMap*)result, (CljValue)key_a, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved_val_a, "map_assoc should preserve existing key :a");
     if (retrieved_val_a) {
         TEST_ASSERT_TRUE(is_fixnum(retrieved_val_a));
@@ -1032,8 +1032,8 @@ TEST(test_map_transient_comprehensive) {
     
     // Verify all entries are preserved
     for (int i = 0; i < 5; i++) {
-        CljValue val_persistent = map_get(persistent_map, (CljValue)keys[i]);
-        CljValue val_transient = map_get(transient_map, (CljValue)keys[i]);
+        CljValue val_persistent = map_get((CljMap*)persistent_map, (CljValue)keys[i], NULL);
+        CljValue val_transient = map_get((CljMap*)transient_map, (CljValue)keys[i], NULL);
         TEST_ASSERT_NOT_NULL(val_persistent);
         TEST_ASSERT_NOT_NULL(val_transient);
         TEST_ASSERT_TRUE(is_fixnum(val_persistent));
@@ -1075,7 +1075,7 @@ TEST(test_map_conj_comprehensive) {
     TEST_ASSERT_EQUAL_PTR(transient, result2);  // Same pointer (in-place mutation)
     TEST_ASSERT_EQUAL_INT(1, transient->count);
     
-    CljValue val1 = map_get(transient, (CljValue)key1);
+    CljValue val1 = map_get((CljMap*)transient, (CljValue)key1, NULL);
     TEST_ASSERT_NOT_NULL(val1);
     TEST_ASSERT_TRUE(is_fixnum(val1));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(val1));
@@ -1086,7 +1086,7 @@ TEST(test_map_conj_comprehensive) {
     TEST_ASSERT_EQUAL_PTR(transient, result3);  // Same pointer
     TEST_ASSERT_EQUAL_INT(1, transient->count);  // Count unchanged (update, not add)
     
-    CljValue val1_updated = map_get(transient, (CljValue)key1);
+    CljValue val1_updated = map_get((CljMap*)transient, (CljValue)key1, NULL);
     TEST_ASSERT_NOT_NULL(val1_updated);
     TEST_ASSERT_TRUE(is_fixnum(val1_updated));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val1_updated));
@@ -1099,8 +1099,8 @@ TEST(test_map_conj_comprehensive) {
     
     TEST_ASSERT_EQUAL_INT(3, transient->count);
     
-    CljValue val2 = map_get(transient, (CljValue)key2);
-    CljValue val3 = map_get(transient, (CljValue)key3);
+    CljValue val2 = map_get((CljMap*)transient, (CljValue)key2, NULL);
+    CljValue val3 = map_get((CljMap*)transient, (CljValue)key3, NULL);
     TEST_ASSERT_NOT_NULL(val2);
     TEST_ASSERT_NOT_NULL(val3);
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(val2));
@@ -1111,7 +1111,7 @@ TEST(test_map_conj_comprehensive) {
     map_conj(transient, (CljValue)key4, NULL);
     TEST_ASSERT_EQUAL_INT(4, transient->count);
     
-    CljValue val4 = map_get(transient, (CljValue)key4);
+    CljValue val4 = map_get((CljMap*)transient, (CljValue)key4, NULL);
     TEST_ASSERT_NULL(val4);  // NULL value is valid
     
     // Test 6: Capacity limit
@@ -1133,7 +1133,7 @@ TEST(test_map_conj_comprehensive) {
     CljMap *result7 = map_conj(persistent, (CljValue)key_p, fixnum(20));
     // Should work for persistent map with RC=1 (COW case)
     if (result7) {
-        CljValue val_p = map_get(persistent, (CljValue)key_p);
+        CljValue val_p = map_get((CljMap*)persistent, (CljValue)key_p, NULL);
         TEST_ASSERT_NOT_NULL(val_p);
         TEST_ASSERT_EQUAL_INT(20, as_fixnum(val_p));
     }
@@ -1164,7 +1164,7 @@ TEST(test_map_conj_with_interned_symbols_across_contexts) {
     TEST_ASSERT_EQUAL_PTR(tmap, result2);  // Should return same pointer
     
     // Verify initial state
-    CljValue closed_val1 = map_get(tmap, (CljValue)kw_closed);
+    CljValue closed_val1 = map_get((CljMap*)tmap, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val1);
     TEST_ASSERT_TRUE(is_special(closed_val1));
     TEST_ASSERT_TRUE(as_special(closed_val1) == SPECIAL_FALSE);
@@ -1183,7 +1183,7 @@ TEST(test_map_conj_with_interned_symbols_across_contexts) {
     TEST_ASSERT_EQUAL_PTR(tmap, result3);  // Should return same pointer
     
     // Verify update worked
-    CljValue closed_val2 = map_get(tmap, (CljValue)kw_closed);
+    CljValue closed_val2 = map_get((CljMap*)tmap, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val2);
     TEST_ASSERT_TRUE(is_special(closed_val2));
     TEST_ASSERT_TRUE(as_special(closed_val2) == SPECIAL_TRUE);
@@ -1221,7 +1221,7 @@ TEST(test_map_conj_finds_existing_key_by_pointer) {
     TEST_ASSERT_EQUAL_PTR(tmap, result2);
     
     // Verify value was updated (not added)
-    CljValue val = map_get(tmap, (CljValue)kw);
+    CljValue val = map_get((CljMap*)tmap, (CljValue)kw, NULL);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val));
@@ -1247,7 +1247,7 @@ TEST(test_map_conj_channel_pattern) {
     map_conj(chan, (ID)kw_closed, (ID)clj_false);  // :closed = false
     
     // Verify initial state
-    CljValue closed_before = map_get(chan, (CljValue)kw_closed);
+    CljValue closed_before = map_get((CljMap*)chan, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_before);
     TEST_ASSERT_TRUE(is_special(closed_before));
     TEST_ASSERT_TRUE(as_special(closed_before) == SPECIAL_FALSE);
@@ -1265,7 +1265,7 @@ TEST(test_map_conj_channel_pattern) {
     TEST_ASSERT_EQUAL_PTR(chan, result);  // Should return same pointer
     
     // Verify channel was mutated
-    CljValue closed_after = map_get(chan, (CljValue)kw_closed);
+    CljValue closed_after = map_get((CljMap*)chan, (CljValue)kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_after);
     TEST_ASSERT_TRUE(is_special(closed_after));
     TEST_ASSERT_TRUE(as_special(closed_after) == SPECIAL_TRUE);
@@ -1305,15 +1305,15 @@ TEST(test_dissoc_single_key) {
         TEST_ASSERT_EQUAL_INT(2, result_map->count);
         
         // Verify :a and :c are still present
-        CljValue val_a = map_get(result_map, (ID)key_a);
-        CljValue val_c = map_get(result_map, (ID)key_c);
+        CljValue val_a = map_get((CljMap*)result_map, (CljValue)key_a, NULL);
+        CljValue val_c = map_get((CljMap*)result_map, (CljValue)key_c, NULL);
         TEST_ASSERT_NOT_NULL(val_a);
         TEST_ASSERT_NOT_NULL(val_c);
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
         TEST_ASSERT_EQUAL_INT(3, as_fixnum(val_c));
         
         // Verify :b is removed
-        CljValue val_b = map_get(result_map, (ID)key_b);
+        CljValue val_b = map_get((CljMap*)result_map, (CljValue)key_b, NULL);
         TEST_ASSERT_NULL(val_b);
         
         RELEASE((CljObject*)map);
@@ -1333,15 +1333,15 @@ TEST(test_dissoc_multiple_keys) {
         
         // Verify :b is still present
         CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
-        CljValue val_b = map_get(result_map, (ID)key_b);
+        CljValue val_b = map_get((CljMap*)result_map, (CljValue)key_b, NULL);
         TEST_ASSERT_NOT_NULL(val_b);
         TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_b));
         
         // Verify :a and :c are removed
         CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");
-        CljValue val_a = map_get(result_map, (ID)key_a);
-        CljValue val_c = map_get(result_map, (ID)key_c);
+        CljValue val_a = map_get((CljMap*)result_map, (CljValue)key_a, NULL);
+        CljValue val_c = map_get((CljMap*)result_map, (CljValue)key_c, NULL);
         TEST_ASSERT_NULL(val_a);
         TEST_ASSERT_NULL(val_c);
     });
@@ -1372,8 +1372,8 @@ TEST(test_dissoc_non_existent_key) {
         // Verify original keys are still present
         CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
-        CljValue val_a = map_get(result_map, (ID)key_a);
-        CljValue val_b = map_get(result_map, (ID)key_b);
+        CljValue val_a = map_get((CljMap*)result_map, (CljValue)key_a, NULL);
+        CljValue val_b = map_get((CljMap*)result_map, (CljValue)key_b, NULL);
         TEST_ASSERT_NOT_NULL(val_a);
         TEST_ASSERT_NOT_NULL(val_b);
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));

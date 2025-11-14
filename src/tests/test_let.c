@@ -556,7 +556,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         TEST_ASSERT_NOT_NULL(atom);
         
         // Store i -> atom in let_env (simulating map_assoc in eval_let)
-        CljMap *new_let_env = (CljMap*)map_assoc((CljObject*)let_env, i_sym, (CljObject*)atom);
+        CljMap *new_let_env = (CljMap*)map_assoc((CljMap*)let_env, i_sym, (CljObject*)atom);
         ASSIGN(let_env, new_let_env);
         
         // Verify i is in let_env using map_contains
@@ -564,12 +564,12 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         TEST_ASSERT_TRUE_MESSAGE(contains, "map_contains should find symbol 'i' in let_env");
         
         // Verify i is in let_env using map_get
-        CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym);
+        CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
         TEST_ASSERT_TRUE(found && TAG(found) == CLJ_ATOM);
         
         // Create another "i" symbol (should be same pointer if interned)
-        CljObject *i_sym2 = intern_symbol_global("i");
+        CljSymbol *i_sym2 = intern_symbol_global("i");
         TEST_ASSERT_NOT_NULL(i_sym2);
         
         // Verify both symbols are the same pointer (interned)
@@ -580,7 +580,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         TEST_ASSERT_TRUE_MESSAGE(contains2, "map_contains should find symbol 'i' (second instance) in let_env");
         
         // Test map_get with second symbol
-        CljValue found2 = map_get((CljMap*)let_env, (CljValue)i_sym2);
+        CljValue found2 = map_get((CljMap*)let_env, (CljValue)i_sym2, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(found2, "map_get should find symbol 'i' (second instance) in let_env");
         TEST_ASSERT_TRUE(found2 && TAG(found2) == CLJ_ATOM);
         
