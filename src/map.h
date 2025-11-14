@@ -41,6 +41,7 @@ static inline CljMap* map_empty(void) {
  * Returns the value (which may be NULL/nil) when key exists.
  */
 ID map_get(CljMap *map, ID key, ID not_found);
+
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
 CljMap* map_assoc(CljMap* map, ID key, ID value);
 /** Return a vector of keys (retained). */

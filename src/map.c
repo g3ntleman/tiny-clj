@@ -54,7 +54,6 @@ CljMap* make_map(int capacity) {
   return map;
 }
 
-/** Get value for key or NULL if absent (structural key equality). */
 ID map_get(CljMap *map, ID key, ID not_found) {
   if (!map || !key)
     return not_found;
@@ -90,6 +89,7 @@ ID map_get(CljMap *map, ID key, ID not_found) {
   
   return not_found;
 }
+
 
 
 /** Associate key->value - always returns a new map (COW disabled).
