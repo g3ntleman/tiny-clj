@@ -81,6 +81,9 @@ CljSymbol *SYM_KW_NS = NULL;
 // Global symbol for clojure.core namespace name (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
 
+// Additional symbols for hot path optimization
+CljSymbol *SYM_NS_STAR = NULL;
+
 // Static symbol structs for special forms (compile-time initialization)
 // These symbols have rc = SINGLETON_RC and use string literals (no strdup needed)
 static struct { CljSymbol sym; } sym_try_data = {
@@ -264,6 +267,11 @@ static struct { CljSymbol sym; } sym_kw_ns_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = ":ns" }
 };
 
+// Additional symbols for optimization (used in hot path)
+static struct { CljSymbol sym; } sym_ns_star_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = "*ns*" }
+};
+
 // Initialisierung der globalen Symbole
 void init_special_symbols() {
     // Special forms - static structs with symbol table registration
@@ -444,6 +452,10 @@ void init_special_symbols() {
     
     SYM_KW_NS = &sym_kw_ns_data.sym;
     symbol_table_add(NULL, ":ns", SYM_KW_NS);
+    
+    // Additional symbols for hot path optimization
+    SYM_NS_STAR = &sym_ns_star_data.sym;
+    symbol_table_add(NULL, "*ns*", SYM_NS_STAR);
     
     // Global symbol for clojure.core namespace name (for fast comparison)
     // Use intern_symbol_global to ensure same symbol is returned by intern_symbol

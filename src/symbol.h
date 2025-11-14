@@ -95,6 +95,9 @@ extern CljSymbol *SYM_KW_NS;
 // Global symbol for clojure.core namespace name (for fast comparison)
 extern CljSymbol *SYM_CLOJURE_CORE;
 
+// Additional symbols for hot path optimization
+extern CljSymbol *SYM_NS_STAR;
+
 // Symbol interning with a real symbol table
 typedef struct SymbolEntry {
     char *ns;

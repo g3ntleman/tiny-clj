@@ -1006,15 +1006,6 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // Simplified implementation - would normally evaluate the AST
     switch (((CljObject*)body)->type) {
         case CLJ_LIST: {
-            CljList *list_data = as_list((ID)body);
-            if (list_data && list_data->first && TAG(list_data->first) == CLJ_SYMBOL && !list_data->rest) {
-                CljSymbol *sym = as_symbol((ID)list_data->first);
-                if (sym && sym->name && (strcmp(sym->name, "r") == 0 || strcmp(sym->name, "c") == 0)) {
-                    // CRITICAL: If body is a single-element list (r/c), treat it as symbol r/c
-                    // This fixes the bug where r/c is treated as (r/c) instead of r/c
-                    return eval_body(list_data->first, env, st, NULL);
-                }
-            }
             // Evaluate list
             // CRITICAL: Pass ctx to preserve RecurContext
             return eval_list(as_list((ID)body), env, st, ctx);
@@ -1259,7 +1250,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     // CRITICAL: Use eval_list_with_context recursively to preserve RecurContext
     if (op && TAG(op) == CLJ_LIST) {
-        op = eval_list_with_context(as_list((ID)op), env, st, ctx);
+        op = eval_list_with_context(as_list(op), env, st, ctx);
         if (!op) {
             return NULL;
         }
@@ -1344,10 +1335,10 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     
     // Continue with symbol resolution (same as eval_list)
     if (op && TAG(op) == CLJ_SYMBOL) {
-        CljObject *resolved = NULL;
+        ID resolved = NULL;
         if (env && TAG(env) == CLJ_MAP) {
-            if (map_contains((CljValue)env, (CljValue)op)) {
-                resolved = (CljObject*)map_get(env, op);
+            if (map_contains(env, op)) {
+                resolved = map_get(env, op);
             }
         }
         if (resolved) {
@@ -1509,10 +1500,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         CljSymbol *sym = as_symbol(op);
         if (sym && sym->name) {
             // Check for time special form before resolving
-            // Use both pointer comparison (fast) and string comparison (fallback)
-            // to handle cases where the parsed symbol is not the same object as SYM_TIME
             CljSymbol *op_sym = (CljSymbol*)op;
-            if (SYM_TIME && (op_sym == SYM_TIME || strcmp(sym->name, "time") == 0)) {
+            if (op_sym == SYM_TIME) {
                 // This is the time special form - handle it directly
                 // Use provided env or fall back to current_ns->mappings
                 CljMap *time_env = env;
@@ -1523,11 +1512,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             }
             // Check for def special form (requires non-evaluated first argument)
             CljSymbol *original_op_sym = (CljSymbol*)original_op;
-            if (original_op_sym == SYM_DEF || (sym->name && strcmp(sym->name, "def") == 0)) {
+            if (original_op_sym == SYM_DEF) {
                 return eval_def(list, env, st);
             }
             // Check for ns special form (requires non-evaluated first argument)
-            if (original_op_sym == SYM_NS || (sym->name && strcmp(sym->name, "ns") == 0)) {
+            if (original_op_sym == SYM_NS) {
                 return eval_ns(list, env, st);
             }
         }
@@ -2308,7 +2297,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
     
     // Special handling for *ns*
-    if (symbol->name && strcmp(symbol->name, "*ns*") == 0) {
+    if (symbol == SYM_NS_STAR) {
         if (st && st->current_ns && st->current_ns->name) {
             return (ID)st->current_ns->name;
         }
@@ -3055,20 +3044,6 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
                 return AUTORELEASE(RETAIN(resolved));
             }
             // Key doesn't exist in map - try namespace resolution below
-            CljSymbol *sym = as_symbol((CljObject*)element);
-            if (sym && sym->name && strcmp(sym->name, "i") == 0) {
-                // This is the symbol 'i' that we're looking for
-                // Check if environment has any entries
-                CljMap *env_map = (CljMap*)env;
-                if (env_map->count == 0) {
-                    // Environment is empty - this shouldn't happen if let_env was created correctly
-                    throw_exception_formatted("SymbolResolutionError", __FILE__, __LINE__, 0,
-                        "Symbol 'i' not found in environment - environment is empty. "
-                        "This indicates that let_env was not created correctly or was lost. "
-                        "Environment: %p, Environment count: %d",
-                        env, env_map->count);
-                }
-            }
         }
         
         // If not found in local environment, try namespace

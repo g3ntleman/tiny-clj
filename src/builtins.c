@@ -26,7 +26,6 @@
 #include "exception.h"
 #include "list.h"
 #include "function.h"
-#include "function_call.h"
 #include "clj_strings.h"
 #include "event_loop.h"
 #include "strings.h"
@@ -2482,10 +2481,9 @@ ID native_format(ID *args, unsigned int argc) {
     }
     
     // Format arguments based on format string
-    int result_len = 0;
     if (argc == 1) {
         // No arguments, just copy format string
-        result_len = snprintf(buffer, buf_size, "%s", fmt_str->data);
+        snprintf(buffer, buf_size, "%s", fmt_str->data);
     } else {
         // We need to handle variadic arguments
         // For simplicity, support common format specifiers: %d, %f, %s
@@ -2496,7 +2494,7 @@ ID native_format(ID *args, unsigned int argc) {
         size_t remaining = buf_size - 1;
         int arg_idx = 1;
         
-        while (*p && arg_idx < argc && remaining > 0) {
+        while (*p && arg_idx < (int)argc && remaining > 0) {
             if (*p == '%' && *(p + 1) != '\0') {
                 p++; // Skip '%'
                 char spec = *p++;
@@ -2554,7 +2552,7 @@ ID native_format(ID *args, unsigned int argc) {
                         CljString *str = (TAG(args[arg_idx]) == CLJ_STRING) ? (CljString*)args[arg_idx] : NULL;
                         if (!str) {
                             // Try to convert to string
-                            char *str_repr = print_str(args[arg_idx]);
+                            const char *str_repr = print_str(args[arg_idx]);
                             if (str_repr) {
                                 int n = snprintf(out, remaining, "%s", str_repr);
                                 if (n < 0 || n >= (int)remaining) {
@@ -2562,7 +2560,7 @@ ID native_format(ID *args, unsigned int argc) {
                                     buf_size *= 2;
                                     buffer = realloc(buffer, buf_size);
                                     if (!buffer) {
-                                        free(str_repr);
+                                        free((void*)str_repr);
                                         throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
                                                        __FILE__, __LINE__, 0);
                                         return NULL;
@@ -2573,7 +2571,7 @@ ID native_format(ID *args, unsigned int argc) {
                                 }
                                 out += n;
                                 remaining -= n;
-                                free(str_repr);
+                                free((void*)str_repr);
                             }
                         } else {
                             int n = snprintf(out, remaining, "%s", str->data);
@@ -2616,7 +2614,6 @@ ID native_format(ID *args, unsigned int argc) {
             }
         }
         *out = '\0';
-        result_len = out - buffer;
     }
     
     // Create string object from buffer

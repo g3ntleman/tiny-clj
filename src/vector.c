@@ -298,7 +298,8 @@ CljPersistentVector* make_vector(unsigned int capacity, CljType type) {
     size_t data_size = (size_t)capacity * sizeof(ID);
     size_t total_size = struct_size + data_size;
     
-    CljPersistentVector *vec = (CljPersistentVector*)alloc_zero(total_size, 1, type);
+    // Use malloc instead of calloc - we set all fields manually and data[] is filled by vector_conj
+    CljPersistentVector *vec = (CljPersistentVector*)alloc(total_size, 1, type);
     if (!vec)
         throw_oom();
 
@@ -307,7 +308,7 @@ CljPersistentVector* make_vector(unsigned int capacity, CljType type) {
     vec->count = 0;
     vec->capacity = capacity;
     // data[] is flexible array member - already allocated at end of struct
-    // No need to set vec->data - it's already part of the struct
+    // No need to initialize data[] - elements are set by vector_conj
 
     return vec;
 }
