@@ -4,7 +4,6 @@
  * Memory allocation macros and runtime constants for Tiny-Clj:
  * - STACK_ALLOC: Stack allocation using alloca() for temporary data
  * - ALLOC: Heap allocation using malloc() for persistent data
- * - ALLOC_ZERO: Zero-initialized heap allocation using calloc()
  * - Function call limits for STM32 compatibility
  * - Builtin function registration system
  */

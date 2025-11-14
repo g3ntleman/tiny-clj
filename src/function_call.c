@@ -2318,7 +2318,9 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         if (value == SYM_NIL) {
             return NULL;
         }
-        return AUTORELEASE(RETAIN(value));
+        // ns_resolve returns a value that is safe to use in our scope
+        // No need for AUTORELEASE/RETAIN - we didn't create the object
+        return value;
     }
     
     // If not found in namespace but is a builtin, it might not be registered yet

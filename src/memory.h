@@ -143,13 +143,6 @@ int get_retain_count(ID obj);
  */
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 
-/** @brief Allocate and zero-initialize `count` objects of type `type` on the heap.
- *  @param type Type to allocate (must be CljObject subtype)
- *  @param count Number of objects to allocate
- *  @return Pointer to zero-initialized allocated memory
- *  @note Only use for CljObject subtypes per MEMORY_POLICY
- */
-#define ALLOC_ZERO(type, count) ((type*) alloc_zero(sizeof(type), (count), TYPE_OF(type)))
 
 /** @brief Special allocation for CljObject with dynamic type.
  *  @param obj_type Type of CljObject to allocate
@@ -438,14 +431,5 @@ int get_retain_count(ID obj);
  * @return Pointer to allocated memory
  */
 void* alloc(size_t type_size, size_t count, CljType obj_type);
-
-/**
- * @brief Allocate and zero-initialize memory with automatic profiling for CljObject types
- * @param type_size Size of the type to allocate
- * @param count Number of elements to allocate
- * @param obj_type Type of the CljObject (for singleton filtering)
- * @return Pointer to allocated memory
- */
-void* alloc_zero(size_t type_size, size_t count, CljType obj_type);
 
 #endif // TINY_CLJ_MEMORY_H

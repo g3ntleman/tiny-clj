@@ -3248,7 +3248,8 @@ ID native_swap_bang(ID *args, unsigned int argc) {
     
     if (argc > 2) {
         fn_argc = argc - 2;
-        fn_args = (ID*)calloc(fn_argc, sizeof(ID));
+        // Use malloc instead of calloc - array is immediately filled
+        fn_args = (ID*)malloc(fn_argc * sizeof(ID));
         if (!fn_args) {
             throw_oom();
             return NULL;

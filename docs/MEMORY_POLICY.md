@@ -361,6 +361,77 @@ ASSIGN(obj, obj);  // Optimized - no operations performed
 - **Consistent** - Same pattern as classic Objective-C
 - **Profiled** - Integrates with memory profiling system
 
+## Function Return Value Memory Policy
+
+### When to Use AUTORELEASE
+
+**Critical Principle: AUTORELEASE is only needed when you create an object yourself with `make_*()` functions.**
+
+#### ✅ Use AUTORELEASE for Self-Created Objects
+
+```c
+// ✅ CORRECT: We created the object, so we use AUTORELEASE
+ID my_function() {
+    CljObject *obj = make_vector(10, 0);  // We created it
+    return AUTORELEASE(obj);  // Transfer ownership to caller's pool
+}
+```
+
+#### ✅ Do NOT Use AUTORELEASE for Objects from Other Functions
+
+```c
+// ✅ CORRECT: ns_resolve returns a value safe to use in our scope
+ID eval_symbol(CljSymbol *symbol, EvalState *st) {
+    ID value = ns_resolve(st, symbol);  // We didn't create this
+    if (value) {
+        return value;  // Just return it - no AUTORELEASE needed
+    }
+    return NULL;
+}
+
+// ❌ WRONG: Unnecessary AUTORELEASE/RETAIN
+ID eval_symbol(CljSymbol *symbol, EvalState *st) {
+    ID value = ns_resolve(st, symbol);
+    if (value) {
+        return AUTORELEASE(RETAIN(value));  // ❌ Unnecessary - value is already safe
+    }
+    return NULL;
+}
+```
+
+#### Key Principle
+
+**Inner functions are responsible for ensuring their return values are safe to use in the caller's scope.** The caller should trust this contract and not add unnecessary memory management operations.
+
+#### Examples
+
+```c
+// ✅ CORRECT: map_get returns retained value - safe to use
+ID get_from_map(CljMap *map, ID key) {
+    ID value = map_get(map, key);  // map_get ensures value is safe
+    return value;  // No AUTORELEASE needed - we didn't create it
+}
+
+// ✅ CORRECT: ns_resolve returns value safe to use
+ID resolve_symbol(CljSymbol *sym, EvalState *st) {
+    ID resolved = ns_resolve(st, sym);  // ns_resolve ensures value is safe
+    return resolved;  // No AUTORELEASE needed - we didn't create it
+}
+
+// ✅ CORRECT: We create the object, so we use AUTORELEASE
+ID create_and_return() {
+    CljObject *obj = make_list();  // We created it
+    return AUTORELEASE(obj);  // Transfer ownership to caller
+}
+```
+
+#### Memory Management Contract
+
+1. **Functions that create objects** (`make_*()`) return objects with `rc=1` - caller must manage
+2. **Functions that return existing objects** (like `map_get`, `ns_resolve`) ensure their return values are safe to use in the caller's scope
+3. **Callers should trust the contract** - no need to add AUTORELEASE/RETAIN for values returned from other functions
+4. **Only use AUTORELEASE** when you created the object yourself with `make_*()`
+
 ## API Memory Policy
 
 ### Public API Functions

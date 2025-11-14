@@ -283,7 +283,8 @@ CljSeqIterator* make_seq(ID obj) {
     }
     
     // Allocate heap wrapper
-    CljSeqIterator *heap_seq = calloc(1, sizeof(CljSeqIterator));
+    // Use malloc instead of calloc - all fields are immediately initialized
+    CljSeqIterator *heap_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
     if (!heap_seq) return NULL;
     
     heap_seq->base.type = CLJ_SEQ;
@@ -327,7 +328,8 @@ ID seq_rest(ID seq_obj) {
     if (!seq) return NULL;
     
     // Create new heap wrapper with advanced iterator
-    CljSeqIterator *rest_seq = calloc(1, sizeof(CljSeqIterator));
+    // Use malloc instead of calloc - all fields are immediately initialized
+    CljSeqIterator *rest_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
     if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;

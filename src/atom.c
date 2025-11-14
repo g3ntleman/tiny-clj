@@ -91,7 +91,8 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     ID current_value = RETAIN(atom->value);
     
     // Prepare function call arguments: [current_value, ...args]
-    ID *fn_args = (ID*)calloc(argc + 1, sizeof(ID));
+    // Use malloc instead of calloc - array is immediately filled
+    ID *fn_args = (ID*)malloc((argc + 1) * sizeof(ID));
     if (!fn_args) {
         RELEASE(current_value);
         throw_oom();

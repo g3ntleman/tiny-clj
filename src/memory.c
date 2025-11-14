@@ -73,29 +73,6 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
     return result;
 }
 
-/**
- * @brief Allocate and zero-initialize memory with automatic profiling for CljObject types
- * @param type_size Size of the type to allocate
- * @param count Number of elements to allocate
- * @return Pointer to allocated memory
- */
-void* alloc_zero(size_t type_size, size_t count, CljType obj_type) {
-    void *result = calloc(count, type_size);
-    
-    // Track object creation if it's a CljObject subtype and NOT a singleton
-    if (result != NULL && type_size >= sizeof(CljObject)) {
-        // Only track non-singleton types (singletons have rc==0)
-        if (!IS_SINGLETON_TYPE(obj_type)) {
-            CljObject *obj = (CljObject*)result;
-            obj->type = obj_type;  // Set type before tracking
-            MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
-        }
-    }
-    
-    return result;
-}
-
-
 // ============================================================================
 // AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
