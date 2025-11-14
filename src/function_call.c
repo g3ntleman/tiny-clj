@@ -1115,7 +1115,7 @@ static CljObject* eval_cond(CljList *list, CljMap *env, EvalState *st) {
     return NULL; // No condition matched
 }
 
-static CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, EvalState *st, CljObject *op) {
+static inline CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, EvalState *st, CljObject *op) {
     CljSymbol *op_sym = (CljSymbol*)op;
     if (op_sym == SYM_PLUS) return eval_arithmetic_generic(list, env, ARITH_ADD, st);
     if (op_sym == SYM_MINUS) return eval_arithmetic_generic(list, env, ARITH_SUB, st);
@@ -1124,7 +1124,7 @@ static CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, EvalState
     return NULL;
 }
 
-static CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject *op) {
+static inline CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject *op) {
     CljSymbol *op_sym = (CljSymbol*)op;
     if (op_sym == SYM_EQUALS || op_sym == SYM_EQUAL) {
         CljObject *a, *b;
@@ -1176,7 +1176,7 @@ void reset_eval_arg_depth(void) {
     g_eval_arg_depth = 0;
 }
 
-static CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
+static inline CljObject* eval_loop_dispatch(CljList *list, CljMap *env, CljObject *op) {
     CljSymbol *op_sym = (CljSymbol*)op;
     if (op_sym == SYM_FOR) return AUTORELEASE(eval_for(list, env));
     if (op_sym == SYM_DOSEQ) return AUTORELEASE(eval_doseq(list, env));
