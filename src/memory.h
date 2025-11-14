@@ -89,16 +89,16 @@ void throw_oom(void) __attribute__((noreturn));
 // AUTORELEASE POOL MANAGEMENT
 // ============================================================================
 
-// Forward declaration for CljPersistentVector (defined in vector.h)
+// Forward declaration for CljVector (defined in vector.h)
 // Note: We can't include vector.h here due to circular dependencies
 // The actual implementation in memory.c includes vector.h
-struct CljPersistentVector;
+struct CljVector;
 
 /** @brief Push a new autorelease pool; returns pool handle.
  *  @return Pool handle (weak vector) for later use with autorelease_pool_pop()
  *  @note Use WITH_AUTORELEASE_POOL macro for automatic cleanup
  */
-struct CljPersistentVector *autorelease_pool_push();
+struct CljVector *autorelease_pool_push();
 
 
 /** @brief Exception-safe cleanup after longjmp/setjmp.
@@ -120,7 +120,7 @@ bool is_autorelease_pool_active(void);
  *  @param pool Pool (weak vector) to pop
  *  @note Used by WITH_AUTORELEASE_POOL macro
  */
-void autorelease_pool_pop(struct CljPersistentVector *pool);
+void autorelease_pool_pop(struct CljVector *pool);
 
 /** @brief Get reference count of object (0 for singletons, actual rc for others).
  *  @param obj Object to check
@@ -231,7 +231,7 @@ int get_retain_count(ID obj);
      *  @note For exception-safe usage, wrap in TRY/CATCH blocks
      */
     #define WITH_AUTORELEASE_POOL(code) do { \
-        struct CljPersistentVector *_pool = autorelease_pool_push(); \
+        struct CljVector *_pool = autorelease_pool_push(); \
         TRY { \
             code; \
             autorelease_pool_pop(_pool); \
@@ -244,7 +244,7 @@ int get_retain_count(ID obj);
     /** @brief Simple autorelease pool management for TRY/CATCH.
      *  @note Use pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
      */
-    #define AUTORELEASE_POOL_BEGIN() struct CljPersistentVector *_pool = autorelease_pool_push()
+    #define AUTORELEASE_POOL_BEGIN() struct CljVector *_pool = autorelease_pool_push()
     #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
     
     /** @brief Retain count macro for testing.
@@ -330,7 +330,7 @@ int get_retain_count(ID obj);
      *  @param code Code block to execute within autorelease pool
      */
     #define WITH_AUTORELEASE_POOL(code) do { \
-        struct CljPersistentVector *_pool = autorelease_pool_push(); \
+        struct CljVector *_pool = autorelease_pool_push(); \
         TRY { \
             code; \
             autorelease_pool_pop(_pool); \
@@ -343,7 +343,7 @@ int get_retain_count(ID obj);
     /** @brief Simple autorelease pool management for TRY/CATCH (release builds).
      *  @note Use pattern: AUTORELEASE_POOL_BEGIN(); ... code ...; AUTORELEASE_POOL_END();
      */
-    #define AUTORELEASE_POOL_BEGIN() struct CljPersistentVector *_pool = autorelease_pool_push()
+    #define AUTORELEASE_POOL_BEGIN() struct CljVector *_pool = autorelease_pool_push()
     #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
     
     /** @brief No-op macros for release builds (no profiling).

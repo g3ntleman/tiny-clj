@@ -70,7 +70,7 @@ TEST(test_print_str_different_types) {
     WITH_AUTORELEASE_POOL({
         // Test with vector
         CljObject *vec = make_vector(2, CLJ_VECTOR);
-        CljPersistentVector *vec_data = as_vector(vec);
+        CljVector *vec_data = as_vector(vec);
         vec_data->data[0] = (CljObject*)fixnum(1);
         vec_data->data[1] = (CljObject*)fixnum(2);
         vec_data->count = 2;

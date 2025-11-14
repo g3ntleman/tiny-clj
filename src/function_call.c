@@ -1693,7 +1693,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
 
         // Erzeuge (fn [] (do ...))
-        CljPersistentVector* empty_params_vec = make_vector(0, CLJ_VECTOR);
+        CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR);
         CljList *fn_list = (CljList*)make_list((CljObject*)SYM_FN, NULL);
         if (!fn_list) return NULL;
         fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
@@ -2166,7 +2166,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     // Convert parameter list/vector to array
     int param_count = 0;
     if (params_list && TAG(params_list) == CLJ_VECTOR) {
-        CljPersistentVector *vec = as_vector((ID)params_list);
+        CljVector *vec = as_vector((ID)params_list);
         param_count = vec ? vector_count(vec) : 0;
     } else {
         param_count = list_count(as_list(params_list));
@@ -2177,7 +2177,7 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
     
     for (int i = 0; i < param_count; i++) {
         if (params_list && TAG(params_list) == CLJ_VECTOR) {
-            CljPersistentVector *vec = as_vector((ID)params_list);
+            CljVector *vec = as_vector((ID)params_list);
             params[i] = vector_nth(vec, i);
         } else {
             params[i] = list_get_element(as_list((ID)params_list), i);
@@ -2609,7 +2609,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    CljPersistentVector *bindings = as_vector((CljValue)bindings_vec);
+    CljVector *bindings = as_vector((CljValue)bindings_vec);
     if (!bindings) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "let bindings must be a valid vector", 
@@ -2866,7 +2866,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Extract parameters from vector
-    CljPersistentVector *params_vec_data = as_vector((CljValue)params_vec);
+    CljVector *params_vec_data = as_vector((CljValue)params_vec);
     if (!params_vec_data) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "defn requires a valid parameter vector", 

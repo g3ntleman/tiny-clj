@@ -187,7 +187,7 @@ TEST(test_parse_multiline_expressions) {
     CljObject *vec_result = parse("[1 ; first element\n 2\n 3]", eval_state);
     TEST_ASSERT_NOT_NULL(vec_result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, vec_result->type);
-    CljPersistentVector *vec = as_vector(vec_result);
+    CljVector *vec = as_vector(vec_result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     
     // Test 3: Multiline map
@@ -204,7 +204,7 @@ TEST(test_parse_multiline_expressions) {
     CljObject *nested_result = parse("[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]", eval_state);
     TEST_ASSERT_NOT_NULL(nested_result);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, nested_result->type);
-    CljPersistentVector *nested_vec = as_vector(nested_result);
+    CljVector *nested_vec = as_vector(nested_result);
     TEST_ASSERT_EQUAL_INT(3, vector_count(nested_vec));
     
     // Test 6: Multiline with tabs and mixed whitespace

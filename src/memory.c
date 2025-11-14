@@ -81,7 +81,7 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
 
 // Forward declarations
 static void release_object_deep(CljObject *v);
-static void autorelease_pool_clear(CljPersistentVector *pool);
+static void autorelease_pool_clear(CljVector *pool);
 
 // ============================================================================
 // REFERENCE COUNTING IMPLEMENTATION
@@ -244,8 +244,8 @@ CljObject *autorelease(CljObject *v) {
     
     
     // Update g_runtime.pool_stack[g_runtime.pool_stack_top with an enlarged pool:
-    // Use vector_conj to append (now supports CLJ_WEAK_VECTOR)
-    CljPersistentVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
+    // Use vector_conj to append (now supports CLJ_VECTOR_WEAK)
+    CljVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
     ASSIGN(g_runtime.pool_stack[g_runtime.pool_stack_top], vector_conj(pool, v));
     
     // Track for memory profiling
@@ -266,10 +266,10 @@ CljObject *autorelease(CljObject *v) {
  * added via autorelease() will be added to this pool and released when
  * the pool is popped.
  */
-static void autorelease_pool_clear(CljPersistentVector *pool) {
+static void autorelease_pool_clear(CljVector *pool) {
     if (!pool) return;
-    // For CLJ_WEAK_VECTOR, don't RELEASE elements (weak reference)
-    if (TAG((ID)pool) == CLJ_WEAK_VECTOR) {
+    // For CLJ_VECTOR_WEAK, don't RELEASE elements (weak reference)
+    if (TAG((ID)pool) == CLJ_VECTOR_WEAK) {
         vector_clear(pool);
     } else {
         VECTOR_FOR_EACH(pool, elem) {
@@ -282,7 +282,7 @@ static void autorelease_pool_clear(CljPersistentVector *pool) {
 }
 
 
-CljPersistentVector *autorelease_pool_push() {
+CljVector *autorelease_pool_push() {
     // Check for stack overflow
     if (g_runtime.pool_stack_top >= MAX_POOL_DEPTH - 1) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
@@ -292,7 +292,7 @@ CljPersistentVector *autorelease_pool_push() {
         return NULL;
     }
     
-    CljPersistentVector *pool = make_vector(1024, CLJ_WEAK_VECTOR);
+    CljVector *pool = make_vector(1024, CLJ_VECTOR_WEAK);
     
     g_runtime.pool_stack[++g_runtime.pool_stack_top] = pool;
     
@@ -305,7 +305,7 @@ CljPersistentVector *autorelease_pool_push() {
 }
 
 
-void autorelease_pool_pop(CljPersistentVector *pool) {
+void autorelease_pool_pop(CljVector *pool) {
     // Check for stack underflow
     if (g_runtime.pool_stack_top < 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
@@ -347,7 +347,7 @@ void autorelease_pool_pop(CljPersistentVector *pool) {
 void autorelease_pool_cleanup_after_exception() {
     // Clean up all pools from array stack
     while (g_runtime.pool_stack_top >= 0) {
-        CljPersistentVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
+        CljVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
         if (pool) {
             autorelease_pool_clear(pool);
             RELEASE((ID)pool);
@@ -520,7 +520,7 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_VECTOR:
             {
-                CljPersistentVector *vec = as_vector(v);
+                CljVector *vec = as_vector(v);
                 // Release all vector elements
                 VECTOR_FOR_EACH(vec, elem) {
                     RELEASE(elem);
@@ -529,9 +529,9 @@ static void release_object_deep(CljObject *v) {
             }
             break;
             
-        case CLJ_WEAK_VECTOR:
+        case CLJ_VECTOR_WEAK:
             {
-                // For CLJ_WEAK_VECTOR, elements are not retained or released (weak references)
+                // For CLJ_VECTOR_WEAK, elements are not retained or released (weak references)
                 // Note: data array wird automatisch freigegeben
             }
             break;

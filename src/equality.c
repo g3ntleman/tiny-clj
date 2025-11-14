@@ -66,10 +66,10 @@ bool clj_equal(ID a, ID b) {
         }
         
         case CLJ_VECTOR:
-        case CLJ_WEAK_VECTOR:
-        case CLJ_TRANSIENT_VECTOR: {
-            CljPersistentVector *vec_a = (CljPersistentVector*)a;
-            CljPersistentVector *vec_b = (CljPersistentVector*)b;
+        case CLJ_VECTOR_WEAK:
+        case CLJ_VECTOR_TRANSIENT: {
+            CljVector *vec_a = (CljVector*)a;
+            CljVector *vec_b = (CljVector*)b;
             if (!vec_a || !vec_b) return false;
             int count_a = vector_count(vec_a);
             int count_b = vector_count(vec_b);

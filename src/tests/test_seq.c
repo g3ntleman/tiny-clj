@@ -32,7 +32,7 @@ TEST(test_make_seq_vector) {
     {
         // Create a test vector
         CljValue vec = make_vector(TEST_VECTOR_SIZE, CLJ_VECTOR);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+        CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         // Add elements using vector_conj
@@ -95,7 +95,7 @@ TEST(test_seq_first) {
     {
         // Create a test vector
         CljValue vec = make_vector(3, CLJ_VECTOR);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+        CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         // Add elements using vector_conj
@@ -117,7 +117,7 @@ TEST(test_seq_rest) {
     {
         // Create a test vector
         CljValue vec = make_vector(3, CLJ_VECTOR);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+        CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         // Add elements using vector_conj
@@ -138,7 +138,7 @@ TEST(test_seq_next) {
     {
         // Create a test vector
         CljValue vec = make_vector(3, CLJ_VECTOR);
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+        CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         
         // Add elements using vector_conj
@@ -160,7 +160,7 @@ TEST(test_seq_rest_vs_next_difference) {
         // Test 1: Non-empty sequence - both should return non-empty sequences
         {
             CljValue vec = make_vector(2, CLJ_VECTOR);
-            CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+            CljVector *vec_data = as_vector((CljObject*)vec);
             vec_data = vector_conj(vec_data, (ID)fixnum(1));
             vec_data = vector_conj(vec_data, (ID)fixnum(2));
             
@@ -184,7 +184,7 @@ TEST(test_seq_rest_vs_next_difference) {
         // Test 2: Single-element sequence - rest should return empty sequence, next should return nil
         {
             CljValue vec = make_vector(1, CLJ_VECTOR);
-            CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+            CljVector *vec_data = as_vector((CljObject*)vec);
             vec_data = vector_conj(vec_data, (ID)fixnum(42));
             
             CljSeqIterator *seq = make_seq((CljObject*)vec);
@@ -218,8 +218,8 @@ TEST(test_seq_equality) {
         CljValue vec1 = make_vector(2, CLJ_VECTOR);
         CljValue vec2 = make_vector(2, CLJ_VECTOR);
         
-        CljPersistentVector *vec1_data = as_vector((CljObject*)vec1);
-        CljPersistentVector *vec2_data = as_vector((CljObject*)vec2);
+        CljVector *vec1_data = as_vector((CljObject*)vec1);
+        CljVector *vec2_data = as_vector((CljObject*)vec2);
         
         TEST_ASSERT_NOT_NULL(vec1_data);
         TEST_ASSERT_NOT_NULL(vec2_data);

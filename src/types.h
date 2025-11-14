@@ -36,7 +36,7 @@ typedef enum {
     CLJ_SYMBOL = 2,   // Interned symbols
     CLJ_STRING = 4,   // Strings
     CLJ_VECTOR = 6,   // Vectors
-    CLJ_WEAK_VECTOR = 8,
+    CLJ_VECTOR_WEAK = 8,
     CLJ_MAP = 10,
     CLJ_LIST = 12,
     CLJ_SEQ = 14,         // Sequence iterator
@@ -45,8 +45,8 @@ typedef enum {
     CLJ_EXCEPTION = 20,
     CLJ_BYTE_ARRAY = 22,  // Mutable byte array
     CLJ_ATOM = 24,         // Mutable atom container
-    CLJ_TRANSIENT_VECTOR = 26,
-    CLJ_TRANSIENT_MAP = 28,
+    CLJ_VECTOR_TRANSIENT = 26,
+    CLJ_MAP_TRANSIENT = 28,
     CLJ_RAW_MEMORY = 32   // Raw memory allocations (ID arrays, etc.)
 } CljType;
 

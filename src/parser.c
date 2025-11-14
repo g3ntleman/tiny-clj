@@ -385,7 +385,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     
     // Create transient vector for efficient building
     CljValue vec = make_vector(6, CLJ_VECTOR);
-    CljValue tvec = transient(vec);
+    CljValue tvec = (ID)vector_transient((CljVector*)vec);
     RELEASE(vec);  // Release original, use transient
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -401,7 +401,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       }
       
       // Use vector_conj_bang for transient vectors (guaranteed in-place)
-      tvec = vector_conj_bang((CljPersistentVector*)tvec, value);
+      tvec = vector_conj_bang((CljVector*)tvec, value);
       if (!tvec) {
         throw_parser_exception("Failed to append to vector", reader);
         return NULL;
@@ -410,7 +410,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     }
     
     // Convert back to persistent vector
-    vec = vector_persistent(tvec);
+    vec = (ID)vector_persistent((CljVector*)tvec);
     RELEASE(tvec);
     
     if (reader_eof(reader) || !reader_match(reader, ']')) {
@@ -506,7 +506,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
       
       // Extract binding and test from vector [binding test]
-      CljPersistentVector *vec = as_vector((CljValue)binding_vec);
+      CljVector *vec = as_vector((CljValue)binding_vec);
       if (!vec || vector_count(vec) < 2) {
         throw_parser_exception("if-let binding vector must have exactly 2 elements", reader);
         return NULL;
@@ -1063,7 +1063,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
   CljValue param_vec = make_vector(1, CLJ_VECTOR);
-  vector_conj((CljPersistentVector*)param_vec, percent_sym);
+  vector_conj((CljVector*)param_vec, percent_sym);
   
   // Create (fn [%] body)
   ID elements[3] = {fn_sym, param_vec, body};

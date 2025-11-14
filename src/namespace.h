@@ -29,7 +29,7 @@ typedef struct {
     CljObject **stack;
     int sp;
     int stack_capacity;
-    struct CljPersistentVector *pool;
+    struct CljVector *pool;
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
     

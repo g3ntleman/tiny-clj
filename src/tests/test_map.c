@@ -211,7 +211,7 @@ TEST(test_channel_object_identity) {
     TEST_ASSERT_NOT_NULL(chan1);
     
     // Verify it's a map
-    TEST_ASSERT_TRUE(chan1 && TAG(chan1) == CLJ_MAP || chan1 && TAG(chan1) == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE(chan1 && TAG(chan1) == CLJ_MAP || chan1 && TAG(chan1) == CLJ_MAP_TRANSIENT);
     
     // Check initial state
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
@@ -1000,7 +1000,7 @@ TEST(test_map_transient_comprehensive) {
     TEST_ASSERT_EQUAL_INT(0, empty_map->count);
     CljMap *empty_transient = map_transient(empty_map);
     TEST_ASSERT_NOT_NULL(empty_transient);
-    TEST_ASSERT_TRUE((CljObject*)empty_transient && TAG((CljObject*)empty_transient) == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE((CljObject*)empty_transient && TAG((CljObject*)empty_transient) == CLJ_MAP_TRANSIENT);
     TEST_ASSERT_EQUAL_INT(0, empty_transient->count);
     RELEASE((CljObject*)empty_map);
     RELEASE((CljObject*)empty_transient);
@@ -1020,7 +1020,7 @@ TEST(test_map_transient_comprehensive) {
     // Convert to transient
     CljMap *transient_map = map_transient(persistent_map);
     TEST_ASSERT_NOT_NULL(transient_map);
-    TEST_ASSERT_TRUE((CljObject*)transient_map && TAG((CljObject*)transient_map) == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE((CljObject*)transient_map && TAG((CljObject*)transient_map) == CLJ_MAP_TRANSIENT);
     TEST_ASSERT_EQUAL_INT(5, transient_map->count);
     
     // Verify it's a different pointer (new map created)

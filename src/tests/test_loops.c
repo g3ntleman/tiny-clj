@@ -488,7 +488,7 @@ TEST(test_go_returns_transient_map_channel) {
     
     // Verify it's a transient map (channel is a transient map)
     // Clojure-compatibility: Channels are maps, but transient for in-place mutation
-    TEST_ASSERT_TRUE((CljObject*)chan && TAG((CljObject*)chan) == CLJ_TRANSIENT_MAP || (CljObject*)chan && TAG((CljObject*)chan) == CLJ_MAP);
+    TEST_ASSERT_TRUE((CljObject*)chan && TAG((CljObject*)chan) == CLJ_MAP_TRANSIENT || (CljObject*)chan && TAG((CljObject*)chan) == CLJ_MAP);
     
     // Cleanup
     if (chan) RELEASE(chan);
@@ -504,7 +504,7 @@ TEST(test_channel_is_transient_map_and_mutable) {
     
     // Verify it's a transient map
     CljObject *obj = (CljObject*)chan;
-    TEST_ASSERT_TRUE(obj->type == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE(obj->type == CLJ_MAP_TRANSIENT);
     
     // Put a value using result_channel_put (mutates in-place)
     CljObject *kw_value = intern_symbol(NULL, ":value");
@@ -540,7 +540,7 @@ TEST(test_channel_mutation_after_run_next_task) {
     
     // Verify it's a transient map
     CljObject *obj = (CljObject*)chan;
-    TEST_ASSERT_TRUE(obj->type == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE(obj->type == CLJ_MAP_TRANSIENT);
     
     // Run next task
     CljObject *ran_result = NULL;
@@ -579,7 +579,7 @@ TEST(test_direct_channel_creation_and_mutation) {
     
     // Verify it's a transient map
     CljObject *obj = (CljObject*)chan;
-    TEST_ASSERT_TRUE(obj->type == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE(obj->type == CLJ_MAP_TRANSIENT);
     
     // Verify initial state
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
@@ -634,7 +634,7 @@ TEST(test_event_loop_run_next_mutates_channel) {
     
     // Verify it's a transient map
     CljObject *obj = (CljObject*)chan;
-    TEST_ASSERT_TRUE(obj->type == CLJ_TRANSIENT_MAP);
+    TEST_ASSERT_TRUE(obj->type == CLJ_MAP_TRANSIENT);
     
     // Run next task using direct function call (not eval_string)
     bool ran = event_loop_run_next(NULL, g_test_eval_state);
@@ -670,7 +670,7 @@ TEST(test_event_loop_enqueue_updates_count) {
         TEST_ASSERT_NOT_NULL(chan);
         
         // Check initial count (should be 0)
-        CljPersistentVector *task_vec = (CljPersistentVector*)g_runtime.task_queue;
+        CljVector *task_vec = (CljVector*)g_runtime.task_queue;
         TEST_ASSERT_NOT_NULL(task_vec);
         unsigned int count_before = vector_count(task_vec);
         TEST_ASSERT_EQUAL_INT_MESSAGE(0, count_before,

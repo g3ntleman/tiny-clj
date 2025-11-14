@@ -688,18 +688,18 @@ TEST(test_vec_with_nil_elements) {
 // Test that vector_conj uses in-place mutation when RC=1
 TEST(test_vector_conj_cow_rc_one_inplace) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR);
         // base.rc is part of CljObject, access via cast
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // First conj should be in-place (RC=1, capacity allows)
-        CljValue new_vec1 = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)fixnum(10));
+        CljValue new_vec1 = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(10));
         TEST_ASSERT_EQUAL_PTR((CljValue)vec, new_vec1); // Same pointer!
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         TEST_ASSERT_EQUAL_INT(1, vector_count(vec));
         
         // Second conj should also be in-place
-        CljValue new_vec2 = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)fixnum(20));
+        CljValue new_vec2 = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(20));
         TEST_ASSERT_EQUAL_PTR((CljValue)vec, new_vec2); // Same pointer!
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
@@ -713,18 +713,18 @@ TEST(test_vector_conj_cow_rc_one_inplace) {
 // Test that vector_conj uses Copy-on-Write when RC>1
 TEST(test_vector_conj_cow_rc_greater_one) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR);
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add some entries
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(10));
+        vector_conj((CljVector*)vec, (ID)fixnum(10));
         
         // RETAIN to increase RC
         RETAIN((CljValue)vec);
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc);
         
         // Now COW should trigger
-        CljValue new_vec = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)fixnum(20));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(20));
         TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc); // Original RC unchanged
         
@@ -733,7 +733,7 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)vector_nth(vec, 0)));
         
         // Verify new vector has both entries
-        CljPersistentVector *new_vec_data = as_vector(new_vec);
+        CljVector *new_vec_data = as_vector(new_vec);
         TEST_ASSERT_EQUAL_INT(2, vector_count(new_vec_data));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)vector_nth(new_vec_data, 0)));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)vector_nth(new_vec_data, 1)));
@@ -747,22 +747,22 @@ TEST(test_vector_conj_cow_rc_greater_one) {
 // Test that vector_conj handles capacity growth with COW
 TEST(test_vector_conj_cow_capacity_growth) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector *vec = (CljPersistentVector*)make_vector(2, CLJ_VECTOR);
+        CljVector *vec = (CljVector*)make_vector(2, CLJ_VECTOR);
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Fill capacity
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(10));
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(20));
+        vector_conj((CljVector*)vec, (ID)fixnum(10));
+        vector_conj((CljVector*)vec, (ID)fixnum(20));
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // RETAIN to trigger COW
         RETAIN((CljValue)vec);
         
         // Add more - should trigger COW with growth
-        CljValue new_vec = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)fixnum(30));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
         TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
         
-        CljPersistentVector *new_vec_data = as_vector(new_vec);
+        CljVector *new_vec_data = as_vector(new_vec);
         // Capacity is implementation detail, only check count
         TEST_ASSERT_EQUAL_INT(3, vector_count(new_vec_data));
         
@@ -783,16 +783,16 @@ TEST(test_vector_conj_cow_capacity_growth) {
 // Test that original vector remains unchanged after COW
 TEST(test_vector_conj_cow_original_unchanged) {
     WITH_AUTORELEASE_POOL({
-        CljPersistentVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR);
         
         // Add entries
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(10));
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(20));
+        vector_conj((CljVector*)vec, (ID)fixnum(10));
+        vector_conj((CljVector*)vec, (ID)fixnum(20));
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // RETAIN to trigger COW
         RETAIN((CljValue)vec);
-        CljValue new_vec = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)fixnum(30));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
         
         // Original should be unchanged
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
@@ -800,7 +800,7 @@ TEST(test_vector_conj_cow_original_unchanged) {
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)vector_nth(vec, 1)));
         
         // New vector should have all entries
-        CljPersistentVector *new_vec_data = as_vector(new_vec);
+        CljVector *new_vec_data = as_vector(new_vec);
         TEST_ASSERT_EQUAL_INT(3, vector_count(new_vec_data));
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)vector_nth(new_vec_data, 0)));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)vector_nth(new_vec_data, 1)));
@@ -815,16 +815,16 @@ TEST(test_vector_conj_cow_original_unchanged) {
 // Test memory leak detection for vector_conj COW
 TEST(test_vector_conj_cow_memory_leak) {
     WITH_MEMORY_PROFILING({
-        CljPersistentVector* vec = make_vector(4, CLJ_VECTOR);
+        CljVector* vec = make_vector(4, CLJ_VECTOR);
         
         // Add entries
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(10));
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(20));
-        vector_conj((CljPersistentVector*)vec, (ID)fixnum(30));
+        vector_conj((CljVector*)vec, (ID)fixnum(10));
+        vector_conj((CljVector*)vec, (ID)fixnum(20));
+        vector_conj((CljVector*)vec, (ID)fixnum(30));
         
         // RETAIN to trigger COW
         RETAIN((CljValue)vec);
-        CljValue new_vec = (CljValue)vector_conj((CljPersistentVector*)vec, (ID)fixnum(40));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(40));
         
         // Cleanup
         RELEASE((CljValue)vec);
@@ -839,10 +839,10 @@ TEST(test_vector_conj_cow_memory_leak) {
 // ============================================================================
 
 TEST(test_weak_vector_does_not_retain_elements) {
-    // Test that adding elements to CLJ_WEAK_VECTOR does NOT increase their RC
+    // Test that adding elements to CLJ_VECTOR_WEAK does NOT increase their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector (like autorelease pool)
-        CljPersistentVector *weak_vec = make_vector(8, CLJ_WEAK_VECTOR);
+        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -852,7 +852,7 @@ TEST(test_weak_vector_does_not_retain_elements) {
         // Add to weak vector - should NOT increase RC
         // vector_assoc handles count increment and capacity growth automatically
         unsigned int count = vector_count(weak_vec);
-        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
         TEST_ASSERT_NOT_NULL(new_vec);
         
         // RC should still be 1 (not retained)
@@ -872,10 +872,10 @@ TEST(test_weak_vector_does_not_retain_elements) {
 }
 
 TEST(test_weak_vector_does_not_release_elements) {
-    // Test that removing elements from CLJ_WEAK_VECTOR does NOT decrease their RC
+    // Test that removing elements from CLJ_VECTOR_WEAK does NOT decrease their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljPersistentVector *weak_vec = make_vector(8, CLJ_WEAK_VECTOR);
+        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -888,19 +888,19 @@ TEST(test_weak_vector_does_not_release_elements) {
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE((CljObject*)weak_vec);
                 weak_vec = new_vec;
             }
         }
         vector_increment_count(weak_vec);
-        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         
         // Remove from weak vector using vector_pop - should NOT decrease RC
-        CljPersistentVector *popped = vector_pop(new_vec);
+        CljVector *popped = vector_pop(new_vec);
         TEST_ASSERT_NOT_NULL(popped);
         
         // RC should still be 1 (not released)
@@ -919,10 +919,10 @@ TEST(test_weak_vector_does_not_release_elements) {
 }
 
 TEST(test_weak_vector_nth_does_not_retain) {
-    // Test that vector_nth does NOT retain elements for CLJ_WEAK_VECTOR
+    // Test that vector_nth does NOT retain elements for CLJ_VECTOR_WEAK
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljPersistentVector *weak_vec = make_vector(8, CLJ_WEAK_VECTOR);
+        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -930,30 +930,30 @@ TEST(test_weak_vector_nth_does_not_retain) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // Add to weak vector
-        // Note: vector_assoc for CLJ_WEAK_VECTOR allows index == count (append)
+        // Note: vector_assoc for CLJ_VECTOR_WEAK allows index == count (append)
         unsigned int count = vector_count(weak_vec);
         // Grow capacity if needed using make_vector_copy
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE((CljObject*)weak_vec);
                 weak_vec = new_vec;
             }
         }
         vector_increment_count(weak_vec);
-        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         TEST_ASSERT_EQUAL(1, vector_count(new_vec));  // Count should be 1
         
-        // Get element using vector_get_element_no_retain - should NOT retain
-        ID result = vector_get_element_no_retain(new_vec, 0);
+        // Get element using vector_nth - for weak vectors, does NOT retain
+        ID result = vector_nth(new_vec, 0);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(map, result);
         
-        // RC should still be 1 (not retained by vector_nth)
+        // RC should still be 1 (not retained for weak vectors)
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // Cleanup
@@ -966,10 +966,10 @@ TEST(test_weak_vector_nth_does_not_retain) {
 }
 
 TEST(test_weak_vector_multiple_elements_rc_unchanged) {
-    // Test that multiple elements in CLJ_WEAK_VECTOR maintain their RC
+    // Test that multiple elements in CLJ_VECTOR_WEAK maintain their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljPersistentVector *weak_vec = make_vector(8, CLJ_WEAK_VECTOR);
+        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create multiple objects
@@ -982,7 +982,7 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
         TEST_ASSERT_EQUAL(1, map3->base.rc);
         
         // Add all to weak vector
-        // Note: vector_assoc for CLJ_WEAK_VECTOR with rc=1 mutates in-place
+        // Note: vector_assoc for CLJ_VECTOR_WEAK with rc=1 mutates in-place
         for (int i = 0; i < 3; i++) {
             CljMap *map = (i == 0) ? map1 : (i == 1) ? map2 : map3;
             unsigned int count = vector_count(weak_vec);
@@ -990,16 +990,16 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE((CljObject*)weak_vec);
                 weak_vec = new_vec;
             }
         }
             vector_increment_count(weak_vec);
-            CljPersistentVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+            CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
             TEST_ASSERT_NOT_NULL(new_vec);
-            // For CLJ_WEAK_VECTOR with rc=1, vector_assoc mutates in-place
+            // For CLJ_VECTOR_WEAK with rc=1, vector_assoc mutates in-place
             if (new_vec != weak_vec) {
                 RELEASE((CljObject*)weak_vec);
                 weak_vec = new_vec;
@@ -1025,10 +1025,10 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
 }
 
 TEST(test_weak_vector_clear_does_not_release_elements) {
-    // Test that vector_clear does NOT release elements for CLJ_WEAK_VECTOR
+    // Test that vector_clear does NOT release elements for CLJ_VECTOR_WEAK
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
-        CljPersistentVector *weak_vec = make_vector(8, CLJ_WEAK_VECTOR);
+        CljVector *weak_vec = make_vector(8, CLJ_VECTOR_WEAK);
         TEST_ASSERT_NOT_NULL(weak_vec);
         
         // Create an object with RC=1
@@ -1041,14 +1041,14 @@ TEST(test_weak_vector_clear_does_not_release_elements) {
         // Since we can't access capacity directly, we'll grow when count >= initial capacity (8)
         if (count >= 8) {
             int newcap = 16;  // Double the initial capacity
-            CljPersistentVector *new_vec = make_vector_copy(weak_vec, newcap);
+            CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
                 RELEASE((CljObject*)weak_vec);
                 weak_vec = new_vec;
             }
         }
         vector_increment_count(weak_vec);
-        CljPersistentVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         
@@ -1075,22 +1075,22 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
     WITH_AUTORELEASE_POOL({
         // Simulate event_loop_enqueue scenario:
         // 1. Create persistent vector with capacity
-        CljPersistentVector *task_vec = make_vector(8, CLJ_VECTOR);
+        CljVector *task_vec = make_vector(8, CLJ_VECTOR);
         TEST_ASSERT_NOT_NULL(task_vec);
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
         // 2. Convert to transient (like task_queue_get does)
-        CljPersistentVector *tvec = (CljPersistentVector*)transient((ID)task_vec);
+        CljVector *tvec = vector_transient(task_vec);
         RELEASE(task_vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_TRANSIENT_VECTOR, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         TEST_ASSERT_EQUAL_INT(0, vector_count(tvec));
         
         // 3. Use clj_conj to add an item (like event_loop_enqueue does)
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        CljPersistentVector *result = clj_conj(tvec, (ID)test_map);
+        CljVector *result = clj_conj(tvec, (ID)test_map);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be same pointer (in-place)
         
@@ -1103,7 +1103,7 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map2 = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map2);
         
-        CljPersistentVector *result2 = clj_conj(tvec, (ID)test_map2);
+        CljVector *result2 = clj_conj(tvec, (ID)test_map2);
         TEST_ASSERT_NOT_NULL(result2);
         TEST_ASSERT_EQUAL_PTR(tvec, result2);
         
@@ -1113,12 +1113,14 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
             "clj_conj should increment count from 1 to 2");
         
         // 7. Verify elements are accessible
-        ID elem0 = vector_get_element_no_retain(tvec, 0);
-        ID elem1 = vector_get_element_no_retain(tvec, 1);
+        ID elem0 = vector_nth(tvec, 0);
+        ID elem1 = vector_nth(tvec, 1);
         TEST_ASSERT_EQUAL_PTR((ID)test_map, elem0);
         TEST_ASSERT_EQUAL_PTR((ID)test_map2, elem1);
         
-        // Cleanup
+        // Cleanup - release retained elements
+        RELEASE(elem0);
+        RELEASE(elem1);
         RELEASE((CljObject*)tvec);
         RELEASE((CljObject*)test_map);
         RELEASE((CljObject*)test_map2);
@@ -1129,15 +1131,15 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
 TEST(test_clj_conj_with_empty_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Create empty persistent vector (capacity 0)
-        CljPersistentVector *task_vec = make_vector(0, CLJ_VECTOR);
+        CljVector *task_vec = make_vector(0, CLJ_VECTOR);
         TEST_ASSERT_NOT_NULL(task_vec);
         TEST_ASSERT_EQUAL_INT(0, vector_count(task_vec));
         
         // Convert to transient
-        CljPersistentVector *tvec = (CljPersistentVector*)transient((ID)task_vec);
+        CljVector *tvec = vector_transient(task_vec);
         RELEASE(task_vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_EQUAL_INT(CLJ_TRANSIENT_VECTOR, ((CljObject*)tvec)->type);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         TEST_ASSERT_EQUAL_INT(0, vector_count(tvec));
         
         // clj_conj should grow capacity and add item
@@ -1154,10 +1156,11 @@ TEST(test_clj_conj_with_empty_transient_vector) {
             "clj_conj should increment count even when starting with capacity 0");
         
         // Verify element is accessible
-        ID elem0 = vector_get_element_no_retain(tvec, 0);
+        ID elem0 = vector_nth(tvec, 0);
         TEST_ASSERT_EQUAL_PTR((ID)test_map, elem0);
         
-        // Cleanup
+        // Cleanup - release retained element
+        RELEASE(elem0);
         RELEASE((CljObject*)tvec);
         RELEASE((CljObject*)test_map);
     });
@@ -1202,12 +1205,12 @@ TEST(test_transient_on_transient_returns_same_object) {
         // Test 1: (transient) on transient vector returns the same object
         CljObject *tvec1 = eval_string("(transient (vector 1 2 3))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(tvec1);
-        TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_TRANSIENT_VECTOR);
+        TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_VECTOR_TRANSIENT);
         
         // Call transient again on the transient vector
         CljObject *tvec2 = eval_string("(transient (transient (vector 1 2 3)))", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(tvec2);
-        TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_TRANSIENT_VECTOR);
+        TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_VECTOR_TRANSIENT);
         
         // They should be equal (same elements)
         CljObject *equal_result = eval_string("(= (transient (vector 1 2 3)) (transient (transient (vector 1 2 3))))", g_test_eval_state);
@@ -1217,21 +1220,21 @@ TEST(test_transient_on_transient_returns_same_object) {
         
         // Test 2: Direct test using native_transient function
         // Create a transient vector
-        CljPersistentVector *vec = make_vector(3, CLJ_VECTOR);
+        CljVector *vec = make_vector(3, CLJ_VECTOR);
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));
-        CljPersistentVector *tvec = (CljPersistentVector*)transient((ID)vec);
+        CljVector *tvec = vector_transient(vec);
         RELEASE((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_TRUE(TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR);
+        TEST_ASSERT_TRUE(TAG((ID)tvec) == CLJ_VECTOR_TRANSIENT);
         
         // Call transient on the transient vector - should return same object
         ID args[] = {(ID)tvec};
         CljObject *result = (CljObject*)native_transient(args, 1);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG((ID)result) == CLJ_TRANSIENT_VECTOR);
+        TEST_ASSERT_TRUE(TAG((ID)result) == CLJ_VECTOR_TRANSIENT);
         
         RELEASE((CljObject*)tvec);
         
@@ -1244,14 +1247,14 @@ TEST(test_transient_on_transient_returns_same_object) {
         CljMap *tmap = map_transient(map);
         RELEASE((CljObject*)map);
         TEST_ASSERT_NOT_NULL(tmap);
-        TEST_ASSERT_TRUE(TAG((ID)tmap) == CLJ_TRANSIENT_MAP);
+        TEST_ASSERT_TRUE(TAG((ID)tmap) == CLJ_MAP_TRANSIENT);
         
         // Call transient on the transient map - should return same object
         ID map_args[] = {(ID)tmap};
         CljObject *map_result = (CljObject*)native_transient(map_args, 1);
         TEST_ASSERT_NOT_NULL(map_result);
         TEST_ASSERT_EQUAL_PTR(tmap, map_result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_TRANSIENT_MAP);
+        TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_MAP_TRANSIENT);
         
         RELEASE((CljObject*)tmap);
     });
@@ -1277,7 +1280,7 @@ TEST(test_persistent_on_persistent_returns_same_object) {
         TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
         
         // Test 2: Direct test using native_persistent_bang function
-        CljPersistentVector *vec = make_vector(3, CLJ_VECTOR);
+        CljVector *vec = make_vector(3, CLJ_VECTOR);
         vec = vector_conj(vec, fixnum(1));
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));

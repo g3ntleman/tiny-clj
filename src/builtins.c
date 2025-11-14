@@ -85,8 +85,8 @@ ID nth2(ID *args, unsigned int argc) {
     }
 
     // Fast path: Vectors (O(1) access) - includes transient vectors
-    if (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_TRANSIENT_VECTOR) {
-        CljPersistentVector *v = as_vector(coll);
+    if (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_VECTOR_TRANSIENT) {
+        CljVector *v = as_vector(coll);
         int count = vector_count(v);
         if (!v || i >= count) {
             // Out of bounds: throw exception
@@ -95,15 +95,11 @@ ID nth2(ID *args, unsigned int argc) {
             return NULL;
         }
         // Index is valid - check if element is nil
-        // Use vector_get_element_no_retain to distinguish nil element from out-of-bounds
-        ID elem = vector_get_element_no_retain(v, i);
-        if (!elem || elem == SYM_NIL) {
-            // Element exists but is nil - return NULL (not not_found)
-            // This is Clojure behavior: (nth [1 nil 3] 1 :default) => nil (not :default)
-            return NULL;
-        }
-        // Element exists and is not nil - return retained
-        return RETAIN(elem);
+        // vector_nth throws exception if out of bounds, and retains the element
+        ID elem = vector_nth(v, i);
+
+        // Element exists and is not nil - already retained by vector_nth
+        return elem;
     }
 
     // Fast path: Lists (O(n) access via list_nth)
@@ -162,7 +158,7 @@ ID native_peek(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "peek")) return NULL;
     ID vec = args[0];
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
-    CljPersistentVector *v = as_vector(vec);
+    CljVector *v = as_vector(vec);
     int count = vector_count(v);
     if (!count) return NULL;  // nil for empty vector
     return vector_nth(v, count - 1);  // Return last element (already retained)
@@ -174,7 +170,7 @@ ID native_pop(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "pop")) return NULL;
     ID vec = args[0];
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
-    CljPersistentVector *v = as_vector(vec);
+    CljVector *v = as_vector(vec);
     int count = vector_count(v);
     if (!v || count == 0) {
         // Return empty vector singleton (no memory management needed)
@@ -182,7 +178,7 @@ ID native_pop(ID *args, unsigned int argc) {
     }
     
     // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
-    CljPersistentVector *result = vector_pop(v);
+    CljVector *result = vector_pop(v);
     if (!result) return NULL;
     return result;  // vec is retained by caller, result is already retained
 }
@@ -219,7 +215,7 @@ ID native_subvec(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    CljPersistentVector *v = as_vector(vec);
+    CljVector *v = as_vector(vec);
     if (!v) return NULL;
     
     int start = AS_FIXNUM(start_idx);
@@ -267,7 +263,7 @@ ID native_subvec(ID *args, unsigned int argc) {
     
     // Create new vector and add elements using vector_conj
     CljValue new_vec_obj = (CljValue)make_vector(subvec_count, CLJ_VECTOR);
-    CljPersistentVector *new_vec = as_vector((CljObject*)new_vec_obj);
+    CljVector *new_vec = as_vector((CljObject*)new_vec_obj);
     if (!new_vec) return NULL;
     
     // Copy elements from start to end using vector_conj
@@ -296,7 +292,7 @@ ID conj2_wrapper(ID *args, int argc) {
 ID conj2(ID vec, ID val) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
-    CljPersistentVector* result = vector_conj((CljPersistentVector*)vec, val);
+    CljVector* result = vector_conj((CljVector*)vec, val);
     if (!result) return NULL;
     return RETAIN(result);
 }
@@ -623,10 +619,10 @@ ID assoc3(ID *args, unsigned int argc) {
     if (coll && TAG(coll) == CLJ_VECTOR) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
-        CljPersistentVector *v = as_vector(coll);
+        CljVector *v = as_vector(coll);
         if (!v || i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljPersistentVector* result = vector_assoc((CljPersistentVector*)coll, i, val);
+        CljVector* result = vector_assoc((CljVector*)coll, i, val);
         if (!result) return NULL;
         return RETAIN(result);
     }
@@ -658,7 +654,7 @@ ID native_dissoc(ID *args, unsigned int argc) {
     if (!map) return NULL;
     
     // Only support maps
-    if (TAG(map) != CLJ_MAP && TAG(map) != CLJ_TRANSIENT_MAP) {
+    if (TAG(map) != CLJ_MAP && TAG(map) != CLJ_MAP_TRANSIENT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "dissoc only works on maps", 
                        __FILE__, __LINE__, 0);
@@ -699,18 +695,22 @@ ID native_transient(ID *args, unsigned int argc) {
     if (!coll) return NULL;
     
     uint16_t tag = TAG(coll);
-    if (tag == CLJ_VECTOR) {
-        return transient(coll);
-    } else if (tag == CLJ_MAP) {
-        return (CljObject*)map_transient((CljMap*)coll);
-    } else if (tag == CLJ_TRANSIENT_VECTOR || tag == CLJ_TRANSIENT_MAP) {
-        // Clojure-compatible: transient on transient returns the same object
-        return coll;
+    switch (tag) {
+        case CLJ_VECTOR:
+            return (ID)vector_transient((CljVector*)coll);
+        case CLJ_MAP:
+            return map_transient(coll);
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_MAP_TRANSIENT:
+            // Clojure-compatible: transient on transient returns the same object
+            return coll;
+        default:
+            break;
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
-                    "transient requires a persistent collection at position 1", 
+                    "transient requires a collection at position 1", 
                     __FILE__, __LINE__, 0);
     return NULL;
 }
@@ -722,13 +722,17 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
     if (!coll) return NULL;
     
     uint16_t tag = TAG(coll);
-    if (tag == CLJ_TRANSIENT_VECTOR) {
-        return vector_persistent(coll);
-    } else if (tag == CLJ_TRANSIENT_MAP) {
-        return map_persistent((CljMap*)coll);
-    } else if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
-        // Clojure-compatible: persistent! on persistent returns the same object
-        return coll;
+    switch (tag) {
+        case CLJ_VECTOR_TRANSIENT:
+            return vector_persistent((CljVector*)coll);
+        case CLJ_MAP_TRANSIENT:
+            return map_persistent(coll);
+        case CLJ_VECTOR:
+        case CLJ_MAP:
+            // Clojure-compatible: persistent! on persistent returns the same object
+            return coll;
+        default:
+            break;
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
@@ -745,14 +749,14 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     if (!coll) return NULL;
     
     
-    if (coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) {
-        CljPersistentVector *result = (CljPersistentVector*)coll;
+    if (coll && TAG(coll) == CLJ_VECTOR_TRANSIENT) {
+        CljVector *result = (CljVector*)coll;
         for (unsigned int i = 1; i < argc; i++) {
             result = clj_conj(result, (CljValue)args[i]);
             if (!result) return NULL;
         }
         return (CljObject*)result;
-    } else if (coll && TAG(coll) == CLJ_TRANSIENT_MAP) {
+    } else if (coll && TAG(coll) == CLJ_MAP_TRANSIENT) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
         return (CljObject*)map_conj((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
     }
@@ -776,7 +780,7 @@ ID native_get(ID *args, unsigned int argc) {
     ID not_found = argc == 3 ? args[2] : NULL;
     if (!map || !key) return (NULL);
     
-    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
+    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
         return map_get((CljMap*)map, key, not_found);
     }
     
@@ -800,10 +804,10 @@ ID native_count(ID *args, unsigned int argc) {
         return fixnum(seq_count(coll));
     }
     
-    if (coll && (TAG(coll) == CLJ_MAP || TAG(coll) == CLJ_TRANSIENT_MAP)) {
+    if (coll && (TAG(coll) == CLJ_MAP || TAG(coll) == CLJ_MAP_TRANSIENT)) {
         return (fixnum(map_count((CljMap*)coll)));
-    } else if (coll && (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_TRANSIENT_VECTOR)) {
-        CljPersistentVector *vec = as_vector(coll);
+    } else if (coll && (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_VECTOR_TRANSIENT)) {
+        CljVector *vec = as_vector(coll);
         return (fixnum(vec ? vector_count(vec) : 0));
     } else if (coll && TAG(coll) == CLJ_LIST) {
         CljList *list = as_list(coll);
@@ -824,7 +828,7 @@ ID native_keys(ID *args, unsigned int argc) {
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
-    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
+    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
         return map_keys(map);
     }
     
@@ -836,7 +840,7 @@ ID native_vals(ID *args, unsigned int argc) {
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
-    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
+    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
         return map_vals(map);
     }
     
@@ -889,11 +893,11 @@ ID native_type(ID *args, unsigned int argc) {
         case CLJ_STRING:
             return (CljObject*)intern_symbol("clojure.lang", "String");
         case CLJ_VECTOR:
-        case CLJ_WEAK_VECTOR:
+        case CLJ_VECTOR_WEAK:
             return (CljObject*)intern_symbol("clojure.lang", "PersistentVector");
-        case CLJ_TRANSIENT_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
             return (CljObject*)intern_symbol("clojure.lang", "TransientVector");
-        case CLJ_TRANSIENT_MAP:
+        case CLJ_MAP_TRANSIENT:
             return (CljObject*)intern_symbol("clojure.lang", "TransientArrayMap");
         case CLJ_MAP:
             return (CljObject*)intern_symbol("clojure.lang", "PersistentArrayMap");
@@ -949,7 +953,7 @@ ID native_vector(ID *args, unsigned int argc) {
     
     // Create vector with capacity+1 to avoid COW when adding all elements
     // (vector_conj uses COW when count >= capacity, so we need capacity > argc)
-    CljPersistentVector *v = make_vector(argc + 1, CLJ_VECTOR);
+    CljVector *v = make_vector(argc + 1, CLJ_VECTOR);
     
     // Add all elements using vector_conj (Clojure-compatible: all args are retained)
     for (unsigned int i = 0; i < argc; i++) {
@@ -1004,7 +1008,7 @@ ID native_vec(ID *args, unsigned int argc) {
     
     // Create vector with default capacity (vector_conj will grow automatically)
     // make_vector throws OOM exception or returns valid object
-    CljPersistentVector* vec = make_vector(4, CLJ_VECTOR);
+    CljVector* vec = make_vector(4, CLJ_VECTOR);
     if (!vec) {
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
                 "Failed to create vector");
@@ -1557,7 +1561,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     
     if (!symbols || TAG(symbols) != CLJ_VECTOR) return;
     
-    CljPersistentVector *vec = as_vector(symbols);
+    CljVector *vec = as_vector(symbols);
     int count = vector_count(vec);
     for (int i = 0; i < count; i++) {
         CljObject *sym = (CljObject*)vector_nth(vec, i);
@@ -1612,7 +1616,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljObject *refer_syms = NULL;
     bool refer_all = false;
     
-    CljPersistentVector *vec = NULL;
+    CljVector *vec = NULL;
     bool ns_name_allocated = false;
     
     // Handle simple Symbol case: (require 'namespace)
@@ -2382,7 +2386,7 @@ ID native_range(ID *args, unsigned int argc) {
     
     // Create vector with calculated capacity
     CljValue vec = (CljValue)make_vector(size, CLJ_VECTOR);
-    CljPersistentVector *v = as_vector((CljObject*)vec);
+    CljVector *v = as_vector((CljObject*)vec);
     if (!v) return NULL;
     
     // Fill vector
@@ -2420,7 +2424,7 @@ ID native_repeat(ID *args, unsigned int argc) {
     
     // Create vector with exact capacity
     CljValue vec = (CljValue)make_vector(count, CLJ_VECTOR);
-    CljPersistentVector *v = as_vector((CljObject*)vec);
+    CljVector *v = as_vector((CljObject*)vec);
     if (!v) return NULL;
     
     // Fill vector with repeated value
@@ -2850,7 +2854,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
     
     // For now, only support vectors as sequences
     if (seq && TAG(seq) == CLJ_VECTOR) {
-        CljPersistentVector *vec = as_vector(seq);
+        CljVector *vec = as_vector(seq);
         int count = vector_count(vec);
         CljValue arr = (CljValue)make_byte_array(count);
         

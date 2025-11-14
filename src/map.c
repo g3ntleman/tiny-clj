@@ -217,7 +217,7 @@ ID map_keys(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljPersistentVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR);
+  CljVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR);
   if (!keys_vec)
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
@@ -236,7 +236,7 @@ ID map_vals(CljMap *map) {
   CljMap *map_data = map;
   if (!map_data)
     return NULL;
-  CljPersistentVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR);
+  CljVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR);
   if (!vals_vec)
     return NULL;
   for (int i = 0; i < map_data->count; i++) {
@@ -437,7 +437,7 @@ CljMap* make_map_from_stack(CljObject **pairs, int pair_count) {
  * Creates a new map with the same capacity and entries as the source map.
  * 
  * @param src Source map to copy from (must not be NULL)
- * @param new_type Type for the new map (CLJ_MAP or CLJ_TRANSIENT_MAP)
+ * @param new_type Type for the new map (CLJ_MAP or CLJ_MAP_TRANSIENT)
  * @return New map with copied entries, or NULL on error
  */
 static CljMap* map_copy(CljMap *src, CljType new_type) {
@@ -496,7 +496,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     }
     
     // Initialize as transient map (allows in-place mutation)
-    tmap->base.type = CLJ_TRANSIENT_MAP;
+    tmap->base.type = CLJ_MAP_TRANSIENT;
     tmap->base.rc = 1;
     tmap->count = 0;
     tmap->capacity = total_capacity;
@@ -545,7 +545,7 @@ CljMap* map_transient(CljMap *map) {
     }
     
     // Use map_copy helper (DRY)
-    CljMap *tmap = map_copy(map, CLJ_TRANSIENT_MAP);
+    CljMap *tmap = map_copy(map, CLJ_MAP_TRANSIENT);
     return tmap;
 }
 
@@ -558,7 +558,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
 #ifdef DEBUG
-    if (obj->type != CLJ_TRANSIENT_MAP && obj->type != CLJ_MAP) {
+    if (obj->type != CLJ_MAP_TRANSIENT && obj->type != CLJ_MAP) {
         fprintf(stderr, "Assertion failed: map_conj requires transient map or persistent map with RC=1, got type %d at %s:%d\n",
                 obj->type, __FILE__, __LINE__);
         abort();
@@ -572,7 +572,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
 #endif
     
     // Runtime check: map_conj is primarily for transient maps
-    if (obj->type != CLJ_TRANSIENT_MAP) {
+    if (obj->type != CLJ_MAP_TRANSIENT) {
         // Allow persistent maps with RC=1 for COW cases (but this should be rare)
         if (obj->type == CLJ_MAP && obj->rc == 1) {
             // COW case: persistent map with RC=1 can be mutated in-place
@@ -646,7 +646,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
 CljMap* map_persistent(CljMap *tmap) {
     if (!tmap) return NULL;
     CljObject *obj = (CljObject*)tmap;
-    if (obj->type != CLJ_TRANSIENT_MAP) {
+    if (obj->type != CLJ_MAP_TRANSIENT) {
         return NULL;
     }
     

@@ -100,8 +100,8 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
             break;
             
         case CLJ_VECTOR:
-        case CLJ_WEAK_VECTOR:
-        case CLJ_TRANSIENT_VECTOR:
+        case CLJ_VECTOR_WEAK:
+        case CLJ_VECTOR_TRANSIENT:
             *offset += snprintf(buf + *offset, buf_size - *offset, "#<vector>");
             break;
             

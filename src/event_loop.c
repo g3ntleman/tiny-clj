@@ -58,7 +58,7 @@ static CljMap* task_to_map(CljObject *fn, CljMap *result_chan) {
 }
 
 static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan) {
-    if (!task_map || TAG((ID)task_map) != CLJ_TRANSIENT_MAP) return false;
+    if (!task_map || TAG((ID)task_map) != CLJ_MAP_TRANSIENT) return false;
     
     task_init_keywords();
     
@@ -88,7 +88,7 @@ static CljMap* timer_task_to_map(CljObject *fn, int32_t scheduled_sec, int32_t s
 }
 
 static bool timer_task_from_map(CljMap *task_map, CljObject **fn, int32_t *scheduled_sec, int32_t *scheduled_msec, bool *periodic, int32_t *period_ms, int32_t *timer_id) {
-    if (!task_map || TAG((ID)task_map) != CLJ_TRANSIENT_MAP) return false;
+    if (!task_map || TAG((ID)task_map) != CLJ_MAP_TRANSIENT) return false;
     
     task_init_keywords();
     
@@ -118,40 +118,39 @@ static void timer_process(void);
 static void timer_insert_sorted_map(CljMap *task_map);
 
 // Helper function to ensure task queue is initialized
-static CljPersistentVector* task_queue_get(void) {
+static CljVector* task_queue_get(void) {
     if (!g_runtime.task_queue) {
-        CljPersistentVector* task_vec = make_vector(8, CLJ_VECTOR);
+        CljVector* task_vec = make_vector(8, CLJ_VECTOR);
         if (task_vec) {
-            g_runtime.task_queue = (CljPersistentVector*)transient((ID)task_vec);
+            g_runtime.task_queue = vector_transient(task_vec);
             RELEASE(task_vec);
         }
     }
     if (!g_runtime.task_queue) return NULL;
-    CljPersistentVector *task_vec = g_runtime.task_queue;
-    if (TAG((ID)task_vec) != CLJ_TRANSIENT_VECTOR) return NULL;
+    CljVector *task_vec = g_runtime.task_queue;
+    if (TAG((ID)task_vec) != CLJ_VECTOR_TRANSIENT) return NULL;
     return task_vec;
 }
 
 // Helper function to ensure timer queue is initialized
-static CljPersistentVector* timer_queue_get(void) {
+static CljVector* timer_queue_get(void) {
     if (!g_runtime.timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, CLJ_VECTOR);
-        if (timer_vec) {
-            g_runtime.timer_queue = transient((ID)timer_vec);
-            RELEASE(timer_vec);
-        }
+        CljVector* timer_vec = make_vector(8, CLJ_VECTOR);
+        ASSIGN(g_runtime.timer_queue, vector_transient(timer_vec));
+        RELEASE(timer_vec);
     }
     if (!g_runtime.timer_queue) return NULL;
-    CljPersistentVector *timer_vec = g_runtime.timer_queue;
-    if (TAG((ID)timer_vec) != CLJ_TRANSIENT_VECTOR) return NULL;
+    CljVector *timer_vec = g_runtime.timer_queue;
+    if (TAG((ID)timer_vec) != CLJ_VECTOR_TRANSIENT) return NULL;
     return timer_vec;
 }
 
 // Helper function to remove element from timer queue at index
-static void timer_queue_remove_at(CljPersistentVector *timer_vec, int index) {
+static void timer_queue_remove_at(CljVector *timer_vec, int index) {
     if (!timer_vec) return;
     // Use vector abstraction - vector_remove_at handles RELEASE automatically
-    vector_remove_at(timer_vec, index);
+
+        ASSIGN(g_runtime.timer_queue, vector_remove_at(timer_vec, index));
 }
 
 void event_loop_init(void) {
@@ -160,7 +159,7 @@ void event_loop_init(void) {
 }
 
 void event_loop_clear(void) {
-    CljPersistentVector *task_vec = task_queue_get();
+    CljVector *task_vec = task_queue_get();
     if (task_vec) {
         VECTOR_FOR_EACH(task_vec, task_elem) {
             CljMap *task_map = (CljMap*)task_elem;
@@ -178,11 +177,11 @@ void event_loop_clear(void) {
         }
     }
     
-    CljPersistentVector *timer_vec = timer_queue_get();
+    CljVector *timer_vec = timer_queue_get();
     if (timer_vec) {
         int count = vector_count(timer_vec);
         for (int i = 0; i < count; i++) {
-            CljMap *task_map = (CljMap*)vector_get_element_no_retain(timer_vec, i);
+            CljMap *task_map = (CljMap*)vector_nth(timer_vec, i);
             if (task_map) {
                 CljObject *fn;
                 if (timer_task_from_map(task_map, &fn, NULL, NULL, NULL, NULL, NULL)) {
@@ -201,7 +200,7 @@ void event_loop_clear(void) {
 void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel) {
     if (!fn_zero_arity) return;
     
-    CljPersistentVector *task_vec = task_queue_get();
+    CljVector *task_vec = task_queue_get();
     if (!task_vec) return;
     
     CljMap *task_map = task_to_map(RETAIN(fn_zero_arity), result_channel ? RETAIN(result_channel) : NULL);
@@ -213,7 +212,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel) {
     
     // Use clj_conj for transient vectors - it handles count internally
     // clj_conj returns the same transient vector (in-place mutation)
-           CljPersistentVector *new_vec = clj_conj(task_vec, (ID)task_map);
+           CljVector *new_vec = clj_conj(task_vec, (ID)task_map);
     if (!new_vec) {
         RELEASE(task_map);
         return;  // clj_conj failed
@@ -246,7 +245,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     
     timer_process();
     
-    CljPersistentVector *task_vec = task_queue_get();
+    CljVector *task_vec = task_queue_get();
     if (!task_vec) return false;
     unsigned int count = vector_count(task_vec);
     if (count == 0) {
@@ -259,10 +258,16 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     CljMap *task_map = (CljMap*)data[0];
     
     // Retain task_map before removing it from the queue (vector_remove_at will release it)
-    RETAIN((CljObject*)task_map);
+    RETAIN(task_map);
     
     // Remove from queue using vector_remove_at
-    vector_remove_at(task_vec, 0);
+    // vector_remove_at may return a new vector (COW), so we need to update g_runtime.task_queue
+    CljVector *new_task_vec = vector_remove_at(task_vec, 0);
+    if (new_task_vec != task_vec) {
+        // vector_remove_at returned a new vector (COW)
+        RELEASE(task_vec);
+        g_runtime.task_queue = new_task_vec;
+    }
     
     CljObject *fn;
     CljMap *result_chan;
@@ -272,12 +277,12 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     }
     
     // Retain result_chan before releasing task_map, since it's part of the map
-    if (result_chan) RETAIN((CljObject*)result_chan);
+    if (result_chan) RETAIN(result_chan);
     RELEASE(task_map);
     
     CljObject *result = NULL;
     bool ok = true;
-    CljPersistentVector *_pool = autorelease_pool_push();
+    CljVector *_pool = autorelease_pool_push();
     TRY {
         result = eval_function_call(fn, NULL, 0, env, st);
         autorelease_pool_pop(_pool);
@@ -292,7 +297,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         
         CLJ_ASSERT(chan != NULL);
         CLJ_ASSERT(obj != NULL);
-        CLJ_ASSERT(obj->type == CLJ_TRANSIENT_MAP || obj->type == CLJ_MAP);
+        CLJ_ASSERT(obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP);
         
         if (obj->type == CLJ_MAP) {
             CLJ_ASSERT(obj->rc == 1);
@@ -327,58 +332,35 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
 
 // Helper function to insert timer task map in sorted order (by scheduled time)
 static void timer_insert_sorted_map(CljMap *task_map) {
-    if (!task_map || TAG((ID)task_map) != CLJ_TRANSIENT_MAP) return;
+    if (!task_map || TAG((ID)task_map) != CLJ_MAP_TRANSIENT) return;
     
     int32_t scheduled_sec, scheduled_msec;
     if (!timer_task_from_map(task_map, NULL, &scheduled_sec, &scheduled_msec, NULL, NULL, NULL)) {
         return;
     }
     
-    CljPersistentVector *timer_vec = timer_queue_get();
+    CljVector *timer_vec = timer_queue_get();
     if (!timer_vec) return;
     
     int count = vector_count(timer_vec);
     int insert_pos = count;
     for (int i = 0; i < count; i++) {
-        CljMap *existing_map = (CljMap*)vector_get_element_no_retain(timer_vec, i);
+        CljMap *existing_map = (CljMap*)vector_nth(timer_vec, i);
         int32_t existing_sec, existing_msec;
         if (timer_task_from_map(existing_map, NULL, &existing_sec, &existing_msec, NULL, NULL, NULL)) {
             if (scheduled_sec < existing_sec || (scheduled_sec == existing_sec && scheduled_msec < existing_msec)) {
                 insert_pos = i;
+                RELEASE(existing_map);
                 break;
             }
         }
+        RELEASE(existing_map);
     }
     
-    // Grow capacity if needed using make_vector_copy
-    // Use a simple heuristic: grow when count >= 8 (initial capacity is usually 8)
-    if (count >= 8) {
-        int newcap = 16;  // Double the capacity
-        CljPersistentVector *new_timer_vec = make_vector_copy(timer_vec, newcap);
-        if (new_timer_vec) {
-            RELEASE((CljObject*)timer_vec);
-            timer_vec = new_timer_vec;
-            g_runtime.timer_queue = new_timer_vec;
-        }
-    }
-    
-    // For inserting at a specific position, we need direct access to the array
-    ID *data = vector_as_array(timer_vec);
-    if (!data) {
-        RELEASE(task_map);
-        return;
-    }
-    
-    // Shift elements right to make room
-    for (int i = count; i > insert_pos; i--) {
-        data[i] = data[i - 1];
-    }
-    
-    // Insert new element
-    data[insert_pos] = (CljObject*)RETAIN((ID)task_map);
-    
-    // Update count for transient vector
-    vector_increment_count(timer_vec);
+    // Use vector_insert_at to insert at the correct position
+    // vector_insert_at handles capacity growth, element shifting, and RETAIN automatically
+
+    ASSIGN(g_runtime.timer_queue, vector_insert_at(timer_vec, insert_pos, (ID)task_map));
 }
 
 // Enqueue a timer task
@@ -391,10 +373,8 @@ int32_t timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic,
     // If delay is 0 and not periodic, execute immediately
     if (delay_ms == 0 && !periodic) {
         CljMap *chan = make_result_channel();
-        if (chan) {
-            event_loop_enqueue(RETAIN(fn_zero_arity), chan);
-            RELEASE(chan);
-        }
+        event_loop_enqueue(RETAIN(fn_zero_arity), chan);
+        RELEASE(chan);
         RELEASE(fn_zero_arity);
         return timer_id;
     }
@@ -421,65 +401,59 @@ int32_t timer_enqueue(CljObject *fn_zero_arity, int64_t delay_ms, bool periodic,
 
 // Process timer queue: move ready timers to normal queue
 static void timer_process(void) {
-    CljPersistentVector *timer_vec = timer_queue_get();
-    if (!timer_vec) return;
-    
     struct timeval tv;
     gettimeofday(&tv, NULL);
     int32_t now_sec = (int32_t)tv.tv_sec;
     int32_t now_msec = (int32_t)(tv.tv_usec / 1000);
     
-    while (vector_count(timer_vec) > 0) {
-        CljMap *task_map = (CljMap*)vector_get_element_no_retain(timer_vec, 0);
+    while (true) {
+        CljVector *timer_vec = timer_queue_get();
+        if (!timer_vec || vector_count(timer_vec) == 0) break;
+        
+        CljMap *task_map = (CljMap*)vector_nth(timer_vec, 0);
+        RETAIN(task_map);  // vector_nth doesn't retain
         
         int32_t scheduled_sec, scheduled_msec;
         CljObject *fn;
         bool periodic;
         int32_t period_ms;
-        
         int32_t timer_id;
+        
         if (!timer_task_from_map(task_map, &fn, &scheduled_sec, &scheduled_msec, &periodic, &period_ms, &timer_id)) {
+            RELEASE(task_map);
             timer_queue_remove_at(timer_vec, 0);
             continue;
         }
         
-        // Compare scheduled time with current time
-        // Timer is ready if scheduled time <= current time
         bool timer_ready = (scheduled_sec < now_sec) || 
                           (scheduled_sec == now_sec && scheduled_msec <= now_msec);
-        
         if (!timer_ready) {
-            // Timer is not ready yet - break (timers are sorted, so rest are also not ready)
-            break;
+            RELEASE(task_map);
+            break;  // Timers are sorted, so rest are also not ready
         }
         
         timer_queue_remove_at(timer_vec, 0);
-        CljMap *chan = make_result_channel();
-        if (!chan) {
-            RELEASE(fn);
-            continue;
-        }
+        RETAIN(fn);  // Retain before releasing task_map
+        RELEASE(task_map);
         
-        // For periodic timers, retain fn before enqueueing (we'll need it for next period)
+        CljMap *chan = make_result_channel();
+        
         if (periodic) {
-            RETAIN(fn);
+            RETAIN(fn);  // Extra retain for next period
         }
         
         event_loop_enqueue(fn, chan);
-        RELEASE(fn);
         RELEASE(chan);
         
         if (periodic) {
-            // Calculate next scheduled time
             int64_t total_msec = (int64_t)now_msec + period_ms;
-            int32_t next_sec = (int32_t)(now_sec + total_msec / 1000);
+            int32_t next_sec = now_sec + (int32_t)(total_msec / 1000);
             int32_t next_msec = (int32_t)(total_msec % 1000);
-            // Preserve timer ID for periodic timers
-            // fn is already retained above
             CljMap *next_task_map = timer_task_to_map(fn, next_sec, next_msec, true, period_ms, timer_id);
             if (next_task_map) {
                 timer_insert_sorted_map(next_task_map);
             }
+            RELEASE(fn);  // Release extra retain (timer_task_to_map and event_loop_enqueue retained it)
         }
     }
 }
@@ -488,18 +462,18 @@ static void timer_process(void) {
 bool timer_cancel(int32_t timer_id) {
     if (timer_id <= 0) return false;
     
-    CljPersistentVector *timer_vec = timer_queue_get();
+    CljVector *timer_vec = timer_queue_get();
     if (!timer_vec) return false;
     
     int count = vector_count(timer_vec);
     for (int i = 0; i < count; i++) {
-        CljMap *task_map = (CljMap*)vector_get_element_no_retain(timer_vec, i);
+        CljMap *task_map = vector_nth(timer_vec, i);
         if (!task_map) continue;
         
         int32_t map_timer_id;
         if (timer_task_from_map(task_map, NULL, NULL, NULL, NULL, NULL, &map_timer_id)) {
             if (map_timer_id == timer_id) {
-                // Found the timer - remove it
+                // Found the timer - remove it (timer_queue_remove_at releases it automatically)
                 timer_queue_remove_at(timer_vec, i);
                 return true;
             }

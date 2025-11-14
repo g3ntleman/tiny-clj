@@ -14,7 +14,7 @@ typedef struct {
 
 typedef struct {
     CljObject base;
-    CljPersistentVector *params;  // Parameter vector (can be NULL if no parameters)
+    CljVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;  // Function body (AST to evaluate)
     CljMap *closure_env;  // Closure environment map (can be NULL)
     const char *name;

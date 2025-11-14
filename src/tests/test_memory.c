@@ -86,7 +86,7 @@ TEST(test_vector_memory) {
         CljValue vec = make_vector(5, CLJ_VECTOR);
         TEST_ASSERT_NOT_NULL(vec);
         
-        CljPersistentVector *vec_data = as_vector((CljObject*)vec);
+        CljVector *vec_data = as_vector((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(vec_data);
         // Capacity is implementation detail, only test that vector was created
         TEST_ASSERT_NOT_NULL(vec_data);

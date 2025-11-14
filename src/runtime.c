@@ -59,18 +59,18 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Initialize event loop queues as transient vectors using ASSIGN
     // Only create if not already set (allows multiple calls)
     if (!runtime->task_queue) {
-        CljPersistentVector* task_vec = make_vector(8, CLJ_VECTOR);
+        CljVector* task_vec = make_vector(8, CLJ_VECTOR);
         if (task_vec) {
-            CljPersistentVector* transient_task = (CljPersistentVector*)transient((ID)task_vec);
-            RELEASE((ID)task_vec); // transient() retains the result
+            CljVector* transient_task = vector_transient(task_vec);
+            RELEASE((ID)task_vec); // vector_transient() retains the result
             ASSIGN(runtime->task_queue, (ID)transient_task);
         }
     }
     if (!runtime->timer_queue) {
-        CljPersistentVector* timer_vec = make_vector(8, CLJ_VECTOR);
+        CljVector* timer_vec = make_vector(8, CLJ_VECTOR);
         if (timer_vec) {
-            CljPersistentVector* transient_timer = (CljPersistentVector*)transient((ID)timer_vec);
-            RELEASE((ID)timer_vec); // transient() retains the result
+            CljVector* transient_timer = vector_transient(timer_vec);
+            RELEASE((ID)timer_vec); // vector_transient() retains the result
             ASSIGN(runtime->timer_queue, (ID)transient_timer);
         }
     }
@@ -94,8 +94,8 @@ void runtime_free(TinyClJRuntime *runtime) {
     
     // Cleanup event loop queues
     if (runtime->task_queue) {
-        CljPersistentVector *tvec = runtime->task_queue;
-        if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
+        CljVector *tvec = runtime->task_queue;
+        if (TAG((ID)tvec) == CLJ_VECTOR_TRANSIENT) {
             // Release all elements in transient vector
             int count = vector_count(tvec);
             for (int i = 0; i < count; i++) {
@@ -109,8 +109,8 @@ void runtime_free(TinyClJRuntime *runtime) {
         runtime->task_queue = NULL;
     }
     if (runtime->timer_queue) {
-        CljPersistentVector *tvec = runtime->timer_queue;
-        if (TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR) {
+        CljVector *tvec = runtime->timer_queue;
+        if (TAG((ID)tvec) == CLJ_VECTOR_TRANSIENT) {
             // Release all elements in transient vector (timer tasks as maps)
             int count = vector_count(tvec);
             for (int i = 0; i < count; i++) {
@@ -127,7 +127,7 @@ void runtime_free(TinyClJRuntime *runtime) {
     // CRITICAL: Drain all autorelease pools before resetting runtime
     // This ensures that objects from previous tests don't leak into the next test
     while (runtime->pool_stack_top >= 0) {
-        CljPersistentVector *pool = runtime->pool_stack[runtime->pool_stack_top];
+        CljVector *pool = runtime->pool_stack[runtime->pool_stack_top];
         if (pool) {
             // Use autorelease_pool_pop to properly release all objects
             autorelease_pool_pop(pool);

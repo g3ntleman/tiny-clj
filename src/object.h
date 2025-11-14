@@ -45,7 +45,7 @@ typedef void* CljValue;
 #define TYPE_OF_CljSymbol CLJ_SYMBOL
 #define TYPE_OF_CljFunction CLJ_CLOSURE
 #define TYPE_OF_CljCFunc CLJ_FUNC
-#define TYPE_OF_CljPersistentVector CLJ_VECTOR
+#define TYPE_OF_CljVector CLJ_VECTOR
 #define TYPE_OF_CljPersistentMap CLJ_MAP
 #define TYPE_OF_CljMap CLJ_MAP
 #define TYPE_OF_CLJException CLJ_EXCEPTION
@@ -140,7 +140,7 @@ static inline bool is_singleton(CljObject *obj) {
 // - CljList -> list.h
 // - CljMap -> map.h  
 // - CljSymbol -> symbol.h
-// - CljPersistentVector -> vector.h
+// - CljVector -> vector.h
 // - CljCFunc, CljFunction -> function.h
 // - CljByteArray -> byte_array.h
 // - CLJException -> exception.h

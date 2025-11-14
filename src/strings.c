@@ -134,15 +134,17 @@ const char* to_string(CljObject *v) {
             }
 
         case CLJ_VECTOR:
-        case CLJ_TRANSIENT_VECTOR:
-        case CLJ_WEAK_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_WEAK:
             {
-                CljPersistentVector *vec = as_vector(v);
+                CljVector *vec = as_vector(v);
                 if (!vec) return strdup("[]");
                 int count = vector_count(vec);
                 size_t cap = 2; // [ ]
                 for (int i = 0; i < count; i++) {
                     ID elem = vector_nth(vec, i);
+                    // vector_nth returns non-retained element, so we need to retain it
+                    if (elem) RETAIN(elem);
                     const char *el = pr_str(elem);
                     cap += strlen(el) + 1;
                     free((void*)el);
@@ -152,6 +154,8 @@ const char* to_string(CljObject *v) {
                 strcpy(s, "[");
                 for (int i = 0; i < count; i++) {
                     ID elem = vector_nth(vec, i);
+                    // vector_nth returns non-retained element, so we need to retain it
+                    if (elem) RETAIN(elem);
                     const char *el = pr_str(elem);
                     strcat(s, el);
                     if (i < count-1) strcat(s, " ");
@@ -161,7 +165,7 @@ const char* to_string(CljObject *v) {
                 strcat(s, "]");
                 
                 // Mark transient vectors for debugging
-                if (v->type == CLJ_TRANSIENT_VECTOR) {
+                if (v->type == CLJ_VECTOR_TRANSIENT) {
                     char *result = ALLOC(char, strlen(s) + 20);
                     snprintf(result, strlen(s) + 20, "<transient %s>", s);
                     free(s);
@@ -216,7 +220,7 @@ const char* to_string(CljObject *v) {
             }
 
         case CLJ_MAP:
-        case CLJ_TRANSIENT_MAP:
+        case CLJ_MAP_TRANSIENT:
             {
                 CljMap *map = as_map(v);
                 if (!map) return strdup("{}");
@@ -249,7 +253,7 @@ const char* to_string(CljObject *v) {
                 strcat(s, "}");
                 
                 // Mark transient maps for debugging
-                if (v->type == CLJ_TRANSIENT_MAP) {
+                if (v->type == CLJ_MAP_TRANSIENT) {
                     char *result = ALLOC(char, strlen(s) + 20);
                     snprintf(result, strlen(s) + 20, "<transient %s>", s);
                     free(s);

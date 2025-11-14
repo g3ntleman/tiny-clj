@@ -23,7 +23,7 @@
 static int allocate_function_params(CljFunction *func, ID *params, int param_count) {
     if (param_count > 0 && params) {
         // Create vector for parameters
-        CljPersistentVector *vec = make_vector(param_count, CLJ_VECTOR);
+        CljVector *vec = make_vector(param_count, CLJ_VECTOR);
         if (!vec) {
             DEALLOC(func);
             throw_oom();
@@ -32,7 +32,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
         
         // Add all parameters to vector (vector_conj retains elements)
         for (int i = 0; i < param_count; i++) {
-            CljPersistentVector *new_vec = vector_conj(vec, RETAIN(params[i]));
+            CljVector *new_vec = vector_conj(vec, RETAIN(params[i]));
             if (!new_vec) {
                 RELEASE(vec);
                 DEALLOC(func);

@@ -14,7 +14,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_STRING: return "String";
         case CLJ_SYMBOL: return "Symbol";
         case CLJ_VECTOR: return "Vector";
-        case CLJ_WEAK_VECTOR: return "WeakVector";
+        case CLJ_VECTOR_WEAK: return "WeakVector";
         case CLJ_MAP: return "Map";
         case CLJ_LIST: return "List";
         case CLJ_FUNC: return "Function";
@@ -23,8 +23,8 @@ const char* clj_type_name(CljType type) {
         case CLJ_BYTE_ARRAY: return "ByteArray";
         case CLJ_ATOM: return "Atom";
         case CLJ_SEQ: return "Sequence";
-        case CLJ_TRANSIENT_VECTOR: return "TransientVector";
-        case CLJ_TRANSIENT_MAP: return "TransientMap";
+        case CLJ_VECTOR_TRANSIENT: return "TransientVector";
+        case CLJ_MAP_TRANSIENT: return "TransientMap";
         case CLJ_RAW_MEMORY: return "RawMemory";
         case CLJ_NIL: return "Nil";
         default: return "Unknown";
