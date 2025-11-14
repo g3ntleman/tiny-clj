@@ -14,29 +14,35 @@
 #endif
 
 // Custom assert with stack trace
-#ifdef ESP32_BUILD
-#define CLJ_ASSERT(expr) do { \
-    if (!(expr)) { \
-        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
-        abort(); \
-    } \
-} while(0)
-#else
-#define CLJ_ASSERT(expr) do { \
-    if (!(expr)) { \
-        fprintf(stderr, "\n🚨 ASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
-        fprintf(stderr, "📚 Stack Trace:\n"); \
-        void *array[20]; \
-        int size = backtrace(array, 20); \
-        char **strings = backtrace_symbols(array, size); \
-        for (int i = 0; i < size; i++) { \
-            fprintf(stderr, "  %d: %s\n", i, strings[i]); \
+// In Release builds (when DEBUG is not defined), CLJ_ASSERT becomes a NOP
+#ifdef DEBUG
+    #ifdef ESP32_BUILD
+    #define CLJ_ASSERT(expr) do { \
+        if (!(expr)) { \
+            fprintf(stderr, "\n🚨 ASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
+            abort(); \
         } \
-        free(strings); \
-        fprintf(stderr, "\n"); \
-        abort(); \
-    } \
-} while(0)
+    } while(0)
+    #else
+    #define CLJ_ASSERT(expr) do { \
+        if (!(expr)) { \
+            fprintf(stderr, "\n🚨 ASSERTION FAILED: %s at %s:%d\n", #expr, __FILE__, __LINE__); \
+            fprintf(stderr, "📚 Stack Trace:\n"); \
+            void *array[20]; \
+            int size = backtrace(array, 20); \
+            char **strings = backtrace_symbols(array, size); \
+            for (int i = 0; i < size; i++) { \
+                fprintf(stderr, "  %d: %s\n", i, strings[i]); \
+            } \
+            free(strings); \
+            fprintf(stderr, "\n"); \
+            abort(); \
+        } \
+    } while(0)
+    #endif
+#else
+    // Release build: CLJ_ASSERT is a NOP to avoid overhead in hot path
+    #define CLJ_ASSERT(expr) ((void)0)
 #endif
 
 // Debug-only assert with stack trace
