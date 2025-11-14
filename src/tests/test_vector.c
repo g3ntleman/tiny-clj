@@ -1196,3 +1196,64 @@ TEST(test_equal_persistent_and_transient_vector) {
     });
 }
 
+// Clojure-compatibility test: (transient) on transient collection returns the same object
+TEST(test_transient_on_transient_returns_same_object) {
+    WITH_AUTORELEASE_POOL({
+        // Test 1: (transient) on transient vector returns the same object
+        CljObject *tvec1 = eval_string("(transient (vector 1 2 3))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(tvec1);
+        TEST_ASSERT_TRUE(TAG(tvec1) == CLJ_TRANSIENT_VECTOR);
+        
+        // Call transient again on the transient vector
+        CljObject *tvec2 = eval_string("(transient (transient (vector 1 2 3)))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(tvec2);
+        TEST_ASSERT_TRUE(TAG(tvec2) == CLJ_TRANSIENT_VECTOR);
+        
+        // They should be equal (same elements)
+        CljObject *equal_result = eval_string("(= (transient (vector 1 2 3)) (transient (transient (vector 1 2 3))))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(equal_result);
+        TEST_ASSERT_TRUE(is_special(equal_result));
+        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
+        
+        // Test 2: Direct test using native_transient function
+        // Create a transient vector
+        CljPersistentVector *vec = make_vector(3, CLJ_VECTOR);
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
+        vec = vector_conj(vec, fixnum(3));
+        CljPersistentVector *tvec = (CljPersistentVector*)transient((ID)vec);
+        RELEASE((CljObject*)vec);
+        TEST_ASSERT_NOT_NULL(tvec);
+        TEST_ASSERT_TRUE(TAG((ID)tvec) == CLJ_TRANSIENT_VECTOR);
+        
+        // Call transient on the transient vector - should return same object
+        ID args[] = {(ID)tvec};
+        CljObject *result = (CljObject*)native_transient(args, 1);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
+        TEST_ASSERT_TRUE(TAG((ID)result) == CLJ_TRANSIENT_VECTOR);
+        
+        RELEASE((CljObject*)tvec);
+        
+        // Test 3: (transient) on transient map returns the same object
+        CljMap *map = make_map(4);
+        CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+        CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
+        map = map_assoc(map, (ID)key1, fixnum(1));
+        map = map_assoc(map, (ID)key2, fixnum(2));
+        CljMap *tmap = map_transient(map);
+        RELEASE((CljObject*)map);
+        TEST_ASSERT_NOT_NULL(tmap);
+        TEST_ASSERT_TRUE(TAG((ID)tmap) == CLJ_TRANSIENT_MAP);
+        
+        // Call transient on the transient map - should return same object
+        ID map_args[] = {(ID)tmap};
+        CljObject *map_result = (CljObject*)native_transient(map_args, 1);
+        TEST_ASSERT_NOT_NULL(map_result);
+        TEST_ASSERT_EQUAL_PTR(tmap, map_result);  // Should be the same pointer
+        TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_TRANSIENT_MAP);
+        
+        RELEASE((CljObject*)tmap);
+    });
+}
+

@@ -695,16 +695,17 @@ ID native_dissoc(ID *args, unsigned int argc) {
 ID native_transient(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "transient")) return NULL;
     
-    CljObject *coll = args[0];
-    if (!coll) return (NULL);
+    ID coll = args[0];
+    if (!coll) return NULL;
     
-    if (coll && TAG(coll) == CLJ_VECTOR) {
-        return ((CljObject*)transient((CljValue)coll));
-    } else if (coll && TAG(coll) == CLJ_MAP) {
-        return ((CljObject*)map_transient((CljMap*)coll));
-    } else if ((coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) || (coll && TAG(coll) == CLJ_TRANSIENT_MAP)) {
+    uint16_t tag = TAG(coll);
+    if (tag == CLJ_VECTOR) {
+        return transient(coll);
+    } else if (tag == CLJ_MAP) {
+        return (CljObject*)map_transient((CljMap*)coll);
+    } else if (tag == CLJ_TRANSIENT_VECTOR || tag == CLJ_TRANSIENT_MAP) {
         // Clojure-compatible: transient on transient returns the same object
-        return (coll);
+        return coll;
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)

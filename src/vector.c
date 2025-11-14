@@ -469,17 +469,14 @@ ID transient(ID vec) {
     if (!vec) return NULL;
     CljObject *obj = (CljObject*)vec;
     if (obj->type != CLJ_VECTOR) {
-        return NULL;
+        return obj->type == CLJ_TRANSIENT_VECTOR NULL;
     }
     
     CljPersistentVector *v = as_vector(vec);
-    if (!v) return NULL;
-    
     // Handle empty vector singleton - create new transient vector with initial capacity
     if (v->count == 0 && v->capacity == 0) {
         // Create transient vector with initial capacity (not 0, so we can grow it)
-        CljPersistentVector *tvec = make_vector(4, CLJ_VECTOR);
-        if (!tvec) return NULL;
+        CljPersistentVector *tvec = make_vector(4, CLJ_VECTOR); // might throw oom
         tvec->base.type = CLJ_TRANSIENT_VECTOR;
         return tvec;
     }

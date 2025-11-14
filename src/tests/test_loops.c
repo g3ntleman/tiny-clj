@@ -180,6 +180,57 @@ TEST(test_go_success_puts_value_high_level) {
     RELEASE(chan);
 }
 
+// Clojure-compatibility test: nil is a valid value that can be sent through channels
+TEST(test_go_nil_value_in_channel) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create channel with go-block that returns nil
+    CljMap *chan = NULL;
+    TRY {
+        chan = eval_string("(go nil)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block with nil should not throw exception");
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(chan);
+    
+    // Initially :value should be nil (from make_result_channel)
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    CljValue val_before = map_get(chan, kw_value, NULL);
+    TEST_ASSERT_NULL(val_before);  // Should be nil initially
+    
+    // Run next task - should write nil to channel
+    CljObject *ran_result = NULL;
+    TRY {
+        ran_result = eval_string("(run-next-task)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception");
+        RELEASE(chan);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(ran_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_result) == SPECIAL_TRUE);
+    
+    // After execution, channel should have nil value and be closed
+    // Clojure-compatibility: nil is a valid value that can be sent through channels
+    CljValue val_after = map_get(chan, kw_value, NULL);
+    // Note: map_get returns NULL for nil values, but map_contains confirms the key exists
+    TEST_ASSERT_TRUE(map_contains(chan, (ID)kw_value));  // Key should exist
+    TEST_ASSERT_NULL(val_after);  // Value should be nil (NULL)
+    
+    CljValue closed_val = map_get(chan, kw_closed, NULL);
+    TEST_ASSERT_NOT_NULL((CljObject*)closed_val);
+    TEST_ASSERT_TRUE(is_special(closed_val));
+    TEST_ASSERT_TRUE(as_special(closed_val) == SPECIAL_TRUE);  // Should be closed
+    
+    // Cleanup
+    RELEASE(chan);
+}
+
 // ============================================================================
 // DOTIMES EDGE CASE TESTS - EVAL_DOTIMES FUNCTION
 // ============================================================================

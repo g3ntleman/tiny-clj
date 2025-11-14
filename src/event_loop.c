@@ -137,7 +137,7 @@ static CljPersistentVector* timer_queue_get(void) {
     if (!g_runtime.timer_queue) {
         CljPersistentVector* timer_vec = make_vector(8, CLJ_VECTOR);
         if (timer_vec) {
-            g_runtime.timer_queue = (CljPersistentVector*)transient((ID)timer_vec);
+            g_runtime.timer_queue = transient((ID)timer_vec);
             RELEASE(timer_vec);
         }
     }
@@ -300,7 +300,9 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         
         void *chan_ptr_before = (void*)chan;
         
-        if (ok && result) {
+        // Clojure-compatibility: nil is a valid value that can be sent through channels
+        // result_channel_put can handle NULL/nil values, so we write the result even if it's nil
+        if (ok) {
             result_channel_put(chan, (ID)result);
             CLJ_ASSERT((void*)chan == chan_ptr_before);
         }
