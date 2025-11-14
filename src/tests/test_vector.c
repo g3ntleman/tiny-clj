@@ -1257,3 +1257,59 @@ TEST(test_transient_on_transient_returns_same_object) {
     });
 }
 
+// Clojure-compatibility test: (persistent!) on persistent collection returns the same object
+TEST(test_persistent_on_persistent_returns_same_object) {
+    WITH_AUTORELEASE_POOL({
+        // Test 1: (persistent!) on persistent vector returns the same object
+        CljObject *vec1 = eval_string("(vector 1 2 3)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(vec1);
+        TEST_ASSERT_TRUE(TAG(vec1) == CLJ_VECTOR);
+        
+        // Call persistent! on the persistent vector
+        CljObject *vec2 = eval_string("(persistent! (vector 1 2 3))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(vec2);
+        TEST_ASSERT_TRUE(TAG(vec2) == CLJ_VECTOR);
+        
+        // They should be equal (same elements)
+        CljObject *equal_result = eval_string("(= (vector 1 2 3) (persistent! (vector 1 2 3)))", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(equal_result);
+        TEST_ASSERT_TRUE(is_special(equal_result));
+        TEST_ASSERT_EQUAL_INT(SPECIAL_TRUE, as_special(equal_result));
+        
+        // Test 2: Direct test using native_persistent_bang function
+        CljPersistentVector *vec = make_vector(3, CLJ_VECTOR);
+        vec = vector_conj(vec, fixnum(1));
+        vec = vector_conj(vec, fixnum(2));
+        vec = vector_conj(vec, fixnum(3));
+        TEST_ASSERT_NOT_NULL(vec);
+        TEST_ASSERT_TRUE(TAG((ID)vec) == CLJ_VECTOR);
+        
+        // Call persistent! on the persistent vector - should return same object
+        ID args[] = {(ID)vec};
+        CljObject *result = (CljObject*)native_persistent_bang(args, 1);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_EQUAL_PTR(vec, result);  // Should be the same pointer
+        TEST_ASSERT_TRUE(TAG((ID)result) == CLJ_VECTOR);
+        
+        RELEASE((CljObject*)vec);
+        
+        // Test 3: (persistent!) on persistent map returns the same object
+        CljMap *map = make_map(4);
+        CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+        CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
+        map = map_assoc(map, (ID)key1, fixnum(1));
+        map = map_assoc(map, (ID)key2, fixnum(2));
+        TEST_ASSERT_NOT_NULL(map);
+        TEST_ASSERT_TRUE(TAG((ID)map) == CLJ_MAP);
+        
+        // Call persistent! on the persistent map - should return same object
+        ID map_args[] = {(ID)map};
+        CljObject *map_result = (CljObject*)native_persistent_bang(map_args, 1);
+        TEST_ASSERT_NOT_NULL(map_result);
+        TEST_ASSERT_EQUAL_PTR(map, map_result);  // Should be the same pointer
+        TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_MAP);
+        
+        RELEASE((CljObject*)map);
+    });
+}
+

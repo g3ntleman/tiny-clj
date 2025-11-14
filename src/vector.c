@@ -469,7 +469,7 @@ ID transient(ID vec) {
     if (!vec) return NULL;
     CljObject *obj = (CljObject*)vec;
     if (obj->type != CLJ_VECTOR) {
-        return obj->type == CLJ_TRANSIENT_VECTOR NULL;
+        return NULL;
     }
     
     CljPersistentVector *v = as_vector(vec);
@@ -530,7 +530,7 @@ CljPersistentVector* vector_conj_bang(CljPersistentVector *tvec, ID item) {
 static size_t g_persistent_count = 0;
 
 /** Convert transient vector back to persistent. */
-ID persistent(ID tvec) {
+ID vector_persistent(ID tvec) {
     g_persistent_count++;
     
     if (!tvec) return NULL;

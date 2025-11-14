@@ -88,7 +88,7 @@ ID transient(ID vec);
 /** Append to transient vector (guaranteed in-place). */
 CljPersistentVector* clj_conj(CljPersistentVector *tvec, ID item);
 /** Convert transient vector back to persistent. */
-ID persistent(ID tvec);
+ID vector_persistent(ID tvec);
 
 /* Verwendung: VECTOR_FOR_EACH(vec, elem) { ... } */
 #define VECTOR_FOR_EACH(vector, elem_var) \

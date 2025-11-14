@@ -385,7 +385,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     
     // Create transient vector for efficient building
     CljValue vec = make_vector(6, CLJ_VECTOR);
-    CljValue tvec = transient((ID)vec);
+    CljValue tvec = transient(vec);
     RELEASE(vec);  // Release original, use transient
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -410,7 +410,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     }
     
     // Convert back to persistent vector
-    vec = persistent((ID)tvec);
+    vec = vector_persistent(tvec);
     RELEASE(tvec);
     
     if (reader_eof(reader) || !reader_match(reader, ']')) {
@@ -493,7 +493,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       }
       
       // Extract binding vector [binding test] from rest
-      CljList *rest_list = as_list((ID)rest);
+      CljList *rest_list = as_list(rest);
       if (!rest_list || !rest_list->first) {
         throw_parser_exception("if-let requires binding vector as first argument", reader);
         return NULL;
@@ -516,7 +516,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       // Note: test is in binding_vec, we use binding_vec directly in the expansion
       
       // Extract then expression
-      CljList *rest_after_binding = as_list((ID)rest_list->rest);
+      CljList *rest_after_binding = as_list(rest_list->rest);
       if (!rest_after_binding || !rest_after_binding->first) {
         throw_parser_exception("if-let requires then expression", reader);
         return NULL;
@@ -526,7 +526,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       
       // Extract else expression (optional)
       ID else_expr = NULL;
-      CljList *rest_after_then = as_list((ID)rest_after_binding->rest);
+      CljList *rest_after_then = as_list(rest_after_binding->rest);
       if (rest_after_then && rest_after_then->first) {
         else_expr = rest_after_then->first;
       }
@@ -736,7 +736,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             CljSymbol *symbol_sym = intern_symbol_global(symbol_str);
             if (symbol_sym) {
               // Look up symbol in target namespace
-              ID resolved = map_get((CljMap*)target_ns->mappings, (ID)symbol_sym, NULL);
+              ID resolved = map_get((CljMap*)target_ns->mappings, symbol_sym, NULL);
               if (resolved) {
                 // Return resolved value (already retained by map_get)
                 return AUTORELEASE(RETAIN(resolved));
@@ -967,7 +967,7 @@ ID parse(const char *input, EvalState *st) {
   
   // Delegate to parse_from_reader (DRY principle)
   // Don't create autorelease pool here - let caller manage memory
-  return (ID)parse_from_reader(&reader, st);
+  return parse_from_reader(&reader, st);
 }
 
 
@@ -1063,7 +1063,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
   CljValue param_vec = make_vector(1, CLJ_VECTOR);
-  vector_conj((CljPersistentVector*)param_vec, (ID)percent_sym);
+  vector_conj((CljPersistentVector*)param_vec, percent_sym);
   
   // Create (fn [%] body)
   ID elements[3] = {fn_sym, param_vec, body};

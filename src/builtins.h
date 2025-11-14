@@ -46,7 +46,7 @@ void builtin_set_eval_state(EvalState *st);
 
 // Transient functions
 ID native_transient(ID *args, unsigned int argc);
-ID native_persistent(ID *args, unsigned int argc);
+ID native_persistent_bang(ID *args, unsigned int argc);
 ID native_conj_bang(ID *args, unsigned int argc);
 
 // Sequence functions with validation

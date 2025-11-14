@@ -184,7 +184,7 @@ ID native_pop(ID *args, unsigned int argc) {
     // Use vector_pop() which handles RC=1 (in-place) and RC>1 (COW) automatically
     CljPersistentVector *result = vector_pop(v);
     if (!result) return NULL;
-    return (ID)result;  // vec is retained by caller, result is already retained
+    return result;  // vec is retained by caller, result is already retained
 }
 
 // subvec: returns sub-vector from start (inclusive) to end (exclusive)
@@ -298,7 +298,7 @@ ID conj2(ID vec, ID val) {
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
     CljPersistentVector* result = vector_conj((CljPersistentVector*)vec, val);
     if (!result) return NULL;
-    return (ID)RETAIN(result);
+    return RETAIN(result);
 }
 
 // Generic conj function that works with BuiltinFn signature
@@ -323,16 +323,16 @@ ID native_conj(ID *args, unsigned int argc) {
         CljList *result = NULL;
         for (unsigned int i = argc - 1; i >= 1; i--) {
             CljObject *val = args[i];
-            result = make_list((ID)val, result);
+            result = make_list(val, result);
         }
-        return (ID)result;
+        return result;
     }
     
     if (coll && TAG(coll) == CLJ_VECTOR) {
         CljObject *result = coll;
         for (unsigned int i = 1; i < argc; i++) {
             CljObject *val = args[i];
-            result = conj2((ID)result, (ID)val);
+            result = conj2(result, val);
             if (!result) return NULL;
         }
         return (result);
@@ -367,7 +367,7 @@ ID native_first(ID *args, unsigned int argc) {
         
         case CLJ_SEQ: {
             // Already a sequence - just call seq_first (DRY)
-            return seq_first((ID)coll);
+            return seq_first(coll);
         }
         
         default: {
@@ -413,7 +413,7 @@ ID native_next(ID *args, unsigned int argc) {
     // For CLJ_VECTOR, CLJ_SEQ, and other seqable types, seq_next handles them via seq_rest
     
     // Check if collection is seqable before trying to create seq
-    if (!is_seqable((ID)coll)) {
+    if (!is_seqable(coll)) {
         // Not seqable - throw exception with type name for debugging
         const char *type_name = clj_type_name(coll->type);
         char error_msg[256];
@@ -435,10 +435,10 @@ ID native_next(ID *args, unsigned int argc) {
     
     // CRITICAL: Check if make_seq returned the original object (if coll was already a CLJ_SEQ)
     // If so, we must NOT release it, as it's owned by the caller (args[0])
-    bool seq_is_original = ((ID)seq == (ID)coll);
+    bool seq_is_original = (seq == coll);
     
     // Return next of the created seq
-    ID result = seq_next((ID)seq);
+    ID result = seq_next(seq);
     
     // seq_next now returns AUTORELEASE objects (already in pool) or NULL
     // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
@@ -460,7 +460,7 @@ ID native_next(ID *args, unsigned int argc) {
     // Only release the seq if we created it (not if it was the original object)
     // If seq_is_original, the caller (eval_and_call_native) will release args[0]
     if (!seq_is_original) {
-        RELEASE((ID)seq);
+        RELEASE(seq);
     }
     return result;
 }
@@ -521,7 +521,7 @@ ID native_list(ID *args, unsigned int argc) {
     
     // If no arguments, return empty list
     if (argc == 0) {
-        return (ID)empty_list();
+        return empty_list();
     }
     
     // Use make_list_from_stack to create list from arguments
@@ -561,7 +561,7 @@ ID native_reverse(ID *args, unsigned int argc) {
             
             CljObject *first = list->first;
             if (first) {
-                CljList *new_result = make_list((ID)first, result);
+                CljList *new_result = make_list(first, result);
                 RELEASE(result);
                 result = new_result;
             }
@@ -590,7 +590,7 @@ ID native_reverse(ID *args, unsigned int argc) {
     while (!seq_empty(seq)) {
         CljObject *first = seq_first(seq);
         if (first) {
-            CljList *new_result = make_list((ID)first, result);
+            CljList *new_result = make_list(first, result);
             RELEASE(result);
             result = new_result;
         }
@@ -601,7 +601,7 @@ ID native_reverse(ID *args, unsigned int argc) {
     }
     
     // Release seq object
-    RELEASE((ID)seq);
+    RELEASE(seq);
     
     // If result is NULL, return empty list
     if (!result) {
@@ -628,7 +628,7 @@ ID assoc3(ID *args, unsigned int argc) {
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
         CljPersistentVector* result = vector_assoc((CljPersistentVector*)coll, i, val);
         if (!result) return NULL;
-        return (ID)RETAIN(result);
+        return RETAIN(result);
     }
     
     // Handle maps
@@ -636,8 +636,8 @@ ID assoc3(ID *args, unsigned int argc) {
         if (!key) return NULL;
         // Use COW-based map_assoc (automatically handles RC=1 in-place, RC>1 COW)
         // map_assoc always returns a map (either the same or a new one), never NULL
-        CljMap *result = map_assoc((CljMap*)coll, (ID)key, (ID)val);
-        return (ID)RETAIN((CljObject*)result);
+        CljMap *result = map_assoc((CljMap*)coll, key, val);
+        return RETAIN((CljObject*)result);
     }
     
     // Unsupported collection type
@@ -677,7 +677,7 @@ ID native_dissoc(ID *args, unsigned int argc) {
         if (!key) continue;  // Skip NULL keys
         
         // map_remove returns a new map (or original if key not found)
-        CljMap *new_result = map_remove(result, (ID)key);
+        CljMap *new_result = map_remove(result, key);
         if (new_result != (CljMap*)result) {
             // New map was created - release old one if it was retained
             if (i > 1 || result != (CljMap*)map) {
@@ -715,19 +715,20 @@ ID native_transient(ID *args, unsigned int argc) {
     return NULL;
 }
 
-ID native_persistent(ID *args, unsigned int argc) {
+ID native_persistent_bang(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "persistent!")) return NULL;
     
-    CljObject *coll = args[0];
-    if (!coll) return (NULL);
+    ID coll = args[0];
+    if (!coll) return NULL;
     
-    if (coll && TAG(coll) == CLJ_TRANSIENT_VECTOR) {
-        return ((CljObject*)persistent((CljValue)coll));
-    } else if (coll && TAG(coll) == CLJ_TRANSIENT_MAP) {
-        return ((CljObject*)map_persistent((CljMap*)coll));
-    } else if ((coll && TAG(coll) == CLJ_VECTOR) || (coll && TAG(coll) == CLJ_MAP)) {
+    uint16_t tag = TAG(coll);
+    if (tag == CLJ_TRANSIENT_VECTOR) {
+        return vector_persistent(coll);
+    } else if (tag == CLJ_TRANSIENT_MAP) {
+        return map_persistent((CljMap*)coll);
+    } else if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
         // Clojure-compatible: persistent! on persistent returns the same object
-        return (coll);
+        return coll;
     }
     
     // Throw exception for unsupported collection type (Clojure-compatible)
@@ -776,7 +777,7 @@ ID native_get(ID *args, unsigned int argc) {
     if (!map || !key) return (NULL);
     
     if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
-        return map_get((CljMap*)map, (ID)key, not_found);
+        return map_get((CljMap*)map, key, not_found);
     }
     
     return not_found ? not_found : NULL; // Return not_found or nil for unsupported types
@@ -796,7 +797,7 @@ ID native_count(ID *args, unsigned int argc) {
     
     // Handle CLJ_SEQ (sequences from rest, etc.)
     if (coll && TAG(coll) == CLJ_SEQ) {
-        return fixnum(seq_count((ID)coll));
+        return fixnum(seq_count(coll));
     }
     
     if (coll && (TAG(coll) == CLJ_MAP || TAG(coll) == CLJ_TRANSIENT_MAP)) {
@@ -824,7 +825,7 @@ ID native_keys(ID *args, unsigned int argc) {
     if (!map) return (NULL);
     
     if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
-        return map_keys((ID)map);
+        return map_keys(map);
     }
     
     return NULL; // Return nil for unsupported types
@@ -836,7 +837,7 @@ ID native_vals(ID *args, unsigned int argc) {
     if (!map) return (NULL);
     
     if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_TRANSIENT_MAP)) {
-        return map_vals((ID)map);
+        return map_vals(map);
     }
     
     return NULL; // Return nil for unsupported types
@@ -932,7 +933,7 @@ ID native_array_map(ID *args, unsigned int argc) {
     for (unsigned int i = 0; i < argc; i += 2) {
         CljObject *key = (CljObject*)args[i];
         CljObject *value = (CljObject*)args[i + 1];
-        CljMap *updated_map = map_assoc(map, (ID)key, (ID)value);
+        CljMap *updated_map = map_assoc(map, key, value);
         ASSIGN(map, updated_map);
     }
     
@@ -1102,7 +1103,7 @@ ID native_schedule(ID *args, unsigned int argc) {
     
     // Create zero-arity wrapper function: (fn [] (fn_obj))
     // The function should be called with zero arguments
-    CljFunction *func = as_function((ID)fn_obj);
+    CljFunction *func = as_function(fn_obj);
     if (!func) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "schedule requires a valid function",
@@ -1184,7 +1185,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     RELEASE(fn_obj);
     
     // schedule-periodic returns timer ID as integer
-    return timer_id > 0 ? (ID)fixnum(timer_id) : NULL;
+    return timer_id > 0 ? fixnum(timer_id) : NULL;
 }
 
 // Timer: cancel-timer builtin - cancel a timer by ID
@@ -1212,7 +1213,7 @@ ID native_cancel_timer(ID *args, unsigned int argc) {
     bool cancelled = timer_cancel(timer_id);
     
     // Return true if cancelled, false if not found
-    return cancelled ? (ID)clj_true : (ID)clj_false;
+    return cancelled ? clj_true : clj_false;
 }
 
 
@@ -1453,7 +1454,7 @@ ID native_symbol(ID *args, unsigned int argc) {
     }
     
     // intern_symbol returns a retained symbol, but builtin functions should return AUTORELEASE
-    return AUTORELEASE((ID)sym);
+    return AUTORELEASE(sym);
 }
 
 // File I/O: slurp - read entire file as string
@@ -1478,7 +1479,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     free((void*)filename_str);
     
     // file_slurp throws exception on errors, so if we get here, result is valid
-    return result ? AUTORELEASE((ID)result) : NULL;
+    return result ? AUTORELEASE(result) : NULL;
 }
 #endif // ESP32_BUILD
 
@@ -1561,7 +1562,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     for (int i = 0; i < count; i++) {
         CljObject *sym = (CljObject*)vector_nth(vec, i);
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
-            if (sym) RELEASE((ID)sym);
+            if (sym) RELEASE(sym);
             continue;
         }
         
@@ -1571,7 +1572,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
             // Copy to target namespace
             ns_define(target_ns, sym, val);
         }
-        RELEASE((ID)sym);  // vector_nth returns retained element
+        RELEASE(sym);  // vector_nth returns retained element
     }
 }
 
@@ -1632,20 +1633,20 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         if (ns_obj && TAG(ns_obj) == CLJ_SYMBOL) {
             CljSymbol *ns_sym = as_symbol(ns_obj);
             if (!ns_sym || !ns_sym->name) {
-                RELEASE((ID)ns_obj);
+                RELEASE(ns_obj);
                 return false;
             }
             ns_name = ns_sym->name;
         } else {
             const char *ns_str = to_string(ns_obj);
             if (!ns_str) {
-                RELEASE((ID)ns_obj);
+                RELEASE(ns_obj);
                 return false;
             }
             ns_name = ns_str;
             ns_name_allocated = true;
         }
-        RELEASE((ID)ns_obj);  // vector_nth returns retained element
+        RELEASE(ns_obj);  // vector_nth returns retained element
         
         // Parse keywords: :as, :refer
         int vec_count = vector_count(vec);
@@ -1657,7 +1658,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             if (elem && TAG(elem) == CLJ_SYMBOL) {
                 CljSymbol *kw = as_symbol(elem);
                 if (!kw || !kw->name) {
-                    RELEASE((ID)elem);
+                    RELEASE(elem);
                     continue;
                 }
                 
@@ -1668,7 +1669,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                         // Don't release alias_sym - it's stored for later use
                         i++; // Skip next element
                     }
-                    RELEASE((ID)elem);
+                    RELEASE(elem);
                 } else if (kw->name[0] == ':' && strcmp(kw->name, ":refer") == 0) {
                     // :refer [symbols] or :refer :all
                     if (i + 1 < vec_count) {
@@ -1677,24 +1678,24 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                             CljSymbol *refer_sym = as_symbol(refer_arg);
                             if (refer_sym && refer_sym->name && strcmp(refer_sym->name, ":all") == 0) {
                                 refer_all = true;
-                                RELEASE((ID)refer_arg);
+                                RELEASE(refer_arg);
                             } else {
-                                RELEASE((ID)refer_arg);
+                                RELEASE(refer_arg);
                             }
                         } else if (refer_arg && TAG(refer_arg) == CLJ_VECTOR) {
                             refer_syms = refer_arg;
                             // Don't release refer_syms - it's stored for later use
                         } else {
-                            if (refer_arg) RELEASE((ID)refer_arg);
+                            if (refer_arg) RELEASE(refer_arg);
                         }
                         i++; // Skip next element
                     }
-                    RELEASE((ID)elem);
+                    RELEASE(elem);
                 } else {
-                    RELEASE((ID)elem);
+                    RELEASE(elem);
                 }
             } else {
-                RELEASE((ID)elem);
+                RELEASE(elem);
             }
         }
     } else {
@@ -2633,7 +2634,7 @@ ID native_format(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    return AUTORELEASE((ID)result);
+    return AUTORELEASE(result);
 }
 
 // Thread-local EvalState for builtins that need it (eval, read-string)
@@ -2833,7 +2834,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
                         "byte-array size must be non-negative, got %d", size);
                 return NULL;
             }
-            return (ID)make_byte_array(size);
+            return make_byte_array(size);
         }
         default:
             break;
@@ -2873,7 +2874,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
             byte_array_set(arr, i, (uint8_t)val);
         }
         
-        return (ID)arr;
+        return arr;
     }
     
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "byte-array currently only supports vectors as sequences",
@@ -2961,7 +2962,7 @@ ID native_aclone(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    return (ID)byte_array_clone((CljValue)arr);
+    return byte_array_clone((CljValue)arr);
 }
 
 // Comparison operators as native functions
@@ -3100,7 +3101,7 @@ ID native_not_eq(ID *args, unsigned int argc) {
     }
     
     // Otherwise use general equality, then invert
-    bool equal = clj_equal((ID)a, (ID)b);
+    bool equal = clj_equal(a, b);
     return equal ? clj_false : clj_true;
 }
 
@@ -3369,7 +3370,7 @@ void register_builtins() {
     register_builtin_in_namespace("assoc", assoc3);
     register_builtin_in_namespace("dissoc", native_dissoc);
     register_builtin_in_namespace("transient", native_transient);
-    register_builtin_in_namespace("persistent!", native_persistent);
+    register_builtin_in_namespace("persistent!", native_persistent_bang);
     register_builtin_in_namespace("conj!", native_conj_bang);
     register_builtin_in_namespace("get", native_get);
     register_builtin_in_namespace("keys", native_keys);

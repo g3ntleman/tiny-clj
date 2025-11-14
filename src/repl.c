@@ -197,7 +197,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
     int start = count - limit;
     CljPersistentVector* out = make_vector(limit, CLJ_VECTOR);
     ID nth_args[2];
-    nth_args[0] = (ID)v;
+    nth_args[0] = v;
     for (int i = 0; i < limit; i++) {
         nth_args[1] = fixnum(start + i);
         ID elem = nth2(nth_args, 2);
@@ -219,7 +219,7 @@ bool history_save_to_file(CljPersistentVector *vec, const char *path) {
     
     CljObject *persistent_vec = vec;
     if (TAG(vec) == CLJ_TRANSIENT_VECTOR) {
-        persistent_vec = (CljObject*)persistent((CljValue)vec);
+        persistent_vec = (CljObject*)vector_persistent((CljValue)vec);
         if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR) {
             if (persistent_vec != vec) RELEASE(persistent_vec);
             return false;
@@ -299,7 +299,7 @@ CljPersistentVector* history_load_from_file(const char *path) {
     evalstate_free(st);
     
     // Transfer to outer pool and return
-    return string_history ? AUTORELEASE((ID)string_history) : empty_vector();
+    return string_history ? AUTORELEASE(string_history) : empty_vector();
 }
 
 
