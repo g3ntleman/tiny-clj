@@ -2,6 +2,7 @@
 #define TINY_CLJ_BUILTINS_H
 
 #include "object.h"
+#include "namespace.h"  // For EvalState
 #include "runtime.h"
 
 typedef ID (*CljNativeFn)(ID *args, unsigned int argc);
