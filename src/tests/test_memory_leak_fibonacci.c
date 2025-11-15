@@ -135,3 +135,21 @@ TEST(test_recursive_calls_without_closure_env_caching) {
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(countdown20_result));
     
 }
+
+// Benchmark test for profiling - only fib(20)
+TEST(test_benchmark_fib20) {
+    // Define fibonacci function
+    const char *fib_code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
+    CljValue result = eval_string(fib_code, g_test_eval_state);
+    
+    // Function definition should succeed
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Test with fib(20) - benchmark for profiling
+    const char *fib20_code = "(fib 20)";
+    CljValue fib20_result = eval_string(fib20_code, g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(fib20_result);
+    TEST_ASSERT_TRUE(is_fixnum(fib20_result));
+    TEST_ASSERT_EQUAL_INT(6765, as_fixnum(fib20_result)); // fib(20) = 6765
+}

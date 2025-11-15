@@ -1205,7 +1205,7 @@ ID native_cancel_timer(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    int32_t timer_id = as_fixnum((CljValue)timer_id_obj);
+    int timer_id = as_fixnum((CljValue)timer_id_obj);
     if (timer_id <= 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "cancel-timer timer-id must be positive",

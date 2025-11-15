@@ -214,7 +214,7 @@ TEST(test_schedule_periodic_returns_timer_id) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
     
     // Timer ID should be a positive integer
-    int32_t timer_id = as_fixnum((CljValue)result);
+    int timer_id = as_fixnum((CljValue)result);
     TEST_ASSERT_TRUE(timer_id > 0);
     
     // Clean up
@@ -239,7 +239,7 @@ TEST(test_cancel_timer_stops_periodic_timer) {
     
     // Cancel the timer
     char cancel_expr[256];
-    int32_t timer_id = as_fixnum((CljValue)timer_id_obj);
+    int timer_id = as_fixnum((CljValue)timer_id_obj);
     snprintf(cancel_expr, sizeof(cancel_expr), "(cancel-timer %d)", timer_id);
     
     CljObject *cancel_result = NULL;
@@ -292,7 +292,7 @@ TEST(test_cancel_timer_returns_true_when_found) {
     TEST_ASSERT_NOT_NULL(timer_id_obj);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)timer_id_obj));
     
-    int32_t timer_id = as_fixnum((CljValue)timer_id_obj);
+    int timer_id = as_fixnum((CljValue)timer_id_obj);
     char cancel_expr[256];
     snprintf(cancel_expr, sizeof(cancel_expr), "(cancel-timer %d)", timer_id);
     

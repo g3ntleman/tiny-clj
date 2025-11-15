@@ -44,6 +44,7 @@ void setUp(void) {
     event_loop_clear();
     
     runtime_init(&g_runtime);
+    event_loop_init();  // Initialize event loop keywords
     
     // Set clojure.core to quiet mode BEFORE any eval state is created
     // This suppresses "=== Loading Clojure Core Functions ===" output

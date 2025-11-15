@@ -36,19 +36,19 @@ fi
 cmake --build "$BUILD_DIR" -j -t unity-tests
 
 # Run benchmark with profiling
-echo "Running slow fibonacci test with profiling..."
+echo "Running fib(20) benchmark test with profiling..."
 TEST_BINARY="$BUILD_DIR/unity-tests"
-TEST_NAME="test_memory_leak_fibonacci_reproduction"
+TEST_NAME="test_memory_leak_fibonacci/benchmark_fib20"
 
 if [ "$USE_SAMPLE" = true ]; then
     # macOS: Use sample
-    echo "Profiling with sample (10 seconds)..."
+    echo "Profiling with sample (30 seconds)..."
     echo "Starting test in background..."
     "$TEST_BINARY" --test "$TEST_NAME" > benchmark_profile.log 2>&1 &
     TEST_PID=$!
     
-    # Sample the running process
-    sample "$TEST_PID" 10 -f benchmark_profile_sample.txt > /dev/null 2>&1
+    # Sample the running process (longer for fib(20))
+    sample "$TEST_PID" 30 -f benchmark_profile_sample.txt > /dev/null 2>&1
     
     # Wait for test to finish
     wait $TEST_PID 2>/dev/null || true

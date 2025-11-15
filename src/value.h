@@ -99,10 +99,10 @@ static inline bool is_fixnum(CljValue val) {
     return get_tag(val) == TAG_FIXNUM;
 }
 
-static inline int32_t as_fixnum(CljValue val) {
+static inline int as_fixnum(CljValue val) {
     CLJ_ASSERT(is_fixnum(val));
     // Extract value: right shift by TAG_BITS (arithmetic shift preserves sign)
-    return (int32_t)((intptr_t)val >> TAG_BITS);
+    return (int)((intptr_t)val >> TAG_BITS);
 }
 
 // Char: 21-bit Unicode character (Tag 1)
