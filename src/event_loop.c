@@ -9,6 +9,7 @@
 #include "vector.h"
 #include "map.h"
 #include "value.h"  // For as_fixnum, clj_true
+#include "kv_macros.h"  // For KV_VALUE
 #include <stdbool.h>
 #include <sys/time.h>
 
@@ -20,6 +21,20 @@ static CljSymbol *KW_SCHEDULED_MSEC;
 static CljSymbol *KW_PERIODIC;
 static CljSymbol *KW_PERIOD_MS;
 static CljSymbol *KW_TIMER_ID;
+
+// Timer-Task Map index constants for direct O(1) access
+// CRITICAL: The order of these enum values MUST match exactly the order of keys
+// in task_timer_to_map() when calling make_transient_map_from_kv().
+// This pattern (enum for indices, guaranteed key order, direct index access)
+// can be reused for future defrecord implementations.
+enum {
+    TIMER_TASK_IDX_FN = 0,
+    TIMER_TASK_IDX_SCHEDULED_SEC,
+    TIMER_TASK_IDX_SCHEDULED_MSEC,
+    TIMER_TASK_IDX_PERIODIC,
+    TIMER_TASK_IDX_PERIOD_MS,
+    TIMER_TASK_IDX_TIMER_ID
+};
 
 // Helper functions for normal Tasks as Maps
 // Task Map keys: :fn, :result-chan
@@ -57,6 +72,12 @@ static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan
 
 // Helper functions for Timer-Tasks as Maps
 // Timer-Task Map keys: :fn, :scheduled-sec, :scheduled-msec, :periodic, :period-ms, :timer-id
+//
+// CRITICAL: The order of keys in make_transient_map_from_kv() MUST match exactly
+// the order of the TIMER_TASK_IDX_* enum values defined above.
+// The optimized Getter functions (task_get_scheduled_sec(), etc.) rely on this
+// guaranteed key order for direct O(1) index access instead of O(n) keyword search.
+// If you change the key order here, you MUST also update the enum values accordingly.
 static CljMap* task_timer_to_map(CljObject *fn, int scheduled_sec, int scheduled_msec, bool periodic, int period_ms, int timer_id) {
     CljMap *tmap = make_transient_map_from_kv(6,
         KW_FN, fn,
@@ -78,28 +99,32 @@ static inline ID task_get_fn(CljMap *task_map) {
     return map_get(task_map, KW_FN, NULL);
 }
 
+// Timer-Task Getter functions (optimized with direct index access O(1))
+// These use direct index access instead of map_get() for better performance.
+// CRITICAL: These only work correctly for Timer-Task maps created by task_timer_to_map(),
+// which guarantees the key order matches the TIMER_TASK_IDX_* enum values.
 static inline int task_get_scheduled_sec(CljMap *task_map) {
-    ID val = map_get(task_map, KW_SCHEDULED_SEC, NULL);
+    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_SCHEDULED_SEC);
     return val ? (int)as_fixnum(val) : 0;
 }
 
 static inline int task_get_scheduled_msec(CljMap *task_map) {
-    ID val = map_get(task_map, KW_SCHEDULED_MSEC, NULL);
+    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_SCHEDULED_MSEC);
     return val ? (int)as_fixnum(val) : 0;
 }
 
 static inline bool task_get_periodic(CljMap *task_map) {
-    ID val = map_get(task_map, KW_PERIODIC, NULL);
-    return val == clj_true;
+    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_PERIODIC);
+    return val == (ID)clj_true;
 }
 
 static inline int task_get_period_ms(CljMap *task_map) {
-    ID val = map_get(task_map, KW_PERIOD_MS, NULL);
+    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_PERIOD_MS);
     return val ? (int)as_fixnum(val) : 0;
 }
 
 static inline int task_get_timer_id(CljMap *task_map) {
-    ID val = map_get(task_map, KW_TIMER_ID, NULL);
+    ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_TIMER_ID);
     return val ? (int)as_fixnum(val) : 0;
 }
 

@@ -3,7 +3,6 @@
 #include "runtime.h"
 #include "value.h"
 #include "exception.h"
-#include "error_messages.h"
 #include "namespace.h"
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h"  // For is_pointer_in_data_segment

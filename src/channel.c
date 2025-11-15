@@ -2,7 +2,7 @@
 #include "map.h"
 #include "value.h"
 #include "symbol.h"
-#include "exception.h"
+#include "exception.h"  // For throw_oom
 
 /** Create a channel (promise-like) as a transient map.
  * @return New transient map channel with RC=1 (caller must release)

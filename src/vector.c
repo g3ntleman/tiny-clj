@@ -1,6 +1,6 @@
 #include "vector.h"
 #include "memory.h"
-#include "value.h"  // For IS_IMMEDIATE macro (used indirectly by RETAIN/RELEASE macros from memory.h)
+#include "value.h"  // For IS_IMMEDIATE macro
 #include "types.h"  // For SINGLETON_RC
 #include "seq.h"  // For SeqIterator
 #include "common.h"  // For CLJ_ASSERT

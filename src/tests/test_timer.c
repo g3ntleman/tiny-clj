@@ -148,9 +148,8 @@ TEST(test_schedule_validates_arguments) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test with non-integer delay
-    CljObject *result = NULL;
     TRY {
-        result = eval_string("(schedule \"100\" (fn [] 42))", g_test_eval_state);
+        (void)eval_string("(schedule \"100\" (fn [] 42))", g_test_eval_state);
     } CATCH(ex) {
         // Should throw exception
         TEST_PASS();
@@ -166,9 +165,8 @@ TEST(test_schedule_validates_function) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test with non-function
-    CljObject *result = NULL;
     TRY {
-        result = eval_string("(schedule 100 42)", g_test_eval_state);
+        (void)eval_string("(schedule 100 42)", g_test_eval_state);
     } CATCH(ex) {
         // Should throw exception
         TEST_PASS();
@@ -184,9 +182,8 @@ TEST(test_schedule_periodic_validates_arguments) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test with non-integer delay
-    CljObject *result = NULL;
     TRY {
-        result = eval_string("(schedule-periodic \"0\" 100 (fn [] 42))", g_test_eval_state);
+        (void)eval_string("(schedule-periodic \"0\" 100 (fn [] 42))", g_test_eval_state);
     } CATCH(ex) {
         // Should throw exception
         TEST_PASS();
@@ -337,9 +334,8 @@ TEST(test_cancel_timer_validates_argument) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test with non-integer argument
-    CljObject *result = NULL;
     TRY {
-        result = eval_string("(cancel-timer \"123\")", g_test_eval_state);
+        (void)eval_string("(cancel-timer \"123\")", g_test_eval_state);
     } CATCH(ex) {
         // Should throw exception
         TEST_PASS();

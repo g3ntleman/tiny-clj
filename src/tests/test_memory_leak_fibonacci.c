@@ -6,9 +6,6 @@
 
 #include "tests_common.h"
 #include "../tiny_clj.h"
-#include "../memory.h"
-#include "../namespace.h"
-#include "../symbol.h"
 
 // ============================================================================
 // TEST: Memory leak reproduction and verification

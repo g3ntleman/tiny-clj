@@ -246,7 +246,7 @@ TEST(test_dotimes_zero_iterations) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
@@ -268,7 +268,7 @@ TEST(test_dotimes_negative_iterations) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
@@ -290,7 +290,7 @@ TEST(test_dotimes_large_iterations) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // Clean up
@@ -312,7 +312,7 @@ TEST(test_dotimes_invalid_binding_format) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for invalid format
     
     // Clean up
@@ -334,7 +334,7 @@ TEST(test_dotimes_non_numeric_count) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
     
     // Clean up
@@ -350,7 +350,7 @@ TEST(test_dotimes_null_input) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation with NULL
-    CljObject *result = eval_dotimes(NULL, env);
+    CljObject *result = eval_dotimes(NULL, env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for NULL input
     
     // Clean up
@@ -376,7 +376,7 @@ TEST(test_dotimes_simple_iteration_count) {
     CljMap *env = make_map(4);
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // The test passes if no errors occur and the function returns NULL

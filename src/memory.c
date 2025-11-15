@@ -326,14 +326,20 @@ void autorelease_pool_pop(CljVector *pool) {
     // Remove pool from stack BEFORE releasing (to avoid double-free if called multiple times)
     g_runtime.pool_stack[g_runtime.pool_stack_top--] = NULL;
     
-    // Clear and release the pool (only if not already a zombie)
+    // Clear and release the pool (only if not already a zombie in DEBUG builds)
     if (pool) {
+#ifdef DEBUG
         // Check if pool is already a zombie (already freed)
         if (get_retain_count(pool) != ZOMBIE_RC) {
             autorelease_pool_clear(pool);
             RELEASE((ID)pool);
         }
         // If pool is already a zombie, skip release (already freed)
+#else
+        // In Release builds, always release (no zombie tracking)
+        autorelease_pool_clear(pool);
+        RELEASE((ID)pool);
+#endif
     }
     
     // Debug output to verify stack state

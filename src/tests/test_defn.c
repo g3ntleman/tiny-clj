@@ -182,8 +182,8 @@ TEST(test_parameter_lookup_optimization) {
     }
     
     gettimeofday(&end, NULL);
-    double elapsed_ms = (end.tv_sec - start.tv_sec) * 1000.0 + 
-                       (end.tv_usec - start.tv_usec) / 1000.0;
+    (void)((end.tv_sec - start.tv_sec) * 1000.0 + 
+           (end.tv_usec - start.tv_usec) / 1000.0);  // Suppress unused variable warning
 }
 
 // ============================================================================

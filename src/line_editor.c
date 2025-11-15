@@ -1,16 +1,11 @@
 #include "line_editor.h"
-#include "vector.h"
-#include "parser.h"
-#include "reader.h"
-#include "exception.h"
+#include "memory.h"  // For RELEASE
+#include "value.h"  // For make_string, fixnum, CljString
+#include "builtins.h"  // For nth2
+#include "clj_strings.h"  // For to_string
+#include "strings.h"  // For string functions
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "clj_strings.h"
-#include "strings.h"
-#include "memory.h"
-#include "memory_profiler.h"
-#include "value.h"
-#include "builtins.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

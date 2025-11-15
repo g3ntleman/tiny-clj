@@ -431,7 +431,7 @@ ID native_next(ID *args, unsigned int argc) {
     
     // CRITICAL: Check if make_seq returned the original object (if coll was already a CLJ_SEQ)
     // If so, we must NOT release it, as it's owned by the caller (args[0])
-    bool seq_is_original = (seq == coll);
+    bool seq_is_original = (seq == (CljSeqIterator*)coll);
     
     // Return next of the created seq
     ID result = seq_next(seq);
@@ -629,9 +629,7 @@ ID assoc3(ID *args, unsigned int argc) {
     
     // Handle maps
     if (coll && TAG(coll) == CLJ_MAP) {
-        if (!key) return NULL;
-        // Use COW-based map_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        // map_assoc always returns a map (either the same or a new one), never NULL
+        // Note: key can be NULL (nil) - that's a valid key in Clojure!
         CljMap *result = map_assoc((CljMap*)coll, key, val);
         return RETAIN((CljObject*)result);
     }
@@ -776,11 +774,17 @@ ID native_get(ID *args, unsigned int argc) {
         return NULL;
     }
     CljObject *map = (CljObject*)args[0];
-    CljObject *key = (CljObject*)args[1];
+    CljObject *key_obj = (CljObject*)args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
-    if (!map || !key) return (NULL);
+    // Note: key can be NULL (nil) - that's a valid key in Clojure!
+    if (!map) return NULL;
     
-    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
+    // Convert SYM_NIL to NULL for key lookup
+    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == (CljObject*)SYM_NIL) 
+        ? NULL 
+        : (ID)key_obj;
+    
+    if (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT) {
         return map_get((CljMap*)map, key, not_found);
     }
     
@@ -829,7 +833,7 @@ ID native_keys(ID *args, unsigned int argc) {
     if (!map) return (NULL);
     
     if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
-        return map_keys(map);
+        return map_keys((CljMap*)map);
     }
     
     return NULL; // Return nil for unsupported types
@@ -841,7 +845,7 @@ ID native_vals(ID *args, unsigned int argc) {
     if (!map) return (NULL);
     
     if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
-        return map_vals(map);
+        return map_vals((CljMap*)map);
     }
     
     return NULL; // Return nil for unsupported types
@@ -3122,42 +3126,6 @@ ID native_vector_p(ID *args, unsigned int argc) {
 // native_time removed: time is now only a special form (eval_time)
 // This ensures time can measure actual evaluation time, not pre-evaluated arguments
 
-// Native time-micro implementation with microsecond resolution
-ID native_time_micro(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "time-micro requires exactly 1 argument",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-    
-    // Start timing (Clojure-compatible: capture start time)
-    struct timeval start, end;
-    gettimeofday(&start, NULL);
-    
-    // Evaluate the argument (it should be a function call or expression)
-    EvalState *st = evalstate_new(false);
-    CljObject *result = NULL;
-    
-    // Use eval_parsed for proper evaluation
-    if (st && args[0]) {
-        result = (CljObject*)eval_parsed(args[0], st, NULL);
-    }
-    
-    // End timing (Clojure-compatible: capture end time)
-    gettimeofday(&end, NULL);
-    
-    // Calculate elapsed time in microseconds (Clojure-compatible: precise calculation)
-    double elapsed_us = (end.tv_sec - start.tv_sec) * 1000000.0 + 
-                       (end.tv_usec - start.tv_usec);
-    
-    // Print timing information (Clojure-compatible: "μsecs" format)
-    printf("Elapsed time: %.2f μsecs\n", elapsed_us);
-    
-    evalstate_free(st);
-    // Return the result of the evaluated expression (Clojure-compatible: return the value)
-    return result;
-}
-
 // Native sleep implementation
 ID native_sleep(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "sleep")) return NULL;
@@ -3399,7 +3367,6 @@ void register_builtins() {
     // Time function
     // time is now only a special form (eval_time), not a builtin
     // This ensures time can measure actual evaluation time, not pre-evaluated arguments
-    register_builtin_in_namespace("time-micro", native_time_micro);
     register_builtin_in_namespace("sleep", native_sleep);
     
     // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments

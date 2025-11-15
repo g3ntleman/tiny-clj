@@ -1160,7 +1160,6 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
                 ID result_id = map_get((CljMap*)env, body, &not_found);
                 if (result_id != &not_found) {
-                    // Key exists in map - result can be NULL (nil), which is valid
                     return (CljObject*)result_id;
                 }
             }
@@ -1170,7 +1169,6 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
                 ID result_id = map_get(st->current_ns->mappings, body, &not_found);
                 if (result_id != &not_found) {
-                    // result can be NULL (nil), which is valid
                     return (CljObject*)result_id;
                 }
             }
@@ -1406,8 +1404,7 @@ static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *
     ID result = eval_function_call(fn, args, argc, env, st);
     
     // Release arguments before freeing the array
-    // Note: eval_function_call copies arguments with ASSIGN, so we need to release our references
-    // RELEASE safely handles NULL and immediate values
+    // eval_function_call copies arguments with ASSIGN, so we need to release our references
     for (int i = 0; i < argc; i++) {
         RELEASE((CljObject*)args[i]);
     }
@@ -1625,7 +1622,6 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
                     RELEASE(result);
                 }
                 result = (CljObject*)expr_result;
-                // Note: result can be NULL (nil), which is valid
             }
         }
         
@@ -1796,7 +1792,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         // No need to save/restore - nested functions will have their own stack frames
         
         CljObject *cond_val = eval_arg(list, 1, env, NULL);
-        // Note: cond_val can be NULL (nil), which is falsy - clj_is_truthy handles NULL correctly
         bool truthy = clj_is_truthy(cond_val);
         // RELEASE safely handles NULL and immediate values
         RELEASE(cond_val);
@@ -1891,7 +1886,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             if (expr) {
                 // eval_body automatically uses eval_body_with_params if ctx is provided
                 ASSIGN(result, eval_body(expr, env, st, ctx));
-                // Note: result can be NULL (nil), which is valid
             }
         }
         
@@ -3339,19 +3333,22 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
             ID key = KV_KEY(map->data, i);
             ID value = KV_VALUE(map->data, i);
             
+            // Cache TAG values for performance (used multiple times)
+            unsigned char key_tag = key ? TAG(key) : 0;
+            unsigned char value_tag = value ? TAG(value) : 0;
+            
             // Evaluate key and value (nil should evaluate to NULL)
             // Check for SYM_NIL before calling eval_body to avoid symbol resolution
-            ID eval_key = (key && TAG(key) == CLJ_SYMBOL && key == SYM_NIL) 
+            ID eval_key = (key && key_tag == CLJ_SYMBOL && key == SYM_NIL) 
                 ? NULL 
                 : (key ? eval_body(key, env, st, NULL) : NULL);
             
-            ID eval_value = (value && TAG(value) == CLJ_SYMBOL && value == SYM_NIL) 
+            ID eval_value = (value && value_tag == CLJ_SYMBOL && value == SYM_NIL) 
                 ? NULL 
                 : (value ? eval_body(value, env, st, NULL) : NULL);
             
             // Add evaluated key-value pair to result map
-            // Note: eval_body returns AUTORELEASE objects, so we don't need to release them
-            // map_assoc will retain them, and the autorelease pool will handle cleanup
+            // eval_body returns AUTORELEASE objects; map_assoc will retain them
             ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
         
@@ -3361,7 +3358,6 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
     // For vectors, etc., return as-is
     return element; // Don't retain - caller will handle retention
 }
-
 
 // is_symbol is already defined in namespace.c
 

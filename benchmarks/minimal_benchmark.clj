@@ -30,10 +30,12 @@
   (println "")
   
   (println "Running timing test...")
-  (let [start (time-micro)
-        _ (dotimes [i 100] (fib 10))
-        end (time-micro)]
-    (println (str "100x fib(10) took: " (- end start) " microseconds")))
+  ;; TODO: time-now muss noch implementiert werden
+  ;; (let [start (time-now)
+  ;;       _ (dotimes [i 100] (fib 10))
+  ;;       end (time-now)]
+  ;;   (println (str "100x fib(10) took: " (- end start) " microseconds")))
+  (time (dotimes [i 100] (fib 10)))
   
   (println "")
   (println "✅ Benchmark completed!"))

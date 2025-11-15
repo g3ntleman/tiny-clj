@@ -55,26 +55,21 @@ CljMap* make_map(int capacity) {
 }
 
 ID map_get(CljMap *map, ID key, ID not_found) {
-  if (!map || !key)
+  if (!map)
     return not_found;
+  // Note: key can be NULL (nil) - that's a valid key in Clojure!
   CljObject *key_obj = (CljObject*)key;
-  if (!key_obj)
-    return not_found;
-  CljMap *map_data = map;
-  if (!map_data)
-    return not_found;
   
-  for (int i = 0; i < map_data->count; i++) {
-    CljObject *stored_key = KV_KEY(map_data->data, i);
-    // Fast path: pointer comparison first (for interned symbols)
+  for (int i = 0; i < map->count; i++) {
+    CljObject *stored_key = KV_KEY(map->data, i);
+    // Fast path: pointer comparison first (for interned symbols and nil keys)
     if (stored_key == key_obj) {
-      return KV_VALUE(map_data->data, i);
+      return KV_VALUE(map->data, i);
     }
     // Fallback: structural comparison for non-interned objects
-    if (stored_key && clj_equal(stored_key, key_obj)) {
-      // DEBUG: Throw exception if structural equality but not pointer equality
-      // This indicates that symbols are not correctly interned
-      if (stored_key && TAG(stored_key) == CLJ_SYMBOL && key_obj && TAG(key_obj) == CLJ_SYMBOL) {
+    if (stored_key && key_obj && clj_equal(stored_key, key_obj)) {
+      // Throw exception if structural equality but not pointer equality (symbol interning issue)
+      if (TAG(stored_key) == CLJ_SYMBOL && TAG(key_obj) == CLJ_SYMBOL) {
         CljSymbol *stored_sym = as_symbol(stored_key);
         throw_exception_formatted("SymbolInterningError", __FILE__, __LINE__, 0,
             "Symbol '%s' found by structural equality but not pointer equality. "
@@ -83,7 +78,7 @@ ID map_get(CljMap *map, ID key, ID not_found) {
             stored_sym && stored_sym->name ? stored_sym->name : "unknown",
             stored_key, key_obj);
       }
-      return KV_VALUE(map_data->data, i);
+      return KV_VALUE(map->data, i);
     }
   }
   
@@ -102,10 +97,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   
   CljObject *key_obj = (CljObject*)key;
   CljObject *value_obj = (CljObject*)value;
-  
-  if (!key_obj) {
-    return map;  // Return original map on error
-  }
+  // Note: key can be NULL (nil) - that's a valid key in Clojure!
   
   CljMap *map_data = map;
   
@@ -124,7 +116,8 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
         return map;  // Return SAME map
       }
       // Fallback: structural comparison for non-interned objects
-      if (k && clj_equal(k, key_obj)) {
+      // Note: If key_obj is NULL, k must also be NULL to match (already handled above)
+      if (k && key_obj && clj_equal(k, key_obj)) {
         // Key found: update in-place (no branches after this)
         ASSIGN(KV_VALUE(map_data->data, i), value_obj);
         return map;  // Return SAME map
@@ -183,8 +176,9 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
       ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
       key_found = true;
       new_idx++;
-    } else if (k && clj_equal(k, key_obj)) {
+    } else if (k && key_obj && clj_equal(k, key_obj)) {
       // Key found - update value (structural comparison)
+      // Note: If key_obj is NULL, k must also be NULL to match (already handled above)
       ASSIGN(KV_KEY(new_map->data, new_idx), KV_KEY(map_data->data, i));
       ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
       key_found = true;
@@ -292,29 +286,22 @@ void map_foreach(CljMap *map, void (*func)(ID, ID)) {
  * not be interned (e.g., during parsing or in test code).
  */
 int map_contains(CljMap *map, ID key) {
-  if (!map || !key)
+  if (!map)
     return 0;
+  // Note: key can be NULL (nil) - that's a valid key in Clojure!
   CljObject *key_obj = (CljObject*)key;
-  if (!key_obj)
-    return 0;
-  CljMap *map_data = map;
-  if (!map_data)
-    return 0;
   
   // Use same logic as map_get: pointer equality first, then structural equality
-  // This ensures consistency between map_contains and map_get
-  for (int i = 0; i < map_data->count; i++) {
-    CljObject *stored_key = KV_KEY(map_data->data, i);
-    // Fast path: pointer comparison first (for interned symbols)
+  for (int i = 0; i < map->count; i++) {
+    CljObject *stored_key = KV_KEY(map->data, i);
+    // Fast path: pointer comparison first (for interned symbols and nil keys)
     if (stored_key == key_obj) {
       return 1;
     }
     // Fallback: structural comparison for non-interned objects
-    // This is consistent with map_get() behavior
-    if (stored_key && clj_equal(stored_key, key_obj)) {
-      // DEBUG: Throw exception if structural equality but not pointer equality
-      // This indicates that symbols are not correctly interned
-      if (stored_key && TAG(stored_key) == CLJ_SYMBOL && key_obj && TAG(key_obj) == CLJ_SYMBOL) {
+    if (stored_key && key_obj && clj_equal(stored_key, key_obj)) {
+      // Throw exception if structural equality but not pointer equality (symbol interning issue)
+      if (TAG(stored_key) == CLJ_SYMBOL && TAG(key_obj) == CLJ_SYMBOL) {
         CljSymbol *stored_sym = as_symbol(stored_key);
         throw_exception_formatted("SymbolInterningError", __FILE__, __LINE__, 0,
             "Symbol '%s' found by structural equality but not pointer equality. "
@@ -519,13 +506,13 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     }
     
     // Then, add/update with additions in-place (later additions override earlier ones)
+    // Note: key can be NULL (nil) - that's a valid key in Clojure!
     for (int i = 0; i < addition_count; i++) {
         CljObject *key = additions[i * 2];
         CljObject *value = additions[i * 2 + 1];
-        if (key) {
-                // Use map_conj for in-place addition/update (no heap allocation)
-                map_conj(tmap, (ID)key, (ID)value);
-        }
+        // Use map_conj for in-place addition/update (no heap allocation)
+        // map_conj now handles NULL keys correctly
+        map_conj(tmap, (ID)key, (ID)value);
     }
     
     // Make immutable by simply changing the type (no copy needed!)
@@ -552,8 +539,9 @@ CljMap* map_transient(CljMap *map) {
 /** Associate key->value in transient map (guaranteed in-place). */
 CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     // CRITICAL: value can be NULL (nil), which is a valid value in Clojure
-    // Only check tmap and key, not value
-    if (!tmap || !key) return NULL;
+    // CRITICAL: key can be NULL (nil), which is a valid key in Clojure
+    // Only check tmap, not key or value
+    if (!tmap) return NULL;
     CljObject *obj = (CljObject*)tmap;
     
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
@@ -586,8 +574,8 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     if (!m) return NULL;
     
     // Check if key already exists (pointer equality first, then structural)
+    // Note: key can be NULL (nil) - that's a valid key in Clojure!
     CljObject *key_obj = (CljObject*)key;
-    CLJ_ASSERT(key_obj != NULL);
     
     bool key_found = false;
     for (int i = 0; i < m->count; i++) {
@@ -606,7 +594,8 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
             return tmap;
         }
         // Fallback: structural comparison for non-interned objects
-        if (existing_key && clj_equal((ID)existing_key, (ID)key_obj)) {
+        // Note: If key_obj is NULL, existing_key must also be NULL to match (already handled above)
+        if (existing_key && key_obj && clj_equal((ID)existing_key, (ID)key_obj)) {
             // Replace existing value
             // CRITICAL: value can be NULL (nil), which is valid
             if (m->data[i * 2 + 1]) {

@@ -258,7 +258,7 @@ TEST(test_def_inc_evaluation_during_load) {
         TEST_ASSERT_NOT_NULL(env);
         
         TRY {
-            CljValue result = eval_list(list, env, g_test_eval_state, NULL);
+            (void)eval_list(list, env, g_test_eval_state, NULL);
             
             // Check if inc is now in the mappings
             CljObject *inc_value = map_get(g_test_eval_state->current_ns->mappings, inc_sym_interned, NULL);
@@ -371,7 +371,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(form), env, g_test_eval_state, NULL);
+        (void)eval_list(as_list(form), env, g_test_eval_state, NULL);
         
         // Check if test-var is in the mappings (even if value is nil/NULL)
         CljSymbol *test_var_sym = intern_symbol_global("test-var");

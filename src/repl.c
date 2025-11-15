@@ -216,22 +216,22 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
 bool history_save_to_file(CljVector *vec, const char *path) {
     if (!path || !vec) return false;
     
-    CljObject *persistent_vec = vec;
-    if (TAG(vec) == CLJ_VECTOR_TRANSIENT) {
-        persistent_vec = (CljObject*)vector_persistent((CljVector*)vec);
+    CljObject *persistent_vec = (CljObject*)vec;
+    if (TAG((CljObject*)vec) == CLJ_VECTOR_TRANSIENT) {
+        persistent_vec = (CljObject*)vector_persistent(vec);
         if (!persistent_vec || TAG(persistent_vec) != CLJ_VECTOR) {
-            if (persistent_vec != vec) RELEASE(persistent_vec);
+            if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
             return false;
         }
     }
     
     if (TAG(persistent_vec) != CLJ_VECTOR) {
-        if (persistent_vec != vec) RELEASE(persistent_vec);
+        if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
         return false;
     }
     
     CljObject *trimmed = history_trim_last_n(persistent_vec, 50);
-    if (persistent_vec != vec) RELEASE(persistent_vec);
+    if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
     if (!trimmed) return false;
     
     const char *s = pr_str(trimmed);
@@ -298,7 +298,7 @@ CljVector* history_load_from_file(const char *path) {
     evalstate_free(st);
     
     // Transfer to outer pool and return
-    return string_history ? AUTORELEASE(string_history) : empty_vector();
+    return string_history ? (CljVector*)AUTORELEASE(string_history) : empty_vector();
 }
 
 

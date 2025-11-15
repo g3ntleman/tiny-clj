@@ -358,8 +358,18 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
         // For symbols, use eval_symbol (uses current_ns->mappings internally)
         result = eval_symbol(as_symbol(parsed_expr), eval_state);
         // eval_symbol already returns autoreleased object
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_MAP) {
+        // Map literals need to have their keys and values evaluated
+        // Use provided env or fall back to current_ns->mappings
+        CljMap *eval_env = env;
+        if (!eval_env) {
+            CLJ_ASSERT(eval_state->current_ns != NULL);
+            eval_env = (CljMap*)eval_state->current_ns->mappings;
+        }
+        result = eval_body(parsed_expr, eval_env, eval_state, NULL);
+        // eval_body returns AUTORELEASE objects
     } else {
-        // Literal value (vector, map, etc.) - return as-is
+        // Literal value (vector, etc.) - return as-is
         // parsed_expr is already AUTORELEASEd by parse()
         result = parsed_expr;
     }
@@ -438,12 +448,10 @@ static ID parse_map(Reader *reader, EvalState *st) {
   int pair_count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     ID key = parse_expr(reader, st);
-    if (!key)
-      return NULL;
+    // Note: key can be NULL (nil) - that's a valid key in Clojure!
     reader_skip_all(reader);
     ID value = parse_expr(reader, st);
-    if (!value)
-      return NULL;
+    // Note: value can be NULL (nil) - that's a valid value in Clojure!
     reader_skip_all(reader);
     pairs[pair_count * 2] = key;
     pairs[pair_count * 2 + 1] = value;

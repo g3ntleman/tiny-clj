@@ -225,10 +225,17 @@ add_executable(tiny-clj-repl
     src/line_editor.c
     ${SOURCES}
 )
-# Set output directory to build-test/
-set_target_properties(tiny-clj-repl PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build-test"
-)
+# Set output directory based on build type
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_target_properties(tiny-clj-repl PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+else()
+    # Debug builds go to build-test/ for compatibility
+    set_target_properties(tiny-clj-repl PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build-test"
+    )
+endif()
 # REPL Build - Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)

@@ -400,9 +400,8 @@ TEST(test_slurp_nonexistent_file) {
 
   // Test slurp with non-existent file
   // This should throw an exception
-  CljObject *result = NULL;
   TRY {
-    result = eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")",
+    (void)eval_string("(slurp \"/nonexistent/file/that/does/not/exist.txt\")",
                         g_test_eval_state);
     // Should not reach here - exception should be thrown
     TEST_FAIL_MESSAGE("slurp should throw exception for nonexistent file");

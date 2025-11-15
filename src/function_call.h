@@ -57,7 +57,7 @@ ID eval_seq(CljList *list, CljMap *env);
 // For-loop functions
 ID eval_for(CljList *list, CljMap *env);
 ID eval_doseq(CljList *list, CljMap *env);
-ID eval_dotimes(CljList *list, CljMap *env);
+ID eval_dotimes(CljList *list, CljMap *env, EvalState *st);
 
 // Let bindings
 ID eval_let(CljList *list, CljMap *env, EvalState *st);

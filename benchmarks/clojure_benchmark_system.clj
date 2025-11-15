@@ -1,11 +1,12 @@
 ;; Benchmark-System komplett in Clojure
-;; Verwendet verfügbare Built-ins: println, time-micro, dotimes, slurp, spit
+;; Verwendet verfügbare Built-ins: println, time-now, dotimes, slurp, spit
+;; TODO: time-now muss noch implementiert werden
 
 ;; Benchmark-System
 (defn run-benchmark [name func iterations]
-  (let [start-time (time-micro)
+  (let [start-time (time-now)
         _ (dotimes [i iterations] (func))
-        end-time (time-micro)
+        end-time (time-now)
         duration (- end-time start-time)]
     {:name name
      :iterations iterations

@@ -553,7 +553,7 @@ TEST(test_subvec_error_cases) {
 
     // Arity error: only 1 argument
     TRY {
-        CljObject *result7 = eval_string("(subvec [1 2 3])", g_test_eval_state);
+        (void)eval_string("(subvec [1 2 3])", g_test_eval_state);
         // Should not reach here - exception should be thrown
         TEST_FAIL_MESSAGE("Expected ArityException to be thrown");
     } CATCH(ex) {
@@ -564,7 +564,7 @@ TEST(test_subvec_error_cases) {
 
     // Arity error: 4 arguments
     TRY {
-        CljObject *result8 = eval_string("(subvec [1 2 3] 0 1 2)", g_test_eval_state);
+        (void)eval_string("(subvec [1 2 3] 0 1 2)", g_test_eval_state);
         // Should not reach here - exception should be thrown
         TEST_FAIL_MESSAGE("Expected ArityException to be thrown");
     } CATCH(ex) {
