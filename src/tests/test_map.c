@@ -1,6 +1,7 @@
 #include "tests_common.h"
 #include "../channel.h"
 #include "../symbol.h"
+#include "../kv_macros.h"
 
 // Test that map_assoc correctly updates values for interned symbol keys
 TEST(test_map_assoc_updates_interned_symbol_key) {
@@ -1065,15 +1066,17 @@ TEST(test_map_conj_comprehensive) {
     CljMap *transient = map_transient(tmap);
     RELEASE((CljObject*)tmap);
     
+    // Test: map_conj with NULL key should succeed (nil is a valid key in Clojure)
     result = map_conj(transient, NULL, fixnum(42));
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(1, result->count);
     
-    // Test 2: Add new key-value pair to empty transient map
+    // Test 2: Add new key-value pair to transient map (already has nil key)
     CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
     CljMap *result2 = map_conj(transient, (CljValue)key1, fixnum(1));
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_PTR(transient, result2);  // Same pointer (in-place mutation)
-    TEST_ASSERT_EQUAL_INT(1, transient->count);
+    TEST_ASSERT_EQUAL_INT(2, transient->count);  // Should have 2 entries: nil and :a
     
     CljValue val1 = map_get((CljMap*)transient, (CljValue)key1, NULL);
     TEST_ASSERT_NOT_NULL(val1);
@@ -1084,7 +1087,7 @@ TEST(test_map_conj_comprehensive) {
     CljMap *result3 = map_conj(transient, (CljValue)key1, fixnum(100));
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_PTR(transient, result3);  // Same pointer
-    TEST_ASSERT_EQUAL_INT(1, transient->count);  // Count unchanged (update, not add)
+    TEST_ASSERT_EQUAL_INT(2, transient->count);  // Count unchanged (update, not add) - should still have nil and :a
     
     CljValue val1_updated = map_get((CljMap*)transient, (CljValue)key1, NULL);
     TEST_ASSERT_NOT_NULL(val1_updated);
@@ -1097,7 +1100,7 @@ TEST(test_map_conj_comprehensive) {
     map_conj(transient, (CljValue)key2, fixnum(2));
     map_conj(transient, (CljValue)key3, fixnum(3));
     
-    TEST_ASSERT_EQUAL_INT(3, transient->count);
+    TEST_ASSERT_EQUAL_INT(4, transient->count);  // Should have nil, :a, :b, :c
     
     CljValue val2 = map_get((CljMap*)transient, (CljValue)key2, NULL);
     CljValue val3 = map_get((CljMap*)transient, (CljValue)key3, NULL);
@@ -1378,5 +1381,229 @@ TEST(test_dissoc_non_existent_key) {
         TEST_ASSERT_NOT_NULL(val_b);
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
         TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_b));
+    });
+}
+
+// Regression tests for nil as key in maps (Clojure-compatible behavior)
+// In Clojure, nil is a valid key in maps: (get {nil "value"} nil) => "value"
+
+// Test: nil can be used as key with assoc
+TEST(test_map_assoc_nil_key) {
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = map_empty();
+        
+        // assoc nil key with value
+        CljObject *value = (CljObject*)intern_symbol(NULL, "nil-value");
+        RETAIN(value);
+        map = map_assoc(map, NULL, (ID)value);
+        TEST_ASSERT_NOT_NULL(map);
+        TEST_ASSERT_EQUAL_INT(1, map->count);
+        
+        // get nil key should return the value
+        CljObject *result = (CljObject*)map_get(map, NULL, NULL);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_EQUAL_PTR(value, result);
+        
+        RELEASE((CljObject*)map);
+        RELEASE(value);
+    });
+}
+
+// Test: nil can be used as key in map literals
+TEST(test_map_literal_nil_key) {
+    WITH_AUTORELEASE_POOL({
+        // Create map literal with nil key: {nil "nil-value"}
+        CljObject *result = eval_string("{nil \"nil-value\"}", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(1, map->count);
+        
+        // get nil key should return "nil-value"
+        CljObject *value = (CljObject*)eval_string("(get {nil \"nil-value\"} nil)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(value);
+        TEST_ASSERT_TRUE(TAG(value) == CLJ_STRING);
+        
+        CljString *str = as_clj_string(value);
+        TEST_ASSERT_NOT_NULL(str);
+        TEST_ASSERT_EQUAL_STRING("nil-value", clj_string_data(str));
+    });
+}
+
+// Test: get with nil key returns value when nil key exists
+TEST(test_map_get_nil_key_exists) {
+    WITH_AUTORELEASE_POOL({
+        // Create map with nil key using assoc
+        CljObject *result = eval_string("(assoc {} nil \"nil-value\")", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        // get nil key should return "nil-value"
+        CljObject *value = eval_string("(get (assoc {} nil \"nil-value\") nil)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(value);
+        TEST_ASSERT_TRUE(TAG(value) == CLJ_STRING);
+        
+        CljString *str = as_clj_string(value);
+        TEST_ASSERT_NOT_NULL(str);
+        TEST_ASSERT_EQUAL_STRING("nil-value", clj_string_data(str));
+    });
+}
+
+// Test: get with missing key returns nil (not found)
+TEST(test_map_get_missing_key_returns_nil) {
+    WITH_AUTORELEASE_POOL({
+        // Create map without nil key
+        CljObject *result = eval_string("(assoc {} :key \"value\")", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        // get missing key should return nil
+        CljObject *value = eval_string("(get {:key \"value\"} :missing)", g_test_eval_state);
+        // nil is represented as NULL in tiny-clj
+        TEST_ASSERT_NULL(value);
+    });
+}
+
+// Test: map_contains with nil key
+TEST(test_map_contains_nil_key) {
+    WITH_AUTORELEASE_POOL({
+        // Create map with nil key
+        CljMap *map = map_empty();
+        CljObject *value = (CljObject*)intern_symbol(NULL, "nil-value");
+        RETAIN(value);
+        map = map_assoc(map, NULL, (ID)value);
+        TEST_ASSERT_NOT_NULL(map);
+        
+        // map_contains should return true for nil key
+        int contains = map_contains(map, NULL);
+        TEST_ASSERT_EQUAL_INT(1, contains);
+        
+        RELEASE((CljObject*)map);
+        RELEASE(value);
+    });
+}
+
+// Test: map_contains with nil key when key doesn't exist
+TEST(test_map_contains_nil_key_not_exists) {
+    WITH_AUTORELEASE_POOL({
+        // Create map without nil key
+        CljMap *map = map_empty();
+        CljObject *key = (CljObject*)intern_symbol(NULL, ":key");
+        CljObject *value = (CljObject*)intern_symbol(NULL, "value");
+        RETAIN(key);
+        RETAIN(value);
+        map = map_assoc(map, (ID)key, (ID)value);
+        TEST_ASSERT_NOT_NULL(map);
+        
+        // map_contains should return false for nil key
+        int contains = map_contains(map, NULL);
+        TEST_ASSERT_EQUAL_INT(0, contains);
+        
+        RELEASE((CljObject*)map);
+        RELEASE(key);
+        RELEASE(value);
+    });
+}
+
+// Test: nil key and nil value in same map
+TEST(test_map_nil_key_nil_value) {
+    WITH_AUTORELEASE_POOL({
+        // Create map with nil key and nil value
+        CljMap *map = map_empty();
+        map = map_assoc(map, NULL, NULL);
+        TEST_ASSERT_NOT_NULL(map);
+        TEST_ASSERT_EQUAL_INT(1, map->count);
+        
+        // get nil key should return nil (NULL)
+        CljObject *result = (CljObject*)map_get(map, NULL, NULL);
+        TEST_ASSERT_NULL(result);
+        
+        // map_contains should return true
+        int contains = map_contains(map, NULL);
+        TEST_ASSERT_EQUAL_INT(1, contains);
+        
+        RELEASE((CljObject*)map);
+    });
+}
+
+// Test: map literal with nil key and regular key
+TEST(test_map_literal_nil_and_regular_key) {
+    WITH_AUTORELEASE_POOL({
+        // Create map literal: {nil "nil-value" :key "key-value"}
+        CljObject *result = eval_string("{nil \"nil-value\" :key \"key-value\"}", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(2, map->count);
+        
+        // get nil key should return "nil-value"
+        CljObject *nil_value = eval_string("(get {nil \"nil-value\" :key \"key-value\"} nil)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(nil_value);
+        TEST_ASSERT_TRUE(TAG(nil_value) == CLJ_STRING);
+        CljString *nil_str = as_clj_string(nil_value);
+        TEST_ASSERT_NOT_NULL(nil_str);
+        TEST_ASSERT_EQUAL_STRING("nil-value", clj_string_data(nil_str));
+        
+        // get :key should return "key-value"
+        CljObject *key_value = eval_string("(get {nil \"nil-value\" :key \"key-value\"} :key)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(key_value);
+        TEST_ASSERT_TRUE(TAG(key_value) == CLJ_STRING);
+        CljString *key_str = as_clj_string(key_value);
+        TEST_ASSERT_NOT_NULL(key_str);
+        TEST_ASSERT_EQUAL_STRING("key-value", clj_string_data(key_str));
+    });
+}
+
+// Test: Verify that nil key in map literal is stored as NULL, not SYM_NIL
+TEST(test_map_literal_nil_key_stored_as_null) {
+    WITH_AUTORELEASE_POOL({
+        // Create map literal with nil key
+        CljObject *result = eval_string("{nil \"test\"}", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+        
+        CljMap *map = (CljMap*)result;
+        TEST_ASSERT_EQUAL_INT(1, map->count);
+        
+        // Check that the key is NULL, not SYM_NIL
+        ID stored_key = KV_KEY(map->data, 0);
+        TEST_ASSERT_NULL(stored_key);  // Key should be NULL, not SYM_NIL
+        
+        // Verify that get with NULL key works
+        ID value = map_get(map, NULL, NULL);
+        TEST_ASSERT_NOT_NULL(value);
+        TEST_ASSERT_TRUE(TAG(value) == CLJ_STRING);
+    });
+}
+
+// Test: (get {nil "nil-value"} nil) should return "nil-value"
+// This test specifically checks the issue where get returns nil instead of the value
+TEST(test_get_nil_key_from_map_literal) {
+    WITH_AUTORELEASE_POOL({
+        // Create map with nil key: {nil "nil-value"}
+        CljObject *map_obj = eval_string("{nil \"nil-value\"}", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(map_obj);
+        TEST_ASSERT_TRUE(TAG(map_obj) == CLJ_MAP);
+        
+        CljMap *map = (CljMap*)map_obj;
+        TEST_ASSERT_EQUAL_INT(1, map->count);
+        
+        // Verify the key is stored as NULL (not SYM_NIL)
+        ID stored_key = KV_KEY(map->data, 0);
+        TEST_ASSERT_NULL_MESSAGE(stored_key, "nil key should be stored as NULL, not SYM_NIL");
+        
+        // Now test get: (get {nil "nil-value"} nil) should return "nil-value"
+        CljObject *result = eval_string("(get {nil \"nil-value\"} nil)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "(get {nil \"nil-value\"} nil) should return \"nil-value\", not nil");
+        
+        if (result) {
+            TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_STRING, "Result should be a string");
+            CljString *str = as_clj_string(result);
+            TEST_ASSERT_NOT_NULL(str);
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("nil-value", clj_string_data(str), 
+                "Result should be \"nil-value\"");
+        }
     });
 }
