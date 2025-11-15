@@ -31,7 +31,6 @@
 #include "../function.h"
 #include "../function_call.h"
 #include "../byte_array.h"
-#include "../exception.h"
 #include "../meta.h"
 #include "../runtime.h"
 #include "../parser.h"

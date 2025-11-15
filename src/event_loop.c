@@ -12,7 +12,6 @@
 #include <stdbool.h>
 #include <sys/time.h>
 
-
 // Task Map keys (static keywords, similar to SYM_IF etc.)
 static CljSymbol *KW_FN;
 static CljSymbol *KW_RESULT_CHAN;
