@@ -48,6 +48,21 @@ Active/Next
 
 Next Priority
 -------------
+- Async Programming & Event Loop: ✅ COMPLETED
+  - Go-Blöcke (go special form) für asynchrones kooperatives Multitasking
+  - Event Loop/Runloop mit FIFO-Queue für Task-Verwaltung
+  - Result-Channel-Support für Go-Blöcke
+  - Manuelle Ausführung über `(run-next-task)` Builtin
+  - Integration in REPL für automatische Event-Loop-Verarbeitung
+  - Exception-sichere Ausführung mit WITH_AUTORELEASE_POOL
+- Timer Functionality: ✅ COMPLETED
+  - `(schedule delay-ms fn)` - Einmalige verzögerte Ausführung
+  - `(schedule-periodic delay-ms period-ms fn)` - Periodische Ausführung
+  - `(cancel-timer timer-id)` - Timer-Abbruch anhand ID
+  - Zeitgesteuerte Queue mit sortierter Einfügung
+  - Transiente Vektoren für effiziente Timer-Verwaltung
+  - STM32-kompatibel und in Embedded-Builds enthalten
+  - Umfassende Timer-Tests (15+ Testfälle)
 - Core Control Flow: `(let)` Implementation: ✅ COMPLETED
   - Implement `(let)` special form for local variable binding
   - Support binding pairs: `(let [var1 val1 var2 val2 ...] body)`
@@ -81,7 +96,7 @@ Next Priority
   - JUnit-Style Test-Output mit TRY/CATCH Exception-Handling
   - Test-Counting bei unhandled Exceptions gefixt
   - High-Level API statt Low-Level eval_list()
-  - 330 Tests, 0 Failures, 0 Ignored
+  - 495 Tests, 0 Failures, 0 Ignored
   - Remaining: Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
   - Remaining: Implement individual test execution: `./unity-tests memory allocation`
   - Remaining: Add CTest integration for CI/CD pipeline

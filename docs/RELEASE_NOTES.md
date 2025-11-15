@@ -2,6 +2,29 @@
 
 ## Latest Updates (Recent Commits)
 
+### Async Programming & Event Loop (Latest)
+- **Go-Blöcke (go special form)**: Implementierung von asynchronen Go-Blöcken für kooperative Multitasking
+  - `(go body)` - Wrappt den Body in eine nullstellige Funktion und reiht sie in die Event-Loop-Queue ein
+  - FIFO-Queue für Task-Verwaltung mit manueller Ausführung über `(run-next-task)`
+  - Result-Channel-Support für Rückgabewerte von Go-Blöcken
+  - Vereinfachte, minimal-kompatible Version im Vergleich zu Clojures core.async
+  - Integration in REPL: Event-Loop wird automatisch während REPL-Zyklen verarbeitet
+- **Event Loop/Runloop**: Zentrale Event-Loop-Implementierung für asynchrone Task-Verarbeitung
+  - `event_loop_enqueue()` - Fügt Go-Blöcke zur Queue hinzu
+  - `event_loop_run_next()` - Führt den nächsten Task aus (FIFO-Reihenfolge)
+  - `event_loop_clear()` - Leert die Queue für Test-Isolation
+  - Automatische Timer-Verarbeitung während Task-Ausführung
+  - Exception-sichere Ausführung mit WITH_AUTORELEASE_POOL
+- **Timer-Funktionalität**: Clojure-kompatible Timer-API für verzögerte und periodische Ausführung
+  - `(schedule delay-ms fn)` - Führt eine Funktion einmal nach `delay-ms` Millisekunden aus
+  - `(schedule-periodic delay-ms period-ms fn)` - Führt eine Funktion periodisch aus
+  - `(cancel-timer timer-id)` - Bricht einen Timer anhand seiner ID ab
+  - Timer-IDs werden als Integer zurückgegeben und können zum Abbrechen verwendet werden
+  - Zeitgesteuerte Queue mit sortierter Einfügung für effiziente Timer-Verarbeitung
+  - Transiente Vektoren für effiziente Timer-Verwaltung im Runtime
+  - Umfassende Timer-Tests mit 15+ Testfällen
+  - Alle Timer-Funktionen sind STM32-kompatibel und in Embedded-Builds enthalten
+
 ### Code Refactoring & Architecture Improvements (Latest)
 - **Object.c Refactoring**: Auslagerung von Funktionen aus object.c in thematische Dateien
   - String-Formatierung (to_string, pr_str, print_str) nach strings.c
@@ -15,7 +38,9 @@
   - Alle Warnungen behoben (const char* statt char*)
 - **Code Quality**: Entfernung redundanter eval-Funktionen und Memory-Management-Optimierungen
 - **Symbol Refactoring**: Symbol-Tabellen-Funktionen von object.c nach symbol.c verschoben
-- **Test Coverage**: 330 Tests, 0 Failures, 0 Ignored
+- **Type System Improvements**: `as_fixnum` gibt jetzt `int` statt `int32_t` zurück für bessere Konsistenz
+- **Code Cleanup**: Entfernung doppelter Includes und falscher `unused`-Attribute
+- **Test Coverage**: 495 Tests, 0 Failures, 0 Ignored
 
 ### Atom Implementation & Clojure Compatibility (Recent)
 - **Atom Data Type**: Implementierung von Clojure-Atom mit Test-First-Ansatz
@@ -54,14 +79,14 @@
 - **nth Enhancement**: `nth` now supports 3 arguments (with default value for out-of-bounds access)
 - **Event Loop Fix**: Fixed double RELEASE bug in `event_loop_run_next` that caused premature channel deallocation
 - **Code Cleanup**: Removed debug output, duplicate tests, and simplified comments
-- **Test Coverage**: All 196 tests passing (0 failures)
+- **Test Coverage**: All 495 tests passing (0 failures)
 
 ### Documentation Cleanup & Testing Improvements
 - **Documentation Consolidation**: Removed 25 unused markdown files, keeping only documented files
 - **Testing Framework**: Enhanced TESTING_GUIDE.md with efficient debugging workflows
 - **Test Consolidation**: Moved CljValue tests to dedicated test_values.c file
 - **Exception Handling**: Fixed autorelease pool exception propagation bug
-- **Test Coverage**: All 145 tests now pass successfully
+- **Test Coverage**: All 495 tests now pass successfully
 
 ### Exception Handling Refactoring
 - **DRY Principle**: Centralized exception throwing with `throw_exception_object()`
@@ -119,4 +144,4 @@
 - UTF-8 support: validation & iteration only; normalization intentionally omitted.
 - Singletons are never autoreleased; exceptions follow explicit ownership rules.
 - Code architecture: object.c wurde deutlich reduziert durch Auslagerung in thematische Dateien (strings.c, exception.c, function.c, environment.c, equality.c, meta.c).
-- Test coverage: 330 Tests, 0 Failures, 0 Ignored - alle Tests bestehen nach Refactoring.
+- Test coverage: 495 Tests, 0 Failures, 0 Ignored - alle Tests bestehen nach Refactoring.
