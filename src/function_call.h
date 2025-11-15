@@ -33,33 +33,6 @@ typedef struct {
     RecurContext *recur;   // Recur state (can be NULL if not in recur context)
 } EvalContext;
 
-// Helper functions for context initialization (DRY)
-static inline EvalEnv eval_env_create(CljMap *closure_env, EvalState *st) {
-    return (EvalEnv){.closure_env = closure_env, .st = st};
-}
-
-static inline ParamContext param_context_create(ID *params, ID *values, int param_count) {
-    return (ParamContext){.params = params, .values = values, .param_count = param_count};
-}
-
-static inline RecurContext recur_context_create(ID *recur_args, int *recur_arg_count) {
-    return (RecurContext){.recur_args = recur_args, .recur_arg_count = recur_arg_count};
-}
-
-static inline EvalContext eval_context_create(ParamContext *params, EvalEnv *env, RecurContext *recur) {
-    return (EvalContext){.params = params, .env = env, .recur = recur};
-}
-
-// Convenience function for common case: context with params and env, no recur
-static inline EvalContext eval_context_create_simple(ParamContext *params, EvalEnv *env) {
-    return eval_context_create(params, env, NULL);
-}
-
-// Convenience function for context with params, env, and recur
-static inline EvalContext eval_context_create_with_recur(ParamContext *params, EvalEnv *env, RecurContext *recur) {
-    return eval_context_create(params, env, recur);
-}
-
 // Erweiterte Funktionsaufruf-Funktionen
 ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st);
 ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx);

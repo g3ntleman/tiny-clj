@@ -205,7 +205,7 @@ static inline void free_obj_array(ID *array, CljObject **stack_buffer) {
 }
 
 /** @brief Get raw nth element from a list (0=head). Returns NULL if out of bounds */
-static CljObject* list_get_element(CljList *list, int index) {
+static inline CljObject* list_get_element(CljList *list, int index) {
     if (!list || index < 0) return NULL;
         CljList *node = list;
     if (index == 0) return LIST_FIRST(node);
@@ -678,14 +678,11 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             recur_args[i] = NULL;
         }
         
-        // Evaluate function body
-        // Pass pointer to local recur state - nested functions will have their own stack frames
-        // Get parameter array pointer directly (no copying needed)
-        ID *params_array_loop_ptr = vector_as_array(func->params);
-        ParamContext param_ctx = param_context_create(params_array_loop_ptr, current_args, current_argc);
-        EvalEnv env_ctx = eval_env_create(call_env, st);  // Use call_env instead of func->closure_env
-        RecurContext recur_ctx = recur_context_create(recur_args, &recur_arg_count);
-        EvalContext ctx = eval_context_create_with_recur(&param_ctx, &env_ctx, &recur_ctx);
+        // Evaluate function body with context
+        ParamContext param_ctx = {.params = params_array, .values = current_args, .param_count = current_argc};
+        EvalEnv env_ctx = {.closure_env = call_env, .st = st};
+        RecurContext recur_ctx = {.recur_args = recur_args, .recur_arg_count = &recur_arg_count};
+        EvalContext ctx = {.params = &param_ctx, .env = &env_ctx, .recur = &recur_ctx};
         // CRITICAL: No TRY/CATCH needed here - exceptions are caught by outer handlers
         // If an exception is thrown, longjmp will jump to the outer handler and this function
         // will never return, so the loop will not continue
@@ -712,11 +709,9 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             
             // CRITICAL: Recreate call_env with new arguments for recur iteration
             // eval_body_with_params uses call_env for parameter lookups, so we must update it
-            // Get parameter array pointer directly (no copying needed)
-            ID *params_array_recur_ptr = vector_as_array(func->params);
             CljMap *new_call_env = env_extend_stack(
                 func->closure_env, 
-                params_array_recur_ptr, 
+                params_array, 
                 (ID*)current_args, 
                 current_argc
             );
