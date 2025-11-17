@@ -1596,12 +1596,10 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (!map) return;
     
     // Iterate through all mappings in source namespace
-    for (int i = 0; i < map->count; i++) {
-        CljObject *key = KV_KEY(map->data, i);
-        CljObject *val = (CljObject*)KV_VALUE(map->data, i);
+    MAP_FOR_EACH(map, key, val) {
         if (key && val) {
             // Copy to target namespace
-            ns_define(target_ns, key, val);
+            ns_define(target_ns, key, (CljObject*)val);
         }
     }
 }

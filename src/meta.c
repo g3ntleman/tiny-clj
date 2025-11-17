@@ -171,10 +171,7 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
     RETAIN(result);
     
     // Add location metadata entries only if they don't exist in existing map
-    for (int i = 0; i < location_map->count; i++) {
-        CljObject *key = KV_KEY(location_map->data, i);
-        CljObject *value = KV_VALUE(location_map->data, i);
-        
+    MAP_FOR_EACH(location_map, key, value) {
         if (!key) continue;
         
         // Check if key already exists in existing map

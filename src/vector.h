@@ -99,6 +99,6 @@ ID vector_persistent(CljVector *tvec);
 #define VECTOR_FOR_EACH(vector, elem_var) \
     for (int _i = 0, _cnt = vector_count(vector); (vector) && _i < _cnt; ++_i) \
         for (ID *_data_ptr = vector_as_array(vector); _data_ptr; _data_ptr = NULL) \
-            for (__auto_type elem_var = _data_ptr[_i]; _data_ptr; _data_ptr = NULL)
+            for (ID elem_var = _data_ptr[_i]; _data_ptr; _data_ptr = NULL)
 
 #endif
