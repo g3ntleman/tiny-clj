@@ -36,7 +36,7 @@ static void search_namespace_callback(ID key, ID value) {
     
     CljNamespace *ns = (CljNamespace*)value;
     if (ns && ns != g_ns_search_ctx->clojure_core_cache && ns->mappings) {
-        CljObject *found = (CljObject*)map_get((CljValue)ns->mappings, (CljValue)g_ns_search_ctx->sym, NULL);
+        CljObject *found = (CljObject*)map_get(ns->mappings, g_ns_search_ctx->sym, NULL);
         if (found && !g_ns_search_ctx->result) {
             g_ns_search_ctx->result = found;
         }
@@ -208,7 +208,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
     CljSymbol *name_symbol = intern_symbol(NULL, name);
     if (!name_symbol) return NULL;
     
-    CljObject *ns_obj = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_symbol, NULL);
+    CljObject *ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
     if (ns_obj) {
         return (CljNamespace*)ns_obj;
     }
@@ -268,12 +268,12 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // CRITICAL: Always check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
-    ID v = map_get((CljValue)current_ns->mappings, sym, NULL);
+    ID v = map_get(current_ns->mappings, sym, NULL);
     if (v) {
         // Found in current namespace - update cache and return
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
         if (g_resolve_cache) {
-            ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            ID updated_cache = map_assoc(g_resolve_cache, sym, v);
             ASSIGN(g_resolve_cache, updated_cache);
         }
         return v;
@@ -281,7 +281,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // Not in current namespace - check cache (fast path for repeated lookups)
     if (g_resolve_cache) {
-        ID cached = map_get((CljValue)g_resolve_cache, (CljValue)sym, NULL);
+        ID cached = map_get(g_resolve_cache, sym, NULL);
         if (cached) {
             return cached;
         }
@@ -289,11 +289,11 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
 
     // Search clojure.core first (most common)
     if (g_runtime.clojure_core_cache && g_runtime.clojure_core_cache->mappings) {
-        v = (CljObject*)map_get((CljValue)g_runtime.clojure_core_cache->mappings, (CljValue)sym, NULL);
+        v = (CljObject*)map_get(g_runtime.clojure_core_cache->mappings, sym, NULL);
         if (v) {
             // Cache the result
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-            ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            ID updated_cache = map_assoc(g_resolve_cache, sym, v);
             ASSIGN(g_resolve_cache, updated_cache);
             return v;
         }
@@ -320,7 +320,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         if (search_ctx.result) {
             v = search_ctx.result;
             // Cache the result
-            (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            (void)map_assoc(g_resolve_cache, sym, v);
             return v;
         }
     }
@@ -350,7 +350,7 @@ void ns_register(CljNamespace *ns) {
     }
     
     // Check if namespace is already registered
-    CljObject *existing = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
+    CljObject *existing = map_get(g_runtime.ns_registry, ns->name, NULL);
     if (existing == (CljObject*)ns) {
         return; // Already registered
     }
@@ -388,7 +388,7 @@ CljNamespace* ns_find(const char *name) {
     CljSymbol *name_symbol = intern_symbol(NULL, name);
     if (!name_symbol) return NULL;
     
-    CljObject *ns_obj = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_symbol, NULL);
+    CljObject *ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
     return (CljNamespace*)ns_obj;
 }
 
@@ -448,11 +448,11 @@ void evalstate_free(EvalState *st) {
     // Release any objects stored in EvalState
     // Note: expr and result are typically autoreleased, but we should clean them up
     // to prevent objects from leaking between tests
-    if (st->expr && !IS_IMMEDIATE((CljValue)st->expr)) {
+    if (st->expr && !IS_IMMEDIATE(st->expr)) {
         RELEASE(st->expr);
         st->expr = NULL;
     }
-    if (st->result && !IS_IMMEDIATE((CljValue)st->result)) {
+    if (st->result && !IS_IMMEDIATE(st->result)) {
         RELEASE(st->result);
         st->result = NULL;
     }
@@ -513,7 +513,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
             } else {
                 CljSymbol *inc_sym = intern_symbol_global("inc");
                 if (inc_sym) {
-                    CljObject *inc_value = (CljObject*)map_get((CljMap*)clojure_core->mappings, (CljValue)inc_sym, NULL);
+                    CljObject *inc_value = (CljObject*)map_get(clojure_core->mappings, inc_sym, NULL);
                     if (!inc_value) {
                         needs_reload = true;
                     }
@@ -647,7 +647,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     if (g_resolve_cache) {
         // Remove the symbol from cache to force re-resolution
-        ID updated_cache = map_assoc((CljValue)g_resolve_cache, (CljValue)symbol, NULL);
+        ID updated_cache = map_assoc(g_resolve_cache, symbol, NULL);
         ASSIGN(g_resolve_cache, updated_cache);
     }
 }
@@ -662,7 +662,7 @@ CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
     
     // Look up alias in aliases map
-    CljObject *ns_name = (CljObject*)map_get((CljValue)ns->aliases, (CljValue)alias, NULL);
+    CljObject *ns_name = (CljObject*)map_get(ns->aliases, alias, NULL);
     return ns_name;
 }
 
