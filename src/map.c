@@ -60,11 +60,12 @@ ID map_get(CljMap *map, ID key, ID not_found) {
   // Note: key can be NULL (nil) - that's a valid key in Clojure!
   CljObject *key_obj = (CljObject*)key;
   
-  for (int i = 0; i < map->count; i++) {
-    CljObject *stored_key = KV_KEY(map->data, i);
+  ID found_value = not_found;
+  MAP_FOR_EACH(map, stored_key, value) {
     // Fast path: pointer comparison first (for interned symbols and nil keys)
     if (stored_key == key_obj) {
-      return KV_VALUE(map->data, i);
+      found_value = (ID)value;
+      break;
     }
     // Fallback: structural comparison for non-interned objects
     if (stored_key && key_obj && clj_equal(stored_key, key_obj)) {
@@ -78,11 +79,12 @@ ID map_get(CljMap *map, ID key, ID not_found) {
             stored_sym && stored_sym->name ? stored_sym->name : "unknown",
             stored_key, key_obj);
       }
-      return KV_VALUE(map->data, i);
+      found_value = (ID)value;
+      break;
     }
   }
   
-  return not_found;
+  return found_value;
 }
 
 
@@ -107,21 +109,25 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   if (map_data->base.rc == 1) {
     // Check if key exists - update value (linear search necessary)
     // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
-    for (int i = 0; i < map_data->count; i++) {
-      CljObject *k = KV_KEY(map_data->data, i);
+    int found_idx = -1;
+    MAP_FOR_EACH(map_data, k, v) {
+      (void)v;  // unused
       // Fast path: pointer comparison first (for interned symbols/keywords)
       if (k == key_obj) {
-        // Key found: update in-place (no branches after this)
-        ASSIGN(KV_VALUE(map_data->data, i), value_obj);
-        return map;  // Return SAME map
+        found_idx = _i;
+        break;
       }
       // Fallback: structural comparison for non-interned objects
       // Note: If key_obj is NULL, k must also be NULL to match (already handled above)
       if (k && key_obj && clj_equal(k, key_obj)) {
-        // Key found: update in-place (no branches after this)
-        ASSIGN(KV_VALUE(map_data->data, i), value_obj);
-        return map;  // Return SAME map
+        found_idx = _i;
+        break;
       }
+    }
+    if (found_idx >= 0) {
+      // Key found: update in-place (no branches after this)
+      ASSIGN(KV_VALUE(map_data->data, found_idx), value_obj);
+      return map;  // Return SAME map
     }
     
     // Key not found: add new entry if capacity allows
@@ -167,26 +173,25 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   bool key_found = false;
   int new_idx = 0;
   
-  for (int i = 0; i < map_data->count; i++) {
-    CljObject *k = KV_KEY(map_data->data, i);
+  MAP_FOR_EACH(map_data, k, v) {
     // Fast path: pointer comparison first (for interned symbols/keywords)
     if (k == key_obj) {
       // Key found - update value
-      ASSIGN(KV_KEY(new_map->data, new_idx), KV_KEY(map_data->data, i));
+      ASSIGN(KV_KEY(new_map->data, new_idx), k);
       ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
       key_found = true;
       new_idx++;
     } else if (k && key_obj && clj_equal(k, key_obj)) {
       // Key found - update value (structural comparison)
       // Note: If key_obj is NULL, k must also be NULL to match (already handled above)
-      ASSIGN(KV_KEY(new_map->data, new_idx), KV_KEY(map_data->data, i));
+      ASSIGN(KV_KEY(new_map->data, new_idx), k);
       ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
       key_found = true;
       new_idx++;
     } else {
       // Copy existing entry
-      ASSIGN(KV_KEY(new_map->data, new_idx), KV_KEY(map_data->data, i));
-      ASSIGN(KV_VALUE(new_map->data, new_idx), KV_VALUE(map_data->data, i));
+      ASSIGN(KV_KEY(new_map->data, new_idx), k);
+      ASSIGN(KV_VALUE(new_map->data, new_idx), v);
       new_idx++;
     }
   }
@@ -214,8 +219,7 @@ ID map_keys(CljMap *map) {
   CljVector* keys_vec = make_vector(map_data->count, CLJ_VECTOR);
   if (!keys_vec)
     return NULL;
-  for (int i = 0; i < map_data->count; i++) {
-    CljObject *key = KV_KEY(map_data->data, i);
+  MAP_FOR_EACH(map_data, key, value) {
     if (key) {
       keys_vec = vector_conj(keys_vec, RETAIN(key));
     }
@@ -233,8 +237,8 @@ ID map_vals(CljMap *map) {
   CljVector* vals_vec = make_vector(map_data->count, CLJ_VECTOR);
   if (!vals_vec)
     return NULL;
-  for (int i = 0; i < map_data->count; i++) {
-    CljObject *val = KV_VALUE(map_data->data, i);
+  MAP_FOR_EACH(map_data, key, val) {
+    (void)key;  // unused
     if (val) {
       vals_vec = vector_conj(vals_vec, RETAIN(val));
     }
@@ -292,8 +296,8 @@ int map_contains(CljMap *map, ID key) {
   CljObject *key_obj = (CljObject*)key;
   
   // Use same logic as map_get: pointer equality first, then structural equality
-  for (int i = 0; i < map->count; i++) {
-    CljObject *stored_key = KV_KEY(map->data, i);
+  MAP_FOR_EACH(map, stored_key, value) {
+    (void)value;  // unused
     // Fast path: pointer comparison first (for interned symbols and nil keys)
     if (stored_key == key_obj) {
       return 1;
@@ -356,11 +360,11 @@ CljMap* map_remove(CljMap *map, ID key) {
   }
   
   // Copy all entries except the one at index
-  for (int i = 0; i < map_data->count; i++) {
-    if (i != index) {
+  MAP_FOR_EACH(map_data, k, v) {
+    if (_i != index) {
       // Copy entry to new map
-      ASSIGN(KV_KEY(new_map->data, new_map->count), KV_KEY(map_data->data, i));
-      ASSIGN(KV_VALUE(new_map->data, new_map->count), KV_VALUE(map_data->data, i));
+      ASSIGN(KV_KEY(new_map->data, new_map->count), k);
+      ASSIGN(KV_VALUE(new_map->data, new_map->count), v);
       new_map->count++;
     }
   }
@@ -495,9 +499,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     
     // First, copy all parent bindings in-place
     if (parent_map) {
-        for (int i = 0; i < parent_map->count; i++) {
-            CljObject *key = KV_KEY(parent_map->data, i);
-            CljObject *value = KV_VALUE(parent_map->data, i);
+        MAP_FOR_EACH(parent_map, key, value) {
             if (key) {
                 // Use map_conj for in-place addition (no heap allocation)
                 map_conj(tmap, key, value);

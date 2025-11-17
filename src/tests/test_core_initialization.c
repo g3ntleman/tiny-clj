@@ -35,9 +35,9 @@ TEST(test_core_initialization_inc_loaded) {
     const char *first_symbol_name = NULL;
     bool found_inc = false;
     
-    for (int i = 0; i < map->count; i++) {
-        CljObject *key = KV_KEY(map->data, i);
-        if (key && key && TAG(key) == CLJ_SYMBOL) {
+    MAP_FOR_EACH(map, key, value) {
+        (void)value;  // unused
+        if (key && TAG(key) == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(key);
             symbol_count++;
             if (!first_symbol_name && sym->name) {
@@ -145,9 +145,9 @@ TEST(test_clojure_core_loads_inc) {
             const char *inc_symbol_found = NULL;
             CljObject *inc_symbol_ptr = NULL;
             
-            for (int i = 0; i < map->count; i++) {
-                CljObject *key = KV_KEY(map->data, i);
-                if (key && key && TAG(key) == CLJ_SYMBOL) {
+            MAP_FOR_EACH(map, key, value) {
+                (void)value;  // unused
+                if (key && TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
                     if (!first_symbol && sym->name) {
@@ -267,9 +267,9 @@ TEST(test_def_inc_evaluation_during_load) {
                 CljMap *map = g_test_eval_state->current_ns->mappings;
                 int symbol_count = 0;
                 const char *first_symbol = NULL;
-                for (int i = 0; i < map->count; i++) {
-                    CljObject *key = KV_KEY(map->data, i);
-                    if (key && key && TAG(key) == CLJ_SYMBOL) {
+                MAP_FOR_EACH(map, key, value) {
+                    (void)value;  // unused
+                    if (key && TAG(key) == CLJ_SYMBOL) {
                         CljSymbol *sym = as_symbol(key);
                         symbol_count++;
                         if (!first_symbol && sym->name) {
@@ -383,8 +383,8 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         // Let's check if the key exists by iterating
         CljMap *map = g_test_eval_state->current_ns->mappings;
         bool found_key = false;
-        for (int i = 0; i < map->count; i++) {
-            CljObject *key = KV_KEY(map->data, i);
+        MAP_FOR_EACH(map, key, value) {
+            (void)value;  // unused
             if (key && TAG(key) == CLJ_SYMBOL && (CljSymbol*)key == test_var_sym) {
                 found_key = true;
                 break;

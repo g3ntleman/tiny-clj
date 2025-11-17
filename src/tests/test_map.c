@@ -2,10 +2,11 @@
 #include "../channel.h"
 #include "../symbol.h"
 #include "../kv_macros.h"
+#include "../map.h"
 
 // Test that map_assoc correctly updates values for interned symbol keys
 TEST(test_map_assoc_updates_interned_symbol_key) {
-    CljMap *map = (CljMap*)make_map(2);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(2));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":closed");
     
     // Set initial value
@@ -16,14 +17,12 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
     map = map_assoc(map, intern_symbol(NULL, ":closed"), (CljValue)clj_true);
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)map, (CljValue)kw, NULL)) == SPECIAL_TRUE);
     TEST_ASSERT_EQUAL_INT(1, map->count); // Should update, not add
-    
-    RELEASE((CljObject*)map);
 }
 
 // Test that map_assoc works correctly with channel pattern (like result channels)
 TEST(test_map_assoc_channel_pattern) {
     // Create channel like make_result_channel
-    CljMap *chan = (CljMap*)make_map(2);
+    CljMap *chan = AUTORELEASE((CljMap*)make_map(2));
     chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":value"), NULL);
     chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":closed"), (CljValue)clj_false);
     
@@ -33,8 +32,6 @@ TEST(test_map_assoc_channel_pattern) {
     // Verify closed is true
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     TEST_ASSERT_TRUE(as_special((CljValue)map_get((CljMap*)chan, (CljValue)kw_closed, NULL)) == SPECIAL_TRUE);
-    
-    RELEASE((CljObject*)chan);
 }
 
 // Test that ASSIGN works with Immediates (clj_true, clj_false, fixnums)
@@ -70,7 +67,7 @@ TEST(test_assign_with_immediates) {
 
 // Test that ASSIGN with Immediates works in map context
 TEST(test_assign_immediates_in_map) {
-    CljMap *map = (CljMap*)make_map(4);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Add immediate values using ASSIGN pattern
@@ -98,8 +95,6 @@ TEST(test_assign_immediates_in_map) {
     TEST_ASSERT_TRUE(as_special(val4) == SPECIAL_FALSE);
     
     TEST_ASSERT_EQUAL_INT(1, map->count); // Should update, not add
-    
-    RELEASE((CljObject*)map);
 }
 
 // Test that intern_symbol returns same pointer for same symbol
@@ -118,7 +113,7 @@ TEST(test_intern_symbol_consistency_for_closed) {
 
 // Test that map_assoc works when called from different contexts
 TEST(test_map_assoc_with_different_intern_calls) {
-    CljMap *map = (CljMap*)make_map(4);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
     
     // Create channel like make_result_channel does
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
@@ -144,13 +139,11 @@ TEST(test_map_assoc_with_different_intern_calls) {
     
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(2, map->count);
-    
-    RELEASE((CljObject*)map);
 }
 
 // Test that map_assoc works with NULL value
 TEST(test_map_assoc_with_null_value) {
-    CljMap *map = (CljMap*)make_map(4);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":value");
     
     // Set NULL value
@@ -170,14 +163,12 @@ TEST(test_map_assoc_with_null_value) {
     TEST_ASSERT_TRUE(val3 == NULL);
     
     TEST_ASSERT_EQUAL_INT(1, map->count);
-    
-    RELEASE((CljObject*)map);
 }
 
 // Test exact channel pattern from make_result_channel and channel_put_and_close
 TEST(test_exact_channel_pattern) {
     // Exact replication of make_result_channel
-    CljMap *chan = (CljMap*)make_map(4);
+    CljMap *chan = AUTORELEASE((CljMap*)make_map(4));
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     chan = map_assoc(chan, (CljValue)kw_value, NULL);
@@ -199,16 +190,15 @@ TEST(test_exact_channel_pattern) {
     TEST_ASSERT_NOT_NULL((CljObject*)closed_final);
     TEST_ASSERT_TRUE(is_special(closed_final));
     TEST_ASSERT_TRUE(as_special(closed_final) == SPECIAL_TRUE);
-    
-    RELEASE((CljObject*)chan);
 }
 
 // Test channel object identity
 TEST(test_channel_object_identity) {
-    CljMap *env = (CljMap*)make_map(4);
+    CljMap *env = AUTORELEASE((CljMap*)make_map(4));
+    (void)env;  // unused
     
     // Create a channel manually
-    CljMap *chan1 = make_result_channel();
+    CljMap *chan1 = AUTORELEASE(make_result_channel());
     TEST_ASSERT_NOT_NULL(chan1);
     
     // Verify it's a map
@@ -230,9 +220,6 @@ TEST(test_channel_object_identity) {
     TEST_ASSERT_NOT_NULL((CljObject*)closed_final);
     TEST_ASSERT_TRUE(is_special(closed_final));
     TEST_ASSERT_TRUE(as_special(closed_final) == SPECIAL_TRUE);
-    
-    RELEASE(env);
-    RELEASE(chan1);
 }
 
 // ============================================================================
@@ -242,7 +229,7 @@ TEST(test_channel_object_identity) {
 // Test that map_assoc works with pointer equality via clj_equal()
 // (verifies that removing redundant fast-path doesn't break functionality)
 TEST(test_map_assoc_with_pointer_equality) {
-    CljMap *map = (CljMap*)make_map(4);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Set initial value
@@ -259,17 +246,15 @@ TEST(test_map_assoc_with_pointer_equality) {
     
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(1, map->count);
-    
-    RELEASE((CljObject*)map);
 }
 
 // Test that map_assoc works with structural equality (non-interned keys)
 TEST(test_map_assoc_with_structural_equality) {
-    CljMap *map = (CljMap*)make_map(4);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
     
     // Create two different string objects with same content
-    CljObject *str1 = (CljObject*)make_string("test-key");
-    CljObject *str2 = (CljObject*)make_string("test-key");
+    CljObject *str1 = AUTORELEASE((CljObject*)make_string("test-key"));
+    CljObject *str2 = AUTORELEASE((CljObject*)make_string("test-key"));
     
     // Set initial value with str1
     map = map_assoc(map, str1, fixnum(42));
@@ -285,16 +270,12 @@ TEST(test_map_assoc_with_structural_equality) {
     
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(1, map->count);
-    
-    RELEASE((CljObject*)map);
-    RELEASE(str1);
-    RELEASE(str2);
 }
 
 // Test that map_get finds symbols bound in let_env
 TEST(test_map_get_finds_let_binding) {
     // Create a map (simulating let_env)
-    CljMap *let_env = (CljMap*)make_map(4);
+    CljMap *let_env = AUTORELEASE((CljMap*)make_map(4));
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "step" (interned)
@@ -324,14 +305,12 @@ TEST(test_map_get_finds_let_binding) {
     CljValue found2 = map_get((CljMap*)let_env, (CljValue)step_sym2, NULL);
     TEST_ASSERT_NOT_NULL(found2);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(found2));
-    
-    RELEASE((CljObject*)let_env);
 }
 
 // Test that map_get uses structural comparison for non-interned symbols
 TEST(test_map_get_structural_comparison) {
     // Create a map
-    CljMap *let_env = (CljMap*)make_map(4);
+    CljMap *let_env = AUTORELEASE((CljMap*)make_map(4));
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "step" (interned)
@@ -353,13 +332,11 @@ TEST(test_map_get_structural_comparison) {
     CljValue found = map_get((CljMap*)let_env, (CljValue)step_sym2, NULL);
     TEST_ASSERT_NOT_NULL(found);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(found));
-    
-    RELEASE((CljObject*)let_env);
 }
 
 // Test that performance is unchanged (clj_equal() already does == check first)
 TEST(test_map_assoc_performance_unchanged) {
-    CljMap *map = (CljMap*)make_map(100);
+    CljMap *map = AUTORELEASE((CljMap*)make_map(100));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Fill map with many entries
@@ -373,8 +350,6 @@ TEST(test_map_assoc_performance_unchanged) {
     CljValue val = (CljValue)map_get((CljMap*)map, (CljValue)kw, NULL);
     TEST_ASSERT_NOT_NULL(val);
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
-    
-    RELEASE((CljObject*)map);
 }
 
 // ============================================================================
@@ -392,7 +367,7 @@ TEST(test_autorelease_does_not_increase_rc) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // AUTORELEASE should NOT increase RC
-        AUTORELEASE((CljValue)map);
+        AUTORELEASE(map);
         TEST_ASSERT_EQUAL(1, map->base.rc);
     });
 }
@@ -404,11 +379,11 @@ TEST(test_retain_increases_rc) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // RETAIN should increase RC
-        RETAIN((CljValue)map);
+        RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // Cleanup
-        RELEASE((CljValue)map);
+        RELEASE(map);
         TEST_ASSERT_EQUAL(1, map->base.rc);
     });
 }
@@ -418,14 +393,14 @@ TEST(test_autorelease_with_retain) {
         // Test 5: AUTORELEASE + RETAIN combination
         CljMap *map = (CljMap*)make_map(4);
         
-        RETAIN((CljValue)map);
+        RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
-        AUTORELEASE((CljValue)map);
+        AUTORELEASE(map);
         TEST_ASSERT_EQUAL(2, map->base.rc); // Should stay 2
         
         // Cleanup
-        RELEASE((CljValue)map);
+        RELEASE(map);
     });
 }
 
@@ -435,9 +410,9 @@ TEST(test_multiple_autorelease_same_object) {
         // Test 6: Multiple AUTORELEASE same object
         CljMap *map = (CljMap*)make_map(4);
         
-        AUTORELEASE((CljValue)map);
-        AUTORELEASE((CljValue)map);
-        AUTORELEASE((CljValue)map);
+        AUTORELEASE(map);
+        AUTORELEASE(map);
+        AUTORELEASE(map);
         
         TEST_ASSERT_EQUAL(1, map->base.rc); // Should stay 1
         
@@ -507,7 +482,7 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         map = map_assoc(map, fixnum(1), fixnum(10));
         
         // RETAIN to increase RC
-        RETAIN((CljValue)map);
+        RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // Now COW should trigger
@@ -532,7 +507,7 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         
         
         // Cleanup
-        RELEASE((CljValue)map);
+        RELEASE(map);
     });
 }
 
@@ -547,7 +522,7 @@ TEST(test_cow_original_map_unchanged) {
         TEST_ASSERT_EQUAL(2, map->count);
         
         // RETAIN to trigger COW
-        RETAIN((CljValue)map);
+        RETAIN(map);
         CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
         
         // Original should be unchanged
@@ -560,7 +535,7 @@ TEST(test_cow_original_map_unchanged) {
         
         
         // Cleanup
-        RELEASE((CljValue)map);
+        RELEASE(map);
     });
 }
 
@@ -570,7 +545,7 @@ TEST(test_cow_with_autorelease) {
         // Test 4: AUTORELEASE mit COW
         CljMap *map = (CljMap*)make_map(4);
         
-        AUTORELEASE((CljValue)map);
+        AUTORELEASE(map);
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // COW with AUTORELEASE
@@ -594,12 +569,12 @@ TEST(test_cow_memory_leak_detection) {
         TEST_ASSERT_EQUAL(4, map->count);
         
         // RETAIN to trigger COW
-        RETAIN((CljValue)map);
+        RETAIN(map);
         CljMap *new_map = map_assoc(map, fixnum(5), fixnum(50));
         AUTORELEASE(new_map);
         
         // Cleanup
-        RELEASE((CljValue)map);
+        RELEASE(map);
         
     });
 }
@@ -709,7 +684,7 @@ TEST(test_cow_actual_cow_demonstration) {
         map = map_assoc(map, fixnum(2), fixnum(20));
         
         // RETAIN to trigger COW
-        RETAIN((CljValue)map);
+        RETAIN(map);
         TEST_ASSERT_EQUAL(2, map->base.rc);
         
         // COW operation
@@ -734,7 +709,7 @@ TEST(test_cow_actual_cow_demonstration) {
         
         
         // Cleanup
-        RELEASE((CljValue)map);
+        RELEASE(map);
     });
 }
 
@@ -776,7 +751,7 @@ TEST(test_update_missing_key_simple) {
     CljObject *pairs[2];
     pairs[0] = (CljObject*)intern_symbol(NULL, ":a");
     pairs[1] = (CljObject*)fixnum(1);
-    CljMap *map = make_map_from_stack(pairs, 1);
+    CljMap *map = AUTORELEASE(make_map_from_stack(pairs, 1));
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
@@ -812,8 +787,6 @@ TEST(test_update_missing_key_simple) {
         TEST_ASSERT_TRUE(is_fixnum(val_a));
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_a));
     }
-    
-    RELEASE((CljObject*)map);
 }
 
 // Test if (if nil 0 0) returns 0 correctly
@@ -956,7 +929,7 @@ TEST(test_map_assoc_direct) {
     CljObject *pairs[2];
     pairs[0] = (CljObject*)intern_symbol(NULL, ":a");
     pairs[1] = (CljObject*)fixnum(1);
-    CljMap *map = make_map_from_stack(pairs, 1);
+    CljMap *map = AUTORELEASE(make_map_from_stack(pairs, 1));
     
     
     // Add a new key :b with value 2
@@ -982,8 +955,6 @@ TEST(test_map_assoc_direct) {
         TEST_ASSERT_TRUE(is_fixnum(retrieved_val_a));
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(retrieved_val_a));
     }
-    
-    RELEASE((CljObject*)map);
 }
 
 // ============================================================================
@@ -997,17 +968,15 @@ TEST(test_map_transient_comprehensive) {
     TEST_ASSERT_NULL(result);
     
     // Test 2: Empty map conversion
-    CljMap *empty_map = (CljMap*)make_map(4);
+    CljMap *empty_map = AUTORELEASE((CljMap*)make_map(4));
     TEST_ASSERT_EQUAL_INT(0, empty_map->count);
-    CljMap *empty_transient = map_transient(empty_map);
+    CljMap *empty_transient = AUTORELEASE(map_transient(empty_map));
     TEST_ASSERT_NOT_NULL(empty_transient);
     TEST_ASSERT_TRUE((CljObject*)empty_transient && TAG((CljObject*)empty_transient) == CLJ_MAP_TRANSIENT);
     TEST_ASSERT_EQUAL_INT(0, empty_transient->count);
-    RELEASE((CljObject*)empty_map);
-    RELEASE((CljObject*)empty_transient);
     
     // Test 3: Map with entries - conversion and data preservation
-    CljMap *persistent_map = (CljMap*)make_map(8);
+    CljMap *persistent_map = AUTORELEASE((CljMap*)make_map(8));
     CljObject *keys[5];
     for (int i = 0; i < 5; i++) {
         char key_name[16];
@@ -1046,10 +1015,6 @@ TEST(test_map_transient_comprehensive) {
     // Test 4: Transient map input returns NULL
     CljMap *result2 = map_transient(transient_map);
     TEST_ASSERT_NULL(result2);
-    
-    // Cleanup
-    RELEASE((CljObject*)persistent_map);
-    RELEASE((CljObject*)transient_map);
 }
 
 // ============================================================================
@@ -1062,9 +1027,8 @@ TEST(test_map_conj_comprehensive) {
     CljMap *result = map_conj(NULL, (CljValue)intern_symbol(NULL, ":key"), fixnum(42));
     TEST_ASSERT_NULL(result);
     
-    CljMap *tmap = (CljMap*)make_map(4);
-    CljMap *transient = map_transient(tmap);
-    RELEASE((CljObject*)tmap);
+    CljMap *tmap = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *transient = AUTORELEASE(map_transient(tmap));
     
     // Test: map_conj with NULL key should succeed (nil is a valid key in Clojure)
     result = map_conj(transient, NULL, fixnum(42));
@@ -1128,7 +1092,7 @@ TEST(test_map_conj_comprehensive) {
     }
     
     // Test 7: Persistent map with RC=1 (COW case) - should work but not recommended
-    CljMap *persistent = (CljMap*)make_map(4);
+    CljMap *persistent = AUTORELEASE((CljMap*)make_map(4));
     CljObject *key_p = (CljObject*)intern_symbol(NULL, ":p");
     persistent = map_assoc(persistent, (CljValue)key_p, fixnum(10));
     TEST_ASSERT_EQUAL_INT(1, persistent->base.rc);
@@ -1140,17 +1104,13 @@ TEST(test_map_conj_comprehensive) {
         TEST_ASSERT_NOT_NULL(val_p);
         TEST_ASSERT_EQUAL_INT(20, as_fixnum(val_p));
     }
-    
-    // Cleanup
-    RELEASE((CljObject*)transient);
-    RELEASE((CljObject*)persistent);
 }
 
 // Test that map_conj works correctly with interned symbols across different contexts
 // This tests the specific issue where :closed keyword is not found when called from different contexts
 TEST(test_map_conj_with_interned_symbols_across_contexts) {
     // Create transient map (like make_result_channel does)
-    CljMap *tmap = (CljMap*)make_map(4);
+    CljMap *tmap = AUTORELEASE((CljMap*)make_map(4));
     TEST_ASSERT_NOT_NULL(tmap);
     
     // Initialize with :value and :closed (like make_result_channel does)
@@ -1193,15 +1153,12 @@ TEST(test_map_conj_with_interned_symbols_across_contexts) {
     
     // Verify count didn't increase (should update, not add)
     TEST_ASSERT_EQUAL_INT(2, tmap->count);
-    
-    // Cleanup
-    RELEASE((CljObject*)tmap);
 }
 
 // Test that map_conj finds existing keys by pointer equality (interned symbols)
 TEST(test_map_conj_finds_existing_key_by_pointer) {
     // Create transient map
-    CljMap *tmap = (CljMap*)make_map(4);
+    CljMap *tmap = AUTORELEASE((CljMap*)make_map(4));
     TEST_ASSERT_NOT_NULL(tmap);
     
     // Create keyword once
@@ -1231,15 +1188,12 @@ TEST(test_map_conj_finds_existing_key_by_pointer) {
     
     // Verify count didn't increase
     TEST_ASSERT_EQUAL_INT(1, tmap->count);
-    
-    // Cleanup
-    RELEASE((CljObject*)tmap);
 }
 
 // Test that map_conj works correctly with channel pattern (make_result_channel + result_channel_close)
 TEST(test_map_conj_channel_pattern) {
     // Create channel like make_result_channel does
-    CljMap *chan = (CljMap*)make_map(4);
+    CljMap *chan = AUTORELEASE((CljMap*)make_map(4));
     TEST_ASSERT_NOT_NULL(chan);
     
     // Initialize with :value and :closed (like make_result_channel does)
@@ -1275,9 +1229,6 @@ TEST(test_map_conj_channel_pattern) {
     
     // Verify count didn't increase
     TEST_ASSERT_EQUAL_INT(2, chan->count);
-    
-    // Cleanup
-    RELEASE((CljObject*)chan);
 }
 
 // ============================================================================
@@ -1288,7 +1239,7 @@ TEST(test_map_conj_channel_pattern) {
 TEST(test_dissoc_single_key) {
     WITH_AUTORELEASE_POOL({
         // Create map with multiple keys
-        CljMap *map = (CljMap*)make_map(4);
+        CljMap *map = AUTORELEASE((CljMap*)make_map(4));
         CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
         CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");
@@ -1318,8 +1269,6 @@ TEST(test_dissoc_single_key) {
         // Verify :b is removed
         CljValue val_b = map_get((CljMap*)result_map, (CljValue)key_b, NULL);
         TEST_ASSERT_NULL(val_b);
-        
-        RELEASE((CljObject*)map);
     });
 }
 
@@ -1390,10 +1339,10 @@ TEST(test_dissoc_non_existent_key) {
 // Test: nil can be used as key with assoc
 TEST(test_map_assoc_nil_key) {
     WITH_AUTORELEASE_POOL({
-        CljMap *map = map_empty();
+        CljMap *map = AUTORELEASE(map_empty());
         
         // assoc nil key with value
-        CljObject *value = (CljObject*)intern_symbol(NULL, "nil-value");
+        CljObject *value = AUTORELEASE((CljObject*)intern_symbol(NULL, "nil-value"));
         RETAIN(value);
         map = map_assoc(map, NULL, (ID)value);
         TEST_ASSERT_NOT_NULL(map);
@@ -1403,9 +1352,6 @@ TEST(test_map_assoc_nil_key) {
         CljObject *result = (CljObject*)map_get(map, NULL, NULL);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(value, result);
-        
-        RELEASE((CljObject*)map);
-        RELEASE(value);
     });
 }
 
@@ -1488,9 +1434,9 @@ TEST(test_map_contains_nil_key) {
 TEST(test_map_contains_nil_key_not_exists) {
     WITH_AUTORELEASE_POOL({
         // Create map without nil key
-        CljMap *map = map_empty();
-        CljObject *key = (CljObject*)intern_symbol(NULL, ":key");
-        CljObject *value = (CljObject*)intern_symbol(NULL, "value");
+        CljMap *map = AUTORELEASE(map_empty());
+        CljObject *key = AUTORELEASE((CljObject*)intern_symbol(NULL, ":key"));
+        CljObject *value = AUTORELEASE((CljObject*)intern_symbol(NULL, "value"));
         RETAIN(key);
         RETAIN(value);
         map = map_assoc(map, (ID)key, (ID)value);
@@ -1499,10 +1445,6 @@ TEST(test_map_contains_nil_key_not_exists) {
         // map_contains should return false for nil key
         int contains = map_contains(map, NULL);
         TEST_ASSERT_EQUAL_INT(0, contains);
-        
-        RELEASE((CljObject*)map);
-        RELEASE(key);
-        RELEASE(value);
     });
 }
 
@@ -1510,7 +1452,7 @@ TEST(test_map_contains_nil_key_not_exists) {
 TEST(test_map_nil_key_nil_value) {
     WITH_AUTORELEASE_POOL({
         // Create map with nil key and nil value
-        CljMap *map = map_empty();
+        CljMap *map = AUTORELEASE(map_empty());
         map = map_assoc(map, NULL, NULL);
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -1522,8 +1464,6 @@ TEST(test_map_nil_key_nil_value) {
         // map_contains should return true
         int contains = map_contains(map, NULL);
         TEST_ASSERT_EQUAL_INT(1, contains);
-        
-        RELEASE((CljObject*)map);
     });
 }
 
@@ -1606,4 +1546,137 @@ TEST(test_get_nil_key_from_map_literal) {
                 "Result should be \"nil-value\"");
         }
     });
+}
+
+// Test MAP_FOR_EACH macro - iterate over all key-value pairs
+TEST(test_map_for_each_macro) {
+    CljMap *map = AUTORELEASE(make_map(4));
+    
+    // Create some keys and values
+    CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+    CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
+    CljObject *key3 = (CljObject*)intern_symbol(NULL, ":c");
+    
+    CljValue val1 = fixnum(1);
+    CljValue val2 = fixnum(2);
+    CljValue val3 = fixnum(3);
+    
+    // Add key-value pairs to map
+    map = map_assoc(map, (ID)key1, val1);
+    map = map_assoc(map, (ID)key2, val2);
+    map = map_assoc(map, (ID)key3, val3);
+    
+    TEST_ASSERT_EQUAL_INT(3, map_count(map));
+    
+    // Count iterations and verify keys/values
+    int iteration_count = 0;
+    CljObject *found_keys[3] = {NULL, NULL, NULL};
+    CljValue found_values[3] = {NULL, NULL, NULL};
+    
+    MAP_FOR_EACH(map, key, value) {
+        found_keys[iteration_count] = key;
+        found_values[iteration_count] = (CljValue)value;
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(3, iteration_count);
+    
+    // Verify that all keys and values were found
+    bool found_key1 = false, found_key2 = false, found_key3 = false;
+    for (int i = 0; i < 3; i++) {
+        if (found_keys[i] == key1) {
+            found_key1 = true;
+            TEST_ASSERT_EQUAL(val1, found_values[i]);
+        } else if (found_keys[i] == key2) {
+            found_key2 = true;
+            TEST_ASSERT_EQUAL(val2, found_values[i]);
+        } else if (found_keys[i] == key3) {
+            found_key3 = true;
+            TEST_ASSERT_EQUAL(val3, found_values[i]);
+        }
+    }
+    
+    TEST_ASSERT_TRUE(found_key1);
+    TEST_ASSERT_TRUE(found_key2);
+    TEST_ASSERT_TRUE(found_key3);
+}
+
+// Test MAP_FOR_EACH with empty map
+TEST(test_map_for_each_empty_map) {
+    CljMap *map = AUTORELEASE(map_empty());
+    
+    int iteration_count = 0;
+    MAP_FOR_EACH(map, key, value) {
+        (void)key; (void)value;  // unused
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(0, iteration_count);
+}
+
+// Test MAP_FOR_EACH with NULL map (should not crash)
+TEST(test_map_for_each_null_map) {
+    CljMap *map = NULL;
+    
+    int iteration_count = 0;
+    MAP_FOR_EACH(map, key, value) {
+        (void)key; (void)value;  // unused
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(0, iteration_count);
+}
+
+// Test MAP_FOR_EACH with NULL keys and NULL values
+TEST(test_map_for_each_with_null_keys_and_values) {
+    CljMap *map = AUTORELEASE(make_map(4));
+    
+    // Add entries with NULL key and NULL value
+    CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
+    CljObject *key2 = NULL;  // NULL key (nil in Clojure)
+    CljObject *key3 = (CljObject*)intern_symbol(NULL, ":c");
+    
+    CljValue val1 = fixnum(1);
+    CljValue val2 = NULL;  // NULL value
+    CljValue val3 = fixnum(3);
+    
+    // Add key-value pairs to map
+    map = map_assoc(map, (ID)key1, val1);
+    map = map_assoc(map, (ID)key2, val2);  // NULL key, NULL value
+    map = map_assoc(map, (ID)key3, val3);
+    
+    TEST_ASSERT_EQUAL_INT(3, map_count(map));
+    
+    // Count iterations and verify keys/values (including NULL)
+    int iteration_count = 0;
+    CljObject *found_keys[3] = {NULL, NULL, NULL};
+    CljValue found_values[3] = {NULL, NULL, NULL};
+    
+    MAP_FOR_EACH(map, key, value) {
+        found_keys[iteration_count] = key;
+        found_values[iteration_count] = (CljValue)value;
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(3, iteration_count);
+    
+    // Verify that all keys and values were found (including NULL)
+    bool found_key1 = false, found_key2 = false, found_key3 = false;
+    for (int i = 0; i < 3; i++) {
+        if (found_keys[i] == key1) {
+            found_key1 = true;
+            TEST_ASSERT_EQUAL(val1, found_values[i]);
+        } else if (found_keys[i] == key2) {  // key2 is NULL
+            found_key2 = true;
+            TEST_ASSERT_NULL(found_keys[i]);  // Key should be NULL
+            TEST_ASSERT_NULL(found_values[i]);  // Value should be NULL
+        } else if (found_keys[i] == key3) {
+            found_key3 = true;
+            TEST_ASSERT_EQUAL(val3, found_values[i]);
+        }
+    }
+    
+    TEST_ASSERT_TRUE(found_key1);
+    TEST_ASSERT_TRUE(found_key2);  // NULL key should be found
+    TEST_ASSERT_TRUE(found_key3);
 }

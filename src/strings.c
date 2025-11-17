@@ -225,9 +225,7 @@ const char* to_string(CljObject *v) {
                 CljMap *map = as_map(v);
                 if (!map) return strdup("{}");
                 size_t cap = 2; // { }
-                for (int i = 0; i < map->count; i++) {
-                    CljObject *k = KV_KEY(map->data, i);
-                    CljObject *val = KV_VALUE(map->data, i);
+                MAP_FOR_EACH(map, k, val) {
                     if (!k) continue;
                     const char *ks = pr_str(k);
                     const char *vs = pr_str(val);
@@ -237,9 +235,7 @@ const char* to_string(CljObject *v) {
                 char *s = ALLOC(char, cap+1);
                 strcpy(s, "{");
                 bool first = true;
-                for (int i = 0; i < map->count; i++) {
-                    CljObject *k = KV_KEY(map->data, i);
-                    CljObject *val = KV_VALUE(map->data, i);
+                MAP_FOR_EACH(map, k, val) {
                     if (!k) continue;
                     if (!first) strcat(s, ", ");
                     const char *ks = pr_str(k);

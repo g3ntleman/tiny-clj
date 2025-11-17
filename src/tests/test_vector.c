@@ -720,7 +720,7 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         vector_conj((CljVector*)vec, (ID)fixnum(10));
         
         // RETAIN to increase RC
-        RETAIN((CljValue)vec);
+        RETAIN(vec);
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc);
         
         // Now COW should trigger
@@ -739,7 +739,7 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)vector_nth(new_vec_data, 1)));
         
         // Cleanup
-        RELEASE((CljValue)vec);
+        RELEASE(vec);
         RELEASE(new_vec);
     });
 }
@@ -756,7 +756,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // RETAIN to trigger COW
-        RETAIN((CljValue)vec);
+        RETAIN(vec);
         
         // Add more - should trigger COW with growth
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
@@ -775,7 +775,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // Cleanup
-        RELEASE((CljValue)vec);
+        RELEASE(vec);
         RELEASE(new_vec);
     });
 }
@@ -791,7 +791,7 @@ TEST(test_vector_conj_cow_original_unchanged) {
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // RETAIN to trigger COW
-        RETAIN((CljValue)vec);
+        RETAIN(vec);
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
         
         // Original should be unchanged
@@ -807,7 +807,7 @@ TEST(test_vector_conj_cow_original_unchanged) {
         TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)vector_nth(new_vec_data, 2)));
         
         // Cleanup
-        RELEASE((CljValue)vec);
+        RELEASE(vec);
         RELEASE(new_vec);
     });
 }
@@ -823,11 +823,11 @@ TEST(test_vector_conj_cow_memory_leak) {
         vector_conj((CljVector*)vec, (ID)fixnum(30));
         
         // RETAIN to trigger COW
-        RETAIN((CljValue)vec);
+        RETAIN(vec);
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(40));
         
         // Cleanup
-        RELEASE((CljValue)vec);
+        RELEASE(vec);
         RELEASE(new_vec);
         
         // Memory should be clean (no leaks)
@@ -862,12 +862,12 @@ TEST(test_weak_vector_does_not_retain_elements) {
         // If it's the same vector, only release once
         if (new_vec != weak_vec) {
             // New vector was created (capacity grew), old one was already released in vector_assoc
-            RELEASE((CljObject*)new_vec);
+            RELEASE(new_vec);
         } else {
             // Same vector, release once
-            RELEASE((CljObject*)weak_vec);
+            RELEASE(weak_vec);
         }
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 
@@ -890,7 +890,7 @@ TEST(test_weak_vector_does_not_release_elements) {
             int newcap = 16;  // Double the initial capacity
             CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
-                RELEASE((CljObject*)weak_vec);
+                RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
@@ -907,14 +907,14 @@ TEST(test_weak_vector_does_not_release_elements) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // Cleanup
-        RELEASE((CljObject*)weak_vec);
+        RELEASE(weak_vec);
         if (new_vec != weak_vec) {
-            RELEASE((CljObject*)new_vec);
+            RELEASE(new_vec);
         }
         if (popped != new_vec) {
-            RELEASE((CljObject*)popped);
+            RELEASE(popped);
         }
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 
@@ -938,7 +938,7 @@ TEST(test_weak_vector_nth_does_not_retain) {
             int newcap = 16;  // Double the initial capacity
             CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
-                RELEASE((CljObject*)weak_vec);
+                RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
@@ -957,11 +957,11 @@ TEST(test_weak_vector_nth_does_not_retain) {
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
         // Cleanup
-        RELEASE((CljObject*)weak_vec);
+        RELEASE(weak_vec);
         if (new_vec != weak_vec) {
-            RELEASE((CljObject*)new_vec);
+            RELEASE(new_vec);
         }
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 
@@ -992,7 +992,7 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
             int newcap = 16;  // Double the initial capacity
             CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
-                RELEASE((CljObject*)weak_vec);
+                RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
@@ -1001,7 +1001,7 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
             TEST_ASSERT_NOT_NULL(new_vec);
             // For CLJ_VECTOR_WEAK with rc=1, vector_assoc mutates in-place
             if (new_vec != weak_vec) {
-                RELEASE((CljObject*)weak_vec);
+                RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
             // Verify count after each addition
@@ -1017,10 +1017,10 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
         TEST_ASSERT_EQUAL(3, vector_count(weak_vec));
         
         // Cleanup
-        RELEASE((CljObject*)weak_vec);
-        RELEASE((CljObject*)map1);
-        RELEASE((CljObject*)map2);
-        RELEASE((CljObject*)map3);
+        RELEASE(weak_vec);
+        RELEASE(map1);
+        RELEASE(map2);
+        RELEASE(map3);
     });
 }
 
@@ -1043,7 +1043,7 @@ TEST(test_weak_vector_clear_does_not_release_elements) {
             int newcap = 16;  // Double the initial capacity
             CljVector *new_vec = make_vector_copy(weak_vec, newcap);
             if (new_vec) {
-                RELEASE((CljObject*)weak_vec);
+                RELEASE(weak_vec);
                 weak_vec = new_vec;
             }
         }
@@ -1062,11 +1062,11 @@ TEST(test_weak_vector_clear_does_not_release_elements) {
         TEST_ASSERT_EQUAL(0, vector_count(new_vec));
         
         // Cleanup
-        RELEASE((CljObject*)weak_vec);
+        RELEASE(weak_vec);
         if (new_vec != weak_vec) {
-            RELEASE((CljObject*)new_vec);
+            RELEASE(new_vec);
         }
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 
@@ -1245,7 +1245,7 @@ TEST(test_transient_on_transient_returns_same_object) {
         map = map_assoc(map, (ID)key1, fixnum(1));
         map = map_assoc(map, (ID)key2, fixnum(2));
         CljMap *tmap = map_transient(map);
-        RELEASE((CljObject*)map);
+        RELEASE(map);
         TEST_ASSERT_NOT_NULL(tmap);
         TEST_ASSERT_TRUE(TAG((ID)tmap) == CLJ_MAP_TRANSIENT);
         
@@ -1312,7 +1312,98 @@ TEST(test_persistent_on_persistent_returns_same_object) {
         TEST_ASSERT_EQUAL_PTR(map, map_result);  // Should be the same pointer
         TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_MAP);
         
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 
+// Test VECTOR_FOR_EACH macro - iterate over all vector elements
+TEST(test_vector_for_each_macro) {
+    CljVector *vec = AUTORELEASE((CljVector*)make_vector(4, CLJ_VECTOR));
+    
+    // Add elements to vector
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, fixnum(2));
+    vec = vector_conj(vec, fixnum(3));
+    
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    
+    // Count iterations and verify elements
+    int iteration_count = 0;
+    CljValue found_values[3] = {NULL, NULL, NULL};
+    
+    VECTOR_FOR_EACH(vec, elem) {
+        found_values[iteration_count] = (CljValue)elem;
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(3, iteration_count);
+    
+    // Verify that all values were found
+    bool found_val1 = false, found_val2 = false, found_val3 = false;
+    for (int i = 0; i < 3; i++) {
+        if (is_fixnum(found_values[i])) {
+            int val = as_fixnum(found_values[i]);
+            if (val == 1) found_val1 = true;
+            else if (val == 2) found_val2 = true;
+            else if (val == 3) found_val3 = true;
+        }
+    }
+    
+    TEST_ASSERT_TRUE(found_val1);
+    TEST_ASSERT_TRUE(found_val2);
+    TEST_ASSERT_TRUE(found_val3);
+}
+
+// Test VECTOR_FOR_EACH with empty vector
+TEST(test_vector_for_each_empty_vector) {
+    CljVector *vec = AUTORELEASE((CljVector*)make_vector(0, CLJ_VECTOR));
+    
+    int iteration_count = 0;
+    VECTOR_FOR_EACH(vec, elem) {
+        (void)elem;  // unused
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(0, iteration_count);
+}
+
+// Test VECTOR_FOR_EACH with NULL vector (should not crash)
+TEST(test_vector_for_each_null_vector) {
+    CljVector *vec = NULL;
+    
+    int iteration_count = 0;
+    VECTOR_FOR_EACH(vec, elem) {
+        (void)elem;  // unused
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(0, iteration_count);
+}
+
+// Test VECTOR_FOR_EACH with NULL elements
+TEST(test_vector_for_each_with_null_elements) {
+    CljVector *vec = AUTORELEASE((CljVector*)make_vector(4, CLJ_VECTOR));
+    
+    // Add elements including NULL (nil)
+    vec = vector_conj(vec, fixnum(1));
+    vec = vector_conj(vec, NULL);  // NULL element
+    vec = vector_conj(vec, fixnum(3));
+    
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    
+    // Count iterations and verify elements (including NULL)
+    int iteration_count = 0;
+    CljValue found_values[3] = {NULL, NULL, NULL};
+    bool found_null = false;
+    
+    VECTOR_FOR_EACH(vec, elem) {
+        found_values[iteration_count] = (CljValue)elem;
+        if (elem == NULL) {
+            found_null = true;
+        }
+        iteration_count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(3, iteration_count);
+    TEST_ASSERT_TRUE(found_null);  // NULL element should be found
+}

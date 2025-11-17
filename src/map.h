@@ -82,5 +82,11 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value);
 /** Convert transient map back to persistent. */
 CljMap* map_persistent(CljMap *tmap);
 
+/* Verwendung: MAP_FOR_EACH(map, key_var, value_var) { ... } */
+#define MAP_FOR_EACH(map, key_var, value_var) \
+    for (int _i = 0, _cnt = map_count(map); (map) && _i < _cnt; ++_i) \
+        for (CljObject **_data_ptr = (map)->data; _data_ptr; _data_ptr = NULL) \
+            for (CljObject *key_var __attribute__((unused)) = _data_ptr[2*_i], *value_var __attribute__((unused)) = _data_ptr[2*_i+1]; _data_ptr; _data_ptr = NULL)
+
 #endif
 

@@ -548,9 +548,9 @@ static void release_object_deep(CljObject *v) {
                 CljMap *map = as_map(v);
                 if (map) {
                     // Release all key-value pairs
-                    for (int i = 0; i < map->count * 2; i += 2) {
-                        RELEASE(map->data[i]);     // key
-                        RELEASE(map->data[i+1]); // value
+                    MAP_FOR_EACH(map, key, value) {
+                        RELEASE(key);
+                        RELEASE(value);
                     }
                     // Note: map->data is a flexible array member, part of the struct
                     // It will be freed automatically when DEALLOC frees the struct

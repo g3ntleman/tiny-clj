@@ -1200,10 +1200,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             CljMap *result = map_empty();
             RETAIN(result);
             
-            for (int i = 0; i < map->count; i++) {
-                ID key = KV_KEY(map->data, i);
-                ID value = KV_VALUE(map->data, i);
-                
+            MAP_FOR_EACH(map, key, value) {
                 // Cache tags for performance
                 int key_tag = key ? TAG(key) : 0;
                 int value_tag = value ? TAG(value) : 0;
@@ -3329,10 +3326,7 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
         CljMap *map = (CljMap*)element;
         CljMap *result = map_empty();
         
-        for (int i = 0; i < map->count; i++) {
-            ID key = KV_KEY(map->data, i);
-            ID value = KV_VALUE(map->data, i);
-            
+        MAP_FOR_EACH(map, key, value) {
             // Cache TAG values for performance (used multiple times)
             unsigned char key_tag = key ? TAG(key) : 0;
             unsigned char value_tag = value ? TAG(value) : 0;

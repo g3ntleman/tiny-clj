@@ -43,9 +43,9 @@ TEST(test_inc_symbol_interning_during_load) {
             CljMap *map = clojure_core->mappings;
             int symbol_count = 0;
             const char *first_symbol = NULL;
-            for (int i = 0; i < map->count; i++) {
-                CljObject *key = KV_KEY(map->data, i);
-                if (key && key && TAG(key) == CLJ_SYMBOL) {
+            MAP_FOR_EACH(map, key, value) {
+                (void)value;  // unused
+                if (key && TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
                     if (!first_symbol && sym->name) {
