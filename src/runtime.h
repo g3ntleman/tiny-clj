@@ -22,13 +22,11 @@
 // Forward declarations to avoid circular dependencies
 // Note: These are only needed when runtime.h is included before namespace.h/symbol.h
 #ifndef TINY_CLJ_NAMESPACE_H
-struct CljNamespace;
-// Don't typedef here - let namespace.h define it to avoid redefinition warning
+typedef struct CljNamespace CljNamespace;
 #endif
 // SymbolEntry is defined in symbol.h - only forward declare if not included
 #ifndef TINY_CLJ_SYMBOL_H
-struct SymbolEntry;
-// Don't typedef here - let symbol.h define it to avoid redefinition warning
+typedef struct SymbolEntry SymbolEntry;
 #else
 // symbol.h already included - SymbolEntry is fully defined
 #endif
@@ -56,10 +54,10 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 typedef struct TinyClJRuntime {
     // Namespaces
     CljMap *ns_registry;      // transient Map: Symbol (namespace name) → CljNamespace*
-    struct CljNamespace *clojure_core_cache;
+    CljNamespace *clojure_core_cache;
     
     // Symbol Table
-    struct SymbolEntry *symbol_table;
+    SymbolEntry *symbol_table;
     
     // Meta Registry
     CljMap *meta_registry;
