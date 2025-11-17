@@ -447,21 +447,21 @@ add_custom_target(run-unit-tests
 # Benchmark targets (integrated from Makefile.benchmark)
 add_custom_target(benchmark
     COMMAND ${CMAKE_COMMAND} -E echo "=== All Tests Passed! Running Performance Benchmarks with Analysis ==="
-    COMMAND ./scripts/benchmark_with_analysis.sh
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/benchmark_with_analysis.sh
     DEPENDS unity-tests
     COMMENT "Running all tests first, then benchmarks with change analysis"
 )
 
 add_custom_target(benchmark-analyze
     COMMAND ${CMAKE_COMMAND} -E echo "=== Running Enhanced Benchmark Analysis ==="
-    COMMAND ./scripts/benchmark_with_analysis.sh --update-baseline
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/benchmark_with_analysis.sh --update-baseline
     DEPENDS unity-tests
     COMMENT "Running enhanced benchmark analysis"
 )
 
 add_custom_target(benchmark-baseline
     COMMAND ${CMAKE_COMMAND} -E echo "=== Creating Performance Baseline ==="
-    COMMAND ${CMAKE_COMMAND} -E copy benchmark_results.csv benchmark_baseline.csv
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/benchmark_results.csv ${CMAKE_SOURCE_DIR}/benchmark_baseline.csv
     COMMAND ${CMAKE_COMMAND} -E echo "✓ Baseline created from current benchmark results"
     COMMAND ${CMAKE_COMMAND} -E echo "Run 'make benchmark-compare' to compare future runs"
     DEPENDS benchmark
@@ -471,8 +471,8 @@ add_custom_target(benchmark-baseline
 add_custom_target(benchmark-compare
     COMMAND ${CMAKE_COMMAND} -E echo "=== Running Performance Change Analysis ==="
     COMMAND make test-benchmark-simple > /dev/null 2>&1
-    COMMAND ./test-benchmark-simple > benchmark_output.txt
-    COMMAND ./scripts/benchmark_with_analysis.sh
+    COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test-benchmark-simple > ${CMAKE_SOURCE_DIR}/benchmark_output.txt
+    COMMAND ${CMAKE_SOURCE_DIR}/scripts/benchmark_with_analysis.sh
     DEPENDS unity-tests
     COMMENT "Running performance change analysis"
 )

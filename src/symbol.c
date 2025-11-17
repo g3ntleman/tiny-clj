@@ -496,7 +496,7 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbo
     
     // Use tagged pointer system to detect heap vs static symbols
     // Heap symbols (TAG_POINTER) need strdup, static symbols use string literals
-    if (symbol && get_tag((CljValue)symbol) == TAG_POINTER) {
+    if (symbol && get_tag(symbol) == TAG_POINTER) {
         // This is a heap-allocated symbol, strdup the name
         entry->name = strdup(name);
     } else {
@@ -504,7 +504,7 @@ SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbo
         entry->name = (char*)name;
     }
     
-    entry->symbol = (CljObject*)symbol;
+    entry->symbol = symbol;
     entry->next = g_runtime.symbol_table;
     g_runtime.symbol_table = entry;
     
@@ -579,7 +579,7 @@ CljSymbol* intern_symbol(const char *ns, const char *name) {
     // Suche zuerst in der Symbol-Table
     SymbolEntry *existing = symbol_table_find(ns, name);
     if (existing) {
-        return (CljSymbol*)existing->symbol;  // Gleicher Pointer!
+        return existing->symbol;  // Gleicher Pointer!
     }
     
     // Symbol nicht gefunden, erstelle neues

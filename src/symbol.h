@@ -102,7 +102,7 @@ extern CljSymbol *SYM_NS_STAR;
 typedef struct SymbolEntry {
     char *ns;
     char *name;
-    CljObject *symbol;
+    CljSymbol *symbol;
     struct SymbolEntry *next;
 } SymbolEntry;
 
