@@ -12,11 +12,86 @@
 #include "tiny_clj.h"
 #include "memory.h"
 #include "parser.h"  // For eval_parsed
+#include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
 // Symbol resolution cache - uses array-map for DRY principle
 // Cache size: 16 entries (good balance between hit rate and memory usage)
 #define RESOLVE_CACHE_SIZE 16
 static CljMap *g_resolve_cache = NULL;
+
+// Helper context for namespace search in ns_resolve()
+struct ns_search_ctx {
+    CljSymbol *sym;
+    CljObject *result;
+    CljNamespace *clojure_core_cache;
+};
+
+// Global context pointer for callback (thread-local would be better, but this works for single-threaded)
+static struct ns_search_ctx *g_ns_search_ctx = NULL;
+
+// Helper function for map_foreach to search namespaces
+static void search_namespace_callback(ID key, ID value) {
+    (void)key; // Unused - we only need the value (namespace)
+    if (!g_ns_search_ctx) return;
+    
+    CljNamespace *ns = (CljNamespace*)value;
+    if (ns && ns != g_ns_search_ctx->clojure_core_cache && ns->mappings) {
+        CljObject *found = (CljObject*)map_get((CljValue)ns->mappings, (CljValue)g_ns_search_ctx->sym, NULL);
+        if (found && !g_ns_search_ctx->result) {
+            g_ns_search_ctx->result = found;
+        }
+    }
+}
+
+// Helper context for namespace cleanup in ns_cleanup()
+// (no context needed, just release each namespace)
+static void release_namespace_callback(ID key, ID value) {
+    (void)key; // Unused - we only need the value (namespace)
+    CljNamespace *ns = (CljNamespace*)value;
+    if (ns) {
+        // Release namespace object (CljObject subtype)
+        // release_object_deep() will handle freeing filename, mappings, and aliases
+        RELEASE((CljObject*)ns);
+    }
+}
+
+// Helper function to grow transient map when capacity is exceeded
+// Returns new transient map with doubled capacity, or NULL on error
+static CljMap* grow_transient_map(CljMap *old_map) {
+    if (!old_map) return NULL;
+    
+    // Calculate new capacity (double the old capacity, minimum 4)
+    int new_capacity = old_map->capacity * 2;
+    if (new_capacity < 4) new_capacity = 4;
+    
+    // Allocate new map with larger capacity
+    size_t struct_size = sizeof(CljMap);
+    size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
+    CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+    if (!new_map) return NULL;
+    
+    // Initialize new transient map
+    new_map->base.type = CLJ_MAP_TRANSIENT;
+    new_map->base.rc = 1;
+    new_map->count = 0;
+    new_map->capacity = new_capacity;
+    
+    // Initialize data array
+    for (int i = 0; i < new_capacity * 2; i++) {
+        new_map->data[i] = NULL;
+    }
+    
+    // Copy all existing entries using map_conj (handles RETAIN automatically)
+    for (int i = 0; i < old_map->count; i++) {
+        CljObject *key = KV_KEY(old_map->data, i);
+        CljObject *value = KV_VALUE(old_map->data, i);
+        if (key) {
+            map_conj(new_map, key, value);
+        }
+    }
+    
+    return new_map;
+}
 
 // Function to reset resolve cache (for test isolation)
 void ns_reset_resolve_cache(void) {
@@ -26,31 +101,150 @@ void ns_reset_resolve_cache(void) {
     }
 }
 
+/** Initialize namespace registry if not already initialized.
+ * This is a helper function to ensure the registry exists before use.
+ * Follows DRY principle - used by ns_get_or_create(), ns_register(), and runtime_init().
+ * 
+ * @return 0 on success, -1 on error
+ */
+static int ns_init_registry(void) {
+    if (g_runtime.ns_registry) {
+        return 0; // Already initialized
+    }
+    
+    CljMap *ns_map = make_map(16);
+    if (!ns_map) {
+        return -1; // OOM
+    }
+    
+    CljMap *transient_map = map_transient(ns_map);
+    RELEASE(ns_map); // map_transient() retains the result
+    g_runtime.ns_registry = transient_map;
+    
+    return 0;
+}
+
+/** Reset namespace registry (cleanup and reinitialize).
+ * This is used by runtime_init() to reset the registry.
+ * 
+ * @return 0 on success, -1 on error
+ */
+int ns_reset_registry(void) {
+    // Cleanup existing registry if present
+    if (g_runtime.ns_registry) {
+        RELEASE(g_runtime.ns_registry);
+        g_runtime.ns_registry = NULL;
+    }
+    
+    // Reset cache (will be automatically rebuilt when needed)
+    g_runtime.clojure_core_cache = NULL;
+    
+    // Initialize new registry
+    return ns_init_registry();
+}
+
+/** Create a new namespace object (does not register it in the registry).
+ * This is the low-level constructor for namespaces, following the pattern
+ * of make_map(), make_symbol(), etc.
+ * 
+ * @param name Namespace name (must not be NULL)
+ * @param file Optional filename associated with the namespace (can be NULL)
+ * @return New namespace object with rc=0, or NULL on error
+ */
+CljNamespace* make_namespace(const char *name, const char *file) {
+    if (!name) return NULL;
+    
+    // Create a new namespace using ALLOC (initializes base.type and base.rc)
+    CljNamespace *ns = ALLOC(CljNamespace, 1);
+    if (!ns) return NULL;
+    
+    // ALLOC already sets base.type = CLJ_NAMESPACE and base.rc = 0
+    
+    // Get or intern the namespace name symbol
+    CljSymbol *name_symbol = intern_symbol(NULL, name);
+    if (!name_symbol) {
+        // If intern_symbol fails, we need to free the namespace
+        // But ALLOC doesn't allocate memory that needs freeing, so we just return NULL
+        // Actually, ALLOC uses malloc, so we need to free it
+        free(ns);
+        return NULL;
+    }
+    
+    ns->name = name_symbol; // Use the interned symbol
+    ns->mappings = make_map(64); // Increased capacity for clojure.core
+    if (!ns->mappings) {
+        free(ns);
+        return NULL;
+    }
+    
+    ns->aliases = make_map(16);
+    if (!ns->aliases) {
+        RELEASE(ns->mappings);
+        free(ns);
+        return NULL;
+    }
+    
+    ns->filename = file ? strdup(file) : NULL;
+    if (file && !ns->filename) {
+        // strdup failed - OOM
+        RELEASE(ns->mappings);
+        RELEASE(ns->aliases);
+        free(ns);
+        return NULL;
+    }
+    
+    return ns;
+}
+
 CljNamespace* ns_get_or_create(const char *name, const char *file) {
     if (!name) return NULL;
     
-    // First, look for an existing namespace
-    CljNamespace *cur = g_runtime.ns_registry;
-    while (cur) {
-        if (cur->name && cur->name->name && strcmp(cur->name->name, name) == 0) {
-            return cur;
-        }
-        cur = cur->next;
+    // Ensure registry is initialized (DRY: use helper function)
+    if (ns_init_registry() != 0) {
+        return NULL; // Failed to initialize registry
+    }
+    
+    // Look up namespace by name in the map
+    CljSymbol *name_symbol = intern_symbol(NULL, name);
+    if (!name_symbol) return NULL;
+    
+    CljObject *ns_obj = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_symbol, NULL);
+    if (ns_obj) {
+        return (CljNamespace*)ns_obj;
     }
 
-    // Create a new namespace
-    CljNamespace *ns = (CljNamespace*)malloc(sizeof(CljNamespace));
+    // Create a new namespace using make_namespace (DRY principle)
+    CljNamespace *ns = make_namespace(name, file);
     if (!ns) return NULL;
     
-    ns->name = intern_symbol(NULL, name);
-    ns->mappings = make_map(64); // Increased capacity for clojure.core
-    ns->aliases = make_map(16);
-    ns->filename = file ? strdup(file) : NULL;
-    ns->next = g_runtime.ns_registry;
-    g_runtime.ns_registry = ns;
+    // Add namespace to registry map (Key: name_symbol, Value: ns)
+    // map_conj() retains the value, so we need to retain ns before adding
+    RETAIN((CljObject*)ns);
+    CljMap *new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
+    if (!new_registry) {
+        // Capacity exceeded - grow the map
+        CljMap *grown_map = grow_transient_map(g_runtime.ns_registry);
+        if (grown_map) {
+            RELEASE(g_runtime.ns_registry);
+            g_runtime.ns_registry = grown_map;
+            // Try again with the grown map
+            new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
+            if (!new_registry) {
+                // Still failed - this should not happen, but handle gracefully
+                RELEASE((CljObject*)ns);
+                return NULL;
+            }
+        } else {
+            // Failed to grow map - OOM
+            RELEASE((CljObject*)ns);
+            return NULL;
+        }
+    }
+    g_runtime.ns_registry = new_registry;
     
     // Cache clojure.core for priority lookup (fast symbol pointer comparison)
-    // Note: CljNamespace is a plain C struct (not CljObject), so direct assignment is correct
+    // Note: CljNamespace is now a CljObject subtype, but we just store a pointer here
+    // The namespace is retained when added to the registry, so no additional retain needed
     if (ns->name == SYM_CLOJURE_CORE) {
         g_runtime.clojure_core_cache = ns;
     }
@@ -106,17 +300,29 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     }
     
     // Search other namespaces (excluding clojure.core to avoid double search)
-    CljNamespace *cur = g_runtime.ns_registry;
-    while (cur) {
-        if (cur != g_runtime.clojure_core_cache && cur->mappings) {
-            v = (CljObject*)map_get((CljValue)cur->mappings, (CljValue)sym, NULL);
-            if (v) {
-                // Cache the result
-                (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
-                return (ID)v;
-            }
+    // Iterate over all namespaces in the registry map
+    if (g_runtime.ns_registry) {
+        // Use static context for callback (thread-local would be better, but this works for single-threaded)
+        static struct ns_search_ctx search_ctx;
+        search_ctx.sym = sym;
+        search_ctx.result = NULL;
+        search_ctx.clojure_core_cache = g_runtime.clojure_core_cache;
+        
+        // Temporarily set global context pointer for callback
+        struct ns_search_ctx *old_ctx = g_ns_search_ctx;
+        g_ns_search_ctx = &search_ctx;
+        
+        map_foreach(g_runtime.ns_registry, search_namespace_callback);
+        
+        // Restore old context
+        g_ns_search_ctx = old_ctx;
+        
+        if (search_ctx.result) {
+            v = search_ctx.result;
+            // Cache the result
+            (void)map_assoc((CljValue)g_resolve_cache, (CljValue)sym, (CljValue)v);
+            return v;
         }
-        cur = cur->next;
     }
     
     // Symbol not found - don't cache NULL values (would waste cache space)
@@ -136,45 +342,66 @@ CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filen
 }
 
 void ns_register(CljNamespace *ns) {
-    if (!ns) return;
+    if (!ns || !ns->name) return;
     
-    // Check if namespace is already registered
-    CljNamespace *cur = g_runtime.ns_registry;
-    while (cur) {
-        if (cur == ns) return; // Already registered
-        cur = cur->next;
+    // Ensure registry is initialized (DRY: use helper function)
+    if (ns_init_registry() != 0) {
+        return; // Failed to initialize registry
     }
     
-    // Add namespace to registry
-    ns->next = g_runtime.ns_registry;
-    g_runtime.ns_registry = ns;
+    // Check if namespace is already registered
+    CljObject *existing = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
+    if (existing == (CljObject*)ns) {
+        return; // Already registered
+    }
+    
+    // Add namespace to registry map (Key: ns->name, Value: ns)
+    // map_conj() retains the value, so we need to retain ns before adding
+    RETAIN((CljObject*)ns);
+    CljMap *new_registry = map_conj(g_runtime.ns_registry, ns->name, ns);
+    if (!new_registry) {
+        // Capacity exceeded - grow the map
+        CljMap *grown_map = grow_transient_map(g_runtime.ns_registry);
+        if (grown_map) {
+            RELEASE(g_runtime.ns_registry);
+            g_runtime.ns_registry = grown_map;
+            // Try again with the grown map
+            new_registry = map_conj(g_runtime.ns_registry, ns->name, ns);
+            if (!new_registry) {
+                // Still failed - this should not happen, but handle gracefully
+                RELEASE((CljObject*)ns);
+                return;
+            }
+        } else {
+            // Failed to grow map - OOM
+            RELEASE((CljObject*)ns);
+            return;
+        }
+    }
+    g_runtime.ns_registry = new_registry;
 }
 
 CljNamespace* ns_find(const char *name) {
-    if (!name) return NULL;
+    if (!name || !g_runtime.ns_registry) return NULL;
     
-    CljNamespace *cur = g_runtime.ns_registry;
-    while (cur) {
-        if (cur->name && cur->name->name && strcmp(cur->name->name, name) == 0) {
-            return cur;
-        }
-        cur = cur->next;
-    }
-    return NULL;
+    // Look up namespace by name in the map
+    CljSymbol *name_symbol = intern_symbol(NULL, name);
+    if (!name_symbol) return NULL;
+    
+    CljObject *ns_obj = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_symbol, NULL);
+    return (CljNamespace*)ns_obj;
 }
 
 void ns_cleanup() {
     // Cleanup all namespaces (caches will be automatically rebuilt when needed)
-    CljNamespace *cur = g_runtime.ns_registry;
-    while (cur) {
-        CljNamespace *next = cur->next;
-        if (cur->filename) free((void*)cur->filename);
-        if (cur->mappings) RELEASE(cur->mappings);
-        if (cur->aliases) RELEASE(cur->aliases);
-        free(cur);
-        cur = next;
+    if (g_runtime.ns_registry) {
+        // Iterate over all namespaces and release them
+        map_foreach(g_runtime.ns_registry, release_namespace_callback);
+        
+        // Release the registry map itself
+        RELEASE(g_runtime.ns_registry);
+        g_runtime.ns_registry = NULL;
     }
-    g_runtime.ns_registry = NULL;
     
     // Reset cache (will be automatically rebuilt when needed)
     g_runtime.clojure_core_cache = NULL;
@@ -365,7 +592,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 
                 // Bind variable (sym = err) - simplified
                 // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-                CljMap *updated_mappings = map_assoc((CljMap*)st->current_ns->mappings, (ID)sym, (ID)ex);
+                CljMap *updated_mappings = map_assoc((CljMap*)st->current_ns->mappings, sym, ex);
                 ASSIGN(st->current_ns->mappings, (CljObject*)updated_mappings);
                 result = (CljObject*)eval_parsed(body, st, NULL);
                 return result;
@@ -406,7 +633,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
-    CljMap *new_mappings = map_assoc(ns->mappings, (ID)symbol, (ID)value);
+    CljMap *new_mappings = map_assoc(ns->mappings, symbol, value);
     if (new_mappings != ns->mappings) {
         // Map was copied (COW) - update reference
         RELEASE(ns->mappings);
@@ -457,10 +684,10 @@ void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
     // NOTE: map_assoc() already does RETAIN(ns_name) and RETAIN(alias) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->aliases
-    CljMap *new_aliases = map_assoc(ns->aliases, (ID)alias, (ID)ns_name);
+    CljMap *new_aliases = map_assoc(ns->aliases, alias, ns_name);
     if (new_aliases != ns->aliases) {
         // Map was copied (COW) - update reference
-        RELEASE((ID)ns->aliases);
+        RELEASE(ns->aliases);
         ns->aliases = new_aliases;
         // new_aliases is already retained by map_assoc
     }

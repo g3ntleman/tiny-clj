@@ -136,7 +136,7 @@ Housekeeping
 ------------
 - All test_* files live in `Tests/` (root tests consolidated)
 - Unity test files: memory_tests.c, parser_tests.c, exception_tests.c in `src/tests/`
-- Generated binaries live in `build/` or `build-release/`
+- Generated binaries live in `build/`
 - CSV reports live in `Reports/`
 - Unity test framework: `external/unity/` as git submodule
 

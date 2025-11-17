@@ -289,7 +289,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
 void line_editor_free(LineEditor *editor) {
     if (editor) {
         // Release history vector (automatically frees all contained strings)
-        if (editor->history) RELEASE(editor->history);
+        RELEASE(editor->history);
         free(editor);
     }
 }
@@ -436,7 +436,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     // Convert transient to persistent temporarily for checking
     CljVector *history_vec = editor->history;
     CljVector *temp_persistent = NULL;
-    if (history_vec && TAG((ID)history_vec) == CLJ_VECTOR_TRANSIENT) {
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
         temp_persistent = (CljVector*)vector_persistent(history_vec);
         if (temp_persistent) {
             int count = vector_count(temp_persistent);
@@ -476,7 +476,7 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     // Convert transient vector to persistent if needed
     CljVector *history_vec = editor->history;
     CljVector *temp_persistent = NULL;
-    if (history_vec && TAG((ID)history_vec) == CLJ_VECTOR_TRANSIENT) {
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
         temp_persistent = (CljVector*)vector_persistent(history_vec);
         if (!temp_persistent) return NULL;
         history_vec = temp_persistent;
@@ -484,18 +484,18 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     
     int count = vector_count(history_vec);
     if (index < 0 || index >= count) {
-        if (temp_persistent) RELEASE(temp_persistent);
+        RELEASE(temp_persistent);
         return NULL;
     }
     
     // Use nth2 to access element (Clojure-compatible API)
     ID nth_args[2];
-    nth_args[0] = (ID)history_vec;
+    nth_args[0] = history_vec;
     nth_args[1] = fixnum(index);
     ID line_obj = nth2(nth_args, 2);
     if (!line_obj || TAG(line_obj) != CLJ_STRING) {
-        if (line_obj) RELEASE(line_obj);
-        if (temp_persistent) RELEASE(temp_persistent);
+        RELEASE(line_obj);
+        RELEASE(temp_persistent);
         return NULL;
     }
     
@@ -504,7 +504,7 @@ const char* line_editor_get_history_line(LineEditor *editor, int index) {
     const char *result = str->data;
     
     RELEASE(line_obj);
-    if (temp_persistent) RELEASE(temp_persistent);
+    RELEASE(temp_persistent);
     return result;
 }
 
@@ -517,7 +517,7 @@ CljVector* line_editor_get_history_vector(LineEditor *editor) {
     
     // Convert transient vector to persistent if needed
     CljVector *history_vec = editor->history;
-    if (history_vec && TAG((ID)history_vec) == CLJ_VECTOR_TRANSIENT) {
+    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
         history_vec = (CljVector*)vector_persistent(history_vec);
         if (!history_vec) return empty_vector();
     }
@@ -527,7 +527,7 @@ CljVector* line_editor_get_history_vector(LineEditor *editor) {
     
     CljVector *out = make_vector(n, CLJ_VECTOR);
     ID nth_args[2];
-    nth_args[0] = (ID)history_vec;
+    nth_args[0] = history_vec;
     for (int i = 0; i < n; i++) {
         nth_args[1] = fixnum(i);
         ID elem = nth2(nth_args, 2);
@@ -541,7 +541,7 @@ CljVector* line_editor_get_history_vector(LineEditor *editor) {
 
 void line_editor_clear_history(LineEditor *editor) {
     if (!editor) return;
-    if (editor->history) RELEASE(editor->history);
+    RELEASE(editor->history);
     CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);
     editor->history = vector_transient(persistent_vec);
     RELEASE(persistent_vec);
@@ -549,11 +549,11 @@ void line_editor_clear_history(LineEditor *editor) {
 }
 
 void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
-    if (!editor || !vec || TAG((ID)vec) != CLJ_VECTOR) return;
+    if (!editor || !vec || TAG(vec) != CLJ_VECTOR) return;
     line_editor_clear_history(editor);
     int count = vector_count(vec);
     ID nth_args[2];
-    nth_args[0] = (ID)vec;
+    nth_args[0] = vec;
     for (int i = 0; i < count; i++) {
         nth_args[1] = fixnum(i);
         ID elem = nth2(nth_args, 2);

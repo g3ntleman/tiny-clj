@@ -38,9 +38,9 @@ TEST(test_history_roundtrip_basic) {
   TEST_ASSERT_TRUE(elem0 && TAG(elem0) == CLJ_STRING);
   TEST_ASSERT_TRUE(elem1 && TAG(elem1) == CLJ_STRING);
   TEST_ASSERT_TRUE(elem2 && TAG(elem2) == CLJ_STRING);
-  if (elem0) RELEASE(elem0);
-  if (elem1) RELEASE(elem1);
-  if (elem2) RELEASE(elem2);
+  RELEASE(elem0);
+  RELEASE(elem1);
+  RELEASE(elem2);
 }
 
 TEST(test_history_trim_to_50) {
@@ -172,7 +172,7 @@ static void test_history_load_from_file_crash_reproduction_body(void) {
       ID elem = vector_nth(v, i);
       TEST_ASSERT_NOT_NULL(elem);
       TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(elem));
-      if (elem) RELEASE(elem);
+      RELEASE(elem);
     }
 
     RELEASE(loaded);
@@ -690,14 +690,14 @@ TEST(test_history_load_from_file_scenario) {
         if (elem && TAG(elem) != CLJ_STRING) {
           all_strings = false;
         }
-        if (elem) RELEASE(elem);
+        RELEASE(elem);
       }
       if (all_strings) {
         CljVector* new_vec = make_vector(count, CLJ_VECTOR);
         for (int i = 0; i < count; i++) {
           ID elem = vector_nth(v, i);
           new_vec = vector_conj(new_vec, elem);
-          if (elem) RELEASE(elem);
+          RELEASE(elem);
         }
 
                         // Verify strings are valid using nth2 (Clojure-compatible API)

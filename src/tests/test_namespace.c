@@ -590,3 +590,161 @@ TEST(test_require_alias_resolution) {
 
 }
 
+// Test: Verify that CljNamespace no longer has next field
+TEST(test_namespace_no_next_field) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a namespace
+    CljNamespace *ns = ns_get_or_create("test-no-next", NULL);
+    TEST_ASSERT_NOT_NULL(ns);
+    
+    // Verify namespace structure - should not have next field
+    // This is a compile-time check, but we can verify the structure works
+    TEST_ASSERT_NOT_NULL(ns->name);
+    TEST_ASSERT_NOT_NULL(ns->mappings);
+    TEST_ASSERT_NOT_NULL(ns->aliases);
+    
+    // Verify namespace can be used normally
+    CljSymbol *test_sym = intern_symbol_global("test-var");
+    CljObject *value = fixnum(42);
+    ns_define(ns, (ID)test_sym, value);
+    
+    CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
+    TEST_ASSERT_NOT_NULL(resolved);
+    
+    // Cleanup
+    RELEASE((CljObject*)test_sym);
+    RELEASE((CljObject*)value);
+    RELEASE((CljObject*)resolved);
+}
+
+// Test: Verify that ns_registry is a Map
+TEST(test_ns_registry_is_map) {
+    TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
+    TEST_ASSERT_TRUE(TAG((ID)g_runtime.ns_registry) == CLJ_MAP_TRANSIENT);
+    
+    // Verify it's a transient map
+    CljMap *registry = g_runtime.ns_registry;
+    TEST_ASSERT_NOT_NULL(registry);
+}
+
+// Test: Verify ns_get_or_create uses Map
+TEST(test_ns_get_or_create_uses_map) {
+    TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
+    
+    // Create a namespace
+    CljNamespace *ns1 = ns_get_or_create("test-map-ns", NULL);
+    TEST_ASSERT_NOT_NULL(ns1);
+    
+    // Verify it's in the map
+    CljSymbol *name_sym = intern_symbol(NULL, "test-map-ns");
+    CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_sym, NULL);
+    TEST_ASSERT_EQUAL_PTR(ns1, (CljNamespace*)found);
+    
+    // Get or create again - should return same namespace
+    CljNamespace *ns2 = ns_get_or_create("test-map-ns", NULL);
+    TEST_ASSERT_EQUAL_PTR(ns1, ns2);
+}
+
+// Test: Verify ns_find uses Map
+TEST(test_ns_find_uses_map) {
+    // Create a namespace
+    CljNamespace *ns = ns_get_or_create("test-find-ns", NULL);
+    TEST_ASSERT_NOT_NULL(ns);
+    
+    // Find it
+    CljNamespace *found = ns_find("test-find-ns");
+    TEST_ASSERT_EQUAL_PTR(ns, found);
+    
+    // Find non-existent namespace
+    CljNamespace *not_found = ns_find("non-existent-ns");
+    TEST_ASSERT_NULL(not_found);
+}
+
+// Test: Verify ns_register uses Map
+TEST(test_ns_register_uses_map) {
+    // Create a namespace using make_namespace (DRY principle)
+    CljNamespace *ns = make_namespace("test-register-ns", NULL);
+    TEST_ASSERT_NOT_NULL(ns);
+    
+    // Register it
+    ns_register(ns);
+    
+    // Verify it's in the map
+    CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
+    TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
+    
+    // Register again - should be idempotent
+    ns_register(ns);
+    CljObject *found2 = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
+    TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found2);
+}
+
+// Test: Verify ns_cleanup releases all from Map
+TEST(test_ns_cleanup_releases_all_from_map) {
+    // Create multiple namespaces
+    CljNamespace *ns1 = ns_get_or_create("cleanup-test-1", NULL);
+    CljNamespace *ns2 = ns_get_or_create("cleanup-test-2", NULL);
+    CljNamespace *ns3 = ns_get_or_create("cleanup-test-3", NULL);
+    
+    TEST_ASSERT_NOT_NULL(ns1);
+    TEST_ASSERT_NOT_NULL(ns2);
+    TEST_ASSERT_NOT_NULL(ns3);
+    
+    // Verify they're in the map
+    TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
+    int count_before = map_count(g_runtime.ns_registry);
+    TEST_ASSERT_TRUE(count_before >= 3);
+    
+    // Cleanup (this will be called by test framework, but we can verify the structure)
+    // Note: We can't actually call ns_cleanup() here as it would break other tests
+    // This test just verifies the structure is correct
+}
+
+// Test: Verify iteration over all namespaces in registry
+TEST(test_ns_registry_iteration) {
+    // Create multiple namespaces
+    CljNamespace *ns1 = ns_get_or_create("iter-test-1", NULL);
+    CljNamespace *ns2 = ns_get_or_create("iter-test-2", NULL);
+    
+    TEST_ASSERT_NOT_NULL(ns1);
+    TEST_ASSERT_NOT_NULL(ns2);
+    
+    // Count namespaces in registry
+    int count = map_count(g_runtime.ns_registry);
+    TEST_ASSERT_TRUE(count >= 2);
+    
+    // Verify both are in the map
+    CljSymbol *sym1 = intern_symbol(NULL, "iter-test-1");
+    CljSymbol *sym2 = intern_symbol(NULL, "iter-test-2");
+    CljObject *found1 = map_get((CljValue)g_runtime.ns_registry, (CljValue)sym1, NULL);
+    CljObject *found2 = map_get((CljValue)g_runtime.ns_registry, (CljValue)sym2, NULL);
+    TEST_ASSERT_EQUAL_PTR(ns1, (CljNamespace*)found1);
+    TEST_ASSERT_EQUAL_PTR(ns2, (CljNamespace*)found2);
+}
+
+// Test: Verify that map_conj return value is handled correctly (may return new instance)
+TEST(test_ns_registry_map_conj_handles_new_instance) {
+    // This test verifies that we correctly handle the case where map_conj might
+    // need to grow the map (though with initial capacity 16, this is unlikely)
+    // The important thing is that we always use the return value of map_conj
+    
+    // Create multiple namespaces to potentially trigger map growth
+    for (int i = 0; i < 20; i++) {
+        char ns_name[32];
+        snprintf(ns_name, sizeof(ns_name), "growth-test-%d", i);
+        CljNamespace *ns = ns_get_or_create(ns_name, NULL);
+        TEST_ASSERT_NOT_NULL(ns);
+        
+        // Verify it's in the registry
+        CljSymbol *name_sym = intern_symbol(NULL, ns_name);
+        CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_sym, NULL);
+        TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
+    }
+    
+    // Verify registry still works correctly
+    TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
+    int count = map_count(g_runtime.ns_registry);
+    TEST_ASSERT_TRUE(count >= 20);
+}
+

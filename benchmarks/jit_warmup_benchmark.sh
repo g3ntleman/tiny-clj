@@ -71,9 +71,9 @@ else
     echo -e "${YELLOW}⚠️  Standard Clojure nicht gefunden - überspringe Clojure-Benchmarks${NC}"
 fi
 
-if [ -f "./build-release/tiny-clj-repl" ]; then
+if [ -f "./build/tiny-clj-repl" ]; then
     TINY_CLJ_AVAILABLE=true
-    TINY_CLJ_PATH="./build-release/tiny-clj-repl"
+    TINY_CLJ_PATH="./build/tiny-clj-repl"
     echo -e "${GREEN}✅ tiny-clj gefunden${NC}"
 else
     TINY_CLJ_AVAILABLE=false

@@ -79,8 +79,8 @@ bool clj_equal(ID a, ID b) {
                 ID elem_a = vector_nth(vec_a, i);
                 ID elem_b = vector_nth(vec_b, i);
                 bool equal = clj_equal(elem_a, elem_b);
-                if (elem_a) RELEASE(elem_a);
-                if (elem_b) RELEASE(elem_b);
+                RELEASE(elem_a);
+                RELEASE(elem_b);
                 if (!equal) return false;
             }
             return true;

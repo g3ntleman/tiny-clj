@@ -115,7 +115,7 @@ static inline int task_get_scheduled_msec(CljMap *task_map) {
 
 static inline bool task_get_periodic(CljMap *task_map) {
     ID val = KV_VALUE(task_map->data, TIMER_TASK_IDX_PERIODIC);
-    return val == (ID)clj_true;
+    return val == clj_true;
 }
 
 static inline int task_get_period_ms(CljMap *task_map) {
@@ -191,7 +191,7 @@ void event_loop_clear(void) {
             CljMap *result_chan;
             if (task_from_map(task_map, &fn, &result_chan)) {
                 RELEASE(fn);
-                if (result_chan) RELEASE(result_chan);
+                RELEASE(result_chan);
             }
             RELEASE(task_map);
         }
@@ -230,7 +230,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel) {
     CljMap *task_map = task_to_map(RETAIN(fn_zero_arity), result_channel ? RETAIN(result_channel) : NULL);
     if (!task_map) {
         RELEASE(fn_zero_arity);
-        if (result_channel) RELEASE(result_channel);
+        RELEASE(result_channel);
         return;
     }
     
@@ -349,7 +349,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
 
     if (!IS_IMMEDIATE(result)) RELEASE(result);
     RELEASE(fn);
-    if (result_chan) RELEASE(result_chan);
+    RELEASE(result_chan);
     return true;
 }
 

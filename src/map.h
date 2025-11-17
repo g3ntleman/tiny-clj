@@ -32,8 +32,8 @@ static inline CljMap* as_map(ID obj) {
 CljMap* make_map(int capacity);
 /** Return the empty map singleton (inline for performance). */
 static inline CljMap* map_empty(void) {
-    extern CljMap *clj_empty_map_singleton;
-    return clj_empty_map_singleton;
+    extern CljMap *map_empty_singleton;
+    return map_empty_singleton;
 }
 /** Get value for key or not_found if absent (structural key equality).
  * If not_found is NULL, returns NULL when key is absent (backward compatible).

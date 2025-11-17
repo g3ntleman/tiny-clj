@@ -47,6 +47,7 @@ typedef enum {
     CLJ_ATOM = 24,         // Mutable atom container
     CLJ_VECTOR_TRANSIENT = 26,
     CLJ_MAP_TRANSIENT = 28,
+    CLJ_NAMESPACE = 30,    // Namespace objects
     CLJ_RAW_MEMORY = 32   // Raw memory allocations (ID arrays, etc.)
 } CljType;
 

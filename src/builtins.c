@@ -695,7 +695,7 @@ ID native_transient(ID *args, unsigned int argc) {
     uint16_t tag = TAG(coll);
     switch (tag) {
         case CLJ_VECTOR:
-            return (ID)vector_transient((CljVector*)coll);
+            return vector_transient((CljVector*)coll);
         case CLJ_MAP:
             return map_transient(coll);
         case CLJ_VECTOR_TRANSIENT:
@@ -782,7 +782,7 @@ ID native_get(ID *args, unsigned int argc) {
     // Convert SYM_NIL to NULL for key lookup
     ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == (CljObject*)SYM_NIL) 
         ? NULL 
-        : (ID)key_obj;
+        : key_obj;
     
     if (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT) {
         return map_get((CljMap*)map, key, not_found);
@@ -1570,7 +1570,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     for (int i = 0; i < count; i++) {
         CljObject *sym = (CljObject*)vector_nth(vec, i);
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
-            if (sym) RELEASE(sym);
+            RELEASE(sym);
             continue;
         }
         
@@ -1694,7 +1694,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                             refer_syms = refer_arg;
                             // Don't release refer_syms - it's stored for later use
                         } else {
-                            if (refer_arg) RELEASE(refer_arg);
+                            RELEASE(refer_arg);
                         }
                         i++; // Skip next element
                     }
@@ -2435,7 +2435,7 @@ ID native_repeat(ID *args, unsigned int argc) {
     for (int i = 0; i < count; i++) {
         ID val = value ? RETAIN(value) : NULL;
         v = vector_conj(v, val);
-        if (val) RELEASE(val); // vector_conj retains, so release our copy
+        RELEASE(val); // vector_conj retains, so release our copy - RELEASE handles NULL
     }
     
     return AUTORELEASE(vec);
@@ -2866,7 +2866,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
             ID elem = vector_nth(vec, i);
             if (!elem || TAG(elem) != CLJ_INT) {
                 RELEASE((CljObject*)arr);
-                if (elem) RELEASE(elem);
+                RELEASE(elem);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "byte-array sequence elements must be numbers",
                                __FILE__, __LINE__, 0);
                 return NULL;
@@ -3282,7 +3282,8 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     
     // Explicitly set clojure.core cache if not already set
     // This ensures cache is set even if register_builtins is called before load_clojure_core
-    // Note: CljNamespace is a plain C struct (not CljObject), so direct assignment is correct
+    // Note: clojure_core_cache is just a pointer to a CljNamespace in the registry
+    // We don't use ASSIGN here because we're just setting the pointer, not retaining the object
     extern TinyClJRuntime g_runtime;
     if (!g_runtime.clojure_core_cache) {
         g_runtime.clojure_core_cache = clojure_core;

@@ -27,7 +27,7 @@ TEST(test_list_count) {
 
     // Test non-list object (this should not crash)
     // Create a proper CljObject for testing
-    CljObject *int_obj = AUTORELEASE(make_string("42")); // Use string as non-list object
+    CljObject *int_obj = AUTORELEASE((CljObject *)make_string("42")); // Use string as non-list object
     TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)int_obj));
 
     // Test empty list (clj_nil is not a list)
@@ -79,7 +79,7 @@ TEST(test_string_creation) {
     // Test direct string creation (bypassing eval_string)
 
     // Test direct string creation
-    CljObject *str = AUTORELEASE(make_string("hello world"));
+    CljObject *str = AUTORELEASE((CljObject *)make_string("hello world"));
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_EQUAL_INT(CLJ_STRING, str->type);
 
@@ -105,7 +105,7 @@ TEST(test_vector_creation) {
 
 TEST(test_map_creation) {
     // Test map creation using CljValue API
-    CljMap *map = AUTORELEASE(make_map(16));
+    CljMap *map = AUTORELEASE((CljMap *)make_map(16));
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
 }
@@ -952,7 +952,7 @@ TEST(test_def_function_isolated_problem) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("eval_symbol should not throw exception for defined function");
         RELEASE(test_fn_sym);
-        if (resolved) RELEASE(resolved);
+        RELEASE(resolved);
         return;
     } END_TRY
     
@@ -967,7 +967,7 @@ TEST(test_def_function_isolated_problem) {
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("Calling test-fn should not throw exception");
         RELEASE(test_fn_sym);
-        if (resolved) RELEASE(resolved);
+        RELEASE(resolved);
         // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
         return;
     } END_TRY
@@ -981,7 +981,7 @@ TEST(test_def_function_isolated_problem) {
     
     // Cleanup
     RELEASE(test_fn_sym);
-    if (resolved) RELEASE(resolved);
+    RELEASE(resolved);
     // Don't RELEASE eval_resolved - eval_symbol returns autoreleased object
 }
 

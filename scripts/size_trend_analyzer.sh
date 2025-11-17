@@ -25,7 +25,7 @@ echo ""
 if [ ! -f "$HISTORY_FILE" ]; then
     echo -e "${YELLOW}No size history file found. Creating baseline...${NC}"
     make test-executable-size > /dev/null 2>&1
-    ./test-executable-size > /dev/null 2>&1
+    ./build/test-executable-size > /dev/null 2>&1 || true
     echo -e "${GREEN}Baseline created: $HISTORY_FILE${NC}"
     exit 0
 fi

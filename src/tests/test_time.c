@@ -99,7 +99,7 @@ TEST(test_time_basic_functionality) {
 TEST(test_time_arity_validation) {
     // Test that time function validates arity correctly
     // Create (time) with no arguments
-    CljObject *time_symbol = SYM_TIME;
+    CljObject *time_symbol = (CljObject *)SYM_TIME;
     CljList *time_list = make_list((ID)time_symbol, NULL);
     
     CljMap *env = make_map(16);
@@ -123,7 +123,7 @@ TEST(test_time_with_too_many_arguments) {
     CljObject *expr2 = fixnum(2);
     
     // Create (time 1 2) with too many arguments
-    CljObject *time_symbol = SYM_TIME;
+    CljObject *time_symbol = (CljObject *)SYM_TIME;
     CljList *time_list = make_list((ID)time_symbol, 
         make_list((ID)expr1, 
         make_list((ID)expr2, NULL)));
@@ -153,10 +153,10 @@ TEST(test_time_with_sleep) {
     CljObject *one_second = fixnum(1);
     
     // Create the expression: (sleep 1)
-    CljObject *expr = make_list((ID)sleep_symbol, make_list((ID)one_second, NULL));
+    CljObject *expr = (CljObject *)make_list((ID)sleep_symbol, make_list((ID)one_second, NULL));
     
     // Create (time (sleep 1))
-    CljObject *time_symbol = SYM_TIME;
+    CljObject *time_symbol = (CljObject *)SYM_TIME;
     CljList *time_list = make_list((ID)time_symbol, make_list((ID)expr, NULL));
     
     CljMap *env = make_map(16);
@@ -190,10 +190,10 @@ TEST(test_time_with_dotimes) {
     // Create: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
     
     // Create symbols
-    CljObject *time_symbol = SYM_TIME;
-    CljObject *dotimes_symbol = SYM_DOTIMES;
+    CljObject *time_symbol = (CljObject *)SYM_TIME;
+    CljObject *dotimes_symbol = (CljObject *)SYM_DOTIMES;
     CljSymbol *i_symbol = intern_symbol_global("i");
-    CljObject *plus_symbol = SYM_PLUS;
+    CljObject *plus_symbol = (CljObject *)SYM_PLUS;
     
     // Create numbers
     CljObject *thousand = fixnum(1000);
@@ -204,14 +204,14 @@ TEST(test_time_with_dotimes) {
     CljObject *five = fixnum(5);
     
     // Create binding vector: [i 1000]
-    CljObject *binding_vector = make_vector(2, CLJ_VECTOR);
+    CljObject *binding_vector = (CljObject *)make_vector(2, CLJ_VECTOR);
     CljVector *vec_data = as_vector(binding_vector);
     // Add elements using vector_conj
     vec_data = vector_conj(vec_data, (ID)i_symbol);
     vec_data = vector_conj(vec_data, (ID)thousand);
     
     // Create arithmetic expression: (+ 1 2 3 4 5)
-    CljObject *arithmetic_expr = make_list((ID)plus_symbol, 
+    CljObject *arithmetic_expr = (CljObject *)make_list((ID)plus_symbol, 
         make_list((ID)one, 
         make_list((ID)two, 
         make_list((ID)three, 
@@ -219,12 +219,12 @@ TEST(test_time_with_dotimes) {
         make_list((ID)five, NULL))))));
     
     // Create dotimes call: (dotimes [i 1000] (+ 1 2 3 4 5))
-    CljObject *dotimes_call = make_list((ID)dotimes_symbol, 
+    CljObject *dotimes_call = (CljObject *)make_list((ID)dotimes_symbol, 
         make_list((ID)binding_vector, 
         make_list((ID)arithmetic_expr, NULL)));
     
     // Create time call: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
-    CljObject *time_call = make_list((ID)time_symbol, 
+    CljObject *time_call = (CljObject *)make_list((ID)time_symbol, 
         make_list((ID)dotimes_call, NULL));
     
     // Create environment

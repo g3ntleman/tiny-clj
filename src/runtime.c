@@ -28,13 +28,10 @@ void runtime_init(TinyClJRuntime *runtime) {
     // ASSIGN automatically handles releasing old values, so multiple calls are safe
     // Caches are automatically rebuilt when needed, so no need to preserve them
     
-    // Reset namespace registry
-    // Note: ns_registry is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
-    runtime->ns_registry = NULL;
-    
-    // Reset caches (will be automatically rebuilt when needed)
-    // Note: clojure_core_cache is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
-    runtime->clojure_core_cache = NULL;
+    // Reset namespace registry (transient Map)
+    // Note: ns_registry is a transient Map: Symbol (namespace name) → CljNamespace*
+    // Use consolidated reset function (DRY principle)
+    ns_reset_registry();
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // The symbol table is cleaned up by symbol_table_cleanup() if needed
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
@@ -56,22 +53,24 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Reset timer counter
     runtime->timer_id_counter = 0;
     
+    // Namespace registry is already initialized by ns_reset_registry() above
+    
     // Initialize event loop queues as transient vectors using ASSIGN
     // Only create if not already set (allows multiple calls)
     if (!runtime->task_queue) {
         CljVector* task_vec = make_vector(8, CLJ_VECTOR);
         if (task_vec) {
             CljVector* transient_task = vector_transient(task_vec);
-            RELEASE((ID)task_vec); // vector_transient() retains the result
-            ASSIGN(runtime->task_queue, (ID)transient_task);
+            RELEASE(task_vec); // vector_transient() retains the result
+            ASSIGN(runtime->task_queue, transient_task);
         }
     }
     if (!runtime->timer_queue) {
         CljVector* timer_vec = make_vector(8, CLJ_VECTOR);
         if (timer_vec) {
             CljVector* transient_timer = vector_transient(timer_vec);
-            RELEASE((ID)timer_vec); // vector_transient() retains the result
-            ASSIGN(runtime->timer_queue, (ID)transient_timer);
+            RELEASE(timer_vec); // vector_transient() retains the result
+            ASSIGN(runtime->timer_queue, transient_timer);
         }
     }
 }
@@ -90,12 +89,13 @@ void runtime_free(TinyClJRuntime *runtime) {
     meta_registry_cleanup();
     
     // Cleanup namespaces (caches will be automatically rebuilt when needed)
+    // Note: ns_cleanup() will release all namespaces from the map and then release the map
     ns_cleanup();
     
     // Cleanup event loop queues
     if (runtime->task_queue) {
         CljVector *tvec = runtime->task_queue;
-        if (TAG((ID)tvec) == CLJ_VECTOR_TRANSIENT) {
+        if (TAG(tvec) == CLJ_VECTOR_TRANSIENT) {
             // Release all elements in transient vector
             int count = vector_count(tvec);
             for (int i = 0; i < count; i++) {
@@ -104,13 +104,13 @@ void runtime_free(TinyClJRuntime *runtime) {
                     RELEASE(elem);
                 }
             }
-            RELEASE((ID)tvec);
+            RELEASE(tvec);
         }
         runtime->task_queue = NULL;
     }
     if (runtime->timer_queue) {
         CljVector *tvec = runtime->timer_queue;
-        if (TAG((ID)tvec) == CLJ_VECTOR_TRANSIENT) {
+        if (TAG(tvec) == CLJ_VECTOR_TRANSIENT) {
             // Release all elements in transient vector (timer tasks as maps)
             int count = vector_count(tvec);
             for (int i = 0; i < count; i++) {
@@ -119,7 +119,7 @@ void runtime_free(TinyClJRuntime *runtime) {
                     RELEASE(elem);
                 }
             }
-            RELEASE((ID)tvec);
+            RELEASE(tvec);
         }
         runtime->timer_queue = NULL;
     }
@@ -139,12 +139,14 @@ void runtime_free(TinyClJRuntime *runtime) {
     
     // Reset all fields individually using ASSIGN
     // Caches will be automatically rebuilt when needed
-    // Reset namespace registry
-    // Note: ns_registry is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
+    // Reset namespace registry (transient Map)
+    // Note: ns_registry is already cleaned up by ns_cleanup() above
+    // Just set to NULL here
     runtime->ns_registry = NULL;
     
     // Reset caches (will be automatically rebuilt when needed)
-    // Note: clojure_core_cache is a CljNamespace* (plain C struct), not CljObject*, so direct assignment
+    // Note: clojure_core_cache is just a pointer to a CljNamespace in the registry
+    // We don't use ASSIGN here because we're just resetting the pointer, not releasing the object
     runtime->clojure_core_cache = NULL;
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE

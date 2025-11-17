@@ -58,9 +58,9 @@ TEST(test_cljvalue_vector_api) {
         TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
         TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)elem2));
-        if (elem0) RELEASE(elem0);
-        if (elem1) RELEASE(elem1);
-        if (elem2) RELEASE(elem2);
+        RELEASE(elem0);
+        RELEASE(elem1);
+        RELEASE(elem2);
     });
 }
 
@@ -92,8 +92,8 @@ TEST(test_cljvalue_transient_vector) {
         ID elem1 = vector_nth(tvec_data, 1);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)elem1));
-        if (elem0) RELEASE(elem0);
-        if (elem1) RELEASE(elem1);
+        RELEASE(elem0);
+        RELEASE(elem1);
     });
 }
 
@@ -112,8 +112,8 @@ TEST(test_cljvalue_clojure_semantics) {
         ID elem1 = vector_nth(vec_data, 1);
         TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)elem0));
         TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)elem1));
-        if (elem0) RELEASE(elem0);
-        if (elem1) RELEASE(elem1);
+        RELEASE(elem0);
+        RELEASE(elem1);
         
         // Test vector count
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec_data));
@@ -357,12 +357,12 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)char_zero));
         
         // Strings are truthy (including empty strings)
-        CljObject *empty_string = make_string("");
+        CljObject *empty_string = (CljObject *)make_string("");
         TEST_ASSERT_NOT_NULL(empty_string);
         TEST_ASSERT_TRUE(clj_is_truthy(empty_string));
         RELEASE(empty_string);
         
-        CljObject *non_empty_string = make_string("hello");
+        CljObject *non_empty_string = (CljObject *)make_string("hello");
         TEST_ASSERT_NOT_NULL(non_empty_string);
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_string));
         RELEASE(non_empty_string);
@@ -370,13 +370,13 @@ TEST(test_truthiness_comprehensive) {
         // Keywords are truthy
         CljSymbol *keyword = intern_symbol_global(":test");
         TEST_ASSERT_NOT_NULL(keyword);
-        TEST_ASSERT_TRUE(clj_is_truthy(keyword));
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject *)keyword));
         RELEASE(keyword);
         
         // Symbols are truthy
         CljSymbol *symbol = intern_symbol_global("test");
         TEST_ASSERT_NOT_NULL(symbol);
-        TEST_ASSERT_TRUE(clj_is_truthy(symbol));
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject *)symbol));
         RELEASE(symbol);
         
         // Empty list is truthy (in Clojure, empty collections are truthy)

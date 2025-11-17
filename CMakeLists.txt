@@ -66,6 +66,9 @@ endif()
 # Include directories
 include_directories(include src external)
 
+# Set output directory for all executables to "build"
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
+
 # Source files
 list(APPEND SOURCES
     src/clojure_core.c
@@ -225,17 +228,7 @@ add_executable(tiny-clj-repl
     src/line_editor.c
     ${SOURCES}
 )
-# Set output directory based on build type
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set_target_properties(tiny-clj-repl PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    )
-else()
-    # Debug builds go to build-test/ for compatibility
-    set_target_properties(tiny-clj-repl PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build-test"
-    )
-endif()
+# Output directory is set globally to "build"
 # REPL Build - Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)
@@ -446,7 +439,7 @@ set(COMMON_TEST_SOURCES
 
 # Test targets for easy execution
 add_custom_target(run-unit-tests
-    COMMAND unity-tests
+    COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unity-tests
     DEPENDS unity-tests
     COMMENT "Running unit tests"
 )
@@ -533,10 +526,10 @@ set_tests_properties(repl-error-divzero PROPERTIES WILL_FAIL TRUE LABELS "repl")
 # History test (test that REPL can handle multiple commands)
 # Use RUNTIME_OUTPUT_DIRECTORY to get the path where tiny-clj-repl is built
 # This avoids hard-coded paths by using CMake variables
-# Note: We use the same path as RUNTIME_OUTPUT_DIRECTORY (${CMAKE_SOURCE_DIR}/build-test)
+# Note: All executables are now in ${CMAKE_SOURCE_DIR}/build
 get_target_property(REPL_OUTPUT_DIR tiny-clj-repl RUNTIME_OUTPUT_DIRECTORY)
 if(NOT REPL_OUTPUT_DIR)
-    set(REPL_OUTPUT_DIR "${CMAKE_BINARY_DIR}")
+    set(REPL_OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 endif()
 add_test(NAME repl-history-multiple 
     COMMAND bash -c "echo -e '(+ 1 2)\n(* 3 4)\n(str \"test\")' | timeout 5s \"${REPL_OUTPUT_DIR}/tiny-clj-repl\""

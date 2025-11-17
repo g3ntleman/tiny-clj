@@ -20,7 +20,7 @@ make -j4
 
 # Step 3: Run unit tests
 echo "Step 3: Running unit tests..."
-./unity-tests
+./build/unity-tests
 
 echo ""
 echo "=== Unit Tests Complete ==="

@@ -16,7 +16,7 @@ echo "Benchmark: fib(20) - original benchmarks-game version (without recur)"
 echo ""
 
 # Configuration
-BUILD_DIR="build-release"
+BUILD_DIR="build"
 RESULTS_DIR="benchmark_results"
 HISTORY_FILE="$RESULTS_DIR/performance_history.csv"
 BENCHMARK_FILE="benchmarks/fibonacci.clj"
@@ -142,12 +142,10 @@ cat > "$TEMP_CLJ_TINY" << TINYCLJ_EOF
 (println (str "BENCHMARK_COMPLETE=true"))
 TINYCLJ_EOF
 
-# Try to find tiny-clj-repl - prefer build-release, then build-test, then search
+# Try to find tiny-clj-repl - prefer build, then search
 TINYCLJ_BIN=""
 if [ -f "$BUILD_DIR/tiny-clj-repl" ]; then
     TINYCLJ_BIN="$BUILD_DIR/tiny-clj-repl"
-elif [ -f "build-test/tiny-clj-repl" ]; then
-    TINYCLJ_BIN="build-test/tiny-clj-repl"
 else
     TINYCLJ_BIN=$(find . -name "tiny-clj-repl" -type f -executable 2>/dev/null | head -1)
 fi

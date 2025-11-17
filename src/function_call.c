@@ -1866,7 +1866,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
                 }
             }
             // Release result from this iteration (will evaluate again in next iteration)
-            if (result) RELEASE(result);
+            RELEASE(result);
         }
     }
     
@@ -1944,7 +1944,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         // Cleanup temporäre Objekte (Queue hält Referenz auf fn_obj)
         // fn_obj wird von event_loop_run_next freigegeben, wenn die Task ausgeführt wird
         RELEASE(fn_list);
-        if (do_list) RELEASE(do_list);
+        RELEASE(do_list);
 
         return (CljObject*)chan;
     }

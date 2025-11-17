@@ -19,6 +19,7 @@
 #include "byte_array.h"
 #include "atom.h"
 #include "function.h"  // For CljFunction
+#include "namespace.h"  // For CljNamespace
 #include <string.h>
 
 // External reference to verbose mode
@@ -269,7 +270,7 @@ CljObject *autorelease(CljObject *v) {
 static void autorelease_pool_clear(CljVector *pool) {
     if (!pool) return;
     // For CLJ_VECTOR_WEAK, don't RELEASE elements (weak reference)
-    if (TAG((ID)pool) == CLJ_VECTOR_WEAK) {
+    if (TAG(pool) == CLJ_VECTOR_WEAK) {
         vector_clear(pool);
     } else {
         VECTOR_FOR_EACH(pool, elem) {
@@ -332,7 +333,7 @@ void autorelease_pool_pop(CljVector *pool) {
         // Check if pool is already a zombie (already freed)
         if (get_retain_count(pool) != ZOMBIE_RC) {
             autorelease_pool_clear(pool);
-            RELEASE((ID)pool);
+            RELEASE(pool);
         }
         // If pool is already a zombie, skip release (already freed)
 #else
@@ -356,7 +357,7 @@ void autorelease_pool_cleanup_after_exception() {
         CljVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
         if (pool) {
             autorelease_pool_clear(pool);
-            RELEASE((ID)pool);
+            RELEASE(pool);
         }
         
         g_runtime.pool_stack[g_runtime.pool_stack_top--] = NULL;
@@ -563,19 +564,19 @@ static void release_object_deep(CljObject *v) {
                 if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
                     printf("🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n", v, list->first, list->rest);
                 }
-                // Release head and tail elements
-                if (list->first) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                // Release head and tail elements - RELEASE handles NULL
+                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                    if (list->first) {
                         printf("🔍 release_object_deep: Releasing list first element %p\n", list->first);
                     }
-                    RELEASE(list->first);
                 }
-                if (list->rest) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                RELEASE(list->first);
+                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                    if (list->rest) {
                         printf("🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
                     }
-                    RELEASE(list->rest);
                 }
+                RELEASE(list->rest);
             }
             break;
             
@@ -587,11 +588,11 @@ static void release_object_deep(CljObject *v) {
             {
                 CljFunction *func = (CljFunction*)v;
                 if (func) {
-                    // Release parameter vector (vector will release all elements)
+                    // Release parameter vector (vector will release all elements) - RELEASE handles NULL
                     RELEASE((CljObject*)func->params);
-                    // Release body
+                    // Release body - RELEASE handles NULL
                     RELEASE(func->body);
-                    // Release closure environment
+                    // Release closure environment - RELEASE handles NULL
                     RELEASE((CljObject*)func->closure_env);
                     // Free function name (strdup'd in make_function)
                     if (func->name) {
@@ -612,9 +613,9 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_ATOM:
             {
-                CljAtom *atom = as_atom((ID)v);
+                CljAtom *atom = as_atom(v);
                 if (atom) {
-                    // Release the atom's value (RELEASE handles nil and immediates safely)
+                    // Release the atom's value - RELEASE handles NULL, nil, and immediates safely
                     RELEASE(atom->value);
                 }
             }
@@ -623,6 +624,25 @@ static void release_object_deep(CljObject *v) {
         case CLJ_SEQ:
             // CljSeqIterator contains only stack-allocated iterator state
             // No heap-allocated data to release (container is a borrowed reference)
+            break;
+            
+        case CLJ_NAMESPACE:
+            {
+                // Note: namespace.h is included at the top of memory.c
+                CljNamespace *ns = (CljNamespace*)v;
+                if (ns) {
+                    // Release mappings map (CljMap*) - RELEASE handles NULL
+                    RELEASE(ns->mappings);
+                    // Release aliases map (CljMap*) - RELEASE handles NULL
+                    RELEASE(ns->aliases);
+                    // Free filename (strdup'd in make_namespace/ns_get_or_create)
+                    if (ns->filename) {
+                        free((void*)ns->filename);
+                    }
+                    // Note: name (CljSymbol*) is an interned symbol managed by the symbol table,
+                    // so it should NOT be released here. The symbol table owns the symbol's lifetime.
+                }
+            }
             break;
             
         // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates

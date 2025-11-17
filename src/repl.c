@@ -305,7 +305,7 @@ CljVector* history_load_from_file(const char *path) {
 /** @brief Print command-line usage information.
  *  @param prog Program name for usage display
  */
-static void usage(const char *prog) {
+static void __attribute__((unused)) usage(const char *prog) {
     printf("Usage: %s [-n NS] [-e EXPR] [-f FILE] [--no-core] [--repl] [--zombie] [--memory-debug]\n", prog);
     printf("\nOptions:\n");
     printf("  -n, --ns NS          Set namespace\n");
@@ -322,7 +322,7 @@ static void usage(const char *prog) {
  *  @param eval_args Array to free before exit
  *  @param exit_code Exit code to use
  */
-static void cleanup_and_exit(const char **eval_args, int exit_code) {
+static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int exit_code) {
     if (eval_args) free(eval_args);
     exit(exit_code);
 }
@@ -333,7 +333,7 @@ static void cleanup_and_exit(const char **eval_args, int exit_code) {
  *  @param memory_debug Enable verbose memory debugging
  *  @return true on successful completion
  */
-static bool run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
+static bool __attribute__((unused)) run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
     // Initialize memory profiling DIRECTLY before the first prompt
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();

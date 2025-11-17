@@ -214,7 +214,7 @@ TEST(test_defn_symbol_recognized) {
         TEST_ASSERT_NOT_NULL(SYM_DEFN);
         
         // Check pointer equality
-        bool pointer_match = (defn_sym == SYM_DEFN);
+        bool pointer_match = (defn_sym == (CljObject *)SYM_DEFN);
         
         // If pointer doesn't match, check if they're the same symbol via symbol table
         if (!pointer_match) {

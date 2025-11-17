@@ -491,7 +491,7 @@ TEST(test_go_returns_transient_map_channel) {
     TEST_ASSERT_TRUE((CljObject*)chan && TAG((CljObject*)chan) == CLJ_MAP_TRANSIENT || (CljObject*)chan && TAG((CljObject*)chan) == CLJ_MAP);
     
     // Cleanup
-    if (chan) RELEASE(chan);
+    RELEASE(chan);
 }
 
 // Test that channels are transient maps and can be mutated in-place
@@ -507,7 +507,7 @@ TEST(test_channel_is_transient_map_and_mutable) {
     TEST_ASSERT_TRUE(obj->type == CLJ_MAP_TRANSIENT);
     
     // Put a value using result_channel_put (mutates in-place)
-    CljObject *kw_value = intern_symbol(NULL, ":value");
+    CljObject *kw_value = (CljObject *)intern_symbol(NULL, ":value");
     CljValue val_42 = fixnum(42);
     result_channel_put(chan, val_42);
     

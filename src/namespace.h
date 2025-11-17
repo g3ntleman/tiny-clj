@@ -11,13 +11,13 @@
 // But since CljMap is an anonymous struct typedef, we can't use forward declaration
 #include "map.h"
 
-// Namespace structure
+// Namespace structure - subtype of CljObject
 typedef struct CljNamespace {
+    CljObject base;           // type + rc (4 bytes) - must be first field
     CljSymbol *name;          // z.B. 'user', 'math' (Symbol instead of CljObject* for type safety)
     CljMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
     CljMap *aliases;          // Map: Symbol → Symbol (Alias → vollständiger Namespace-Name)
     const char *filename;    // optional: zugeordnetes File
-    struct CljNamespace *next;
 } CljNamespace;
 
 // EvalState structure including namespaces and exception handling
@@ -39,10 +39,10 @@ typedef struct {
     int col;                  // current column
 } EvalState;
 
-// Global namespace registry
-extern CljNamespace *ns_registry;
+// Global namespace registry is now in g_runtime.ns_registry (CljMap*)
 
 // Namespace functions
+CljNamespace* make_namespace(const char *name, const char *file);
 CljNamespace* ns_get_or_create(const char *name, const char *file);
 ID ns_resolve(EvalState *st, CljSymbol *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
@@ -51,6 +51,7 @@ CljNamespace* ns_find(const char *name);
 void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_cleanup(void);
 void ns_reset_resolve_cache(void);
+int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 
 // Namespace alias functions
 CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias);

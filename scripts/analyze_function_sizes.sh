@@ -5,7 +5,7 @@
 
 set -e
 
-TARGET="tiny-clj-stm32"
+TARGET="build/tiny-clj-stm32"
 STM32_TOOLCHAIN="arm-none-eabi-"
 OUTPUT_FILE="Reports/function_size_analysis.md"
 TOP_COUNT=20
@@ -26,7 +26,7 @@ echo ""
 if [ ! -f "$TARGET" ]; then
     echo -e "${RED}Error: $TARGET not found!${NC}"
     echo "Please build the project first:"
-    echo "  make clean && cmake -DCMAKE_BUILD_TYPE=MinSizeRel . && make -j4"
+    echo "  cmake -DCMAKE_BUILD_TYPE=MinSizeRel . && make -j4"
     echo ""
     echo "Note: This script analyzes the macOS build. For STM32-specific analysis:"
     echo "  cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/stm32.cmake -DCMAKE_BUILD_TYPE=MinSizeRel ."

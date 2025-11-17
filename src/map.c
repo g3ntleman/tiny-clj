@@ -21,7 +21,7 @@ static CljMap map_empty_singleton_data = {
     .capacity = 0
     // data[] flexible array member not initialized (not needed for capacity=0)
 };
-CljMap *clj_empty_map_singleton = &map_empty_singleton_data;
+CljMap *map_empty_singleton = &map_empty_singleton_data;
 
 // === CljValue API (Phase 1: Parallel) ===
 
@@ -217,10 +217,10 @@ ID map_keys(CljMap *map) {
   for (int i = 0; i < map_data->count; i++) {
     CljObject *key = KV_KEY(map_data->data, i);
     if (key) {
-      keys_vec = vector_conj(keys_vec, (ID)RETAIN(key));
+      keys_vec = vector_conj(keys_vec, RETAIN(key));
     }
   }
-  return (ID)keys_vec;
+  return keys_vec;
 }
 
 /** Return a vector of values (retained). */
@@ -236,10 +236,10 @@ ID map_vals(CljMap *map) {
   for (int i = 0; i < map_data->count; i++) {
     CljObject *val = KV_VALUE(map_data->data, i);
     if (val) {
-      vals_vec = vector_conj(vals_vec, (ID)RETAIN(val));
+      vals_vec = vector_conj(vals_vec, RETAIN(val));
     }
   }
-  return (ID)vals_vec;
+  return vals_vec;
 }
 
 /** Return number of key/value pairs. */
@@ -275,7 +275,7 @@ void map_foreach(CljMap *map, void (*func)(ID, ID)) {
   if (!map_data)
     return;
   KV_FOREACH(map_data->data, map_data->count, key, value,
-             { func((ID)key, (ID)value); });
+             { func(key, value); });
 }
 
 /** Return 1 if key exists (pointer equality fast-path, fallback to structural equality).
@@ -500,7 +500,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
             CljObject *value = KV_VALUE(parent_map->data, i);
             if (key) {
                 // Use map_conj for in-place addition (no heap allocation)
-                map_conj(tmap, (ID)key, (ID)value);
+                map_conj(tmap, key, value);
             }
         }
     }
@@ -508,11 +508,11 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     // Then, add/update with additions in-place (later additions override earlier ones)
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     for (int i = 0; i < addition_count; i++) {
-        CljObject *key = additions[i * 2];
-        CljObject *value = additions[i * 2 + 1];
+        CljObject *key = KV_KEY(additions, i);
+        CljObject *value = KV_VALUE(additions, i);
         // Use map_conj for in-place addition/update (no heap allocation)
         // map_conj now handles NULL keys correctly
-        map_conj(tmap, (ID)key, (ID)value);
+        map_conj(tmap, key, value);
     }
     
     // Make immutable by simply changing the type (no copy needed!)
@@ -595,7 +595,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
         }
         // Fallback: structural comparison for non-interned objects
         // Note: If key_obj is NULL, existing_key must also be NULL to match (already handled above)
-        if (existing_key && key_obj && clj_equal((ID)existing_key, (ID)key_obj)) {
+        if (existing_key && key_obj && clj_equal(existing_key, key_obj)) {
             // Replace existing value
             // CRITICAL: value can be NULL (nil), which is valid
             if (m->data[i * 2 + 1]) {

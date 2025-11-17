@@ -13,11 +13,15 @@ fi
 TEST_NAME="$1"
 DURATION=10  # Fixed 10 seconds sampling duration
 
-# Use debug build without ASAN for cleaner profiling
-UNITY_TESTS_BIN="./build-debug-noasan/unity-tests"
+# Use build directory for unity-tests
+UNITY_TESTS_BIN="./build/unity-tests"
 if [ ! -f "$UNITY_TESTS_BIN" ]; then
-    echo "Warning: $UNITY_TESTS_BIN not found, using ./unity-tests"
-    UNITY_TESTS_BIN="./unity-tests"
+    echo "Warning: $UNITY_TESTS_BIN not found, searching for unity-tests"
+    UNITY_TESTS_BIN=$(find . -name "unity-tests" -type f -executable 2>/dev/null | head -1)
+    if [ -z "$UNITY_TESTS_BIN" ]; then
+        echo "Error: unity-tests not found. Please build the project first."
+        exit 1
+    fi
 fi
 
 echo "Profiling test: $TEST_NAME"
@@ -31,7 +35,7 @@ echo ""
 
 # Start sample in background, waiting for unity-tests process
 echo "Starting sample (waiting for unity-tests process)..."
-sample unity-tests $DURATION -wait -mayDie -f "$OUTPUT_FILE" > /dev/null 2>&1 &
+sample "$UNITY_TESTS_BIN" $DURATION -wait -mayDie -f "$OUTPUT_FILE" > /dev/null 2>&1 &
 SAMPLE_PID=$!
 
 # Give sample a moment to start waiting

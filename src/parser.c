@@ -395,7 +395,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     
     // Create transient vector for efficient building
     CljValue vec = make_vector(6, CLJ_VECTOR);
-    CljValue tvec = (ID)vector_transient((CljVector*)vec);
+    CljValue tvec = vector_transient((CljVector*)vec);
     RELEASE(vec);  // Release original, use transient
     
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -420,7 +420,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     }
     
     // Convert back to persistent vector
-    vec = (ID)vector_persistent((CljVector*)tvec);
+    vec = vector_persistent((CljVector*)tvec);
     RELEASE(tvec);
     
     if (reader_eof(reader) || !reader_match(reader, ']')) {
@@ -1043,7 +1043,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   reader_skip_all(reader);
   if (reader_peek_char(reader) != ')') {
     throw_parser_exception("Unclosed anonymous function - expected ')'", reader);
-    if (body) RELEASE(body);
+    RELEASE(body);
     return NULL;
   }
   reader_next(reader); // Consume ')'

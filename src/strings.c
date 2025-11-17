@@ -148,7 +148,7 @@ const char* to_string(CljObject *v) {
                     const char *el = pr_str(elem);
                     cap += strlen(el) + 1;
                     free((void*)el);
-                    if (elem) RELEASE(elem);
+                    RELEASE(elem);
                 }
                 char *s = ALLOC(char, cap+1);
                 strcpy(s, "[");
@@ -160,7 +160,7 @@ const char* to_string(CljObject *v) {
                     strcat(s, el);
                     if (i < count-1) strcat(s, " ");
                     free((void*)el);
-                    if (elem) RELEASE(elem);
+                    RELEASE(elem);
                 }
                 strcat(s, "]");
                 
@@ -291,7 +291,7 @@ const char* to_string(CljObject *v) {
 
         case CLJ_SEQ:
             {
-                CljSeqIterator *seq = as_seq((ID)v);
+                CljSeqIterator *seq = as_seq(v);
                 if (!seq) return strdup("()");
                 
                 // Direktes Drucken ohne Umkopieren
