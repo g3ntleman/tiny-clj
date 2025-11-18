@@ -78,11 +78,23 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
 // AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
 
-#define MAX_POOL_DEPTH 24
+// MAX_POOL_DEPTH is defined in runtime.h
 
 // Forward declarations
 static void release_object_deep(CljObject *v);
 static void autorelease_pool_clear(CljVector *pool);
+
+// Ensure pool_stack is initialized as transient vector
+static void ensure_pool_stack_initialized(void) {
+    if (!g_runtime.pool_stack) {
+        CljVector* pool_vec = make_vector(0, CLJ_VECTOR);
+        if (pool_vec) {
+            CljVector* transient_pool = vector_transient(pool_vec);
+            RELEASE(pool_vec);
+            g_runtime.pool_stack = transient_pool;
+        }
+    }
+}
 
 // ============================================================================
 // REFERENCE COUNTING IMPLEMENTATION
@@ -234,20 +246,26 @@ void release(CljObject *v) {
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
     
+    ensure_pool_stack_initialized();
 
     // Require active autorelease pool
-    if (g_runtime.pool_stack_top < 0) {
+    if (!g_runtime.pool_stack || vector_count(g_runtime.pool_stack) == 0) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
                 v, v ? v->type : -1);
+        return v;
     } 
     
+    unsigned int stack_depth = vector_count(g_runtime.pool_stack);
+    CljVector *pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
     
-    // Update g_runtime.pool_stack[g_runtime.pool_stack_top with an enlarged pool:
-    // Use vector_conj to append (now supports CLJ_VECTOR_WEAK)
-    CljVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
-    ASSIGN(g_runtime.pool_stack[g_runtime.pool_stack_top], vector_conj(pool, v));
+    // Update pool with new object (pool may be replaced by vector_conj due to COW)
+    CljVector *updated_pool = vector_conj(pool, v);
+    if (updated_pool != pool) {
+        // Pool was replaced (COW), update stack (vector_assoc supports transient vectors)
+        ASSIGN(g_runtime.pool_stack, vector_assoc(g_runtime.pool_stack, stack_depth - 1, (ID)updated_pool));
+    }
     
     // Track for memory profiling
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
@@ -284,22 +302,24 @@ static void autorelease_pool_clear(CljVector *pool) {
 
 
 CljVector *autorelease_pool_push() {
-    // Check for stack overflow
-    if (g_runtime.pool_stack_top >= MAX_POOL_DEPTH - 1) {
-        throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-            "Autorelease pool stack overflow! Maximum depth of %d exceeded. "
-            "This indicates too many nested WITH_AUTORELEASE_POOL blocks.", 
-            MAX_POOL_DEPTH);
+    ensure_pool_stack_initialized();
+    
+    // Check for stack overflow (assertion check)
+    unsigned int stack_depth = vector_count(g_runtime.pool_stack);
+    CLJ_ASSERT(stack_depth < MAX_POOL_DEPTH && "Autorelease pool stack overflow! Maximum depth exceeded.");
+    
+    CljVector *pool = make_vector(1024, CLJ_VECTOR_WEAK);
+    if (!pool) {
+        throw_oom();
         return NULL;
     }
     
-    CljVector *pool = make_vector(1024, CLJ_VECTOR_WEAK);
-    
-    g_runtime.pool_stack[++g_runtime.pool_stack_top] = pool;
+    // Push pool to stack using transient vector operations
+    ASSIGN(g_runtime.pool_stack, vector_conj_bang(g_runtime.pool_stack, (ID)pool));
     
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-        printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%d)\n", 
-               pool, g_runtime.pool_stack_top + 1);
+        printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%u)\n", 
+               pool, vector_count(g_runtime.pool_stack));
     }
     
     return pool;
@@ -308,7 +328,7 @@ CljVector *autorelease_pool_push() {
 
 void autorelease_pool_pop(CljVector *pool) {
     // Check for stack underflow
-    if (g_runtime.pool_stack_top < 0) {
+    if (!g_runtime.pool_stack || vector_count(g_runtime.pool_stack) == 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
                "This indicates more pop() calls than push() calls.\n");
         return;
@@ -316,16 +336,17 @@ void autorelease_pool_pop(CljVector *pool) {
     
     // Always use the pool from the top of the stack
     // The provided pool parameter may be outdated if autorelease() replaced the pool
-    pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
+    unsigned int stack_depth = vector_count(g_runtime.pool_stack);
+    pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
     
     // Debug output
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-        printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%d)\n", 
-               pool, g_runtime.pool_stack_top + 1);
+        printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%u)\n", 
+               pool, stack_depth);
     }
     
     // Remove pool from stack BEFORE releasing (to avoid double-free if called multiple times)
-    g_runtime.pool_stack[g_runtime.pool_stack_top--] = NULL;
+    ASSIGN(g_runtime.pool_stack, vector_pop(g_runtime.pool_stack));
     
     // Clear and release the pool (only if not already a zombie in DEBUG builds)
     if (pool) {
@@ -345,25 +366,24 @@ void autorelease_pool_pop(CljVector *pool) {
     
     // Debug output to verify stack state
     if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
-        printf("🔍 autorelease_pool_pop: After pop, stack_top=%d\n", g_runtime.pool_stack_top);
+        printf("🔍 autorelease_pool_pop: After pop, stack_depth=%u\n", 
+               vector_count(g_runtime.pool_stack));
     }
 }
 
-// CFAutoreleasePool: Exception-safe cleanup function
-// Call this from CATCH blocks to clean up pools after exceptions
+// Exception-safe cleanup function (called from CATCH blocks)
 void autorelease_pool_cleanup_after_exception() {
-    // Clean up all pools from array stack
-    while (g_runtime.pool_stack_top >= 0) {
-        CljVector *pool = g_runtime.pool_stack[g_runtime.pool_stack_top];
-        if (pool) {
-            autorelease_pool_clear(pool);
-            RELEASE(pool);
+    if (g_runtime.pool_stack) {
+        while (vector_count(g_runtime.pool_stack) > 0) {
+            unsigned int stack_depth = vector_count(g_runtime.pool_stack);
+            CljVector *pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
+            if (pool) {
+                autorelease_pool_clear(pool);
+                RELEASE(pool);
+            }
+            ASSIGN(g_runtime.pool_stack, vector_pop(g_runtime.pool_stack));
         }
-        
-        g_runtime.pool_stack[g_runtime.pool_stack_top--] = NULL;
     }
-    
-    g_runtime.pool_stack_top = -1;
 }
 
 /** @brief Pop and drain current autorelease pool (most common usage)
@@ -394,8 +414,12 @@ void autorelease_pool_cleanup_after_exception() {
  * at program termination or when you need to ensure all pools are drained.
  */
 void autorelease_pool_cleanup_all() {
-    while (g_runtime.pool_stack_top >= 0) {
-        autorelease_pool_pop(g_runtime.pool_stack[g_runtime.pool_stack_top]);
+    if (g_runtime.pool_stack) {
+        while (vector_count(g_runtime.pool_stack) > 0) {
+            unsigned int stack_depth = vector_count(g_runtime.pool_stack);
+            CljVector *pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
+            autorelease_pool_pop(pool);
+        }
     }
 }
 
@@ -406,7 +430,7 @@ void autorelease_pool_cleanup_all() {
  * Useful for debugging and ensuring proper pool management.
  */
 bool is_autorelease_pool_active(void) {
-    return g_runtime.pool_stack_top >= 0;
+    return g_runtime.pool_stack && vector_count(g_runtime.pool_stack) > 0;
 }
 
 /** @brief Get retain count of object

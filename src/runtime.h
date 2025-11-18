@@ -21,15 +21,20 @@
 
 // Forward declarations to avoid circular dependencies
 // Note: These are only needed when runtime.h is included before namespace.h/symbol.h
+// C11 allows identical typedef redefinitions, but compiler warns - suppress warning
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtypedef-redefinition"
 #ifndef TINY_CLJ_NAMESPACE_H
 typedef struct CljNamespace CljNamespace;
+#else
+// CljNamespace already defined in namespace.h
 #endif
-// SymbolEntry is defined in symbol.h - only forward declare if not included
-#ifndef TINY_CLJ_SYMBOL_H
+#ifndef TINY_CLJ_SYMBOLS_H
 typedef struct SymbolEntry SymbolEntry;
 #else
-// symbol.h already included - SymbolEntry is fully defined
+// SymbolEntry already defined in symbol.h
 #endif
+#pragma GCC diagnostic pop
 
 // Memory allocation macros
 // Allocate `count` objects of type `type` on the stack
@@ -62,9 +67,8 @@ typedef struct TinyClJRuntime {
     // Meta Registry
     CljMap *meta_registry;
     
-    // Autorelease Pool Stack (direct weak vectors)
-    CljVector *pool_stack[MAX_POOL_DEPTH];
-    int pool_stack_top;
+    // Autorelease Pool Stack (transient vector)
+    CljVector *pool_stack;
     
     // Builtins
     bool builtins_registered;

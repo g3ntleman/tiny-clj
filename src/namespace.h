@@ -12,6 +12,8 @@
 #include "map.h"
 
 // Namespace structure - subtype of CljObject
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtypedef-redefinition"
 typedef struct CljNamespace {
     CljObject base;           // type + rc (4 bytes) - must be first field
     CljSymbol *name;          // z.B. 'user', 'math' (Symbol instead of CljObject* for type safety)
@@ -19,6 +21,7 @@ typedef struct CljNamespace {
     CljMap *aliases;          // Map: Symbol → Symbol (Alias → vollständiger Namespace-Name)
     const char *filename;    // optional: zugeordnetes File
 } CljNamespace;
+#pragma GCC diagnostic pop
 
 // EvalState structure including namespaces and exception handling
 typedef struct {

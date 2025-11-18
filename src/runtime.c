@@ -13,8 +13,7 @@ TinyClJRuntime g_runtime = {
     .clojure_core_cache = NULL,
     .symbol_table = NULL,
     .meta_registry = NULL,
-    .pool_stack = {NULL},
-    .pool_stack_top = -1,
+    .pool_stack = NULL,
     .builtins_registered = false,
     .task_queue = NULL,
     .timer_queue = NULL,
@@ -40,12 +39,18 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Reset meta registry
     ASSIGN(runtime->meta_registry, NULL);
     
-    // Reset pool stack (array of pointers)
-    // runtime_free() should have already freed all pools and set them to NULL
-    for (int i = 0; i < MAX_POOL_DEPTH; i++) {
-        runtime->pool_stack[i] = NULL;
+    // Reset pool stack (transient vector)
+    if (runtime->pool_stack) {
+        RELEASE(runtime->pool_stack);
+        runtime->pool_stack = NULL;
     }
-    runtime->pool_stack_top = -1;
+    // Initialize pool_stack as transient vector
+    CljVector* pool_vec = make_vector(0, CLJ_VECTOR);
+    if (pool_vec) {
+        CljVector* transient_pool = vector_transient(pool_vec);
+        RELEASE(pool_vec);
+        runtime->pool_stack = transient_pool;
+    }
     
     // Reset builtins flag
     runtime->builtins_registered = false;
@@ -124,16 +129,16 @@ void runtime_free(TinyClJRuntime *runtime) {
         runtime->timer_queue = NULL;
     }
     
-    // CRITICAL: Drain all autorelease pools before resetting runtime
-    // This ensures that objects from previous tests don't leak into the next test
-    while (runtime->pool_stack_top >= 0) {
-        CljVector *pool = runtime->pool_stack[runtime->pool_stack_top];
-        if (pool) {
-            // Use autorelease_pool_pop to properly release all objects
-            autorelease_pool_pop(pool);
-        } else {
-            // Pool pointer is NULL, just decrement stack
-            runtime->pool_stack_top--;
+    // Drain all autorelease pools before resetting runtime
+    if (runtime->pool_stack) {
+        while (vector_count(runtime->pool_stack) > 0) {
+            unsigned int stack_depth = vector_count(runtime->pool_stack);
+            CljVector *pool = (CljVector*)vector_nth(runtime->pool_stack, stack_depth - 1);
+            if (pool) {
+                autorelease_pool_pop(pool);
+            } else {
+                ASSIGN(runtime->pool_stack, vector_pop(runtime->pool_stack));
+            }
         }
     }
     
@@ -154,13 +159,11 @@ void runtime_free(TinyClJRuntime *runtime) {
     // Reset meta registry
     ASSIGN(runtime->meta_registry, NULL);
     
-    // Reset pool stack (array of pointers)
-    // Note: Pools were already released in the loop above (lines 128-137),
-    // so just set to NULL without releasing again to avoid double-free
-    for (int i = 0; i < MAX_POOL_DEPTH; i++) {
-        runtime->pool_stack[i] = NULL;
+    // Reset pool stack (pools were already released above)
+    if (runtime->pool_stack) {
+        RELEASE(runtime->pool_stack);
+        runtime->pool_stack = NULL;
     }
-    runtime->pool_stack_top = -1;
     
     // Reset builtins flag
     runtime->builtins_registered = false;

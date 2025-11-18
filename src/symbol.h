@@ -99,12 +99,15 @@ extern CljSymbol *SYM_CLOJURE_CORE;
 extern CljSymbol *SYM_NS_STAR;
 
 // Symbol interning with a real symbol table
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtypedef-redefinition"
 typedef struct SymbolEntry {
     char *ns;
     char *name;
     CljSymbol *symbol;
     struct SymbolEntry *next;
 } SymbolEntry;
+#pragma GCC diagnostic pop
 
 extern SymbolEntry *symbol_table;
 
