@@ -1295,7 +1295,7 @@ static inline CljObject* eval_arithmetic_dispatch(CljList *list, CljMap *env, Ev
 
 static inline CljObject* eval_comparison_dispatch(CljList *list, CljMap *env, CljObject *op) {
     CljSymbol *op_sym = (CljSymbol*)op;
-    if (op_sym == SYM_EQUALS || op_sym == SYM_EQUAL) {
+    if (op_sym == SYM_EQUALS) {
         CljObject *a, *b;
         EVAL_TWO_ARGS(list, env, a, b);
         

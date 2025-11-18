@@ -4,19 +4,17 @@
 #include "object.h"
 #include <stdbool.h>
 
-// Forward declaration for CljNamespace (to avoid circular dependency with namespace.h)
-// Use struct forward declaration instead of typedef to avoid redefinition warnings
-struct CljNamespace;
-typedef struct CljNamespace CljNamespace;
+// Forward declaration for CljSymbol (needed for self-reference)
+typedef struct CljSymbol CljSymbol;
 
 // CljSymbol struct definition
 #define SYMBOL_NAME_MAX_LEN 64
 
-typedef struct {
+struct CljSymbol {
     CljObject base;
-    CljNamespace *ns;
+    CljSymbol *ns;  // Namespace name symbol (Clojure-compatible: Symbol->ns is a Symbol, not Namespace object)
     const char *name;
-} CljSymbol;
+};
 
 // Type-safe casting
 static inline CljSymbol* as_symbol(ID obj) {
@@ -64,7 +62,6 @@ extern CljSymbol *SYM_MINUS;
 extern CljSymbol *SYM_MULTIPLY;
 extern CljSymbol *SYM_DIVIDE;
 extern CljSymbol *SYM_EQUALS;
-extern CljSymbol *SYM_EQUAL;
 extern CljSymbol *SYM_LT;
 extern CljSymbol *SYM_GT;
 extern CljSymbol *SYM_LE;
@@ -108,6 +105,12 @@ CljSymbol* intern_symbol(const char *ns, const char *name);
 CljSymbol* intern_symbol_global(const char *name);  // Without namespace
 void symbol_table_add(const char *ns, const char *name, CljSymbol *symbol);
 void symbol_table_cleanup();
+
+// Helper functions for namespace lookup (DRY principle)
+// Forward declaration for CljNamespace
+struct CljNamespace;
+struct CljNamespace* symbol_get_namespace(CljSymbol *sym);  // Get namespace object from symbol's namespace name
+const char* symbol_get_namespace_name(CljSymbol *sym);  // Get namespace name string from symbol
 
 // Initialisierung der globalen Symbole
 void init_special_symbols();

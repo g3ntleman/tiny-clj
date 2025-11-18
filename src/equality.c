@@ -107,15 +107,12 @@ bool clj_equal(ID a, ID b) {
             if (!sym_a->name || !sym_b->name) return false;
             if (strcmp(sym_a->name, sym_b->name) != 0) return false;
             
-            // Compare namespaces (both NULL or both same object)
+            // Compare namespaces (pointer comparison works due to interning)
             if (sym_a->ns == sym_b->ns) return true;
             if (!sym_a->ns || !sym_b->ns) return false;
             
-            // Both have namespaces - compare their names
-            CljSymbol *ns_a = sym_a->ns->name;
-            CljSymbol *ns_b = sym_b->ns->name;
-            if (!ns_a || !ns_b) return false;
-            return strcmp(ns_a->name, ns_b->name) == 0;
+            // Compare namespace name strings
+            return strcmp(sym_a->ns->name, sym_b->ns->name) == 0;
         }
         
         // Referenz-Typen - nur Pointer-Vergleich (bereits durch a == b abgefangen)

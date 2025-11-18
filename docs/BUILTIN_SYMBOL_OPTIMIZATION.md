@@ -44,7 +44,7 @@ typedef enum {
 static BuiltinSymbolType dispatch_builtin_symbol(CljObject *op) {
     // Tier 1: Most frequent operations (90%+)
     if (op == SYM_IF) return SYMBOL_IF;
-    if (op == SYM_EQUALS || op == SYM_EQUAL) return SYMBOL_EQUALS;
+    if (op == SYM_EQUALS) return SYMBOL_EQUALS;
     if (op == SYM_PLUS) return SYMBOL_PLUS;
     if (op == SYM_MINUS) return SYMBOL_MINUS;
     

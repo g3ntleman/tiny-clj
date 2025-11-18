@@ -45,7 +45,6 @@ CljSymbol *SYM_MINUS = NULL;
 CljSymbol *SYM_MULTIPLY = NULL;
 CljSymbol *SYM_DIVIDE = NULL;
 CljSymbol *SYM_EQUALS = NULL;
-CljSymbol *SYM_EQUAL = NULL;
 CljSymbol *SYM_LT = NULL;
 CljSymbol *SYM_GT = NULL;
 CljSymbol *SYM_LE = NULL;
@@ -177,9 +176,6 @@ static struct { CljSymbol sym; } sym_divide_data = {
 };
 static struct { CljSymbol sym; } sym_equals_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = "=" }
-};
-static struct { CljSymbol sym; } sym_equal_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = "equal" }
 };
 static struct { CljSymbol sym; } sym_lt_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = "<" }
@@ -367,9 +363,6 @@ void init_special_symbols() {
     SYM_EQUALS = &sym_equals_data.sym;
     symbol_table_add(NULL, "=", SYM_EQUALS);
     
-    SYM_EQUAL = &sym_equal_data.sym;
-    symbol_table_add(NULL, "equal", SYM_EQUAL);
-    
     SYM_LT = &sym_lt_data.sym;
     symbol_table_add(NULL, "<", SYM_LT);
     
@@ -466,10 +459,7 @@ void init_special_symbols() {
 static CljSymbol* vector_find_symbol(CljVector *vec, const char *ns, const char *name) {
     if (!vec || !name) return NULL;
     
-    CljNamespace *ns_obj = NULL;
-    if (ns) {
-        ns_obj = ns_get_or_create(ns, NULL);
-    }
+    CljSymbol *ns_sym = ns ? intern_symbol_global(ns) : NULL;
     
     unsigned int count = vector_count(vec);
     for (unsigned int i = 0; i < count; i++) {
@@ -477,7 +467,8 @@ static CljSymbol* vector_find_symbol(CljVector *vec, const char *ns, const char 
         if (elem && TAG(elem) == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(elem);
             if (sym->name && strcmp(sym->name, name) == 0) {
-                if ((!ns_obj && !sym->ns) || (ns_obj && sym->ns && sym->ns == ns_obj)) {
+                // Compare namespace name symbols (pointer comparison works due to interning)
+                if ((!ns_sym && !sym->ns) || (ns_sym && sym->ns && sym->ns == ns_sym)) {
                     return sym;
                 }
             }
@@ -560,18 +551,17 @@ CljSymbol* make_symbol(const char *name, const char *ns) {
     // Enforce invariant: symbols always have a name
     CLJ_ASSERT(sym->name != NULL && "Symbol must have a name after creation");
     
-    // Get or create namespace object
+    // Get interned symbol for namespace name (Clojure-compatible: Symbol->ns is a Symbol, not Namespace object)
     if (ns) {
-        sym->ns = ns_get_or_create(ns, NULL);  // NULL for file parameter
+        sym->ns = intern_symbol_global(ns);
         if (!sym->ns) {
             free(sym);
-            throw_exception_formatted("NamespaceError", __FILE__, __LINE__, 0,
-                    "Failed to create namespace '%s' for symbol '%s'", ns, name);
+            throw_exception_formatted("OutOfMemoryError", __FILE__, __LINE__, 0,
+                    "Failed to intern namespace name symbol '%s' for symbol '%s'", ns, name);
             return NULL;
         }
-        // Namespace is already retained by ns_get_or_create
     } else {
-        sym->ns = NULL;  // No namespace
+        sym->ns = NULL;
     }
     
     return sym;
@@ -597,6 +587,20 @@ CljSymbol* intern_symbol(const char *ns, const char *name) {
 // Global symbols (without namespace)
 CljSymbol* intern_symbol_global(const char *name) {
     return intern_symbol(NULL, name);
+}
+
+// Helper: Get namespace object from symbol's namespace name (DRY principle)
+// Returns NULL if namespace doesn't exist
+struct CljNamespace* symbol_get_namespace(CljSymbol *sym) {
+    if (!sym || !sym->ns || !sym->ns->name) return NULL;
+    return ns_find(sym->ns->name);
+}
+
+// Helper: Get namespace name string from symbol (DRY principle)
+// Returns NULL if symbol has no namespace
+const char* symbol_get_namespace_name(CljSymbol *sym) {
+    if (!sym || !sym->ns) return NULL;
+    return sym->ns->name;
 }
 
 // Clean up symbol table (ONLY for test cleanup, not regular symbols)

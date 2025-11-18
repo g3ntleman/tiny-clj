@@ -120,15 +120,11 @@ const char* to_string(CljObject *v) {
                 if (!sym) return strdup("nil");
                 
                 // Handle namespace-qualified symbols
-                if (sym->ns && sym->ns->name) {  // Check if namespace exists
-                    // Get namespace name from the namespace object
-                    CljSymbol *ns_sym = sym->ns->name;
-                    if (ns_sym && ns_sym->name) {
-                        size_t len = strlen(ns_sym->name) + 1 + strlen(sym->name) + 1;
-                        char *s = ALLOC(char, len);
-                        snprintf(s, len, "%s/%s", ns_sym->name, sym->name);
-                        return s;
-                    }
+                if (sym->ns && sym->ns->name) {
+                    size_t len = strlen(sym->ns->name) + 1 + strlen(sym->name) + 1;
+                    char *s = ALLOC(char, len);
+                    snprintf(s, len, "%s/%s", sym->ns->name, sym->name);
+                    return s;
                 }
                 return strdup(sym->name);
             }

@@ -277,6 +277,7 @@ add_executable(unity-tests
     src/tests/test_list.c
     src/tests/test_namespace.c
     src/tests/test_symbol_interning.c
+    src/tests/test_symbol_clojure_compat.c
     src/tests/test_core_initialization.c
     src/tests/test_equal.c
     src/tests/test_seq.c
