@@ -4,6 +4,7 @@
  * Memory allocation macros and runtime constants for Tiny-Clj:
  * - STACK_ALLOC: Stack allocation using alloca() for temporary data
  * - ALLOC: Heap allocation using malloc() for persistent data
+ * - ALLOC_ZERO: Zero-initialized heap allocation using calloc()
  * - Function call limits for STM32 compatibility
  * - Builtin function registration system
  */
@@ -14,27 +15,10 @@
 #include "object.h"
 #include "memory.h"
 #include "vector.h"
-#include "map.h"
+#include "namespace.h"
 #include <alloca.h>
 #include <stdlib.h>
 #include <stdbool.h>
-
-// Forward declarations to avoid circular dependencies
-// Note: These are only needed when runtime.h is included before namespace.h/symbol.h
-// C11 allows identical typedef redefinitions, but compiler warns - suppress warning
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtypedef-redefinition"
-#ifndef TINY_CLJ_NAMESPACE_H
-typedef struct CljNamespace CljNamespace;
-#else
-// CljNamespace already defined in namespace.h
-#endif
-#ifndef TINY_CLJ_SYMBOLS_H
-typedef struct SymbolEntry SymbolEntry;
-#else
-// SymbolEntry already defined in symbol.h
-#endif
-#pragma GCC diagnostic pop
 
 // Memory allocation macros
 // Allocate `count` objects of type `type` on the stack
@@ -48,7 +32,7 @@ typedef struct SymbolEntry SymbolEntry;
 // Note: This is a safety limit - actual stack depth depends on function nesting
 // Very high value to handle deeply nested Clojure function calls
 // Note: This is a safety limit to prevent infinite recursion, not a hard limit
-#define MAX_CALL_STACK_DEPTH 1000
+#define MAX_CALL_STACK_DEPTH 30
 
 // Maximum autorelease pool depth
 #define MAX_POOL_DEPTH 24
@@ -58,17 +42,18 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 // Runtime state management
 typedef struct TinyClJRuntime {
     // Namespaces
-    CljMap *ns_registry;      // transient Map: Symbol (namespace name) → CljNamespace*
-    CljNamespace *clojure_core_cache;
+    CljMap *ns_registry;            // transient Map: Symbol → CljNamespace*
+    CljNamespace *clojure_core_cache;  // CljNamespace*
     
     // Symbol Table
-    SymbolEntry *symbol_table;
+    CljVector *symbol_table;        // Vector of CljSymbol*
     
     // Meta Registry
-    CljMap *meta_registry;
+    void *meta_registry;            // CljObject*
     
-    // Autorelease Pool Stack (transient vector)
-    CljVector *pool_stack;
+    // Autorelease Pool Stack
+    CljVector *pool_stack;  // transient vector for autorelease pools
+    int pool_stack_top;
     
     // Builtins
     bool builtins_registered;
@@ -76,7 +61,7 @@ typedef struct TinyClJRuntime {
     // Event Loop
     CljVector *task_queue;    // transient vector for normal tasks
     CljVector *timer_queue;  // transient vector for timer tasks
-    int timer_id_counter;          // counter for unique timer IDs
+    int timer_id_counter;
 } TinyClJRuntime;
 
 // Statisch alloziertes globales Runtime-Struct

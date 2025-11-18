@@ -57,7 +57,6 @@ typedef void* CljValue;
 #define TYPE_OF_double CLJ_FLOAT
 #define TYPE_OF_char CLJ_STRING
 // Für interne Strukturen ohne CLJ_TYPE
-#define TYPE_OF_SymbolEntry CLJ_NIL
 #define TYPE_OF_CljNamespace CLJ_NAMESPACE
 
 // Makro zur Typableitung

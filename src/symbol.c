@@ -5,7 +5,8 @@
 #include "exception.h"
 #include "namespace.h"
 #include "types.h"  // For SINGLETON_RC
-#include "memory.h"  // For is_pointer_in_data_segment
+#include "memory.h"
+#include "vector.h"  // For vector operations
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -461,54 +462,58 @@ void init_special_symbols() {
     SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
 }
 
-// Find symbol in the table
-static SymbolEntry* symbol_table_find(const char *ns, const char *name) {
-    if (!name) return NULL;
+// Helper function to find symbol in vector by comparing name and namespace
+static CljSymbol* vector_find_symbol(CljVector *vec, const char *ns, const char *name) {
+    if (!vec || !name) return NULL;
     
-    SymbolEntry *entry = g_runtime.symbol_table;
-    while (entry) {
-        // Check namespace match first
-        bool ns_match = false;
-        if (entry->ns && ns) {
-            ns_match = (strcmp(entry->ns, ns) == 0);
-        } else if (!entry->ns && !ns) {
-            ns_match = true;
-        }
-        
-        // If namespace matches, check name
-        if (ns_match && entry->name) {
-            if (strcmp(entry->name, name) == 0) {
-                return entry;
+    CljNamespace *ns_obj = NULL;
+    if (ns) {
+        ns_obj = ns_get_or_create(ns, NULL);
+    }
+    
+    unsigned int count = vector_count(vec);
+    for (unsigned int i = 0; i < count; i++) {
+        ID elem = vector_nth(vec, i);
+        if (elem && TAG(elem) == CLJ_SYMBOL) {
+            CljSymbol *sym = as_symbol(elem);
+            if (sym->name && strcmp(sym->name, name) == 0) {
+                if ((!ns_obj && !sym->ns) || (ns_obj && sym->ns && sym->ns == ns_obj)) {
+                    return sym;
+                }
             }
         }
-        entry = entry->next;
     }
     
     return NULL;
 }
 
+// Find symbol in the table
+static CljSymbol* symbol_table_find(const char *ns, const char *name) {
+    if (!name || !g_runtime.symbol_table) return NULL;
+    return vector_find_symbol(g_runtime.symbol_table, ns, name);
+}
+
 // Add symbol to the table
-SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbol) {
-    SymbolEntry *entry = (SymbolEntry*)malloc(sizeof(SymbolEntry));
-    if (!entry) return NULL;
+void symbol_table_add(const char *ns, const char *name, CljSymbol *symbol) {
+    if (!symbol || !name) return;
     
-    entry->ns = ns ? strdup(ns) : NULL;
-    
-    // Use tagged pointer system to detect heap vs static symbols
-    // Heap symbols (TAG_POINTER) need strdup, static symbols use string literals
-    if (symbol && get_tag(symbol) == TAG_POINTER) {
-        // This is a heap-allocated symbol, strdup the name
-        entry->name = strdup(name);
-    } else {
-        // This is a static symbol with string literal, don't strdup
-        entry->name = (char*)name;
+    if (!g_runtime.symbol_table) {
+        g_runtime.symbol_table = make_vector(16, CLJ_VECTOR);
     }
     
-    entry->symbol = symbol;
-    entry->next = g_runtime.symbol_table;
-    g_runtime.symbol_table = entry;
+    CljSymbol *existing = vector_find_symbol(g_runtime.symbol_table, ns, name);
+    if (existing) {
+        return;  // Already exists
+    }
     
-    return entry;
+    CljVector *new_table = vector_conj(g_runtime.symbol_table, (ID)symbol);
+    if (new_table) {
+        if (new_table != g_runtime.symbol_table) {
+            RELEASE(g_runtime.symbol_table);
+            g_runtime.symbol_table = new_table;
+        }
+        RETAIN((ID)symbol);
+    }
 }
 
 /**
@@ -576,17 +581,14 @@ CljSymbol* make_symbol(const char *name, const char *ns) {
 CljSymbol* intern_symbol(const char *ns, const char *name) {
     if (!name) return NULL;
     
-    // Suche zuerst in der Symbol-Table
-    SymbolEntry *existing = symbol_table_find(ns, name);
+    CljSymbol *existing = symbol_table_find(ns, name);
     if (existing) {
-        return existing->symbol;  // Gleicher Pointer!
+        return existing;
     }
     
-    // Symbol nicht gefunden, erstelle neues
     CljSymbol *symbol = make_symbol(name, ns);
     if (!symbol) return NULL;
     
-    // Füge zur Symbol-Table hinzu
     symbol_table_add(ns, name, symbol);
     
     return symbol;
@@ -601,21 +603,9 @@ CljSymbol* intern_symbol_global(const char *name) {
 // This function will be eliminated by dead-code-elimination in production builds
 // since it's only called from test files
 void symbol_table_cleanup() {
-    SymbolEntry *entry = g_runtime.symbol_table;
-    while (entry) {
-        SymbolEntry *next = entry->next;
-        if (entry->ns) free(entry->ns);
-        
-        // Only free entry->name if it's heap-allocated (not in data segment)
-        // Static symbols use string literals in data segment that shouldn't be freed
-        // Heap-allocated symbols (strdup'd) are on the heap and should be freed
-        if (entry->name && !is_pointer_in_data_segment(entry->name)) {
-            free(entry->name);
-        }
-        
-        free(entry);
-        entry = next;
+    if (g_runtime.symbol_table) {
+        RELEASE(g_runtime.symbol_table);
+        g_runtime.symbol_table = NULL;
     }
-    g_runtime.symbol_table = NULL;
 }
 

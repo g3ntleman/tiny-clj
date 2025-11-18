@@ -34,23 +34,16 @@ void runtime_init(TinyClJRuntime *runtime) {
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // The symbol table is cleaned up by symbol_table_cleanup() if needed
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
-    // ASSIGN(runtime->symbol_table, NULL);  // DON'T reset - preserves SYM_CLOJURE_CORE
+    // Initialize symbol_table as empty vector if not already set
+    if (!runtime->symbol_table) {
+        runtime->symbol_table = make_vector(16, CLJ_VECTOR);
+    }
     
     // Reset meta registry
     ASSIGN(runtime->meta_registry, NULL);
     
-    // Reset pool stack (transient vector)
-    if (runtime->pool_stack) {
-        RELEASE(runtime->pool_stack);
-        runtime->pool_stack = NULL;
-    }
-    // Initialize pool_stack as transient vector
-    CljVector* pool_vec = make_vector(0, CLJ_VECTOR);
-    if (pool_vec) {
-        CljVector* transient_pool = vector_transient(pool_vec);
-        RELEASE(pool_vec);
-        runtime->pool_stack = transient_pool;
-    }
+    // Reset pool stack (transient vector) - pool_stack is an array, not a pointer
+    // This is handled by memory.c's ensure_pool_stack_initialized()
     
     // Reset builtins flag
     runtime->builtins_registered = false;
@@ -137,7 +130,8 @@ void runtime_free(TinyClJRuntime *runtime) {
             if (pool) {
                 autorelease_pool_pop(pool);
             } else {
-                ASSIGN(runtime->pool_stack, vector_pop(runtime->pool_stack));
+                CljVector *popped = vector_pop(runtime->pool_stack);
+                ASSIGN(runtime->pool_stack, popped);
             }
         }
     }
@@ -159,7 +153,7 @@ void runtime_free(TinyClJRuntime *runtime) {
     // Reset meta registry
     ASSIGN(runtime->meta_registry, NULL);
     
-    // Reset pool stack (pools were already released above)
+    // Reset pool stack
     if (runtime->pool_stack) {
         RELEASE(runtime->pool_stack);
         runtime->pool_stack = NULL;

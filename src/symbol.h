@@ -98,23 +98,10 @@ extern CljSymbol *SYM_CLOJURE_CORE;
 // Additional symbols for hot path optimization
 extern CljSymbol *SYM_NS_STAR;
 
-// Symbol interning with a real symbol table
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtypedef-redefinition"
-typedef struct SymbolEntry {
-    char *ns;
-    char *name;
-    CljSymbol *symbol;
-    struct SymbolEntry *next;
-} SymbolEntry;
-#pragma GCC diagnostic pop
-
-extern SymbolEntry *symbol_table;
-
 CljSymbol* make_symbol(const char *name, const char *ns);
 CljSymbol* intern_symbol(const char *ns, const char *name);
 CljSymbol* intern_symbol_global(const char *name);  // Without namespace
-SymbolEntry* symbol_table_add(const char *ns, const char *name, CljSymbol *symbol);
+void symbol_table_add(const char *ns, const char *name, CljSymbol *symbol);
 void symbol_table_cleanup();
 
 // Initialisierung der globalen Symbole
