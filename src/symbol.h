@@ -4,12 +4,17 @@
 #include "object.h"
 #include <stdbool.h>
 
+// Forward declaration for CljNamespace (to avoid circular dependency with namespace.h)
+// Use struct forward declaration instead of typedef to avoid redefinition warnings
+struct CljNamespace;
+typedef struct CljNamespace CljNamespace;
+
 // CljSymbol struct definition
 #define SYMBOL_NAME_MAX_LEN 64
 
 typedef struct {
     CljObject base;
-    struct CljNamespace *ns;
+    CljNamespace *ns;
     const char *name;
 } CljSymbol;
 

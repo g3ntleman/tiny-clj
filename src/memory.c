@@ -309,10 +309,7 @@ CljVector *autorelease_pool_push() {
     CLJ_ASSERT(stack_depth < MAX_POOL_DEPTH && "Autorelease pool stack overflow! Maximum depth exceeded.");
     
     CljVector *pool = make_vector(1024, CLJ_VECTOR_WEAK);
-    if (!pool) {
-        throw_oom();
-        return NULL;
-    }
+
     
     // Push pool to stack using transient vector operations
     ASSIGN(g_runtime.pool_stack, vector_conj_bang(g_runtime.pool_stack, (ID)pool));
