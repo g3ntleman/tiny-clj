@@ -35,31 +35,34 @@ CljList* empty_list(void);
 // Returns NULL if obj is NULL (valid for list->rest)
 // Throws exception if obj is not NULL and not a CLJ_LIST
 static inline CljList* as_list(ID obj) {
+    // Happy path: obj is not NULL and has correct type
+    if (obj && TAG(obj) == CLJ_LIST) {
+        return (CljList*)obj;  // Direct return, no jumps
+    }
+    // NULL is valid (e.g., end of list) - return NULL
     if (!obj) {
-        // NULL is valid (e.g., end of list) - return NULL
         return NULL;
     }
-    if (TAG(obj) != CLJ_LIST) {
-        char error_msg[128];
-        const char *type_name = clj_type_name(((CljObject*)obj)->type);
-        snprintf(error_msg, sizeof(error_msg), 
-                "Type mismatch: expected List, got %s", 
-                type_name);
-        printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
-        // Print stacktrace
-        #ifdef __GNUC__
-        void *array[10];
-        size_t size = backtrace(array, 10);
-        char **strings = backtrace_symbols(array, size);
-        printf("[STACKTRACE] Backtrace:\n");
-        for (size_t i = 0; i < size; i++) {
-            printf("  %s\n", strings[i]);
-        }
-        free(strings);
-        #endif
-        throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
+    // Error case: wrong type
+    char error_msg[128];
+    const char *type_name = clj_type_name(((CljObject*)obj)->type);
+    snprintf(error_msg, sizeof(error_msg), 
+            "Type mismatch: expected List, got %s", 
+            type_name);
+    printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
+    // Print stacktrace
+    #ifdef __GNUC__
+    void *array[10];
+    size_t size = backtrace(array, 10);
+    char **strings = backtrace_symbols(array, size);
+    printf("[STACKTRACE] Backtrace:\n");
+    for (size_t i = 0; i < size; i++) {
+        printf("  %s\n", strings[i]);
     }
-    return (CljList*)obj;
+    free(strings);
+    #endif
+    throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
+    return NULL;
 }
 ID list_nth(CljList *list, int n);
 int list_count(CljList *list);

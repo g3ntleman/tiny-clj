@@ -26,6 +26,8 @@ typedef void* CljValue;
 
 // ZOMBIE_RC and SINGLETON_RC are defined in types.h
 
+// Return value for index-based search functions when element is not found
+#define INDEX_NOT_FOUND (-1)
 
 // Type optimization constants
 #define LAST_SINGLETON_TYPE CLJ_SYMBOL  // Last singleton type (CLJ_SYMBOL, after immediate types)
@@ -153,14 +155,17 @@ static inline bool clj_is_truthy(CljObject *v) {
     // In Clojure, only nil and false are falsy, everything else is truthy
     // nil = NULL (0x0)
     // false = (0 << 3) | 5 = 0x5
-    if (!v) return false;  // nil is falsy
-    // Check if it's false: false has tag 5 (TAG_BOOL) and special value 0
-    if (((uintptr_t)v & 0x7) == 5) {  // TAG_BOOL = 5
-        uint8_t special = (uint8_t)((uintptr_t)v >> 3);
-        if (special == 0) return false;  // SPECIAL_FALSE = 0
+    if (v) {
+        // Happy path: not nil, check if false
+        // Check if it's false: false has tag 5 (TAG_BOOL) and special value 0
+        if (((uintptr_t)v & 0x7) == 5) {  // TAG_BOOL = 5
+            uint8_t special = (uint8_t)((uintptr_t)v >> 3);
+            if (special == 0) return false;  // SPECIAL_FALSE = 0
+        }
+        // Everything else is truthy (including character('\0'), fixed(0.0), etc.)
+        return true;
     }
-    // Everything else is truthy (including character('\0'), fixed(0.0), etc.)
-    return true;
+    return false;  // nil is falsy
 }
 
 // Specific function implementations moved to their respective headers:
@@ -182,17 +187,12 @@ static inline bool clj_is_truthy(CljObject *v) {
 
 // Type-safe casting with exception throwing (DRY principle)
 static inline void* assert_type(CljObject *obj, CljType expected_type) {
-    if (!obj || TAG(obj) != expected_type) {
-#ifdef DEBUG
-        // Direct error output with expected and actual types
-        const char *actual_type = obj ? "Object" : "NULL";
-        const char *expected_type_name = "Expected";
-        fprintf(stderr, "Assertion failed: Expected %s, got %s at %s:%d\n", 
-                expected_type_name, actual_type, __FILE__, __LINE__);
-#endif
-        abort();
+    // Happy path: obj is not NULL and has correct type
+    if (obj && TAG(obj) == expected_type) {
+        return obj;  // Direct return, no jumps
     }
-    return obj;
+    CLJ_ASSERT(0 && "Type assertion failed");
+    return NULL;  // Never reached in DEBUG, but needed for Release builds
 }
 
 // Type-safe casting functions moved to specific headers:

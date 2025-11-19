@@ -2,6 +2,7 @@
 #define TINY_CLJ_MAP_H
 
 #include "object.h"
+#include "common.h"  // For CLJ_ASSERT
 // Forward declaration for IS_IMMEDIATE macro (defined in value.h)
 // We can't include value.h here due to circular dependency: map.h -> value.h -> namespace.h -> map.h
 // map.c includes value.h where IS_IMMEDIATE is actually needed
@@ -16,15 +17,12 @@ typedef struct {
 
 // Type-safe casting
 static inline CljMap* as_map(ID obj) {
-    if (!obj || (TAG(obj) != CLJ_MAP && TAG(obj) != CLJ_MAP_TRANSIENT)) {
-#ifdef DEBUG
-        const char *actual_type = obj ? "Vector" : "NULL";
-        fprintf(stderr, "Assertion failed: Expected Map, got %s at %s:%d\n", 
-                actual_type, __FILE__, __LINE__);
-#endif
-        abort();
+    // Happy path: obj is not NULL and has correct type
+    if (obj && (TAG(obj) == CLJ_MAP || TAG(obj) == CLJ_MAP_TRANSIENT)) {
+        return (CljMap*)obj;  // Direct return, no jumps
     }
-    return (CljMap*)obj;
+    CLJ_ASSERT(0 && "Expected Map type");
+    return NULL;  // Never reached in DEBUG, but needed for Release builds
 }
 
 // Map operations (optimized with pointer fast paths)

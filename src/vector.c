@@ -1,6 +1,5 @@
 #include "vector.h"
 #include "memory.h"
-#include "value.h"  // For IS_IMMEDIATE macro
 #include "types.h"  // For SINGLETON_RC
 #include "seq.h"  // For SeqIterator
 #include "common.h"  // For CLJ_ASSERT
@@ -53,22 +52,33 @@ unsigned int vector_count(CljVector *vec) {
  * @return Retained element or NULL (nil)
  */
  ID vector_nth(CljVector *vec, unsigned int index) {
-    if (!vec) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
-                "vector_nth: vector is NULL");
-        return NULL;
-    }
-    if (index >= vec->count) {
+    if (vec) {
+        if (index < vec->count) {
+            return vec->data[index];
+        }
         throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
-                "vector_nth: index %u is out of bounds for vector with %u elements", index, vec->count);
-        return NULL;
+            "vector_nth: index %u is out of bounds for vector with %u elements", index, vec->count);
     }
-    ID result = vec->data[index];
-    // For CLJ_VECTOR_WEAK, don't RETAIN (weak reference)
-    // if (vec->base.type != CLJ_VECTOR_WEAK) {
-    //     RETAIN(result); // fishy. Either AUTORLEASE(RETAIN(result)) or simply return result.
-    // }
-    return result;
+    throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "vector_nth: vector is NULL");
+    return NULL;
+}
+
+/** Find index of element using clj_equal for comparison.
+ * @param vec Vector to search
+ * @param value Value to find
+ * @return Index of element (0-based) or INDEX_NOT_FOUND if not found
+ */
+int vector_index_of(CljVector *vec, ID value) {
+    if (!vec) return INDEX_NOT_FOUND;
+    
+    VECTOR_FOR_EACH(vec, elem) {
+        if (clj_equal(elem, value)) {
+            return _i;
+        }
+    }
+    
+    return INDEX_NOT_FOUND;
 }
 
 /** Initialize seq iterator for vector (internal use by seq.c).
@@ -136,10 +146,13 @@ void vector_clear(CljVector *vec) {
  * @return New vector with updated element, or NULL on error
  */
 CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value) {
-    if (!vec) return NULL;
-    CljVector *v = as_vector(vec);
-    if (!v || index >= v->count) return NULL;
-    return vector_assoc(vec, index, value);
+    if (vec) {
+        CljVector *v = as_vector(vec);  // as_vector() may return NULL in Release builds
+        if (v && index < v->count) {
+            return vector_assoc(vec, index, value);  // Happy path
+        }
+    }
+    return NULL;
 }
 
 /** Copy vector with specified capacity.
@@ -191,31 +204,34 @@ CljVector* make_vector_copy(CljVector* vec, unsigned capacity) {
  * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
  */
 CljVector* vector_pop(CljVector* vec) {
-    if (!vec) return NULL;
-    CljVector *v = as_vector(vec);
-    if (!v || v->count == 0) return vec;  // Empty vector, return as-is
-    
-    // OPTIMIZATION: If RC=1, mutate in-place (O(1))
-    if (v->base.rc == 1) {
-        // For CLJ_VECTOR_WEAK, don't RELEASE (weak reference)
-        if (v->base.type != CLJ_VECTOR_WEAK) {
-            // Release last element
-            RELEASE(vector_nth(v, v->count - 1));
+    if (vec) {
+        CljVector *v = as_vector(vec);
+        if (v && v->count > 0) {
+            // Happy path: RC=1, mutate in-place (O(1))
+            if (v->base.rc == 1) {
+                // For CLJ_VECTOR_WEAK, don't RELEASE (weak reference)
+                if (v->base.type != CLJ_VECTOR_WEAK) {
+                    // Release last element
+                    RELEASE(vector_nth(v, v->count - 1));
+                }
+                // Set last element to NULL and decrement count
+                v->count--;
+                return vec;  // Return same vector (in-place mutation)
+            }
+            
+            // RC>1: Copy-on-Write (O(n))
+            // Create new vector with count-1 elements using make_vector_copy
+            // First, temporarily reduce count to copy only first count-1 elements
+            int original_count = v->count;
+            v->count = original_count - 1;
+            CljVector *new_vec = make_vector_copy(v, original_count - 1);
+            v->count = original_count;  // Restore original count
+            
+            return new_vec;
         }
-        // Set last element to NULL and decrement count
-        v->count--;
-        return vec;  // Return same vector (in-place mutation)
+        return vec;  // Empty vector, return as-is
     }
-    
-    // RC>1: Copy-on-Write (O(n))
-    // Create new vector with count-1 elements using make_vector_copy
-    // First, temporarily reduce count to copy only first count-1 elements
-    int original_count = v->count;
-    v->count = original_count - 1;
-    CljVector *new_vec = make_vector_copy(v, original_count - 1);
-    v->count = original_count;  // Restore original count
-    
-    return new_vec;
+    return NULL;
 }
 
 /** Insert element at index in vector (in-place if RC=1, COW if RC>1).

@@ -459,20 +459,18 @@ void init_special_symbols() {
 static CljSymbol* vector_find_symbol(CljVector *vec, const char *ns, const char *name) {
     if (!vec || !name) return NULL;
     
-    CljSymbol *ns_sym = ns ? intern_symbol_global(ns) : NULL;
+    // Create temporary symbol structure for comparison (not heap-allocated)
+    CljSymbol temp_sym = {
+        .base = { .type = CLJ_SYMBOL, .rc = 0 },  // rc=0: not heap-allocated
+        .name = name,
+        .ns = ns ? intern_symbol_global(ns) : NULL
+    };
     
-    unsigned int count = vector_count(vec);
-    for (unsigned int i = 0; i < count; i++) {
-        ID elem = vector_nth(vec, i);
-        if (elem && TAG(elem) == CLJ_SYMBOL) {
-            CljSymbol *sym = as_symbol(elem);
-            if (sym->name && strcmp(sym->name, name) == 0) {
-                // Compare namespace name symbols (pointer comparison works due to interning)
-                if ((!ns_sym && !sym->ns) || (ns_sym && sym->ns && sym->ns == ns_sym)) {
-                    return sym;
-                }
-            }
-        }
+    int index = vector_index_of(vec, (ID)&temp_sym);
+    if (index != INDEX_NOT_FOUND) {
+        ID elem = vector_nth(vec, (unsigned int)index);
+        CLJ_ASSERT(elem && TAG(elem) == CLJ_SYMBOL && "vector_index_of should only return indices of symbols when searching for a symbol");
+        return as_symbol(elem);
     }
     
     return NULL;
@@ -480,8 +478,10 @@ static CljSymbol* vector_find_symbol(CljVector *vec, const char *ns, const char 
 
 // Find symbol in the table
 static CljSymbol* symbol_table_find(const char *ns, const char *name) {
-    if (!name || !g_runtime.symbol_table) return NULL;
-    return vector_find_symbol(g_runtime.symbol_table, ns, name);
+    if (name && g_runtime.symbol_table) {
+        return vector_find_symbol(g_runtime.symbol_table, ns, name);  // Happy path
+    }
+    return NULL;
 }
 
 // Add symbol to the table

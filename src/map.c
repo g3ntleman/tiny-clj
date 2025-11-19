@@ -55,36 +55,33 @@ CljMap* make_map(int capacity) {
 }
 
 ID map_get(CljMap *map, ID key, ID not_found) {
-  if (!map)
-    return not_found;
-  // Note: key can be NULL (nil) - that's a valid key in Clojure!
-  CljObject *key_obj = (CljObject*)key;
-  
-  ID found_value = not_found;
-  MAP_FOR_EACH(map, stored_key, value) {
-    // Fast path: pointer comparison first (for interned symbols and nil keys)
-    if (stored_key == key_obj) {
-      found_value = (ID)value;
-      break;
-    }
-    // Fallback: structural comparison for non-interned objects
-    if (stored_key && key_obj && clj_equal(stored_key, key_obj)) {
-      // Throw exception if structural equality but not pointer equality (symbol interning issue)
-      if (TAG(stored_key) == CLJ_SYMBOL && TAG(key_obj) == CLJ_SYMBOL) {
-        CljSymbol *stored_sym = as_symbol(stored_key);
-        throw_exception_formatted("SymbolInterningError", __FILE__, __LINE__, 0,
-            "Symbol '%s' found by structural equality but not pointer equality. "
-            "This indicates that symbols are not correctly interned. "
-            "Stored symbol: %p, Key symbol: %p",
-            stored_sym && stored_sym->name ? stored_sym->name : "unknown",
-            stored_key, key_obj);
+  if (map) {
+    // Note: key can be NULL (nil) - that's a valid key in Clojure!
+    CljObject *key_obj = (CljObject*)key;
+    
+    MAP_FOR_EACH(map, stored_key, value) {
+      // Happy path: pointer comparison first (for interned symbols and nil keys)
+      if (stored_key == key_obj) {
+        return (ID)value;  // Direct return, no jumps
       }
-      found_value = (ID)value;
-      break;
+      // Fallback: structural comparison for non-interned objects
+      if (stored_key && key_obj && clj_equal(stored_key, key_obj)) {
+        // Throw exception if structural equality but not pointer equality (symbol interning issue)
+        if (TAG(stored_key) == CLJ_SYMBOL && TAG(key_obj) == CLJ_SYMBOL) {
+          CljSymbol *stored_sym = as_symbol(stored_key);
+          throw_exception_formatted("SymbolInterningError", __FILE__, __LINE__, 0,
+              "Symbol '%s' found by structural equality but not pointer equality. "
+              "This indicates that symbols are not correctly interned. "
+              "Stored symbol: %p, Key symbol: %p",
+              stored_sym->name ? stored_sym->name : "unknown",
+              stored_key, key_obj);
+        }
+        return (ID)value;
+      }
     }
   }
   
-  return found_value;
+  return not_found;
 }
 
 
@@ -93,24 +90,19 @@ ID map_get(CljMap *map, ID key, ID not_found) {
  * To re-enable COW: Change #if 0 to #if 1 below to enable RC=1 hot-path.
  */
 CljMap* map_assoc(CljMap* map, ID key, ID value) {
-  if (!map || TAG(map) != CLJ_MAP) {
-    return map;  // Return original map on error
-  }
-  
-  CljObject *key_obj = (CljObject*)key;
-  CljObject *value_obj = (CljObject*)value;
-  // Note: key can be NULL (nil) - that's a valid key in Clojure!
-  
-  CljMap *map_data = map;
+  if (map && TAG(map) == CLJ_MAP) {
+    CljObject *key_obj = (CljObject*)key;
+    CljObject *value_obj = (CljObject*)value;
+    // Note: key can be NULL (nil) - that's a valid key in Clojure!
   
 #if 0
   // COW HOT-PATH: RC=1 → in-place mutation (disabled by default)
   // To re-enable COW: Change #if 0 to #if 1 above
-  if (map_data->base.rc == 1) {
+  if (map->base.rc == 1) {
     // Check if key exists - update value (linear search necessary)
     // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
     int found_idx = -1;
-    MAP_FOR_EACH(map_data, k, v) {
+    MAP_FOR_EACH(map, k, v) {
       (void)v;  // unused
       // Fast path: pointer comparison first (for interned symbols/keywords)
       if (k == key_obj) {
@@ -126,17 +118,17 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
     }
     if (found_idx >= 0) {
       // Key found: update in-place (no branches after this)
-      ASSIGN(KV_VALUE(map_data->data, found_idx), value_obj);
+      ASSIGN(KV_VALUE(map->data, found_idx), value_obj);
       return map;  // Return SAME map
     }
     
     // Key not found: add new entry if capacity allows
-    if (map_data->count < map_data->capacity) {
+    if (map->count < map->capacity) {
       // Direct in-place mutation (no branches after this)
-      int idx = map_data->count;
-      ASSIGN(KV_KEY(map_data->data, idx), key_obj);
-      ASSIGN(KV_VALUE(map_data->data, idx), value_obj);
-      map_data->count++;
+      int idx = map->count;
+      ASSIGN(KV_KEY(map->data, idx), key_obj);
+      ASSIGN(KV_VALUE(map->data, idx), value_obj);
+      map->count++;
       return map;  // Return SAME map
     }
     
@@ -145,9 +137,9 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
 #endif
   
   // Always create a new map (COW disabled)
-  int new_capacity = map_data->capacity;
-  if (map_data->count >= map_data->capacity) {
-    new_capacity = map_data->capacity * 2;
+  int new_capacity = map->capacity;
+  if (map->count >= map->capacity) {
+    new_capacity = map->capacity * 2;
     if (new_capacity < 4) new_capacity = 4;
   }
   
@@ -173,7 +165,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   bool key_found = false;
   int new_idx = 0;
   
-  MAP_FOR_EACH(map_data, k, v) {
+  MAP_FOR_EACH(map, k, v) {
     // Fast path: pointer comparison first (for interned symbols/keywords)
     if (k == key_obj) {
       // Key found - update value
@@ -207,6 +199,10 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   new_map->count = new_idx;
   
   return new_map;  // Return NEW map
+  }
+  
+  // Error case: invalid map or wrong type
+  return map;  // Return original map on error
 }
 
 /** Return a vector of keys (retained). */
@@ -311,7 +307,7 @@ int map_contains(CljMap *map, ID key) {
             "Symbol '%s' found by structural equality but not pointer equality. "
             "This indicates that symbols are not correctly interned. "
             "Stored symbol: %p, Key symbol: %p",
-            stored_sym && stored_sym->name ? stored_sym->name : "unknown",
+            stored_sym->name ? stored_sym->name : "unknown",
             stored_key, key_obj);
       }
       return 1;
@@ -336,7 +332,7 @@ CljMap* map_remove(CljMap *map, ID key) {
     return map;  // Return original map on error
   
   int index = KV_FIND_INDEX(map_data->data, map_data->count, key_obj);
-  if (index < 0) {
+  if (index == INDEX_NOT_FOUND) {
     return map;  // Key not found - return original map
   }
   
@@ -547,19 +543,11 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     CljObject *obj = (CljObject*)tmap;
     
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
-#ifdef DEBUG
-    if (obj->type != CLJ_MAP_TRANSIENT && obj->type != CLJ_MAP) {
-        fprintf(stderr, "Assertion failed: map_conj requires transient map or persistent map with RC=1, got type %d at %s:%d\n",
-                obj->type, __FILE__, __LINE__);
-        abort();
-    }
+    CLJ_ASSERT((obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP) && "map_conj requires transient map or persistent map with RC=1");
     // In COW cases, persistent maps with RC=1 can be mutated, but map_conj is primarily for transient maps
-    if (obj->type == CLJ_MAP && obj->rc != 1) {
-        fprintf(stderr, "Assertion failed: map_conj on persistent map requires RC=1 for COW, got RC=%d at %s:%d\n",
-                obj->rc, __FILE__, __LINE__);
-        abort();
+    if (obj->type == CLJ_MAP) {
+        CLJ_ASSERT(obj->rc == 1 && "map_conj on persistent map requires RC=1 for COW");
     }
-#endif
     
     // Runtime check: map_conj is primarily for transient maps
     if (obj->type != CLJ_MAP_TRANSIENT) {

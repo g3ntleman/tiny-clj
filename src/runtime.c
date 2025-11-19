@@ -95,9 +95,7 @@ void runtime_free(TinyClJRuntime *runtime) {
         CljVector *tvec = runtime->task_queue;
         if (TAG(tvec) == CLJ_VECTOR_TRANSIENT) {
             // Release all elements in transient vector
-            int count = vector_count(tvec);
-            for (int i = 0; i < count; i++) {
-                ID elem = vector_nth(tvec, i);
+            VECTOR_FOR_EACH(tvec, elem) {
                 if (elem) {
                     RELEASE(elem);
                 }
@@ -110,9 +108,7 @@ void runtime_free(TinyClJRuntime *runtime) {
         CljVector *tvec = runtime->timer_queue;
         if (TAG(tvec) == CLJ_VECTOR_TRANSIENT) {
             // Release all elements in transient vector (timer tasks as maps)
-            int count = vector_count(tvec);
-            for (int i = 0; i < count; i++) {
-                ID elem = vector_nth(tvec, i);
+            VECTOR_FOR_EACH(tvec, elem) {
                 if (elem) {
                     RELEASE(elem);
                 }

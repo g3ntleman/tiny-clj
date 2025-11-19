@@ -13,6 +13,7 @@
 #ifndef KV_MACROS_H
 #define KV_MACROS_H
 
+#include "object.h"  // For INDEX_NOT_FOUND
 #include "memory.h"
 
 // Access the key at index i in an interleaved key-value array
@@ -42,9 +43,9 @@
     } \
 } while(0)
 
-// Find index of a key in an interleaved array (returns -1 if not found)
+// Find index of a key in an interleaved array (returns INDEX_NOT_FOUND if not found)
 #define KV_FIND_INDEX(kv_array, count, target_key) ({ \
-    int _found_index = -1; \
+    int _found_index = INDEX_NOT_FOUND; \
     for (int _i = 0; _i < (count); _i++) { \
         if (KV_KEY(kv_array, _i) == (target_key)) { \
             _found_index = _i; \
@@ -55,7 +56,7 @@
 })
 
 // Check if a key exists in an interleaved array
-#define KV_CONTAINS(kv_array, count, target_key) (KV_FIND_INDEX(kv_array, count, target_key) >= 0)
+#define KV_CONTAINS(kv_array, count, target_key) (KV_FIND_INDEX(kv_array, count, target_key) != INDEX_NOT_FOUND)
 
 // Get the number of valid key-value pairs (skips NULL keys)
 #define KV_COUNT_VALID(kv_array, max_count) ({ \

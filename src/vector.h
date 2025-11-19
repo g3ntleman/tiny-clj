@@ -2,6 +2,7 @@
 #define TINY_CLJ_VECTOR_H
 
 #include "object.h"
+#include "common.h"  // For CLJ_ASSERT
 #include "seq.h"  // For SeqIterator
 
 // CljVector is an opaque pointer - structure definition is in vector.c
@@ -11,17 +12,15 @@ typedef struct CljVector CljVector;
 
 // Type-safe casting
 static inline CljVector* as_vector(ID obj) {
+    // Happy path: obj is not NULL and has correct type
     if (obj) {
         int tag = TAG(obj);
         if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_WEAK || tag == CLJ_VECTOR_TRANSIENT) {
-            return (CljVector*)obj;
+            return (CljVector*)obj;  // Direct return, no jumps
         }
     }
-#ifdef DEBUG
-    fprintf(stderr, "Assertion failed: Expected Vector, got %s at %s:%d\n", 
-            obj ? "invalid type" : "NULL", __FILE__, __LINE__);
-#endif
-    abort();
+    CLJ_ASSERT(0 && "Expected Vector type");
+    return NULL;  // Never reached in DEBUG, but needed for Release builds
 }
 
 // === Legacy API removed - use CljValue API instead ===
@@ -57,6 +56,8 @@ CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value);
 unsigned int vector_count(CljVector *vec);
 /** Get element at index. Returns retained element or NULL if index out of bounds or nil. */
 ID vector_nth(CljVector *vec, unsigned int index);
+/** Find index of element using clj_equal for comparison. Returns index or INDEX_NOT_FOUND if not found. */
+int vector_index_of(CljVector *vec, ID value);
 /** Set element at index. Returns new vector with updated element (COW if needed). */
 CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value);
 /** Copy vector with specified capacity. */

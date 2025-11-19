@@ -2,6 +2,7 @@
 #define TINY_CLJ_ATOM_H
 
 #include "object.h"
+#include "common.h"  // For CLJ_ASSERT
 
 // CljAtom struct definition
 typedef struct {
@@ -11,15 +12,12 @@ typedef struct {
 
 // Type-safe casting
 static inline CljAtom* as_atom(ID obj) {
-    if (!obj || TAG(obj) != CLJ_ATOM) {
-#ifdef DEBUG
-        const char *actual_type = obj ? "Atom" : "NULL";
-        fprintf(stderr, "Assertion failed: Expected Atom, got %s at %s:%d\n", 
-                actual_type, __FILE__, __LINE__);
-#endif
-        abort();
+    // Happy path: obj is not NULL and has correct type
+    if (obj && TAG(obj) == CLJ_ATOM) {
+        return (CljAtom*)obj;  // Direct return, no jumps
     }
-    return (CljAtom*)obj;
+    CLJ_ASSERT(0 && "Expected Atom type");
+    return NULL;  // Never reached in DEBUG, but needed for Release builds
 }
 
 // === Atom API ===

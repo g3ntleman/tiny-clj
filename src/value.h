@@ -2,6 +2,7 @@
 #define TINY_CLJ_VALUE_H
 
 #include "object.h"
+#include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include <stdint.h>
 #include <string.h>
@@ -212,7 +213,7 @@ static inline ID CHECKED(ID id) {
         return id;
     }
     fprintf(stderr, "ID_TO_OBJ: Invalid object type %d at %p\n", obj->type, obj);
-    abort();
+    CLJ_ASSERT(0 && "Invalid object type");
 }
 #else
 #define ID_TO_OBJ(id) (id)
