@@ -132,6 +132,24 @@ TEST(test_let_shadowing) {
 }
 
 // ============================================================================
+// TEST: Let symbol in arithmetic operation
+// ============================================================================
+TEST(test_let_symbol_in_arithmetic) {
+    WITH_AUTORELEASE_POOL({
+        // Use global st from setUp (clojure.core already loaded)
+        
+        // Test: (let [result 2] (+ 1 result)) should return 3
+        // This tests that symbols bound in let can be used in arithmetic operations
+        const char *code = "(let [result 2] (+ 1 result))";
+        CljValue result = eval_string(code, g_test_eval_state);
+        
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+    });
+}
+
+// ============================================================================
 // TEST: Let with function calls
 // ============================================================================
 TEST(test_let_with_function_calls) {

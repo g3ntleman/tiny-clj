@@ -69,8 +69,6 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st);
 
 // Forward declarations for loop evaluation
 ID eval_body_with_env(ID body, CljMap *env, EvalState *st);
-ID eval_body_with_local_env(ID body, CljMap *local_env, EvalState *st);
-CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st);
 
 // Helper: Evaluate symbol in environment with namespace fallback
 static CljObject* eval_symbol_in_env(CljObject *sym, CljMap *env, EvalState *st);
@@ -237,100 +235,17 @@ static bool is_numeric_type(CljObject *obj) {
     return IS_IMMEDIATE(obj);
 }
 
-// Optimized overflow checking using compiler intrinsics
-// Fast-path: Skip checks for small values where overflow is impossible
-// Use compiler intrinsics when available for better performance
-#if defined(__GNUC__) || defined(__clang__)
-    // GCC/Clang: Use builtin overflow functions
-    #define USE_BUILTIN_OVERFLOW 1
-#else
-    #define USE_BUILTIN_OVERFLOW 0
-#endif
-
-// Fast-path threshold: values in this range cannot overflow with normal operations
-#define SAFE_ADD_THRESHOLD 1000000  // Safe if both |a|, |b| < 1M
-#define SAFE_MUL_THRESHOLD 46340    // Safe if both |a|, |b| < sqrt(INT_MAX) ≈ 46340
-
-// Optimized addition with overflow check
-static inline bool checked_add(int a, int b, int *result) {
-    // Fast-path: If both values are small, overflow is impossible
-    if (a >= -SAFE_ADD_THRESHOLD && a <= SAFE_ADD_THRESHOLD &&
-        b >= -SAFE_ADD_THRESHOLD && b <= SAFE_ADD_THRESHOLD) {
-        *result = a + b;
-        return false;  // No overflow
-    }
-    
-#if USE_BUILTIN_OVERFLOW
-    return __builtin_add_overflow(a, b, result);
-#else
-    // Fallback: Manual check
-    if (a > 0 && b > INT_MAX - a) return true;  // Overflow
-    if (a < 0 && b < INT_MIN - a) return true;  // Underflow
-    *result = a + b;
-    return false;
-#endif
-}
-
-// Optimized subtraction with overflow check
-static inline bool checked_sub(int a, int b, int *result) {
-    // Fast-path: If both values are small, underflow is impossible
-    if (a >= -SAFE_ADD_THRESHOLD && a <= SAFE_ADD_THRESHOLD &&
-        b >= -SAFE_ADD_THRESHOLD && b <= SAFE_ADD_THRESHOLD) {
-        *result = a - b;
-        return false;  // No overflow
-    }
-    
-#if USE_BUILTIN_OVERFLOW
-    return __builtin_sub_overflow(a, b, result);
-#else
-    // Fallback: Manual check
-    if (a > 0 && b < a - INT_MAX) return true;  // Overflow
-    if (a < 0 && b > a - INT_MIN) return true;  // Underflow
-    *result = a - b;
-    return false;
-#endif
-}
-
-// Optimized multiplication with overflow check
-static inline bool checked_mul(int a, int b, int *result) {
-    // Fast-path: If both values are small, overflow is impossible
-    if (a >= -SAFE_MUL_THRESHOLD && a <= SAFE_MUL_THRESHOLD &&
-        b >= -SAFE_MUL_THRESHOLD && b <= SAFE_MUL_THRESHOLD) {
-        *result = a * b;
-        return false;  // No overflow
-    }
-    
-    // Special case: multiplication by 0 or 1
-    if (a == 0 || b == 0) {
-        *result = 0;
-        return false;
-    }
-    if (a == 1) {
-        *result = b;
-        return false;
-    }
-    if (b == 1) {
-        *result = a;
-        return false;
-    }
-    
-#if USE_BUILTIN_OVERFLOW
-    return __builtin_mul_overflow(a, b, result);
-#else
-    // Fallback: Manual check
-    if (a != 0 && b != 0) {
-        if (a > INT_MAX / b || a < INT_MIN / b) return true;  // Overflow
-    }
-    *result = a * b;
-    return false;
-#endif
+// Helper function to throw unresolved symbol exception (DRY principle)
+static void throw_unresolved_symbol_exception(const char *sym_name) {
+    throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+        "Unable to resolve symbol: %s in this context", sym_name);
 }
 
 /** @brief Generic arithmetic function (variadic version) */
 CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalState *st) {
     // Clojure-compatible: Accept NULL environment - eval_arg handles it
     // and falls back to namespace lookup for symbol resolution
-    (void)st; // Suppress unused parameter warning
+    // CRITICAL: st is now used by eval_arg for namespace resolution
     int total_count = list_count(list);
     int argc = total_count - 1;  // Subtract 1 for the operator
     
@@ -354,7 +269,7 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
     if (!args) return NULL;
     
     for (int i = 0; i < argc; i++) {
-        args[i] = eval_arg(list, i + 1, env, NULL);
+        args[i] = eval_arg(list, i + 1, env, st);
         if (!args[i]) {
             // Clean up already evaluated arguments
             for (int j = 0; j < i; j++) {
@@ -405,192 +320,6 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
     
     // AUTORELEASE handles immediates and NULL safely - no checks needed
     return AUTORELEASE(result);
-}
-
-// Generic arithmetic function (with parameter substitution)
-ID eval_arithmetic_generic_with_substitution(CljList *list, ArithOp op, const EvalContext *ctx) {
-    
-    CLJ_ASSERT(ctx != NULL);
-    CLJ_ASSERT(ctx->params != NULL);  // params are required for arithmetic
-    CLJ_ASSERT(ctx->env != NULL);      // env is required
-    
-    CljObject *first_arg = list_get_element(as_list(list), 1);
-    CljObject *second_arg = list_get_element(as_list(list), 2);
-    
-    CLJ_ASSERT(first_arg != NULL);
-    CLJ_ASSERT(second_arg != NULL);
-    
-    ID a = eval_body_with_params(first_arg, ctx);
-    ID b = eval_body_with_params(second_arg, ctx);
-    
-    // For arithmetic operations, arguments should not be NULL
-    if (first_arg && TAG(first_arg) == CLJ_SYMBOL) {
-        // If first argument is a symbol, it should resolve to a value (not NULL)
-        // Exception: nil is valid, but we check for that separately
-        // OPTIMIZATION: Parameter resolution now uses environment map (O(1)) instead of array iteration (O(n))
-        if (a == NULL) {
-            // Check if it's a parameter in environment map
-            bool is_param = false;
-            if (ctx->env && ctx->env->closure_env) {
-                is_param = map_contains(ctx->env->closure_env, first_arg);
-            }
-            if (is_param) {
-                // Parameter found but value is NULL - this is the bug!
-                CLJ_ASSERT(0 && "Parameter resolved to NULL in arithmetic operation");
-            }
-        }
-    } else if (IS_IMMEDIATE(first_arg)) {
-        // If first argument is an immediate (fixnum, etc.), it should return itself
-        CLJ_ASSERT(a == first_arg);
-    }
-    
-    if (second_arg && TAG(second_arg) == CLJ_SYMBOL) {
-        // If second argument is a symbol, it should resolve to a value (not NULL)
-        // OPTIMIZATION: Parameter resolution now uses environment map (O(1)) instead of array iteration (O(n))
-        if (b == NULL) {
-            // Check if it's a parameter in environment map
-            bool is_param = false;
-            if (ctx->env && ctx->env->closure_env) {
-                is_param = map_contains(ctx->env->closure_env, second_arg);
-            }
-            if (is_param) {
-                // Parameter found but value is NULL - this is the bug!
-                CLJ_ASSERT(0 && "Parameter resolved to NULL in arithmetic operation");
-            }
-        }
-    } else if (IS_IMMEDIATE(second_arg)) {
-        // If second argument is an immediate (fixnum, etc.), it should return itself
-        CLJ_ASSERT(b == second_arg);
-    }
-    
-    // CRITICAL: Arithmetic operations cannot accept nil
-    if (!a || !b) {
-        // RELEASE safely handles NULL and immediate values
-        RELEASE(a);
-        RELEASE(b);
-        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-                "Cannot use nil as a Number");
-        return NULL;
-    }
-    
-    // FAST PATH: Both arguments are fixnums - direct arithmetic without type checks
-    // This is the most common case in arithmetic operations
-    uint16_t tag_a = TAG(a);
-    uint16_t tag_b = TAG(b);
-    if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
-        int a_val = as_fixnum((CljValue)a);
-        int b_val = as_fixnum((CljValue)b);
-        int result;
-        
-        // Division by zero check
-        if (op == ARITH_DIV && b_val == 0) {
-            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %d / %d", a_val, b_val);
-            return NULL;
-        }
-        
-        switch (op) {
-            case ARITH_ADD:
-                // Optimized overflow check using compiler intrinsics
-                if (checked_add(a_val, b_val, &result)) {
-                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                        ERR_INTEGER_OVERFLOW_ADDITION, a_val, b_val);
-                    return NULL;
-                }
-                break;
-            case ARITH_SUB:
-                // Optimized overflow check using compiler intrinsics
-                if (checked_sub(a_val, b_val, &result)) {
-                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                        ERR_INTEGER_OVERFLOW_SUBTRACTION, a_val, b_val);
-                    return NULL;
-                }
-                break;
-            case ARITH_MUL:
-                // Optimized overflow check using compiler intrinsics
-                if (checked_mul(a_val, b_val, &result)) {
-                    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                        ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
-                    return NULL;
-                }
-                break;
-            case ARITH_DIV:
-                result = a_val / b_val;
-                break;
-            default:
-                return NULL;
-        }
-        
-        return fixnum(result);
-    }
-    
-    // Fallback: Generic path for non-fixnum types or mixed types
-    // Check for non-numeric types
-    if (!is_numeric_type(a) || !is_numeric_type(b)) {
-        throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
-                "String cannot be used as a Number");
-        return NULL;
-    }
-    
-    // Division by zero check
-    if (op == ARITH_DIV) {
-        if (tag_b == CLJ_INT && as_fixnum((CljValue)b) == 0) {
-            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %d / %d", as_fixnum((CljValue)a), as_fixnum((CljValue)b));
-            return NULL;
-        }
-        if (tag_b == CLJ_FLOAT && as_fixed((CljValue)b) == 0.0) {
-            throw_exception_formatted("ArithmeticException", __FILE__, __LINE__, 0,
-                    "Division by zero: %f / %f", as_fixed((CljValue)a), as_fixed((CljValue)b));
-            return NULL;
-        }
-    }
-    
-    // For now, only support integer arithmetic
-    // TODO: Add mixed int/float support
-    if (tag_a != CLJ_INT || tag_b != CLJ_INT) {
-        throw_exception_formatted("NotImplementedError", __FILE__, __LINE__, 0,
-                "Mixed int/float arithmetic not yet implemented");
-        return NULL;
-    }
-    
-    int a_val = as_fixnum((CljValue)a);
-    int b_val = as_fixnum((CljValue)b);
-    int result;
-    
-    switch (op) {
-        case ARITH_ADD:
-            // Optimized overflow check using compiler intrinsics
-            if (checked_add(a_val, b_val, &result)) {
-                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                    ERR_INTEGER_OVERFLOW_ADDITION, a_val, b_val);
-                return NULL;
-            }
-            break;
-        case ARITH_SUB:
-            // Optimized overflow check using compiler intrinsics
-            if (checked_sub(a_val, b_val, &result)) {
-                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                    ERR_INTEGER_OVERFLOW_SUBTRACTION, a_val, b_val);
-                return NULL;
-            }
-            break;
-        case ARITH_MUL:
-            // Optimized overflow check using compiler intrinsics
-            if (checked_mul(a_val, b_val, &result)) {
-                throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0,
-                    ERR_INTEGER_OVERFLOW_MULTIPLICATION, a_val, b_val);
-                return NULL;
-            }
-            break;
-        case ARITH_DIV:
-            result = a_val / b_val;
-            break;
-        default:
-            return NULL;
-    }
-    
-    return fixnum(result);
 }
 
 // Extended function call implementation with complete evaluation
@@ -840,114 +569,13 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
             // Type check before calling
             if (!body_obj || TAG(body_obj) != CLJ_LIST) return NULL;
             CljList *list_data = as_list(body);
-            return eval_list_with_env(list_data, env, st);
+            return eval_list(list_data, env, st, NULL);
         }
         
         default:
             // Literal value
             return AUTORELEASE(RETAIN(body));
     }
-}
-
-// Evaluate body with local environment (for dotimes, doseq, etc.)
-ID eval_body_with_local_env(ID body, CljMap *local_env, EvalState *st) {
-    // Assertion: Environment and state must not be NULL when expected
-    CLJ_ASSERT(local_env != NULL);
-    CLJ_ASSERT(body != NULL);
-    CLJ_ASSERT(st != NULL);
-    
-    // Check if body is an immediate value
-    if (IS_IMMEDIATE(body)) {
-        return body;
-    }
-    
-    CljObject *body_obj = (CljObject*)body;
-    switch (body_obj->type) {
-        case CLJ_SYMBOL: {
-            // First try local environment
-            CljObject *result = (CljObject*)map_get((CljMap*)local_env, (CljValue)body, NULL);
-            if (result) {
-                return AUTORELEASE(RETAIN(result));
-            }
-            
-            // If not found in local environment, try namespace
-            if (st && st->current_ns && st->current_ns->mappings) {
-                result = (CljObject*)map_get((CljValue)st->current_ns->mappings, (CljValue)body, NULL);
-                if (result) {
-                    return AUTORELEASE(RETAIN(result));
-                }
-            }
-            
-            // If still not found, try global symbol resolution
-            result = eval_symbol(as_symbol(body), st);
-            // eval_symbol returns AUTORELEASE - object survives until pool-pop
-            return result;
-        }
-        
-        case CLJ_LIST: {
-            // Type check before calling
-            if (!body || TAG(body) != CLJ_LIST) return NULL;
-            CljList *list_data = as_list(body);
-            
-            // Use eval_list for full evaluation with namespace access
-            // Pass local_env as the environment parameter
-            return eval_list(list_data, local_env, st, NULL);
-        }
-        
-        default:
-            // Literal value
-            return AUTORELEASE(RETAIN(body));
-    }
-}
-
-// Evaluate list with environment (for loops)
-CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
-    // Assertion: List must not be NULL when expected
-    CLJ_ASSERT(list != NULL);
-    
-    CljObject *head = list->first;
-    
-    // First element is the operator
-    CljObject *op = head;
-    
-    // For symbols, look up in environment
-    if (op && TAG(op) == CLJ_SYMBOL) {
-        CljObject *resolved = (CljObject*)map_get((CljMap*)env, (CljValue)op, NULL);
-        if (resolved) {
-            // If it's a function, call it
-            // CRITICAL: Check for both CLJ_FUNC (native) and CLJ_CLOSURE (Clojure functions)
-            int tag = TAG(resolved);
-            if (tag == CLJ_FUNC || tag == CLJ_CLOSURE) {
-                // Count arguments
-                int total_count = list_count(as_list(list));
-                int argc = total_count - 1;
-                if (argc < 0) argc = 0;
-                
-                // Evaluate arguments
-                CljObject *args_stack[16];
-                ID *args = alloc_obj_array(argc, args_stack);
-                
-                for (int i = 0; i < argc; i++) {
-                    args[i] = eval_body_with_env(list_get_element(list, i + 1), env, st);
-                    if (!args[i]) args[i] = NULL;
-                }
-                
-                // Call the function
-                CljObject *result = eval_function_call(resolved, args, argc, env, st);
-                
-                free_obj_array((ID*)args, args_stack);
-                
-                return result;
-            }
-            // Otherwise, return the resolved value
-            return RETAIN(resolved);
-        }
-    }
-    
-    // Fallback: return first element
-    return AUTORELEASE(RETAIN(head));
 }
 
 // Simplified body evaluation with parameter binding
@@ -1000,8 +628,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     // Symbol found in closure_env but value is also a symbol - this is an error
                     CljSymbol *sym = as_symbol(body);
                     const char *sym_name = sym && sym->name ? sym->name : "unknown";
-                    throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
-                        "Unable to resolve symbol: %s in this context", sym_name);
+                    throw_unresolved_symbol_exception(sym_name);
                     return NULL;
                 }
                 
@@ -1035,8 +662,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     // Symbol found in namespace but value is also a symbol - this is an error
                     CljSymbol *sym = as_symbol(body);
                     const char *sym_name = sym && sym->name ? sym->name : "unknown";
-                    throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
-                        "Unable to resolve symbol: %s in this context", sym_name);
+                    throw_unresolved_symbol_exception(sym_name);
                     return NULL;
                 }
                 // ns_resolve returns retained values - object survives until pool-pop
@@ -1053,11 +679,10 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             // nil is represented as NULL - return NULL directly
             return NULL;
         }
-        // Symbol not found - throw exception instead of returning symbol
+        // Symbol not found - throw exception
         CljSymbol *sym_obj = as_symbol(body);
         const char *sym_name_final = sym_obj && sym_obj->name ? sym_obj->name : "unknown";
-        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
-            "Unable to resolve symbol: %s in this context", sym_name_final);
+        throw_unresolved_symbol_exception(sym_name_final);
         return NULL;
     }
     
@@ -1539,9 +1164,10 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     
     // Early dispatch check with original_op (before symbol resolution)
     // This allows early exit for common arithmetic/comparison operations
-    // Use closure_env instead of env to ensure parameter resolution works correctly
+    // CRITICAL: Use env if available (e.g., let_env), otherwise fall back to closure_env
+    // This ensures that let bindings are found in arithmetic operations
     if (op && op_tag == CLJ_SYMBOL) {
-        CljObject *result = eval_arithmetic_dispatch(list, closure_env ? closure_env : env, ctx_st, original_op);
+        CljObject *result = eval_arithmetic_dispatch(list, env ? env : closure_env, ctx_st, original_op);
         if (result) return result;
         result = eval_comparison_dispatch(list, closure_env ? closure_env : env, original_op);
         if (result) return result;
@@ -1797,6 +1423,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // CRITICAL: Use original_op for comparison, not resolved op, because
     // SYM_PLUS, SYM_MINUS, etc. are statically initialized symbols that should
     // match the symbols from the AST (which are interned via intern_symbol_global)
+    // CRITICAL: Use env (which may be let_env) to ensure let bindings are found
     CljObject *result = eval_arithmetic_dispatch(list, env, st, original_op);
     if (result) return result;
     
@@ -2243,7 +1870,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
             "Cannot call %s as a function", clj_type_name(op->type));
     return NULL;
-}
 }
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
@@ -3305,7 +2931,7 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
         }
         
         // If not found in local environment, try namespace
-        // CRITICAL: Use provided st if available, otherwise use NULL (uses default "user" namespace)
+        // CRITICAL: ns_resolve can handle st == NULL (uses default "user" namespace)
         CljObject *resolved = ns_resolve(st, as_symbol(element));
         if (resolved) {
             // CRITICAL: ns_resolve returns AUTORELEASE objects.
@@ -3313,9 +2939,14 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
             return resolved;
         }
         
-        // If not found in environment or namespace, return the symbol as-is (don't retain - it's a symbol)
-        // This is OK for symbols that will be resolved later or are undefined
-        return element;
+        // Symbol not found - throw exception
+        // This happens when:
+        // 1. Symbol not found in env AND
+        // 2. ns_resolve(st, ...) returned NULL (not found in any namespace)
+        CljSymbol *sym_obj = as_symbol(element);
+        const char *sym_name = sym_obj && sym_obj->name ? sym_obj->name : "unknown";
+        throw_unresolved_symbol_exception(sym_name);
+        return NULL;
     }
     
     // For lists, evaluate them directly
