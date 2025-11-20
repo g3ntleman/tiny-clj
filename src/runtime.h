@@ -70,7 +70,6 @@ extern TinyClJRuntime g_runtime;
 
 void runtime_init(TinyClJRuntime *runtime);
 void runtime_reset(TinyClJRuntime *runtime);
-void runtime_free(TinyClJRuntime *runtime);
 
 // Legacy builtin functions removed - all builtins now use namespace registration
 

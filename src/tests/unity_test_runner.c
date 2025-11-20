@@ -90,8 +90,8 @@ void tearDown(void) {
     // Reset time output suppression (for consistency)
     set_suppress_time_output(false);
     
-    // Note: runtime_reset() is called in setUp() before runtime_init()
-    // No need to call it here as runtime_free() will clean up
+    // runtime_reset() is called in setUp() before runtime_init()
+    // Also called here in tearDown() to clean up after the test
     
     // JUnit-style: Only print memory stats if verbose mode is enabled
     // (memory_profiler_check_leaks already handles leak reporting)
@@ -101,7 +101,7 @@ void tearDown(void) {
     // Check for leaks silently (reporting disabled by default - no output for passing tests)
     memory_profiler_check_leaks("Test Complete");
     
-    runtime_free(&g_runtime);
+    runtime_reset(&g_runtime);
 }
 
 // ============================================================================

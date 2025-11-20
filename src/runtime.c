@@ -72,22 +72,6 @@ void runtime_init(TinyClJRuntime *runtime) {
 void runtime_reset(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
-    // Reset all runtime-related state that needs to be cleared between tests
-    ASSIGN(runtime->resolve_cache, NULL);
-    reset_eval_arg_depth();
-    event_loop_clear();
-    
-    // Note: runtime_init() will handle:
-    // - ns_reset_registry() (resets namespace registry)
-    // - meta_registry reset
-    // - builtins_registered flag
-    // - timer_id_counter
-    // - event loop queue initialization
-}
-
-void runtime_free(TinyClJRuntime *runtime) {
-    if (!runtime) return;
-    
     // Cleanup in correct order
     // CRITICAL: Don't cleanup symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // that are used by namespaces. If we clean it up, intern_symbol will create new symbols
@@ -95,6 +79,9 @@ void runtime_free(TinyClJRuntime *runtime) {
     // The symbol table will persist across tests, which is fine since symbols are interned.
     meta_registry_cleanup();
     ns_cleanup();
+    
+    // Reset static variables
+    reset_eval_arg_depth();
     
     // Cleanup all CljObject* fields using ASSIGN (automatically frees via release_object_deep())
     ASSIGN(runtime->task_queue, NULL);
@@ -108,5 +95,8 @@ void runtime_free(TinyClJRuntime *runtime) {
     // Reset primitive fields
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
+    
+    // Clear event loop queues (they will be reinitialized in runtime_init())
+    event_loop_clear();
 }
 
