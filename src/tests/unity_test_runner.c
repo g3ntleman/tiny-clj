@@ -39,9 +39,9 @@ void setUp(void) {
     // Suppress time output in tests
     set_suppress_time_output(true);
     
-    // CRITICAL: Clear event loop queue for test isolation
-    // This ensures that tasks from previous tests don't interfere with current test
-    event_loop_clear();
+    // CRITICAL: Reset all runtime state for test isolation
+    // This consolidates all reset operations for CljRuntime
+    runtime_reset(&g_runtime);
     
     runtime_init(&g_runtime);
     event_loop_init();  // Initialize event loop keywords
@@ -90,8 +90,8 @@ void tearDown(void) {
     // Reset time output suppression (for consistency)
     set_suppress_time_output(false);
     
-    // Reset eval arg depth (for test isolation)
-    reset_eval_arg_depth();
+    // Note: runtime_reset() is called in setUp() before runtime_init()
+    // No need to call it here as runtime_free() will clean up
     
     // JUnit-style: Only print memory stats if verbose mode is enabled
     // (memory_profiler_check_leaks already handles leak reporting)

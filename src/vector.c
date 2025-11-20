@@ -119,23 +119,21 @@ ID* vector_as_array(CljVector *vec) {
  * @param vec Transient vector to increment count for
  */
 void vector_increment_count(CljVector *vec) {
-    if (vec && (TAG(vec) == CLJ_VECTOR_TRANSIENT || TAG(vec) == CLJ_VECTOR_WEAK)) {
-        vec->count++;
-    }
-}
-
-/** Set count to zero for transient vectors (internal use only).
- * @param vec Transient vector to reset count for
- */
-void vector_reset_count(CljVector *vec) {
-    if (vec && (TAG(vec) == CLJ_VECTOR_TRANSIENT || TAG(vec) == CLJ_VECTOR_WEAK)) {
-        vec->count = 0;
-    }
+    CLJ_ASSERT(vec != NULL);
+    int tag = TAG(vec);
+    CLJ_ASSERT(tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_WEAK);
+    vec->count++;
 }
 
 void vector_clear(CljVector *vec) {
     CLJ_ASSERT(vec != NULL);
-    CLJ_ASSERT(vec->base.type == CLJ_VECTOR_WEAK || vec->base.type == CLJ_VECTOR_TRANSIENT);
+    
+    if (vec->base.type != CLJ_VECTOR_WEAK) {
+        VECTOR_FOR_EACH(vec, elem) {
+          RELEASE(elem);
+        }
+    }
+    
     vec->count = 0;
 }
 
@@ -320,10 +318,11 @@ CljVector* vector_remove_at(CljVector* vec, unsigned int index) {
     if (!v || index >= v->count) return vec;  // Invalid index, return as-is
     
     // OPTIMIZATION: If RC=1 or transient vector, mutate in-place (O(n) due to shifting)
-    bool is_transient = (TAG(vec) == CLJ_VECTOR_TRANSIENT || TAG(vec) == CLJ_VECTOR_WEAK);
+    int tag = TAG(vec);
+    bool is_transient = (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_WEAK);
     if (v->base.rc == 1 || is_transient) {
         // Release element at index (only for non-weak vectors)
-        if (v->data[index] && TAG(vec) != CLJ_VECTOR_WEAK) {
+        if (v->data[index] && tag != CLJ_VECTOR_WEAK) {
             RELEASE(v->data[index]);
         }
         // Shift elements left
@@ -342,14 +341,11 @@ CljVector* vector_remove_at(CljVector* vec, unsigned int index) {
     
     new_vec->count = new_count;
     
-    // Copy elements before index
-    for (unsigned int i = 0; i < index; i++) {
-        new_vec->data[i] = RETAIN(v->data[i]);
-    }
-    
-    // Copy elements after index
-    for (unsigned int i = index + 1; i < v->count; i++) {
-        new_vec->data[i - 1] = RETAIN(v->data[i]);
+    // Copy all elements except the one at index
+    for (unsigned int i = 0, j = 0; i < v->count; i++) {
+        if (i != index) {
+            new_vec->data[j++] = RETAIN(v->data[i]);
+        }
     }
     
     return new_vec;

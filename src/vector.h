@@ -83,8 +83,6 @@ bool vector_init_seq_iterator(SeqIterator *iter, CljVector *vec);
 ID* vector_as_array(CljVector *vec);
 /** Increment count for transient vectors (internal use only). */
 void vector_increment_count(CljVector *vec);
-/** Set count to zero for transient vectors (internal use only). */
-void vector_reset_count(CljVector *vec);
 /** Clear vector by setting count to zero (only for CLJ_VECTOR_WEAK or CLJ_VECTOR_TRANSIENT). */
 void vector_clear(CljVector *vec);
 

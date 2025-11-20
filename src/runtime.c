@@ -6,11 +6,18 @@
 #include "meta.h"
 #include "vector.h"
 #include "memory.h"
+#include "function_call.h"  // For reset_eval_arg_depth()
+#include "event_loop.h"     // For event_loop_clear()
+#include "map.h"            // For make_map()
+
+// Symbol resolution cache size: 16 entries (good balance between hit rate and memory usage)
+#define RESOLVE_CACHE_SIZE 16
 
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
     .clojure_core_cache = NULL,
+    .resolve_cache = NULL,
     .symbol_table = NULL,
     .meta_registry = NULL,
     .pool_stack = NULL,
@@ -23,38 +30,23 @@ TinyClJRuntime g_runtime = {
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
-    // Initialize all fields individually using ASSIGN (allows multiple calls with same pointer)
+    // Initialize all fields (allows multiple calls with same pointer)
     // ASSIGN automatically handles releasing old values, so multiple calls are safe
-    // Caches are automatically rebuilt when needed, so no need to preserve them
     
-    // Reset namespace registry (transient Map)
-    // Note: ns_registry is a transient Map: Symbol (namespace name) → CljNamespace*
-    // Use consolidated reset function (DRY principle)
+    // Reset namespace registry (transient Map: Symbol → CljNamespace*)
     ns_reset_registry();
+    
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
-    // The symbol table is cleaned up by symbol_table_cleanup() if needed
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
-    // Initialize symbol_table as empty vector if not already set
     if (!runtime->symbol_table) {
         runtime->symbol_table = make_vector(16, CLJ_VECTOR);
     }
     
-    // Reset meta registry
+    // Initialize/reset CljObject* fields
     ASSIGN(runtime->meta_registry, NULL);
+    ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
     
-    // Reset pool stack (transient vector) - pool_stack is an array, not a pointer
-    // This is handled by memory.c's ensure_pool_stack_initialized()
-    
-    // Reset builtins flag
-    runtime->builtins_registered = false;
-    
-    // Reset timer counter
-    runtime->timer_id_counter = 0;
-    
-    // Namespace registry is already initialized by ns_reset_registry() above
-    
-    // Initialize event loop queues as transient vectors using ASSIGN
-    // Only create if not already set (allows multiple calls)
+    // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {
         CljVector* task_vec = make_vector(8, CLJ_VECTOR);
         if (task_vec) {
@@ -71,96 +63,50 @@ void runtime_init(TinyClJRuntime *runtime) {
             ASSIGN(runtime->timer_queue, transient_timer);
         }
     }
+    
+    // Reset primitive fields
+    runtime->builtins_registered = false;
+    runtime->timer_id_counter = 0;
+}
+
+void runtime_reset(TinyClJRuntime *runtime) {
+    if (!runtime) return;
+    
+    // Reset all runtime-related state that needs to be cleared between tests
+    ASSIGN(runtime->resolve_cache, NULL);
+    reset_eval_arg_depth();
+    event_loop_clear();
+    
+    // Note: runtime_init() will handle:
+    // - ns_reset_registry() (resets namespace registry)
+    // - meta_registry reset
+    // - builtins_registered flag
+    // - timer_id_counter
+    // - event loop queue initialization
 }
 
 void runtime_free(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
-    // Cleanup in korrekter Reihenfolge
-    // Pools werden automatisch beim nächsten Test geleert
-    
-    // Cleanup symbol table and meta registry
-    // CRITICAL: Don't cleanup symbol table - it contains SYM_CLOJURE_CORE and other symbols
+    // Cleanup in correct order
+    // CRITICAL: Don't cleanup symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // that are used by namespaces. If we clean it up, intern_symbol will create new symbols
     // that don't match the ones stored in namespace mappings, causing lookup failures.
     // The symbol table will persist across tests, which is fine since symbols are interned.
     meta_registry_cleanup();
-    
-    // Cleanup namespaces (caches will be automatically rebuilt when needed)
-    // Note: ns_cleanup() will release all namespaces from the map and then release the map
     ns_cleanup();
     
-    // Cleanup event loop queues
-    if (runtime->task_queue) {
-        CljVector *tvec = runtime->task_queue;
-        if (TAG(tvec) == CLJ_VECTOR_TRANSIENT) {
-            // Release all elements in transient vector
-            VECTOR_FOR_EACH(tvec, elem) {
-                if (elem) {
-                    RELEASE(elem);
-                }
-            }
-            RELEASE(tvec);
-        }
-        runtime->task_queue = NULL;
-    }
-    if (runtime->timer_queue) {
-        CljVector *tvec = runtime->timer_queue;
-        if (TAG(tvec) == CLJ_VECTOR_TRANSIENT) {
-            // Release all elements in transient vector (timer tasks as maps)
-            VECTOR_FOR_EACH(tvec, elem) {
-                if (elem) {
-                    RELEASE(elem);
-                }
-            }
-            RELEASE(tvec);
-        }
-        runtime->timer_queue = NULL;
-    }
-    
-    // Drain all autorelease pools before resetting runtime
-    if (runtime->pool_stack) {
-        while (vector_count(runtime->pool_stack) > 0) {
-            unsigned int stack_depth = vector_count(runtime->pool_stack);
-            CljVector *pool = (CljVector*)vector_nth(runtime->pool_stack, stack_depth - 1);
-            if (pool) {
-                autorelease_pool_pop(pool);
-            } else {
-                CljVector *popped = vector_pop(runtime->pool_stack);
-                ASSIGN(runtime->pool_stack, popped);
-            }
-        }
-    }
-    
-    // Reset all fields individually using ASSIGN
-    // Caches will be automatically rebuilt when needed
-    // Reset namespace registry (transient Map)
-    // Note: ns_registry is already cleaned up by ns_cleanup() above
-    // Just set to NULL here
-    runtime->ns_registry = NULL;
-    
-    // Reset caches (will be automatically rebuilt when needed)
-    // Note: clojure_core_cache is just a pointer to a CljNamespace in the registry
-    // We don't use ASSIGN here because we're just resetting the pointer, not releasing the object
-    runtime->clojure_core_cache = NULL;
-    // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
-    // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
-    
-    // Reset meta registry
+    // Cleanup all CljObject* fields using ASSIGN (automatically frees via release_object_deep())
+    ASSIGN(runtime->task_queue, NULL);
+    ASSIGN(runtime->timer_queue, NULL);
+    ASSIGN(runtime->resolve_cache, NULL);
+    ASSIGN(runtime->pool_stack, NULL);
+    ASSIGN(runtime->ns_registry, NULL);
+    ASSIGN(runtime->clojure_core_cache, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     
-    // Reset pool stack
-    if (runtime->pool_stack) {
-        RELEASE(runtime->pool_stack);
-        runtime->pool_stack = NULL;
-    }
-    
-    // Reset builtins flag
+    // Reset primitive fields
     runtime->builtins_registered = false;
-    
-    // Reset timer counter
     runtime->timer_id_counter = 0;
-    
 }
 
-// Legacy functions removed - all builtins now use namespace registration

@@ -60,7 +60,7 @@ ID eval_doseq(CljList *list, CljMap *env);
 ID eval_dotimes(CljList *list, CljMap *env, EvalState *st);
 
 // Let bindings
-ID eval_let(CljList *list, CljMap *env, EvalState *st);
+ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
 // Function definition macro
 ID eval_defn(CljList *list, CljMap *env, EvalState *st);

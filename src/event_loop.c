@@ -185,39 +185,16 @@ void event_loop_init(void) {
 void event_loop_clear(void) {
     CljVector *task_vec = task_queue_get();
     if (task_vec) {
-        VECTOR_FOR_EACH(task_vec, task_elem) {
-            CljMap *task_map = task_elem;
-            CljObject *fn;
-            CljMap *result_chan;
-            if (task_from_map(task_map, &fn, &result_chan)) {
-                RELEASE(fn);
-                RELEASE(result_chan);
-            }
-            RELEASE(task_map);
-        }
-        // Clear vector by removing all elements
-        while (vector_count(task_vec) > 0) {
-            vector_remove_at(task_vec, 0);
-        }
+        // Clear vector count - elements will be freed when vector is released
+        // For transient vectors, we just reset the count
+        vector_clear(task_vec);
     }
     
     CljVector *timer_vec = timer_queue_get();
     if (timer_vec) {
-        int count = vector_count(timer_vec);
-        for (int i = 0; i < count; i++) {
-            CljMap *task_map = (CljMap*)vector_nth(timer_vec, i);
-            if (task_map) {
-                ID fn = task_get_fn(task_map);
-                if (fn) {
-                    RELEASE(fn);
-                }
-                RELEASE(task_map);
-            }
-        }
-        // Clear vector by removing all elements
-        while (vector_count(timer_vec) > 0) {
-            vector_remove_at(timer_vec, 0);
-        }
+        // Clear vector count - elements will be freed when vector is released
+        // For transient vectors, we just reset the count
+        vector_clear(timer_vec);
     }
 }
 

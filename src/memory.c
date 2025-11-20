@@ -288,16 +288,20 @@ CljObject *autorelease(CljObject *v) {
 static void autorelease_pool_clear(CljVector *pool) {
     if (!pool) return;
     // For CLJ_VECTOR_WEAK, don't RELEASE elements (weak reference)
+    // Just clear the count - elements are weak references, not owned
     if (TAG(pool) == CLJ_VECTOR_WEAK) {
         vector_clear(pool);
     } else {
+        // For regular vectors, RELEASE will automatically free all elements via release_object_deep()
+        // But we need to release elements before clearing, so they're freed now
+        // Note: This is a special case - we're clearing the pool, not releasing it
+        // So we manually release elements, then clear the count
         VECTOR_FOR_EACH(pool, elem) {
             RELEASE(elem);
         }
         vector_clear(pool);
     }
-    // Ensure count is set to 0 (vector_clear should do this, but be explicit)
-    vector_reset_count(pool);
+    // vector_clear already sets count to 0
 }
 
 

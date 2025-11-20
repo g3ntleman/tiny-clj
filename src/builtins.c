@@ -85,7 +85,8 @@ ID nth2(ID *args, unsigned int argc) {
     }
 
     // Fast path: Vectors (O(1) access) - includes transient vectors
-    if (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_VECTOR_TRANSIENT) {
+    int tag = TAG(coll);
+    if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
         CljVector *v = as_vector(coll);
         int count = vector_count(v);
         if (!v || i >= count) {
@@ -784,7 +785,8 @@ ID native_get(ID *args, unsigned int argc) {
         ? NULL 
         : key_obj;
     
-    if (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT) {
+    int tag = TAG(map);
+    if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
         return map_get((CljMap*)map, key, not_found);
     }
     
@@ -808,20 +810,22 @@ ID native_count(ID *args, unsigned int argc) {
         return fixnum(seq_count(coll));
     }
     
-    if (coll && (TAG(coll) == CLJ_MAP || TAG(coll) == CLJ_MAP_TRANSIENT)) {
-        return (fixnum(map_count((CljMap*)coll)));
-    } else if (coll && (TAG(coll) == CLJ_VECTOR || TAG(coll) == CLJ_VECTOR_TRANSIENT)) {
-        CljVector *vec = as_vector(coll);
-        return (fixnum(vec ? vector_count(vec) : 0));
-    } else if (coll && TAG(coll) == CLJ_LIST) {
-        CljList *list = as_list(coll);
-        return (fixnum(list_count(list)));
-    } else if (coll && TAG(coll) == CLJ_STRING) {
-        CljString *str = (CljString*)coll;
-        
- 
-        // Return string length directly
-        return fixnum(str->length);
+    if (coll) {
+        int tag = TAG(coll);
+        if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
+            return (fixnum(map_count((CljMap*)coll)));
+        } else if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
+            CljVector *vec = as_vector(coll);
+            return (fixnum(vec ? vector_count(vec) : 0));
+        } else if (tag == CLJ_LIST) {
+            CljList *list = as_list(coll);
+            return (fixnum(list_count(list)));
+        } else if (tag == CLJ_STRING) {
+            CljString *str = (CljString*)coll;
+            
+            // Return string length directly
+            return fixnum(str->length);
+        }
     }
     
     return (fixnum(0)); // Default count for unsupported types
@@ -832,7 +836,8 @@ ID native_keys(ID *args, unsigned int argc) {
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
-    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
+    int tag = TAG(map);
+    if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
         return map_keys((CljMap*)map);
     }
     
@@ -844,7 +849,8 @@ ID native_vals(ID *args, unsigned int argc) {
     CljObject *map = (CljObject*)args[0];
     if (!map) return (NULL);
     
-    if (map && (TAG(map) == CLJ_MAP || TAG(map) == CLJ_MAP_TRANSIENT)) {
+    int tag = TAG(map);
+    if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
         return map_vals((CljMap*)map);
     }
     

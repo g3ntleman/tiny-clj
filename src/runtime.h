@@ -44,6 +44,7 @@ typedef struct TinyClJRuntime {
     // Namespaces
     CljMap *ns_registry;            // transient Map: Symbol → CljNamespace*
     CljNamespace *clojure_core_cache;  // CljNamespace*
+    CljMap *resolve_cache;          // Symbol resolution cache
     
     // Symbol Table
     CljVector *symbol_table;        // Vector of CljSymbol*
@@ -68,6 +69,7 @@ typedef struct TinyClJRuntime {
 extern TinyClJRuntime g_runtime;
 
 void runtime_init(TinyClJRuntime *runtime);
+void runtime_reset(TinyClJRuntime *runtime);
 void runtime_free(TinyClJRuntime *runtime);
 
 // Legacy builtin functions removed - all builtins now use namespace registration

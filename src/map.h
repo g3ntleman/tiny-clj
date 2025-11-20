@@ -18,8 +18,11 @@ typedef struct {
 // Type-safe casting
 static inline CljMap* as_map(ID obj) {
     // Happy path: obj is not NULL and has correct type
-    if (obj && (TAG(obj) == CLJ_MAP || TAG(obj) == CLJ_MAP_TRANSIENT)) {
-        return (CljMap*)obj;  // Direct return, no jumps
+    if (obj) {
+        int tag = TAG(obj);
+        if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
+            return (CljMap*)obj;  // Direct return, no jumps
+        }
     }
     CLJ_ASSERT(0 && "Expected Map type");
     return NULL;  // Never reached in DEBUG, but needed for Release builds

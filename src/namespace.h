@@ -53,7 +53,6 @@ void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
 void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_cleanup(void);
-void ns_reset_resolve_cache(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 
 // Namespace alias functions

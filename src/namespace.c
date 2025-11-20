@@ -17,7 +17,6 @@
 // Symbol resolution cache - uses array-map for DRY principle
 // Cache size: 16 entries (good balance between hit rate and memory usage)
 #define RESOLVE_CACHE_SIZE 16
-static CljMap *g_resolve_cache = NULL;
 
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {
@@ -93,13 +92,6 @@ static CljMap* grow_transient_map(CljMap *old_map) {
     return new_map;
 }
 
-// Function to reset resolve cache (for test isolation)
-void ns_reset_resolve_cache(void) {
-    if (g_resolve_cache) {
-        RELEASE(g_resolve_cache);
-        g_resolve_cache = NULL;
-    }
-}
 
 /** Initialize namespace registry if not already initialized.
  * This is a helper function to ensure the registry exists before use.
@@ -261,27 +253,22 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         return NULL;
     }
     
-    // Initialize cache on first use (DRY: reuse array-map)
-    if (!g_resolve_cache) {
-        g_resolve_cache = make_map(RESOLVE_CACHE_SIZE);
-    }
-    
     // CRITICAL: Always check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
     ID v = map_get(current_ns->mappings, sym, NULL);
     if (v) {
         // Found in current namespace - update cache and return
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-        if (g_resolve_cache) {
-            ID updated_cache = map_assoc(g_resolve_cache, sym, v);
-            ASSIGN(g_resolve_cache, updated_cache);
+        if (g_runtime.resolve_cache) {
+            ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
+            ASSIGN(g_runtime.resolve_cache, updated_cache);
         }
         return v;
     }
     
     // Not in current namespace - check cache (fast path for repeated lookups)
-    if (g_resolve_cache) {
-        ID cached = map_get(g_resolve_cache, sym, NULL);
+    if (g_runtime.resolve_cache) {
+        ID cached = map_get(g_runtime.resolve_cache, sym, NULL);
         if (cached) {
             return cached;
         }
@@ -293,8 +280,8 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         if (v) {
             // Cache the result
             // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-            ID updated_cache = map_assoc(g_resolve_cache, sym, v);
-            ASSIGN(g_resolve_cache, updated_cache);
+            ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
+            ASSIGN(g_runtime.resolve_cache, updated_cache);
             return v;
         }
     }
@@ -320,7 +307,10 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         if (search_ctx.result) {
             v = search_ctx.result;
             // Cache the result
-            (void)map_assoc(g_resolve_cache, sym, v);
+            if (g_runtime.resolve_cache) {
+                ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
+                ASSIGN(g_runtime.resolve_cache, updated_cache);
+            }
             return v;
         }
     }
@@ -549,7 +539,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     }
     
     // Reset symbol resolution cache
-    ns_reset_resolve_cache();
+    // Resolve cache is now reset via runtime_reset()
     
     // Set current_ns to "user"
     evalstate_set_ns(*st_ptr, "user");
@@ -645,10 +635,10 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // CRITICAL: Invalidate resolve cache when a symbol is redefined in the current namespace
     // This ensures that ns_resolve will find the new definition instead of returning cached value
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-    if (g_resolve_cache) {
+    if (g_runtime.resolve_cache) {
         // Remove the symbol from cache to force re-resolution
-        ID updated_cache = map_assoc(g_resolve_cache, symbol, NULL);
-        ASSIGN(g_resolve_cache, updated_cache);
+        ID updated_cache = map_assoc(g_runtime.resolve_cache, symbol, NULL);
+        ASSIGN(g_runtime.resolve_cache, updated_cache);
     }
 }
 

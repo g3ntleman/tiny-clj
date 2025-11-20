@@ -918,7 +918,8 @@ CljObject* eval_list_with_env(CljList *list, CljMap *env, EvalState *st) {
         if (resolved) {
             // If it's a function, call it
             // CRITICAL: Check for both CLJ_FUNC (native) and CLJ_CLOSURE (Clojure functions)
-            if (TAG(resolved) == CLJ_FUNC || TAG(resolved) == CLJ_CLOSURE) {
+            int tag = TAG(resolved);
+            if (tag == CLJ_FUNC || tag == CLJ_CLOSURE) {
                 // Count arguments
                 int total_count = list_count(as_list(list));
                 int argc = total_count - 1;
@@ -1123,8 +1124,9 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(body != NULL);
     
-    // CRITICAL: If EvalContext is provided, use eval_body_with_params to preserve RecurContext
-    if (ctx) {
+    // CRITICAL: If EvalContext is provided AND has params, use eval_body_with_params to preserve RecurContext
+    // If ctx has no params but has recur, we still need to handle recur, so we check for params
+    if (ctx && ctx->params) {
         return eval_body_with_params(body, ctx);
     }
     
@@ -1483,11 +1485,16 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
                 ID recur_args[16] = {NULL};
                 
                 // Evaluate arguments using eval_body_with_params (similar to eval_arg)
+                // CRITICAL: Create a new context without RecurContext for argument evaluation
+                // This ensures that nested function calls get their own RecurContext and don't
+                // interfere with the outer function's recur state
+                EvalContext arg_ctx = {.params = ctx->params, .env = ctx->env, .recur = NULL};
                 for (int i = 0; i < arg_count; i++) {
                     CljObject *arg = list_get_element(recur_list, i + 1); // +1 to skip 'recur'
                     if (arg) {
-                        // Evaluate argument with current context
-                        ID eval_arg = eval_body_with_params(arg, ctx);
+                        // Evaluate argument with context that has no RecurContext
+                        // This prevents nested functions from interfering with outer recur
+                        ID eval_arg = eval_body_with_params(arg, &arg_ctx);
                         // CRITICAL: eval_arg can be NULL (nil), which is valid
                         // We still need to count it as an argument
                         if (eval_arg) {
@@ -1525,29 +1532,33 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     // for nested evaluations to preserve RecurContext.
     
     // Handle maps as functions (for key lookup) - must be first
+    // Use closure_env instead of env to ensure parameter resolution works correctly
     if (op && op_tag == CLJ_MAP) {
-        return eval_map_lookup(list, env, op);
+        return eval_map_lookup(list, closure_env ? closure_env : env, op);
     }
     
     // Early dispatch check with original_op (before symbol resolution)
     // This allows early exit for common arithmetic/comparison operations
+    // Use closure_env instead of env to ensure parameter resolution works correctly
     if (op && op_tag == CLJ_SYMBOL) {
-        CljObject *result = eval_arithmetic_dispatch(list, env, st, original_op);
+        CljObject *result = eval_arithmetic_dispatch(list, closure_env ? closure_env : env, ctx_st, original_op);
         if (result) return result;
-        result = eval_comparison_dispatch(list, env, original_op);
+        result = eval_comparison_dispatch(list, closure_env ? closure_env : env, original_op);
         if (result) return result;
     }
     
     // Continue with symbol resolution (same as eval_list)
+    // Use closure_env instead of env to ensure parameter resolution works correctly
+    CljMap *resolve_env = closure_env ? closure_env : env;
     if (op && op_tag == CLJ_SYMBOL) {
         // Compute op_sym if not already computed
         if (!op_sym) {
             op_sym = as_symbol(op);
         }
         ID resolved = NULL;
-        if (env && TAG(env) == CLJ_MAP) {
+        if (resolve_env && TAG(resolve_env) == CLJ_MAP) {
             // Use sentinel to distinguish "key not found" from "value is nil"
-            ID resolved_id = map_get(env, op, &not_found);
+            ID resolved_id = map_get(resolve_env, op, &not_found);
             if (resolved_id != &not_found) {
                 resolved = resolved_id;
             }
@@ -1556,7 +1567,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
             op = resolved;
             op_tag = op ? TAG(op) : 0;  // Update tag after resolution
         } else {
-            resolved = eval_symbol(op_sym, st);
+            resolved = eval_symbol(op_sym, ctx_st);
             if (resolved) {
                 op = resolved;
                 op_tag = op ? TAG(op) : 0;  // Update tag after resolution
@@ -1565,10 +1576,11 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     }
     
     // Dispatch to helper functions (same as eval_list)
-    CljObject *result = eval_arithmetic_dispatch(list, env, st, original_op);
+    // Use closure_env instead of env to ensure parameter resolution works correctly
+    CljObject *result = eval_arithmetic_dispatch(list, resolve_env, ctx_st, original_op);
     if (result) return result;
     
-    result = eval_comparison_dispatch(list, env, original_op);
+    result = eval_comparison_dispatch(list, resolve_env, original_op);
     if (result) return result;
     
     // Special forms that need RecurContext support
@@ -1625,10 +1637,14 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         return result;
     }
     
-    // CRITICAL: For all other operations, delegate to eval_list WITHOUT context
-    // to prevent infinite recursion (eval_list -> eval_list_with_context -> eval_list)
-    // eval_list now handles recur directly when ctx is available
-    return eval_list(list, env, st, NULL);
+    // CRITICAL: For all other operations, delegate to eval_list
+    // To prevent infinite recursion (eval_list -> eval_body -> eval_body_with_params -> eval_list_with_context -> eval_list),
+    // we pass a context with only RecurContext (no params), so eval_body won't call eval_body_with_params
+    // This preserves RecurContext for recur calls while avoiding infinite recursion
+    // Use env (not closure_env) to match what eval_list_with_context uses for arithmetic operations
+    // closure_env is only used for parameter resolution in eval_body_with_params, not for symbol resolution in eval_list
+    EvalContext recur_only_ctx = {.params = NULL, .env = ctx->env, .recur = ctx->recur};
+    return eval_list(list, env, st, &recur_only_ctx);
 }
 
 // Simplified list evaluation (optionally accepts EvalContext for recur support)
@@ -1664,10 +1680,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
                 ID recur_args[16] = {NULL};
                 
                 // Evaluate arguments using eval_body_with_params
+                // CRITICAL: Create a new context without RecurContext for argument evaluation
+                // This ensures that nested function calls get their own RecurContext and don't
+                // interfere with the outer function's recur state
+                EvalContext arg_ctx = {.params = ctx->params, .env = ctx->env, .recur = NULL};
                 for (int i = 0; i < arg_count; i++) {
                     CljObject *arg = list_get_element(recur_list, i + 1); // +1 to skip 'recur'
                     if (arg) {
-                        ID eval_arg = eval_body_with_params(arg, ctx);
+                        // Evaluate argument with context that has no RecurContext
+                        // This prevents nested functions from interfering with outer recur
+                        ID eval_arg = eval_body_with_params(arg, &arg_ctx);
                         if (eval_arg) {
                             recur_args[i] = RETAIN(eval_arg);
                         }
@@ -2038,7 +2060,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     
     if (original_op_sym == SYM_LET) {
         // (let [bindings*] body*)
-        return eval_let(list, env, st);
+        // CRITICAL: Pass ctx to preserve RecurContext for recur calls
+        return eval_let(list, env, st, ctx);
     }
     
     if (original_op_sym == SYM_VAR) {
@@ -2066,10 +2089,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             ID recur_args[16] = {NULL};
             
             // Evaluate arguments using eval_body_with_params
+            // CRITICAL: Create a new context without RecurContext for argument evaluation
+            // This ensures that nested function calls get their own RecurContext and don't
+            // interfere with the outer function's recur state
+            EvalContext arg_ctx = {.params = ctx->params, .env = ctx->env, .recur = NULL};
             for (int i = 0; i < arg_count; i++) {
                 CljObject *arg = list_get_element(recur_list, i + 1); // +1 to skip 'recur'
                 if (arg) {
-                    ID eval_arg = eval_body_with_params(arg, ctx);
+                    // Evaluate argument with context that has no RecurContext
+                    // This prevents nested functions from interfering with outer recur
+                    ID eval_arg = eval_body_with_params(arg, &arg_ctx);
                     if (eval_arg) {
                         recur_args[i] = RETAIN(eval_arg);
                     }
@@ -2103,8 +2132,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
     
     // Check if op (after resolution) is a function
-    if (op && (TAG(op) == CLJ_FUNC || TAG(op) == CLJ_CLOSURE)) {
-        return call_function_with_args(op, list, env, st);
+    if (op) {
+        int tag = TAG(op);
+        if (tag == CLJ_FUNC || tag == CLJ_CLOSURE) {
+            return call_function_with_args(op, list, env, st);
+        }
     }
     
     // Fallback: try to resolve symbol and call as function
@@ -2148,8 +2180,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
         
         // Check if it's a function (native or interpreted)
-        if (fn && (TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE)) {
-            // CRITICAL: Manage recursion depth here, not in eval_arg
+        if (fn) {
+            int tag = TAG(fn);
+            if (tag == CLJ_FUNC || tag == CLJ_CLOSURE) {
+                // CRITICAL: Manage recursion depth here, not in eval_arg
             // This prevents double counting when eval_arg calls eval_list
             if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
 #ifdef DEBUG
@@ -2210,7 +2244,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             "Cannot call %s as a function", clj_type_name(op->type));
     return NULL;
 }
-
+}
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
@@ -2807,7 +2841,7 @@ ID eval_list_function(CljList *list, CljMap *env) {
 // ============================================================================
 // EVAL_LET - Let bindings implementation
 // ============================================================================
-ID eval_let(CljList *list, CljMap *env, EvalState *st) {
+ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // (let [bindings*] body*)
     // bindings* => binding-form init-expr
     
@@ -2931,7 +2965,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                 RETAIN(value);  // Retain for consistency
             } else {
                 // Complex expression - evaluate it
-                value = eval_body(init_val, let_env, st, NULL);
+                // CRITICAL: Pass ctx to preserve RecurContext for recur calls
+                value = eval_body(init_val, let_env, st, ctx);
                 // value can be NULL if evaluation result is nil
             }
         }
@@ -3009,7 +3044,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st) {
                     RETAIN(result);  // Retain for consistency
                 } else {
                     // Complex expression - evaluate it
-                    result = eval_body(body_expr, let_env, st, NULL);
+                    // CRITICAL: Pass ctx to preserve RecurContext for recur calls
+                    result = eval_body(body_expr, let_env, st, ctx);
                 }
             }
         }

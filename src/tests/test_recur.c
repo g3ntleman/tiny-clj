@@ -503,3 +503,129 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, TAG(result), "Result should be a Fixnum");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
 }
+
+// ============================================================================
+// Tests for nested recur calls
+// ============================================================================
+
+// Test: Function A calls function B, both use recur
+// This tests if nested recur contexts are handled correctly
+TEST(test_nested_recur_outer_calls_inner) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Define inner function B that uses recur
+    CljObject *inner_def = eval_string("(def inner (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(inner_def);
+    
+    // Define outer function A that calls inner and also uses recur
+    // Outer function: calls inner, then uses recur itself
+    CljObject *outer_def = eval_string("(def outer (fn [n acc] (if (= n 0) acc (let [result (inner 2 0)] (recur (- n 1) (+ acc result))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(outer_def);
+    
+    // Test: outer(3, 0) should call inner(2, 0) three times
+    // inner(2, 0) returns 2, so outer should return 2+2+2 = 6
+    CljObject *result = eval_string("(outer 3 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
+}
+
+// Test: Function A uses recur, and within the recur loop calls function B that also uses recur
+// This is a more complex nested scenario
+TEST(test_nested_recur_in_recur_loop) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Define helper function that uses recur
+    CljObject *helper_def = eval_string("(def helper (fn [x] (if (= x 0) 0 (recur (- x 1)))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(helper_def);
+    
+    // Define main function that uses recur and calls helper in each iteration
+    CljObject *main_def = eval_string("(def main (fn [n acc] (if (= n 0) acc (let [h (helper 1)] (recur (- n 1) (+ acc h))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(main_def);
+    
+    // Test: main(3, 0) should call helper(1) three times
+    // helper(1) returns 0, so main should return 0
+    CljObject *result = eval_string("(main 3 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
+}
+
+// Test: More complex nested recur - outer function uses recur, inner function also uses recur
+// The inner function is called from within the outer function's recur loop
+TEST(test_nested_recur_complex) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Define inner function that sums using recur
+    CljObject *sum_inner_def = eval_string("(def sum-inner (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc n)))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(sum_inner_def);
+    
+    // Define outer function that uses recur and calls sum-inner in each iteration
+    CljObject *outer_sum_def = eval_string("(def outer-sum (fn [count acc] (if (= count 0) acc (let [inner-result (sum-inner 2 0)] (recur (- count 1) (+ acc inner-result))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(outer_sum_def);
+    
+    // Test: outer-sum(2, 0) should call sum-inner(2, 0) twice
+    // sum-inner(2, 0) = 0+1+2 = 3, so outer-sum should return 3+3 = 6
+    CljObject *result = eval_string("(outer-sum 2 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum((CljValue)result));
+}
+
+// Test: Simple nested recur - outer function uses recur, calls inner function that also uses recur
+// This is the simplest case to test if nested recur contexts work correctly
+TEST(test_nested_recur_simple) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Define inner function that uses recur
+    CljObject *inner_def = eval_string("(def inner (fn [x] (if (= x 0) 0 (recur (- x 1)))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(inner_def);
+    
+    // Define outer function that uses recur and calls inner
+    CljObject *outer_def = eval_string("(def outer (fn [n] (if (= n 0) 0 (let [i (inner 1)] (recur (- n 1))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(outer_def);
+    
+    // Test: outer(3) should call inner(1) three times, each returning 0
+    // So outer should return 0
+    CljObject *result = eval_string("(outer 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
+}
+
+// Test: Nested recur where inner function's recur might interfere with outer function's recur
+// This tests if the RecurContext is properly isolated between nested function calls
+TEST(test_nested_recur_isolation) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Define helper function that uses recur to count down
+    CljObject *helper_def = eval_string("(def helper (fn [n] (if (= n 0) 0 (recur (- n 1)))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(helper_def);
+    
+    // Define main function that uses recur and calls helper in each iteration
+    // The key is that helper's recur should not affect main's recur
+    CljObject *main_def = eval_string("(def main (fn [count acc] (if (= count 0) acc (let [h (helper 2)] (recur (- count 1) (+ acc h))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(main_def);
+    
+    // Test: main(2, 0) should call helper(2) twice
+    // helper(2) recurs twice and returns 0, so main should return 0+0 = 0
+    CljObject *result = eval_string("(main 2 0)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)result));
+}
