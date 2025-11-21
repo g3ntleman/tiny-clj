@@ -7,7 +7,7 @@
 #include "tests_common.h"
 #include "../tiny_clj.h"
 #include "../memory.h"
-#include "../clj_strings.h"
+#include "../strings.h"
 #include "../object.h"
 #include "../value.h"
 #include "../runtime.h"

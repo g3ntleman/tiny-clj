@@ -67,7 +67,7 @@
       (let [result (step s cmap (list) 0)]
         (if (nil? result)
           ""
-          (join "" result))))))
+          (clojure.string/join "" result))))))
 
 ;; includes? - True if s includes substr
 (defn includes? [s substr]
@@ -104,7 +104,11 @@
                          (let [first-elem (first coll)
                                rest-coll (rest coll)]
                            (if (empty? rest-coll)
-                             (build-list separator rest-coll (cons (str first-elem) acc))
+                             ;; Last element - add it without separator and finish
+                             (if (empty? acc)
+                               (list (str first-elem))
+                               (clojure.core/reverse (cons (str first-elem) acc)))
+                             ;; Not last element - add it with separator and recurse
                              (build-list separator rest-coll (cons separator (cons (str first-elem) acc)))))))
           concat-strings (fn [str-list]
                            (if (empty? str-list)
@@ -152,27 +156,15 @@
 
 ;; last-index-of - Returns last index of value in s
 ;; Uses native C function for performance
-(defn last-index-of [s value from-index]
-  (if (nil? from-index)
-    (clojure.string/last-index-of s value)
-    (clojure.string/last-index-of s value from-index)))
+;; Note: Native function is registered directly, no Clojure wrapper needed
 
 ;; lower-case - Converts string to lower-case
 ;; Uses native C function for performance
 ;; Note: Native function is registered directly, no Clojure wrapper needed
 
 ;; reverse - Reverses string
-(defn reverse [s]
-  (if (or (nil? s) (= (count s) 0))
-    s
-    (let [step (fn [s acc idx]
-                 (if (< idx 0)
-                   (if (empty? acc)
-                     ""
-                     (join "" acc))
-                   (let [c (subs s idx (+ idx 1))]
-                     (step s (cons c acc) (- idx 1)))))]
-      (step s (list) (- (count s) 1)))))
+;; Uses native C function for performance
+;; Note: Native function is registered directly, no Clojure wrapper needed
 
 ;; starts-with? - True if s starts with substr
 (defn starts-with? [s substr]
@@ -230,10 +222,7 @@
 
 ;; upper-case - Converts string to upper-case
 ;; Uses native C function for performance
-(defn upper-case [s]
-  (if (or (nil? s) (= (count s) 0))
-    s
-    (clojure.string/upper-case s)))
+;; Note: Native function is registered directly, no Clojure wrapper needed
 
 ;; ============================================================================
 ;; Functions with String variants (work without TRE)
@@ -291,7 +280,7 @@
                            (if (= (count remaining) 0)
                              ""
                              remaining)
-                           (join "" (clojure.core/reverse (cons remaining acc)))))
+                           (clojure.string/join "" (clojure.core/reverse (cons remaining acc)))))
                        ;; Found match, replace it
                        (let [before (subs s start-idx idx)
                              after-start (+ idx (count match))]
@@ -301,7 +290,7 @@
             ""
             (if (string? result)
               result
-              (join "" result))))))))
+              (clojure.string/join "" result))))))))
 
 ;; replace-first - Replaces first instance of match with replacement
 ;; String version works without TRE

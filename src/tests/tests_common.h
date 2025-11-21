@@ -36,7 +36,7 @@
 #include "../parser.h"
 #include "../namespace.h"
 #include "../seq.h"
-#include "../clj_strings.h"
+#include "../strings.h"
 #include "../strings.h"
 #include "../tiny_clj.h"
 
@@ -70,8 +70,11 @@ extern EvalState* test_get_eval_state(void);
     } \
     static void register_##name(void) __attribute__((constructor)); \
     static void register_##name(void) { \
-        const char *filename = test_extract_filename_from_path(__FILE__); \
-        test_registry_add_with_file_info(#name, name, filename, __FILE__, __LINE__); \
+        char *filename = test_extract_filename_from_path(__FILE__); \
+        if (filename) { \
+            test_registry_add_with_file_info(#name, name, filename, __FILE__, __LINE__); \
+            free(filename); \
+        } \
     } \
     static void name##_body(void)
 

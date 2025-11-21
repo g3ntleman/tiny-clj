@@ -297,6 +297,9 @@ add_executable(unity-tests
     src/tests/test_list_resolution.c
     src/tests/test_byte_array.c
     src/tests/test_keyword_evaluation.c
+    src/tests/test_string.c
+    src/tests/test_require.c
+    src/tests/test_qualified_symbol_resolution.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
     src/tests/test_timer.c
@@ -337,24 +340,91 @@ add_executable(unity-tests
     src/line_editor.c
 )
 
-# Debug parser target removed - file not found
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE
+# Remove any dependency on CMAKE_BUILD_TYPE for unity-tests
+# IMPORTANT: Disable dead code elimination to preserve test registration functions
+# that are called via constructor attributes
 apply_common_settings(unity-tests)
 # Option to disable ASAN for profiling
 option(ENABLE_ASAN "Enable AddressSanitizer for unity-tests" ON)
 if(ENABLE_ASAN)
-    set_target_properties(unity-tests PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-        LINK_FLAGS "-fsanitize=address"
-        COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
-    )
+    if(APPLE)
+        # macOS: disable dead_strip to preserve all functions (including test registrations)
+        # Use target_link_options to properly set linker flags
+        set_target_properties(unity-tests PROPERTIES
+            COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            # Force Debug configuration regardless of CMAKE_BUILD_TYPE
+            COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
+        )
+        # Override global linker flags to prevent dead code elimination
+        # This ensures test registration functions (called via constructors) are preserved
+        # Use target_link_options to properly set linker flags without dead_strip
+        target_link_options(unity-tests PRIVATE
+            -fsanitize=address
+        )
+        # Remove dead_strip from global flags if present
+        string(REPLACE "-Wl,-dead_strip" "" TMP_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+        string(REPLACE "-Wl,-S" "" TMP_FLAGS "${TMP_FLAGS}")
+        if(TMP_FLAGS)
+            target_link_options(unity-tests PRIVATE ${TMP_FLAGS})
+        endif()
+    else()
+        # Linux/other: disable gc-sections to preserve all functions
+        set_target_properties(unity-tests PROPERTIES
+            COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            # Force Debug configuration regardless of CMAKE_BUILD_TYPE
+            COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
+        )
+        target_link_options(unity-tests PRIVATE
+            -fsanitize=address
+            -Wl,--no-gc-sections
+        )
+    endif()
 else()
-    set_target_properties(unity-tests PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-        LINK_FLAGS ""
-        COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
-    )
+    if(APPLE)
+        # macOS: disable dead_strip to preserve all functions (including test registrations)
+        set_target_properties(unity-tests PROPERTIES
+            COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            # Force Debug configuration regardless of CMAKE_BUILD_TYPE
+            COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
+        )
+        # Override global linker flags to prevent dead code elimination
+        # This ensures test registration functions (called via constructors) are preserved
+        # Use target_link_options to properly set linker flags without dead_strip
+        # Remove dead_strip from global flags if present
+        string(REPLACE "-Wl,-dead_strip" "" TMP_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+        string(REPLACE "-Wl,-S" "" TMP_FLAGS "${TMP_FLAGS}")
+        if(TMP_FLAGS)
+            target_link_options(unity-tests PRIVATE ${TMP_FLAGS})
+        endif()
+    else()
+        # Linux/other: disable gc-sections to preserve all functions
+        set_target_properties(unity-tests PROPERTIES
+            COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            # Force Debug configuration regardless of CMAKE_BUILD_TYPE
+            COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
+            COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
+        )
+        target_link_options(unity-tests PRIVATE
+            -Wl,--no-gc-sections
+        )
+    endif()
 endif()
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c

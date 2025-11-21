@@ -2,13 +2,14 @@
 #include "memory.h"  // For RELEASE
 #include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
-#include "clj_strings.h"  // For to_string
+#include "strings.h"  // For to_string
 #include "strings.h"  // For string functions
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>  // For UINT_MAX
 
 #ifdef ENABLE_LINE_EDITING
 // Global line editor instance
@@ -36,7 +37,7 @@ struct LineEditor {
     
     // History support using CljVector
     CljVector *history;        // CljVector für History
-    int history_index;         // Current position in history (-1 = new line)
+    unsigned int history_index;  // Current position in history (UINT_MAX = new line)
     char temp_buffer[512];     // Backup of current line when browsing history
 };
 
@@ -92,7 +93,7 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     editor->put_char('\a');
                     return 3;
                 }
-                if (editor->history_index == -1) {
+                if (editor->history_index == UINT_MAX) {
                     // First time going up - save current line and go to last history item
                     strncpy(editor->temp_buffer, editor->buffer, sizeof(editor->temp_buffer) - 1);
                     editor->temp_buffer[sizeof(editor->temp_buffer) - 1] = '\0';
@@ -105,32 +106,35 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     return 3;
                 }
                 
-                if (editor->history_index >= 0) {
-                    const char *history_line = line_editor_get_history_line(editor, editor->history_index);
+                if (editor->history_index != UINT_MAX) {
+                    CljString *history_line = line_editor_get_history_line(editor, editor->history_index);
                     if (history_line) {
                         // Move cursor to beginning of current input and clear to end of line
                         for (int i = 0; i < editor->cursor_pos; i++) {
                             editor->put_string(ESC_LEFT);
                         }
                         editor->put_string(ESC_CLEAR);
-                        strncpy(editor->buffer, history_line, sizeof(editor->buffer) - 1);
+                        const char *str_data = clj_string_data(history_line);
+                        strncpy(editor->buffer, str_data, sizeof(editor->buffer) - 1);
                         editor->buffer[sizeof(editor->buffer) - 1] = '\0';
                         editor->length = strlen(editor->buffer);
                         editor->cursor_pos = editor->length;
                         editor->put_string(editor->buffer);
+                        // Release the retained CljString
+                        RELEASE((CljObject*)history_line);
                     } else {
                         // History line not found - reset to new line
-                        editor->history_index = -1;
+                        editor->history_index = UINT_MAX;
                     }
                 }
                 return 3; // Consumed 3 bytes
             }
         case 'B': // Down arrow - navigate history forwards
-            if (editor->history_index >= 0) {
+            if (editor->history_index != UINT_MAX) {
                 editor->history_index++;
-                if (editor->history_index >= line_editor_get_history_size(editor)) {
+                if (editor->history_index >= (unsigned int)line_editor_get_history_size(editor)) {
                     // Past end of history - restore temp buffer
-                    editor->history_index = -1;
+                    editor->history_index = UINT_MAX;
                     // Move cursor to beginning of current input and clear to end of line
                     for (int i = 0; i < editor->cursor_pos; i++) {
                         editor->put_string(ESC_LEFT);
@@ -143,18 +147,21 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                     editor->put_string(editor->buffer);
                 } else {
                     // Load next history item
-                    const char *history_line = line_editor_get_history_line(editor, editor->history_index);
+                    CljString *history_line = line_editor_get_history_line(editor, editor->history_index);
                     if (history_line) {
                         // Move cursor to beginning of current input and clear to end of line
                         for (int i = 0; i < editor->cursor_pos; i++) {
                             editor->put_string(ESC_LEFT);
                         }
                         editor->put_string(ESC_CLEAR);
-                        strncpy(editor->buffer, history_line, sizeof(editor->buffer) - 1);
+                        const char *str_data = clj_string_data(history_line);
+                        strncpy(editor->buffer, str_data, sizeof(editor->buffer) - 1);
                         editor->buffer[sizeof(editor->buffer) - 1] = '\0';
                         editor->length = strlen(editor->buffer);
                         editor->cursor_pos = editor->length;
                         editor->put_string(editor->buffer);
+                        // Release the retained CljString
+                        RELEASE((CljObject*)history_line);
                     }
                 }
             } else {
@@ -280,7 +287,7 @@ LineEditor* line_editor_new(GetCharFunc get_char, PutCharFunc put_char, PutStrin
     CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);  // Start with persistent vector
     editor->history = vector_transient(persistent_vec);      // Convert to transient for efficient operations
     RELEASE(persistent_vec);  // Release the persistent version
-    editor->history_index = -1;  // -1 means we're on a new line
+    editor->history_index = UINT_MAX;  // UINT_MAX means we're on a new line
     editor->temp_buffer[0] = '\0';
     
     return editor;
@@ -383,7 +390,7 @@ int line_editor_process_input(LineEditor *editor) {
             editor->line_ready = true;
             editor->put_char('\n');
             // Reset history index when submitting a line
-            editor->history_index = -1;
+            editor->history_index = UINT_MAX;
             return LINE_EDITOR_LINE_READY;
         }
         return LINE_EDITOR_SUCCESS;
@@ -441,11 +448,16 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
         if (temp_persistent) {
             int count = vector_count(temp_persistent);
             if (count > 0) {
-                const char *last_line = line_editor_get_history_line(editor, count - 1);
-                if (last_line && strcmp(line, last_line) == 0) {
-                    // Duplicate of last entry - skip adding
-                    RELEASE(temp_persistent);
-                    return;
+                CljString *last_line = line_editor_get_history_line(editor, count - 1);
+                if (last_line) {
+                    const char *str_data = clj_string_data(last_line);
+                    if (strcmp(line, str_data) == 0) {
+                        // Duplicate of last entry - skip adding
+                        RELEASE((CljObject*)last_line);
+                        RELEASE(temp_persistent);
+                        return;
+                    }
+                    RELEASE((CljObject*)last_line);
                 }
             }
             RELEASE(temp_persistent);
@@ -453,10 +465,15 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     } else {
         int count = vector_count(history_vec);
         if (count > 0) {
-            const char *last_line = line_editor_get_history_line(editor, count - 1);
-            if (last_line && strcmp(line, last_line) == 0) {
-                // Duplicate of last entry - skip adding
-                return;
+            CljString *last_line = line_editor_get_history_line(editor, count - 1);
+            if (last_line) {
+                const char *str_data = clj_string_data(last_line);
+                if (strcmp(line, str_data) == 0) {
+                    // Duplicate of last entry - skip adding
+                    RELEASE((CljObject*)last_line);
+                    return;
+                }
+                RELEASE((CljObject*)last_line);
             }
         }
     }
@@ -470,42 +487,12 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     }
 }
 
-const char* line_editor_get_history_line(LineEditor *editor, int index) {
+CljString* line_editor_get_history_line(LineEditor *editor, int index) {
     if (!editor) return NULL;
     
     // Convert transient vector to persistent if needed
     CljVector *history_vec = editor->history;
-    CljVector *temp_persistent = NULL;
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
-        temp_persistent = (CljVector*)vector_persistent(history_vec);
-        if (!temp_persistent) return NULL;
-        history_vec = temp_persistent;
-    }
-    
-    int count = vector_count(history_vec);
-    if (index < 0 || index >= count) {
-        RELEASE(temp_persistent);
-        return NULL;
-    }
-    
-    // Use nth2 to access element (Clojure-compatible API)
-    ID nth_args[2];
-    nth_args[0] = history_vec;
-    nth_args[1] = fixnum(index);
-    ID line_obj = nth2(nth_args, 2);
-    if (!line_obj || TAG(line_obj) != CLJ_STRING) {
-        RELEASE(line_obj);
-        RELEASE(temp_persistent);
-        return NULL;
-    }
-    
-    // String data is stored in CljString structure
-    CljString *str = (CljString*)line_obj;
-    const char *result = str->data;
-    
-    RELEASE(line_obj);
-    RELEASE(temp_persistent);
-    return result;
+    return vector_nth(history_vec, index);
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {
@@ -545,7 +532,7 @@ void line_editor_clear_history(LineEditor *editor) {
     CljVector *persistent_vec = make_vector(50, CLJ_VECTOR);
     editor->history = vector_transient(persistent_vec);
     RELEASE(persistent_vec);
-    editor->history_index = -1;
+    editor->history_index = UINT_MAX;
 }
 
 void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
@@ -587,7 +574,7 @@ void cleanup_line_editor(void) {
 // Reset history index to new line mode (used after exceptions)
 void line_editor_reset_history_index(LineEditor *editor) {
     if (editor) {
-        editor->history_index = -1;  // Reset to new line mode
+        editor->history_index = UINT_MAX;  // Reset to new line mode
     }
 }
 
@@ -671,7 +658,7 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
     (void)editor; (void)line;
 }
 
-const char* line_editor_get_history_line(LineEditor *editor, int index) {
+CljString* line_editor_get_history_line(LineEditor *editor, int index) {
     (void)editor; (void)index;
     return NULL;
 }

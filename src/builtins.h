@@ -58,6 +58,9 @@ ID native_list(ID *args, unsigned int argc);
 ID native_count(ID *args, unsigned int argc);
 ID native_conj(ID *args, unsigned int argc);
 ID native_reverse(ID *args, unsigned int argc);
+#ifndef ESP32_BUILD
+ID native_require(ID *args, unsigned int argc);
+#endif
 
 // Comparison operators
 ID native_lt(ID *args, unsigned int argc);

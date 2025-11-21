@@ -56,6 +56,18 @@ void test_registry_add_with_file_info(const char *name, TestFunc func, const cha
         return;
     }
     
+    // Copy test name to ensure it's permanently stored
+    // This is critical because name might point to a static buffer that could be overwritten
+    size_t name_len = strlen(name);
+    char *name_copy = malloc(name_len + 1);
+    if (!name_copy) {
+        fprintf(stderr, "Error: Failed to allocate memory for test name\n");
+        free(qualified_name);
+        free(group_copy);
+        return;
+    }
+    strcpy(name_copy, name);
+    
     // Copy file path to ensure it's permanently stored
     char *file_copy = NULL;
     if (file) {
@@ -63,6 +75,7 @@ void test_registry_add_with_file_info(const char *name, TestFunc func, const cha
         file_copy = malloc(file_len + 1);
         if (!file_copy) {
             fprintf(stderr, "Error: Failed to allocate memory for file path\n");
+            free(name_copy);
             free(qualified_name);
             free(group_copy);
             return;
@@ -71,7 +84,7 @@ void test_registry_add_with_file_info(const char *name, TestFunc func, const cha
     }
     
     // Add test to registry
-    test_registry[test_count].name = name;
+    test_registry[test_count].name = name_copy;
     test_registry[test_count].qualified_name = qualified_name;
     test_registry[test_count].func = func;
     test_registry[test_count].group = group_copy;
@@ -133,8 +146,20 @@ void test_registry_add_with_group(const char *name, TestFunc func, const char *g
     }
     strcpy(group_copy, group);
     
+    // Copy test name to ensure it's permanently stored
+    // This is critical because name might point to a static buffer that could be overwritten
+    size_t name_len = strlen(name);
+    char *name_copy = malloc(name_len + 1);
+    if (!name_copy) {
+        fprintf(stderr, "Error: Failed to allocate memory for test name\n");
+        free(group_copy);
+        free(qualified_name);
+        return;
+    }
+    strcpy(name_copy, name);
+    
     // Add test to registry
-    test_registry[test_count].name = name;
+    test_registry[test_count].name = name_copy;
     test_registry[test_count].qualified_name = qualified_name;
     test_registry[test_count].func = func;
     test_registry[test_count].group = group_copy;
@@ -253,8 +278,9 @@ void test_registry_list_groups(void) {
 
 // Clear the registry (for cleanup)
 void test_registry_clear(void) {
-    // Free all allocated strings (qualified_name, group, and file)
+    // Free all allocated strings (name, qualified_name, group, and file)
     for (size_t i = 0; i < test_count; i++) {
+        free((void*)test_registry[i].name);
         free((void*)test_registry[i].qualified_name);
         free((void*)test_registry[i].group);
         if (test_registry[i].file) {
@@ -268,8 +294,15 @@ void test_registry_clear(void) {
 }
 
 // Helper function to extract filename from __FILE__ (without path and extension)
-const char *test_extract_filename_from_path(const char *file_path) {
-    if (!file_path) return "unknown";
+// Returns dynamically allocated string that caller must free
+char *test_extract_filename_from_path(const char *file_path) {
+    if (!file_path) {
+        char *result = malloc(8);
+        if (result) {
+            strcpy(result, "unknown");
+        }
+        return result;
+    }
     
     // Find the last path separator (Unix '/' or Windows '\')
     const char *last_sep = strrchr(file_path, '/');
@@ -284,22 +317,27 @@ const char *test_extract_filename_from_path(const char *file_path) {
     // Find the extension (last dot)
     const char *last_dot = strrchr(filename, '.');
     if (last_dot) {
-        // Allocate a static buffer to hold the filename without extension
-        // Note: This is per-call, so each call gets its own buffer
-        // For registration, we'll copy this string anyway
-        // FIX: Use thread-local storage or allocate dynamically to avoid overwriting
-        static char buffer[256];
+        // Dynamically allocate buffer for filename without extension
         size_t len = last_dot - filename;
-        if (len >= sizeof(buffer)) {
-            len = sizeof(buffer) - 1;
+        char *result = malloc(len + 1);
+        if (!result) {
+            fprintf(stderr, "Error: Failed to allocate memory for filename\n");
+            return NULL;
         }
-        strncpy(buffer, filename, len);
-        buffer[len] = '\0';
-        return buffer;
+        strncpy(result, filename, len);
+        result[len] = '\0';
+        return result;
     }
     
-    // No extension found, return filename as-is
-    return filename;
+    // No extension found, return filename as-is (dynamically allocated)
+    size_t len = strlen(filename);
+    char *result = malloc(len + 1);
+    if (!result) {
+        fprintf(stderr, "Error: Failed to allocate memory for filename\n");
+        return NULL;
+    }
+    strcpy(result, filename);
+    return result;
 }
 
 // Simple pattern matching with * wildcard

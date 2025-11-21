@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
 #include "object.h"
 #include "strings.h"
 #include "namespace.h"  // For CljNamespace definition
-#include "clj_strings.h"
 #include "value.h"
 #include "symbol.h"
 #include "vector.h"
@@ -58,6 +58,35 @@ struct CljString* make_string(const char *str) {
     s->base.rc = 1;
     s->length = (uint16_t)len;
     memcpy(s->data, str, len + 1);  // includes null terminator
+    
+    return s;
+}
+
+CljString* make_string_buffer(size_t length) {
+    // Return empty string singleton if length is 0
+    if (length == 0) {
+        return string_empty_singleton;
+    }
+    
+    // Check that length fits in 16-bit field (max 65,535 characters)
+    if (length > UINT16_MAX) {
+        throw_exception(EXCEPTION_RUNTIME, "make_string_buffer: length exceeds maximum (65,535)",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Allocate CljString + space for string data + null terminator
+    CljString *s = (CljString*)alloc(sizeof(CljString) + length + 1, 1, CLJ_STRING);
+    if (!s) {
+        throw_oom();
+        return NULL;
+    }
+    
+    s->base.type = CLJ_STRING;
+    s->base.rc = 1;
+    s->length = (uint16_t)length;
+    // Zero-initialize the buffer (including null terminator)
+    memset(s->data, 0, length + 1);
     
     return s;
 }

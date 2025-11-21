@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>  // For fprintf in DEBUG mode
 #include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
@@ -253,12 +254,16 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         return NULL;
     }
     
-    // CRITICAL: Always check current namespace first (before cache)
+    // Always check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
-    ID v = map_get(current_ns->mappings, sym, NULL);
-    if (v) {
-        // Found in current namespace - update cache and return
-        // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+    // Use sentinel to distinguish "key not found" from "value is nil"
+    // In Clojure, nil is a valid value, so we need to distinguish between
+    // "symbol not found" (should search other namespaces) and "symbol found with nil value" (should return nil)
+    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID v = map_get(current_ns->mappings, sym, (ID)&not_found_sentinel);
+    if (v != (ID)&not_found_sentinel) {
+        // Found in current namespace (value can be NULL/nil, which is valid)
+        // Update cache (map_assoc may return a new map due to COW, so we must use the result)
         if (g_runtime.resolve_cache) {
             ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
             ASSIGN(g_runtime.resolve_cache, updated_cache);
@@ -278,10 +283,11 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     if (g_runtime.clojure_core_cache && g_runtime.clojure_core_cache->mappings) {
         v = (CljObject*)map_get(g_runtime.clojure_core_cache->mappings, sym, NULL);
         if (v) {
-            // Cache the result
-            // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-            ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
-            ASSIGN(g_runtime.resolve_cache, updated_cache);
+            // Cache the result (map_assoc may return a new map due to COW, so we must use the result)
+            if (g_runtime.resolve_cache) {
+                ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
+                ASSIGN(g_runtime.resolve_cache, updated_cache);
+            }
             return v;
         }
     }
@@ -527,10 +533,19 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     (*st_ptr)->file = NULL;
     (*st_ptr)->line = 0;
     (*st_ptr)->col = 0;
-    (*st_ptr)->current_ns = NULL;
     
     // Reset user namespace for isolation
+    // evalstate_new already created a new user namespace, but we need to ensure it's clean
+    // (no definitions from previous tests). We must reset it AFTER evalstate_new creates it.
+    // Get user namespace - it should exist because evalstate_new creates it
+    // But load_clojure_core may have changed current_ns to clojure.core, so we need to find it explicitly
     CljNamespace *user_ns = ns_find("user");
+    if (!user_ns) {
+        // If not found, create it explicitly (shouldn't happen, but handle it)
+        user_ns = ns_get_or_create("user", NULL);
+    }
+    // Always reset user namespace mappings to ensure test isolation
+    // This clears any definitions from previous tests (e.g., helper, main from test_recur)
     if (user_ns && user_ns != g_runtime.clojure_core_cache) {
         if (user_ns->mappings) {
             RELEASE(user_ns->mappings);
@@ -538,10 +553,8 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
         }
     }
     
-    // Reset symbol resolution cache
-    // Resolve cache is now reset via runtime_reset()
-    
-    // Set current_ns to "user"
+    // Ensure current_ns is set to "user" (with clean mappings)
+    // The user_ns we reset above should be the same one that evalstate_set_ns will find
     evalstate_set_ns(*st_ptr, "user");
 }
 
@@ -614,6 +627,19 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // Only check for NULL ns and symbol
     if (!ns || !symbol) return;
     
+    // DEBUG: Print debug info for blank? registration
+    #ifdef DEBUG
+    if (symbol && TAG(symbol) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(symbol);
+        if (sym && sym->name && strcmp(sym->name, "blank?") == 0) {
+            fprintf(stderr, "[DEBUG] ns_define: Registering blank? in namespace %s\n", 
+                    ns->name ? ns->name->name : "unknown");
+            fprintf(stderr, "[DEBUG] ns_define: symbol=%p, value=%p, mappings=%p\n", 
+                    symbol, value, ns->mappings);
+        }
+    }
+    #endif
+    
     // Create or update mappings
     if (!ns->mappings) {
         ns->mappings = make_map(16);
@@ -631,6 +657,22 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         // new_mappings is already retained by map_assoc
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
+    
+    // DEBUG: Verify blank? was registered
+    #ifdef DEBUG
+    if (symbol && TAG(symbol) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(symbol);
+        if (sym && sym->name && strcmp(sym->name, "blank?") == 0) {
+            fprintf(stderr, "[DEBUG] ns_define: After registration, mappings=%p, count=%d\n", 
+                    ns->mappings, ns->mappings ? ((CljMap*)ns->mappings)->count : 0);
+            // Verify it's in the map
+            static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+            ID found = map_get(ns->mappings, symbol, (ID)&not_found_sentinel);
+            fprintf(stderr, "[DEBUG] ns_define: Verification lookup: found=%p (sentinel=%p)\n", 
+                    found, (ID)&not_found_sentinel);
+        }
+    }
+    #endif
     
     // CRITICAL: Invalidate resolve cache when a symbol is redefined in the current namespace
     // This ensures that ns_resolve will find the new definition instead of returning cached value

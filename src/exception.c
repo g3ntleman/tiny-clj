@@ -12,7 +12,7 @@
 #include "error_messages.h"
 #include "object.h"
 #include "memory.h"
-#include "clj_strings.h"  // For to_string
+#include "strings.h"  // For to_string
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
 

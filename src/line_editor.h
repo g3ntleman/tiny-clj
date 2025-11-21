@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include "object.h"
 #include "vector.h"
+#include "strings.h"  // For CljString
 
 // Forward declarations
 typedef struct LineEditor LineEditor;
@@ -43,7 +44,7 @@ void line_editor_reset(LineEditor *editor);
 
 // History support (optional)
 void line_editor_add_to_history(LineEditor *editor, const char *line);
-const char* line_editor_get_history_line(LineEditor *editor, int index);
+CljString* line_editor_get_history_line(LineEditor *editor, int index);  // Returns retained CljString (caller must RELEASE)
 int line_editor_get_history_size(const LineEditor *editor);
 
 // History bulk operations

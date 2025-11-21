@@ -28,8 +28,8 @@ extern CljString* string_empty_singleton;
  * @brief Accessor macros for CljString
  */
 #define as_clj_string(obj) ((CljString*)(obj))
-#define string_data(str) ((str)->data)
-#define string_length(str) ((str)->length)
+#define string_data(str) ((as_clj_string(str))->data)
+#define string_length(str) ((as_clj_string(str))->length)
 
 /**
  * @brief Check if a CljObject is a string
@@ -53,13 +53,12 @@ CljString* make_clj_string(const char *str);
 CljString* make_string(const char *str);
 
 /**
- * @brief Get string length
- * @param str CljString object
- * @return String length
+ * @brief Create a string buffer of given length (null-terminated, all zeros)
+ * @param length Length of the string buffer (must be <= UINT16_MAX)
+ * @return CljString object with zero-initialized data (caller must release)
  */
-static inline uint16_t clj_string_length(CljString *str) {
-    return str ? str->length : 0;
-}
+CljString* make_string_buffer(size_t length);
+
 
 /**
  * @brief Get string data as C-string
@@ -73,6 +72,7 @@ static inline const char* clj_string_data(CljString *str) {
 // String representation functions
 /** Return newly allocated C-string representation (caller frees). */
 const char* pr_str(CljObject *v);
+const char* print_str(CljObject *v);
 const char* to_string(CljObject *v);
 
 #endif // TINY_CLJ_STRINGS_H

@@ -130,7 +130,7 @@ void vector_clear(CljVector *vec) {
     
     if (vec->base.type != CLJ_VECTOR_WEAK) {
         VECTOR_FOR_EACH(vec, elem) {
-          RELEASE(elem);
+        RELEASE(elem);
         }
     }
     

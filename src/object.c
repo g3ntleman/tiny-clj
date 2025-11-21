@@ -25,7 +25,7 @@
 #include "kv_macros.h"
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
-#include "clj_strings.h"
+#include "strings.h"
 #include "function.h"
 #include "list.h"
 #include "symbol.h"

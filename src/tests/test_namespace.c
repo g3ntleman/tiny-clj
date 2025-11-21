@@ -1,5 +1,8 @@
 #include "tests_common.h"
 #include "runtime.h"
+#include "symbol.h"
+#include "namespace.h"
+#include "function_call.h"
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -53,6 +56,27 @@ TEST(test_namespace_lookup_user_namespace) {
     RELEASE((CljObject*)resolved);
     RELEASE((CljObject*)test_sym);
     RELEASE((CljObject*)value);
+}
+
+// ============================================================================
+// TEST MOVED FROM test_qualified_symbol_resolution.c
+// ============================================================================
+
+// Test: Verify that qualified symbols are parsed correctly with ns field set
+TEST(test_qualified_symbol_parsing_moved) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Parse a qualified symbol
+    CljObject *parsed = eval_string("'clojure.core/reverse", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_NOT_NULL(sym->ns); // ns field should be set
+    TEST_ASSERT_NOT_NULL(sym->name); // name field should be set
+    TEST_ASSERT_EQUAL_STRING("reverse", sym->name);
+    TEST_ASSERT_EQUAL_STRING("clojure.core", sym->ns->name);
 }
 
 // Test symbol interning - same symbol should return same pointer
@@ -352,6 +376,127 @@ TEST(test_ns_resolve_symbol_cache) {
     RELEASE((CljObject*)test_sym);
     RELEASE((CljObject*)test_value);
     RELEASE((CljObject*)resolved1);
+}
+
+// Test that resolve_list_operator uses resolve_cache for function calls
+// This test verifies that function calls benefit from the resolve_cache optimization
+TEST(test_resolve_list_operator_uses_cache) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Ensure clojure.core is loaded
+    CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
+    if (!g_runtime.clojure_core_cache) {
+        g_runtime.clojure_core_cache = clojure_core;
+    }
+    
+    // Switch to user namespace
+    evalstate_set_ns(g_test_eval_state, "user");
+    
+    // Clear resolve_cache to start fresh
+    if (g_runtime.resolve_cache) {
+        RELEASE((CljObject*)g_runtime.resolve_cache);
+        g_runtime.resolve_cache = make_map(16);
+    }
+    
+    // Test with a builtin function that should be in clojure.core
+    // Use 'inc' which should be available
+    CljSymbol *inc_sym = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL(inc_sym);
+    
+    // First function call - should populate cache
+    // Parse and evaluate (inc 1) - this will call resolve_list_operator
+    CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
+    TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
+    
+    // Verify that cache was populated
+    TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
+    CljObject *cached_inc = (CljObject*)map_get(g_runtime.resolve_cache, inc_sym, NULL);
+    TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "resolve_cache should contain 'inc' after first function call");
+    
+    // Second function call - should use cache (faster path)
+    CljObject *result2 = eval_string("(inc 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
+    TEST_ASSERT_EQUAL(3, as_fixnum((CljValue)result2));
+    
+    // Multiple calls to verify cache is being used
+    for (int i = 0; i < 10; i++) {
+        char expr[32];
+        snprintf(expr, sizeof(expr), "(inc %d)", i);
+        CljObject *result = eval_string(expr, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(result);
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+        TEST_ASSERT_EQUAL(i + 1, as_fixnum((CljValue)result));
+    }
+    
+    // Cleanup
+    RELEASE((CljObject*)inc_sym);
+    RELEASE((CljObject*)result1);
+    RELEASE((CljObject*)result2);
+}
+
+// Test that cache invalidation works correctly when symbols are redefined
+// This verifies that the optimization maintains Clojure semantics
+TEST(test_resolve_cache_invalidation_on_redefinition) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Ensure clojure.core is loaded
+    CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
+    if (!g_runtime.clojure_core_cache) {
+        g_runtime.clojure_core_cache = clojure_core;
+    }
+    
+    // Switch to user namespace
+    evalstate_set_ns(g_test_eval_state, "user");
+    
+    // Clear resolve_cache to start fresh
+    if (g_runtime.resolve_cache) {
+        RELEASE((CljObject*)g_runtime.resolve_cache);
+        g_runtime.resolve_cache = make_map(16);
+    }
+    
+    // Test with a builtin function that we can redefine
+    // Use 'inc' which should be available in clojure.core
+    CljSymbol *inc_sym = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL(inc_sym);
+    
+    // First function call - should populate cache
+    CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
+    TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
+    
+    // Verify cache was populated
+    TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
+    CljObject *cached = (CljObject*)map_get(g_runtime.resolve_cache, inc_sym, NULL);
+    TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
+    
+    // Now redefine 'inc' in user namespace (shadowing clojure.core)
+    // Create a simple function that returns 999
+    CljObject *new_inc_value = fixnum(999);
+    ns_define(g_test_eval_state->current_ns, inc_sym, new_inc_value);
+    
+    // Verify cache was invalidated (should be NULL after ns_define)
+    // ns_define invalidates cache by setting it to NULL
+    CljObject *cached_after_redef = (CljObject*)map_get(g_runtime.resolve_cache, inc_sym, NULL);
+    // Cache should be NULL after invalidation (ns_define sets it to NULL)
+    TEST_ASSERT_NULL_MESSAGE(cached_after_redef, "resolve_cache should be invalidated (NULL) after redefinition");
+    
+    // Second function call - should resolve from user namespace (not cached old value)
+    // Note: This will fail because we defined a fixnum, not a function
+    // But the important part is that cache was invalidated
+    // Let's just verify that ns_resolve finds the new value
+    CljObject *resolved_after_redef = ns_resolve(g_test_eval_state, inc_sym);
+    TEST_ASSERT_NOT_NULL(resolved_after_redef);
+    TEST_ASSERT_EQUAL(999, as_fixnum((CljValue)resolved_after_redef));
+    
+    // Cleanup
+    RELEASE((CljObject*)inc_sym);
+    RELEASE((CljObject*)new_inc_value);
+    RELEASE((CljObject*)result1);
+    RELEASE((CljObject*)resolved_after_redef);
 }
 
 

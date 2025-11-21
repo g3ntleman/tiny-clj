@@ -356,7 +356,22 @@ TEST(test_special_form_when) {
     ID result10 = eval_string("(when false 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NULL(result10); // nil is NULL in our system
     
-    // result1-10 are automatically managed by eval_string
+    // REGRESSION TEST: when with nil condition should return nil (not throw error)
+    // This tests the fix for the bug where when returned NULL immediately for nil
+    // instead of checking truthiness. nil should be treated as falsy, not as an error.
+    ID result_when_nil_regression1 = eval_string("(when nil 42)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(result_when_nil_regression1, "when with nil condition should return nil");
+    
+    // REGRESSION TEST: when with nil condition and multiple expressions should return nil
+    ID result_when_nil_regression2 = eval_string("(when nil 1 2 3)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(result_when_nil_regression2, "when with nil condition and multiple expressions should return nil");
+    
+    // REGRESSION TEST: when with nil condition should not evaluate body
+    // This ensures that the body is not evaluated when condition is nil
+    ID result_when_nil_regression3 = eval_string("(when nil (throw (Exception. \"should not be evaluated\")))", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(result_when_nil_regression3, "when with nil condition should not evaluate body and return nil");
+    
+    // result1-10 and regression test results are automatically managed by eval_string
 }
 
 // ============================================================================

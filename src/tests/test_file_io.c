@@ -199,10 +199,13 @@ void test_history_load_from_file_crash_reproduction(void) {
 static void register_test_history_load_from_file_crash_reproduction(void)
     __attribute__((constructor));
 static void register_test_history_load_from_file_crash_reproduction(void) {
-  const char *filename = test_extract_filename_from_path(__FILE__);
-  test_registry_add_with_group("test_history_load_from_file_crash_reproduction",
-                               test_history_load_from_file_crash_reproduction,
-                               filename);
+  char *filename = test_extract_filename_from_path(__FILE__);
+  if (filename) {
+    test_registry_add_with_group("test_history_load_from_file_crash_reproduction",
+                                 test_history_load_from_file_crash_reproduction,
+                                 filename);
+    free(filename);
+  }
 }
 
 TEST(test_pr_str_escapes_quotes) {

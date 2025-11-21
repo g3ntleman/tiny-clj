@@ -2,7 +2,7 @@
 #include "object.h"
 #include "list.h"
 #include "value.h"
-#include "clj_strings.h"
+#include "strings.h"
 #include "types.h"
 #include "vector.h"
 #include "function_call.h"

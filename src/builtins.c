@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <math.h>
+#include <ctype.h>
 #include "object.h"
 #include "vector.h"
 #include "map.h"
@@ -26,7 +27,7 @@
 #include "exception.h"
 #include "list.h"
 #include "function.h"
-#include "clj_strings.h"
+#include "strings.h"
 #include "event_loop.h"
 #include "strings.h"
 #include "reader.h"
@@ -523,6 +524,21 @@ ID native_list(ID *args, unsigned int argc) {
     
     // Use make_list_from_stack to create list from arguments
     return AUTORELEASE(make_list_from_stack((CljValue*)args, argc));
+}
+
+// nil? function that checks if a value is nil
+ID native_nilp(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+    
+    if (!validate_builtin_args(argc, 1, "nil?")) return NULL;
+    
+    // nil is represented as NULL in tiny-clj
+    // Return true if argument is NULL, false otherwise
+    if (!args[0]) {
+        return clj_true;
+    }
+    
+    return clj_false;
 }
 
 // Reverse function that reverses a list
@@ -1373,33 +1389,390 @@ ID native_str(ID *args, unsigned int argc) {
         return make_string("");
     }
     
+    // Optimization: If only one argument and it's already a string, return it directly
+    // Caller already holds a reference, so we can just return it
+    if (argc == 1 && args[0] && TAG(args[0]) == CLJ_STRING) {
+        return args[0];
+    }
+    
     // Calculate total length
     size_t total_len = 0;
     for (unsigned int i = 0; i < argc; i++) {
-        const char *s = to_string(args[i]);
-        if (s) {
-            total_len += strlen(s);
-            free((char*)s);
+        if (args[i] && TAG(args[i]) == CLJ_STRING) {
+            // Direct string: use string_length() to avoid conversion
+            total_len += string_length(args[i]);
+        } else {
+            // Non-string: convert to string to get length
+            const char *s = to_string(args[i]);
+            if (s) {
+                total_len += strlen(s);
+                free((char*)s);
+            }
         }
     }
     
-    // Allocate buffer
-    char *buffer = ALLOC(char, total_len + 1);
-    if (!buffer) return make_string("");
-    buffer[0] = '\0';
+    // Allocate CljString buffer directly
+    // make_string_buffer throws exceptions on error, never returns NULL
+    CljString *result = make_string_buffer(total_len);
+    char *buffer = result->data;
     
     // Concatenate all strings
     for (unsigned int i = 0; i < argc; i++) {
-        const char *s = to_string(args[i]);
-        if (s) {
+        if (args[i] && TAG(args[i]) == CLJ_STRING) {
+            // Direct string: use string_data() to avoid conversion
+            strcat(buffer, string_data(args[i]));
+        } else {
+            // Non-string: convert to string
+            // to_string never returns NULL - it always returns an allocated string
+            const char *s = to_string(args[i]);
             strcat(buffer, s);
             free((char*)s);
         }
     }
     
-    CljObject *result = (CljObject*)make_string(buffer);
-    free(buffer);
-    return result;
+    return (CljObject*)result;
+}
+
+// String substring: (subs s start) or (subs s start end)
+ID native_subs(ID *args, unsigned int argc) {
+    if (argc != 2 && argc != 3) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                "subs requires exactly 2 or 3 argument%s, got %u",
+                argc == 2 ? "" : "s", argc);
+        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    ID str_arg = args[0];
+    ID start_arg = args[1];
+    ID end_arg = argc == 3 ? args[2] : NULL;
+    
+    // Validate string argument
+    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "subs requires a string as first argument");
+        return NULL;
+    }
+    
+    // Validate start index
+    if (!start_arg || TAG(start_arg) != CLJ_INT) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "subs requires a number as start index");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    int start = AS_FIXNUM(start_arg);
+    
+    // Cache string length to avoid multiple calls
+    int str_len = string_length(str);
+    int end;
+    
+    // Determine end index: if not provided, use string length
+    if (end_arg) {
+        if (TAG(end_arg) != CLJ_INT) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "subs requires a number as end index");
+            return NULL;
+        }
+        end = AS_FIXNUM(end_arg);
+    } else {
+        end = str_len;
+    }
+    
+    // Bounds validation
+    if (start < 0) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "subs start index %d is negative", start);
+        return NULL;
+    }
+    
+    if (end > str_len) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "subs end index %d is greater than string length %d", end, str_len);
+        return NULL;
+    }
+    
+    if (start > end) {
+        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+                "subs start index %d is greater than end index %d", start, end);
+        return NULL;
+    }
+    
+    // Calculate substring length
+    int substr_len = end - start;
+    
+    // Special case: empty substring (start == end)
+    if (substr_len == 0) {
+        return (ID)string_empty_singleton;
+    }
+    
+    // Create CljString directly without temporary C-string
+    CljString *result = make_string_buffer(substr_len);
+    const char *str_data = string_data(str);
+    memcpy(result->data, str_data + start, substr_len);
+    result->data[substr_len] = '\0';
+    
+    return AUTORELEASE(result);
+}
+
+// String trim: (trim s) - removes whitespace from both ends
+ID native_trim(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                "trim requires exactly 1 argument, got %u", argc);
+        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    ID str_arg = args[0];
+    
+    // Handle nil
+    if (!str_arg) {
+        return NULL; // nil -> nil
+    }
+    
+    // Validate string argument
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "trim requires a string argument");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    if (!str) return NULL;
+    
+    const char *str_data = string_data(str);
+    int str_len = string_length(str);
+    
+    // Find start (skip leading whitespace)
+    int start = 0;
+    while (start < str_len && (str_data[start] == ' ' || str_data[start] == '\t' || 
+                               str_data[start] == '\n' || str_data[start] == '\r')) {
+        start++;
+    }
+    
+    // Find end (skip trailing whitespace)
+    int end = str_len - 1;
+    while (end >= start && (str_data[end] == ' ' || str_data[end] == '\t' || 
+                            str_data[end] == '\n' || str_data[end] == '\r')) {
+        end--;
+    }
+    
+    // Calculate trimmed length
+    int trimmed_len = end - start + 1;
+    
+    // Special case: empty string or all whitespace
+    if (trimmed_len <= 0) {
+        return (ID)string_empty_singleton;
+    }
+    
+    // Create CljString directly without temporary C-string
+    CljString *result = make_string_buffer(trimmed_len);
+    memcpy(result->data, str_data + start, trimmed_len);
+    result->data[trimmed_len] = '\0';
+    return AUTORELEASE(result);
+}
+
+// String upper-case: (upper-case s) - converts string to upper-case
+ID native_upper_case(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                                  "upper-case requires 1 argument, got %u", argc);
+        return NULL;
+    }
+    
+    ID str_arg = args[0];
+    
+    // Handle nil
+    if (!str_arg) {
+        return NULL; // nil -> nil
+    }
+    
+    // Validate string argument
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "upper-case requires a string argument");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    if (!str) return NULL;
+    
+    const char *str_data = string_data(str);
+    uint16_t str_len = string_length(str);
+    
+    if (str_len == 0) {
+        return (ID)string_empty_singleton;
+    }
+    
+    // Convert to upper-case directly in CljString buffer
+    CljString *result = make_string_buffer(str_len);
+    for (uint16_t i = 0; i < str_len; i++) {
+        result->data[i] = (char)toupper((unsigned char)str_data[i]);
+    }
+    result->data[str_len] = '\0';
+    return AUTORELEASE(result);
+}
+
+// String lower-case: (lower-case s) - converts string to lower-case
+ID native_lower_case(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                                  "lower-case requires 1 argument, got %u", argc);
+        return NULL;
+    }
+    
+    ID str_arg = args[0];
+    
+    // Handle nil
+    if (!str_arg) {
+        return NULL; // nil -> nil
+    }
+    
+    // Validate string argument
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "lower-case requires a string argument");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    if (!str) return NULL;
+    
+    const char *str_data = string_data(str);
+    uint16_t str_len = string_length(str);
+    
+    if (str_len == 0) {
+        return (ID)string_empty_singleton;
+    }
+    
+    // Convert to lower-case directly in CljString buffer
+    CljString *result = make_string_buffer(str_len);
+    for (uint16_t i = 0; i < str_len; i++) {
+        result->data[i] = (char)tolower((unsigned char)str_data[i]);
+    }
+    result->data[str_len] = '\0';
+    return AUTORELEASE(result);
+}
+
+// String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
+ID native_last_index_of(ID *args, unsigned int argc) {
+    if (argc != 2 && argc != 3) {
+        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                                  "last-index-of requires 2 or 3 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    ID str_arg = args[0];
+    ID value_arg = args[1];
+    ID from_index_arg = argc == 3 ? args[2] : NULL;
+    
+    // Validate string argument
+    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "last-index-of requires a string as first argument");
+        return NULL;
+    }
+    
+    // Validate value argument
+    if (!value_arg || TAG(value_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "last-index-of requires a string as second argument");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    CljString *value = as_clj_string(value_arg);
+    if (!str || !value) return NULL;
+    
+    const char *str_data = string_data(str);
+    const char *value_data = clj_string_data(value);
+    uint16_t str_len = string_length(str);
+    uint16_t value_len = string_length(value);
+    
+    // Handle empty value
+    if (value_len == 0) {
+        // Empty string always found at end
+        return fixnum(str_len);
+    }
+    
+    // Validate from-index if provided
+    int from_index = str_len - 1; // Default: search from end
+    if (from_index_arg) {
+        if (TAG(from_index_arg) != CLJ_INT) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                      "last-index-of requires an integer as from-index");
+            return NULL;
+        }
+        from_index = as_fixnum(from_index_arg);
+        if (from_index < 0) from_index = 0;
+        if (from_index >= str_len) from_index = str_len - 1;
+    }
+    
+    // Search backwards from from_index
+    for (int i = from_index; i >= 0; i--) {
+        if (i + value_len > str_len) continue;
+        
+        // Check if substring matches
+        bool match = true;
+        for (uint16_t j = 0; j < value_len; j++) {
+            if (str_data[i + j] != value_data[j]) {
+                match = false;
+                break;
+            }
+        }
+        
+        if (match) {
+            return fixnum(i);
+        }
+    }
+    
+    // Not found
+    return NULL; // nil
+}
+
+// String reverse: (reverse s) - reverses a string (not lists)
+ID native_string_reverse(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                                  "reverse requires 1 argument, got %u", argc);
+        return NULL;
+    }
+    
+    ID str_arg = args[0];
+    
+    // Handle nil
+    if (!str_arg) {
+        return NULL; // nil -> nil
+    }
+    
+    // Validate string argument
+    if (TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "reverse requires a string argument");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    if (!str) return NULL;
+    
+    const char *str_data = string_data(str);
+    uint16_t str_len = string_length(str);
+    
+    if (str_len == 0) {
+        return (ID)string_empty_singleton;
+    }
+    
+    // Reverse string directly in CljString buffer
+    CljString *result = make_string_buffer(str_len);
+    for (uint16_t i = 0; i < str_len; i++) {
+        result->data[i] = str_data[str_len - 1 - i];
+    }
+    result->data[str_len] = '\0';
+    return AUTORELEASE(result);
 }
 
 // Create symbol from string (with optional namespace)
@@ -1536,19 +1909,39 @@ static char* read_file_cstr(const char *path) {
 static bool eval_source_in_current_state(const char *src, EvalState *st) {
     if (!src || !st) return false;
     bool ok = true;
+    int expr_count = 0;
+    int success_count = 0;
     WITH_AUTORELEASE_POOL({
         Reader reader;
         reader_init(&reader, src);
         while (!reader_is_eof(&reader)) {
             reader_skip_all(&reader);
             if (reader_is_eof(&reader)) break;
+            
+            // Save reader position before parsing to detect if we're stuck
+            size_t pos_before = reader_offset(&reader);
+            expr_count++;
+            
             TRY {
                 CljValue form = value_by_parsing_expr(&reader, st);
                 if (!form) {
-                    if (reader_is_eof(&reader)) break; else { ok = false; break; }
+                    if (reader_is_eof(&reader)) break;
+                    // Parse failed - skip to next line to avoid infinite loop
+                    ok = false;
+                    while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
+                    if (!reader_is_eof(&reader)) reader_next(&reader);
+                    continue;
                 }
                 (void)eval_parsed((CljObject*)form, st, NULL);
                 // value_by_parsing_expr returns AUTORELEASE object
+                success_count++;
+                
+                // Check if reader advanced (to detect infinite loops)
+                size_t pos_after = reader_offset(&reader);
+                if (pos_after == pos_before && !reader_is_eof(&reader)) {
+                    // Reader didn't advance - skip character to avoid infinite loop
+                    reader_next(&reader);
+                }
             } CATCH(ex) {
                 ok = false;
                 // Skip to next line to avoid infinite loop
@@ -1557,7 +1950,8 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
             } END_TRY
         }
     });
-    return ok;
+    // Return true if at least some expressions succeeded (partial loading is OK)
+    return success_count > 0;
 }
 
 /**
@@ -1717,24 +2111,51 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (!ns_name) return false;
     
     // Load namespace (existing logic)
+    // CRITICAL: Check if namespace exists, but don't skip loading if it only has native functions
+    // A namespace might exist because native functions were registered, but Clojure code hasn't been loaded yet
     CljNamespace *existing = ns_find(ns_name);
     if (existing) {
-        // Namespace already loaded - just set alias/refer if needed
-        if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-            CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
-            if (ns_name_sym) {
-                ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+        // Check if namespace has been fully loaded by checking for a marker function
+        // For clojure.string, check if blank? exists (first Clojure function defined)
+        // If it doesn't exist, we need to load the Clojure code even though namespace exists
+        bool needs_loading = false;
+        if (strcmp(ns_name, "clojure.string") == 0) {
+            CljSymbol *blank_sym = intern_symbol_global("blank?");
+            if (blank_sym && existing->mappings) {
+                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+                // nil (NULL) is a valid value in Clojure, so we can't use NULL as not_found
+                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+                ID blank_func = map_get(existing->mappings, blank_sym, (ID)&not_found_sentinel);
+                if (blank_func == (ID)&not_found_sentinel) {
+                    // blank? not found - namespace exists but Clojure code not loaded
+                    needs_loading = true;
+                }
+                // If blank_func != sentinel, it was found (even if it's nil/NULL, which is valid)
+            } else {
+                // Can't check - assume needs loading to be safe
+                needs_loading = true;
             }
         }
-        if (refer_all) {
-            copy_all_symbols_to_namespace(existing, st->current_ns);
-        } else if (refer_syms) {
-            copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
+        
+        if (!needs_loading) {
+            // Namespace already fully loaded - just set alias/refer if needed
+            if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
+                CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
+                if (ns_name_sym) {
+                    ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+                }
+            }
+            if (refer_all) {
+                copy_all_symbols_to_namespace(existing, st->current_ns);
+            } else if (refer_syms) {
+                copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
+            }
+            if (ns_name_allocated) {
+                free((char*)ns_name);
+            }
+            return true;
         }
-        if (ns_name_allocated) {
-            free((char*)ns_name);
-        }
-        return true;
+        // Fall through to load Clojure code even though namespace exists
     }
     
     // Convert namespace to relative path
@@ -1769,8 +2190,22 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         orig_ns = st->current_ns->name->name;
     }
     
+    // CRITICAL: Ensure target namespace exists before loading
+    // This ensures that native functions registered before loading are in the correct namespace
+    CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
+    if (!target_ns) {
+        free(source);
+        free(rel);
+        if (ns_name_allocated) {
+            free((char*)ns_name);
+        }
+        return false;
+    }
+    
     // Temporarily switch to target namespace
-    if (st) evalstate_set_ns(st, ns_name);
+    if (st) {
+        st->current_ns = target_ns;
+    }
     bool ok = eval_source_in_current_state(source, st);
     // Restore original namespace
     if (st && orig_ns) evalstate_set_ns(st, orig_ns);
@@ -1778,11 +2213,22 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     free(source);
     free(rel);
     
+    // CRITICAL: Don't fail completely if some expressions failed to load
+    // Some functions may have been successfully defined even if others failed
+    // This allows partial loading (e.g., if one function has an error, others still work)
+    // We only return false if the namespace itself couldn't be created
     if (!ok) {
-        if (ns_name_allocated) {
-            free((char*)ns_name);
+        // Check if namespace was at least created (even if loading had errors)
+        CljNamespace *loaded_ns = ns_find(ns_name);
+        if (!loaded_ns) {
+            // Namespace wasn't even created - this is a real failure
+            if (ns_name_allocated) {
+                free((char*)ns_name);
+            }
+            return false;
         }
-        return false;
+        // Namespace exists but some expressions failed - continue anyway
+        // This allows partial success (some functions loaded, others didn't)
     }
     
     // Now that namespace is loaded, set alias/refer if needed
@@ -3267,6 +3713,10 @@ ID native_do(ID *args, unsigned int argc) {
     // Arguments are already evaluated by eval_arg, so we just return the last one
     // Note: We need to RETAIN the last argument since it will be released by the caller
     CljObject *last = (CljObject*)args[argc - 1];
+    // CRITICAL: If last is NULL (nil), return NULL directly without RETAIN/AUTORELEASE
+    if (!last) {
+        return NULL;
+    }
     return AUTORELEASE(RETAIN(last));
 }
 
@@ -3277,9 +3727,32 @@ ID native_do(ID *args, unsigned int argc) {
 static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     EvalState *st = evalstate_new(false);
     
-    // Get or create clojure.core namespace
-    CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
-    if (!clojure_core) {
+    // Check if name is a qualified symbol (e.g., "Math/sqrt")
+    const char *slash = strchr(name, '/');
+    CljNamespace *target_ns;
+    const char *symbol_name;
+    
+    if (slash && slash > name && slash[1] != '\0') {
+        // Qualified symbol: split into namespace and name
+        size_t ns_len = slash - name;
+        char *ns_name = (char*)malloc(ns_len + 1);
+        if (!ns_name) {
+            evalstate_free(st);
+            return;
+        }
+        strncpy(ns_name, name, ns_len);
+        ns_name[ns_len] = '\0';
+        
+        symbol_name = slash + 1;
+        target_ns = ns_get_or_create(ns_name, NULL);
+        free(ns_name);
+    } else {
+        // Unqualified symbol: register in clojure.core
+        target_ns = ns_get_or_create("clojure.core", NULL);
+        symbol_name = name;
+    }
+    
+    if (!target_ns) {
         evalstate_free(st);
         return;
     }
@@ -3289,16 +3762,17 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     // Note: clojure_core_cache is just a pointer to a CljNamespace in the registry
     // We don't use ASSIGN here because we're just setting the pointer, not retaining the object
     extern TinyClJRuntime g_runtime;
-    if (!g_runtime.clojure_core_cache) {
-        g_runtime.clojure_core_cache = clojure_core;
+    if (!g_runtime.clojure_core_cache && target_ns->name && target_ns->name->name && 
+        strcmp(target_ns->name->name, "clojure.core") == 0) {
+        g_runtime.clojure_core_cache = target_ns;
     }
     
-    // Register the builtin in clojure.core namespace
-    CljObject *symbol = (CljObject*)intern_symbol(NULL, name);
+    // Register the builtin in target namespace
+    CljObject *symbol = (CljObject*)intern_symbol(NULL, symbol_name);
     CljObject *func_obj = make_named_func(func, NULL, name);
     if (symbol && func_obj) {
-        ns_define(clojure_core, symbol, func_obj);
-        // Builtin registered successfully in clojure.core
+        ns_define(target_ns, symbol, func_obj);
+        // Builtin registered successfully
     } else {
         // Failed to register builtin
     }
@@ -3322,7 +3796,15 @@ void register_builtins() {
     register_builtin_in_namespace("eval", native_eval);
     register_builtin_in_namespace("read-string", native_read_string);
     register_builtin_in_namespace("str", native_str);
+    register_builtin_in_namespace("subs", native_subs);
     register_builtin_in_namespace("symbol", native_symbol);
+    
+    // Register clojure.string functions
+    register_builtin_in_namespace("clojure.string/trim", native_trim);
+    register_builtin_in_namespace("clojure.string/upper-case", native_upper_case);
+    register_builtin_in_namespace("clojure.string/lower-case", native_lower_case);
+    register_builtin_in_namespace("clojure.string/last-index-of", native_last_index_of);
+    register_builtin_in_namespace("clojure.string/reverse", native_string_reverse);
 #ifndef ESP32_BUILD
     register_builtin_in_namespace("slurp", native_slurp);
     register_builtin_in_namespace("spit", native_spit);
@@ -3343,6 +3825,7 @@ void register_builtins() {
     register_builtin_in_namespace("cons", native_cons);
     register_builtin_in_namespace("list", native_list);
     register_builtin_in_namespace("count", native_count);
+    register_builtin_in_namespace("nil?", native_nilp);
     register_builtin_in_namespace("reverse", native_reverse);
     register_builtin_in_namespace("assoc", assoc3);
     register_builtin_in_namespace("dissoc", native_dissoc);

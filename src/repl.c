@@ -8,7 +8,7 @@
 #include "builtins.h"
 #include "memory_profiler.h"
 #include "line_editor.h"
-#include "clj_strings.h"
+#include "strings.h"
 #include "strings.h"
 #include "reader.h"
 #include "runtime.h"
