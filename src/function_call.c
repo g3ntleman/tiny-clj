@@ -2956,6 +2956,67 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
+    // Check if body is :native marker (for native function stubs)
+    // This must be checked before TCO transformation
+    bool is_native_stub = false;
+    if (body_expr_obj == (CljObject*)SYM_KW_NATIVE) {
+        is_native_stub = true;
+    } else if (IS_KEYWORD(body_expr_obj)) {
+        // Also check by pointer comparison for interned symbols
+        CljSymbol *body_kw = as_symbol(body_expr_obj);
+        if (body_kw == SYM_KW_NATIVE) {
+            is_native_stub = true;
+        }
+    }
+    
+    // Handle native function stub
+    if (is_native_stub) {
+        // Extract Clojure function name
+        CljSymbol *name_symbol = as_symbol(name_sym);
+        if (!name_symbol || !name_symbol->name) {
+            free_obj_array((ID*)params, params_stack);
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                           "defn with :native requires a valid function name", 
+                           NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Lookup native function by Clojure name
+        BuiltinFn native_func = native_function_lookup(name_symbol->name);
+        if (!native_func) {
+            free_obj_array((ID*)params, params_stack);
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg),
+                    "Native function not found for: %s", name_symbol->name);
+            throw_exception(EXCEPTION_RUNTIME, error_msg, NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Create native function object
+        // Use Clojure function name (already interned symbol name)
+        CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, name_symbol->name);
+        if (!native_func_obj) {
+            free_obj_array((ID*)params, params_stack);
+            throw_exception(EXCEPTION_RUNTIME, 
+                           "Failed to create native function object", 
+                           NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Register native function in namespace (replaces any existing registration)
+        ns_define(st->current_ns, name_sym, (ID)native_func_obj);
+        
+        // Remove native function from namespace registry if it was registered there
+        // (e.g., if it was registered as "clojure.string/trim" in register_builtins)
+        // This prevents duplicate registrations
+        // Note: We search for qualified name "clojure.string/trim" in the namespace
+        // But since we're in the current namespace, we just need to ensure the stub takes over
+        // The native function in the registry will be shadowed by this stub
+        
+        free_obj_array((ID*)params, params_stack);
+        return name_sym;  // defn returns the symbol
+    }
+    
     // Transform recursive tail calls to recur (automatic TCO)
     CljObject *transformed_body = transform_recursive_tail_calls(body_expr_obj, name_sym, 
                                                                   (CljObject**)params, param_count, 

@@ -1759,6 +1759,38 @@ ID native_string_reverse(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+// Native function lookup table for stubs
+// Key is Clojure function name (e.g., "trim", not "native_trim")
+typedef struct {
+    const char *clojure_name;  // Clojure function name (e.g., "trim")
+    BuiltinFn native_func;     // Native C function pointer
+} NativeFunctionEntry;
+
+static const NativeFunctionEntry native_function_table[] = {
+    {"trim", native_trim},
+    {"upper-case", native_upper_case},
+    {"lower-case", native_lower_case},
+    {"last-index-of", native_last_index_of},
+    {"reverse", native_string_reverse},
+    {NULL, NULL}  // Sentinel
+};
+
+// Lookup native function by Clojure name
+// Returns NULL if not found
+BuiltinFn native_function_lookup(const char *clojure_name) {
+    if (!clojure_name) {
+        return NULL;
+    }
+    
+    for (int i = 0; native_function_table[i].clojure_name != NULL; i++) {
+        if (strcmp(native_function_table[i].clojure_name, clojure_name) == 0) {
+            return native_function_table[i].native_func;
+        }
+    }
+    
+    return NULL;
+}
+
 // Create symbol from string (with optional namespace)
 ID native_symbol(ID *args, unsigned int argc) {
     // symbol accepts 1 or 2 arguments: (symbol "name") or (symbol "ns" "name")

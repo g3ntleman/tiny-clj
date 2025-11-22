@@ -76,6 +76,7 @@ CljSymbol *SYM_KW_DOC = NULL;
 CljSymbol *SYM_KW_ERROR = NULL;
 CljSymbol *SYM_KW_STACK = NULL;
 CljSymbol *SYM_KW_NS = NULL;
+CljSymbol *SYM_KW_NATIVE = NULL;
 
 // Global symbol for clojure.core namespace name (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
@@ -262,6 +263,9 @@ static struct { CljSymbol sym; } sym_kw_stack_data = {
 static struct { CljSymbol sym; } sym_kw_ns_data = {
     .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = ":ns" }
 };
+static struct { CljSymbol sym; } sym_kw_native_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns = NULL, .name = ":native" }
+};
 
 // Additional symbols for optimization (used in hot path)
 static struct { CljSymbol sym; } sym_ns_star_data = {
@@ -445,6 +449,9 @@ void init_special_symbols() {
     
     SYM_KW_NS = &sym_kw_ns_data.sym;
     symbol_table_add(NULL, ":ns", SYM_KW_NS);
+    
+    SYM_KW_NATIVE = &sym_kw_native_data.sym;
+    symbol_table_add(NULL, ":native", SYM_KW_NATIVE);
     
     // Additional symbols for hot path optimization
     SYM_NS_STAR = &sym_ns_star_data.sym;

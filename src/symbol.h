@@ -93,6 +93,7 @@ extern CljSymbol *SYM_KW_DOC;
 extern CljSymbol *SYM_KW_ERROR;
 extern CljSymbol *SYM_KW_STACK;
 extern CljSymbol *SYM_KW_NS;
+extern CljSymbol *SYM_KW_NATIVE;
 
 // Global symbol for clojure.core namespace name (for fast comparison)
 extern CljSymbol *SYM_CLOJURE_CORE;

@@ -155,16 +155,14 @@
           (concat-strings result))))))
 
 ;; last-index-of - Returns last index of value in s
-;; Uses native C function for performance
-;; Note: Native function is registered directly, no Clojure wrapper needed
+;; Note: from-index is optional, but we define it as required for now
+(defn last-index-of [s value from-index] :native)
 
 ;; lower-case - Converts string to lower-case
-;; Uses native C function for performance
-;; Note: Native function is registered directly, no Clojure wrapper needed
+(defn lower-case [s] :native)
 
 ;; reverse - Reverses string
-;; Uses native C function for performance
-;; Note: Native function is registered directly, no Clojure wrapper needed
+(defn reverse [s] :native)
 
 ;; starts-with? - True if s starts with substr
 (defn starts-with? [s substr]
@@ -174,9 +172,7 @@
       (= idx 0))))
 
 ;; trim - Removes whitespace from both ends
-;; Uses native C function for performance
-;; Note: Native function is registered directly, no Clojure wrapper needed
-;; The Clojure definition was removed because it caused infinite recursion
+(defn trim [s] :native)
 
 ;; triml - Removes whitespace from left
 (defn triml [s]
@@ -221,8 +217,7 @@
       (trim-right s (- (count s) 1)))))
 
 ;; upper-case - Converts string to upper-case
-;; Uses native C function for performance
-;; Note: Native function is registered directly, no Clojure wrapper needed
+(defn upper-case [s] :native)
 
 ;; ============================================================================
 ;; Functions with String variants (work without TRE)

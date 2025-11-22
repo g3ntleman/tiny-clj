@@ -26,6 +26,10 @@ ID make_named_func(BuiltinFn fn, void *env, const char *name);
 // Builtins registration
 void register_builtins();
 
+// Native function lookup for stubs
+// Returns NULL if not found
+BuiltinFn native_function_lookup(const char *clojure_name);
+
 // Variadic functions (Phase 1)
 ID native_str(ID *args, unsigned int argc);
 // Arithmetic wrapper functions removed - using *_variadic directly
@@ -96,6 +100,13 @@ ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);
 ID native_reset_bang(ID *args, unsigned int argc);
 ID native_swap_bang(ID *args, unsigned int argc);
+
+// String functions (clojure.string namespace)
+ID native_trim(ID *args, unsigned int argc);
+ID native_upper_case(ID *args, unsigned int argc);
+ID native_lower_case(ID *args, unsigned int argc);
+ID native_last_index_of(ID *args, unsigned int argc);
+ID native_string_reverse(ID *args, unsigned int argc);
 
 // Loop constructs converted to builtins
 // Note: dotimes is now implemented as a special form, not a builtin

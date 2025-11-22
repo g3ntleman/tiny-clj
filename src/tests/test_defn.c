@@ -16,7 +16,200 @@
 #include "../kv_macros.h"
 #include "../runtime.h"
 #include "../object.h"
+#include "../builtins.h"
 #include <sys/time.h>
+
+// ============================================================================
+// TEST: :native Keyword statisch registriert
+// ============================================================================
+TEST(test_native_keyword_registered) {
+    // Ensure special symbols are initialized
+    init_special_symbols();
+    
+    // Test that SYM_KW_NATIVE exists
+    TEST_ASSERT_NOT_NULL_MESSAGE(SYM_KW_NATIVE, "SYM_KW_NATIVE should be registered");
+    
+    // Test that it's a keyword
+    TEST_ASSERT_TRUE_MESSAGE(IS_KEYWORD((CljObject*)SYM_KW_NATIVE), 
+                             "SYM_KW_NATIVE should be a keyword");
+    
+    // Test that name is ":native"
+    CljSymbol *native_kw = as_symbol((CljObject*)SYM_KW_NATIVE);
+    TEST_ASSERT_NOT_NULL(native_kw);
+    TEST_ASSERT_NOT_NULL(native_kw->name);
+    TEST_ASSERT_EQUAL_STRING(":native", native_kw->name);
+}
+
+// ============================================================================
+// TEST: :native Keyword kann geparst werden
+// ============================================================================
+TEST(test_native_keyword_can_be_parsed) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+        
+        // Parse :native keyword
+        Reader reader;
+        reader_init(&reader, ":native");
+        ID parsed = value_by_parsing_expr(&reader, g_test_eval_state);
+        
+        TEST_ASSERT_NOT_NULL_MESSAGE(parsed, ":native should be parseable");
+        TEST_ASSERT_TRUE_MESSAGE(IS_KEYWORD((CljObject*)parsed), 
+                                 "parsed :native should be a keyword");
+        
+        // Compare with SYM_KW_NATIVE (pointer equality for interned symbols)
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_KW_NATIVE, parsed, 
+                                      ":native should match SYM_KW_NATIVE");
+    });
+}
+
+// ============================================================================
+// TEST: defn mit :native als Body erkannt werden
+// ============================================================================
+TEST(test_defn_with_native_marker_recognized) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+        
+        // Parse (defn trim [s] :native)
+        Reader reader;
+        reader_init(&reader, "(defn trim [s] :native)");
+        ID form = value_by_parsing_expr(&reader, g_test_eval_state);
+        
+        TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (defn trim [s] :native)");
+        
+        // Verify it's a list
+        CljList *list = as_list(form);
+        TEST_ASSERT_NOT_NULL_MESSAGE(list, "parsed form should be a list");
+        
+        // Get body (should be :native)
+        // Structure: (defn trim [s] :native)
+        // rest: (trim [s] :native)
+        // rest->rest: ([s] :native)
+        // rest->rest->rest: (:native)
+        CljList *rest1 = as_list((ID)list->rest);
+        TEST_ASSERT_NOT_NULL(rest1);
+        CljList *rest2 = as_list((ID)rest1->rest);
+        TEST_ASSERT_NOT_NULL(rest2);
+        CljList *rest3 = as_list((ID)rest2->rest);
+        TEST_ASSERT_NOT_NULL(rest3);
+        
+        CljObject *body = LIST_FIRST(rest3);
+        TEST_ASSERT_NOT_NULL_MESSAGE(body, "body should be :native");
+        TEST_ASSERT_TRUE_MESSAGE(IS_KEYWORD(body), "body should be a keyword");
+        
+        // Compare with SYM_KW_NATIVE
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_KW_NATIVE, body, 
+                                      "body should be SYM_KW_NATIVE");
+    });
+}
+
+// ============================================================================
+// TEST: defn mit :native als Body wird erkannt (eval_defn)
+// ============================================================================
+TEST(test_defn_eval_defn_recognizes_native_marker) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+        
+        // Parse and evaluate (defn trim [s] :native)
+        // This should not throw an exception (even though native lookup is not yet implemented)
+        const char *code = "(defn trim [s] :native)";
+        
+        // For now, this will fail because native lookup is not implemented
+        // But it should at least parse correctly
+        CljValue result = eval_string(code, g_test_eval_state);
+        
+        // Currently, this will fail because we haven't implemented native function lookup
+        // But the parsing should work
+        // TODO: Once native lookup is implemented, this should succeed
+    });
+}
+
+// ============================================================================
+// TEST: defn mit normalem Body wird normal behandelt
+// ============================================================================
+TEST(test_defn_normal_body_still_works) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        
+        // Normal defn should still work
+        const char *code = "(defn add [a b] (+ a b))";
+        CljValue result = eval_string(code, g_test_eval_state);
+        
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "normal defn should work");
+        
+        // Test that function can be called
+        CljValue call_result = eval_string("(add 3 4)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(call_result);
+        TEST_ASSERT_TRUE(is_fixnum(call_result));
+        TEST_ASSERT_EQUAL_INT(7, as_fixnum(call_result));
+    });
+}
+
+// ============================================================================
+// TEST: defn mit :native als Body registriert native Funktion
+// ============================================================================
+TEST(test_defn_native_stub_registers_native_function) {
+    WITH_AUTORELEASE_POOL({
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
+        init_special_symbols();
+        
+        // Switch to clojure.string namespace
+        eval_string("(ns clojure.string)", g_test_eval_state);
+        
+        // Define native stub
+        const char *code = "(defn trim [s] :native)";
+        CljValue result = eval_string(code, g_test_eval_state);
+        
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "defn with :native should succeed");
+        
+        // Verify that trim is now a native function
+        CljValue trim_resolved = eval_string("trim", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(trim_resolved, "trim should be resolvable");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(trim_resolved) == CLJ_FUNC, 
+                                 "trim should be a function");
+        
+        // Test that native function can be called
+        CljValue call_result = eval_string("(trim \"  hello  \")", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(call_result);
+        TEST_ASSERT_TRUE(TAG(call_result) == CLJ_STRING);
+    });
+}
+
+// ============================================================================
+// TEST: Native Funktion Lookup - trim finden
+// ============================================================================
+TEST(test_native_function_lookup_trim) {
+    BuiltinFn func = native_function_lookup("trim");
+    TEST_ASSERT_NOT_NULL_MESSAGE(func, "native_function_lookup should find trim");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(native_trim, func, "should return native_trim function");
+}
+
+// ============================================================================
+// TEST: Native Funktion Lookup - upper-case finden
+// ============================================================================
+TEST(test_native_function_lookup_upper_case) {
+    BuiltinFn func = native_function_lookup("upper-case");
+    TEST_ASSERT_NOT_NULL_MESSAGE(func, "native_function_lookup should find upper-case");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(native_upper_case, func, "should return native_upper_case function");
+}
+
+// ============================================================================
+// TEST: Native Funktion Lookup - nonexistent nicht finden
+// ============================================================================
+TEST(test_native_function_lookup_nonexistent) {
+    BuiltinFn func = native_function_lookup("nonexistent");
+    TEST_ASSERT_NULL_MESSAGE(func, "native_function_lookup should return NULL for nonexistent function");
+}
+
+// ============================================================================
+// TEST: Native Funktion Lookup - NULL name
+// ============================================================================
+TEST(test_native_function_lookup_null_name) {
+    BuiltinFn func = native_function_lookup(NULL);
+    TEST_ASSERT_NULL_MESSAGE(func, "native_function_lookup should return NULL for NULL name");
+}
 
 // ============================================================================
 // TEST: Basic defn function definition

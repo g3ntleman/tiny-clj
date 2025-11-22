@@ -562,6 +562,7 @@ TEST(test_meta_clojure_compatible_keys) {
     TEST_ASSERT_NOT_NULL(SYM_KW_LINE);
     TEST_ASSERT_NOT_NULL(SYM_KW_FILE);
     TEST_ASSERT_NOT_NULL(SYM_KW_NS);
+    TEST_ASSERT_NOT_NULL(SYM_KW_NATIVE);
     
     // Test :column keyword
     CljSymbol *kw_column = intern_symbol_global(":column");
