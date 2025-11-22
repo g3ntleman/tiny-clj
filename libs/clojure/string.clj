@@ -156,12 +156,15 @@
 
 ;; last-index-of - Returns last index of value in s
 ;; Note: from-index is optional, but we define it as required for now
+^#^{:doc "Returns the index of the last occurrence of value in s, or nil if not found. Optionally takes from-index to start searching backwards from."}
 (defn last-index-of [s value from-index] :native)
 
 ;; lower-case - Converts string to lower-case
+^#^{:doc "Converts string to all lower-case."}
 (defn lower-case [s] :native)
 
 ;; reverse - Reverses string
+^#^{:doc "Returns s with its characters reversed."}
 (defn reverse [s] :native)
 
 ;; starts-with? - True if s starts with substr
@@ -172,6 +175,7 @@
       (= idx 0))))
 
 ;; trim - Removes whitespace from both ends
+^#^{:doc "Removes whitespace from both ends of string."}
 (defn trim [s] :native)
 
 ;; triml - Removes whitespace from left
@@ -217,6 +221,7 @@
       (trim-right s (- (count s) 1)))))
 
 ;; upper-case - Converts string to upper-case
+^#^{:doc "Converts string to all upper-case."}
 (defn upper-case [s] :native)
 
 ;; ============================================================================

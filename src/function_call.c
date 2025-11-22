@@ -28,6 +28,7 @@
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
+#include "meta.h"
 #include "list.h"
 #include "value.h"
 #include "environment.h"
@@ -3005,6 +3006,29 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         
         // Register native function in namespace (replaces any existing registration)
         ns_define(st->current_ns, name_sym, (ID)native_func_obj);
+        
+        // Apply metadata to native function (only in DEBUG builds for memory efficiency)
+        // Metadata can come from:
+        // 1. The defn form itself: ^#^{:doc "..."} (defn name ...)
+        // 2. The name symbol: ^#^{:doc "..."} name in (defn ^#^{:doc "..."} name ...)
+#ifdef DEBUG
+#ifdef ENABLE_META
+        // Check if defn form has metadata (if it was parsed with ^meta)
+        ID form_meta = meta_get((CljObject*)list);
+        if (form_meta) {
+            // Apply metadata to native function object
+            meta_set((CljObject*)native_func_obj, (CljObject*)form_meta);
+        } else {
+            // Check if name_sym has metadata (if it was parsed with ^meta)
+            ID name_meta = meta_get((CljObject*)name_sym);
+            if (name_meta) {
+                // Apply metadata to native function object
+                meta_set((CljObject*)native_func_obj, (CljObject*)name_meta);
+            }
+        }
+#endif // ENABLE_META
+#endif // DEBUG
+        // In release builds, metadata is discarded for memory efficiency (ESP32)
         
         // Remove native function from namespace registry if it was registered there
         // (e.g., if it was registered as "clojure.string/trim" in register_builtins)
