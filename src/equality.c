@@ -79,8 +79,7 @@ bool clj_equal(ID a, ID b) {
                 ID elem_a = vector_nth(vec_a, i);
                 ID elem_b = vector_nth(vec_b, i);
                 bool equal = clj_equal(elem_a, elem_b);
-                RELEASE(elem_a);
-                RELEASE(elem_b);
+                // elem_a and elem_b lifetime is tied to vectors - no release needed
                 if (!equal) return false;
             }
             return true;

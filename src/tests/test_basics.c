@@ -527,7 +527,6 @@ TEST(test_load_multiline_file) {
 }
 
 
-// Isolated tests for easier debugging
 TEST(test_first_function) {
     
     // Test first on vectors (builtin function)
@@ -728,7 +727,7 @@ TEST(test_map_function) {
 // Symbol output tests removed - integrated into existing test structure
 
 // ============================================================================
-// DEBUGGING TESTS FOR RECUR IMPLEMENTATION
+// TESTS FOR RECUR IMPLEMENTATION
 // ============================================================================
 
 // Test as_list function with valid list

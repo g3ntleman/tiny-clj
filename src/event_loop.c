@@ -408,7 +408,8 @@ static void timer_process(void) {
         if (!timer_vec || vector_count(timer_vec) == 0) break;
         
         CljMap *task_map = (CljMap*)vector_nth(timer_vec, 0);
-        RETAIN(task_map);  // vector_nth doesn't retain
+        // Retain task_map because we'll release it later (it's removed from vector)
+        RETAIN(task_map);
         
         int scheduled_sec = task_get_scheduled_sec(task_map);
         int scheduled_msec = task_get_scheduled_msec(task_map);

@@ -28,6 +28,7 @@
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
+#include "strings.h"
 #include "list.h"
 #include "value.h"
 #include "environment.h"
@@ -2214,13 +2215,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         // Qualified symbol: find target namespace and resolve symbol
         const char *ns_name = symbol->ns->name;
         
-        // DEBUG: Print debug info for blank? resolution
-        #ifdef DEBUG
-        if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-            fprintf(stderr, "[DEBUG] eval_symbol: Qualified symbol blank? detected, ns_name=%s\n", ns_name);
-        }
-        #endif
-        
         // CRITICAL: Check if ns_name is an alias in the current namespace
         // Aliases are stored in current_ns->aliases map: alias -> namespace name symbol
         const char *actual_ns_name = ns_name;
@@ -2244,86 +2238,37 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             // Create unqualified symbol for lookup (symbol->name is already the name part)
             CljSymbol *name_sym = intern_symbol_global(symbol->name);
             if (name_sym) {
-                // DEBUG: Print debug info for blank? resolution
-                #ifdef DEBUG
-                if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-                    fprintf(stderr, "[DEBUG] eval_symbol: Looking up blank? in namespace %s\n", actual_ns_name);
-                    fprintf(stderr, "[DEBUG] eval_symbol: target_ns=%p, mappings=%p, mappings->count=%d\n", 
-                            target_ns, target_ns->mappings, 
-                            target_ns->mappings ? ((CljMap*)target_ns->mappings)->count : 0);
-                    fprintf(stderr, "[DEBUG] eval_symbol: name_sym=%p, name_sym->name=%s\n", 
-                            name_sym, name_sym->name);
-                }
-                #endif
-                
                 // Look up symbol in target namespace
                 // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
                 static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
                 ID resolved = map_get(target_ns->mappings, name_sym, (ID)&not_found_sentinel);
                 if (resolved != (ID)&not_found_sentinel) {
                     // Found in target namespace - return it (can be NULL/nil, which is valid)
-                    #ifdef DEBUG
-                    if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-                        fprintf(stderr, "[DEBUG] eval_symbol: blank? found via map_get, resolved=%p\n", resolved);
-                    }
-                    #endif
                     return resolved;
                 }
                 
-                // DEBUG: Symbol not found - try to find it by iterating through mappings
-                // This helps identify if the symbol exists but with a different pointer
-                // Only do this in debug builds to avoid performance impact
-                #ifdef DEBUG
-                {
-                    CljMap *mappings = target_ns->mappings;
-                    if (mappings) {
-                        if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-                            fprintf(stderr, "[DEBUG] eval_symbol: blank? not found via map_get, iterating through mappings...\n");
-                            fprintf(stderr, "[DEBUG] eval_symbol: mappings->count=%d\n", mappings->count);
-                        }
-                        for (int i = 0; i < mappings->count; i++) {
-                            CljObject *key = KV_KEY(mappings->data, i);
-                            if (key && TAG(key) == CLJ_SYMBOL) {
-                                CljSymbol *key_sym = as_symbol(key);
-                                if (symbol->name && strcmp(symbol->name, "blank?") == 0 && key_sym && key_sym->name) {
-                                    fprintf(stderr, "[DEBUG] eval_symbol: Found key in mapping[%d]: %s (key=%p, name_sym=%p)\n", 
-                                            i, key_sym->name, key, name_sym);
-                                    if (strcmp(key_sym->name, "blank?") == 0) {
-                                        fprintf(stderr, "[DEBUG] eval_symbol: Key matches blank?, checking equality...\n");
-                                        fprintf(stderr, "[DEBUG] eval_symbol: Pointer equal: %s, Structural equal: %s\n",
-                                                (key == name_sym) ? "YES" : "NO",
-                                                clj_equal((ID)key, (ID)name_sym) ? "YES" : "NO");
-                                    }
-                                }
-                                // Use clj_equal to check if symbols are structurally equal
-                                // This handles cases where symbols have different pointers
-                                if (key_sym && clj_equal((ID)key, (ID)name_sym)) {
-                                    // Found symbol with structural equality but different pointer
-                                    // Return the value directly
-                                    CljObject *value = KV_VALUE(mappings->data, i);
-                                    if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-                                        fprintf(stderr, "[DEBUG] eval_symbol: blank? found via structural equality, value=%p\n", value);
-                                    }
-                                    // CRITICAL: value can be NULL (nil), which is a valid value
-                                    // Return it even if it's NULL
-                                    return (ID)value;
-                                }
+                // Symbol not found - try to find it by iterating through mappings
+                // This handles cases where symbols have different pointers but are structurally equal
+                CljMap *mappings = target_ns->mappings;
+                if (mappings) {
+                    for (int i = 0; i < mappings->count; i++) {
+                        CljObject *key = KV_KEY(mappings->data, i);
+                        if (key && TAG(key) == CLJ_SYMBOL) {
+                            CljSymbol *key_sym = as_symbol(key);
+                            // Use clj_equal to check if symbols are structurally equal
+                            // This handles cases where symbols have different pointers
+                            if (key_sym && clj_equal((ID)key, (ID)name_sym)) {
+                                // Found symbol with structural equality but different pointer
+                                // Return the value directly
+                                CljObject *value = KV_VALUE(mappings->data, i);
+                                // CRITICAL: value can be NULL (nil), which is a valid value
+                                // Return it even if it's NULL
+                                return (ID)value;
                             }
-                        }
-                        if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-                            fprintf(stderr, "[DEBUG] eval_symbol: blank? not found in any mapping\n");
                         }
                     }
                 }
-                #endif
             }
-        } else {
-            #ifdef DEBUG
-            if (symbol->name && strcmp(symbol->name, "blank?") == 0) {
-                fprintf(stderr, "[DEBUG] eval_symbol: blank? - target_ns=%p, mappings=%p\n", target_ns, 
-                        target_ns ? target_ns->mappings : NULL);
-            }
-            #endif
         }
         
         // Qualified symbol not found in target namespace
@@ -2960,20 +2905,67 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     CljObject *body_expr_obj = NULL;
     
     // rest now points to the body expressions
+    // CRITICAL: For defn, body can be a single expression or multiple expressions
+    // If multiple, we need to wrap them in a do block
+    // However, we need to distinguish between:
+    // 1. Real multiple body expressions: (defn f [x] expr1 expr2)
+    // 2. Parsing errors where the next defn is incorrectly parsed as part of the body
+    // We check if the second element is a defn - if so, it's likely a parsing error
     if (rest->rest == NULL) {
-        // Single body expression - use directly without wrapping in a list
-        // CRITICAL: Do NOT wrap in list - func->body should be the expression itself
+        // Single body expression - use directly
         body_expr_obj = rest->first;
     } else {
-        // Multiple body expressions - just use the last one for now
-        // TODO: Implement proper do block or let sequencing
-        CljObject *current_obj = (CljObject*)rest;
-        CljList *current = rest;
-        while (current->rest) {
-            current_obj = current->rest;
-            current = as_list(current_obj);
+        // Check if second element is a defn (parsing error indicator)
+        CljList *rest_list = as_list(rest->rest);
+        bool is_parsing_error = false;
+        if (rest_list && rest_list->first && TAG(rest_list->first) == CLJ_LIST) {
+            CljList *second_list = as_list(rest_list->first);
+            if (second_list && second_list->first && TAG(second_list->first) == CLJ_SYMBOL) {
+                CljSymbol *second_sym = as_symbol(second_list->first);
+                if (second_sym && second_sym->name && strcmp(second_sym->name, "defn") == 0) {
+                    // Second element is a defn - this is likely a parsing error
+                    // Use only the first body expression
+                    is_parsing_error = true;
+                }
+            }
         }
-        body_expr_obj = current->first;
+        
+        if (is_parsing_error) {
+            // Parsing error - use only first body expression
+            body_expr_obj = rest->first;
+        } else {
+            // Real multiple body expressions - wrap in do block
+            int body_count = 0;
+            CljList *current = rest;
+            while (current) {
+                body_count++;
+                if (!current->rest) break;
+                current = as_list(current->rest);
+            }
+            
+            // Build do block: (do expr1 expr2 ...)
+            CljObject *do_args[16]; // Max 16 body expressions
+            if (body_count > 15) {
+                free_obj_array((ID*)params, params_stack);
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+                               "defn body has too many expressions (max 15)", 
+                               NULL, 0, 0);
+                return NULL;
+            }
+            
+            do_args[0] = (CljObject*)SYM_DO;
+            current = rest;
+            for (int i = 0; i < body_count; i++) {
+                if (current && current->first) {
+                    do_args[i + 1] = current->first;
+                }
+                if (!current->rest) break;
+                current = as_list(current->rest);
+            }
+            
+            // Create do list
+            body_expr_obj = (CljObject*)make_list_from_stack((CljValue*)do_args, body_count + 1);
+        }
     }
     
     if (!body_expr_obj) {
@@ -3005,13 +2997,53 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    CljMap *fn_env = st->current_ns->mappings;
-    if (!fn_env) {
-        fn_env = make_map(16);
+    // CRITICAL: Create a closure environment that includes both current namespace mappings
+    // and clojure.core mappings. This ensures that functions defined in non-core namespaces
+    // (like clojure.string) can access clojure.core functions (like reverse, str, empty?, etc.)
+    // This is similar to what eval_let does (lines 2698-2719)
+    CljMap *fn_env = NULL;
+    
+    // Start with current namespace mappings
+    if (st->current_ns->mappings) {
+        // Create a new map that will contain both current_ns and clojure.core mappings
+        CljMap *ns_mappings = (CljMap*)st->current_ns->mappings;
+        fn_env = (CljMap*)make_map(ns_mappings->count + 32);
+        
+        // Copy current namespace mappings first
+        for (int i = 0; i < ns_mappings->capacity; i++) {
+            CljValue key = ns_mappings->data[i * 2];
+            CljValue val = ns_mappings->data[i * 2 + 1];
+            if (key) {
+                CljMap *new_fn_env = map_assoc(fn_env, key, val);
+                ASSIGN(fn_env, new_fn_env);
+            }
+        }
+    } else {
+        fn_env = make_map(32);
         st->current_ns->mappings = fn_env;
     }
     
-    // Create function object with namespace mappings as closure_env
+    // Add clojure.core namespace mappings so functions like reverse, str, empty? are available
+    extern TinyClJRuntime g_runtime;
+    if (fn_env && g_runtime.clojure_core_cache) {
+        CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+        if (clojure_core && clojure_core->mappings) {
+            CljMap *core_mappings = (CljMap*)clojure_core->mappings;
+            for (int i = 0; i < core_mappings->capacity; i++) {
+                CljValue key = core_mappings->data[i * 2];
+                CljValue val = core_mappings->data[i * 2 + 1];
+                if (key) {
+                    // Only add if not already in fn_env (current namespace mappings take precedence)
+                    if (!map_contains(fn_env, key)) {
+                        CljMap *new_fn_env = map_assoc(fn_env, key, val);
+                        ASSIGN(fn_env, new_fn_env);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Create function object with extended closure_env that includes both namespaces
     CljFunction *fn_obj = make_function(params, param_count, transformed_body, fn_env, NULL);
     if (!fn_obj) {
         free_obj_array((ID*)params, params_stack);
@@ -3030,29 +3062,39 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // ns_define may update st->current_ns->mappings (COW), so we need to update closure_env
     ns_define(st->current_ns, name_sym, fn_obj); // ns_define does RETAIN internally
     
-    // CRITICAL: Update closure_env to point to current namespace mappings
-    // This ensures recursive calls can find the function via closure_env or namespace lookup
-    // Since ns_define may have updated st->current_ns->mappings (COW),
-    // we need to update the function's closure_env to point to the updated mappings
-    // Always update closure_env to ensure it contains the function that was just registered
-    // This is necessary even if COW didn't happen, because the function needs to be
-    // available in closure_env for recursive calls
-    // CRITICAL: Always update closure_env, even if pointers are the same, because
-    // the function was just added to the mappings, and closure_env needs to reflect that
-    if (st->current_ns->mappings != func->closure_env) {
-        // Use ASSIGN to safely replace closure_env (releases old, retains new)
-        ASSIGN(func->closure_env, (CljMap*)st->current_ns->mappings);
+    // CRITICAL: After ns_define, we need to ensure the function is in closure_env
+    // Since we created an extended closure_env (with clojure.core mappings),
+    // we need to add the function to that extended environment, not replace it
+    // with just the namespace mappings (which would lose clojure.core access)
+    // First, update the extended env with the function so it can find itself recursively
+    CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym, NULL);
+    if (func_in_closure != fn_obj) {
+        // Function not in closure_env yet - add it to the extended env
+        CljMap *new_closure_env = map_assoc(func->closure_env, name_sym, fn_obj);
+        ASSIGN(func->closure_env, new_closure_env);
     }
-    // Even if pointers are the same, the function is now in the mappings
-    // closure_env already points to the correct map, so no update needed
+    // Also update the extended env with any new mappings from ns_define (if COW happened)
+    // But keep the extended env structure (with clojure.core mappings)
+    if (st->current_ns->mappings != func->closure_env) {
+        // ns_define may have created a new mappings map (COW)
+        // We need to merge the new namespace mappings into our extended env
+        // But preserve clojure.core mappings that are already there
+        CljMap *current_ns_mappings = (CljMap*)st->current_ns->mappings;
+        MAP_FOR_EACH(current_ns_mappings, key, val) {
+            // Update or add namespace mappings to extended env
+            // Note: key can be NULL (nil) - that's a valid key in Clojure!
+            CljMap *new_closure_env = map_assoc(func->closure_env, key, val);
+            ASSIGN(func->closure_env, new_closure_env);
+        }
+    }
     
     // ASSERTION: Verify that the function is now in closure_env
     // This tests the thesis that closure_env contains the function after ns_define
     CLJ_ASSERT(func->closure_env != NULL);
     CLJ_ASSERT(TAG(func->closure_env) == CLJ_MAP);
-    CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym, NULL);
-    CLJ_ASSERT(func_in_closure != NULL);
-    CLJ_ASSERT(func_in_closure == (CljObject*)fn_obj || func_in_closure == (CljObject*)func);
+    CljObject *func_in_closure_check = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym, NULL);
+    CLJ_ASSERT(func_in_closure_check != NULL);
+    CLJ_ASSERT(func_in_closure_check == (CljObject*)fn_obj || func_in_closure_check == (CljObject*)func);
     
     RELEASE((CljObject*)fn_obj); // Release our reference (namespace keeps it)
     free_obj_array((ID*)params, params_stack);

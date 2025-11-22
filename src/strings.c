@@ -168,24 +168,20 @@ const char* to_string(CljObject *v) {
                 size_t cap = 2; // [ ]
                 for (int i = 0; i < count; i++) {
                     ID elem = vector_nth(vec, i);
-                    // vector_nth returns non-retained element, so we need to retain it
-                    if (elem) RETAIN(elem);
+                    // elem lifetime is tied to vector - no release needed
                     const char *el = pr_str(elem);
                     cap += strlen(el) + 1;
                     free((void*)el);
-                    RELEASE(elem);
                 }
                 char *s = ALLOC(char, cap+1);
                 strcpy(s, "[");
                 for (int i = 0; i < count; i++) {
                     ID elem = vector_nth(vec, i);
-                    // vector_nth returns non-retained element, so we need to retain it
-                    if (elem) RETAIN(elem);
+                    // elem lifetime is tied to vector - no release needed
                     const char *el = pr_str(elem);
                     strcat(s, el);
                     if (i < count-1) strcat(s, " ");
                     free((void*)el);
-                    RELEASE(elem);
                 }
                 strcat(s, "]");
                 

@@ -97,11 +97,11 @@ ID nth2(ID *args, unsigned int argc) {
             return NULL;
         }
         // Index is valid - check if element is nil
-        // vector_nth throws exception if out of bounds, and retains the element
+        // vector_nth throws exception if out of bounds
         ID elem = vector_nth(v, i);
 
-        // Element exists and is not nil - already retained by vector_nth
-        return elem;
+        // Element exists and is not nil - retain it for return value
+        return elem ? RETAIN(elem) : NULL;
     }
 
     // Fast path: Lists (O(n) access via list_nth)
@@ -163,7 +163,8 @@ ID native_peek(ID *args, unsigned int argc) {
     CljVector *v = as_vector(vec);
     int count = vector_count(v);
     if (!count) return NULL;  // nil for empty vector
-    return vector_nth(v, count - 1);  // Return last element (already retained)
+    ID elem = vector_nth(v, count - 1);
+    return elem ? RETAIN(elem) : NULL;  // Retain element for return value
 }
 
 // pop: returns new vector without last element, or empty vector if empty
@@ -272,8 +273,8 @@ ID native_subvec(ID *args, unsigned int argc) {
     for (int i = 0; i < subvec_count; i++) {
         ID elem = vector_nth(v, start + i);
         if (elem) {
-            new_vec = vector_conj(new_vec, elem);
-            RELEASE(elem);  // vector_conj retains, so release our retained copy
+            // vector_conj retains the element, so we need to retain it first
+            new_vec = vector_conj(new_vec, RETAIN(elem));
         } else {
             new_vec = vector_conj(new_vec, NULL);  // nil elements
         }
@@ -1390,7 +1391,6 @@ ID native_str(ID *args, unsigned int argc) {
     }
     
     // Optimization: If only one argument and it's already a string, return it directly
-    // Caller already holds a reference, so we can just return it
     if (argc == 1 && args[0] && TAG(args[0]) == CLJ_STRING) {
         return args[0];
     }
@@ -1399,31 +1399,23 @@ ID native_str(ID *args, unsigned int argc) {
     size_t total_len = 0;
     for (unsigned int i = 0; i < argc; i++) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
-            // Direct string: use string_length() to avoid conversion
             total_len += string_length(args[i]);
         } else {
-            // Non-string: convert to string to get length
             const char *s = to_string(args[i]);
-            if (s) {
-                total_len += strlen(s);
-                free((char*)s);
-            }
+            total_len += strlen(s);
+            free((char*)s);
         }
     }
     
     // Allocate CljString buffer directly
-    // make_string_buffer throws exceptions on error, never returns NULL
     CljString *result = make_string_buffer(total_len);
     char *buffer = result->data;
     
     // Concatenate all strings
     for (unsigned int i = 0; i < argc; i++) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
-            // Direct string: use string_data() to avoid conversion
             strcat(buffer, string_data(args[i]));
         } else {
-            // Non-string: convert to string
-            // to_string never returns NULL - it always returns an allocated string
             const char *s = to_string(args[i]);
             strcat(buffer, s);
             free((char*)s);
@@ -1542,8 +1534,6 @@ ID native_trim(ID *args, unsigned int argc) {
     }
     
     CljString *str = as_clj_string(str_arg);
-    if (!str) return NULL;
-    
     const char *str_data = string_data(str);
     int str_len = string_length(str);
     
@@ -1599,8 +1589,6 @@ ID native_upper_case(ID *args, unsigned int argc) {
     }
     
     CljString *str = as_clj_string(str_arg);
-    if (!str) return NULL;
-    
     const char *str_data = string_data(str);
     uint16_t str_len = string_length(str);
     
@@ -1640,8 +1628,6 @@ ID native_lower_case(ID *args, unsigned int argc) {
     }
     
     CljString *str = as_clj_string(str_arg);
-    if (!str) return NULL;
-    
     const char *str_data = string_data(str);
     uint16_t str_len = string_length(str);
     
@@ -1757,8 +1743,6 @@ ID native_string_reverse(ID *args, unsigned int argc) {
     }
     
     CljString *str = as_clj_string(str_arg);
-    if (!str) return NULL;
-    
     const char *str_data = string_data(str);
     uint16_t str_len = string_length(str);
     
@@ -1810,14 +1794,12 @@ ID native_symbol(ID *args, unsigned int argc) {
         
         // Extract namespace (can be NULL if nil was passed)
         if (ns_arg) {
-            CljString *ns_str = (CljString*)ns_arg;
-            ns = clj_string_data(ns_str);
+            ns = string_data(ns_arg);
         } else {
             ns = NULL;  // nil namespace
         }
         
-        CljString *name_str = (CljString*)name_arg;
-        name = clj_string_data(name_str);
+        name = string_data(name_arg);
     } else {
         // One argument: name only
         ID name_arg = args[0];
@@ -1944,6 +1926,10 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                 }
             } CATCH(ex) {
                 ok = false;
+                // Log exceptions during namespace loading to help debug issues
+                if (ex && ex->message && ex->message[0] != '\0') {
+                    fprintf(stderr, "[namespace loading] Exception: %s\n", ex->message);
+                }
                 // Skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                 if (!reader_is_eof(&reader)) reader_next(&reader);
@@ -1980,7 +1966,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
             // Copy to target namespace
             ns_define(target_ns, sym, val);
         }
-        RELEASE(sym);  // vector_nth returns retained element
+        // sym lifetime is tied to vector - no release needed
     }
 }
 
@@ -2052,7 +2038,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             ns_name = ns_str;
             ns_name_allocated = true;
         }
-        RELEASE(ns_obj);  // vector_nth returns retained element
+        // ns_obj lifetime is tied to vector - no release needed
         
         // Parse keywords: :as, :refer
         int vec_count = vector_count(vec);
@@ -3322,7 +3308,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
                 return NULL;
             }
             int val = AS_FIXNUM(elem);
-            RELEASE(elem);  // vector_nth returns retained element
+            // elem lifetime is tied to vector - no release needed
             if (val < 0 || val > 255) {
                 RELEASE((CljObject*)arr);
                 throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,

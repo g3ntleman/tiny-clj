@@ -70,7 +70,6 @@ void setUp(void) {
 #endif
 
 #ifdef DEBUG
-        // Enable zombie mode for debugging use-after-free errors
         enable_zombie_mode();
 #endif
     
@@ -160,7 +159,6 @@ static void run_test_with_exception_handling(const Test *test) {
         RUN_TEST(test->func);
     } CATCH(ex) {
         // Unhandled exception caught - mark test as failed
-        // Print exception details for debugging
         if (ex) {
             fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
                     test->qualified_name, ex->type, ex->message);
@@ -325,12 +323,9 @@ int main(int argc, char **argv) {
     enable_memory_profiling(true);
     // Disable memory leak reporting by default (only show on failures)
     set_memory_leak_reporting_enabled(false);
-    // Only enable zombie mode for debugging use-after-free errors
-    // Memory verbose mode and debug output are disabled to reduce noise
     set_memory_verbose_mode(false);
-    // enable_memory_debug_output(); // Disabled - too verbose
 #ifdef DEBUG
-    enable_zombie_mode(); // Keep zombie mode for debugging
+    enable_zombie_mode();
 #endif
 #endif
     
@@ -351,7 +346,7 @@ int main(int argc, char **argv) {
             // Enable memory profiler summary
             show_memory_summary = true;
 #ifdef ENABLE_MEMORY_PROFILING
-            set_memory_verbose_mode(false); // Disabled - too verbose
+            set_memory_verbose_mode(false);
             set_memory_leak_reporting_enabled(true);
 #endif
             run_tests_by_registry();

@@ -627,19 +627,6 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // Only check for NULL ns and symbol
     if (!ns || !symbol) return;
     
-    // DEBUG: Print debug info for blank? registration
-    #ifdef DEBUG
-    if (symbol && TAG(symbol) == CLJ_SYMBOL) {
-        CljSymbol *sym = as_symbol(symbol);
-        if (sym && sym->name && strcmp(sym->name, "blank?") == 0) {
-            fprintf(stderr, "[DEBUG] ns_define: Registering blank? in namespace %s\n", 
-                    ns->name ? ns->name->name : "unknown");
-            fprintf(stderr, "[DEBUG] ns_define: symbol=%p, value=%p, mappings=%p\n", 
-                    symbol, value, ns->mappings);
-        }
-    }
-    #endif
-    
     // Create or update mappings
     if (!ns->mappings) {
         ns->mappings = make_map(16);
@@ -657,22 +644,6 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         // new_mappings is already retained by map_assoc
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
-    
-    // DEBUG: Verify blank? was registered
-    #ifdef DEBUG
-    if (symbol && TAG(symbol) == CLJ_SYMBOL) {
-        CljSymbol *sym = as_symbol(symbol);
-        if (sym && sym->name && strcmp(sym->name, "blank?") == 0) {
-            fprintf(stderr, "[DEBUG] ns_define: After registration, mappings=%p, count=%d\n", 
-                    ns->mappings, ns->mappings ? ((CljMap*)ns->mappings)->count : 0);
-            // Verify it's in the map
-            static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-            ID found = map_get(ns->mappings, symbol, (ID)&not_found_sentinel);
-            fprintf(stderr, "[DEBUG] ns_define: Verification lookup: found=%p (sentinel=%p)\n", 
-                    found, (ID)&not_found_sentinel);
-        }
-    }
-    #endif
     
     // CRITICAL: Invalidate resolve cache when a symbol is redefined in the current namespace
     // This ensures that ns_resolve will find the new definition instead of returning cached value

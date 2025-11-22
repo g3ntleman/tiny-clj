@@ -182,18 +182,11 @@ static void test_history_load_from_file_crash_reproduction_body(void) {
 }
 
 void test_history_load_from_file_crash_reproduction(void) {
-  // Enable verbose memory debugging
-  set_memory_verbose_mode(true);
-  enable_memory_debug_output();
-
   // Use WITH_AUTORELEASE_POOL to match the REPL scenario
   // The crash happens when history_load_from_file's pool is popped,
   // but the strings are still referenced by the vector
   WITH_AUTORELEASE_POOL(
       { test_history_load_from_file_crash_reproduction_body(); });
-
-  // Disable verbose mode after test
-  set_memory_verbose_mode(false);
 }
 
 static void register_test_history_load_from_file_crash_reproduction(void)
@@ -588,10 +581,6 @@ TEST(test_spit_slurp_roundtrip) {
 TEST(test_parse_vector_strings_inner_pool) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-  // Enable verbose memory debugging
-  set_memory_verbose_mode(true);
-  enable_memory_debug_output();
-
   // Test: parse a vector with strings inside eval_string (which creates inner
   // pool)
   WITH_AUTORELEASE_POOL({
@@ -643,10 +632,6 @@ TEST(test_history_load_from_file_scenario) {
   TEST_ASSERT_NOT_NULL(fp);
   fprintf(fp, "%s", test_content);
   fclose(fp);
-
-  // Enable verbose memory debugging
-  set_memory_verbose_mode(true);
-  enable_memory_debug_output();
 
   // Simulate exactly what history_load_from_file does:
   // 1. Call eval_string (creates inner pool)

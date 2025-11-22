@@ -26,7 +26,7 @@ static void load_clojure_string_namespace(void) {
 }
 
 // ============================================================================
-// DEBUG TESTS - Test hypotheses about namespace loading and symbol resolution
+// TESTS - Test hypotheses about namespace loading and symbol resolution
 // ============================================================================
 
 // Test: Verify that clojure.string namespace exists after require
@@ -212,7 +212,6 @@ TEST(test_string_debug_join_direct_call) {
     CljObject *result = eval_string("(clojure.string/join \",\" '(\"a\" \"b\"))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     
-    // Debug: Check what type result is
     if (result) {
         if (TAG(result) == CLJ_STRING) {
             CljString *str = as_clj_string(result);
@@ -558,6 +557,218 @@ TEST(test_string_debug_direct_function_call_hypothesis) {
     }
 }
 
+// Test: Hypothesis 9 - Check if join is actually defined when clojure.string is loaded
+TEST(test_string_debug_join_defined_after_load_hypothesis) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Load clojure.string namespace
+    load_clojure_string_namespace();
+    
+    // Get namespace
+    CljNamespace *string_ns = ns_find("clojure.string");
+    TEST_ASSERT_NOT_NULL(string_ns);
+    TEST_ASSERT_NOT_NULL(string_ns->mappings);
+    
+    // Check mapping count - should have multiple functions including join
+    CljMap *mappings = string_ns->mappings;
+    int count = mappings->count;
+    TEST_ASSERT_TRUE_MESSAGE(count > 0, "clojure.string namespace should have mappings");
+    
+    // Try to find join using map_get (safer than iterating)
+    CljSymbol *join_sym = intern_symbol_global("join");
+    TEST_ASSERT_NOT_NULL(join_sym);
+    
+    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID join_func = map_get(string_ns->mappings, join_sym, (ID)&not_found_sentinel);
+    
+    bool found_join = (join_func != (ID)&not_found_sentinel);
+    TEST_ASSERT_TRUE_MESSAGE(found_join, "join should be found in namespace mappings after loading");
+    TEST_ASSERT_NOT_NULL(join_func);
+    
+    if (join_func) {
+        TEST_ASSERT_TRUE_MESSAGE(TAG(join_func) == CLJ_FUNC || TAG(join_func) == CLJ_CLOSURE, 
+                                 "join should be a function or closure");
+    }
+}
+
+// Test: Hypothesis 10 - Check if join's closure environment is correct
+TEST(test_string_debug_join_closure_env_hypothesis) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Load clojure.string namespace
+    load_clojure_string_namespace();
+    
+    // Get join function
+    CljSymbol *join_sym = intern_symbol("clojure.string", "join");
+    TEST_ASSERT_NOT_NULL(join_sym);
+    
+    ID join_func = eval_symbol(join_sym, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(join_func);
+    TEST_ASSERT_TRUE(TAG(join_func) == CLJ_CLOSURE);
+    
+    if (TAG(join_func) == CLJ_CLOSURE) {
+        CljFunction *func = as_function(join_func);
+        TEST_ASSERT_NOT_NULL(func);
+        TEST_ASSERT_NOT_NULL(func->closure_env);
+        TEST_ASSERT_TRUE(TAG(func->closure_env) == CLJ_MAP);
+        
+        // Check if closure_env contains necessary functions like reverse, str, etc.
+        CljSymbol *reverse_sym = intern_symbol_global("reverse");
+        CljSymbol *str_sym = intern_symbol_global("str");
+        CljSymbol *empty_sym = intern_symbol_global("empty?");
+        
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        
+        ID reverse_func = map_get(func->closure_env, reverse_sym, (ID)&not_found_sentinel);
+        ID str_func = map_get(func->closure_env, str_sym, (ID)&not_found_sentinel);
+        ID empty_func = map_get(func->closure_env, empty_sym, (ID)&not_found_sentinel);
+        
+        // These should be found in closure_env (they're in clojure.core)
+        TEST_ASSERT_TRUE_MESSAGE(reverse_func != (ID)&not_found_sentinel, 
+                                 "reverse should be in join's closure_env");
+        TEST_ASSERT_TRUE_MESSAGE(str_func != (ID)&not_found_sentinel, 
+                                 "str should be in join's closure_env");
+        TEST_ASSERT_TRUE_MESSAGE(empty_func != (ID)&not_found_sentinel, 
+                                 "empty? should be in join's closure_env");
+    }
+}
+
+// Test: Hypothesis 11 - Test if nested functions in join can access their closure
+TEST(test_string_debug_join_nested_functions_closure_hypothesis) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: Create a function similar to join with nested functions
+    // and check if nested functions can access outer closure
+    CljObject *result = eval_string(
+        "(let [outer-fn (fn [x] "
+        "  (let [inner-fn (fn [y] "
+        "    (let [deep-fn (fn [z] (+ x y z))] "
+        "      (deep-fn 1)))] "
+        "    (inner-fn 2)))] "
+        "(outer-fn 3))", 
+        g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// Test: Hypothesis 12 - Test if join works with a simpler version (without nested recursion)
+TEST(test_string_debug_join_simple_version_hypothesis) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: Simple version of join without nested recursive functions
+    CljObject *result = eval_string(
+        "(let [simple-join (fn [sep coll] "
+        "  (if (empty? coll) "
+        "    \"\" "
+        "    (let [first-elem (first coll) "
+        "          rest-coll (rest coll)] "
+        "      (if (empty? rest-coll) "
+        "        (str first-elem) "
+        "        (str first-elem sep (simple-join sep rest-coll))))))] "
+        "(simple-join \",\" '(\"a\" \"b\" \"c\")))", 
+        g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
+    
+    if (result && TAG(result) == CLJ_STRING) {
+        CljString *str = as_clj_string(result);
+        TEST_ASSERT_EQUAL_STRING("a,b,c", clj_string_data(str));
+    }
+}
+
+// Test: Hypothesis 13 - Test if the problem is with calling join from different namespace
+TEST(test_string_debug_join_from_different_namespace_hypothesis) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Load clojure.string namespace
+    load_clojure_string_namespace();
+    
+    // Switch to a different namespace and try to call join
+    eval_string("(ns test-ns)", g_test_eval_state);
+    
+    // Try to call join from different namespace
+    CljObject *result = eval_string("(clojure.string/join \",\" '(\"a\" \"b\"))", g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    
+    if (result) {
+        if (TAG(result) == CLJ_STRING) {
+            CljString *str = as_clj_string(result);
+            TEST_ASSERT_EQUAL_STRING("a,b", clj_string_data(str));
+        } else if (TAG(result) == CLJ_NIL || result == NULL) {
+            TEST_FAIL_MESSAGE("join returned nil when called from different namespace");
+        } else {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "join returned unexpected type: %d", TAG(result));
+            TEST_FAIL_MESSAGE(msg);
+        }
+    } else {
+        TEST_FAIL_MESSAGE("join returned NULL when called from different namespace");
+    }
+}
+
+// Test: Hypothesis 14 - Test if join works when defined in current namespace
+TEST(test_string_debug_join_in_current_namespace_hypothesis) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define join in current namespace (user)
+    CljObject *defn_result = eval_string(
+        "(defn my-join [separator coll] "
+        "  (if (empty? coll) "
+        "    \"\" "
+        "    (let [sep (if (nil? separator) \"\" separator) "
+        "          build-list (fn [separator coll acc] "
+        "            (if (empty? coll) "
+        "              (if (empty? acc) "
+        "                nil "
+        "                (clojure.core/reverse acc)) "
+        "              (let [first-elem (first coll) "
+        "                    rest-coll (rest coll)] "
+        "                (if (empty? rest-coll) "
+        "                  (if (empty? acc) "
+        "                    (list (str first-elem)) "
+        "                    (clojure.core/reverse (cons (str first-elem) acc))) "
+        "                  (build-list separator rest-coll (cons separator (cons (str first-elem) acc))))))) "
+        "          concat-strings (fn [str-list] "
+        "            (if (empty? str-list) "
+        "              \"\" "
+        "              (let [first-str (first str-list) "
+        "                    rest-list (rest str-list)] "
+        "                (if (empty? rest-list) "
+        "                  first-str "
+        "                  (let [next-result (concat-strings rest-list)] "
+        "                    (str first-str next-result))))))] "
+        "      (let [result (build-list sep coll (list))] "
+        "        (if (nil? result) "
+        "          \"\" "
+        "          (concat-strings result)))))", 
+        g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(defn_result);
+    
+    // Now call the function
+    CljObject *call_result = eval_string("(my-join \",\" '(\"a\" \"b\"))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(call_result);
+    
+    if (call_result) {
+        if (TAG(call_result) == CLJ_STRING) {
+            CljString *str = as_clj_string(call_result);
+            TEST_ASSERT_EQUAL_STRING("a,b", clj_string_data(str));
+        } else if (TAG(call_result) == CLJ_NIL || call_result == NULL) {
+            TEST_FAIL_MESSAGE("my-join returned nil instead of string");
+        } else {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "my-join returned unexpected type: %d", TAG(call_result));
+            TEST_FAIL_MESSAGE(msg);
+        }
+    } else {
+        TEST_FAIL_MESSAGE("my-join returned NULL");
+    }
+}
+
 // ============================================================================
 // BLANK? TESTS
 // ============================================================================
@@ -710,7 +921,7 @@ TEST(test_string_reverse) {
 }
 
 // ============================================================================
-// DEBUG TESTS FOR REVERSE CONFLICTS
+// TESTS FOR REVERSE CONFLICTS
 // ============================================================================
 
 TEST(test_string_debug_reverse_direct_resolution) {

@@ -46,10 +46,11 @@ unsigned int vector_count(CljVector *vec) {
     return vec->count;
 }
 
-/** Get element at index. Returns retained element or NULL if index out of bounds or nil.
+/** Get element at index. Returns element or NULL if index out of bounds or nil.
+ * Element lifetime is tied to the vector - caller must not release.
  * @param vec Vector to access
  * @param index Index (0-based)
- * @return Retained element or NULL (nil)
+ * @return Element or NULL (nil) - lifetime tied to vector
  */
  ID vector_nth(CljVector *vec, unsigned int index) {
     if (vec) {
@@ -209,8 +210,11 @@ CljVector* vector_pop(CljVector* vec) {
             if (v->base.rc == 1) {
                 // For CLJ_VECTOR_WEAK, don't RELEASE (weak reference)
                 if (v->base.type != CLJ_VECTOR_WEAK) {
-                    // Release last element
-                    RELEASE(vector_nth(v, v->count - 1));
+                    // Release last element (element lifetime is tied to vector)
+                    ID last_elem = vector_nth(v, v->count - 1);
+                    if (last_elem && !is_immediate(last_elem)) {
+                        RELEASE((CljObject*)last_elem);
+                    }
                 }
                 // Set last element to NULL and decrement count
                 v->count--;

@@ -492,7 +492,9 @@ CljString* line_editor_get_history_line(LineEditor *editor, int index) {
     
     // Convert transient vector to persistent if needed
     CljVector *history_vec = editor->history;
-    return vector_nth(history_vec, index);
+    ID elem = vector_nth(history_vec, index);
+    // Retain element for return value (caller will release it)
+    return elem ? (CljString*)RETAIN(elem) : NULL;
 }
 
 int line_editor_get_history_size(const LineEditor *editor) {
