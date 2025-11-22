@@ -504,28 +504,14 @@ int line_editor_get_history_size(const LineEditor *editor) {
 CljVector* line_editor_get_history_vector(LineEditor *editor) {
     if (!editor) return empty_vector();
     
-    // Convert transient vector to persistent if needed
     CljVector *history_vec = editor->history;
-    if (history_vec && TAG(history_vec) == CLJ_VECTOR_TRANSIENT) {
-        history_vec = (CljVector*)vector_persistent(history_vec);
-        if (!history_vec) return empty_vector();
-    }
+    if (!history_vec) return empty_vector();
     
     int n = vector_count(history_vec);
     if (!n) return empty_vector();
     
-    CljVector *out = make_vector(n, CLJ_VECTOR);
-    ID nth_args[2];
-    nth_args[0] = history_vec;
-    for (int i = 0; i < n; i++) {
-        nth_args[1] = fixnum(i);
-        ID elem = nth2(nth_args, 2);
-        if (elem) {
-            out = vector_conj(out, elem);
-            RELEASE(elem);
-        }
-    }
-    return out;
+    // Return transient vector directly - history_save_to_file handles conversion
+    return history_vec;
 }
 
 void line_editor_clear_history(LineEditor *editor) {
@@ -591,7 +577,7 @@ static void build_default_history_path(char *out, size_t out_sz) {
 
 // Externe Persistenz-Funktionen (in repl.c definiert)
 extern CljObject* history_trim_last_n(CljObject *vec, int limit);
-extern bool history_save_to_file(CljObject *vec, const char *path);
+extern bool history_save_to_file(CljVector *vec, const char *path);
 extern CljObject* history_load_from_file(const char *path);
 
 // Laden der History an Default-Pfad, Ergebnis als persistent Vector<String>
@@ -605,11 +591,8 @@ CljObject* line_editor_history_load_default(void) {
 bool line_editor_history_save_default(CljObject *vec) {
     char path[512];
     build_default_history_path(path, sizeof(path));
-    // Falls transient, in persistent umwandeln
-    if (vec && vec->type == CLJ_VECTOR_TRANSIENT) {
-        vec = (CljObject*)vector_persistent((CljVector*)vec);
-    }
-    return history_save_to_file(vec, path);
+    // history_save_to_file handles transient to persistent conversion
+    return history_save_to_file((CljVector*)vec, path);
 }
 
 #else

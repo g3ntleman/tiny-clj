@@ -1005,8 +1005,23 @@ ID parse(const char *input, EvalState *st) {
  * @return Object with applied metadata or NULL on error
  */
 static ID parse_meta(Reader *reader, EvalState *st) {
-  if (!reader_eof(reader) && reader_next(reader) != '^')
+  // Consume the '^' character
+  if (reader_next(reader) != '^')
     return NULL;
+  
+  // Check if this is ^#^{...} syntax (metadata map)
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '#') {
+    char next = reader_peek_ahead(reader, 1);
+    if (next == '^') {
+      // This is ^#^{...} syntax - delegate to parse_meta_map
+      // But we need to consume the '#' first
+      reader_next(reader);  // Consume '#'
+      return parse_meta_map(reader, st);
+    }
+  }
+  
+  // Regular ^meta syntax
   reader_skip_all(reader);
   ID meta = parse_expr(reader, st);
   if (!meta)
@@ -1105,10 +1120,19 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
  */
 static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
-  if (reader_next(reader) != '#')
-    return NULL;
+  // When called from parse_expr, we need to consume '#' and '^'
+  // When called from parse_meta, we're already past '#' and at '^'
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '#') {
+    // Called from parse_expr - consume '#' and '^'
+    if (reader_next(reader) != '#')
+      return NULL;
+  }
+  // Now we should be at '^'
   if (reader_next(reader) != '^')
     return NULL;
+  
+  reader_skip_all(reader);
   ID meta = parse_map(reader, st);
   if (!meta)
     return NULL;

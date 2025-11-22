@@ -18,6 +18,7 @@
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "value.h"
+// clj_equal is available via map.h -> equality.h
 
 void meta_registry_init() {
     {
@@ -55,7 +56,45 @@ void meta_set(CljObject *v, CljObject *meta) {
 ID meta_get(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return NULL;
     
-    return (ID)map_get(g_runtime.meta_registry, (CljValue)v, NULL);
+    // First try pointer comparison (fast path)
+    ID result = (ID)map_get(g_runtime.meta_registry, (CljValue)v, NULL);
+    if (result) return result;
+    
+    // If not found by pointer, try structural equality (for cases where objects are copied)
+    // This is needed when metadata is set on a parsed object but a new object is created during evaluation
+    CljMap *registry = g_runtime.meta_registry;
+    if (!registry) return NULL;
+    
+    // For lists, we need to handle the case where symbols might have different namespaces
+    // but are structurally equivalent (e.g., unqualified symbols in different contexts)
+    if (TAG(v) == CLJ_LIST) {
+        MAP_FOR_EACH(registry, stored_key, value) {
+            if (stored_key == (CljObject*)v) {
+                // Already checked above, but check again for safety
+                return (ID)value;
+            }
+            // For lists, try structural equality with namespace-agnostic symbol comparison
+            if (stored_key && TAG(stored_key) == CLJ_LIST) {
+                if (clj_equal(stored_key, (CljObject*)v)) {
+                    return (ID)value;
+                }
+            }
+        }
+    } else {
+        // For non-lists, use standard structural equality
+        MAP_FOR_EACH(registry, stored_key, value) {
+            if (stored_key == (CljObject*)v) {
+                // Already checked above, but check again for safety
+                return (ID)value;
+            }
+            // Try structural equality for non-interned objects (like lists)
+            if (stored_key && clj_equal(stored_key, (CljObject*)v)) {
+                return (ID)value;
+            }
+        }
+    }
+    
+    return NULL;
 }
 
 void meta_clear(CljObject *v) {

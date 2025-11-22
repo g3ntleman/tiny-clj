@@ -1865,6 +1865,19 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Store in namespace (value can be NULL/nil - legitimate case)
     ns_define(st->current_ns, symbol, value);
     
+    // Apply metadata to value (only in DEBUG builds for memory efficiency)
+    // In Clojure, metadata from ^#^{...} (def ...) is applied to the value
+#ifdef DEBUG
+#ifdef ENABLE_META
+    // Try to get metadata from the def form (list object)
+    ID form_meta = meta_get((CljObject*)list);
+    if (form_meta && value) {
+        // Metadata found on the form - apply it to the value
+        meta_set((CljObject*)value, (CljObject*)form_meta);
+    }
+#endif // ENABLE_META
+#endif // DEBUG
+    
     // Return the symbol (Clojure-compatible: def returns the var/symbol, not the value)
     return symbol;
 }
@@ -3008,34 +3021,23 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         ns_define(st->current_ns, name_sym, (ID)native_func_obj);
         
         // Apply metadata to native function (only in DEBUG builds for memory efficiency)
-        // Metadata can come from:
-        // 1. The defn form itself: ^#^{:doc "..."} (defn name ...)
-        // 2. The name symbol: ^#^{:doc "..."} name in (defn ^#^{:doc "..."} name ...)
+        // In Clojure, metadata from ^#^{...} (defn ...) is applied to the function
 #ifdef DEBUG
 #ifdef ENABLE_META
-        // Check if defn form has metadata (if it was parsed with ^meta)
+        // Try to get metadata from the defn form (list object)
         ID form_meta = meta_get((CljObject*)list);
         if (form_meta) {
-            // Apply metadata to native function object
+            // Metadata found on the form - apply it to the function
             meta_set((CljObject*)native_func_obj, (CljObject*)form_meta);
         } else {
-            // Check if name_sym has metadata (if it was parsed with ^meta)
+            // Try to get metadata from the function name symbol
             ID name_meta = meta_get((CljObject*)name_sym);
             if (name_meta) {
-                // Apply metadata to native function object
                 meta_set((CljObject*)native_func_obj, (CljObject*)name_meta);
             }
         }
 #endif // ENABLE_META
 #endif // DEBUG
-        // In release builds, metadata is discarded for memory efficiency (ESP32)
-        
-        // Remove native function from namespace registry if it was registered there
-        // (e.g., if it was registered as "clojure.string/trim" in register_builtins)
-        // This prevents duplicate registrations
-        // Note: We search for qualified name "clojure.string/trim" in the namespace
-        // But since we're in the current namespace, we just need to ensure the stub takes over
-        // The native function in the registry will be shadowed by this stub
         
         free_obj_array((ID*)params, params_stack);
         return name_sym;  // defn returns the symbol
@@ -3122,6 +3124,21 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     if (func && sym && sym->name[0] && !func->name) {
         func->name = strdup(sym->name);
     }
+    
+    // Apply metadata to function (only in DEBUG builds for memory efficiency)
+#ifdef DEBUG
+#ifdef ENABLE_META
+    ID form_meta = meta_get((CljObject*)list);
+    if (form_meta) {
+        meta_set((CljObject*)fn_obj, (CljObject*)form_meta);
+    } else {
+        ID name_meta = meta_get((CljObject*)name_sym);
+        if (name_meta) {
+            meta_set((CljObject*)fn_obj, (CljObject*)name_meta);
+        }
+    }
+#endif // ENABLE_META
+#endif // DEBUG
     
     // Register function in namespace (after creation for recursive calls)
     // This ensures the function is available when the body is evaluated

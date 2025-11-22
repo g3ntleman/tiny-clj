@@ -32,6 +32,8 @@
 #include "strings.h"
 #include "reader.h"
 #include "parser.h"
+#include "meta.h"
+#include "function_call.h"
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -1791,6 +1793,45 @@ BuiltinFn native_function_lookup(const char *clojure_name) {
     return NULL;
 }
 
+// Meta function: (meta obj) - returns metadata map or nil
+ID native_meta(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+                                  "meta requires 1 argument, got %u", argc);
+        return NULL;
+    }
+    
+    ID obj = args[0];
+    if (!obj) {
+        return NULL; // nil -> nil
+    }
+    
+#ifdef ENABLE_META
+    // If obj is a symbol, resolve it to get the actual value (function, var, etc.)
+    // This allows (meta trim) to work by resolving trim to the function first
+    ID target_obj = obj;
+    if (TAG(obj) == CLJ_SYMBOL) {
+        // Get current eval state from builtin context to resolve symbol
+        // Forward declaration for static variable
+        extern _Thread_local EvalState *g_current_eval_state;
+        if (g_current_eval_state && g_current_eval_state->current_ns) {
+            ID resolved = ns_resolve(g_current_eval_state, (CljSymbol*)obj);
+            if (resolved) {
+                target_obj = resolved;
+            }
+        }
+    }
+    
+    ID meta = meta_get((CljObject*)target_obj);
+    if (meta) {
+        RETAIN(meta); // meta_get doesn't retain, so we need to retain for return
+        return meta;
+    }
+#endif // ENABLE_META
+    
+    return NULL; // No metadata -> nil
+}
+
 // Create symbol from string (with optional namespace)
 ID native_symbol(ID *args, unsigned int argc) {
     // symbol accepts 1 or 2 arguments: (symbol "name") or (symbol "ns" "name")
@@ -1922,8 +1963,6 @@ static char* read_file_cstr(const char *path) {
 
 static bool eval_source_in_current_state(const char *src, EvalState *st) {
     if (!src || !st) return false;
-    bool ok = true;
-    int expr_count = 0;
     int success_count = 0;
     WITH_AUTORELEASE_POOL({
         Reader reader;
@@ -1934,14 +1973,12 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
             
             // Save reader position before parsing to detect if we're stuck
             size_t pos_before = reader_offset(&reader);
-            expr_count++;
             
             TRY {
                 CljValue form = value_by_parsing_expr(&reader, st);
                 if (!form) {
                     if (reader_is_eof(&reader)) break;
                     // Parse failed - skip to next line to avoid infinite loop
-                    ok = false;
                     while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                     if (!reader_is_eof(&reader)) reader_next(&reader);
                     continue;
@@ -1957,9 +1994,8 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                     reader_next(&reader);
                 }
             } CATCH(ex) {
-                ok = false;
                 // Log exceptions during namespace loading to help debug issues
-                if (ex && ex->message && ex->message[0] != '\0') {
+                if (ex) {
                     fprintf(stderr, "[namespace loading] Exception: %s\n", ex->message);
                 }
                 // Skip to next line to avoid infinite loop
@@ -3113,8 +3149,8 @@ ID native_format(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
-// Thread-local EvalState for builtins that need it (eval, read-string)
-static _Thread_local EvalState *g_current_eval_state = NULL;
+// Thread-local EvalState for builtins that need it (eval, read-string, meta)
+_Thread_local EvalState *g_current_eval_state = NULL;
 
 // Set current EvalState (called by eval_function_call before calling builtins)
 void builtin_set_eval_state(EvalState *st) {
@@ -3816,6 +3852,7 @@ void register_builtins() {
     register_builtin_in_namespace("str", native_str);
     register_builtin_in_namespace("subs", native_subs);
     register_builtin_in_namespace("symbol", native_symbol);
+    register_builtin_in_namespace("meta", native_meta);
     
     // Register clojure.string functions
     register_builtin_in_namespace("clojure.string/trim", native_trim);

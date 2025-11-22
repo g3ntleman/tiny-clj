@@ -303,6 +303,7 @@ add_executable(unity-tests
     src/tests/test_file_io.c
     src/tests/test_atom.c
     src/tests/test_timer.c
+    src/tests/test_meta.c
     external/unity/src/unity.c
     src/builtins.c
     src/byte_array.c

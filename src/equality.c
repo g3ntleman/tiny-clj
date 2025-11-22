@@ -14,6 +14,7 @@
 #include "map.h"
 #include "strings.h"
 #include "kv_macros.h"
+#include "list.h"
 
 // Forward declaration for string_empty_singleton
 extern CljString* string_empty_singleton;
@@ -108,14 +109,55 @@ bool clj_equal(ID a, ID b) {
             
             // Compare namespaces (pointer comparison works due to interning)
             if (sym_a->ns == sym_b->ns) return true;
+            
+            // If both symbols are unqualified (no namespace), they are equal
+            // This handles cases where symbols are parsed in different contexts
+            // but are structurally equivalent (e.g., unqualified symbols)
+            if (!sym_a->ns && !sym_b->ns) return true;
+            
+            // If one has a namespace and the other doesn't, they are not equal
             if (!sym_a->ns || !sym_b->ns) return false;
             
-            // Compare namespace name strings
+            // Both have namespaces - compare namespace name strings
             return strcmp(sym_a->ns->name, sym_b->ns->name) == 0;
         }
         
+        case CLJ_LIST: {
+            // Structural equality for lists (needed for metadata lookup)
+            CljList *list_a = as_list(a);
+            CljList *list_b = as_list(b);
+            if (!list_a || !list_b) return false;
+            
+            // Compare lists element by element
+            CljList *curr_a = list_a;
+            CljList *curr_b = list_b;
+            while (curr_a && curr_b) {
+                // Compare first elements
+                if (!clj_equal((ID)curr_a->first, (ID)curr_b->first)) {
+                    return false;
+                }
+                // Move to next elements
+                CljObject *rest_a = curr_a->rest;
+                CljObject *rest_b = curr_b->rest;
+                // Check if rest is NULL (end of list)
+                if (!rest_a && !rest_b) return true;
+                if (!rest_a || !rest_b) return false;
+                // Check if rest is a list
+                if (TAG(rest_a) != CLJ_LIST || TAG(rest_b) != CLJ_LIST) {
+                    // Rest is not a list - compare directly
+                    if (!clj_equal((ID)rest_a, (ID)rest_b)) {
+                        return false;
+                    }
+                    return true; // Both have same non-list rest
+                }
+                curr_a = as_list(rest_a);
+                curr_b = as_list(rest_b);
+            }
+            // Both should be NULL at the same time
+            return curr_a == curr_b;
+        }
+        
         // Referenz-Typen - nur Pointer-Vergleich (bereits durch a == b abgefangen)
-        case CLJ_LIST:
         case CLJ_FUNC:
         case CLJ_CLOSURE:
             // Functions are only equal if they're the same instance

@@ -17,6 +17,7 @@
 #include "value.h"
 #include "event_loop.h"
 #include "file_utils.h"
+#include "meta.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -297,8 +298,8 @@ CljVector* history_load_from_file(const char *path) {
     
     evalstate_free(st);
     
-    // Transfer to outer pool and return
-    return string_history ? (CljVector*)AUTORELEASE(string_history) : empty_vector();
+    // Return retained object - caller must release or autorelease it
+    return string_history ? string_history : empty_vector();
 }
 
 
@@ -333,7 +334,7 @@ static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int
  *  @param memory_debug Enable verbose memory debugging
  *  @return true on successful completion
  */
-static bool __attribute__((unused)) run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
+static bool run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
     // Initialize memory profiling DIRECTLY before the first prompt
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();
@@ -382,17 +383,20 @@ static bool __attribute__((unused)) run_interactive_repl(EvalState *st, bool zom
     set_line_editor(editor);
     // Lade History aus Default-Datei und fülle Editor-History (mit Exception-Handling)
     CljObject *history_vec = NULL;
-    TRY {
-        CljObject *loaded = line_editor_history_load_default();
-        if (loaded && TAG(loaded) == CLJ_VECTOR) {
-            // RETAIN to keep history alive
-            ASSIGN(history_vec, RETAIN(loaded));
-        }
-    } CATCH(ex) {
-        // Exception beim History-Laden - starte mit leerer History
-        // Exception wird automatisch freigegeben durch CATCH-Macro
-        history_vec = NULL;
-    } END_TRY
+    WITH_AUTORELEASE_POOL({
+        TRY {
+            CljObject *loaded = line_editor_history_load_default();
+            // Only use loaded history if it has content
+            if (loaded && TAG(loaded) == CLJ_VECTOR && vector_count((CljVector*)loaded) > 0) {
+                // loaded is already retained from history_load_from_file, transfer to outer pool
+                ASSIGN(history_vec, AUTORELEASE(loaded));
+            }
+        } CATCH(ex) {
+            // Exception beim History-Laden - starte mit leerer History
+            // Exception wird automatisch freigegeben durch CATCH-Macro
+            history_vec = NULL;
+        } END_TRY
+    });
     // Verwende die geladene History
     if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
         line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
@@ -501,6 +505,8 @@ static bool __attribute__((unused)) run_interactive_repl(EvalState *st, bool zom
                 WITH_AUTORELEASE_POOL({
                     CljVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
+                        // RETAIN before passing to save function (it may convert transient to persistent)
+                        RETAIN((CljObject*)vec);
                         line_editor_history_save_default((CljObject*)vec);
                         RELEASE(vec);
                     }
@@ -523,7 +529,12 @@ static bool __attribute__((unused)) run_interactive_repl(EvalState *st, bool zom
         LineEditor *ed = get_line_editor();
         if (ed) {
             CljVector *vec = line_editor_get_history_vector(ed);
-            if (vec) { line_editor_history_save_default((CljObject*)vec); RELEASE(vec); }
+            if (vec) {
+                // RETAIN before passing to save function (it may convert transient to persistent)
+                RETAIN((CljObject*)vec);
+                line_editor_history_save_default((CljObject*)vec);
+                RELEASE(vec);
+            }
         }
     });
 #endif
@@ -536,6 +547,7 @@ static bool __attribute__((unused)) run_interactive_repl(EvalState *st, bool zom
 int main(int argc, char **argv) {
     platform_init();
     runtime_init(&g_runtime);
+    meta_registry_init();  // Initialize metadata registry
     init_special_symbols();  // Initialize special symbols like SYM_DEF
     EvalState *st = evalstate_new(false);
     // Note: set_global_eval_state() removed - Exception handling now independent
