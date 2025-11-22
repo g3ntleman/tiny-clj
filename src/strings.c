@@ -21,6 +21,7 @@
 #include "memory.h"
 #include "kv_macros.h"
 #include "types.h"  // For SINGLETON_RC
+#include "runtime.h"  // For g_runtime
 
 // Empty string singleton with CljString layout
 static struct {
@@ -298,12 +299,17 @@ const char* to_string(CljObject *v) {
                 // Interpreted Clojure function (CljFunction)
                 CljFunction *clj_func = (CljFunction*)v;
                 if (clj_func && clj_func->name) {
+                    CljNamespace *ns = ns_find_for_object((CljObject*)v);
+                    const char *ns_name = ns && ns->name && ns->name->name ? ns->name->name : NULL;
+                    
                     char buf[256];
-                    snprintf(buf, sizeof(buf), "#<function %s>", clj_func->name);
+                    snprintf(buf, sizeof(buf), "#<Clojure function %s%s%s>", 
+                             ns_name ? ns_name : "", 
+                             ns_name ? "/" : "",
+                             clj_func->name);
                     return strdup(buf);
-                } else {
-                    return strdup("#<function>");
                 }
+                return strdup("#<Clojure function>");
             }
 
         case CLJ_SEQ:

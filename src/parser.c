@@ -19,7 +19,6 @@
 #include <stdbool.h>
 #include "memory.h"
 #include "utf8.h"
-#include "vector.h"
 #include "value.h"
 #include "symbol.h"
 #include "meta.h"
@@ -38,13 +37,6 @@ static void throw_parser_exception(const char *message, Reader *reader) {
 #define MAX_STACK_LIST_SIZE 64
 #define MAX_STACK_STRING_SIZE 256
 
-// Global jump buffer for parse errors
-
-// Error handling - using namespace.h version
-
-
-
-
 /** @brief Check if character is a digit */
 static bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
@@ -59,23 +51,7 @@ static bool is_alphanumeric(char c) {
          c == '!' || c == '/' || c == '.';
 }
 
-
 // Forward declarations for Reader-based parser functions
-
-
-/**
- * @brief Parse list literal (a b c) using const char** input
- * @param input Pointer to current position in input string
- * @param st Evaluation state
- * @return Parsed list CljObject or NULL on error
- */
-
-/**
- * @brief Parse symbol literal (identifier) using const char** input
- * @param input Pointer to current position in input string
- * @param st Evaluation state
- * @return Parsed symbol CljObject or NULL on error
- */
 
 /**
  * @brief Parse string literal "text" using const char** input
@@ -128,8 +104,8 @@ static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
+static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
-// static CljObject* make_number_by_parsing_old(Reader *reader, EvalState *st); // Removed unused function
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
 static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
@@ -280,6 +256,10 @@ ID parse_expr(Reader *reader, EvalState *st) {
       // Create (deref <expr>) list: (deref expr)
       ID deref_elements[2] = {SYM_DEREF, atom_expr};
       return AUTORELEASE(make_list_from_stack((CljValue*)deref_elements, 2));
+    
+    case '\\':
+      // Handle character literals: \a, \space, \tab, \newline, \return, etc.
+      return parse_character(reader, st);
     
     default:
       break;
@@ -630,6 +610,75 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
 
   // Build list node
   return AUTORELEASE(make_list(element, (CljList*)rest));
+}
+
+/**
+ * @brief Parse character literal (\a, \space, \tab, \newline, etc.)
+ * @param reader Reader instance for input
+ * @param st Evaluation state
+ * @return Parsed character CljValue or NULL on error
+ */
+static ID parse_character(Reader *reader, EvalState *st) {
+  (void)st;
+  reader_consume(reader);
+  
+  if (reader_eof(reader)) {
+    throw_parser_exception("Unexpected end of input after '\\'", reader);
+    return NULL;
+  }
+  
+  char name[32];
+  int pos = 0;
+  while (!reader_eof(reader) && pos < 31 && is_alphanumeric(reader_peek_char(reader))) {
+    name[pos++] = reader_next(reader);
+  }
+  name[pos] = '\0';
+  
+  if (pos > 0) {
+    // Named character literal - use switch on first char for performance
+    switch (name[0]) {
+      case 's':
+        if (strcmp(name, "space") == 0) return character(' ');
+        break;
+      case 't':
+        if (strcmp(name, "tab") == 0) return character('\t');
+        break;
+      case 'n':
+        if (strcmp(name, "newline") == 0) return character('\n');
+        break;
+      case 'r':
+        if (strcmp(name, "return") == 0) return character('\r');
+        break;
+      case 'b':
+        if (strcmp(name, "backspace") == 0) return character('\b');
+        break;
+      case 'f':
+        if (strcmp(name, "formfeed") == 0) return character('\f');
+        break;
+    }
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Unknown named character: \\%s", name);
+    throw_parser_exception(msg, reader);
+    return NULL;
+  } else {
+    char c = reader_next(reader);
+    switch (c) {
+      case 'n':
+        return character('\n');
+      case 't':
+        return character('\t');
+      case 'r':
+        return character('\r');
+      case '\\':
+        return character('\\');
+      case 'b':
+        return character('\b');
+      case 'f':
+        return character('\f');
+      default:
+        return character((unsigned char)c);
+    }
+  }
 }
 
 /**

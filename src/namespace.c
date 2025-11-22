@@ -377,6 +377,25 @@ void ns_register(CljNamespace *ns) {
     g_runtime.ns_registry = new_registry;
 }
 
+// Helper function to find namespace containing a given object
+CljNamespace* ns_find_for_object(CljObject *obj) {
+    if (!obj || !g_runtime.ns_registry) return NULL;
+    
+    MAP_FOR_EACH(g_runtime.ns_registry, ns_key, ns_val) {
+        if (ns_val && TAG(ns_val) == CLJ_NAMESPACE) {
+            CljNamespace *ns = (CljNamespace*)ns_val;
+            if (ns->mappings) {
+                MAP_FOR_EACH(ns->mappings, key, value) {
+                    if (value == (ID)obj) {
+                        return ns;
+                    }
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 CljNamespace* ns_find(const char *name) {
     if (!name || !g_runtime.ns_registry) return NULL;
     

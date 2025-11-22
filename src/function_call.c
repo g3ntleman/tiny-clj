@@ -28,7 +28,6 @@
 #include "seq.h"
 #include "namespace.h"
 #include "memory.h"
-#include "strings.h"
 #include "list.h"
 #include "value.h"
 #include "environment.h"
@@ -703,16 +702,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     // Check if body is a valid pointer (not pointing to invalid memory)
     // NOTE: This check must come AFTER IS_IMMEDIATE, because immediate values
     // have small numeric values that would fail this check
-    // CRITICAL: Also check IS_IMMEDIATE again here as a safety check
-    // If body has a small address but IS_IMMEDIATE is true, it's an immediate value
-    if ((uintptr_t)body < 0x1000) {
-        // Double-check if it's an immediate value (in case IS_IMMEDIATE check failed)
-        if (IS_IMMEDIATE(body)) {
-            // It's an immediate value - return it directly
-            return body;
-        }
-        // CRITICAL: If we reach here, body is not an immediate value but has a small address
-        // This might indicate a bug
+    if ((uintptr_t)body < 0x1000 && !IS_IMMEDIATE(body)) {
         return NULL;
     }
     
@@ -1978,7 +1968,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
                     if (!existing) {
 #ifndef ESP32_BUILD
                         // Load namespace (simplified - just call native_require)
-                        ID spec_id = (ID)spec;
+                        ID spec_id = spec;
                         ID args[1] = { spec_id };
                         (void)native_require(args, 1);
 #endif
@@ -2004,13 +1994,7 @@ ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
 }
 
 ID eval_var(CljList *list, CljMap *env, EvalState *st) {
-    // (var symbol) - returns a var reference to the symbol
-    // Assertion: Environment must not be NULL when expected
-    CLJ_ASSERT(env != NULL);
     (void)env;  // Not used
-    // Assertion: List and EvalState must not be NULL when expected
-    CLJ_ASSERT(list != NULL);
-    assert(st != NULL);
     
     // Get symbol name (first argument)
     CljObject *sym_obj = list_get_element(list, 1);
@@ -2241,30 +2225,26 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
                 // Look up symbol in target namespace
                 // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
                 static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID resolved = map_get(target_ns->mappings, name_sym, (ID)&not_found_sentinel);
-                if (resolved != (ID)&not_found_sentinel) {
+                ID resolved = map_get(target_ns->mappings, name_sym, &not_found_sentinel);
+                if (resolved != &not_found_sentinel) {
                     // Found in target namespace - return it (can be NULL/nil, which is valid)
                     return resolved;
                 }
                 
                 // Symbol not found - try to find it by iterating through mappings
                 // This handles cases where symbols have different pointers but are structurally equal
-                CljMap *mappings = target_ns->mappings;
-                if (mappings) {
-                    for (int i = 0; i < mappings->count; i++) {
-                        CljObject *key = KV_KEY(mappings->data, i);
-                        if (key && TAG(key) == CLJ_SYMBOL) {
-                            CljSymbol *key_sym = as_symbol(key);
-                            // Use clj_equal to check if symbols are structurally equal
-                            // This handles cases where symbols have different pointers
-                            if (key_sym && clj_equal((ID)key, (ID)name_sym)) {
-                                // Found symbol with structural equality but different pointer
-                                // Return the value directly
-                                CljObject *value = KV_VALUE(mappings->data, i);
-                                // CRITICAL: value can be NULL (nil), which is a valid value
-                                // Return it even if it's NULL
-                                return (ID)value;
-                            }
+                CljMap *mappings = (CljMap*)target_ns->mappings;
+                MAP_FOR_EACH(mappings, key, value) {
+                    if (key && TAG(key) == CLJ_SYMBOL) {
+                        CljSymbol *key_sym = as_symbol(key);
+                        // Use clj_equal to check if symbols are structurally equal
+                        // This handles cases where symbols have different pointers
+                        if (key_sym && clj_equal(key, name_sym)) {
+                            // Found symbol with structural equality but different pointer
+                            // Return the value directly
+                            // CRITICAL: value can be NULL (nil), which is a valid value
+                            // Return it even if it's NULL
+                            return value;
                         }
                     }
                 }
@@ -2272,7 +2252,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         }
         
         // Qualified symbol not found in target namespace
-        // Build qualified name for error message (use original ns_name, not actual_ns_name)
         const char *name = symbol->name ? symbol->name : "unknown";
         size_t qualified_len = strlen(ns_name) + 1 + strlen(name) + 1;
         char *qualified_name = (char*)malloc(qualified_len);
@@ -2281,7 +2260,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
             free(qualified_name);
         } else {
-            // Fallback if malloc fails
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_name, name);
         }
         return NULL;
@@ -2294,7 +2272,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
     
     // For builtin functions, resolve from namespace to get the actual function object
-    // Namespace lookup (for both special forms and builtin functions)
     ID value = ns_resolve(st, symbol);
     if (value) {
         // Special case: If value is SYM_NIL, return NULL
@@ -2389,14 +2366,18 @@ ID eval_seq(CljList *list, CljMap *env) {
  * @return A new environment with the binding added
  */
 static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *element) {
-    CljMap *new_env = (CljMap*)make_map(4); // Small capacity for loop environment
+    // Estimate capacity: existing bindings + new binding
+    int capacity = env ? ((CljMap*)env)->count + 1 : 4;
+    CljMap *new_env = (CljMap*)make_map(capacity);
     if (new_env) {
         // Copy existing environment bindings
         if (env) {
-            // For now, just use the existing environment
-            // TODO: Implement proper environment copying
+            MAP_FOR_EACH(env, key, value) {
+                CljMap *updated = map_assoc(new_env, key, value);
+                ASSIGN(new_env, updated);
+            }
         }
-        // Add new binding
+        // Add new binding (overwrites if key already exists)
         // CRITICAL: map_assoc may return a new map (COW), so we must use the result
         CljMap *updated_env = map_assoc(new_env, var, element);
         ASSIGN(new_env, updated_env);
@@ -3088,22 +3069,13 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         }
     }
     
-    // ASSERTION: Verify that the function is now in closure_env
-    // This tests the thesis that closure_env contains the function after ns_define
-    CLJ_ASSERT(func->closure_env != NULL);
-    CLJ_ASSERT(TAG(func->closure_env) == CLJ_MAP);
-    CljObject *func_in_closure_check = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym, NULL);
-    CLJ_ASSERT(func_in_closure_check != NULL);
-    CLJ_ASSERT(func_in_closure_check == (CljObject*)fn_obj || func_in_closure_check == (CljObject*)func);
-    
-    RELEASE((CljObject*)fn_obj); // Release our reference (namespace keeps it)
+    RELEASE((CljObject*)fn_obj);
     free_obj_array((ID*)params, params_stack);
-    return name_sym; // Return symbol (Clojure-compatible)
+    return name_sym;
 }
 
 // Helper function for evaluating arguments
 ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
-    // Assertion: List must not be NULL when expected
     CLJ_ASSERT(list != NULL);
     if (!list || TAG(list) != CLJ_LIST) return NULL;
     
