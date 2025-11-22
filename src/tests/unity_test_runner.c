@@ -163,13 +163,9 @@ static void run_test_with_exception_handling(const Test *test) {
             fprintf(stderr, "Unhandled exception in %s: %s - %s\n", 
                     test->qualified_name, ex->type, ex->message);
             if (ex->stacktrace) {
-                // Use print_exception to print stacktrace (it handles CljString properly)
                 print_exception(ex);
             }
         }
-        // Mark test as failed using Unity's internal state
-        // Note: UnityDefaultTestRun already incremented NumberOfTests at the start (before execution),
-        // so we don't need to increment it here
         Unity.TestFailures++;
         Unity.CurrentTestFailed = 1;
     } END_TRY
