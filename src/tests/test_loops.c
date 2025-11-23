@@ -243,7 +243,7 @@ TEST(test_dotimes_zero_iterations) {
     CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
@@ -258,7 +258,7 @@ TEST(test_dotimes_negative_iterations) {
     CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
@@ -273,7 +273,7 @@ TEST(test_dotimes_large_iterations) {
     CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
@@ -288,7 +288,7 @@ TEST(test_dotimes_invalid_binding_format) {
     CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
@@ -303,7 +303,7 @@ TEST(test_dotimes_non_numeric_count) {
     CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, (CljList*)make_list((ID)body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
@@ -334,7 +334,7 @@ TEST(test_dotimes_simple_iteration_count) {
                                                          (CljList*)make_list((ID)body, NULL))));
     
     // Create environment
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);

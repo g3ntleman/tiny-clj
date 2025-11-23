@@ -365,14 +365,14 @@ TEST(test_truthiness_comprehensive) {
         TEST_ASSERT_TRUE(clj_is_truthy(non_empty_string));
         
         // Keywords are truthy
-        CljSymbol *keyword = AUTORELEASE(intern_symbol_global(":test"));
+        CljSymbol *keyword = (CljSymbol*)AUTORELEASE((CljObject*)intern_symbol_global(":test"));
         TEST_ASSERT_NOT_NULL(keyword);
-        TEST_ASSERT_TRUE(clj_is_truthy(keyword));
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)keyword));
         
         // Symbols are truthy
-        CljSymbol *symbol = AUTORELEASE(intern_symbol_global("test"));
+        CljSymbol *symbol = (CljSymbol*)AUTORELEASE((CljObject*)intern_symbol_global("test"));
         TEST_ASSERT_NOT_NULL(symbol);
-        TEST_ASSERT_TRUE(clj_is_truthy(symbol));
+        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)symbol));
         
         // Empty list is truthy (in Clojure, empty collections are truthy)
         // Note: empty_list() returns a singleton, which should be truthy
@@ -380,31 +380,31 @@ TEST(test_truthiness_comprehensive) {
         // (see edge cases section below)
         
         // Non-empty list is truthy
-        CljList *non_empty_list = AUTORELEASE(make_list(fixnum(1), NULL));
+        CljList *non_empty_list = (CljList*)AUTORELEASE((CljObject*)make_list(fixnum(1), NULL));
         TEST_ASSERT_NOT_NULL(non_empty_list);
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_list));
         
         // Empty vector is truthy
-        CljVector *empty_vec = AUTORELEASE(make_vector(0, CLJ_VECTOR));
+        CljVector *empty_vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(0, CLJ_VECTOR));
         TEST_ASSERT_NOT_NULL(empty_vec);
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)empty_vec));
         
         // Non-empty vector is truthy
-        CljVector *non_empty_vec = AUTORELEASE(make_vector(1, CLJ_VECTOR));
+        CljVector *non_empty_vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(1, CLJ_VECTOR));
         TEST_ASSERT_NOT_NULL(non_empty_vec);
         non_empty_vec = vector_conj(non_empty_vec, (ID)fixnum(1));
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_vec));
         
         // Empty map is truthy
-        CljMap *empty_map = AUTORELEASE(make_map(0));
+        CljMap *empty_map = (CljMap*)AUTORELEASE((CljObject*)make_map(0));
         TEST_ASSERT_NOT_NULL(empty_map);
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)empty_map));
         
         // Non-empty map is truthy
-        CljMap *non_empty_map = AUTORELEASE(make_map(4));
+        CljMap *non_empty_map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
         TEST_ASSERT_NOT_NULL(non_empty_map);
         // map_assoc always returns a new map (COW disabled)
-        CljMap *new_map = AUTORELEASE((CljMap*)map_assoc((ID)non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
+        CljMap *new_map = (CljMap*)AUTORELEASE((CljObject*)map_assoc((ID)non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
         TEST_ASSERT_NOT_NULL(new_map);
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)new_map));
         

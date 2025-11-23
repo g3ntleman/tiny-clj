@@ -828,14 +828,14 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Evaluate key and value (nil should evaluate to NULL)
                 // Check for SYM_NIL before calling eval_body to avoid symbol resolution
                 ID eval_key = NULL;
-                if (key && key_tag == CLJ_SYMBOL && key == SYM_NIL) {
+                if (key && key_tag == CLJ_SYMBOL && (CljObject*)key == (CljObject*)SYM_NIL) {
                     eval_key = NULL;  // nil evaluates to NULL
                 } else if (key) {
                     eval_key = eval_body(key, env, st, ctx);
                 }
                 
                 ID eval_value = NULL;
-                if (value && value_tag == CLJ_SYMBOL && value == SYM_NIL) {
+                if (value && value_tag == CLJ_SYMBOL && (CljObject*)value == (CljObject*)SYM_NIL) {
                     eval_value = NULL;  // nil evaluates to NULL
                 } else if (value) {
                     eval_value = eval_body(value, env, st, ctx);
@@ -3151,7 +3151,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // with just the namespace mappings (which would lose clojure.core access)
     // First, update the extended env with the function so it can find itself recursively
     CljObject *func_in_closure = (CljObject*)map_get((CljValue)func->closure_env, (CljValue)name_sym, NULL);
-    if (func_in_closure != fn_obj) {
+    if (func_in_closure != (CljObject*)fn_obj) {
         // Function not in closure_env yet - add it to the extended env
         CljMap *new_closure_env = map_assoc(func->closure_env, name_sym, fn_obj);
         ASSIGN(func->closure_env, new_closure_env);
@@ -3303,11 +3303,11 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
             
             // Evaluate key and value (nil should evaluate to NULL)
             // Check for SYM_NIL before calling eval_body to avoid symbol resolution
-            ID eval_key = (key && key_tag == CLJ_SYMBOL && key == SYM_NIL) 
+            ID eval_key = (key && key_tag == CLJ_SYMBOL && (CljObject*)key == (CljObject*)SYM_NIL) 
                 ? NULL 
                 : (key ? eval_body(key, env, st, NULL) : NULL);
             
-            ID eval_value = (value && value_tag == CLJ_SYMBOL && value == SYM_NIL) 
+            ID eval_value = (value && value_tag == CLJ_SYMBOL && (CljObject*)value == (CljObject*)SYM_NIL) 
                 ? NULL 
                 : (value ? eval_body(value, env, st, NULL) : NULL);
             

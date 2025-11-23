@@ -118,7 +118,7 @@ TEST(test_defn_eval_defn_recognizes_native_marker) {
         
         // For now, this will fail because native lookup is not implemented
         // But it should at least parse correctly
-        CljValue result = eval_string(code, g_test_eval_state);
+        (void)eval_string(code, g_test_eval_state);
         
         // Currently, this will fail because we haven't implemented native function lookup
         // But the parsing should work

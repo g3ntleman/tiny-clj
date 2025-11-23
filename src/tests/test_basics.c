@@ -105,7 +105,7 @@ TEST(test_vector_creation) {
 
 TEST(test_map_creation) {
     // Test map creation using CljValue API
-    CljMap *map = AUTORELEASE((CljMap *)make_map(16));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(16));
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, map->base.type);
 }
