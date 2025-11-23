@@ -206,6 +206,94 @@ RELEASE(obj);   // Reference decrement
 
 This ensures consistent memory profiling and better tracking of all memory operations throughout the codebase.
 
+### RETAIN/RELEASE/AUTORELEASE Macros - NULL and Immediate Value Safety
+
+**Important:** The `RETAIN()`, `RELEASE()`, and `AUTORELEASE()` macros **do NOT require NULL checks**. They safely handle NULL values and immediate values automatically.
+
+#### NULL Safety:
+```c
+// ✅ CORRECT: No NULL check needed
+CljObject *obj = NULL;
+RETAIN(obj);      // Safe - no operation performed on NULL
+RELEASE(obj);     // Safe - no operation performed on NULL
+AUTORELEASE(obj); // Safe - no operation performed on NULL
+
+// ❌ UNNECESSARY: Manual NULL check
+if (obj != NULL) {
+    RETAIN(obj);  // ❌ Unnecessary check - RETAIN handles NULL safely
+}
+```
+
+#### Immediate Value Safety:
+```c
+// ✅ CORRECT: No immediate value check needed
+CljValue num = make_fixnum(42);
+CljValue ch = make_char('A');
+RETAIN(num);      // Safe - IS_IMMEDIATE check inside macro
+RELEASE(ch);      // Safe - IS_IMMEDIATE check inside macro
+AUTORELEASE(num); // Safe - IS_IMMEDIATE check inside macro
+
+// ❌ UNNECESSARY: Manual immediate value check
+if (!IS_IMMEDIATE(value)) {
+    RETAIN(value);  // ❌ Unnecessary check - RETAIN handles immediates safely
+}
+```
+
+#### How It Works:
+The macros internally check for immediate values, and the underlying functions (`retain()`, `release()`, `autorelease()`) safely handle NULL:
+```c
+#define RETAIN(obj) ({ \
+    ID _id = (obj); \
+    if (!IS_IMMEDIATE(_id)) { \
+        CljObject* _tmp = (CljObject*)_id; \
+        retain(_tmp);  // retain() safely handles NULL
+    } \
+    _id; \
+})
+
+#define RELEASE(obj) ({ \
+    ID _id = (obj); \
+    if (!IS_IMMEDIATE(_id)) { \
+        CljObject* _tmp = (CljObject*)_id; \
+        release(_tmp);  // release() safely handles NULL
+    } \
+    (CljObject*)_id; \
+})
+
+#define AUTORELEASE(obj) ({ \
+    ID _id = (obj); \
+    if (!IS_IMMEDIATE(_id)) { \
+        CljObject* _tmp = (CljObject*)_id; \
+        autorelease(_tmp);  // autorelease() safely handles NULL
+    } \
+    (CljObject*)_id; \
+})
+```
+
+The underlying functions have built-in NULL safety:
+```c
+void retain(CljObject *v) {
+    if (!v) return;  // NULL-safe
+    // ... rest of implementation
+}
+
+void release(CljObject *v) {
+    if (!v) return;  // NULL-safe
+    // ... rest of implementation
+}
+
+CljObject *autorelease(CljObject *v) {
+    if (!v) return NULL;  // NULL-safe
+    // ... rest of implementation
+}
+```
+
+**Key Benefits:**
+- **No NULL checks needed** - Macros handle NULL safely
+- **No immediate value checks needed** - Macros check `IS_IMMEDIATE()` internally
+- **Cleaner code** - Less boilerplate, more readable
+- **Consistent safety** - Same behavior across all memory management macros
+
 ### RETAIN/RELEASE Macros Return Values
 
 **Important:** The `RETAIN()` and `RELEASE()` macros **return the object** for fluent usage:
@@ -279,11 +367,13 @@ ASSIGN(obj, new_obj);  // obj is now retained, old value (if any) is released
 ```
 
 #### What ASSIGN Does:
-1. **Retains the new object** (if not NULL)
-2. **Releases the old object** (if not NULL) 
+1. **Retains the new object** (if not NULL and not immediate)
+2. **Releases the old object** (if not NULL and not immediate) 
 3. **Assigns the new object** to the variable
 4. **Optimizes self-assignment** (skips operations if `new_obj == var`)
 5. **Handles NULL safely** in both `var` and `new_obj` parameters
+6. **Eliminates need for manual NULL checks** - no need to check if old value exists before releasing
+7. **Eliminates need for manual RELEASE calls** - ASSIGN handles release automatically
 
 #### Classic Objective-C Pattern:
 ```c
@@ -299,6 +389,34 @@ obj = new_obj;
 // ✅ ASSIGN macro (safe and concise):
 ASSIGN(obj, new_obj);
 ```
+
+#### Key Benefits - No Manual NULL Checks Needed:
+```c
+// ❌ Unnecessary: Manual NULL check and RELEASE
+if (st->pending_metadata) {
+    RELEASE(st->pending_metadata);
+}
+st->pending_metadata = new_meta;
+RETAIN(new_meta);
+
+// ✅ Correct: ASSIGN handles everything automatically
+ASSIGN(st->pending_metadata, new_meta);
+
+// ❌ Unnecessary: Manual NULL check for cleanup
+if (st->pending_metadata) {
+    RELEASE(st->pending_metadata);
+    st->pending_metadata = NULL;
+}
+
+// ✅ Correct: ASSIGN with NULL safely releases old value
+ASSIGN(st->pending_metadata, NULL);
+```
+
+**Important:** `ASSIGN` automatically handles:
+- **NULL checks** - No need to check if old value exists
+- **RELEASE of old value** - Automatically released if not NULL
+- **RETAIN of new value** - Automatically retained if not NULL
+- **Self-assignment optimization** - Skips operations if assigning to itself
 
 #### Common Use Cases:
 
