@@ -18,6 +18,7 @@
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "value.h"
+#include "common.h"  // For CLJ_ASSERT
 // clj_equal is available via map.h -> equality.h
 
 void meta_registry_init() {
@@ -51,6 +52,15 @@ void meta_set(CljObject *v, CljObject *meta) {
         // Old map is automatically handled by map_assoc (released if RC>1)
         g_runtime.meta_registry = new_registry;
     }
+    
+    // Assertion: Verify that the metadata can be retrieved after setting
+    // This ensures that meta_set and meta_get work correctly together
+    ID retrieved_meta = meta_get(v);
+    if (meta != NULL) {
+        CLJ_ASSERT(retrieved_meta != NULL && "meta_set: metadata should be retrievable after setting");
+        CLJ_ASSERT(retrieved_meta == (ID)meta && "meta_set: retrieved metadata should match the set metadata");
+    }
+    // Note: If meta is NULL, retrieved_meta may also be NULL, which is acceptable
 }
 
 ID meta_get(CljObject *v) {

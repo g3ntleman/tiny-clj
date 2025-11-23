@@ -2,7 +2,7 @@
 #include "memory.h"  // For RELEASE
 #include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
-#include "strings.h"  // For to_string
+#include "strings.h"  // For to_cstring
 #include "strings.h"  // For string functions
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -533,7 +533,7 @@ void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
         nth_args[1] = fixnum(i);
         ID elem = nth2(nth_args, 2);
         if (elem && TAG(elem) == CLJ_STRING) {
-            const char *plain = to_string(elem);
+            const char *plain = to_cstring(elem);
             if (plain) {
                 line_editor_add_to_history(editor, plain);
                 free((void*)plain);

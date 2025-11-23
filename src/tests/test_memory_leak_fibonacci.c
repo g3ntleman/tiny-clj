@@ -134,6 +134,10 @@ TEST(test_recursive_calls_without_closure_env_caching) {
 }
 
 // Benchmark test for profiling - only fib(20)
+// DISABLED: This test is redundant (fib(20) is already tested in test_memory_leak_fibonacci_reproduction)
+// and causes significant performance degradation (takes ~3+ seconds due to recursive fibonacci calculation)
+// Use this test only for manual profiling: uncomment and run with --test memory_leak_fibonacci/test_benchmark_fib20
+/*
 TEST(test_benchmark_fib20) {
     // Define fibonacci function
     const char *fib_code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
@@ -150,3 +154,4 @@ TEST(test_benchmark_fib20) {
     TEST_ASSERT_TRUE(is_fixnum(fib20_result));
     TEST_ASSERT_EQUAL_INT(6765, as_fixnum(fib20_result)); // fib(20) = 6765
 }
+*/

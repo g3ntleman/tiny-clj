@@ -91,6 +91,7 @@ TEST(test_parse_comments) {
     evalstate_free(eval_state);
 }
 
+// Test metadata parsing with map syntax: ^{:key :value} obj
 TEST(test_parse_metadata) {
     EvalState *eval_state = evalstate_new(false);
     
@@ -113,6 +114,157 @@ TEST(test_parse_metadata) {
         CljValue meta_value = map_get((CljMap*)meta, (CljValue)kw_key, NULL);
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
+    }
+#endif // ENABLE_META
+    
+    evalstate_free(eval_state);
+}
+
+// Test metadata parsing with keyword shorthand: ^:keyword obj
+TEST(test_parse_metadata_keyword_shorthand) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test ^:private syntax (shorthand for ^{:private true})
+    CljObject *result = parse("^:private 42", eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    
+#ifdef ENABLE_META
+    // Test that metadata is stored
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    
+    // Test that metadata contains :private -> true
+    CljSymbol *kw_private = intern_symbol_global(":private");
+    if (kw_private) {
+        CljValue meta_value = map_get((CljMap*)meta, (CljValue)kw_private, NULL);
+        TEST_ASSERT_NOT_NULL(meta_value);
+        TEST_ASSERT_TRUE(meta_value == clj_true);
+    }
+#endif // ENABLE_META
+    
+    evalstate_free(eval_state);
+}
+
+// Test metadata parsing with hash caret syntax: #^{:key :value} obj
+TEST(test_parse_metadata_hash_caret) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test #^{:key :value} syntax
+    CljObject *result = parse("#^{:key :value} 42", eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    
+#ifdef ENABLE_META
+    // Test that metadata is stored
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    
+    // Test that metadata contains the key-value pair
+    CljSymbol *kw_key = intern_symbol_global(":key");
+    CljSymbol *kw_value = intern_symbol_global(":value");
+    if (kw_key && kw_value) {
+        CljValue meta_value = map_get((CljMap*)meta, (CljValue)kw_key, NULL);
+        TEST_ASSERT_NOT_NULL(meta_value);
+        TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
+    }
+#endif // ENABLE_META
+    
+    evalstate_free(eval_state);
+}
+
+// Test metadata parsing with combined syntax: ^#^{:key :value} obj
+TEST(test_parse_metadata_combined) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test ^#^{:key :value} syntax (combination of ^ and #^)
+    CljObject *result = parse("^#^{:key :value} 42", eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    
+#ifdef ENABLE_META
+    // Test that metadata is stored
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    
+    // Test that metadata contains the key-value pair
+    CljSymbol *kw_key = intern_symbol_global(":key");
+    CljSymbol *kw_value = intern_symbol_global(":value");
+    if (kw_key && kw_value) {
+        CljValue meta_value = map_get((CljMap*)meta, (CljValue)kw_key, NULL);
+        TEST_ASSERT_NOT_NULL(meta_value);
+        TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
+    }
+#endif // ENABLE_META
+    
+    evalstate_free(eval_state);
+}
+
+// Test metadata parsing with multiple keywords: ^:private ^:dynamic obj
+TEST(test_parse_metadata_multiple_keywords) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test multiple keyword metadata (should merge)
+    CljObject *result = parse("^:private ^:dynamic 42", eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    
+#ifdef ENABLE_META
+    // Test that metadata is stored
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    
+    // Test that metadata contains both :private and :dynamic
+    CljSymbol *kw_private = intern_symbol_global(":private");
+    CljSymbol *kw_dynamic = intern_symbol_global(":dynamic");
+    if (kw_private && kw_dynamic) {
+        CljValue private_value = map_get((CljMap*)meta, (CljValue)kw_private, NULL);
+        CljValue dynamic_value = map_get((CljMap*)meta, (CljValue)kw_dynamic, NULL);
+        TEST_ASSERT_NOT_NULL(private_value);
+        TEST_ASSERT_NOT_NULL(dynamic_value);
+        TEST_ASSERT_TRUE(private_value == clj_true);
+        TEST_ASSERT_TRUE(dynamic_value == clj_true);
+    }
+#endif // ENABLE_META
+    
+    evalstate_free(eval_state);
+}
+
+// Test metadata parsing with mixed syntax: ^:private ^{:doc "test"} obj
+TEST(test_parse_metadata_mixed) {
+    EvalState *eval_state = evalstate_new(false);
+    
+    // Test mixed keyword and map metadata
+    CljObject *result = parse("^:private ^{:doc \"test\"} 42", eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    
+#ifdef ENABLE_META
+    // Test that metadata is stored
+    ID meta = meta_get(result);
+    TEST_ASSERT_NOT_NULL(meta);
+    TEST_ASSERT_TRUE((CljObject*)meta && TAG((CljObject*)meta) == CLJ_MAP);
+    
+    // Test that metadata contains both :private and :doc
+    CljSymbol *kw_private = intern_symbol_global(":private");
+    CljSymbol *kw_doc = intern_symbol_global(":doc");
+    if (kw_private && kw_doc) {
+        CljValue private_value = map_get((CljMap*)meta, (CljValue)kw_private, NULL);
+        CljValue doc_value = map_get((CljMap*)meta, (CljValue)kw_doc, NULL);
+        TEST_ASSERT_NOT_NULL(private_value);
+        TEST_ASSERT_NOT_NULL(doc_value);
+        TEST_ASSERT_TRUE(private_value == clj_true);
+        // doc_value should be a string "test"
+        TEST_ASSERT_TRUE((CljObject*)doc_value && TAG((CljObject*)doc_value) == CLJ_STRING);
     }
 #endif // ENABLE_META
     
@@ -245,9 +397,9 @@ TEST(test_parse_empty_string) {
     TEST_ASSERT_TRUE(is_special((CljValue)eq_result));
     TEST_ASSERT_TRUE(eq_result == clj_true);
     
-    // Test 5: Test to_string function on empty string (this should fail with NULL pointer)
-    // Note: to_string returns const char* but allocates memory that must be freed
-    const char *str_repr = to_string(empty_str_result);
+    // Test 5: Test to_cstring function on empty string (this should fail with NULL pointer)
+    // Note: to_cstring returns const char* but allocates memory that must be freed
+    const char *str_repr = to_cstring(empty_str_result);
     TEST_ASSERT_NOT_NULL(str_repr);
     TEST_ASSERT_EQUAL_STRING("", str_repr);
     free((char*)str_repr);

@@ -92,7 +92,7 @@ CljString* make_string_buffer(size_t length) {
     return s;
 }
 
-const char* to_string(CljObject *v) {
+const char* to_cstring(CljObject *v) {
     // Handle nil (represented as NULL)
     if (!v) {
         return strdup("nil");
@@ -393,7 +393,7 @@ const char* to_string(CljObject *v) {
                 char buf[256];
                 snprintf(buf, sizeof(buf), "#<Atom@%p: %s>", (void*)atom, value_str);
                 free((void*)value_str);
-                return strdup(buf);  // strdup() required: to_string() must return allocated string
+                return strdup(buf);  // strdup() required: to_cstring() must return allocated string
             }
 
         case CLJ_BYTE_ARRAY:
@@ -436,7 +436,7 @@ const char* pr_str(CljObject *v) {
     
     // pr_str adds quotes around strings and escapes quotes inside
     if (v && TAG(v) == CLJ_STRING) {
-        const char *raw = to_string(v);
+        const char *raw = to_cstring(v);
         if (!raw) return strdup("\"\"");
         
         // Count escaped characters needed (each " and \ needs escaping)
@@ -468,8 +468,8 @@ const char* pr_str(CljObject *v) {
         return result;
     }
     
-    // For all other types: delegate to to_string
-    return to_string(v);
+    // For all other types: delegate to to_cstring
+    return to_cstring(v);
 }
 
 const char* print_str(CljObject *v) {
@@ -479,8 +479,8 @@ const char* print_str(CljObject *v) {
     }
     
     // print_str does NOT add quotes around strings (unlike pr_str)
-    // For all types including strings: delegate to to_string
-    return to_string(v);
+    // For all types including strings: delegate to to_cstring
+    return to_cstring(v);
 }
 
 

@@ -12,7 +12,7 @@
 #include "error_messages.h"
 #include "object.h"
 #include "memory.h"
-#include "strings.h"  // For to_string
+#include "strings.h"  // For to_cstring
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
 
@@ -319,10 +319,10 @@ void print_exception(CLJException *ex) {
         // Zombie objects have rc == ZOMBIE_RC (-1)
         CljObject *obj = ex->object;
         if (obj->rc != ZOMBIE_RC) {
-            const char *obj_str = to_string(ex->object);
+            const char *obj_str = to_cstring(ex->object);
             if (obj_str) {
                 fprintf(stderr, " object: %s @%p", obj_str, (void*)ex->object);
-                free((void*)obj_str);  // to_string returns allocated C-string
+                free((void*)obj_str);  // to_cstring returns allocated C-string
             }
         } else {
             // Zombie object - print address and type name

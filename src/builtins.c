@@ -1403,7 +1403,7 @@ ID native_str(ID *args, unsigned int argc) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
             total_len += string_length(args[i]);
         } else {
-            const char *s = to_string(args[i]);
+            const char *s = to_cstring(args[i]);
             total_len += strlen(s);
             free((char*)s);
         }
@@ -1418,7 +1418,7 @@ ID native_str(ID *args, unsigned int argc) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
             strcat(buffer, string_data(args[i]));
         } else {
-            const char *s = to_string(args[i]);
+            const char *s = to_cstring(args[i]);
             strcat(buffer, s);
             free((char*)s);
         }
@@ -1907,7 +1907,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "slurp")) return NULL;
     
     // Convert argument to C-string
-    const char *filename_str = to_string(args[0]);
+    const char *filename_str = to_cstring(args[0]);
     if (!filename_str) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "slurp requires a string or symbol argument",
@@ -2098,7 +2098,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             }
             ns_name = ns_sym->name;
         } else {
-            const char *ns_str = to_string(ns_obj);
+            const char *ns_str = to_cstring(ns_obj);
             if (!ns_str) {
                 RELEASE(ns_obj);
                 return false;
@@ -2337,7 +2337,7 @@ ID native_spit(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "spit")) return NULL;
     
     // Convert first argument (filename) to C-string
-    const char *filename_str = to_string(args[0]);
+    const char *filename_str = to_cstring(args[0]);
     if (!filename_str) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
                        "spit requires a string or symbol as first argument (filename)",
@@ -2346,7 +2346,7 @@ ID native_spit(ID *args, unsigned int argc) {
     }
     
     // Convert second argument (content) to C-string
-    const char *content_str = to_string(args[1]);
+    const char *content_str = to_cstring(args[1]);
     if (!content_str) {
         free((void*)filename_str);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
@@ -3826,6 +3826,44 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
     CljObject *func_obj = make_named_func(func, NULL, name);
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);
+        
+        // Add metadata to native function (Clojure-compatible: :name and :ns)
+#ifdef ENABLE_META
+        // Ensure special symbols are initialized
+        init_special_symbols();
+        
+        // Create metadata map with :name and :ns
+        CljMap *meta_map = make_map(4);
+        if (meta_map) {
+            // Add :name (function name as string)
+            CljSymbol *kw_name = intern_symbol_global(":name");
+            if (kw_name) {
+                CljString *name_str = make_string(symbol_name);
+                if (name_str) {
+                    CljMap *updated = map_assoc(meta_map, (ID)kw_name, (ID)name_str);
+                    if (updated != meta_map) {
+                        RELEASE(meta_map);
+                        meta_map = updated;
+                    }
+                    RELEASE(name_str);
+                }
+            }
+            
+            // Add :ns (namespace name as symbol)
+            if (SYM_KW_NS && target_ns && target_ns->name) {
+                CljMap *updated = map_assoc(meta_map, (ID)SYM_KW_NS, (ID)target_ns->name);
+                if (updated != meta_map) {
+                    RELEASE(meta_map);
+                    meta_map = updated;
+                }
+            }
+            
+            // Set metadata on function object
+            meta_set((CljObject*)func_obj, (CljObject*)meta_map);
+            RELEASE(meta_map);
+        }
+#endif // ENABLE_META
+        
         // Builtin registered successfully
     } else {
         // Failed to register builtin

@@ -81,10 +81,6 @@ static bool is_alphanumeric(char c) {
  * @return Object with applied metadata map or NULL on error
  */
 
-
-
-
-
 /**
  * @brief Reader helper: advance and return character
  * @param reader Reader instance
@@ -97,13 +93,14 @@ static char reader_consume(Reader *reader) {
 // Forward declarations for Reader-based parser functions
 static ID parse_meta(Reader *reader, EvalState *st);
 static ID parse_meta_map(Reader *reader, EvalState *st);
+static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj);
 static ID parse_anon_fn(Reader *reader, EvalState *st);
 static ID parse_vector(Reader *reader, EvalState *st);
 static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
-static ID parse_symbol(Reader *reader, EvalState *st);
+static ID parse_symbol(Reader *reader);
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 
@@ -271,7 +268,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
   
   // Handle symbols starting with :, alphanumeric, ., %, or Unicode
   if (c == ':' || is_alphanumeric(c) || c == '.' || c == '%' || (unsigned char)c >= 0x80) {
-    return parse_symbol(reader, st);
+    return parse_symbol(reader);
   }
   
   // Handle single-character operators
@@ -279,7 +276,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
     char next = reader_peek_ahead(reader, 1);
     if (next && (is_alphanumeric(next) || next == '*' || next == '+' || next == '/' || next == '=' || next == '<' || next == '>' || next == '-' || next == '_' || next == '?' || next == '!' || next == '%' || (unsigned char)next >= 0x80)) {
       // Multi-character symbol like *ns* or *out*
-      return parse_symbol(reader, st);
+      return parse_symbol(reader);
     }
     // Single character operator
     reader_consume(reader);
@@ -691,7 +688,7 @@ static ID parse_character(Reader *reader, EvalState *st) {
  * This ensures pointer equality for the same symbol names, which is critical for
  * map lookups and namespace resolution.
  */
-static ID parse_symbol(Reader *reader, EvalState *st) {
+static ID parse_symbol(Reader *reader) {
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
   int slash_pos = -1;
@@ -999,15 +996,92 @@ ID parse(const char *input, EvalState *st) {
 
 
 /**
+ * @brief Merge new metadata with existing metadata on object (DRY helper)
+ * @param obj Object that might have existing metadata
+ * @param new_meta New metadata to merge (will be released)
+ * @return Object with merged metadata or NULL on error (caller must handle RELEASE/AUTORELEASE)
+ */
+static ID merge_metadata_with_object(ID obj, ID new_meta) {
+  if (!obj || !new_meta) {
+    if (new_meta) RELEASE(new_meta);
+    if (obj) RELEASE(obj);
+    return NULL;
+  }
+  
+  // Check if the object already has metadata (from nested metadata parsing)
+  ID existing_meta = meta_get((CljObject*)obj);
+  if (existing_meta) {
+    // Merge existing metadata with new metadata (existing takes precedence)
+    CljObject *merged_meta = meta_merge((CljObject*)existing_meta, (CljObject*)new_meta);
+    if (merged_meta != (CljObject*)existing_meta) {
+      // Apply merged metadata to object
+      meta_set((CljObject*)obj, merged_meta);
+      RELEASE(merged_meta);
+    }
+    RELEASE(new_meta);
+    return obj;  // Return object (caller will handle AUTORELEASE)
+  }
+  
+  // No existing metadata, apply new metadata directly
+  meta_set((CljObject*)obj, (CljObject*)new_meta);
+  RELEASE(new_meta);
+  return obj;  // Return object (caller will handle AUTORELEASE)
+}
+
+/**
+ * @brief Apply metadata to object and merge location metadata (DRY helper)
+ * @param reader Reader instance for location metadata
+ * @param st Evaluation state
+ * @param meta Metadata to apply (will be released)
+ * @param obj Object to apply metadata to
+ * @return Object with applied metadata (autoreleased) or NULL on error
+ */
+static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj) {
+  if (!obj) {
+    if (meta) RELEASE(meta);
+    return NULL;
+  }
+  
+  // Apply metadata if provided
+  if (meta) {
+    meta_set(obj, meta);
+  }
+  
+#ifdef ENABLE_META
+  // Automatically add source code location metadata
+  CljObject *location_meta = make_location_meta(reader, st);
+  if (location_meta) {
+    // Get current metadata (might be from meta parameter or existing)
+    ID current_meta = meta ? (ID)meta : meta_get((CljObject*)obj);
+    if (current_meta) {
+      // Merge location metadata with existing metadata (doesn't overwrite)
+      CljObject *merged_meta = meta_merge((CljObject*)current_meta, location_meta);
+      if (merged_meta != (CljObject*)current_meta) {
+        // Update meta if it was merged
+        meta_set(obj, merged_meta);
+        RELEASE(merged_meta);
+      }
+    } else {
+      // No existing metadata, just set location metadata
+      meta_set(obj, (CljObject*)location_meta);
+    }
+    RELEASE(location_meta);
+  }
+#endif // ENABLE_META
+  
+  if (meta) RELEASE(meta);
+  return AUTORELEASE(obj);
+}
+
+/**
  * @brief Parse metadata ^meta using Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @return Object with applied metadata or NULL on error
  */
 static ID parse_meta(Reader *reader, EvalState *st) {
-  // Consume the '^' character
-  if (reader_next(reader) != '^')
-    return NULL;
+  // Consume the '^' character (we know it's '^' because parse_expr checked it)
+  reader_next(reader);
   
   // Check if this is ^#^{...} syntax (metadata map)
   reader_skip_all(reader);
@@ -1021,7 +1095,47 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
   }
   
-  // Regular ^meta syntax
+  // Check if this is ^:keyword syntax (shorthand for ^{:keyword true})
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == ':') {
+    // Parse the keyword
+    ID keyword_meta = parse_expr(reader, st);
+    if (!keyword_meta)
+      return NULL;
+    
+    // Convert keyword to metadata map {:keyword true}
+    // In Clojure, ^:keyword means ^{:keyword true}
+    CljMap *meta_map = make_map(4);
+    if (!meta_map) {
+      RELEASE(keyword_meta);
+      return NULL;
+    }
+    
+    // Associate keyword with true
+    // map_assoc always returns a new map (COW disabled), so we need to use the result
+    CljMap *updated_map = map_assoc(meta_map, keyword_meta, (ID)clj_true);
+    RELEASE(meta_map);  // Release original map (map_assoc creates new one)
+    meta_map = updated_map;
+    RELEASE(keyword_meta);
+    
+    // Parse the object (which might have more metadata)
+    reader_skip_all(reader);
+    ID obj = parse_expr(reader, st);
+    if (!obj) {
+      RELEASE(meta_map);
+      return NULL;
+    }
+    
+    // Merge metadata with object (handles existing metadata)
+    ID result = merge_metadata_with_object(obj, (ID)meta_map);
+    if (!result) {
+      return NULL;
+    }
+    // Apply location metadata if enabled
+    return apply_metadata_to_object(reader, st, NULL, result);
+  }
+  
+  // Regular ^meta syntax (map or other expression)
   reader_skip_all(reader);
   ID meta = parse_expr(reader, st);
   if (!meta)
@@ -1032,25 +1146,14 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     RELEASE(meta);
     return NULL;
   }
-  meta_set(obj, meta);
   
-#ifdef ENABLE_META
-  // Automatically add source code location metadata
-  CljObject *location_meta = make_location_meta(reader, st);
-  if (location_meta) {
-    // Merge location metadata with existing metadata (doesn't overwrite)
-    CljObject *merged_meta = meta_merge((CljObject*)meta, location_meta);
-    if (merged_meta != (CljObject*)meta) {
-      // Update meta if it was merged
-      meta_set(obj, merged_meta);
-      RELEASE(merged_meta);
-    }
-    RELEASE(location_meta);
+  // Merge metadata with object (handles existing metadata)
+  ID result = merge_metadata_with_object(obj, meta);
+  if (!result) {
+    return NULL;
   }
-#endif // ENABLE_META
-  
-  RELEASE(meta);
-  return AUTORELEASE(obj);
+  // Apply location metadata if enabled
+  return apply_metadata_to_object(reader, st, NULL, result);
 }
 
 /**
@@ -1124,13 +1227,15 @@ static ID parse_meta_map(Reader *reader,
   // When called from parse_meta, we're already past '#' and at '^'
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
-    // Called from parse_expr - consume '#' and '^'
-    if (reader_next(reader) != '#')
-      return NULL;
+    // Called from parse_expr - consume '#' first
+    reader_next(reader);  // Consume '#'
   }
-  // Now we should be at '^'
-  if (reader_next(reader) != '^')
+  // Now we should be at '^' (either from parse_expr after '#' or from parse_meta)
+  reader_skip_all(reader);
+  if (reader_eof(reader) || reader_current(reader) != '^') {
     return NULL;
+  }
+  reader_next(reader);  // Consume '^'
   
   reader_skip_all(reader);
   ID meta = parse_map(reader, st);
@@ -1142,24 +1247,7 @@ static ID parse_meta_map(Reader *reader,
     RELEASE(meta);
     return NULL;
   }
-  meta_set(obj, meta);
   
-#ifdef ENABLE_META
-  // Automatically add source code location metadata
-  CljObject *location_meta = make_location_meta(reader, st);
-  if (location_meta) {
-    // Merge location metadata with existing metadata (doesn't overwrite)
-    CljObject *merged_meta = meta_merge((CljObject*)meta, location_meta);
-    if (merged_meta != (CljObject*)meta) {
-      // Update meta if it was merged
-      meta_set(obj, merged_meta);
-      RELEASE(merged_meta);
-    }
-    RELEASE(location_meta);
-  }
-#endif // ENABLE_META
-  
-  RELEASE(meta);
-  return AUTORELEASE(obj);
+  return apply_metadata_to_object(reader, st, meta, obj);
 }
 

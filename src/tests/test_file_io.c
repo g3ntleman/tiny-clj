@@ -118,8 +118,8 @@ TEST(test_history_load_current_format) {
   TEST_ASSERT_NOT_NULL(elem0);
   TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(elem0));
 
-  // Verify string content using to_string
-  const char *str_content = to_string((CljObject*)elem0);
+  // Verify string content using to_cstring
+  const char *str_content = to_cstring((CljObject*)elem0);
   RELEASE(elem0);
   TEST_ASSERT_NOT_NULL(str_content);
   TEST_ASSERT_EQUAL_STRING("(list 1 1.0 \"1\" \"one\")", str_content);
