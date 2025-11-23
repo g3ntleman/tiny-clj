@@ -1318,7 +1318,7 @@ TEST(test_persistent_on_persistent_returns_same_object) {
 
 // Test VECTOR_FOR_EACH macro - iterate over all vector elements
 TEST(test_vector_for_each_macro) {
-    CljVector *vec = AUTORELEASE((CljVector*)make_vector(4, CLJ_VECTOR));
+    CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(4, CLJ_VECTOR));
     
     // Add elements to vector
     vec = vector_conj(vec, fixnum(1));
@@ -1356,7 +1356,7 @@ TEST(test_vector_for_each_macro) {
 
 // Test VECTOR_FOR_EACH with empty vector
 TEST(test_vector_for_each_empty_vector) {
-    CljVector *vec = AUTORELEASE((CljVector*)make_vector(0, CLJ_VECTOR));
+    CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(0, CLJ_VECTOR));
     
     int iteration_count = 0;
     VECTOR_FOR_EACH(vec, elem) {
@@ -1382,7 +1382,7 @@ TEST(test_vector_for_each_null_vector) {
 
 // Test VECTOR_FOR_EACH with NULL elements
 TEST(test_vector_for_each_with_null_elements) {
-    CljVector *vec = AUTORELEASE((CljVector*)make_vector(4, CLJ_VECTOR));
+    CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(4, CLJ_VECTOR));
     
     // Add elements including NULL (nil)
     vec = vector_conj(vec, fixnum(1));

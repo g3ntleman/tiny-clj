@@ -22,7 +22,7 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
 // Test that map_assoc works correctly with channel pattern (like result channels)
 TEST(test_map_assoc_channel_pattern) {
     // Create channel like make_result_channel
-    CljMap *chan = AUTORELEASE((CljMap*)make_map(2));
+    CljMap *chan = (CljMap*)AUTORELEASE((CljObject*)make_map(2));
     chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":value"), NULL);
     chan = map_assoc(chan, (CljValue)intern_symbol(NULL, ":closed"), (CljValue)clj_false);
     
@@ -168,7 +168,7 @@ TEST(test_map_assoc_with_null_value) {
 // Test exact channel pattern from make_result_channel and channel_put_and_close
 TEST(test_exact_channel_pattern) {
     // Exact replication of make_result_channel
-    CljMap *chan = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *chan = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     chan = map_assoc(chan, (CljValue)kw_value, NULL);
@@ -194,7 +194,7 @@ TEST(test_exact_channel_pattern) {
 
 // Test channel object identity
 TEST(test_channel_object_identity) {
-    CljMap *env = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     (void)env;  // unused
     
     // Create a channel manually
@@ -275,7 +275,7 @@ TEST(test_map_assoc_with_structural_equality) {
 // Test that map_get finds symbols bound in let_env
 TEST(test_map_get_finds_let_binding) {
     // Create a map (simulating let_env)
-    CljMap *let_env = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *let_env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "step" (interned)
@@ -310,7 +310,7 @@ TEST(test_map_get_finds_let_binding) {
 // Test that map_get uses structural comparison for non-interned symbols
 TEST(test_map_get_structural_comparison) {
     // Create a map
-    CljMap *let_env = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *let_env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_NOT_NULL(let_env);
     
     // Create a symbol "step" (interned)
@@ -336,7 +336,7 @@ TEST(test_map_get_structural_comparison) {
 
 // Test that performance is unchanged (clj_equal() already does == check first)
 TEST(test_map_assoc_performance_unchanged) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(100));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(100));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Fill map with many entries
@@ -968,7 +968,7 @@ TEST(test_map_transient_comprehensive) {
     TEST_ASSERT_NULL(result);
     
     // Test 2: Empty map conversion
-    CljMap *empty_map = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *empty_map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_EQUAL_INT(0, empty_map->count);
     CljMap *empty_transient = AUTORELEASE(map_transient(empty_map));
     TEST_ASSERT_NOT_NULL(empty_transient);
@@ -976,7 +976,7 @@ TEST(test_map_transient_comprehensive) {
     TEST_ASSERT_EQUAL_INT(0, empty_transient->count);
     
     // Test 3: Map with entries - conversion and data preservation
-    CljMap *persistent_map = AUTORELEASE((CljMap*)make_map(8));
+    CljMap *persistent_map = (CljMap*)AUTORELEASE((CljObject*)make_map(8));
     CljObject *keys[5];
     for (int i = 0; i < 5; i++) {
         char key_name[16];
@@ -1027,8 +1027,8 @@ TEST(test_map_conj_comprehensive) {
     CljMap *result = map_conj(NULL, (CljValue)intern_symbol(NULL, ":key"), fixnum(42));
     TEST_ASSERT_NULL(result);
     
-    CljMap *tmap = AUTORELEASE((CljMap*)make_map(4));
-    CljMap *transient = AUTORELEASE(map_transient(tmap));
+    CljMap *tmap = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
+    CljMap *transient = (CljMap*)AUTORELEASE((CljObject*)map_transient(tmap));
     
     // Test: map_conj with NULL key should succeed (nil is a valid key in Clojure)
     result = map_conj(transient, NULL, fixnum(42));
@@ -1092,7 +1092,7 @@ TEST(test_map_conj_comprehensive) {
     }
     
     // Test 7: Persistent map with RC=1 (COW case) - should work but not recommended
-    CljMap *persistent = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *persistent = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     CljObject *key_p = (CljObject*)intern_symbol(NULL, ":p");
     persistent = map_assoc(persistent, (CljValue)key_p, fixnum(10));
     TEST_ASSERT_EQUAL_INT(1, persistent->base.rc);
@@ -1110,7 +1110,7 @@ TEST(test_map_conj_comprehensive) {
 // This tests the specific issue where :closed keyword is not found when called from different contexts
 TEST(test_map_conj_with_interned_symbols_across_contexts) {
     // Create transient map (like make_result_channel does)
-    CljMap *tmap = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *tmap = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_NOT_NULL(tmap);
     
     // Initialize with :value and :closed (like make_result_channel does)
@@ -1158,7 +1158,7 @@ TEST(test_map_conj_with_interned_symbols_across_contexts) {
 // Test that map_conj finds existing keys by pointer equality (interned symbols)
 TEST(test_map_conj_finds_existing_key_by_pointer) {
     // Create transient map
-    CljMap *tmap = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *tmap = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_NOT_NULL(tmap);
     
     // Create keyword once
@@ -1193,7 +1193,7 @@ TEST(test_map_conj_finds_existing_key_by_pointer) {
 // Test that map_conj works correctly with channel pattern (make_result_channel + result_channel_close)
 TEST(test_map_conj_channel_pattern) {
     // Create channel like make_result_channel does
-    CljMap *chan = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *chan = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_NOT_NULL(chan);
     
     // Initialize with :value and :closed (like make_result_channel does)
@@ -1339,7 +1339,7 @@ TEST(test_dissoc_non_existent_key) {
 // Test: nil can be used as key with assoc
 TEST(test_map_assoc_nil_key) {
     WITH_AUTORELEASE_POOL({
-        CljMap *map = AUTORELEASE(map_empty());
+        CljMap *map = (CljMap*)AUTORELEASE((CljObject*)map_empty());
         
         // assoc nil key with value
         CljObject *value = AUTORELEASE((CljObject*)intern_symbol(NULL, "nil-value"));
@@ -1434,7 +1434,7 @@ TEST(test_map_contains_nil_key) {
 TEST(test_map_contains_nil_key_not_exists) {
     WITH_AUTORELEASE_POOL({
         // Create map without nil key
-        CljMap *map = AUTORELEASE(map_empty());
+        CljMap *map = (CljMap*)AUTORELEASE((CljObject*)map_empty());
         CljObject *key = AUTORELEASE((CljObject*)intern_symbol(NULL, ":key"));
         CljObject *value = AUTORELEASE((CljObject*)intern_symbol(NULL, "value"));
         RETAIN(key);
@@ -1452,7 +1452,7 @@ TEST(test_map_contains_nil_key_not_exists) {
 TEST(test_map_nil_key_nil_value) {
     WITH_AUTORELEASE_POOL({
         // Create map with nil key and nil value
-        CljMap *map = AUTORELEASE(map_empty());
+        CljMap *map = (CljMap*)AUTORELEASE((CljObject*)map_empty());
         map = map_assoc(map, NULL, NULL);
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -1603,7 +1603,7 @@ TEST(test_map_for_each_macro) {
 
 // Test MAP_FOR_EACH with empty map
 TEST(test_map_for_each_empty_map) {
-    CljMap *map = AUTORELEASE(map_empty());
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)map_empty());
     
     int iteration_count = 0;
     MAP_FOR_EACH(map, key, value) {
