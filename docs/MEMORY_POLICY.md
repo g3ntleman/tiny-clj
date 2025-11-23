@@ -25,10 +25,8 @@ CljValue ch = make_char('A');          // No RELEASE() needed
 CljValue flag = make_special(SPECIAL_TRUE); // No RELEASE() needed
 CljValue nil_val = NULL;               // No RELEASE() needed
 
-// ✅ CORRECT: Check if value is immediate before releasing
-if (!is_immediate(value)) {
-    RELEASE((CljObject*)value);  // Only release heap objects
-}
+// ✅ CORRECT: RELEASE() macro handles immediate values automatically
+RELEASE((CljObject*)value);  // Safe for both heap objects and immediates
 ```
 
 #### Benefits of Immediate Values:
@@ -637,7 +635,7 @@ if (!is_immediate(value)) {
 5. **Production**: Use `RELEASE()` for performance
 6. **Non-return values**: Use `RELEASE()` when object is not returned as function result
 7. **Data Structures**: Use `RETAIN()` when storing objects
-8. **Type Checking**: Always check `is_immediate()` before releasing values
+8. **Type Checking**: `RELEASE()` macro handles immediate values automatically - no manual check needed
 9. **Profiling**: Always track memory usage in tests
 10. **Debugging**: Use memory profiler to find leaks
 11. **Trust API Design**: Follow documented memory policy
@@ -884,13 +882,13 @@ if (obj) release(obj);  // ❌ ERROR-PRONE: Easy to forget or get order wrong
 if (new_obj) retain(new_obj);
 obj = new_obj;
 
-// WRONG: Trying to release immediate values
+// WRONG: This is actually safe - RELEASE() handles immediates automatically
+// (Immediate values don't need releasing, but RELEASE() won't crash on them)
 CljValue num = make_fixnum(42);
-RELEASE((CljObject*)num);  // ❌ CRASH: Immediate values are not heap objects
+RELEASE((CljObject*)num);  // ✅ SAFE: RELEASE() macro checks IS_IMMEDIATE internally
 
-// WRONG: Not checking if value is immediate before releasing
-CljValue value = get_some_value();
-RELEASE((CljObject*)value);  // ❌ CRASH: May be immediate value
+// WRONG: This is actually safe - RELEASE() handles immediates automatically
+// (This example is kept for historical reference, but RELEASE() is safe for immediates)
 ```
 
 ### ✅ Correct Usage
@@ -910,16 +908,14 @@ CljValue num = make_fixnum(42);        // ✅ SAFE: No RELEASE() needed
 CljValue ch = make_char('A');          // ✅ SAFE: No RELEASE() needed
 CljValue flag = make_special(SPECIAL_TRUE); // ✅ SAFE: No RELEASE() needed
 
-// CORRECT: Check if value is immediate before releasing
+// CORRECT: RELEASE() macro handles immediate values automatically
 CljValue value = get_some_value();
-if (!is_immediate(value)) {
-    RELEASE((CljObject*)value);  // ✅ SAFE: Only release heap objects
-}
+RELEASE((CljObject*)value);  // ✅ SAFE: Works for both heap objects and immediates
 ```
 
 ### Memory Policy Verification
 - **Always check Doxygen documentation** for memory policy
 - **Use memory profiling** to validate assumptions
 - **Test-First development** prevents incorrect implementations
-- **Check `is_immediate()`** before releasing any value
+- **RELEASE() macro** handles immediate values automatically - no manual check needed
 - **Trust existing API design** unless proven otherwise
