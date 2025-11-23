@@ -6,7 +6,7 @@
 
 // Test that map_assoc correctly updates values for interned symbol keys
 TEST(test_map_assoc_updates_interned_symbol_key) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(2));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(2));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":closed");
     
     // Set initial value
@@ -67,7 +67,7 @@ TEST(test_assign_with_immediates) {
 
 // Test that ASSIGN with Immediates works in map context
 TEST(test_assign_immediates_in_map) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Add immediate values using ASSIGN pattern
@@ -113,7 +113,7 @@ TEST(test_intern_symbol_consistency_for_closed) {
 
 // Test that map_assoc works when called from different contexts
 TEST(test_map_assoc_with_different_intern_calls) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Create channel like make_result_channel does
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
@@ -143,7 +143,7 @@ TEST(test_map_assoc_with_different_intern_calls) {
 
 // Test that map_assoc works with NULL value
 TEST(test_map_assoc_with_null_value) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":value");
     
     // Set NULL value
@@ -229,7 +229,7 @@ TEST(test_channel_object_identity) {
 // Test that map_assoc works with pointer equality via clj_equal()
 // (verifies that removing redundant fast-path doesn't break functionality)
 TEST(test_map_assoc_with_pointer_equality) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test");
     
     // Set initial value
@@ -250,7 +250,7 @@ TEST(test_map_assoc_with_pointer_equality) {
 
 // Test that map_assoc works with structural equality (non-interned keys)
 TEST(test_map_assoc_with_structural_equality) {
-    CljMap *map = AUTORELEASE((CljMap*)make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Create two different string objects with same content
     CljObject *str1 = AUTORELEASE((CljObject*)make_string("test-key"));
@@ -751,7 +751,7 @@ TEST(test_update_missing_key_simple) {
     CljObject *pairs[2];
     pairs[0] = (CljObject*)intern_symbol(NULL, ":a");
     pairs[1] = (CljObject*)fixnum(1);
-    CljMap *map = AUTORELEASE(make_map_from_stack(pairs, 1));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map_from_stack(pairs, 1));
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
@@ -929,7 +929,7 @@ TEST(test_map_assoc_direct) {
     CljObject *pairs[2];
     pairs[0] = (CljObject*)intern_symbol(NULL, ":a");
     pairs[1] = (CljObject*)fixnum(1);
-    CljMap *map = AUTORELEASE(make_map_from_stack(pairs, 1));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map_from_stack(pairs, 1));
     
     
     // Add a new key :b with value 2
@@ -1239,7 +1239,7 @@ TEST(test_map_conj_channel_pattern) {
 TEST(test_dissoc_single_key) {
     WITH_AUTORELEASE_POOL({
         // Create map with multiple keys
-        CljMap *map = AUTORELEASE((CljMap*)make_map(4));
+        CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
         CljObject *key_a = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
         CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");

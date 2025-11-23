@@ -312,7 +312,7 @@ TEST(test_dotimes_non_numeric_count) {
 
 TEST(test_dotimes_null_input) {
     // Test eval_dotimes with NULL input
-    CljMap *env = AUTORELEASE(make_map(4));
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation with NULL
     CljObject *result = eval_dotimes(NULL, env, g_test_eval_state);
