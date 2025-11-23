@@ -1550,7 +1550,7 @@ TEST(test_get_nil_key_from_map_literal) {
 
 // Test MAP_FOR_EACH macro - iterate over all key-value pairs
 TEST(test_map_for_each_macro) {
-    CljMap *map = AUTORELEASE(make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Create some keys and values
     CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
@@ -1629,7 +1629,7 @@ TEST(test_map_for_each_null_map) {
 
 // Test MAP_FOR_EACH with NULL keys and NULL values
 TEST(test_map_for_each_with_null_keys_and_values) {
-    CljMap *map = AUTORELEASE(make_map(4));
+    CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Add entries with NULL key and NULL value
     CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
