@@ -198,7 +198,7 @@ TEST(test_channel_object_identity) {
     (void)env;  // unused
     
     // Create a channel manually
-    CljMap *chan1 = AUTORELEASE(make_result_channel());
+    CljMap *chan1 = (CljMap*)AUTORELEASE((CljObject*)make_result_channel());
     TEST_ASSERT_NOT_NULL(chan1);
     
     // Verify it's a map
@@ -970,7 +970,7 @@ TEST(test_map_transient_comprehensive) {
     // Test 2: Empty map conversion
     CljMap *empty_map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     TEST_ASSERT_EQUAL_INT(0, empty_map->count);
-    CljMap *empty_transient = AUTORELEASE(map_transient(empty_map));
+    CljMap *empty_transient = (CljMap*)AUTORELEASE((CljObject*)map_transient(empty_map));
     TEST_ASSERT_NOT_NULL(empty_transient);
     TEST_ASSERT_TRUE((CljObject*)empty_transient && TAG((CljObject*)empty_transient) == CLJ_MAP_TRANSIENT);
     TEST_ASSERT_EQUAL_INT(0, empty_transient->count);

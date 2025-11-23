@@ -299,9 +299,8 @@ TEST(test_nonexistent_qualified_symbol_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: clojure.core/nonexistent should throw exception
-    CljObject *result = NULL;
     TRY {
-        result = eval_string("clojure.core/nonexistent", g_test_eval_state);
+        (void)eval_string("clojure.core/nonexistent", g_test_eval_state);
         TEST_FAIL_MESSAGE("Should have thrown exception for nonexistent symbol");
     } CATCH(ex) {
         // Expected exception
@@ -314,9 +313,8 @@ TEST(test_nonexistent_namespace_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: nonexistent.ns/symbol should throw exception
-    CljObject *result = NULL;
     TRY {
-        result = eval_string("nonexistent.ns/symbol", g_test_eval_state);
+        (void)eval_string("nonexistent.ns/symbol", g_test_eval_state);
         TEST_FAIL_MESSAGE("Should have thrown exception for nonexistent namespace");
     } CATCH(ex) {
         // Expected exception

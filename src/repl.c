@@ -334,7 +334,7 @@ static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int
  *  @param memory_debug Enable verbose memory debugging
  *  @return true on successful completion
  */
-static bool run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
+__attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
     // Initialize memory profiling DIRECTLY before the first prompt
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();

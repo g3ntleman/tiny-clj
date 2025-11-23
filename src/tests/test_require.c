@@ -32,7 +32,7 @@ TEST(test_require_clojure_string) {
     // Try to resolve blank? from clojure.string namespace
     EvalState *temp_st = evalstate_new(false);
     evalstate_set_ns(temp_st, "clojure.string");
-    ID blank_func = ns_resolve(temp_st, blank_sym);
+    (void)ns_resolve(temp_st, blank_sym);
     evalstate_free(temp_st);
     
     // blank? should be available (either as function or as nil if not yet loaded)
