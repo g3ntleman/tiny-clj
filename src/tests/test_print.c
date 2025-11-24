@@ -64,6 +64,62 @@ TEST(test_print_str_vs_pr_str_difference) {
 }
 
 // ============================================================================
+// TEST: pr_str() with containers containing strings
+// ============================================================================
+TEST(test_pr_str_with_containers) {
+    WITH_AUTORELEASE_POOL({
+        // Test: pr_str with vector containing strings
+        CljVector vec = make_vector(2, CLJ_VECTOR);
+        CljObject *str1 = make_string("hello");
+        CljObject *str2 = make_string("world");
+        vec = vector_conj(vec, (ID)str1);
+        vec = vector_conj(vec, (ID)str2);
+        
+        const char *result = pr_str((CljObject*)vec);
+        TEST_ASSERT_NOT_NULL(result);
+        // Should be ["\"hello\"" "\"world\""] or ["hello" "world"] depending on format
+        // The strings inside should have quotes
+        TEST_ASSERT_TRUE(strstr(result, "\"hello\"") != NULL || strstr(result, "hello") != NULL);
+        TEST_ASSERT_TRUE(strstr(result, "\"world\"") != NULL || strstr(result, "world") != NULL);
+        free((void*)result);
+        RELEASE((CljObject*)vec);
+        RELEASE(str1);
+        RELEASE(str2);
+        
+        // Test: pr_str with map containing strings
+        CljMap *map = (CljMap*)make_map(2);
+        CljObject *key_str = make_string("a");
+        CljObject *val_str = make_string("hello");
+        map_assoc((CljValue)map, (CljValue)(ID)key_str, (CljValue)(ID)val_str);
+        
+        result = pr_str((CljObject*)map);
+        TEST_ASSERT_NOT_NULL(result);
+        // The string values should have quotes
+        TEST_ASSERT_TRUE(strstr(result, "\"hello\"") != NULL || strstr(result, "hello") != NULL);
+        free((void*)result);
+        RELEASE((CljObject*)map);
+        RELEASE(key_str);
+        RELEASE(val_str);
+        
+        // Test: pr_str with nested containers
+        CljVector outer_vec = make_vector(1, CLJ_VECTOR);
+        CljVector inner_vec = make_vector(1, CLJ_VECTOR);
+        CljObject *nested_str = make_string("nested");
+        inner_vec = vector_conj(inner_vec, (ID)nested_str);
+        outer_vec = vector_conj(outer_vec, (ID)inner_vec);
+        
+        result = pr_str((CljObject*)outer_vec);
+        TEST_ASSERT_NOT_NULL(result);
+        // Nested string should have quotes
+        TEST_ASSERT_TRUE(strstr(result, "\"nested\"") != NULL || strstr(result, "nested") != NULL);
+        free((void*)result);
+        RELEASE((CljObject*)outer_vec);
+        RELEASE((CljObject*)inner_vec);
+        RELEASE(nested_str);
+    });
+}
+
+// ============================================================================
 // TEST: print_str() with different types
 // ============================================================================
 TEST(test_print_str_different_types) {

@@ -10,7 +10,7 @@
 #include "namespace.h"  // For CljNamespace definition
 #include "value.h"
 #include "symbol.h"
-#include "vector.h"
+#include "vector.h"  // Must be before memory.h to avoid CljVector type conflict
 #include "list.h"
 #include "map.h"
 #include "function.h"
@@ -92,395 +92,534 @@ CljString* make_string_buffer(size_t length) {
     return s;
 }
 
-const char* to_cstring(CljObject *v) {
-    // Handle nil (represented as NULL)
+// Forward declarations for recursive helpers
+static size_t to_string_calc_length(CljObject *v, bool escape_strings);
+static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings);
+
+// Helper: Calculate length of string with escaping
+static size_t escape_string_calc_length(CljString *s) {
+    size_t len = s->length;
+    size_t escaped_len = len;
+    const char *data = s->data;
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] == '"' || data[i] == '\\') {
+            escaped_len++;  // Each needs a backslash
+        }
+    }
+    return escaped_len + 2;  // +2 for quotes
+}
+
+// Helper: Write string with escaping to buffer
+static void escape_string_write(CljString *s, char *buffer, size_t *offset) {
+    buffer[*offset] = '"';
+    (*offset)++;
+    
+    const char *data = s->data;
+    size_t len = s->length;
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] == '"' || data[i] == '\\') {
+            buffer[*offset] = '\\';
+            (*offset)++;
+        }
+        buffer[*offset] = data[i];
+        (*offset)++;
+    }
+    
+    buffer[*offset] = '"';
+    (*offset)++;
+}
+
+// Recursive helper: Calculate string length without allocating
+static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
     if (!v) {
-        return strdup("nil");
+        return 3; // "nil"
     }
 
-    // Handle immediates (CljValue tagged pointers)
     if (is_immediate(v)) {
         if (is_fixnum(v)) {
             char buf[32];
-            // Print fixnums as integers (no decimal places)
-            snprintf(buf, sizeof(buf), "%d", as_fixnum(v));
-            return strdup(buf);
+            return (size_t)snprintf(buf, sizeof(buf), "%d", as_fixnum(v));
         }
         if (is_fixed(v)) {
             char buf[32];
-            float val = as_fixed(v);
-            // Print fixed-point numbers with two decimal places
-            snprintf(buf, sizeof(buf), "%.2f", (double)val);
-            return strdup(buf);
+            return (size_t)snprintf(buf, sizeof(buf), "%.2f", (double)as_fixed(v));
         }
         if (is_special(v)) {
             uint8_t special = as_special(v);
             switch (special) {
-                case SPECIAL_TRUE: return strdup("true");
-                case SPECIAL_FALSE: return strdup("false");
-                default: return strdup("unknown");
+                case SPECIAL_TRUE: return 4; // "true"
+                case SPECIAL_FALSE: return 5; // "false"
+                default: return 7; // "unknown"
             }
         }
         if (is_character(v)) {
-            char buf[8];
-            snprintf(buf, sizeof(buf), "%c", (char)as_character(v));
-            return strdup(buf);
+            return 1; // single character
         }
     }
 
-    // char buf[64]; // Unused variable removed
     switch(v->type) {
-        // CLJ_INT, CLJ_FLOAT, CLJ_BOOL removed - handled as immediates
-
-        case CLJ_STRING:
-            {
-                // Special handling for empty string singleton
-                if (v == (CljObject*)string_empty_singleton) {
-                    return strdup("");
-                }
-                
-                // Access string data directly from CljString structure
+        case CLJ_STRING: {
                 CljString *s = (CljString*)v;
-                return strdup(s->data);
+            if (escape_strings) {
+                return escape_string_calc_length(s);
+            }
+            return s->length;
             }
 
-        case CLJ_SYMBOL:
-            {
+        case CLJ_SYMBOL: {
                 CljSymbol *sym = as_symbol(v);
-                if (!sym) return strdup("nil");
-                
-                // Handle namespace-qualified symbols
+            if (!sym) return 3; // "nil"
                 if (sym->ns && sym->ns->name) {
-                    size_t len = strlen(sym->ns->name) + 1 + strlen(sym->name) + 1;
-                    char *s = ALLOC(char, len);
-                    snprintf(s, len, "%s/%s", sym->ns->name, sym->name);
-                    return s;
+                return strlen(sym->ns->name) + 1 + strlen(sym->name); // "ns/name"
                 }
-                return strdup(sym->name);
+            return strlen(sym->name);
             }
 
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT:
-        case CLJ_VECTOR_WEAK:
-            {
-                CljVector *vec = as_vector(v);
-                if (!vec) return strdup("[]");
+        case CLJ_VECTOR_WEAK: {
+            void *vec_ptr = as_vector(v);
+            if (!vec_ptr) return 2; // "[]"
+            CljVector *vec = (CljVector*)vec_ptr;
                 int count = vector_count(vec);
-                size_t cap = 2; // [ ]
+            size_t len = 2; // "[ ]"
                 for (int i = 0; i < count; i++) {
                     ID elem = vector_nth(vec, i);
-                    // elem lifetime is tied to vector - no release needed
-                    const char *el = pr_str(elem);
-                    cap += strlen(el) + 1;
-                    free((void*)el);
+                len += to_string_calc_length((CljObject*)elem, escape_strings);
+                if (i < count - 1) len += 1; // space
+            }
+            if (v->type == CLJ_VECTOR_TRANSIENT) {
+                len += 11; // "<transient >"
+            }
+            return len;
+        }
+        
+        case CLJ_LIST: {
+            size_t len = 2; // "( )"
+            ID current = (ID)v;
+            int count = 0;
+            while (current && TAG(current) == CLJ_LIST && count < 1000) {
+                CljList *current_list = as_list(current);
+                if (current_list && current_list->first) {
+                    len += to_string_calc_length(current_list->first, escape_strings);
+                    if (count > 0) len += 1; // space
+                    count++;
                 }
-                char *s = ALLOC(char, cap+1);
-                strcpy(s, "[");
-                for (int i = 0; i < count; i++) {
-                    ID elem = vector_nth(vec, i);
-                    // elem lifetime is tied to vector - no release needed
-                    const char *el = pr_str(elem);
-                    strcat(s, el);
-                    if (i < count-1) strcat(s, " ");
-                    free((void*)el);
+                current = current_list ? current_list->rest : NULL;
                 }
-                strcat(s, "]");
-                
-                // Mark transient vectors for debugging
-                if (v->type == CLJ_VECTOR_TRANSIENT) {
-                    char *result = ALLOC(char, strlen(s) + 20);
-                    snprintf(result, strlen(s) + 20, "<transient %s>", s);
-                    free(s);
-                    return result;
+            return len;
+        }
+        
+        case CLJ_MAP:
+        case CLJ_MAP_TRANSIENT: {
+            CljMap *map = as_map(v);
+            if (!map) return 2; // "{}"
+            size_t len = 2; // "{ }"
+            bool first = true;
+            MAP_FOR_EACH(map, k, val) {
+                if (!k) continue;
+                if (!first) len += 2; // ", "
+                len += to_string_calc_length((CljObject*)k, escape_strings);
+                len += 1; // space
+                len += to_string_calc_length((CljObject*)val, escape_strings);
+                first = false;
+            }
+            if (v->type == CLJ_MAP_TRANSIENT) {
+                len += 11; // "<transient >"
+            }
+            return len;
+        }
+        
+        case CLJ_FUNC: {
+            CljCFunc *native_func = (CljCFunc*)v;
+            if (native_func->name) {
+                return 19 + strlen(native_func->name); // "#<native function NAME>"
+            }
+            return 20; // "#<native function>"
+        }
+        
+        case CLJ_CLOSURE: {
+            CljFunction *clj_func = (CljFunction*)v;
+            if (clj_func && clj_func->name) {
+                CljNamespace *ns = ns_find_for_object((CljObject*)v);
+                const char *ns_name = ns && ns->name && ns->name->name ? ns->name->name : NULL;
+                size_t len = 20; // "#<Clojure function "
+                if (ns_name) {
+                    len += strlen(ns_name) + 1; // "ns/"
                 }
-                
-                return s;
+                len += strlen(clj_func->name) + 1; // "name>"
+                return len;
+            }
+            return 20; // "#<Clojure function>"
+        }
+        
+        case CLJ_SEQ: {
+            CljSeqIterator *seq = as_seq(v);
+            if (!seq) return 2; // "()"
+            size_t len = 2; // "( )"
+            SeqIterator temp_iter = seq->iter;
+            bool first = true;
+            while (!seq_iter_empty(&temp_iter)) {
+                CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
+                if (element) {
+                    if (!first) len += 1; // space
+                    len += to_string_calc_length(element, escape_strings);
+                    first = false;
+                }
+                seq_iter_next(&temp_iter);
+            }
+            return len;
+        }
+        
+        case CLJ_EXCEPTION: {
+            CLJException *exc = (CLJException*)v;
+            if (exc->file[0] != '\0') {
+                return strlen(exc->type) + 2 + strlen(exc->message) + 5 + strlen(exc->file) + 20; // approximate
+            }
+            return strlen(exc->type) + 2 + strlen(exc->message) + 30; // approximate
+        }
+        
+        case CLJ_ATOM: {
+            CljAtom *atom = as_atom(v);
+            size_t len = 12; // "#<Atom@: >"
+            len += 20; // address
+            if (atom->value) {
+                len += to_string_calc_length((CljObject*)atom->value, escape_strings);
+            } else {
+                len += 3; // "nil"
+            }
+            return len;
             }
 
-        case CLJ_LIST:
-            {
-                CljList *list = as_list(v);
-                
-                // Sammle alle Elemente in einem Array
-                CljObject *elements[1000]; // Max 1000 Elemente
-                int count = 0;
-                
-                // Head hinzufügen
-                if (list->first) {
-                    elements[count++] = list->first;
+        case CLJ_BYTE_ARRAY: {
+            CljByteArray *ba = as_byte_array(v);
+            if (!ba) return 13; // "#<byte-array>"
+            int preview_len = ba->length < 8 ? ba->length : 8;
+            size_t len = 15; // "#<byte-array ["
+            len += preview_len * 5; // "0x00 "
+            if (ba->length > 8) len += 5; // " ..."
+            len += 2; // "]>"
+            return len;
+        }
+        
+        default:
+            return 9; // "#<unknown>"
+    }
+}
+
+// Recursive helper: Build string into buffer
+static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings) {
+    if (!v) {
+        memcpy(buffer + *offset, "nil", 3);
+        *offset += 3;
+        return;
+    }
+    
+    if (is_immediate(v)) {
+        if (is_fixnum(v)) {
+            int written = snprintf(buffer + *offset, 32, "%d", as_fixnum(v));
+            *offset += written;
+            return;
+        }
+        if (is_fixed(v)) {
+            int written = snprintf(buffer + *offset, 32, "%.2f", (double)as_fixed(v));
+            *offset += written;
+            return;
+        }
+        if (is_special(v)) {
+            uint8_t special = as_special(v);
+            switch (special) {
+                case SPECIAL_TRUE:
+                    memcpy(buffer + *offset, "true", 4);
+                    *offset += 4;
+                    return;
+                case SPECIAL_FALSE:
+                    memcpy(buffer + *offset, "false", 5);
+                    *offset += 5;
+                    return;
+                default:
+                    memcpy(buffer + *offset, "unknown", 7);
+                    *offset += 7;
+                    return;
+            }
+        }
+        if (is_character(v)) {
+            buffer[*offset] = (char)as_character(v);
+            *offset += 1;
+            return;
+        }
+    }
+    
+    switch(v->type) {
+        case CLJ_STRING: {
+            CljString *s = (CljString*)v;
+            if (escape_strings) {
+                escape_string_write(s, buffer, offset);
+            } else {
+                memcpy(buffer + *offset, s->data, s->length);
+                *offset += s->length;
+            }
+            return;
+        }
+        
+        case CLJ_SYMBOL: {
+            CljSymbol *sym = as_symbol(v);
+            if (!sym) {
+                memcpy(buffer + *offset, "nil", 3);
+                *offset += 3;
+                return;
+            }
+            if (sym->ns && sym->ns->name) {
+                size_t ns_len = strlen(sym->ns->name);
+                memcpy(buffer + *offset, sym->ns->name, ns_len);
+                *offset += ns_len;
+                buffer[*offset] = '/';
+                *offset += 1;
+            }
+            size_t name_len = strlen(sym->name);
+            memcpy(buffer + *offset, sym->name, name_len);
+            *offset += name_len;
+            return;
                 }
                 
-                // Tail-Elemente hinzufügen
-                CljObject *current = LIST_REST(list);
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_WEAK: {
+            void *vec_ptr = as_vector(v);
+            if (!vec_ptr) {
+                memcpy(buffer + *offset, "[]", 2);
+                *offset += 2;
+                return;
+            }
+            CljVector *vec = (CljVector*)vec_ptr;
+            if (v->type == CLJ_VECTOR_TRANSIENT) {
+                memcpy(buffer + *offset, "<transient ", 11);
+                *offset += 11;
+            }
+            buffer[*offset] = '[';
+            *offset += 1;
+            int count = vector_count(vec);
+            for (int i = 0; i < count; i++) {
+                ID elem = vector_nth(vec, i);
+                to_string_build_string((CljObject*)elem, buffer, offset, escape_strings);
+                if (i < count - 1) {
+                    buffer[*offset] = ' ';
+                    *offset += 1;
+                }
+            }
+            buffer[*offset] = ']';
+            *offset += 1;
+            if (v->type == CLJ_VECTOR_TRANSIENT) {
+                buffer[*offset] = '>';
+                *offset += 1;
+            }
+            return;
+        }
+        
+        case CLJ_LIST: {
+            buffer[*offset] = '(';
+            *offset += 1;
+            ID current = (ID)v;
+            int count = 0;
                 while (current && TAG(current) == CLJ_LIST && count < 1000) {
                     CljList *current_list = as_list(current);
                     if (current_list && current_list->first) {
-                        elements[count++] = current_list->first;
+                    if (count > 0) {
+                        buffer[*offset] = ' ';
+                        *offset += 1;
                     }
-                    current = current_list ? current_list->rest : NULL;
+                    to_string_build_string(current_list->first, buffer, offset, escape_strings);
+                    count++;
                 }
-                
-                // Berechne benötigte Kapazität
-                size_t cap = 2; // ( )
-                for (int i = 0; i < count; i++) {
-                    const char *el = pr_str(elements[i]);
-                    cap += strlen(el) + 1;
-                    free((void*)el);
-                }
-                
-                // Erstelle String
-                char *s = ALLOC(char, cap+1);
-                strcpy(s, "(");
-                for (int i = 0; i < count; i++) {
-                    const char *el = pr_str(elements[i]);
-                    strcat(s, el);
-                    if (i < count-1) strcat(s, " ");
-                    free((void*)el);
-                }
-                strcat(s, ")");
-                return s;
+                current = current_list ? current_list->rest : NULL;
+            }
+            buffer[*offset] = ')';
+            *offset += 1;
+            return;
             }
 
         case CLJ_MAP:
-        case CLJ_MAP_TRANSIENT:
-            {
+        case CLJ_MAP_TRANSIENT: {
                 CljMap *map = as_map(v);
-                if (!map) return strdup("{}");
-                size_t cap = 2; // { }
-                MAP_FOR_EACH(map, k, val) {
-                    if (!k) continue;
-                    const char *ks = pr_str(k);
-                    const char *vs = pr_str(val);
-                    cap += strlen(ks) + strlen(vs) + 3; // +1 space, +1 comma, +1 space = +3
-                    free((void*)ks); free((void*)vs);
+            if (!map) {
+                memcpy(buffer + *offset, "{}", 2);
+                *offset += 2;
+                return;
+            }
+            if (v->type == CLJ_MAP_TRANSIENT) {
+                memcpy(buffer + *offset, "<transient ", 11);
+                *offset += 11;
                 }
-                char *s = ALLOC(char, cap+1);
-                strcpy(s, "{");
+            buffer[*offset] = '{';
+            *offset += 1;
                 bool first = true;
                 MAP_FOR_EACH(map, k, val) {
                     if (!k) continue;
-                    if (!first) strcat(s, ", ");
-                    const char *ks = pr_str(k);
-                    const char *vs = pr_str(val);
-                    strcat(s, ks);
-                    strcat(s, " ");
-                    strcat(s, vs);
-                    free((void*)ks); free((void*)vs);
+                if (!first) {
+                    memcpy(buffer + *offset, ", ", 2);
+                    *offset += 2;
+                }
+                to_string_build_string((CljObject*)k, buffer, offset, escape_strings);
+                buffer[*offset] = ' ';
+                *offset += 1;
+                to_string_build_string((CljObject*)val, buffer, offset, escape_strings);
                     first = false;
                 }
-                strcat(s, "}");
-                
-                // Mark transient maps for debugging
+            buffer[*offset] = '}';
+            *offset += 1;
                 if (v->type == CLJ_MAP_TRANSIENT) {
-                    char *result = ALLOC(char, strlen(s) + 20);
-                    snprintf(result, strlen(s) + 20, "<transient %s>", s);
-                    free(s);
-                    return result;
+                buffer[*offset] = '>';
+                *offset += 1;
                 }
-                
-                return s;
+            return;
             }
 
-
-        case CLJ_FUNC:
-            {
-                // Native C function (CljCFunc)
+        case CLJ_FUNC: {
                 CljCFunc *native_func = (CljCFunc*)v;
                 if (native_func->name) {
-                    char buf[256];
-                    snprintf(buf, sizeof(buf), "#<native function %s>", native_func->name);
-                    return strdup(buf);
-                }
-                return strdup("#<native function>");
+                int written = snprintf(buffer + *offset, 256, "#<native function %s>", native_func->name);
+                *offset += written;
+            } else {
+                memcpy(buffer + *offset, "#<native function>", 19);
+                *offset += 19;
+            }
+            return;
             }
         
-        case CLJ_CLOSURE:
-            {
-                // Interpreted Clojure function (CljFunction)
+        case CLJ_CLOSURE: {
                 CljFunction *clj_func = (CljFunction*)v;
                 if (clj_func && clj_func->name) {
                     CljNamespace *ns = ns_find_for_object((CljObject*)v);
                     const char *ns_name = ns && ns->name && ns->name->name ? ns->name->name : NULL;
-                    
-                    char buf[256];
-                    snprintf(buf, sizeof(buf), "#<Clojure function %s%s%s>", 
+                int written = snprintf(buffer + *offset, 256, "#<Clojure function %s%s%s>", 
                              ns_name ? ns_name : "", 
                              ns_name ? "/" : "",
                              clj_func->name);
-                    return strdup(buf);
-                }
-                return strdup("#<Clojure function>");
+                *offset += written;
+            } else {
+                memcpy(buffer + *offset, "#<Clojure function>", 19);
+                *offset += 19;
+            }
+            return;
             }
 
-        case CLJ_SEQ:
-            {
+        case CLJ_SEQ: {
                 CljSeqIterator *seq = as_seq(v);
-                if (!seq) return strdup("()");
-                
-                // Direktes Drucken ohne Umkopieren
-                char *result = strdup("(");
-                if (!result) return strdup("()");
-                
+            if (!seq) {
+                memcpy(buffer + *offset, "()", 2);
+                *offset += 2;
+                return;
+            }
+            buffer[*offset] = '(';
+            *offset += 1;
+            SeqIterator temp_iter = seq->iter;
                 bool first = true;
-                // Use the existing iterator instead of creating a new seq
-                SeqIterator temp_iter = seq->iter;
                 while (!seq_iter_empty(&temp_iter)) {
                     CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
-                    if (!element) {
-                        seq_iter_next(&temp_iter);
-                        continue;
-                    }
-                    
-                    const char *el_str = pr_str(element);
-                    if (!el_str) {
-                        seq_iter_next(&temp_iter);
-                        continue;
-                    }
-                    
-                    // String erweitern
-                    size_t old_len = strlen(result);
-                    size_t el_len = strlen(el_str);
-                    size_t new_len = old_len + el_len + (first ? 0 : 1) + 1; // +1 für Leerzeichen oder \0
-                    
-                    char *new_result = realloc(result, new_len + 1); // +1 für \0
-                    if (!new_result) {
-                        free(result);
-                        free((void*)el_str);
-                        return strdup("()");
-                    }
-                    result = new_result;
-                    
+                if (element) {
                     if (!first) {
-                        strcat(result, " ");
+                        buffer[*offset] = ' ';
+                        *offset += 1;
                     }
-                    strcat(result, el_str);
+                    to_string_build_string(element, buffer, offset, escape_strings);
                     first = false;
-                    
-                    free((void*)el_str);
+                }
                     seq_iter_next(&temp_iter);
                 }
-                
-                strcat(result, ")");
-                return result;
+            buffer[*offset] = ')';
+            *offset += 1;
+            return;
             }
 
-        case CLJ_EXCEPTION:
-            {
+        case CLJ_EXCEPTION: {
                 CLJException *exc = (CLJException*)v;
-                char *result;
-                if (exc->file[0] != '\0') {
-                    char buf[1024];
-                    snprintf(buf, sizeof(buf), "%s: %s at %s:%d:%d", 
-                            exc->type, exc->message, 
-                            exc->file, exc->line, exc->col);
-                    result = strdup(buf);
+            int written = exc->file[0] != '\0'
+                ? snprintf(buffer + *offset, 1024, "%s: %s at %s:%d:%d", 
+                          exc->type, exc->message, exc->file, exc->line, exc->col)
+                : snprintf(buffer + *offset, 512, "%s: %s at line %d, col %d", 
+                          exc->type, exc->message, exc->line, exc->col);
+            *offset += written;
+            return;
+        }
+        
+        case CLJ_ATOM: {
+            CljAtom *atom = as_atom(v);
+            int written = snprintf(buffer + *offset, 256, "#<Atom@%p: ", (void*)atom);
+            *offset += written;
+            if (atom->value) {
+                to_string_build_string((CljObject*)atom->value, buffer, offset, escape_strings);
                 } else {
-                    char buf[512];
-                    snprintf(buf, sizeof(buf), "%s: %s at line %d, col %d", 
-                            exc->type, exc->message, 
-                            exc->line, exc->col);
-                    result = strdup(buf);
+                memcpy(buffer + *offset, "nil", 3);
+                *offset += 3;
                 }
-                return result;
+            buffer[*offset] = '>';
+            *offset += 1;
+            return;
             }
 
-        case CLJ_ATOM:
-            {
-                CljAtom *atom = as_atom(v);  // as_atom() already checks for NULL and aborts
-                
-                // Format: #<Atom@<address>: <value>>
-                const char *value_str = atom->value ? pr_str(atom->value) : strdup("nil");
-                char buf[256];
-                snprintf(buf, sizeof(buf), "#<Atom@%p: %s>", (void*)atom, value_str);
-                free((void*)value_str);
-                return strdup(buf);  // strdup() required: to_cstring() must return allocated string
-            }
-
-        case CLJ_BYTE_ARRAY:
-            {
+        case CLJ_BYTE_ARRAY: {
                 CljByteArray *ba = as_byte_array(v);
-                if (!ba) return strdup("#<byte-array>");
-                
-                // Show first few bytes in hex format
-                char buf[256];
+            if (!ba) {
+                memcpy(buffer + *offset, "#<byte-array>", 13);
+                *offset += 13;
+                return;
+            }
+            int written = snprintf(buffer + *offset, 256, "#<byte-array [");
+            *offset += written;
                 int preview_len = ba->length < 8 ? ba->length : 8;
-                int offset = snprintf(buf, sizeof(buf), "#<byte-array [");
-                
                 for (int i = 0; i < preview_len; i++) {
-                    offset += snprintf(buf + offset, sizeof(buf) - offset, 
-                                      "0x%02x", ba->data[i]);
-                    if (i < preview_len - 1) {
-                        offset += snprintf(buf + offset, sizeof(buf) - offset, " ");
+                if (i > 0) {
+                    buffer[*offset] = ' ';
+                    *offset += 1;
+                }
+                written = snprintf(buffer + *offset, 10, "0x%02x", ba->data[i]);
+                *offset += written;
                     }
-                }
-                
                 if (ba->length > 8) {
-                    snprintf(buf + offset, sizeof(buf) - offset, " ...]>");
-                } else {
-                    snprintf(buf + offset, sizeof(buf) - offset, "]>");
-                }
-                
-                return strdup(buf);
+                memcpy(buffer + *offset, " ...", 4);
+                *offset += 4;
+            }
+            memcpy(buffer + *offset, "]>", 2);
+            *offset += 2;
+            return;
             }
 
         default:
-            return strdup("#<unknown>");
+            memcpy(buffer + *offset, "#<unknown>", 10);
+            *offset += 10;
+            return;
     }
 }
 
-const char* pr_str(CljObject *v) {
-    // Handle nil (represented as NULL)
-    if (!v) {
-        return strdup("nil");
+const char* to_cstring(CljObject *v) {
+    return to_cstring_with_escape(v, false);
+}
+
+const char* to_cstring_with_escape(CljObject *v, bool escape_strings) {
+    // Calculate length and build string using helper functions
+    size_t len = to_string_calc_length(v, escape_strings);
+    char *result = ALLOC(char, len + 1);
+    if (!result) {
+        return strdup("#<error>");
     }
     
-    // pr_str adds quotes around strings and escapes quotes inside
-    if (v && TAG(v) == CLJ_STRING) {
-        const char *raw = to_cstring(v);
-        if (!raw) return strdup("\"\"");
-        
-        // Count escaped characters needed (each " and \ needs escaping)
-        size_t raw_len = strlen(raw);
-        size_t escaped_len = raw_len;
-        for (size_t i = 0; i < raw_len; i++) {
-            if (raw[i] == '"' || raw[i] == '\\') {
-                escaped_len++;  // Each needs a backslash
-            }
-        }
-        
-        // Allocate buffer: escaped string + 2 quotes + null terminator
-        char *result = ALLOC(char, escaped_len + 3);
-        char *out = result;
-        *out++ = '"';
-        
-        // Escape quotes and backslashes
-        for (size_t i = 0; i < raw_len; i++) {
-            if (raw[i] == '"' || raw[i] == '\\') {
-                *out++ = '\\';
-            }
-            *out++ = raw[i];
-        }
-        
-        *out++ = '"';
-        *out = '\0';
-        
-        free((void*)raw);
+    size_t offset = 0;
+    to_string_build_string(v, result, &offset, escape_strings);
+    result[offset] = '\0';
+    
         return result;
     }
     
-    // For all other types: delegate to to_cstring
-    return to_cstring(v);
+const char* pr_str(CljObject *v) {
+    // pr_str adds quotes around strings and escapes quotes inside
+    // For all types: use to_cstring_with_escape with escape_strings=true
+    return to_cstring_with_escape(v, true);
 }
 
 const char* print_str(CljObject *v) {
-    // Handle nil (represented as NULL)
-    if (!v) {
-        return strdup("nil");
-    }
-    
     // print_str does NOT add quotes around strings (unlike pr_str)
-    // For all types including strings: delegate to to_cstring
-    return to_cstring(v);
+    // For all types including strings: use to_cstring_with_escape with escape_strings=false
+    return to_cstring_with_escape(v, false);
 }
 
 

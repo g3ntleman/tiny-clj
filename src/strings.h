@@ -74,5 +74,7 @@ static inline const char* clj_string_data(CljString *str) {
 const char* pr_str(CljObject *v);
 const char* print_str(CljObject *v);
 const char* to_cstring(CljObject *v);
+/** Internal function with escape_strings parameter. */
+const char* to_cstring_with_escape(CljObject *v, bool escape_strings);
 
 #endif // TINY_CLJ_STRINGS_H
