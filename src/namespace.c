@@ -641,6 +641,18 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
  * @param symbol Symbol to define
  * @param value Value to bind to symbol
  */
+/**
+ * @brief Invalidate the resolve cache by setting it to NULL
+ * This is more efficient than removing individual symbols via map_assoc.
+ * The cache will be automatically rebuilt on the next ns_resolve() call.
+ */
+void ns_invalidate_resolve_cache(void) {
+    if (g_runtime.resolve_cache) {
+        RELEASE(g_runtime.resolve_cache);
+        g_runtime.resolve_cache = NULL;
+    }
+}
+
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // Allow NULL value (nil) - it's a legitimate case
     // Only check for NULL ns and symbol
@@ -648,7 +660,8 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     
     // Create or update mappings
     if (!ns->mappings) {
-        ns->mappings = make_map(16);
+        // OPTIMIZATION: Start with capacity 32 to reduce map growth during namespace loading
+        ns->mappings = make_map(32);
     }
     
     // Store symbol-value binding (overwrites existing)
@@ -664,14 +677,10 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
     
-    // CRITICAL: Invalidate resolve cache when a symbol is redefined in the current namespace
-    // This ensures that ns_resolve will find the new definition instead of returning cached value
-    // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-    if (g_runtime.resolve_cache) {
-        // Remove the symbol from cache to force re-resolution
-        ID updated_cache = map_assoc(g_runtime.resolve_cache, symbol, NULL);
-        ASSIGN(g_runtime.resolve_cache, updated_cache);
-    }
+    // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
+    // This avoids ~23 map_assoc() calls per require and is more efficient.
+    // The cache will be automatically rebuilt on the next ns_resolve() call.
+    ns_invalidate_resolve_cache();
 }
 
 /**

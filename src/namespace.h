@@ -53,6 +53,7 @@ void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
 CljNamespace* ns_find_for_object(CljObject *obj);  // Find namespace containing object
 void ns_define(CljNamespace *ns, ID symbol, ID value);
+void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)
 void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 
