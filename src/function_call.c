@@ -651,6 +651,16 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
             }
         }
+        // Check if symbol is a keyword - keywords evaluate to themselves
+        if (IS_KEYWORD(body)) {
+            // Keywords evaluate to themselves (singletons need no memory management)
+            return body;
+        }
+        // Special case: nil should evaluate to NULL (not SYM_NIL)
+        if (body == SYM_NIL) {
+            // nil is represented as NULL - return NULL directly
+            return NULL;
+        }
         // If still not found, try namespace lookup (for recursive function calls)
         // ns_resolve takes CljObject* (only objects, not immediates) and returns ID
         // body is a symbol (CljObject*), so we can pass it directly
@@ -670,16 +680,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // ns_resolve returns retained values - object survives until pool-pop
                 return resolved_id;
             }
-        }
-        // Check if symbol is a keyword - keywords evaluate to themselves
-        if (IS_KEYWORD(body)) {
-            // Keywords evaluate to themselves (singletons need no memory management)
-            return body;
-        }
-        // Special case: nil should evaluate to NULL (not SYM_NIL)
-        if (body == SYM_NIL) {
-            // nil is represented as NULL - return NULL directly
-            return NULL;
         }
         // Symbol not found - throw exception
         CljSymbol *sym_obj = as_symbol(body);
@@ -2023,15 +2023,9 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
-    // Look up the symbol in the current namespace
-    ID value = ns_resolve(st, sym);
-    if (!value) {
-        // Try to find the symbol in the current namespace mappings
-        CljMap *mappings = st->current_ns->mappings;
-        if (mappings) {
-            value = map_get((CljValue)mappings, sym_obj, NULL);
-        }
-    }
+    // Use eval_symbol to handle qualified symbols correctly
+    // eval_symbol handles both qualified (clojure.string/trim) and unqualified symbols
+    ID value = eval_symbol(sym, st);
     
     if (!value) {
         eval_error("var: symbol not found", st);
@@ -2198,14 +2192,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return symbol;
     }
     
-    // Special handling for *ns*
-    if (symbol == SYM_NS_STAR) {
-        if (st && st->current_ns && st->current_ns->name) {
-            return st->current_ns->name;
-        }
-        return intern_symbol(NULL, "user");
-    }
-    
     // CRITICAL: Handle qualified symbols (symbol->ns is set during parsing)
     // Parser already splits qualified symbols into name and namespace
     // This avoids string parsing in the hot-path
@@ -2232,29 +2218,79 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         }
         
         CljNamespace *target_ns = ns_find(actual_ns_name);
-        if (target_ns && target_ns->mappings) {
-            // Create unqualified symbol for lookup (symbol->name is already the name part)
-            CljSymbol *name_sym = intern_symbol_global(symbol->name);
-            if (name_sym) {
-                // Look up symbol in target namespace
-                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID resolved = map_get(target_ns->mappings, name_sym, &not_found_sentinel);
-                if (resolved != &not_found_sentinel) {
-                    // Found in target namespace - return it (can be NULL/nil, which is valid)
-                    return resolved;
-                }
-                
-                // Symbol not found - try to find it by iterating through mappings
-                // This handles cases where symbols have different pointers but are structurally equal
-                CljMap *mappings = (CljMap*)target_ns->mappings;
-                MAP_FOR_EACH(mappings, key, value) {
-                    if (key && TAG(key) == CLJ_SYMBOL) {
-                        CljSymbol *key_sym = as_symbol(key);
-                        // Use clj_equal to check if symbols are structurally equal
-                        // This handles cases where symbols have different pointers
-                        if (key_sym && clj_equal(key, name_sym)) {
-                            // Found symbol with structural equality but different pointer
+        if (!target_ns) {
+            // Namespace not found - throw exception with qualified name
+            const char *name = symbol->name ? symbol->name : "unknown";
+            size_t qualified_len = strlen(ns_name) + 1 + strlen(name) + 1;
+            char *qualified_name = (char*)malloc(qualified_len);
+            if (qualified_name) {
+                snprintf(qualified_name, qualified_len, "%s/%s", ns_name, name);
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context (namespace %s not found)", qualified_name, ns_name);
+                free(qualified_name);
+            } else {
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context (namespace %s not found)", ns_name, name, ns_name);
+            }
+            return NULL;
+        }
+        
+        if (!target_ns->mappings) {
+            // Namespace has no mappings - throw exception with qualified name
+            const char *name = symbol->name ? symbol->name : "unknown";
+            size_t qualified_len = strlen(ns_name) + 1 + strlen(name) + 1;
+            char *qualified_name = (char*)malloc(qualified_len);
+            if (qualified_name) {
+                snprintf(qualified_name, qualified_len, "%s/%s", ns_name, name);
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context (namespace %s has no mappings)", qualified_name, ns_name);
+                free(qualified_name);
+            } else {
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context (namespace %s has no mappings)", ns_name, name, ns_name);
+            }
+            return NULL;
+        }
+        
+        // Create unqualified symbol for lookup (symbol->name is already the name part)
+        CljSymbol *name_sym = intern_symbol_global(symbol->name);
+        if (!name_sym) {
+            // Failed to intern symbol - throw exception
+            const char *name = symbol->name ? symbol->name : "unknown";
+            size_t qualified_len = strlen(ns_name) + 1 + strlen(name) + 1;
+            char *qualified_name = (char*)malloc(qualified_len);
+            if (qualified_name) {
+                snprintf(qualified_name, qualified_len, "%s/%s", ns_name, name);
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context (failed to intern symbol)", qualified_name);
+                free(qualified_name);
+            } else {
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context (failed to intern symbol)", ns_name, name);
+            }
+            return NULL;
+        }
+        
+        // Look up symbol in target namespace
+        // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        ID resolved = map_get(target_ns->mappings, name_sym, &not_found_sentinel);
+        if (resolved != &not_found_sentinel) {
+            // Found in target namespace - return it (can be NULL/nil, which is valid)
+            return resolved;
+        }
+        
+        // Symbol not found - try to find it by iterating through mappings
+        // This handles cases where symbols have different pointers but are structurally equal
+        // For unqualified symbols in namespace mappings, we compare by name only
+        // CRITICAL: map_get already uses MAP_FOR_EACH internally, so if it didn't find it,
+        // the iteration here should also not find it unless there's a bug in map_get
+        // But we try anyway as a fallback for edge cases
+        CljMap *mappings = (CljMap*)target_ns->mappings;
+        if (mappings && name_sym && name_sym->name) {
+            const char *target_name = name_sym->name;
+            MAP_FOR_EACH(mappings, key, value) {
+                if (key && TAG(key) == CLJ_SYMBOL) {
+                    CljSymbol *key_sym = as_symbol(key);
+                    if (key_sym && key_sym->name) {
+                        // Compare symbol names (for unqualified symbols in namespace mappings)
+                        // Namespace mappings store unqualified symbols, so we compare by name only
+                        if (strcmp(key_sym->name, target_name) == 0) {
+                            // Found symbol with matching name
                             // Return the value directly
                             // CRITICAL: value can be NULL (nil), which is a valid value
                             // Return it even if it's NULL
@@ -2972,7 +3008,13 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     // Check if body is :native marker (for native function stubs)
     // This must be checked before TCO transformation
+    // We can recognize :native at different points:
+    // 1. Direct keyword: :native
+    // 2. List containing only :native: (:native)
+    // 3. Evaluated form that results in :native
     bool is_native_stub = false;
+    
+    // Check 1: Direct keyword comparison
     if (body_expr_obj == (CljObject*)SYM_KW_NATIVE) {
         is_native_stub = true;
     } else if (IS_KEYWORD(body_expr_obj)) {
@@ -2980,6 +3022,33 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         CljSymbol *body_kw = as_symbol(body_expr_obj);
         if (body_kw == SYM_KW_NATIVE) {
             is_native_stub = true;
+        } else if (body_kw && body_kw->name && strcmp(body_kw->name, ":native") == 0) {
+            // Fallback: String comparison for cases where :native was parsed before SYM_KW_NATIVE was initialized
+            is_native_stub = true;
+        }
+    } else if (body_expr_obj && TAG(body_expr_obj) == CLJ_LIST) {
+        // Check 2: List containing only :native (lazy evaluation case)
+        // This handles cases where :native was parsed as a list (e.g., due to metadata parsing issues)
+        CljList *body_list = as_list(body_expr_obj);
+        if (body_list && body_list->first) {
+            CljObject *first = body_list->first;
+            // Check if list has only one element (rest is NULL or empty list)
+            bool is_single_element = !body_list->rest || 
+                                     (TAG(body_list->rest) == CLJ_LIST && 
+                                      as_list(body_list->rest)->first == NULL);
+            if (is_single_element) {
+                // Single element list - check if it's :native
+                if (first == (CljObject*)SYM_KW_NATIVE) {
+                    is_native_stub = true;
+                } else if (IS_KEYWORD(first)) {
+                    CljSymbol *first_kw = as_symbol(first);
+                    if (first_kw == SYM_KW_NATIVE) {
+                        is_native_stub = true;
+                    } else if (first_kw && first_kw->name && strcmp(first_kw->name, ":native") == 0) {
+                        is_native_stub = true;
+                    }
+                }
+            }
         }
     }
     
@@ -2995,14 +3064,24 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             return NULL;
         }
         
+        // CRITICAL: Intern the symbol to ensure pointer equality in map lookups
+        // The parsed symbol might not be the same instance as the interned symbol
+        CljSymbol *interned_name_sym = intern_symbol_global(name_symbol->name);
+        if (!interned_name_sym) {
+            free_obj_array((ID*)params, params_stack);
+            throw_exception(EXCEPTION_RUNTIME, 
+                           "Failed to intern function name symbol", 
+                           NULL, 0, 0);
+            return NULL;
+        }
+        
         // Lookup native function by Clojure name
         BuiltinFn native_func = native_function_lookup(name_symbol->name);
         if (!native_func) {
             free_obj_array((ID*)params, params_stack);
-            char error_msg[256];
-            snprintf(error_msg, sizeof(error_msg),
+            // Use throw_exception_formatted for better error messages
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                     "Native function not found for: %s", name_symbol->name);
-            throw_exception(EXCEPTION_RUNTIME, error_msg, NULL, 0, 0);
             return NULL;
         }
         
@@ -3017,10 +3096,17 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             return NULL;
         }
         
-        // Register native function in namespace (replaces any existing registration)
-        ns_define(st->current_ns, name_sym, (ID)native_func_obj);
+        // Register native function in namespace using interned symbol (replaces any existing registration)
+        ns_define(st->current_ns, (ID)interned_name_sym, (ID)native_func_obj);
+        
+        // ASSERT: Verify that the registered native function can be found using interned symbol
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        ID found = map_get(st->current_ns->mappings, (ID)interned_name_sym, (ID)&not_found_sentinel);
+        CLJ_ASSERT(found != (ID)&not_found_sentinel && "eval_defn: Registered native function must be findable in namespace mappings");
+        CLJ_ASSERT(found == (ID)native_func_obj && "eval_defn: Found function must match registered function");
         
         // Apply metadata to native function (only in DEBUG builds for memory efficiency)
+        // In Release builds, metadata is parsed but ignored
         // In Clojure, metadata from ^#^{...} (defn ...) is applied to the function
 #ifdef DEBUG
 #ifdef ENABLE_META
@@ -3040,7 +3126,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
 #endif // DEBUG
         
         free_obj_array((ID*)params, params_stack);
-        return name_sym;  // defn returns the symbol
+        return (ID)interned_name_sym;  // defn returns the interned symbol
     }
     
     // Transform recursive tail calls to recur (automatic TCO)
@@ -3088,7 +3174,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         }
     } else {
         fn_env = make_map(32);
-        st->current_ns->mappings = fn_env;
+        ns_set_mappings(st->current_ns, fn_env);
     }
     
     // Add clojure.core namespace mappings so functions like reverse, str, empty? are available
@@ -3126,6 +3212,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
     
     // Apply metadata to function (only in DEBUG builds for memory efficiency)
+    // In Release builds, metadata is parsed but ignored
 #ifdef DEBUG
 #ifdef ENABLE_META
     ID form_meta = meta_get((CljObject*)list);
@@ -3144,6 +3231,12 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // This ensures the function is available when the body is evaluated
     // ns_define may update st->current_ns->mappings (COW), so we need to update closure_env
     ns_define(st->current_ns, name_sym, fn_obj); // ns_define does RETAIN internally
+    
+    // ASSERT: Verify that the registered function can be found
+    static CljObject not_found_sentinel_func = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID found_func = map_get(st->current_ns->mappings, name_sym, (ID)&not_found_sentinel_func);
+    CLJ_ASSERT(found_func != (ID)&not_found_sentinel_func && "eval_defn: Registered function must be findable in namespace mappings");
+    CLJ_ASSERT(found_func == (ID)fn_obj && "eval_defn: Found function must match registered function");
     
     // CRITICAL: After ns_define, we need to ensure the function is in closure_env
     // Since we created an extended closure_env (with clojure.core mappings),
@@ -3535,7 +3628,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     // Print timing information (Clojure-compatible: "msecs" format)
     // Suppress output in test context
     if (!g_suppress_time_output) {
-        printf("Elapsed time: %.2f msecs\n", elapsed_ms);
+        fprintf(stderr, "Elapsed time: %.2f msecs\n", elapsed_ms);
     }
     
     // Return the result of the evaluated expression (Clojure-compatible: return the value)

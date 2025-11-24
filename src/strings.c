@@ -423,6 +423,16 @@ const char* to_cstring(CljObject *v) {
                 return strdup(buf);
             }
 
+        case CLJ_NAMESPACE:
+            {
+                CljNamespace *ns = (CljNamespace*)v;
+                if (!ns || !ns->name || !ns->name->name) {
+                    return strdup("#<namespace>");
+                }
+                // Return namespace name (Clojure-compatible: find-ns returns the name)
+                return strdup(ns->name->name);
+            }
+
         default:
             return strdup("#<unknown>");
     }

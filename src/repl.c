@@ -624,28 +624,46 @@ int main(int argc, char **argv) {
     }
 
     if (file_arg) {
-        // Simple file evaluation without TRY/CATCH
+        // Load entire file into memory for proper parsing (handles metadata across lines)
         FILE *fp = fopen(file_arg, "r");
         if (!fp) {
             printf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
         
-        char line[1024];
-        char acc[8192]; acc[0] = '\0';
-        while (fgets(line, sizeof(line), fp)) {
-            strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
-            if (form_balance(acc, NULL) != 0) continue;
-            
-            bool success = eval_multiline_string(acc, st);
-            if (!success) {
-                // Parse error or evaluation failed
-                fclose(fp);
-                cleanup_and_exit(eval_args, 1);
-            }
-            acc[0] = '\0';
+        // Get file size
+        if (fseek(fp, 0, SEEK_END) != 0) {
+            fclose(fp);
+            printf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
+            cleanup_and_exit(eval_args, 1);
         }
+        long sz = ftell(fp);
+        if (sz < 0) {
+            fclose(fp);
+            printf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
+            cleanup_and_exit(eval_args, 1);
+        }
+        rewind(fp);
+        
+        // Allocate buffer (sz + 1 for null terminator)
+        char *buffer = (char*)malloc((size_t)sz + 1);
+        if (!buffer) {
+            fclose(fp);
+            printf("Error: Out of memory\n");
+            cleanup_and_exit(eval_args, 1);
+        }
+        
+        // Read entire file
+        size_t n = fread(buffer, 1, (size_t)sz, fp);
+        buffer[n] = '\0';
         fclose(fp);
+        
+        // Evaluate entire file content
+        bool success = eval_multiline_string(buffer, st);
+        free(buffer);
+        if (!success) {
+            cleanup_and_exit(eval_args, 1);
+        }
         if (!start_repl && eval_count == 0) {
             cleanup_and_exit(eval_args, 0);
         }

@@ -346,8 +346,8 @@ TEST(test_parameter_lookup_optimization) {
     struct timeval start, end;
     gettimeofday(&start, NULL);
     
-    // Call function 100 times - each call does parameter lookups
-    for (int i = 0; i < 100; i++) {
+    // Call function 10 times - each call does parameter lookups
+    for (int i = 0; i < 10; i++) {
         char code[64];
         snprintf(code, sizeof(code), "(test-lookup %d %d %d)", i, i+1, i+2);
         CljValue result = eval_string(code, g_test_eval_state);

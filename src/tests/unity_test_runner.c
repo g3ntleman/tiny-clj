@@ -171,33 +171,13 @@ static void run_test_with_exception_handling(const Test *test) {
     } END_TRY
 }
 
-// JUnit-style test runner: print both PASS and FAIL messages with correct file paths
+// One-line test runner: Unity already prints one line per test
 static void run_tests_by_registry(void) {
     size_t test_count;
     Test *all_tests = test_registry_get_all(&test_count);
-    
-    if (test_count == 0) {
-        return;
-    }
-    
     for (size_t i = 0; i < test_count; i++) {
-        // Capture Unity test state before running
-        int failures_before = Unity.TestFailures;
-        
-        // Set Unity's TestFile and CurrentTestLineNumber for correct error reporting
         set_unity_test_file_info(&all_tests[i]);
-        
-        // Run test with exception handling
         run_test_with_exception_handling(&all_tests[i]);
-        
-        // Check if test failed
-        int failures_after = Unity.TestFailures;
-        
-        if (failures_after > failures_before) {
-            // Test failed - Unity already printed the error with file path
-            // Print the test name for consistency on stderr
-            fprintf(stderr, "FAIL: %s\n", all_tests[i].qualified_name);
-        }
     }
 }
 
@@ -231,27 +211,11 @@ static void run_specific_test(const char *test_name_or_pattern) {
             return;
         }
         
-        // JUnit-style: Simple progress indicator for pattern matching
+        // One-line output for pattern matching
         for (size_t i = 0; i < test_count; i++) {
-            // Match against qualified name (group/testname format)
             if (test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern)) {
-                // Capture Unity test state before running
-                int failures_before = Unity.TestFailures;
-                
-                // Set Unity's TestFile and CurrentTestLineNumber for correct error reporting
                 set_unity_test_file_info(&all_tests[i]);
-                
-                // Run test with exception handling
                 run_test_with_exception_handling(&all_tests[i]);
-                
-                // Check if test failed
-                int failures_after = Unity.TestFailures;
-                
-                if (failures_after > failures_before) {
-                    // Test failed - Unity already printed the error with file path
-                    // Print the test name for consistency on stderr
-                    fprintf(stderr, "FAIL: %s\n", all_tests[i].qualified_name);
-                }
             }
         }
     } else {
@@ -267,39 +231,8 @@ static void run_specific_test(const char *test_name_or_pattern) {
         }
         
         if (test) {
-            // Redirect Unity's stdout to /dev/null to suppress PASS messages
-            FILE *original_stdout = stdout;
-            FILE *devnull = fopen("/dev/null", "w");
-            if (devnull) {
-                stdout = devnull;
-            }
-            
-            // Capture Unity test state before running
-            int failures_before = Unity.TestFailures;
-            
-            // Set Unity's TestFile and CurrentTestLineNumber for correct error reporting
             set_unity_test_file_info(test);
-            
-            // Run test with exception handling
             run_test_with_exception_handling(test);
-            
-            // Check if test failed
-            int failures_after = Unity.TestFailures;
-            
-            if (failures_after > failures_before) {
-                // Restore stdout for FAIL message
-                if (devnull) {
-                    stdout = original_stdout;
-                }
-                // Test failed - print name only (no path/line number)
-                fprintf(stderr, "FAIL: %s\n", test->qualified_name);
-            }
-            
-            // Restore stdout
-            if (devnull) {
-                stdout = original_stdout;
-                fclose(devnull);
-            }
             // Summary will be printed at end of main()
         } else {
             // Test not found - print error message

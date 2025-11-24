@@ -105,6 +105,8 @@ bool clj_equal(ID a, ID b) {
             CljSymbol *sym_b = as_symbol(b);
             if (!sym_a || !sym_b) return false;
             if (!sym_a->name || !sym_b->name) return false;
+            
+            // Compare symbol names (must match)
             if (strcmp(sym_a->name, sym_b->name) != 0) return false;
             
             // Compare namespaces (pointer comparison works due to interning)
@@ -118,7 +120,9 @@ bool clj_equal(ID a, ID b) {
             // If one has a namespace and the other doesn't, they are not equal
             if (!sym_a->ns || !sym_b->ns) return false;
             
-            // Both have namespaces - compare namespace name strings
+            // Both have namespaces - compare namespace name strings (must match)
+            // CRITICAL: Both name and namespace name must match for symbols to be equal
+            if (!sym_a->ns->name || !sym_b->ns->name) return false;
             return strcmp(sym_a->ns->name, sym_b->ns->name) == 0;
         }
         

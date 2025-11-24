@@ -5,6 +5,8 @@
  */
 
 #include "tests_common.h"
+#include "strings.h"  // For to_cstring
+#include <sys/time.h>
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -38,6 +40,34 @@ TEST(test_require_clojure_string) {
     // blank? should be available (either as function or as nil if not yet loaded)
     // We just check that namespace exists and can be queried
     TEST_ASSERT_NOT_NULL(string_ns->mappings);
+}
+
+// Debug test: Check if trim is in namespace mappings after require
+TEST(test_require_debug_trim_in_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Load clojure.string namespace
+    (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+    
+    // Check if namespace exists
+    CljNamespace *string_ns = ns_find("clojure.string");
+    TEST_ASSERT_NOT_NULL_MESSAGE(string_ns, "clojure.string namespace should exist");
+    TEST_ASSERT_NOT_NULL_MESSAGE(string_ns->mappings, "clojure.string namespace should have mappings");
+    
+    // Check if trim symbol exists
+    CljSymbol *trim_sym = intern_symbol_global("trim");
+    TEST_ASSERT_NOT_NULL_MESSAGE(trim_sym, "trim symbol should be interned");
+    
+    // Check if trim is in namespace mappings
+    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID trim_func = map_get(string_ns->mappings, trim_sym, (ID)&not_found_sentinel);
+    
+    if (trim_func == (ID)&not_found_sentinel) {
+        TEST_FAIL_MESSAGE("trim not found in clojure.string namespace mappings - stubs may not have been executed");
+    } else {
+        TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim should be in namespace mappings");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(trim_func) == CLJ_FUNC, "trim should be a native function");
+    }
 }
 
 // Test: Verify that native functions are available in clojure.string

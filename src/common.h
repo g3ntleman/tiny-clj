@@ -82,4 +82,18 @@
 #endif
 #endif
 
+// EQUALS macro: compares two values using clj_equal() with single evaluation
+// Ensures arguments are evaluated only once to avoid side effects
+// Note: Requires object.h to be included for clj_equal() declaration
+#if defined(__GNUC__) || defined(__clang__)
+#define EQUALS(a, b) ({ \
+    __typeof__(a) _a = (a); \
+    __typeof__(b) _b = (b); \
+    clj_equal(_a, _b); \
+})
+#else
+// Fallback: simple macro (may evaluate parameters multiple times)
+#define EQUALS(a, b) clj_equal((a), (b))
+#endif
+
 #endif // TINY_CLJ_COMMON_H

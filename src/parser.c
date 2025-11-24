@@ -138,6 +138,26 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return parse_meta_map(reader, st);
       if (next == '(')
         return parse_anon_fn(reader, st);
+      if (next == '\'') {
+        // Handle var reader macro #'symbol => (var symbol)
+        reader_next(reader);  // Consume '#'
+        reader_next(reader);  // Consume '''
+        reader_skip_all(reader);
+        size_t vb_before = reader_offset(reader);
+        ID var_expr = parse_expr(reader, st);
+        size_t vb_after = reader_offset(reader);
+        if (vb_after <= vb_before && !reader_eof(reader)) {
+          throw_parser_exception("Parser made no progress after #'", reader);
+          return NULL;
+        }
+        if (!var_expr) return NULL;
+        // Create (var <expr>) list: (var expr)
+        // Use SYM_VAR if available, otherwise intern it
+        extern CljSymbol *SYM_VAR;
+        CljSymbol *var_sym = SYM_VAR ? SYM_VAR : intern_symbol_global("var");
+        ID var_elements[2] = {var_sym, var_expr};
+        return AUTORELEASE(make_list_from_stack((CljValue*)var_elements, 2));
+      }
       break;
     }
     
@@ -418,22 +438,40 @@ static ID parse_vector(Reader *reader, EvalState *st) {
  * @return Parsed map CljObject or NULL on error
  */
 static ID parse_map(Reader *reader, EvalState *st) {
-  if (!reader_match(reader, '{'))
+  if (!reader_match(reader, '{')) {
+    throw_parser_exception("Expected '{' to start map", reader);
     return NULL;
+  }
   reader_skip_all(reader);
   ID pairs[MAX_STACK_MAP_PAIRS * 2];
   int pair_count = 0;
   while (!reader_eof(reader) && reader_peek_char(reader) != '}') {
     ID key = parse_expr(reader, st);
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
+    // But if parse_expr returns NULL due to an error, we should check for exceptions
+    if (!key && !reader_is_eof(reader) && reader_peek_char(reader) != '}') {
+      // parse_expr failed - check if it's a parsing error or just nil
+      // If we're not at '}', it's likely a parsing error
+      throw_parser_exception("Failed to parse map key", reader);
+      return NULL;
+    }
     reader_skip_all(reader);
     ID value = parse_expr(reader, st);
     // Note: value can be NULL (nil) - that's a valid value in Clojure!
+    // But if parse_expr returns NULL due to an error, we should check for exceptions
+    if (!value && !reader_is_eof(reader) && reader_peek_char(reader) != '}') {
+      // parse_expr failed - check if it's a parsing error or just nil
+      // If we're not at '}', it's likely a parsing error
+      throw_parser_exception("Failed to parse map value", reader);
+      return NULL;
+    }
     reader_skip_all(reader);
     pairs[pair_count * 2] = key;
     pairs[pair_count * 2 + 1] = value;
     pair_count++;
   }
+  // After parsing all pairs, we should be at the closing '}'
+  // Don't skip whitespace here - we need to check if we're at '}'
   if (reader_eof(reader) || !reader_match(reader, '}')) {
     throw_parser_exception("Unclosed map - missing closing '}'", reader);
     return NULL;
@@ -1008,6 +1046,10 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
     return NULL;
   }
   
+  // In Release builds, metadata is parsed but ignored (for memory efficiency)
+  // In DEBUG builds, metadata is stored and can be retrieved via (meta)
+#ifdef DEBUG
+#ifdef ENABLE_META
   // Check if the object already has metadata (from nested metadata parsing)
   ID existing_meta = meta_get((CljObject*)obj);
   if (existing_meta) {
@@ -1024,6 +1066,8 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   
   // No existing metadata, apply new metadata directly
   meta_set((CljObject*)obj, (CljObject*)new_meta);
+#endif // ENABLE_META
+#endif // DEBUG
   RELEASE(new_meta);
   return obj;  // Return object (caller will handle AUTORELEASE)
 }
@@ -1042,12 +1086,15 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     return NULL;
   }
   
+  // In Release builds, metadata is parsed but ignored (for memory efficiency)
+  // In DEBUG builds, metadata is stored and can be retrieved via (meta)
+#ifdef DEBUG
+#ifdef ENABLE_META
   // Apply metadata if provided
   if (meta) {
     meta_set(obj, meta);
   }
   
-#ifdef ENABLE_META
   // Automatically add source code location metadata
   CljObject *location_meta = make_location_meta(reader, st);
   if (location_meta) {
@@ -1068,6 +1115,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     RELEASE(location_meta);
   }
 #endif // ENABLE_META
+#endif // DEBUG
   
   if (meta) RELEASE(meta);
   return AUTORELEASE(obj);
@@ -1100,14 +1148,17 @@ static ID parse_meta(Reader *reader, EvalState *st) {
   if (!reader_eof(reader) && reader_current(reader) == ':') {
     // Parse the keyword
     ID keyword_meta = parse_expr(reader, st);
-    if (!keyword_meta)
+    if (!keyword_meta) {
+      throw_parser_exception("Failed to parse keyword in ^:keyword metadata syntax", reader);
       return NULL;
+    }
     
     // Convert keyword to metadata map {:keyword true}
     // In Clojure, ^:keyword means ^{:keyword true}
     CljMap *meta_map = make_map(4);
     if (!meta_map) {
       RELEASE(keyword_meta);
+      throw_parser_exception("Failed to allocate memory for metadata map", reader);
       return NULL;
     }
     
@@ -1123,33 +1174,50 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     ID obj = parse_expr(reader, st);
     if (!obj) {
       RELEASE(meta_map);
+      throw_parser_exception("Failed to parse object after ^:keyword metadata", reader);
       return NULL;
     }
     
     // Merge metadata with object (handles existing metadata)
     ID result = merge_metadata_with_object(obj, (ID)meta_map);
     if (!result) {
+      RELEASE(meta_map);
+      RELEASE(obj);
+      throw_parser_exception("Failed to merge metadata with object", reader);
       return NULL;
     }
     // Apply location metadata if enabled
     return apply_metadata_to_object(reader, st, NULL, result);
   }
   
-  // Regular ^meta syntax (map or other expression)
+  // Regular ^meta syntax - check if it's a map ^{...} or other expression
   reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '{') {
+    // ^{...} syntax - delegate to parse_meta_map (which handles both ^{...} and #^{...})
+    // parse_meta_map will consume the '{' and parse the map
+    return parse_meta_map(reader, st);
+  }
+  
+  // Other expression (not a map) - parse as expression
   ID meta = parse_expr(reader, st);
-  if (!meta)
+  if (!meta) {
+    throw_parser_exception("Failed to parse metadata expression in ^meta syntax", reader);
     return NULL;
+  }
   reader_skip_all(reader);
   ID obj = parse_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
+    throw_parser_exception("Failed to parse object after metadata in ^meta syntax", reader);
     return NULL;
   }
   
   // Merge metadata with object (handles existing metadata)
   ID result = merge_metadata_with_object(obj, meta);
   if (!result) {
+    RELEASE(meta);
+    RELEASE(obj);
+    throw_parser_exception("Failed to merge metadata with object", reader);
     return NULL;
   }
   // Apply location metadata if enabled
@@ -1224,30 +1292,58 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
 static ID parse_meta_map(Reader *reader,
                                         EvalState *st) {
   // When called from parse_expr, we need to consume '#' and '^'
-  // When called from parse_meta, we're already past '#' and at '^'
+  // When called from parse_meta for ^#^{...}, we're already past '^' and '#' and should be at '^'
+  // When called from parse_meta for ^{...}, we're already past '^' and should be at '{'
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
     // Called from parse_expr - consume '#' first
     reader_next(reader);  // Consume '#'
+    reader_skip_all(reader);
+    if (reader_eof(reader) || reader_current(reader) != '^') {
+      throw_parser_exception("Expected '^' after '#' in metadata map syntax #^{...}", reader);
+      return NULL;
+    }
+    reader_next(reader);  // Consume '^'
+    reader_skip_all(reader);
+  } else if (!reader_eof(reader) && reader_current(reader) == '^') {
+    // Called from parse_meta for ^#^{...} - we're at the second '^', consume it
+    reader_next(reader);  // Consume '^'
+    reader_skip_all(reader);
   }
-  // Now we should be at '^' (either from parse_expr after '#' or from parse_meta)
-  reader_skip_all(reader);
-  if (reader_eof(reader) || reader_current(reader) != '^') {
-    return NULL;
-  }
-  reader_next(reader);  // Consume '^'
-  
-  reader_skip_all(reader);
+  // Now we should be at '{' (the start of the metadata map)
+  // Use parse_map directly (DRY: same code for both ^{...} and #^{...})
   ID meta = parse_map(reader, st);
-  if (!meta)
+  if (!meta) {
+    throw_parser_exception("Failed to parse metadata map", reader);
     return NULL;
+  }
+  // parse_map already consumed the closing '}', so reader is positioned after '}'
+  // Skip whitespace (including newlines) before parsing the object
   reader_skip_all(reader);
+  
+  // Check if we're at EOF before trying to parse the object
+  // This can happen if the metadata map is on the last line of the file
+  // In that case, the object should be on the next line, but we need to handle it
+  if (reader_eof(reader)) {
+    RELEASE(meta);
+    throw_parser_exception("Unexpected EOF after metadata map - missing object", reader);
+    return NULL;
+  }
+  
   ID obj = parse_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
+    throw_parser_exception("Failed to parse object after metadata map", reader);
     return NULL;
   }
   
-  return apply_metadata_to_object(reader, st, meta, obj);
+  ID result = apply_metadata_to_object(reader, st, meta, obj);
+  if (!result) {
+    RELEASE(meta);
+    RELEASE(obj);
+    throw_parser_exception("Failed to apply metadata to object", reader);
+    return NULL;
+  }
+  return result;
 }
 

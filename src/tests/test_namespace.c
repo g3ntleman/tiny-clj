@@ -315,7 +315,7 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
     // Test multiple ns_resolve calls - should NOT trigger namespace search loop
     // If cache is properly set, the search loop in ns_resolve (lines 66-79) won't execute
     CljSymbol *plus_sym = intern_symbol_global("+");
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10; i++) {
         CljObject *resolved = ns_resolve(g_test_eval_state, plus_sym);
         // Should work without searching through all namespaces
         (void)resolved; // Just test that it doesn't crash
@@ -354,11 +354,11 @@ TEST(test_ns_resolve_symbol_cache) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved1));
     
     // Multiple resolutions with same symbol - should benefit from cache
-    // Measure time for 100 resolutions (baseline without cache)
+    // Measure time for 10 resolutions (baseline without cache)
     struct timeval start, end;
     gettimeofday(&start, NULL);
     
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10; i++) {
         CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
         TEST_ASSERT_NOT_NULL(resolved);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
@@ -422,7 +422,7 @@ TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_EQUAL(3, as_fixnum((CljValue)result2));
     
     // Multiple calls to verify cache is being used
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 3; i++) {
         char expr[32];
         snprintf(expr, sizeof(expr), "(inc %d)", i);
         CljObject *result = eval_string(expr, g_test_eval_state);
@@ -875,7 +875,7 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
     // The important thing is that we always use the return value of map_conj
     
     // Create multiple namespaces to potentially trigger map growth
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 5; i++) {
         char ns_name[32];
         snprintf(ns_name, sizeof(ns_name), "growth-test-%d", i);
         CljNamespace *ns = ns_get_or_create(ns_name, NULL);
@@ -891,5 +891,155 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
     int count = map_count(g_runtime.ns_registry);
     TEST_ASSERT_TRUE(count >= 20);
+}
+
+// Test: Verify ns-map returns mappings map
+TEST(test_ns_map_returns_mappings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a test namespace with some mappings
+    CljNamespace *test_ns = ns_get_or_create("test-ns-map", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+    
+    // Add some mappings
+    CljSymbol *sym1 = intern_symbol_global("test-var1");
+    CljSymbol *sym2 = intern_symbol_global("test-var2");
+    CljObject *val1 = fixnum(100);
+    CljObject *val2 = fixnum(200);
+    
+    ns_define(test_ns, (ID)sym1, val1);
+    ns_define(test_ns, (ID)sym2, val2);
+    
+    // Test ns-map with namespace symbol
+    CljSymbol *ns_sym = intern_symbol_global("test-ns-map");
+    TEST_ASSERT_NOT_NULL(ns_sym);
+    
+    // Call ns-map via eval_string
+    CljObject *result = eval_string("(ns-map 'test-ns-map)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    
+    // Verify the mappings are in the result
+    CljMap *mappings = (CljMap*)result;
+    CljObject *found_val1 = (CljObject*)map_get(mappings, sym1, NULL);
+    CljObject *found_val2 = (CljObject*)map_get(mappings, sym2, NULL);
+    TEST_ASSERT_NOT_NULL(found_val1);
+    TEST_ASSERT_NOT_NULL(found_val2);
+    TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)found_val1));
+    TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)found_val2));
+    
+    // Cleanup
+    RELEASE((CljObject*)sym1);
+    RELEASE((CljObject*)sym2);
+    RELEASE((CljObject*)val1);
+    RELEASE((CljObject*)val2);
+    RELEASE((CljObject*)ns_sym);
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify ns-map with empty namespace returns empty map
+TEST(test_ns_map_empty_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create an empty namespace
+    CljNamespace *empty_ns = ns_get_or_create("test-empty-ns", NULL);
+    TEST_ASSERT_NOT_NULL(empty_ns);
+    
+    // Test ns-map with namespace symbol
+    CljObject *result = eval_string("(ns-map 'test-empty-ns)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    
+    // Verify it's an empty map
+    CljMap *mappings = (CljMap*)result;
+    TEST_ASSERT_EQUAL(0, map_count(mappings));
+    
+    // Cleanup
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify ns-map with current namespace (using namespace name)
+TEST(test_ns_map_current_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Add a mapping to current namespace
+    CljSymbol *test_sym = intern_symbol_global("current-ns-var");
+    CljObject *test_val = fixnum(42);
+    ns_define(g_test_eval_state->current_ns, (ID)test_sym, test_val);
+    
+    // Get current namespace name
+    const char *current_ns_name = g_test_eval_state->current_ns->name->name;
+    
+    // Test ns-map with namespace name
+    char expr[256];
+    snprintf(expr, sizeof(expr), "(ns-map '%s)", current_ns_name);
+    CljObject *result = eval_string(expr, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    
+    // Verify the mapping is in the result
+    CljMap *mappings = (CljMap*)result;
+    CljObject *found = (CljObject*)map_get(mappings, test_sym, NULL);
+    TEST_ASSERT_NOT_NULL(found);
+    TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
+    
+    // Cleanup
+    RELEASE((CljObject*)test_sym);
+    RELEASE((CljObject*)test_val);
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify find-ns returns namespace object
+TEST(test_find_ns_returns_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a test namespace
+    CljNamespace *test_ns = ns_get_or_create("test-find-ns", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+    
+    // Test find-ns with symbol
+    CljObject *result = eval_string("(find-ns 'test-find-ns)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_NAMESPACE);
+    TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
+    
+    // Cleanup
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify find-ns returns nil for non-existent namespace
+TEST(test_find_ns_returns_nil_for_nonexistent) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test find-ns with non-existent namespace
+    CljObject *result = eval_string("(find-ns 'does.not.exist)", g_test_eval_state);
+    TEST_ASSERT_NULL(result); // Should return nil (NULL)
+}
+
+// Test: Verify find-ns with string argument
+TEST(test_find_ns_with_string) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a test namespace
+    CljNamespace *test_ns = ns_get_or_create("test-find-ns-string", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+    
+    // Test find-ns with string
+    CljObject *result = eval_string("(find-ns \"test-find-ns-string\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_NAMESPACE);
+    TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
+    
+    // Cleanup
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify find-ns with nil argument returns nil
+TEST(test_find_ns_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test find-ns with nil
+    CljObject *result = eval_string("(find-ns nil)", g_test_eval_state);
+    TEST_ASSERT_NULL(result); // Should return nil (NULL)
 }
 

@@ -299,6 +299,7 @@ add_executable(unity-tests
     src/tests/test_keyword_evaluation.c
     src/tests/test_string.c
     src/tests/test_require.c
+    src/tests/test_require_perf.c
     src/tests/test_qualified_symbol_resolution.c
     src/tests/test_file_io.c
     src/tests/test_atom.c

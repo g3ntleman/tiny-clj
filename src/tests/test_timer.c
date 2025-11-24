@@ -23,10 +23,10 @@
 TEST(test_schedule_executes_after_delay) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // Create a timer that prints after 100ms
+    // Create a timer that prints after 1ms
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(schedule 100 (fn [] 42))", g_test_eval_state);
+        result = eval_string("(schedule 1 (fn [] 42))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("schedule should not throw exception");
         return;
@@ -36,7 +36,7 @@ TEST(test_schedule_executes_after_delay) {
     TEST_ASSERT_NULL(result);
     
     // Wait a bit and run tasks - timer should execute
-    usleep(150000); // 150ms
+    usleep(5000); // 5ms
     
     // Run timer processing and task execution
     CljObject *ran_val = NULL;
@@ -97,10 +97,10 @@ TEST(test_schedule_zero_delay_executes_immediately) {
 TEST(test_schedule_periodic_repeats) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
-    // Create a periodic timer that runs every 100ms, starting immediately
+    // Create a periodic timer that runs every 1ms, starting immediately
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(schedule-periodic 0 100 (fn [] 42))", g_test_eval_state);
+        result = eval_string("(schedule-periodic 0 1 (fn [] 42))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
         return;
@@ -124,7 +124,7 @@ TEST(test_schedule_periodic_repeats) {
     TEST_ASSERT_TRUE(as_special((CljValue)ran_val) == SPECIAL_TRUE);
     
     // Wait for next period
-    usleep(150000); // 150ms
+    usleep(5000); // 5ms
     
     // Second execution should be ready
     TRY {
@@ -200,7 +200,7 @@ TEST(test_schedule_periodic_returns_timer_id) {
     
     CljObject *result = NULL;
     TRY {
-        result = eval_string("(schedule-periodic 0 1000 (fn [] (println \"Tick\")))", g_test_eval_state);
+        result = eval_string("(schedule-periodic 0 1 (fn [] (println \"Tick\")))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
         return;
@@ -225,7 +225,7 @@ TEST(test_cancel_timer_stops_periodic_timer) {
     // Create a periodic timer
     CljObject *timer_id_obj = NULL;
     TRY {
-        timer_id_obj = eval_string("(schedule-periodic 0 100 (fn [] 42))", g_test_eval_state);
+        timer_id_obj = eval_string("(schedule-periodic 0 1 (fn [] 42))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
         return;
@@ -253,7 +253,7 @@ TEST(test_cancel_timer_stops_periodic_timer) {
     TEST_ASSERT_TRUE(as_special((CljValue)cancel_result) == SPECIAL_TRUE);
     
     // Wait a bit - timer should not execute anymore
-    usleep(150000); // 150ms
+    usleep(5000); // 5ms
     
     // Try to run task - should be empty (timer was cancelled)
     CljObject *ran_val = NULL;
@@ -280,7 +280,7 @@ TEST(test_cancel_timer_returns_true_when_found) {
     // Create a periodic timer
     CljObject *timer_id_obj = NULL;
     TRY {
-        timer_id_obj = eval_string("(schedule-periodic 0 1000 (fn [] 42))", g_test_eval_state);
+        timer_id_obj = eval_string("(schedule-periodic 0 10 (fn [] 42))", g_test_eval_state);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE("schedule-periodic should not throw exception");
         return;

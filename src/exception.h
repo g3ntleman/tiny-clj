@@ -243,4 +243,7 @@ extern const char *EXCEPTION_DIVISION_BY_ZERO;
 /** @brief Static exception type: ZombieAccessException */
 extern const char *EXCEPTION_ZOMBIE_ACCESS;
 
+/** @brief Static exception type: IndexOutOfBoundsException */
+extern const char *EXCEPTION_INDEX_OUT_OF_BOUNDS;
+
 #endif

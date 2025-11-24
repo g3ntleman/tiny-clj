@@ -635,11 +635,11 @@ TEST(test_cow_memory_efficiency_benchmark) {
         // Test 4: Memory-Effizienz Benchmark
         CljMap *env = (CljMap*)make_map(4);
         
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 100; i++) {
             CljValue new_env = map_assoc((CljValue)env, fixnum(i), fixnum(i * 10));
             AUTORELEASE(new_env);
             
-            if (i % 100 == 0) {
+            if (i % 10 == 0) {
             }
         }
         

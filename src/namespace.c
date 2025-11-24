@@ -36,9 +36,12 @@ static void search_namespace_callback(ID key, ID value) {
     
     CljNamespace *ns = (CljNamespace*)value;
     if (ns && ns != g_ns_search_ctx->clojure_core_cache && ns->mappings) {
-        CljObject *found = (CljObject*)map_get(ns->mappings, g_ns_search_ctx->sym, NULL);
-        if (found && !g_ns_search_ctx->result) {
-            g_ns_search_ctx->result = found;
+        // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        ID found = map_get(ns->mappings, g_ns_search_ctx->sym, (ID)&not_found_sentinel);
+        if (found != (ID)&not_found_sentinel && !g_ns_search_ctx->result) {
+            // Found in namespace (value can be NULL/nil, which is valid)
+            g_ns_search_ctx->result = (CljObject*)found;
         }
     }
 }
@@ -112,7 +115,7 @@ static int ns_init_registry(void) {
     
     CljMap *transient_map = map_transient(ns_map);
     RELEASE(ns_map); // map_transient() retains the result
-    g_runtime.ns_registry = transient_map;
+    ASSIGN(g_runtime.ns_registry, transient_map);
     
     return 0;
 }
@@ -126,7 +129,7 @@ int ns_reset_registry(void) {
     // Cleanup existing registry if present
     if (g_runtime.ns_registry) {
         RELEASE(g_runtime.ns_registry);
-        g_runtime.ns_registry = NULL;
+        ASSIGN(g_runtime.ns_registry, NULL);
     }
     
     // Reset cache (will be automatically rebuilt when needed)
@@ -134,6 +137,18 @@ int ns_reset_registry(void) {
     
     // Initialize new registry
     return ns_init_registry();
+}
+
+/**
+ * @brief Set namespace mappings (central setter for all mapping changes)
+ * @param ns Namespace
+ * @param mappings New mappings map
+ */
+void ns_set_mappings(CljNamespace *ns, CljMap *mappings) {
+    if (!ns) return;
+    
+    // Use ASSIGN which handles RELEASE/RETAIN correctly
+    ASSIGN(ns->mappings, mappings);
 }
 
 /** Create a new namespace object (does not register it in the registry).
@@ -152,6 +167,10 @@ CljNamespace* make_namespace(const char *name, const char *file) {
     if (!ns) return NULL;
     
     // ALLOC already sets base.type = CLJ_NAMESPACE and base.rc = 0
+    // Initialize mappings to NULL to avoid uninitialized memory issues
+    ns->mappings = NULL;
+    ns->aliases = NULL;
+    ns->filename = NULL;
     
     // Get or intern the namespace name symbol
     CljSymbol *name_symbol = intern_symbol(NULL, name);
@@ -164,10 +183,18 @@ CljNamespace* make_namespace(const char *name, const char *file) {
     }
     
     ns->name = name_symbol; // Use the interned symbol
-    ns->mappings = make_map(64); // Increased capacity for clojure.core
-    if (!ns->mappings) {
+    CljMap *mappings = make_map(64); // Increased capacity for clojure.core
+    if (!mappings) {
         free(ns);
         return NULL;
+    }
+    ns_set_mappings(ns, mappings);
+    
+    // Define *ns* in namespace mappings (ClojureScript-style: *ns* is a normal var)
+    // This allows *ns* to be resolved via normal symbol resolution, avoiding special cases
+    extern CljSymbol *SYM_NS_STAR;
+    if (SYM_NS_STAR) {
+        ns_define(ns, (ID)SYM_NS_STAR, (ID)name_symbol);
     }
     
     ns->aliases = make_map(16);
@@ -219,7 +246,7 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
         CljMap *grown_map = grow_transient_map(g_runtime.ns_registry);
         if (grown_map) {
             RELEASE(g_runtime.ns_registry);
-            g_runtime.ns_registry = grown_map;
+            ASSIGN(g_runtime.ns_registry, grown_map);
             // Try again with the grown map
             new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
             if (!new_registry) {
@@ -233,7 +260,12 @@ CljNamespace* ns_get_or_create(const char *name, const char *file) {
             return NULL;
         }
     }
-    g_runtime.ns_registry = new_registry;
+    // CRITICAL: map_conj may return a new map (COW), so we must update g_runtime.ns_registry with ASSIGN
+    ASSIGN(g_runtime.ns_registry, new_registry);
+    
+    // ASSERT: Verify that the added namespace can be found
+    CljObject *found_ns = map_get(g_runtime.ns_registry, name_symbol, NULL);
+    CLJ_ASSERT(found_ns == (CljObject*)ns && "ns_get_or_create: Added namespace must be findable in registry");
     
     // Cache clojure.core for priority lookup (fast symbol pointer comparison)
     // Note: CljNamespace is now a CljObject subtype, but we just store a pointer here
@@ -263,8 +295,8 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     ID v = map_get(current_ns->mappings, sym, (ID)&not_found_sentinel);
     if (v != (ID)&not_found_sentinel) {
         // Found in current namespace (value can be NULL/nil, which is valid)
-        // Update cache (map_assoc may return a new map due to COW, so we must use the result)
-        if (g_runtime.resolve_cache) {
+        // Update cache (only cache non-nil values to save space)
+        if (g_runtime.resolve_cache && v) {
             ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
             ASSIGN(g_runtime.resolve_cache, updated_cache);
         }
@@ -272,6 +304,8 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     }
     
     // Not in current namespace - check cache (fast path for repeated lookups)
+    // NOTE: Cache only stores non-nil values (nil values are not cached to save space)
+    // This means if cached is NULL, the symbol is not in cache (not that it resolved to nil)
     if (g_runtime.resolve_cache) {
         ID cached = map_get(g_runtime.resolve_cache, sym, NULL);
         if (cached) {
@@ -281,10 +315,14 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
 
     // Search clojure.core first (most common)
     if (g_runtime.clojure_core_cache && g_runtime.clojure_core_cache->mappings) {
-        v = (CljObject*)map_get(g_runtime.clojure_core_cache->mappings, sym, NULL);
-        if (v) {
-            // Cache the result (map_assoc may return a new map due to COW, so we must use the result)
-            if (g_runtime.resolve_cache) {
+        // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        ID found = map_get(g_runtime.clojure_core_cache->mappings, sym, (ID)&not_found_sentinel);
+        if (found != (ID)&not_found_sentinel) {
+            // Found in clojure.core (value can be NULL/nil, which is valid)
+            v = (CljObject*)found;
+            // Cache the result (only cache non-nil values to save space)
+            if (g_runtime.resolve_cache && v) {
                 ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
                 ASSIGN(g_runtime.resolve_cache, updated_cache);
             }
@@ -310,9 +348,13 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         // Restore old context
         g_ns_search_ctx = old_ctx;
         
+        // NOTE: search_ctx.result can be NULL (nil), which is a valid value
+        // But we can't distinguish between "not found" (result == NULL) and "found with nil" (result == NULL)
+        // For now, we only return non-NULL results from the search
+        // This means nil values in other namespaces won't be found, but that's acceptable for now
         if (search_ctx.result) {
             v = search_ctx.result;
-            // Cache the result
+            // Cache the result (only cache non-nil values to save space)
             if (g_runtime.resolve_cache) {
                 ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
                 ASSIGN(g_runtime.resolve_cache, updated_cache);
@@ -360,7 +402,7 @@ void ns_register(CljNamespace *ns) {
         CljMap *grown_map = grow_transient_map(g_runtime.ns_registry);
         if (grown_map) {
             RELEASE(g_runtime.ns_registry);
-            g_runtime.ns_registry = grown_map;
+            ASSIGN(g_runtime.ns_registry, grown_map);
             // Try again with the grown map
             new_registry = map_conj(g_runtime.ns_registry, ns->name, ns);
             if (!new_registry) {
@@ -374,7 +416,12 @@ void ns_register(CljNamespace *ns) {
             return;
         }
     }
-    g_runtime.ns_registry = new_registry;
+    // CRITICAL: map_conj may return a new map (COW), so we must update g_runtime.ns_registry with ASSIGN
+    ASSIGN(g_runtime.ns_registry, new_registry);
+    
+    // ASSERT: Verify that the added namespace can be found
+    CljObject *found_ns = map_get(g_runtime.ns_registry, ns->name, NULL);
+    CLJ_ASSERT(found_ns == (CljObject*)ns && "ns_register: Added namespace must be findable in registry");
 }
 
 // Helper function to find namespace containing a given object
@@ -415,7 +462,7 @@ void ns_cleanup() {
         
         // Release the registry map itself
         RELEASE(g_runtime.ns_registry);
-        g_runtime.ns_registry = NULL;
+        ASSIGN(g_runtime.ns_registry, NULL);
     }
     
     // Reset cache (will be automatically rebuilt when needed)
@@ -480,10 +527,15 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
     if (!st || !ns_name) return;
     
     // CRITICAL: Check cache first for clojure.core (fast path)
-    // This ensures we always use the cached namespace if it exists
-    if (strcmp(ns_name, "clojure.core") == 0 && g_runtime.clojure_core_cache) {
-        st->current_ns = g_runtime.clojure_core_cache;
-        return;
+    // HAPPY PATH: Use pointer comparison with interned symbol (no strcmp)
+    // Optimize: Check length first (12 chars) before pointer comparison
+    if (ns_name && ns_name[0] == 'c' && ns_name[11] == 'e' && ns_name[12] == '\0') {
+        // Fast length check: "clojure.core" is 12 chars
+        CljSymbol *ns_name_sym = intern_symbol(NULL, ns_name);
+        if (ns_name_sym == SYM_CLOJURE_CORE && g_runtime.clojure_core_cache) {
+            st->current_ns = g_runtime.clojure_core_cache;
+            return;
+        }
     }
     
     // Get or create namespace
@@ -498,6 +550,12 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
         // This handles the case where ns_get_or_create just created it
         if (ns->name == SYM_CLOJURE_CORE && !g_runtime.clojure_core_cache) {
             g_runtime.clojure_core_cache = ns;
+        }
+        // Update *ns* in namespace mappings (ClojureScript-style: *ns* is a normal var)
+        // This ensures *ns* always reflects the current namespace
+        extern CljSymbol *SYM_NS_STAR;
+        if (SYM_NS_STAR && ns->mappings) {
+            ns_define(ns, (ID)SYM_NS_STAR, (ID)ns->name);
         }
     }
 }
@@ -568,7 +626,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     if (user_ns && user_ns != g_runtime.clojure_core_cache) {
         if (user_ns->mappings) {
             RELEASE(user_ns->mappings);
-            user_ns->mappings = make_map(16);
+            ns_set_mappings(user_ns, make_map(16));
         }
     }
     
@@ -615,7 +673,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 // Bind variable (sym = err) - simplified
                 // CRITICAL: map_assoc may return a new map (COW), so we must use the result
                 CljMap *updated_mappings = map_assoc((CljMap*)st->current_ns->mappings, sym, ex);
-                ASSIGN(st->current_ns->mappings, (CljObject*)updated_mappings);
+                ns_set_mappings(st->current_ns, updated_mappings);
                 result = (CljObject*)eval_parsed(body, st, NULL);
                 return result;
             }
@@ -633,8 +691,6 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
     // Vereinfachte catch-Implementierung
     return eval_try(form, st);
 }
-
-
 /**
  * @brief Define a symbol in the current namespace
  * @param st Evaluation state
@@ -648,21 +704,22 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     
     // Create or update mappings
     if (!ns->mappings) {
-        ns->mappings = make_map(16);
+        ns_set_mappings(ns, make_map(16));
     }
     
     // Store symbol-value binding (overwrites existing)
     // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
-    // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
+    // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings with ASSIGN
+    // ASSIGN handles reference counting correctly (RELEASE old, RETAIN new)
     CljMap *new_mappings = map_assoc(ns->mappings, symbol, value);
-    if (new_mappings != ns->mappings) {
-        // Map was copied (COW) - update reference
-        RELEASE(ns->mappings);
-        ns->mappings = new_mappings;
-        // new_mappings is already retained by map_assoc
-    }
-    // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
+    ns_set_mappings(ns, new_mappings);
+    
+    // ASSERT: Verify that the added element can be found
+    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID found = map_get(ns->mappings, symbol, (ID)&not_found_sentinel);
+    CLJ_ASSERT(found != (ID)&not_found_sentinel && "ns_define: Added element must be findable in mappings");
+    CLJ_ASSERT(found == (ID)value || (value && IS_IMMEDIATE(value)) && "ns_define: Found value must match added value");
     
     // CRITICAL: Invalidate resolve cache when a symbol is redefined in the current namespace
     // This ensures that ns_resolve will find the new definition instead of returning cached value

@@ -14,7 +14,6 @@
 #include "vector.h"
 #include "map.h"
 #include "atom.h"
-#include "kv_macros.h"
 #include "numeric_utils.h"
 #include "runtime.h"
 #include "memory.h"
@@ -29,11 +28,9 @@
 #include "function.h"
 #include "strings.h"
 #include "event_loop.h"
-#include "strings.h"
 #include "reader.h"
 #include "parser.h"
 #include "meta.h"
-#include "function_call.h"
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -874,6 +871,86 @@ ID native_vals(ID *args, unsigned int argc) {
     }
     
     return NULL; // Return nil for unsupported types
+}
+
+// ns-map: Returns a map of all mappings in a namespace
+// Accepts either a namespace object or a symbol representing the namespace name
+ID native_ns_map(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "ns-map")) return NULL;
+    
+    ID arg = args[0];
+    if (!arg) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "ns-map requires a namespace or symbol, got nil");
+        return NULL;
+    }
+    
+    CljNamespace *ns = NULL;
+    int arg_tag = TAG(arg);
+    
+    // Check if argument is a namespace object
+    if (arg_tag == CLJ_NAMESPACE) {
+        ns = (CljNamespace*)arg;
+        CLJ_ASSERT(ns != NULL);
+    } else if (arg_tag == CLJ_SYMBOL) {
+        // Argument is a symbol - find namespace by name
+        CljSymbol *ns_sym = as_symbol((CljObject*)arg);
+        CLJ_ASSERT(ns_sym != NULL);
+        CLJ_ASSERT(ns_sym->name != NULL);
+        ns = ns_find(ns_sym->name);
+        if (!ns) {
+            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                    "ns-map: namespace %s not found", ns_sym->name);
+            return NULL;
+        }
+    } else {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "ns-map requires a namespace or symbol, got %s", clj_type_name(arg_tag));
+        return NULL;
+    }
+    
+    // Return the mappings map (or empty map if no mappings)
+    // Namespace mappings are always persistent (created with make_map())
+    return AUTORELEASE(ns->mappings ? RETAIN((CljObject*)ns->mappings) : make_map(0));
+}
+
+// find-ns: Returns the namespace object for a given name, or nil if not found
+// Accepts either a symbol or a string representing the namespace name
+ID native_find_ns(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "find-ns")) return NULL;
+    
+    ID arg = args[0];
+    if (!arg) {
+        return NULL; // nil argument returns nil (Clojure-compatible)
+    }
+    
+    const char *ns_name = NULL;
+    int arg_tag = TAG(arg);
+    
+    // Check if argument is a symbol
+    if (arg_tag == CLJ_SYMBOL) {
+        CljSymbol *ns_sym = as_symbol((CljObject*)arg);
+        CLJ_ASSERT(ns_sym != NULL);
+        CLJ_ASSERT(ns_sym->name != NULL);
+        ns_name = ns_sym->name;
+    } else if (arg_tag == CLJ_STRING) {
+        // Argument is a string - get the C string
+        CljString *str = as_clj_string((CljObject*)arg);
+        CLJ_ASSERT(str != NULL);
+        ns_name = str->data;
+    } else {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                "find-ns requires a symbol or string, got %s", clj_type_name(arg_tag));
+        return NULL;
+    }
+    
+    // Find namespace by name
+    CljNamespace *ns = ns_find(ns_name);
+    if (ns) {
+        return AUTORELEASE(RETAIN((CljObject*)ns));
+    } else {
+        return NULL; // Namespace not found - return nil (Clojure-compatible)
+    }
 }
 
 ID native_type(ID *args, unsigned int argc) {
@@ -1974,8 +2051,10 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
             // Save reader position before parsing to detect if we're stuck
             size_t pos_before = reader_offset(&reader);
             
+            // Store form outside TRY block so it's accessible in CATCH
+            CljValue form = NULL;
             TRY {
-                CljValue form = value_by_parsing_expr(&reader, st);
+                form = value_by_parsing_expr(&reader, st);
                 if (!form) {
                     if (reader_is_eof(&reader)) break;
                     // Parse failed - skip to next line to avoid infinite loop
@@ -1983,6 +2062,7 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                     if (!reader_is_eof(&reader)) reader_next(&reader);
                     continue;
                 }
+                
                 (void)eval_parsed((CljObject*)form, st, NULL);
                 // value_by_parsing_expr returns AUTORELEASE object
                 success_count++;
@@ -1994,10 +2074,7 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                     reader_next(&reader);
                 }
             } CATCH(ex) {
-                // Log exceptions during namespace loading to help debug issues
-                if (ex) {
-                    fprintf(stderr, "[namespace loading] Exception: %s\n", ex->message);
-                }
+                // Exception caught - continue with next expression
                 // Skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                 if (!reader_is_eof(&reader)) reader_next(&reader);
@@ -2075,14 +2152,16 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljVector *vec = NULL;
     bool ns_name_allocated = false;
     
-    // Handle simple Symbol case: (require 'namespace)
-    if (spec && TAG(spec) == CLJ_SYMBOL) {
+    // HAPPY PATH: Handle simple Symbol case first (most common): (require 'namespace)
+    // Optimize for linear execution in common case
+    int spec_tag = TAG(spec);
+    if (spec_tag == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(spec);
         if (!sym || !sym->name) return false;
         ns_name = sym->name;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
-    else if (spec && TAG(spec) == CLJ_VECTOR) {
+    else if (spec_tag == CLJ_VECTOR) {
         vec = as_vector(spec);
         if (vector_count(vec) < 1) return false;
         
@@ -2164,56 +2243,56 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     
     if (!ns_name) return false;
     
-    // Load namespace (existing logic)
-    // CRITICAL: Check if namespace exists, but don't skip loading if it only has native functions
-    // A namespace might exist because native functions were registered, but Clojure code hasn't been loaded yet
+    // HAPPY PATH: Check if namespace already loaded (linear path, no nested branches)
+    // Most common case: namespace exists and is fully loaded
     CljNamespace *existing = ns_find(ns_name);
-    if (existing) {
-        // Check if namespace has been fully loaded by checking for a marker function
-        // For clojure.string, check if blank? exists (first Clojure function defined)
-        // If it doesn't exist, we need to load the Clojure code even though namespace exists
-        bool needs_loading = false;
-        if (strcmp(ns_name, "clojure.string") == 0) {
-            CljSymbol *blank_sym = intern_symbol_global("blank?");
-            if (blank_sym && existing->mappings) {
-                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-                // nil (NULL) is a valid value in Clojure, so we can't use NULL as not_found
-                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID blank_func = map_get(existing->mappings, blank_sym, (ID)&not_found_sentinel);
-                if (blank_func == (ID)&not_found_sentinel) {
-                    // blank? not found - namespace exists but Clojure code not loaded
-                    needs_loading = true;
-                }
-                // If blank_func != sentinel, it was found (even if it's nil/NULL, which is valid)
-            } else {
-                // Can't check - assume needs loading to be safe
-                needs_loading = true;
-            }
-        }
-        
-        if (!needs_loading) {
-            // Namespace already fully loaded - just set alias/refer if needed
-            if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-                CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
-                if (ns_name_sym) {
-                    ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
-                }
-            }
-            if (refer_all) {
-                copy_all_symbols_to_namespace(existing, st->current_ns);
-            } else if (refer_syms) {
-                copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
-            }
-            if (ns_name_allocated) {
-                free((char*)ns_name);
-            }
-            return true;
-        }
-        // Fall through to load Clojure code even though namespace exists
+    if (!existing || !existing->mappings) {
+        // Not found or no mappings - must load
+        goto load_namespace;
     }
     
+    // Check if fully loaded (for clojure.string, verify blank? exists)
+    bool is_loaded = true;
+    if (strcmp(ns_name, "clojure.string") == 0) {
+        CljSymbol *blank_sym = intern_symbol_global("blank?");
+        if (blank_sym) {
+            static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+            ID blank_func = map_get(existing->mappings, blank_sym, (ID)&not_found_sentinel);
+            is_loaded = (blank_func != (ID)&not_found_sentinel);
+        }
+    }
+    
+    // HAPPY PATH: Already loaded - handle alias/refer and return (linear path)
+    if (is_loaded) {
+        // Handle alias if present (uncommon, but must check)
+        if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
+            CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
+            if (ns_name_sym) {
+                ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+            }
+        }
+        // Handle refer if present (uncommon)
+        if (refer_all) {
+            copy_all_symbols_to_namespace(existing, st->current_ns);
+        } else if (refer_syms) {
+            copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
+        }
+        if (ns_name_allocated) {
+            free((char*)ns_name);
+        }
+        return true;
+    }
+    
+    // Declare variables outside block for use after block
+    char *rel = NULL;
+    char *source = NULL;
+    const char *orig_ns = NULL;
+    CljNamespace *target_ns = NULL;
+    bool ok = false;
+    
+load_namespace:
     // Convert namespace to relative path
-    char *rel = namespace_to_relpath(ns_name);
+    rel = namespace_to_relpath(ns_name);
     if (!rel) {
         if (ns_name_allocated) {
             free((char*)ns_name);
@@ -2225,7 +2304,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     char libs_path[512];
     snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
     
-    char *source = read_file_cstr(libs_path);
+    source = read_file_cstr(libs_path);
     if (!source) {
         source = read_file_cstr(rel);
     }
@@ -2239,14 +2318,13 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     }
     
     // Evaluate source in current state
-    const char *orig_ns = NULL;
     if (st && st->current_ns && st->current_ns->name && st->current_ns->name->name) {
         orig_ns = st->current_ns->name->name;
     }
     
     // CRITICAL: Ensure target namespace exists before loading
     // This ensures that native functions registered before loading are in the correct namespace
-    CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
+    target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns) {
         free(source);
         free(rel);
@@ -2260,7 +2338,36 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (st) {
         st->current_ns = target_ns;
     }
-    bool ok = eval_source_in_current_state(source, st);
+    ok = eval_source_in_current_state(source, st);
+    // CRITICAL: After loading, ensure target_ns mappings are preserved
+    // The namespace in the registry should be the same object, but verify
+    CljNamespace *verify_ns = ns_find(ns_name);
+    if (verify_ns != target_ns) {
+        // Different namespace object - this should not happen, but handle it
+        // Copy mappings from target_ns to verify_ns
+        if (target_ns->mappings && verify_ns->mappings) {
+            // Merge mappings from target_ns into verify_ns
+            MAP_FOR_EACH(target_ns->mappings, key, val) {
+                CljMap *new_mappings = map_assoc(verify_ns->mappings, key, val);
+                ns_set_mappings(verify_ns, new_mappings);
+                // ASSERT: Verify that the added element can be found
+                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+                ID found = map_get(verify_ns->mappings, key, (ID)&not_found_sentinel);
+                CLJ_ASSERT(found != (ID)&not_found_sentinel && "process_require_spec: Merged element must be findable");
+            }
+        } else if (target_ns->mappings && !verify_ns->mappings) {
+            // target_ns has mappings but verify_ns doesn't - copy them
+            ns_set_mappings(verify_ns, target_ns->mappings);
+        }
+    } else if (verify_ns && target_ns && verify_ns->mappings != target_ns->mappings) {
+        // Same namespace object, but different mappings pointers - COW issue
+        // This should not happen - ns_define should have updated ns->mappings
+        // But if it did, we need to ensure the registry has the updated mappings
+        // Since verify_ns == target_ns, they should have the same mappings
+        // This is a bug - ns_define should have updated the mappings correctly
+        // CRITICAL: Update verify_ns->mappings to match target_ns->mappings
+        ns_set_mappings(verify_ns, target_ns->mappings);
+    }
     // Restore original namespace
     if (st && orig_ns) evalstate_set_ns(st, orig_ns);
     
@@ -2286,7 +2393,9 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     }
     
     // Now that namespace is loaded, set alias/refer if needed
-    CljNamespace *loaded_ns = ns_find(ns_name);
+    // CRITICAL: Use target_ns instead of ns_find to ensure we use the same namespace object
+    // that was used during loading (where mappings were registered)
+    CljNamespace *loaded_ns = target_ns ? target_ns : ns_find(ns_name);
     if (loaded_ns) {
         if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
             CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
@@ -3892,12 +4001,10 @@ void register_builtins() {
     register_builtin_in_namespace("symbol", native_symbol);
     register_builtin_in_namespace("meta", native_meta);
     
-    // Register clojure.string functions
-    register_builtin_in_namespace("clojure.string/trim", native_trim);
-    register_builtin_in_namespace("clojure.string/upper-case", native_upper_case);
-    register_builtin_in_namespace("clojure.string/lower-case", native_lower_case);
-    register_builtin_in_namespace("clojure.string/last-index-of", native_last_index_of);
-    register_builtin_in_namespace("clojure.string/reverse", native_string_reverse);
+    // Note: clojure.string functions are NOT registered here
+    // They are registered via :native stubs when clojure.string.clj is loaded
+    // This ensures they are only available after (require 'clojure.string)
+    
 #ifndef ESP32_BUILD
     register_builtin_in_namespace("slurp", native_slurp);
     register_builtin_in_namespace("spit", native_spit);
@@ -3928,6 +4035,8 @@ void register_builtins() {
     register_builtin_in_namespace("get", native_get);
     register_builtin_in_namespace("keys", native_keys);
     register_builtin_in_namespace("vals", native_vals);
+    register_builtin_in_namespace("ns-map", native_ns_map);
+    register_builtin_in_namespace("find-ns", native_find_ns);
     register_builtin_in_namespace("println", native_println);
     
     // Register print functions

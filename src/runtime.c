@@ -34,7 +34,10 @@ void runtime_init(TinyClJRuntime *runtime) {
     // ASSIGN automatically handles releasing old values, so multiple calls are safe
     
     // Reset namespace registry (transient Map: Symbol → CljNamespace*)
-    ns_reset_registry();
+    // Only reset if not already initialized (allows multiple calls without losing state)
+    if (!runtime->ns_registry) {
+        ns_reset_registry();
+    }
     
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
