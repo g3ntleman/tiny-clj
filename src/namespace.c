@@ -285,6 +285,60 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         return NULL;
     }
     
+    // CRITICAL: Handle qualified symbols (symbol->ns is set during parsing)
+    // For qualified symbols, resolve directly in the target namespace
+    if (sym->ns && sym->ns->name) {
+        // Qualified symbol: find target namespace and resolve symbol
+        const char *ns_name = sym->ns->name;
+        
+        // Check if ns_name is an alias in the current namespace
+        const char *actual_ns_name = ns_name;
+        if (st && st->current_ns && st->current_ns->aliases) {
+            // Create symbol for alias lookup
+            CljSymbol *alias_sym = intern_symbol_global(ns_name);
+            if (alias_sym) {
+                CljObject *resolved_ns_name_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
+                if (resolved_ns_name_obj && TAG(resolved_ns_name_obj) == CLJ_SYMBOL) {
+                    // Found alias - use the actual namespace name
+                    CljSymbol *resolved_ns_sym = as_symbol(resolved_ns_name_obj);
+                    if (resolved_ns_sym && resolved_ns_sym->name) {
+                        actual_ns_name = resolved_ns_sym->name;
+                    }
+                }
+            }
+        }
+        
+        CljNamespace *target_ns = ns_find(actual_ns_name);
+        if (!target_ns || !target_ns->mappings) {
+            // Namespace not found or has no mappings - return NULL
+            return NULL;
+        }
+        
+        // Create unqualified symbol for lookup (sym->name is already the name part)
+        CljSymbol *name_sym = intern_symbol_global(sym->name);
+        if (!name_sym) {
+            return NULL;
+        }
+        
+        // Look up the symbol in the target namespace mappings
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        CljMap *mappings = (CljMap*)target_ns->mappings;
+        ID v = map_get(mappings, (ID)name_sym, (ID)&not_found_sentinel);
+        if (v != (ID)&not_found_sentinel) {
+            // Found in target namespace (value can be NULL/nil, which is valid)
+            // Cache the result (only cache non-nil values to save space)
+            if (g_runtime.resolve_cache && v) {
+                ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
+                ASSIGN(g_runtime.resolve_cache, updated_cache);
+            }
+            return v;
+        }
+        
+        // Qualified symbol not found in target namespace
+        return NULL;
+    }
+    
+    // Unqualified symbol: search in current namespace, then clojure.core, then other namespaces
     // Always check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
     // Use sentinel to distinguish "key not found" from "value is nil"

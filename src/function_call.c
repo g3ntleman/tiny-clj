@@ -3105,10 +3105,9 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         CLJ_ASSERT(found != (ID)&not_found_sentinel && "eval_defn: Registered native function must be findable in namespace mappings");
         CLJ_ASSERT(found == (ID)native_func_obj && "eval_defn: Found function must match registered function");
         
-        // Apply metadata to native function (only in DEBUG builds for memory efficiency)
-        // In Release builds, metadata is parsed but ignored
+        // Apply metadata to native function
         // In Clojure, metadata from ^#^{...} (defn ...) is applied to the function
-#ifdef DEBUG
+        // Also add :name and :ns metadata (Clojure-compatible) for all native functions
 #ifdef ENABLE_META
         // form_meta already defined at function start
         if (form_meta) {
@@ -3121,8 +3120,52 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                 meta_set((CljObject*)native_func_obj, (CljObject*)name_meta);
             }
         }
+        
+        // Always add :name and :ns metadata (Clojure-compatible) for native functions
+        // This ensures (meta 'clojure.string/trim) returns metadata even without explicit metadata
+        init_special_symbols();
+        CljMap *existing_meta = (CljMap*)meta_get((CljObject*)native_func_obj);
+        CljMap *meta_map = existing_meta ? existing_meta : make_map(4);
+        
+        if (meta_map) {
+            // Add :name (function name as string)
+            CljSymbol *kw_name = intern_symbol_global(":name");
+            if (kw_name) {
+                // Check if :name already exists in metadata
+                ID existing_name = map_get(meta_map, (ID)kw_name, NULL);
+                if (!existing_name) {
+                    CljString *name_str = make_string(name_symbol->name);
+                    if (name_str) {
+                        CljMap *updated = map_assoc(meta_map, (ID)kw_name, (ID)name_str);
+                        if (updated != meta_map) {
+                            if (!existing_meta) RELEASE(meta_map);
+                            meta_map = updated;
+                        }
+                        RELEASE(name_str);
+                    }
+                }
+            }
+            
+            // Add :ns (namespace name as symbol)
+            if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
+                // Check if :ns already exists in metadata
+                ID existing_ns = map_get(meta_map, (ID)SYM_KW_NS, NULL);
+                if (!existing_ns) {
+                    CljMap *updated = map_assoc(meta_map, (ID)SYM_KW_NS, (ID)st->current_ns->name);
+                    if (updated != meta_map) {
+                        if (!existing_meta) RELEASE(meta_map);
+                        meta_map = updated;
+                    }
+                }
+            }
+            
+            // Set metadata on function object (only if we created a new map or modified existing)
+            if (meta_map != existing_meta) {
+                meta_set((CljObject*)native_func_obj, (CljObject*)meta_map);
+                if (!existing_meta) RELEASE(meta_map);
+            }
+        }
 #endif // ENABLE_META
-#endif // DEBUG
         
         free_obj_array((ID*)params, params_stack);
         return (ID)interned_name_sym;  // defn returns the interned symbol
