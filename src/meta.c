@@ -240,5 +240,54 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
     return result;
 }
 
+// Merge metadata maps with second map taking precedence (overwrites conflicting keys)
+// Used when form metadata should override existing metadata (e.g., from register_builtins)
+CljObject* meta_merge_with_precedence(CljObject *existing_meta, CljObject *form_meta) {
+    if (!form_meta) return existing_meta;
+    if (!existing_meta) return form_meta;
+    
+    // Check if both are maps
+    if (TAG(existing_meta) != CLJ_MAP || TAG(form_meta) != CLJ_MAP) {
+        return form_meta; // Return form_meta if types don't match (form takes precedence)
+    }
+    
+    CljMap *existing_map = as_map(existing_meta);
+    CljMap *form_map = as_map(form_meta);
+    if (!existing_map || !form_map) return form_meta;
+    
+    // Start with existing map (copy it)
+    CljMap *result = existing_map;
+    RETAIN(result);
+    
+    // Add/overwrite all entries from form_meta (form takes precedence)
+    MAP_FOR_EACH(form_map, key, value) {
+        if (!key) continue;
+        // map_assoc will overwrite existing keys
+        CljMap *new_result = map_assoc(result, (ID)key, (ID)value);
+        if (new_result != result) {
+            RELEASE(result);
+            result = new_result;
+        }
+    }
+    
+    // Also add keys from existing_meta that don't exist in form_meta
+    MAP_FOR_EACH(existing_map, key, value) {
+        if (!key) continue;
+        // Check if key exists in form_meta
+        ID form_value = map_get(form_map, (ID)key, NULL);
+        if (!form_value) {
+            // Key doesn't exist in form_meta, add it from existing_meta
+            CljMap *new_result = map_assoc(result, (ID)key, (ID)value);
+            if (new_result != result) {
+                RELEASE(result);
+                result = new_result;
+            }
+        }
+        // If key exists in form_meta, it was already added above (form takes precedence)
+    }
+    
+    return (CljObject*)result;
+}
+
 #endif // ENABLE_META
 

@@ -50,8 +50,9 @@ extern EvalState* g_test_eval_state;
 extern EvalState* test_get_eval_state(void);
 
 // Registration macro for automatic test discovery
+// Note: __attribute__((used)) prevents dead-strip from removing these functions
 #define REGISTER_TEST(func) \
-    static void register_##func(void) __attribute__((constructor)); \
+    static void register_##func(void) __attribute__((constructor, used)); \
     static void register_##func(void) { \
         test_registry_add_with_group(#func, func, "test"); \
     }
@@ -61,6 +62,7 @@ extern EvalState* test_get_eval_state(void);
 // Extracts filename from __FILE__ to use as group name
 // Stores file path and line number for Unity error reporting
 // Note: The global variable g_test_eval_state (or st via #define) is available in all tests
+// Note: __attribute__((used)) prevents dead-strip from removing these functions
 #define TEST(name) \
     static void name##_body(void); \
     void name(void) { \
@@ -68,7 +70,7 @@ extern EvalState* test_get_eval_state(void);
             name##_body(); \
         }); \
     } \
-    static void register_##name(void) __attribute__((constructor)); \
+    static void register_##name(void) __attribute__((constructor, used)); \
     static void register_##name(void) { \
         char *filename = test_extract_filename_from_path(__FILE__); \
         if (filename) { \

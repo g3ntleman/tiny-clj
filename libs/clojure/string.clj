@@ -175,7 +175,7 @@
       (= idx 0))))
 
 ;; trim - Removes whitespace from both ends
-^#^{:doc "Removes whitespace from both ends of string."}
+^#^{:doc "Removes whitespace from both ends of string s. Returns s with all leading and trailing whitespace removed. Whitespace includes space, tab, newline, and return characters. Returns the original string if s is nil or empty."}
 (defn trim [s] :native)
 
 ;; triml - Removes whitespace from left

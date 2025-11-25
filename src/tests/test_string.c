@@ -19,8 +19,11 @@ int load_clojure_core(EvalState *st);
 // ============================================================================
 
 static void load_clojure_string_namespace(void) {
-    // Load clojure.string namespace using require
-    // CRITICAL: This must be called before any clojure.string function tests
+    // Load clojure.string namespace using eval_string (required for test isolation)
+    // NOTE: native_require creates its own EvalState, which breaks test isolation.
+    // Using eval_string ensures the namespace is loaded in the correct EvalState context.
+    // CRITICAL: This must be called before any clojure.string function tests.
+    // NOTE: Each test runs in isolation, so we can't cache the namespace loading.
     CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
     (void)req_result; // require returns nil
 }

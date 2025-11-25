@@ -14,26 +14,7 @@
 // FOR-LOOP TESTS
 // ============================================================================
 
-TEST(test_dotimes_basic) {
-    // Test eval_dotimes with basic functionality
-    // Create dotimes call: (dotimes [i 3] i)
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    
-    // Create environment
-    CljMap *env = make_map(4);
-    
-    // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
-    
-    // Clean up
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
+// test_dotimes_basic removed - duplicate of test_dotimes_simple_iteration_count in test_loops.c
 
 TEST(test_doseq_basic) {
     CljMap *env = make_map(4);
@@ -49,136 +30,29 @@ TEST(test_for_basic) {
     RELEASE(env);
 }
 
-TEST(test_dotimes_with_environment) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
+// test_dotimes_with_environment removed - duplicate of test_dotimes_simple_iteration_count in test_loops.c
 
 // ============================================================================
 // DOTIMES EDGE CASE TESTS - EVAL_DOTIMES FUNCTION
 // ============================================================================
-
-TEST(test_dotimes_zero_iterations) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(0), NULL));
-    CljObject *body = make_list((ID)SYM_PRINTLN, make_list((ID)make_string("Should not print"), NULL));
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
-
-TEST(test_dotimes_negative_iterations) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(-5), NULL));
-    CljObject *body = make_list((ID)SYM_PRINTLN, make_list((ID)make_string("Should not print"), NULL));
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
-
-TEST(test_dotimes_large_iterations) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(1000), NULL));
-    CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
-
-TEST(test_dotimes_invalid_binding_format) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), NULL);
-    CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
-
-TEST(test_dotimes_non_numeric_count) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)make_string("not-a-number"), NULL));
-    CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
+// Note: Most dotimes edge case tests are in test_loops.c (using AUTORELEASE)
+// Only unique tests are kept here
 
 TEST(test_dotimes_missing_body) {
-    // Test eval_dotimes with missing body
+    // Test eval_dotimes with missing body - unique test not in test_loops.c
     // Create dotimes call: (dotimes [i 3]) - missing body
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, make_list((ID)binding_vector, NULL));
+    CljObject *binding_vector = AUTORELEASE((CljObject*)make_list((ID)intern_symbol_global("i"), (CljList*)make_list((ID)fixnum(3), NULL)));
+    CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, NULL)));
     
     // Create environment
-    CljMap *env = make_map(4);
+    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
+    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for missing body
-    
-    // Clean up
-    RELEASE(binding_vector);
-    RELEASE(dotimes_call);
-    RETAIN(env);
-    RELEASE(env);
 }
 
-TEST(test_dotimes_simple_iteration_count) {
-    CljObject *binding_vector = make_list((ID)intern_symbol_global("i"), make_list((ID)fixnum(3), NULL));
-    CljSymbol *body = intern_symbol_global("i");
-    CljObject *dotimes_call = make_list((ID)SYM_DOTIMES, 
-                                       make_list((ID)binding_vector, 
-                                                make_list((ID)body, NULL)));
-    CljMap *env = make_map(4);
-    
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env);
-    TEST_ASSERT_NULL(result);
-    
-    RELEASE(binding_vector);
-    RELEASE(body);
-    RELEASE(dotimes_call);
-    RELEASE(env);
-}
+// test_dotimes_simple_iteration_count removed - duplicate in test_loops.c
 
 TEST(test_doseq_with_environment) {
     WITH_AUTORELEASE_POOL({

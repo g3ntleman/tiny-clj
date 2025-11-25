@@ -25,6 +25,9 @@ CljObject* make_location_meta(void *reader, void *st);
 
 // Helper function to merge metadata maps
 CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta);
+
+// Merge metadata maps with second map taking precedence (overwrites conflicting keys)
+CljObject* meta_merge_with_precedence(CljObject *existing_meta, CljObject *form_meta);
 #else
 // Stubs when meta is disabled
 #define meta_set(v, meta) ((void)0)
@@ -34,6 +37,7 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta);
 #define meta_registry_cleanup() ((void)0)
 #define make_location_meta(reader, st) ((CljObject*)NULL)
 #define meta_merge(existing, location) ((existing) ? (existing) : (location))
+#define meta_merge_with_precedence(existing, form) ((form) ? (form) : (existing))
 #endif
 
 #endif

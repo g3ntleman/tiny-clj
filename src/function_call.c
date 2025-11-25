@@ -35,6 +35,7 @@
 #include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
+#include "strings.h"
 
 // Use C stack for recur state - each function call has its own stack frame
 // No global variables needed - local variables in eval_function_call are automatically isolated
@@ -2840,6 +2841,55 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
+    // Get metadata from the function name symbol (metadata is set on the symbol during parsing)
+    // This is more reliable than getting it from the list object, which may change during evaluation
+#ifdef DEBUG
+#ifdef ENABLE_META
+    // Debug: Print symbol information using to_string
+    const char *symbol_str = to_cstring(name_sym);
+    if (symbol_str) {
+        fprintf(stderr, "[DEBUG] eval_defn: Looking for metadata on symbol: %s (ptr: %p)\n", 
+                symbol_str, (void*)name_sym);
+        free((void*)symbol_str);
+    }
+    
+    // Also check what symbols are in the metadata registry (only for trim to reduce output)
+    CljSymbol *name_symbol = as_symbol(name_sym);
+    if (name_symbol && name_symbol->name && strcmp(name_symbol->name, "trim") == 0) {
+        if (g_runtime.meta_registry) {
+            CljMap *registry = g_runtime.meta_registry;
+            fprintf(stderr, "[DEBUG] eval_defn: Metadata registry has %d entries\n", registry->count);
+            MAP_FOR_EACH(registry, key, value) {
+                if (key && TAG(key) == CLJ_SYMBOL) {
+                    const char *key_str = to_cstring(key);
+                    if (key_str) {
+                        fprintf(stderr, "[DEBUG] eval_defn: Registry has symbol: %s (ptr: %p)\n", 
+                                key_str, (void*)key);
+                        free((void*)key_str);
+                    }
+                }
+            }
+        }
+    }
+    
+    ID form_meta = meta_get((CljObject*)name_sym);
+    if (form_meta) {
+        fprintf(stderr, "[DEBUG] eval_defn: Found metadata on symbol\n");
+    } else {
+        fprintf(stderr, "[DEBUG] eval_defn: No metadata found on symbol, trying list object\n");
+    }
+    // Fallback: also try to get from list object (for backward compatibility)
+    if (!form_meta) {
+        form_meta = meta_get((CljObject*)list);
+        if (form_meta) {
+            fprintf(stderr, "[DEBUG] eval_defn: Found metadata on list object\n");
+        } else {
+            fprintf(stderr, "[DEBUG] eval_defn: No metadata found on list object either\n");
+        }
+    }
+#endif // ENABLE_META
+#endif // DEBUG
+    
     // Get parameter vector (second element after defn)
     rest_obj = rest->rest;
     rest = as_list(rest_obj);
@@ -3022,15 +3072,16 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         
         // Apply metadata to native function (only in DEBUG builds for memory efficiency)
         // In Clojure, metadata from ^#^{...} (defn ...) is applied to the function
+        // NOTE: We don't search for existing metadata from register_builtin_in_core because
+        // it only contains technical metadata (:name, :ns) which will be overwritten anyway
 #ifdef DEBUG
 #ifdef ENABLE_META
-        // Try to get metadata from the defn form (list object)
-        ID form_meta = meta_get((CljObject*)list);
+        // form_meta was captured at the start of eval_defn (from the parsed list object)
         if (form_meta) {
-            // Metadata found on the form - apply it to the function
+            // Form metadata exists - apply directly (overwrites any existing metadata)
             meta_set((CljObject*)native_func_obj, (CljObject*)form_meta);
         } else {
-            // Try to get metadata from the function name symbol
+            // Try to get metadata from the function name symbol as fallback
             ID name_meta = meta_get((CljObject*)name_sym);
             if (name_meta) {
                 meta_set((CljObject*)native_func_obj, (CljObject*)name_meta);
@@ -3128,7 +3179,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Apply metadata to function (only in DEBUG builds for memory efficiency)
 #ifdef DEBUG
 #ifdef ENABLE_META
-    ID form_meta = meta_get((CljObject*)list);
+    // form_meta was captured at the start of eval_defn (from the parsed list object)
     if (form_meta) {
         meta_set((CljObject*)fn_obj, (CljObject*)form_meta);
     } else {

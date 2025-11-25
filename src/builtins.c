@@ -2171,23 +2171,21 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (existing) {
         // Check if namespace has been fully loaded by checking for a marker function
         // For clojure.string, check if blank? exists (first Clojure function defined)
-        // If it doesn't exist, we need to load the Clojure code even though namespace exists
-        bool needs_loading = false;
-        if (strcmp(ns_name, "clojure.string") == 0) {
-            CljSymbol *blank_sym = intern_symbol_global("blank?");
-            if (blank_sym && existing->mappings) {
+        // OPTIMIZATION: Cache the blank? symbol lookup to avoid repeated intern_symbol_global calls
+        bool needs_loading = true;
+        if (strcmp(ns_name, "clojure.string") == 0 && existing->mappings) {
+            static CljSymbol *cached_blank_sym = NULL;
+            if (!cached_blank_sym) {
+                cached_blank_sym = intern_symbol_global("blank?");
+            }
+            if (cached_blank_sym) {
                 // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
                 // nil (NULL) is a valid value in Clojure, so we can't use NULL as not_found
                 static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID blank_func = map_get(existing->mappings, blank_sym, (ID)&not_found_sentinel);
-                if (blank_func == (ID)&not_found_sentinel) {
-                    // blank? not found - namespace exists but Clojure code not loaded
-                    needs_loading = true;
+                ID blank_func = map_get(existing->mappings, cached_blank_sym, (ID)&not_found_sentinel);
+                if (blank_func != (ID)&not_found_sentinel) {
+                    needs_loading = false; // blank? found - namespace is fully loaded
                 }
-                // If blank_func != sentinel, it was found (even if it's nil/NULL, which is valid)
-            } else {
-                // Can't check - assume needs loading to be safe
-                needs_loading = true;
             }
         }
         
@@ -3778,7 +3776,8 @@ ID native_do(ID *args, unsigned int argc) {
 // dotimes is now implemented as a special form, not a builtin
 
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
-static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
+// Also supports qualified symbols like "Math/sqrt" for other namespaces
+static void register_builtin_in_core(const char *name, BuiltinFn func) {
     EvalState *st = evalstate_new(false);
     
     // Check if name is a qualified symbol (e.g., "Math/sqrt")
@@ -3874,108 +3873,105 @@ static void register_builtin_in_namespace(const char *name, BuiltinFn func) {
 
 void register_builtins() {
     // Register all builtins in clojure.core namespace (unified system)
-    register_builtin_in_namespace("+", native_add_variadic);
-    register_builtin_in_namespace("-", native_sub_variadic);
-    register_builtin_in_namespace("*", native_mul_variadic);
-    register_builtin_in_namespace("/", native_div_variadic);
-    register_builtin_in_namespace("mod", native_mod);
-    register_builtin_in_namespace("quot", native_quot);
-    register_builtin_in_namespace("bit-shift-left", native_bit_shift_left);
-    register_builtin_in_namespace("range", native_range);
-    register_builtin_in_namespace("repeat", native_repeat);
-    register_builtin_in_namespace("Math/sqrt", native_math_sqrt);
-    register_builtin_in_namespace("format", native_format);
-    register_builtin_in_namespace("eval", native_eval);
-    register_builtin_in_namespace("read-string", native_read_string);
-    register_builtin_in_namespace("str", native_str);
-    register_builtin_in_namespace("subs", native_subs);
-    register_builtin_in_namespace("symbol", native_symbol);
-    register_builtin_in_namespace("meta", native_meta);
+    register_builtin_in_core("+", native_add_variadic);
+    register_builtin_in_core("-", native_sub_variadic);
+    register_builtin_in_core("*", native_mul_variadic);
+    register_builtin_in_core("/", native_div_variadic);
+    register_builtin_in_core("mod", native_mod);
+    register_builtin_in_core("quot", native_quot);
+    register_builtin_in_core("bit-shift-left", native_bit_shift_left);
+    register_builtin_in_core("range", native_range);
+    register_builtin_in_core("repeat", native_repeat);
+    register_builtin_in_core("Math/sqrt", native_math_sqrt);
+    register_builtin_in_core("format", native_format);
+    register_builtin_in_core("eval", native_eval);
+    register_builtin_in_core("read-string", native_read_string);
+    register_builtin_in_core("str", native_str);
+    register_builtin_in_core("subs", native_subs);
+    register_builtin_in_core("symbol", native_symbol);
+    register_builtin_in_core("meta", native_meta);
     
-    // Register clojure.string functions
-    register_builtin_in_namespace("clojure.string/trim", native_trim);
-    register_builtin_in_namespace("clojure.string/upper-case", native_upper_case);
-    register_builtin_in_namespace("clojure.string/lower-case", native_lower_case);
-    register_builtin_in_namespace("clojure.string/last-index-of", native_last_index_of);
-    register_builtin_in_namespace("clojure.string/reverse", native_string_reverse);
+    // NOTE: clojure.string functions are NOT registered here as builtins.
+    // They are defined in libs/clojure/string.clj and loaded via require.
+    // This allows metadata (docstrings) to be properly attached.
 #ifndef ESP32_BUILD
-    register_builtin_in_namespace("slurp", native_slurp);
-    register_builtin_in_namespace("spit", native_spit);
-    register_builtin_in_namespace("require", native_require);
+    register_builtin_in_core("slurp", native_slurp);
+    register_builtin_in_core("spit", native_spit);
+    register_builtin_in_core("require", native_require);
 #endif
-    register_builtin_in_namespace("type", native_type);
-    register_builtin_in_namespace("array-map", native_array_map);
-    register_builtin_in_namespace("vector", native_vector);
-    register_builtin_in_namespace("vec", native_vec);
-    register_builtin_in_namespace("nth", nth2);
-    register_builtin_in_namespace("peek", native_peek);
-    register_builtin_in_namespace("pop", native_pop);
-    register_builtin_in_namespace("subvec", native_subvec);
-    register_builtin_in_namespace("conj", native_conj);
-    register_builtin_in_namespace("first", native_first);
-    register_builtin_in_namespace("rest", native_rest);
-    register_builtin_in_namespace("next", native_next);
-    register_builtin_in_namespace("cons", native_cons);
-    register_builtin_in_namespace("list", native_list);
-    register_builtin_in_namespace("count", native_count);
-    register_builtin_in_namespace("nil?", native_nilp);
-    register_builtin_in_namespace("reverse", native_reverse);
-    register_builtin_in_namespace("assoc", assoc3);
-    register_builtin_in_namespace("dissoc", native_dissoc);
-    register_builtin_in_namespace("transient", native_transient);
-    register_builtin_in_namespace("persistent!", native_persistent_bang);
-    register_builtin_in_namespace("conj!", native_conj_bang);
-    register_builtin_in_namespace("get", native_get);
-    register_builtin_in_namespace("keys", native_keys);
-    register_builtin_in_namespace("vals", native_vals);
-    register_builtin_in_namespace("println", native_println);
+    register_builtin_in_core("type", native_type);
+    register_builtin_in_core("array-map", native_array_map);
+    register_builtin_in_core("vector", native_vector);
+    register_builtin_in_core("vec", native_vec);
+    register_builtin_in_core("nth", nth2);
+    register_builtin_in_core("peek", native_peek);
+    register_builtin_in_core("pop", native_pop);
+    register_builtin_in_core("subvec", native_subvec);
+    register_builtin_in_core("conj", native_conj);
+    register_builtin_in_core("first", native_first);
+    register_builtin_in_core("rest", native_rest);
+    register_builtin_in_core("next", native_next);
+    register_builtin_in_core("cons", native_cons);
+    register_builtin_in_core("list", native_list);
+    register_builtin_in_core("count", native_count);
+    register_builtin_in_core("nil?", native_nilp);
+    register_builtin_in_core("reverse", native_reverse);
+    register_builtin_in_core("assoc", assoc3);
+    register_builtin_in_core("dissoc", native_dissoc);
+    register_builtin_in_core("transient", native_transient);
+    register_builtin_in_core("persistent!", native_persistent_bang);
+    register_builtin_in_core("conj!", native_conj_bang);
+    register_builtin_in_core("get", native_get);
+    register_builtin_in_core("keys", native_keys);
+    register_builtin_in_core("vals", native_vals);
+    register_builtin_in_core("println", native_println);
     
     // Register print functions
-    register_builtin_in_namespace("print", native_print);
-    register_builtin_in_namespace("pr", native_pr);
-    register_builtin_in_namespace("prn", native_prn);
+    register_builtin_in_core("print", native_print);
+    register_builtin_in_core("pr", native_pr);
+    register_builtin_in_core("prn", native_prn);
     
     // Register comparison operators as normal functions
-    register_builtin_in_namespace("<", native_lt);
-    register_builtin_in_namespace(">", native_gt);
-    register_builtin_in_namespace("<=", native_le);
-    register_builtin_in_namespace(">=", native_ge);
-    register_builtin_in_namespace("=", native_eq);
-    register_builtin_in_namespace("not=", native_not_eq);
-    register_builtin_in_namespace("identical?", native_identical);
-    register_builtin_in_namespace("vector?", native_vector_p);
+    register_builtin_in_core("<", native_lt);
+    register_builtin_in_core(">", native_gt);
+    register_builtin_in_core("<=", native_le);
+    register_builtin_in_core(">=", native_ge);
+    register_builtin_in_core("=", native_eq);
+    register_builtin_in_core("not=", native_not_eq);
+    register_builtin_in_core("identical?", native_identical);
+    register_builtin_in_core("vector?", native_vector_p);
     
     // Time function
     // time is now only a special form (eval_time), not a builtin
     // This ensures time can measure actual evaluation time, not pre-evaluated arguments
-    register_builtin_in_namespace("sleep", native_sleep);
+    register_builtin_in_core("sleep", native_sleep);
     
     // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments
     // They are handled directly in eval_list() via eval_def() and eval_ns()
     
     // Control flow functions
-    register_builtin_in_namespace("do", native_do);
+    register_builtin_in_core("do", native_do);
     
     // Loop constructs
     // dotimes is now implemented as a special form, not a builtin
     
     // Byte array functions
-    register_builtin_in_namespace("byte-array", native_byte_array);
-    register_builtin_in_namespace("aget", native_aget);
-    register_builtin_in_namespace("aset", native_aset);
-    register_builtin_in_namespace("alength", native_alength);
-    register_builtin_in_namespace("aclone", native_aclone);
+    register_builtin_in_core("byte-array", native_byte_array);
+    register_builtin_in_core("aget", native_aget);
+    register_builtin_in_core("aset", native_aset);
+    register_builtin_in_core("alength", native_alength);
+    register_builtin_in_core("aclone", native_aclone);
     // Event-loop builtin
-    register_builtin_in_namespace("run-next-task", native_run_next_task);
+    register_builtin_in_core("run-next-task", native_run_next_task);
     
     // Timer builtins
-    register_builtin_in_namespace("schedule", native_schedule);
-    register_builtin_in_namespace("schedule-periodic", native_schedule_periodic);
-    register_builtin_in_namespace("cancel-timer", native_cancel_timer);
+    register_builtin_in_core("schedule", native_schedule);
+    register_builtin_in_core("schedule-periodic", native_schedule_periodic);
+    register_builtin_in_core("cancel-timer", native_cancel_timer);
     
     // Atom functions
-    register_builtin_in_namespace("atom", native_atom);
-    register_builtin_in_namespace("deref", native_deref);
-    register_builtin_in_namespace("reset!", native_reset_bang);
-    register_builtin_in_namespace("swap!", native_swap_bang);
+    register_builtin_in_core("atom", native_atom);
+    register_builtin_in_core("deref", native_deref);
+    register_builtin_in_core("reset!", native_reset_bang);
+    register_builtin_in_core("swap!", native_swap_bang);
 }

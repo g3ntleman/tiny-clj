@@ -5,6 +5,9 @@
  */
 
 #include "tests_common.h"
+#include "../meta.h"
+#include "../map.h"
+#include "../kv_macros.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -336,5 +339,83 @@ TEST(test_require_both_reverse_functions) {
     TEST_ASSERT_TRUE(string_result && TAG(string_result) == CLJ_STRING);
     CljString *str = as_clj_string(string_result);
     TEST_ASSERT_EQUAL_STRING("cba", clj_string_data(str));
+}
+
+// ============================================================================
+// METADATA TESTS
+// ============================================================================
+
+// Test: Verify that trim has metadata (docstring) after require
+TEST(test_require_trim_metadata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+#ifdef DEBUG
+#ifdef ENABLE_META
+    // Load clojure.string namespace
+    (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+    
+    // Resolve trim function
+    CljSymbol *trim_sym = intern_symbol("clojure.string", "trim");
+    TEST_ASSERT_NOT_NULL_MESSAGE(trim_sym, "trim symbol should exist");
+    
+    ID trim_func = ns_resolve(g_test_eval_state, trim_sym);
+    TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim function should be resolvable");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(trim_func) == CLJ_FUNC, "trim should be a native function");
+    
+    // Check that metadata exists
+    ID trim_meta = meta_get((CljObject*)trim_func);
+    TEST_ASSERT_NOT_NULL_MESSAGE(trim_meta, "trim should have metadata after require");
+    
+    if (trim_meta) {
+        // Check that metadata is a map
+        TEST_ASSERT_TRUE_MESSAGE(TAG(trim_meta) == CLJ_MAP, "metadata should be a map");
+        
+        // Check for :doc key
+        CljSymbol *doc_key = intern_symbol_global(":doc");
+        TEST_ASSERT_NOT_NULL(doc_key);
+        
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        ID doc_value = map_get((CljMap*)trim_meta, (ID)doc_key, (ID)&not_found_sentinel);
+        
+        TEST_ASSERT_TRUE_MESSAGE(doc_value != (ID)&not_found_sentinel, 
+                                 "trim metadata should have :doc key");
+        
+        if (doc_value != (ID)&not_found_sentinel) {
+            TEST_ASSERT_TRUE_MESSAGE(TAG(doc_value) == CLJ_STRING, 
+                                     ":doc value should be a string");
+        }
+    }
+#endif // ENABLE_META
+#endif // DEBUG
+}
+
+// Test: Verify that trim metadata can be accessed via meta function
+TEST(test_require_trim_meta_function) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+#ifdef DEBUG
+#ifdef ENABLE_META
+    // Load clojure.string namespace
+    (void)eval_string("(require 'clojure.string)", g_test_eval_state);
+    
+    // Test: (meta clojure.string/trim) should return metadata map
+    CljObject *meta_result = eval_string("(meta clojure.string/trim)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, "meta should return a result");
+    
+    if (meta_result) {
+        TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP, 
+                                 "meta result should be a map");
+        
+        // Check for :doc key
+        CljObject *doc_result = eval_string("(get (meta clojure.string/trim) :doc)", g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(doc_result, ":doc should exist in metadata");
+        
+        if (doc_result) {
+            TEST_ASSERT_TRUE_MESSAGE(TAG(doc_result) == CLJ_STRING, 
+                                     ":doc value should be a string");
+        }
+    }
+#endif // ENABLE_META
+#endif // DEBUG
 }
 
