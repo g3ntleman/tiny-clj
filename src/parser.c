@@ -22,6 +22,7 @@
 #include "value.h"
 #include "symbol.h"
 #include "meta.h"
+#include "strings.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1143,6 +1144,13 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
   }
   
+  // Check if this is ^{...} syntax (metadata map without #)
+  reader_skip_all(reader);
+  if (!reader_eof(reader) && reader_current(reader) == '{') {
+    // This is ^{...} syntax - delegate to parse_meta_map
+    return parse_meta_map(reader, st);
+  }
+  
   // Check if this is ^:keyword syntax (shorthand for ^{:keyword true})
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == ':') {
@@ -1190,34 +1198,21 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     return apply_metadata_to_object(reader, st, NULL, result);
   }
   
-  // Regular ^meta syntax - check if it's a map ^{...} or other expression
+  // Regular ^meta syntax (map or other expression)
   reader_skip_all(reader);
-  if (!reader_eof(reader) && reader_current(reader) == '{') {
-    // ^{...} syntax - delegate to parse_meta_map (which handles both ^{...} and #^{...})
-    // parse_meta_map will consume the '{' and parse the map
-    return parse_meta_map(reader, st);
-  }
-  
-  // Other expression (not a map) - parse as expression
   ID meta = parse_expr(reader, st);
-  if (!meta) {
-    throw_parser_exception("Failed to parse metadata expression in ^meta syntax", reader);
+  if (!meta)
     return NULL;
-  }
   reader_skip_all(reader);
   ID obj = parse_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
-    throw_parser_exception("Failed to parse object after metadata in ^meta syntax", reader);
     return NULL;
   }
   
   // Merge metadata with object (handles existing metadata)
   ID result = merge_metadata_with_object(obj, meta);
   if (!result) {
-    RELEASE(meta);
-    RELEASE(obj);
-    throw_parser_exception("Failed to merge metadata with object", reader);
     return NULL;
   }
   // Apply location metadata if enabled
@@ -1330,10 +1325,19 @@ static ID parse_meta_map(Reader *reader,
     return NULL;
   }
   
+  // Parse the object - parse_expr will skip whitespace again, but that's OK
+  // We need to ensure we're not at EOF before calling parse_expr
+  // Note: parse_expr returns NULL only if at EOF (after reader_skip_all)
+  // Since we already checked for EOF above, if parse_expr returns NULL here,
+  // it means parse_expr's reader_skip_all advanced to EOF, which shouldn't happen
+  // But to be safe, we check again after parse_expr
   ID obj = parse_expr(reader, st);
   if (!obj) {
     RELEASE(meta);
-    throw_parser_exception("Failed to parse object after metadata map", reader);
+    // parse_expr returns NULL only if at EOF (after its own reader_skip_all)
+    // Since we already checked for EOF before calling parse_expr, this shouldn't happen
+    // But parse_expr's reader_skip_all might have advanced to EOF
+    throw_parser_exception("Failed to parse object after metadata map - parse_expr returned NULL (likely EOF)", reader);
     return NULL;
   }
   

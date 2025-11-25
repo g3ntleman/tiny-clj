@@ -198,11 +198,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   // Set final count - new_idx is the number of entries copied/updated/added
   new_map->count = new_idx;
   
-  // ASSERT: Verify that the added/updated element can be found
-  static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-  ID found = map_get(new_map, key, (ID)&not_found_sentinel);
-  CLJ_ASSERT(found != (ID)&not_found_sentinel && "map_assoc: Added/updated element must be findable");
-  CLJ_ASSERT(found == (ID)value || (value && IS_IMMEDIATE(value)) && "map_assoc: Found value must match added value");
+  // ASSERT removed for performance - was verifying with map_get after every map_assoc
   
   return new_map;  // Return NEW map
   }
@@ -624,11 +620,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     ASSIGN(m->data[m->count * 2 + 1], value ? (CljObject*)value : NULL);
     m->count++;
     
-    // ASSERT: Verify that the added element can be found
-    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-    ID found = map_get(tmap, key, (ID)&not_found_sentinel);
-    CLJ_ASSERT(found != (ID)&not_found_sentinel && "map_conj: Added element must be findable");
-    CLJ_ASSERT(found == (ID)value || (value && IS_IMMEDIATE(value)) && "map_conj: Found value must match added value");
+    // ASSERT removed for performance - was verifying with map_get after every map_conj
     
     return tmap; // In-place mutation
 }

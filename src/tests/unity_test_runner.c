@@ -67,6 +67,9 @@ void setUp(void) {
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
         set_memory_verbose_mode(false);
+        // Update cached debug output flag after initialization
+        extern void memory_update_debug_output_active(void);
+        memory_update_debug_output_active();
 #endif
 
 #ifdef DEBUG

@@ -100,11 +100,6 @@ static bool eval_core_source(const char *src, EvalState *st) {
         }
       }
       
-      // Always log exceptions for def expressions, even in quiet mode
-      // This helps catch silent failures during core loading
-      if (ex && ex->message[0] != '\0' && (!g_core_quiet || is_def_expr)) {
-        printf("[clojure.core] Exception loading expression: %s\n", ex->message);
-      }
     } END_TRY
     
     // value_by_parsing_expr returns AUTORELEASE object
@@ -124,10 +119,6 @@ static bool eval_core_source(const char *src, EvalState *st) {
     // This ensures the verification can check the correct namespace
   }
   
-  if (!g_core_quiet) {
-    printf("[clojure.core] Loaded %d/%d expressions successfully\n", 
-           success_count, expr_count);
-  }
   
   return success_count > 0;
 }
@@ -135,11 +126,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
 int load_clojure_core(EvalState *st) {
   if (!st) return 0;
   
-  if (!g_core_quiet) {
-    printf("=== Loading Clojure Core Functions ===\n");
-  }
-  if (!clojure_core_code && !g_core_quiet) {
-    printf("[clojure.core] source string missing\n");
+  if (!clojure_core_code) {
     return 0;
   }
 
@@ -155,7 +142,6 @@ int load_clojure_core(EvalState *st) {
     if (st->current_ns && st->current_ns->name == SYM_CLOJURE_CORE) {
       g_runtime.clojure_core_cache = st->current_ns;
     } else {
-      fprintf(stderr, "[clojure.core] CRITICAL: Failed to get clojure.core namespace!\n");
       return 0;
     }
   }
@@ -174,10 +160,7 @@ int load_clojure_core(EvalState *st) {
     st->current_ns = original_ns;
   }
 
-  if (!ok) {
-    // Note: last_error removed - Exception handling now uses global exception stack
-    printf("[clojure.core] load error: Exception occurred during core loading\n");
-  }
+  (void)ok; // Result is checked below
 
   // CRITICAL ASSERTION: Verify that 'inc' was loaded successfully
   // This ensures that the loading process actually stored the function
@@ -190,23 +173,17 @@ int load_clojure_core(EvalState *st) {
       if (inc_sym) {
         CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
         if (!inc_value) {
-          // inc not found - this is a critical error
-          fprintf(stderr, "[clojure.core] CRITICAL: 'inc' not found in mappings after loading!\n");
-          // Don't fail silently - abort or return error
           return 0;
         }
         // Verify it's a function
         if (!inc_value || (TAG(inc_value) != CLJ_FUNC && TAG(inc_value) != CLJ_CLOSURE)) {
-          fprintf(stderr, "[clojure.core] CRITICAL: 'inc' is not a function (type: %d)!\n", ((CljObject*)inc_value)->type);
           return 0;
         }
       }
     } else {
-      fprintf(stderr, "[clojure.core] CRITICAL: clojure_core_cache has no mappings!\n");
       return 0;
     }
   } else {
-    fprintf(stderr, "[clojure.core] CRITICAL: clojure_core_cache is NULL after loading!\n");
     return 0;
   }
 

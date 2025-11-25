@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>  // For fprintf in DEBUG mode
 #include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
@@ -553,6 +552,8 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
         }
         // Update *ns* in namespace mappings (ClojureScript-style: *ns* is a normal var)
         // This ensures *ns* always reflects the current namespace
+        // CRITICAL: ns_define may trigger COW and create new mappings, but that's OK
+        // because ns_set_mappings updates ns->mappings correctly
         extern CljSymbol *SYM_NS_STAR;
         if (SYM_NS_STAR && ns->mappings) {
             ns_define(ns, (ID)SYM_NS_STAR, (ID)ns->name);

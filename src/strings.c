@@ -588,10 +588,16 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             {
                 CljNamespace *ns = (CljNamespace*)v;
                 if (!ns || !ns->name || !ns->name->name) {
-                    return strdup("#<namespace>");
+                    memcpy(buffer + *offset, "#<namespace>", 12);
+                    *offset += 12;
+                    return;
                 }
-                // Return namespace name (Clojure-compatible: find-ns returns the name)
-                return strdup(ns->name->name);
+                // Write namespace name to buffer
+                const char *ns_name = ns->name->name;
+                size_t ns_name_len = strlen(ns_name);
+                memcpy(buffer + *offset, ns_name, ns_name_len);
+                *offset += ns_name_len;
+                return;
             }
 
         default:

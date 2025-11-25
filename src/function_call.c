@@ -35,6 +35,7 @@
 #include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
+#include "strings.h"
 
 // Use C stack for recur state - each function call has its own stack frame
 // No global variables needed - local variables in eval_function_call are automatically isolated
@@ -1291,16 +1292,6 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
         
         if (fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE) {
             if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
-#ifdef DEBUG
-                fprintf(stderr, "STACK OVERFLOW: g_eval_arg_depth=%d, MAX_CALL_STACK_DEPTH=%d\n", 
-                        g_eval_arg_depth, MAX_CALL_STACK_DEPTH);
-                if (fn_tag == CLJ_CLOSURE) {
-                    CljFunction *func = as_function(fn);
-                    if (func && func->name) {
-                        fprintf(stderr, "  Function: %s\n", func->name);
-                    }
-                }
-#endif
                 throw_exception(EXCEPTION_STACK_OVERFLOW, 
                               "Maximum evaluation depth exceeded in nested function calls", 
                               __FILE__, __LINE__, 0);
@@ -2857,6 +2848,15 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
     
+    // Check if form has metadata (store in variable for later use)
+    // In Release builds, metadata is parsed but ignored (for memory efficiency)
+    // In DEBUG builds, metadata is stored and can be retrieved via (meta)
+    #ifdef ENABLE_META
+    ID form_meta = meta_get((CljObject*)list);
+    #else
+    ID form_meta = NULL;
+    #endif // ENABLE_META
+    
     // Parse arguments using rest traversal: (defn name [params] body...)
     CljObject *rest_obj = list->rest;
     CljList *rest = as_list(rest_obj);
@@ -3110,8 +3110,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         // In Clojure, metadata from ^#^{...} (defn ...) is applied to the function
 #ifdef DEBUG
 #ifdef ENABLE_META
-        // Try to get metadata from the defn form (list object)
-        ID form_meta = meta_get((CljObject*)list);
+        // form_meta already defined at function start
         if (form_meta) {
             // Metadata found on the form - apply it to the function
             meta_set((CljObject*)native_func_obj, (CljObject*)form_meta);
@@ -3215,7 +3214,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // In Release builds, metadata is parsed but ignored
 #ifdef DEBUG
 #ifdef ENABLE_META
-    ID form_meta = meta_get((CljObject*)list);
+    // form_meta already defined at function start
     if (form_meta) {
         meta_set((CljObject*)fn_obj, (CljObject*)form_meta);
     } else {

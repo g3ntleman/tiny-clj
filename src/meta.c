@@ -49,8 +49,8 @@ void meta_set(CljObject *v, CljObject *meta) {
     // When RC>1 or capacity full, map_assoc creates a new map
     if (new_registry != g_runtime.meta_registry) {
         // New map was created (Copy-on-Write), update registry
-        // Old map is automatically handled by map_assoc (released if RC>1)
-        g_runtime.meta_registry = new_registry;
+        // Use ASSIGN to properly handle reference counting
+        ASSIGN(g_runtime.meta_registry, new_registry);
     }
     
     // Assertion: Verify that the metadata can be retrieved after setting
@@ -114,8 +114,8 @@ void meta_clear(CljObject *v) {
     CljMap *new_registry = map_remove(g_runtime.meta_registry, (ID)v);
     if (new_registry != g_runtime.meta_registry) {
         // New map was created, update registry
-        RELEASE((CljObject*)g_runtime.meta_registry);
-        g_runtime.meta_registry = new_registry;
+        // Use ASSIGN to properly handle reference counting
+        ASSIGN(g_runtime.meta_registry, new_registry);
     }
     // If key was not found, map_remove returns original map (no change needed)
 }

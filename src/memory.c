@@ -28,6 +28,17 @@ extern bool g_memory_verbose_mode;
 // Global flag to control debug output during initialization
 static bool g_debug_output_enabled = false;
 
+// Cached flag to avoid repeated checks - updated when any of the flags change
+static bool g_debug_output_active = false;
+
+// Forward declaration for update function
+static inline void update_debug_output_active(void);
+
+// Update cached debug output flag (call when flags change)
+static inline void update_debug_output_active(void) {
+    g_debug_output_active = g_memory_profiling_enabled && g_memory_verbose_mode && g_debug_output_enabled;
+}
+
 #ifdef DEBUG
 // Public flag to enable zombie mode (NSZombieEnabled)
 bool g_zombie_enabled = false;
@@ -41,11 +52,18 @@ void enable_zombie_mode(void) {
 // Function to enable debug output after initialization
 void enable_memory_debug_output(void) {
     g_debug_output_enabled = true;
+    update_debug_output_active();
 }
 
 // Function to disable debug output
 void disable_memory_debug_output(void) {
     g_debug_output_enabled = false;
+    update_debug_output_active();
+}
+
+// Public function to update cached debug output flag (called from memory_profiler.c)
+void memory_update_debug_output_active(void) {
+    update_debug_output_active();
 }
 
 // ============================================================================
@@ -169,7 +187,8 @@ void release(CljObject *v) {
     // Only show debug output if memory profiling is enabled and verbose mode is on
     // AND debug output is enabled (after initialization)
     // Move this after the safety checks to avoid accessing v->type on invalid pointers
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+    // Use cached flag to avoid repeated function calls
+    if (g_debug_output_active) {
         printf("🔍 release: Object %p, type=%d (%s), rc=%d -> ", 
                v, v->type, clj_type_name(v->type), v->rc);
     }
@@ -216,7 +235,7 @@ void release(CljObject *v) {
     MEMORY_PROFILER_TRACK_RELEASE(v);
     
     if (v->rc == 0) { 
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+        if (g_debug_output_active) {
             printf("🔍 release: Object %p will be freed (rc=0)\n", v);
         }
 #ifdef DEBUG
@@ -229,7 +248,7 @@ void release(CljObject *v) {
         release_object_deep(v); 
         DEALLOC(v); // Hook for memory profiling - marks as zombie if enabled
 
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+        if (g_debug_output_active) {
             printf("🔍 release: Object %p freed\n", v);
         }
     }
@@ -318,7 +337,7 @@ CljVector *autorelease_pool_push() {
     // Push pool to stack using transient vector operations
     ASSIGN(g_runtime.pool_stack, vector_conj_bang(g_runtime.pool_stack, (ID)pool));
     
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+    if (g_debug_output_active) {
         printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%u)\n", 
                pool, vector_count(g_runtime.pool_stack));
     }
@@ -341,7 +360,7 @@ void autorelease_pool_pop(CljVector *pool) {
     pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
     
     // Debug output
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+    if (g_debug_output_active) {
         printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%u)\n", 
                pool, stack_depth);
     }
@@ -366,7 +385,7 @@ void autorelease_pool_pop(CljVector *pool) {
     }
     
     // Debug output to verify stack state
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+    if (g_debug_output_active) {
         printf("🔍 autorelease_pool_pop: After pop, stack_depth=%u\n", 
                vector_count(g_runtime.pool_stack));
     }
@@ -477,7 +496,7 @@ int get_retain_count(ID obj) {
 static void release_object_deep(CljObject *v) {
     
     if (!v) {
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+        if (g_debug_output_active) {
             printf("🔍 release_object_deep: NULL object\n");
         }
         return;
@@ -489,19 +508,19 @@ static void release_object_deep(CljObject *v) {
     if (v->rc == ZOMBIE_RC) {
         CljType type = v->type;
         if (type != CLJ_ATOM) {
-            if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+            if (g_debug_output_active) {
                 printf("🔍 release_object_deep: Skipping zombie object %p (type=%s)\n", v, clj_type_name(type));
             }
             return;
         }
         // For CLJ_ATOM, continue with cleanup to release the atom's value
-        if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+        if (g_debug_output_active) {
             printf("🔍 release_object_deep: Cleaning up zombie CLJ_ATOM %p\n", v);
         }
     }
 #endif
     
-    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+    if (g_debug_output_active) {
         printf("🔍 release_object_deep: Object %p, type=%d (%s), rc=%d\n", 
                v, v->type, clj_type_name(v->type), v->rc);
     }
@@ -516,18 +535,18 @@ static void release_object_deep(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
             {
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                if (g_debug_output_active) {
                     printf("🔍 release_object_deep: Freeing STRING object %p\n", v);
                 }
                 // Free string data stored directly after CljObject header
                 char **str_ptr = (char**)((char*)v + sizeof(CljObject));
                 if (*str_ptr) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                    if (g_debug_output_active) {
                         printf("🔍 release_object_deep: Freeing string data: '%s'\n", *str_ptr);
                     }
                     free(*str_ptr);
                 } else {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                    if (g_debug_output_active) {
                         printf("🔍 release_object_deep: String data is NULL\n");
                     }
                 }
@@ -536,13 +555,13 @@ static void release_object_deep(CljObject *v) {
             
         case CLJ_SYMBOL:
             {
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                if (g_debug_output_active) {
                     printf("🔍 release_object_deep: Freeing SYMBOL object %p\n", v);
                 }
                 CljSymbol *sym = (CljSymbol*)v;
                 // Only free symbol name if it's heap-allocated (not in data segment)
                 if (sym && sym->name && !is_pointer_in_data_segment(sym->name)) {
-                    if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                    if (g_debug_output_active) {
                         printf("🔍 release_object_deep: Freeing symbol name: '%s'\n", sym->name);
                     }
                     free((void*)sym->name);
@@ -586,17 +605,17 @@ static void release_object_deep(CljObject *v) {
         case CLJ_LIST:
             {
                 CljList *list = as_list(v);
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                if (g_debug_output_active) {
                     printf("🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n", v, list->first, list->rest);
                 }
                 // Release head and tail elements - RELEASE handles NULL
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                if (g_debug_output_active) {
                     if (list->first) {
                         printf("🔍 release_object_deep: Releasing list first element %p\n", list->first);
                     }
                 }
                 RELEASE(list->first);
-                if (is_memory_profiling_enabled() && g_memory_verbose_mode && g_debug_output_enabled) {
+                if (g_debug_output_active) {
                     if (list->rest) {
                         printf("🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
                     }

@@ -2051,10 +2051,8 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
             // Save reader position before parsing to detect if we're stuck
             size_t pos_before = reader_offset(&reader);
             
-            // Store form outside TRY block so it's accessible in CATCH
-            CljValue form = NULL;
             TRY {
-                form = value_by_parsing_expr(&reader, st);
+                CljValue form = value_by_parsing_expr(&reader, st);
                 if (!form) {
                     if (reader_is_eof(&reader)) break;
                     // Parse failed - skip to next line to avoid infinite loop
@@ -2062,7 +2060,6 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                     if (!reader_is_eof(&reader)) reader_next(&reader);
                     continue;
                 }
-                
                 (void)eval_parsed((CljObject*)form, st, NULL);
                 // value_by_parsing_expr returns AUTORELEASE object
                 success_count++;
@@ -2074,7 +2071,6 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                     reader_next(&reader);
                 }
             } CATCH(ex) {
-                // Exception caught - continue with next expression
                 // Skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                 if (!reader_is_eof(&reader)) reader_next(&reader);
@@ -2283,16 +2279,9 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         return true;
     }
     
-    // Declare variables outside block for use after block
-    char *rel = NULL;
-    char *source = NULL;
-    const char *orig_ns = NULL;
-    CljNamespace *target_ns = NULL;
-    bool ok = false;
-    
-load_namespace:
+load_namespace: {
     // Convert namespace to relative path
-    rel = namespace_to_relpath(ns_name);
+    char *rel = namespace_to_relpath(ns_name);
     if (!rel) {
         if (ns_name_allocated) {
             free((char*)ns_name);
@@ -2304,7 +2293,7 @@ load_namespace:
     char libs_path[512];
     snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
     
-    source = read_file_cstr(libs_path);
+    char *source = read_file_cstr(libs_path);
     if (!source) {
         source = read_file_cstr(rel);
     }
@@ -2318,13 +2307,14 @@ load_namespace:
     }
     
     // Evaluate source in current state
+    const char *orig_ns = NULL;
     if (st && st->current_ns && st->current_ns->name && st->current_ns->name->name) {
         orig_ns = st->current_ns->name->name;
     }
     
     // CRITICAL: Ensure target namespace exists before loading
     // This ensures that native functions registered before loading are in the correct namespace
-    target_ns = ns_get_or_create(ns_name, NULL);
+    CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
     if (!target_ns) {
         free(source);
         free(rel);
@@ -2338,38 +2328,21 @@ load_namespace:
     if (st) {
         st->current_ns = target_ns;
     }
-    ok = eval_source_in_current_state(source, st);
-    // CRITICAL: After loading, ensure target_ns mappings are preserved
-    // The namespace in the registry should be the same object, but verify
-    CljNamespace *verify_ns = ns_find(ns_name);
-    if (verify_ns != target_ns) {
-        // Different namespace object - this should not happen, but handle it
-        // Copy mappings from target_ns to verify_ns
-        if (target_ns->mappings && verify_ns->mappings) {
-            // Merge mappings from target_ns into verify_ns
-            MAP_FOR_EACH(target_ns->mappings, key, val) {
-                CljMap *new_mappings = map_assoc(verify_ns->mappings, key, val);
-                ns_set_mappings(verify_ns, new_mappings);
-                // ASSERT: Verify that the added element can be found
-                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID found = map_get(verify_ns->mappings, key, (ID)&not_found_sentinel);
-                CLJ_ASSERT(found != (ID)&not_found_sentinel && "process_require_spec: Merged element must be findable");
-            }
-        } else if (target_ns->mappings && !verify_ns->mappings) {
-            // target_ns has mappings but verify_ns doesn't - copy them
-            ns_set_mappings(verify_ns, target_ns->mappings);
-        }
-    } else if (verify_ns && target_ns && verify_ns->mappings != target_ns->mappings) {
-        // Same namespace object, but different mappings pointers - COW issue
-        // This should not happen - ns_define should have updated ns->mappings
-        // But if it did, we need to ensure the registry has the updated mappings
-        // Since verify_ns == target_ns, they should have the same mappings
-        // This is a bug - ns_define should have updated the mappings correctly
-        // CRITICAL: Update verify_ns->mappings to match target_ns->mappings
-        ns_set_mappings(verify_ns, target_ns->mappings);
-    }
+    bool ok = eval_source_in_current_state(source, st);
+    // CRITICAL: Save mappings after loading (they contain all functions we just added)
+    // evalstate_set_ns may trigger COW for target_ns if orig_ns == ns_name
+    // But even if orig_ns != ns_name, evalstate_set_ns might affect target_ns through ns_find
+    // So we always save and restore mappings to be safe
+    CljMap *target_mappings_after_loading = target_ns ? target_ns->mappings : NULL;
     // Restore original namespace
     if (st && orig_ns) evalstate_set_ns(st, orig_ns);
+    // After restoring, check if mappings changed and restore if necessary
+    if (target_mappings_after_loading) {
+        CljNamespace *verify_ns = ns_find(ns_name);
+        if (verify_ns && verify_ns->mappings != target_mappings_after_loading) {
+            ns_set_mappings(verify_ns, target_mappings_after_loading);
+        }
+    }
     
     free(source);
     free(rel);
@@ -2393,9 +2366,7 @@ load_namespace:
     }
     
     // Now that namespace is loaded, set alias/refer if needed
-    // CRITICAL: Use target_ns instead of ns_find to ensure we use the same namespace object
-    // that was used during loading (where mappings were registered)
-    CljNamespace *loaded_ns = target_ns ? target_ns : ns_find(ns_name);
+    CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns) {
         if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
             CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
@@ -2416,6 +2387,7 @@ load_namespace:
     }
     
     return true;
+    } // End of load_namespace: block
 }
 
 ID native_require(ID *args, unsigned int argc) {
@@ -2424,7 +2396,16 @@ ID native_require(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    EvalState *st = evalstate_new(false);
+    // CRITICAL: Use g_current_eval_state instead of creating a new one
+    // This ensures that require uses the correct namespace context
+    // Forward declaration - g_current_eval_state is defined later in this file
+    extern _Thread_local EvalState *g_current_eval_state;
+    if (!g_current_eval_state) {
+        throw_exception(EXCEPTION_RUNTIME, "require: EvalState not available",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    EvalState *st = g_current_eval_state;
 
     // Process each require spec (support multiple specs: (require '[ns1 :as n1] '[ns2 :as n2]))
     for (unsigned int i = 0; i < argc; i++) {
@@ -2435,7 +2416,6 @@ ID native_require(ID *args, unsigned int argc) {
         }
     }
 
-    evalstate_free(st);
     return NULL; // Clojure-compatible: require returns nil
 }
 #endif // ESP32_BUILD

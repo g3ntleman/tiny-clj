@@ -121,12 +121,12 @@ static void repl_process_event_loop(EvalState *st) {
     }
 }
 
-/** @brief Evaluate multiple expressions from a multiline string.
- *  @param code Multiline string containing multiple expressions
+/** @brief Evaluate multiple forms from a string.
+ *  @param code String containing multiple forms/expressions
  *  @param st Evaluation state
  *  @return true if successful, false on parse or evaluation error
  */
-static bool eval_multiline_string(const char *code, EvalState *st) {
+bool eval_multiform_string(const char *code, EvalState *st) {
     bool result = true; // Start optimistic
     
     // Use WITH_AUTORELEASE_POOL for automatic cleanup
@@ -491,7 +491,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
         // (Entfernt) REPL interne History-Kommandos
 
-        bool success = eval_multiline_string(acc, st);
+        bool success = eval_multiform_string(acc, st);
         
         repl_process_event_loop(st);
         
@@ -659,7 +659,7 @@ int main(int argc, char **argv) {
         fclose(fp);
         
         // Evaluate entire file content
-        bool success = eval_multiline_string(buffer, st);
+        bool success = eval_multiform_string(buffer, st);
         free(buffer);
         if (!success) {
             cleanup_and_exit(eval_args, 1);
@@ -675,7 +675,7 @@ int main(int argc, char **argv) {
     int i = 0;
     while (i < eval_count) {
         // Simple eval-args without TRY/CATCH
-        bool success = eval_multiline_string(eval_args[i], st);
+        bool success = eval_multiform_string(eval_args[i], st);
         if (!success) {
             // Parse error or evaluation failed
             cleanup_and_exit(eval_args, 1);
