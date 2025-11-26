@@ -1761,6 +1761,69 @@ ID native_string_reverse(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+// ============================================================================
+// Namespace introspection functions
+// ============================================================================
+
+// ns-map: Returns the mappings map of a namespace
+// Usage: (ns-map ns-name) or (ns-map 'ns-name)
+// Returns a map of all symbols to their values in the namespace
+ID native_ns_map(ID *args, unsigned int argc) {
+    CLJ_ASSERT(argc == 1 && "ns-map: arity check failed");
+    
+    ID ns_arg = args[0];
+    if (!ns_arg) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "ns-map: argument must not be nil");
+        return NULL;
+    }
+
+    CljNamespace *target_ns = NULL;
+    int tag = TAG(ns_arg);
+    
+    if (tag == CLJ_SYMBOL) {
+        target_ns = ns_find_by_symbol(as_symbol(ns_arg));
+    } else if (tag == CLJ_STRING) {
+        target_ns = ns_find(string_data(ns_arg));
+    } else if (tag == CLJ_NAMESPACE) {
+        target_ns = (CljNamespace*)ns_arg;
+    } else {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "ns-map: argument must be a symbol, string, or namespace");
+        return NULL;
+    }
+
+    if (!target_ns) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "Namespace not found");
+        return NULL;
+    }
+
+    return (ID)(target_ns->mappings ? target_ns->mappings : make_map(0));
+}
+
+// find-ns: Returns the namespace object for the given name
+// Usage: (find-ns 'ns-name) or (find-ns "ns-name")
+// Returns the namespace object or nil if not found
+ID native_find_ns(ID *args, unsigned int argc) {
+    CLJ_ASSERT(argc == 1 && "find-ns: arity check failed");
+    
+    ID ns_arg = args[0];
+    if (!ns_arg) return NULL; // nil -> nil (Clojure-compatible)
+
+    int tag = TAG(ns_arg);
+    if (tag == CLJ_SYMBOL) {
+        return (ID)ns_find_by_symbol(as_symbol(ns_arg));
+    } else if (tag == CLJ_STRING) {
+        return (ID)ns_find(string_data(ns_arg));
+    }
+    
+    throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                              "find-ns: argument must be a symbol or string");
+    return NULL;
+}
+
+// ============================================================================
 // Native function lookup table for stubs
 // Uses CljSymbol* for efficient pointer comparison (symbols are interned)
 // Statically initialized at compile-time using static symbol data structures
@@ -3953,6 +4016,10 @@ void register_builtins() {
     // time is now only a special form (eval_time), not a builtin
     // This ensures time can measure actual evaluation time, not pre-evaluated arguments
     register_builtin_in_core("sleep", native_sleep);
+
+    // Namespace introspection functions
+    register_builtin_in_core("ns-map", native_ns_map);
+    register_builtin_in_core("find-ns", native_find_ns);
 
     // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments
     // They are handled directly in eval_list() via eval_def() and eval_ns()
