@@ -3112,7 +3112,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                             ? map_merge(standard_meta, (CljMap*)user_meta)
                             : standard_meta;
         
-        meta_set(native_func_obj, merged_meta);
+        meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
 #endif // ENABLE_META
 #endif // DEBUG
 

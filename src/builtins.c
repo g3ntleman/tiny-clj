@@ -3928,7 +3928,7 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
             }
 
             // Set metadata on function object
-            meta_set(func_obj, meta_map);
+            meta_set((CljObject*)func_obj, (CljObject*)meta_map);
             RELEASE(meta_map);
         }
 #endif // ENABLE_META
