@@ -3254,21 +3254,20 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
     CLJ_ASSERT(list != NULL);
     if (!list || TAG(list) != CLJ_LIST) return NULL;
 
+    // Get element from list
+    ID element = list_nth(as_list(list), index);
+    
+    // Special case: nil evaluates to NULL (not SYM_NIL)
+    if (element == SYM_NIL) return NULL;
+    
+    if (!element) return NULL;
+
     // Handle NULL environment gracefully
     if (env == NULL) {
         // Return the element as-is if no environment is available
-        ID element = list_nth(as_list(list), index);
-        // Special case: nil should evaluate to NULL (not SYM_NIL)
-        if (element == SYM_NIL) {
-            return NULL;  // nil is represented as NULL
-        }
         // RETAIN and AUTORELEASE handle immediates and NULL safely - no check needed
         return AUTORELEASE(RETAIN(element));
     }
-
-    // Use the existing list_nth function which is safer
-    ID element = list_nth(as_list(list), index);
-    if (!element) return NULL;
 
     // For simple types (numbers, strings, booleans), return as-is
     if (IS_IMMEDIATE(element) || (element && TAG(element) == CLJ_STRING)) {
