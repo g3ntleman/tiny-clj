@@ -3078,6 +3078,22 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         // Lookup native function by Clojure name
         BuiltinFn native_func = native_function_lookup(name_symbol->name);
         if (!native_func) {
+            // Log detailed error about missing native implementation
+            // Use string representation of the original symbol as printed in Clojure
+            CljObject *name_as_obj = (CljObject*)name_sym;
+            const char *name_str_repr = to_cstring(name_as_obj);
+            if (name_str_repr) {
+                fprintf(stderr,
+                        "[tiny-clj] ERROR: :native function pointer not found for symbol %s (C name: %s)\n",
+                        name_str_repr,
+                        name_symbol->name ? name_symbol->name : "<NULL>");
+                free((void*)name_str_repr);
+            } else {
+                fprintf(stderr,
+                        "[tiny-clj] ERROR: :native function pointer not found for C name %s\n",
+                        name_symbol->name ? name_symbol->name : "<NULL>");
+            }
+
             free_obj_array((ID*)params, params_stack);
             // Use throw_exception_formatted for better error messages
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
