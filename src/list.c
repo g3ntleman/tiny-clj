@@ -38,7 +38,7 @@ CljList* make_list(ID first, CljList *rest) {
 // List-Operationen für try/catch
 ID list_nth(CljList *list, int n) {
     if (!list || n < 0) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for list", n);
         return NULL;
     }
@@ -46,7 +46,7 @@ ID list_nth(CljList *list, int n) {
     // Check if list is empty (both first and rest are NULL)
     if (list_empty(list)) {
         // Empty list - index is out of bounds
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for list", n);
         return NULL;
     }
@@ -68,7 +68,7 @@ ID list_nth(CljList *list, int n) {
     }
     
     // Index not found - out of bounds
-    throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+    throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
             "nth index %d is out of bounds for list", n);
     return NULL;
 }

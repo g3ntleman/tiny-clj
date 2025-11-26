@@ -1,6 +1,6 @@
 /*
  * Clojure Parser Implementation
- * 
+ *
  * Features:
  * - Parses Clojure-like syntax (lists, vectors, maps, symbols, keywords,
  * numbers, strings)
@@ -29,7 +29,7 @@
 
 // Helper function for parser exceptions
 static void throw_parser_exception(const char *message, Reader *reader) {
-    throw_exception("ParseError", message, "parser", reader->line, reader->column);
+    throw_exception(EXCEPTION_PARSE, message, "parser", reader->line, reader->column);
 }
 
 // Stack-based parser constants
@@ -128,11 +128,11 @@ ID parse_expr(Reader *reader, EvalState *st) {
   if (reader_is_eof(reader))
     return NULL;
   char c = reader_current(reader);
-  
+
   switch (c) {
     case '^':
       return parse_meta(reader, st);
-    
+
     case '#': {
       char next = reader_peek_ahead(reader, 1);
       if (next == '^')
@@ -141,24 +141,24 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return parse_anon_fn(reader, st);
       break;
     }
-    
+
     case '[':
       return parse_vector(reader, st);
-    
+
     case '{':
       return parse_map(reader, st);
-    
+
     case '(':
       return parse_list(reader, st);
-    
+
     case '"':
       return parse_string_internal(reader, st);
-    
+
     case '-':
       if (isdigit(reader_peek_ahead(reader, 1)))
         return make_number_by_parsing(reader, st);
       break;
-    
+
     case '.':
       if (isdigit(reader_peek_ahead(reader, 1))) {
         // Check for invalid decimal syntax like .01 (should be 0.01)
@@ -170,17 +170,17 @@ ID parse_expr(Reader *reader, EvalState *st) {
           invalid_decimal[pos++] = reader_next(reader);
         }
         invalid_decimal[pos] = '\0';
-        
-        throw_exception_formatted("ParseError", __FILE__, __LINE__, 0, 
+
+        throw_exception_formatted(EXCEPTION_PARSE, __FILE__, __LINE__, 0,
             "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
         return NULL;
       }
       break;
-    
+
     case 'n':
       // Handle nil literal - parse as SYM_NIL symbol (not NULL)
-      if (reader_peek_ahead(reader, 1) == 'i' && 
-          reader_peek_ahead(reader, 2) == 'l' && 
+      if (reader_peek_ahead(reader, 1) == 'i' &&
+          reader_peek_ahead(reader, 2) == 'l' &&
           !is_alphanumeric(reader_peek_ahead(reader, 3))) {
         reader_consume(reader); // 'n'
         reader_consume(reader); // 'i'
@@ -192,12 +192,12 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return AUTORELEASE(nil_sym);
       }
       break;
-    
+
     case 't':
       // Handle true literal
-      if (reader_peek_ahead(reader, 1) == 'r' && 
-          reader_peek_ahead(reader, 2) == 'u' && 
-          reader_peek_ahead(reader, 3) == 'e' && 
+      if (reader_peek_ahead(reader, 1) == 'r' &&
+          reader_peek_ahead(reader, 2) == 'u' &&
+          reader_peek_ahead(reader, 3) == 'e' &&
           !is_alphanumeric(reader_peek_ahead(reader, 4))) {
         reader_consume(reader); // 't'
         reader_consume(reader); // 'r'
@@ -206,13 +206,13 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return clj_true;
       }
       break;
-    
+
     case 'f':
       // Handle false literal
-      if (reader_peek_ahead(reader, 1) == 'a' && 
-          reader_peek_ahead(reader, 2) == 'l' && 
-          reader_peek_ahead(reader, 3) == 's' && 
-          reader_peek_ahead(reader, 4) == 'e' && 
+      if (reader_peek_ahead(reader, 1) == 'a' &&
+          reader_peek_ahead(reader, 2) == 'l' &&
+          reader_peek_ahead(reader, 3) == 's' &&
+          reader_peek_ahead(reader, 4) == 'e' &&
           !is_alphanumeric(reader_peek_ahead(reader, 5))) {
         reader_consume(reader); // 'f'
         reader_consume(reader); // 'a'
@@ -222,7 +222,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return clj_false;
       }
       break;
-    
+
     case '\'':
       // Handle quote 'x => (quote x)
       reader_consume(reader); // consume '
@@ -238,7 +238,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       // Create (quote <expr>) list: (quote expr)
       ID elements[2] = {SYM_QUOTE, quoted};
       return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
-    
+
     case '@':
       // Handle deref @x => (deref x)
       reader_consume(reader); // consume @
@@ -254,24 +254,24 @@ ID parse_expr(Reader *reader, EvalState *st) {
       // Create (deref <expr>) list: (deref expr)
       ID deref_elements[2] = {SYM_DEREF, atom_expr};
       return AUTORELEASE(make_list_from_stack((CljValue*)deref_elements, 2));
-    
+
     case '\\':
       // Handle character literals: \a, \space, \tab, \newline, \return, etc.
       return parse_character(reader, st);
-    
+
     default:
       break;
   }
-  
+
   // Handle digits
   if (isdigit(c))
     return make_number_by_parsing(reader, st);
-  
+
   // Handle symbols starting with :, alphanumeric, ., %, or Unicode
   if (c == ':' || is_alphanumeric(c) || c == '.' || c == '%' || (unsigned char)c >= 0x80) {
     return parse_symbol(reader);
   }
-  
+
   // Handle single-character operators
   if (strchr("+*/=<>", c)) {
     char next = reader_peek_ahead(reader, 1);
@@ -284,10 +284,10 @@ ID parse_expr(Reader *reader, EvalState *st) {
     char buf[2] = {c, '\0'};
     return intern_symbol_global(buf);
   }
-  
+
   // Unknown character - throw exception with helpful message
   char msg[256];
-  snprintf(msg, sizeof(msg), "Unexpected character '%c' (0x%02x) at position %zu (line %d, col %d)", 
+  snprintf(msg, sizeof(msg), "Unexpected character '%c' (0x%02x) at position %zu (line %d, col %d)",
            (c >= 32 && c < 127) ? c : '?', (unsigned char)c, reader->index, reader->line, reader->column);
   throw_parser_exception(msg, reader);
   return NULL;
@@ -310,14 +310,14 @@ ID parse_expr(Reader *reader, EvalState *st) {
  */
 ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
     CLJ_ASSERT(eval_state != NULL);
-    
+
     // NULL means nil (e.g., () parses to nil) - return NULL
     if (parsed_expr == NULL) {
         return NULL;
     }
-    
+
     CljObject *result = NULL;
-    
+
     // Don't catch exceptions here - let them propagate to the caller
     // Check if parsed_expr is an immediate value first
     if (IS_IMMEDIATE(parsed_expr)) {
@@ -351,7 +351,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
         // parsed_expr is already AUTORELEASEd by parse()
         result = parsed_expr;
     }
-    
+
     // result can be NULL only if the evaluation result is nil
     // If evaluation fails, it should throw an exception, not return NULL
     return result;
@@ -363,31 +363,31 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @return Parsed vector CljObject or NULL on error
- * 
+ *
  * Note: Vector size is limited by available heap memory (ESP32: ~520KB total RAM).
  * Nesting depth is limited by stack size (typically several KB).
  */
 static ID parse_vector(Reader *reader, EvalState *st) {
   if (reader_match(reader, '[')) {
     reader_skip_all(reader);
-    
+
     // Create transient vector for efficient building
     CljValue vec = make_vector(6, CLJ_VECTOR);
     CljValue tvec = vector_transient((CljVector*)vec);
     RELEASE(vec);  // Release original, use transient
-    
+
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
       size_t before = reader_offset(reader);
       ID value = parse_expr(reader, st);
       size_t after = reader_offset(reader);
-      
+
       // Check if parser made progress - if not, it's an error
       // If parser made progress, NULL means nil (which is valid)
       if (!value && after <= before && !reader_eof(reader)) {
         RELEASE(tvec);
         return NULL;
       }
-      
+
       // Use vector_conj_bang for transient vectors (guaranteed in-place)
       tvec = vector_conj_bang((CljVector*)tvec, value);
       if (!tvec) {
@@ -396,17 +396,17 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       }
       reader_skip_all(reader);
     }
-    
+
     // Convert back to persistent vector
     vec = vector_persistent((CljVector*)tvec);
     RELEASE(tvec);
-    
+
     if (reader_eof(reader) || !reader_match(reader, ']')) {
       RELEASE(vec);
       throw_parser_exception("Unclosed vector - missing closing ']'", reader);
       return NULL;
     }
-    
+
     return AUTORELEASE(vec);
   }
   return NULL;
@@ -453,70 +453,70 @@ static ID parse_list(Reader *reader, EvalState *st) {
   if (!reader_match(reader, '('))
     return NULL;
   reader_skip_all(reader);
-  
+
   // Handle empty list - return nil (Clojure behavior: () is nil)
   if (reader_peek_char(reader) == ')') {
     reader_next(reader);
     return NULL;  // () is nil in Clojure
   }
-  
+
   // Parse first element
   ID first = parse_expr_with_progress(reader, st);
   reader_skip_all(reader);
-  
+
   // Check if first element is if-let symbol for macro expansion
   if (first && TAG(first) == CLJ_SYMBOL) {
     CljSymbol *sym = as_symbol((CljValue)first);
-    if (sym && sym->name && strcmp(sym->name, "if-let") == 0) {
+    if (sym && sym->cname && strcmp(sym->cname, "if-let") == 0) {
       // Macro expansion: (if-let [binding test] then else?)
       // => (let [binding test] (if binding then else?))
-      
+
       // Parse rest of the list: [binding test], then, else?
       ID rest = parse_list_rest(reader, st);
       if (!rest) {
         throw_parser_exception("if-let requires at least binding vector and then expression", reader);
         return NULL;
       }
-      
+
       // Extract binding vector [binding test] from rest
       CljList *rest_list = as_list(rest);
       if (!rest_list || !rest_list->first) {
         throw_parser_exception("if-let requires binding vector as first argument", reader);
         return NULL;
       }
-      
+
       ID binding_vec = rest_list->first;
       if (!binding_vec || TAG(binding_vec) != CLJ_VECTOR) {
         throw_parser_exception("if-let binding must be a vector", reader);
         return NULL;
       }
-      
+
       // Extract binding and test from vector [binding test]
       CljVector *vec = as_vector((CljValue)binding_vec);
       if (!vec || vector_count(vec) < 2) {
         throw_parser_exception("if-let binding vector must have exactly 2 elements", reader);
         return NULL;
       }
-      
+
       ID binding = vector_nth(vec, 0);
       // Note: test is in binding_vec, we use binding_vec directly in the expansion
-      
+
       // Extract then expression
       CljList *rest_after_binding = as_list(rest_list->rest);
       if (!rest_after_binding || !rest_after_binding->first) {
         throw_parser_exception("if-let requires then expression", reader);
         return NULL;
       }
-      
+
       ID then_expr = rest_after_binding->first;
-      
+
       // Extract else expression (optional)
       ID else_expr = NULL;
       CljList *rest_after_then = as_list(rest_after_binding->rest);
       if (rest_after_then && rest_after_then->first) {
         else_expr = rest_after_then->first;
       }
-      
+
       // Build expansion: (let [binding test] (if binding then else?))
       // First, build (if binding then else?)
       ID if_args[4];
@@ -529,46 +529,46 @@ static ID parse_list(Reader *reader, EvalState *st) {
         if_arg_count = 4;
       }
       ID if_expr = AUTORELEASE(make_list_from_stack((CljValue*)if_args, if_arg_count));
-      
+
       // Build binding vector for let: [binding test]
       ID let_binding_vec = AUTORELEASE(binding_vec);
-      
+
       // Build (let [binding test] (if binding then else?))
       ID let_args[3];
       let_args[0] = SYM_LET;
       let_args[1] = let_binding_vec;
       let_args[2] = if_expr;
       ID expanded = AUTORELEASE(make_list_from_stack((CljValue*)let_args, 3));
-      
+
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
-      
+
       if (reader_eof(reader) || !reader_match(reader, ')')) {
         RELEASE(expanded);
         throw_parser_exception("Unclosed list - missing closing ')'", reader);
         return NULL;
       }
-      
+
       return expanded;
     }
   }
-  
+
   // Parse rest of the list recursively
   ID rest = parse_list_rest(reader, st);
-  
+
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
   CljValue result = AUTORELEASE(make_list(first, (CljList*)rest));
-  
+
   // Skip whitespace before checking for closing parenthesis
   reader_skip_all(reader);
-  
+
   if (reader_eof(reader) || !reader_match(reader, ')')) {
     RELEASE(result);
     throw_parser_exception("Unclosed list - missing closing ')'", reader);
     return NULL;
   }
-  
+
   return result;
 }
 
@@ -619,19 +619,19 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
 static ID parse_character(Reader *reader, EvalState *st) {
   (void)st;
   reader_consume(reader);
-  
+
   if (reader_eof(reader)) {
     throw_parser_exception("Unexpected end of input after '\\'", reader);
     return NULL;
   }
-  
+
   char name[32];
   int pos = 0;
   while (!reader_eof(reader) && pos < 31 && is_alphanumeric(reader_peek_char(reader))) {
     name[pos++] = reader_next(reader);
   }
   name[pos] = '\0';
-  
+
   if (pos > 0) {
     // Named character literal - use switch on first char for performance
     switch (name[0]) {
@@ -684,7 +684,7 @@ static ID parse_character(Reader *reader, EvalState *st) {
  * @param reader Reader instance for input
  * @param st Evaluation state
  * @return Parsed symbol CljObject (interned via intern_symbol_global) or NULL on error
- * 
+ *
  * IMPORTANT: All symbols returned by the parser (directly or indirectly) are interned.
  * This ensures pointer equality for the same symbol names, which is critical for
  * map lookups and namespace resolution.
@@ -693,24 +693,24 @@ static ID parse_symbol(Reader *reader) {
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
   int slash_pos = -1;
-  
+
   // Handle keyword prefix
   if (reader_peek_char(reader) == ':') {
     buffer[pos++] = reader_next(reader);
     if (reader_peek_char(reader) == ':')
       buffer[pos++] = reader_next(reader);
   }
-  
+
   while (!reader_eof(reader) && pos < MAX_STACK_STRING_SIZE - 1) {
     int cp = reader_peek_codepoint(reader);
     if (cp < 0) break;
-    
+
     if (utf8_is_symbol_char(cp)) {
       // Track position of '/' for namespace-qualified symbols
       if (cp == '/') {
         slash_pos = pos;
       }
-      
+
       // Get the UTF-8 bytes for this codepoint
       const char *current = reader->src + reader->index;
       const char *next = utf8codepoint(current, NULL);
@@ -720,15 +720,15 @@ static ID parse_symbol(Reader *reader) {
         // Fallback: einen Byte voranschreiten, um Hänger zu vermeiden
         next = current + 1;
       }
-      
+
       size_t bytes_to_copy = next - current;
       if (pos + bytes_to_copy >= MAX_STACK_STRING_SIZE) break;
-      
+
       // Copy UTF-8 bytes
       for (size_t i = 0; i < bytes_to_copy; i++) {
         buffer[pos++] = current[i];
       }
-      
+
       // Advance reader by codepoint
       size_t before = reader_offset(reader);
       reader_next_codepoint(reader);
@@ -739,7 +739,7 @@ static ID parse_symbol(Reader *reader) {
       break;
     }
   }
-  
+
   buffer[pos] = '\0';
   // Leere Symbole sind ungültig – statt abzubrechen, sauber fehlschlagen
   if (pos == 0) {
@@ -757,14 +757,14 @@ static ID parse_symbol(Reader *reader) {
   }
   if (!utf8valid(buffer))
     throw_parser_exception("Invalid UTF-8 in symbol", reader);
-  
+
   // Check for namespace-qualified symbol: namespace/symbol or alias/symbol
   if (slash_pos > 0 && slash_pos < pos - 1) {
     // Split buffer at '/': namespace/alias and symbol
     buffer[slash_pos] = '\0';
     const char *ns_str = buffer;
     const char *symbol_str = buffer + slash_pos + 1;
-    
+
     if (ns_str[0] != '\0' && symbol_str[0] != '\0') {
       // CRITICAL: Create symbol with namespace set (not full string name)
       // This allows eval_symbol to quickly check symbol->ns instead of parsing in hot-path
@@ -775,7 +775,7 @@ static ID parse_symbol(Reader *reader) {
       // If intern fails, fall through to return unqualified symbol
     }
   }
-  
+
   return AUTORELEASE(intern_symbol_global(buffer));
 }
 
@@ -834,7 +834,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
             // Validate continuation bytes before copying
             bool valid = true;
             for (size_t i = 1; i < bytes_to_copy; i++) {
-              if (reader->index + i >= reader->length || 
+              if (reader->index + i >= reader->length ||
                   !utf8_is_continuation_byte((unsigned char)reader->src[reader->index + i])) {
                 valid = false;
                 break;
@@ -909,7 +909,7 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
   char buf[MAX_STACK_STRING_SIZE];
   int pos = 0;
   bool has_digit_before_dot = false;
-  
+
   if (reader_peek_char(reader) == '-')
     buf[pos++] = reader_next(reader);
   if (!isdigit(reader_peek_char(reader))) {
@@ -931,13 +931,13 @@ static CljObject* make_number_by_parsing(Reader *reader, EvalState *st) {
       buf[pos++] = reader_next(reader);
   }
   buf[pos] = '\0';
-  
+
   // Validate: decimal numbers must have at least one digit before the dot
   if (strchr(buf, '.') && !has_digit_before_dot) {
     throw_parser_exception("Unable to resolve symbol: .01 in this context", reader);
     return NULL;
   }
-  
+
   if (strchr(buf, '.'))
     return fixed((float)atof(buf));
   return fixnum(atoi(buf));
@@ -971,7 +971,7 @@ CljValue value_by_parsing_expr(Reader *reader, EvalState *st) {
  */
 CljValue parse_from_reader(Reader *reader, EvalState *st) {
   if (!reader || !st) return NULL;
-  
+
   // value_by_parsing_expr already returns AUTORELEASE objects
   // No need for additional WITH_AUTORELEASE_POOL - just return the result
   // The object is already in the caller's autorelease pool
@@ -986,10 +986,10 @@ CljValue parse_from_reader(Reader *reader, EvalState *st) {
  */
 ID parse(const char *input, EvalState *st) {
   if (!input || !st) return NULL;
-  
+
   Reader reader;
   reader_init(&reader, input);
-  
+
   // Delegate to parse_from_reader (DRY principle)
   // Don't create autorelease pool here - let caller manage memory
   return parse_from_reader(&reader, st);
@@ -1008,7 +1008,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
     if (obj) RELEASE(obj);
     return NULL;
   }
-  
+
   // Check if the object already has metadata (from nested metadata parsing)
   ID existing_meta = meta_get((CljObject*)obj);
   if (existing_meta) {
@@ -1022,7 +1022,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
     RELEASE(new_meta);
     return obj;  // Return object (caller will handle AUTORELEASE)
   }
-  
+
   // No existing metadata, apply new metadata directly
   meta_set((CljObject*)obj, (CljObject*)new_meta);
   RELEASE(new_meta);
@@ -1042,7 +1042,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     if (meta) RELEASE(meta);
     return NULL;
   }
-  
+
   // Special handling for defn forms: set metadata on the function name symbol instead of the list
   // This ensures metadata persists even if the list object changes during evaluation
   if (meta && TAG(obj) == CLJ_LIST) {
@@ -1059,7 +1059,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
           // Debug: Print symbol information using to_string
           const char *symbol_str = to_cstring(rest->first);
           if (symbol_str) {
-            fprintf(stderr, "[DEBUG] apply_metadata_to_object: Setting metadata on symbol: %s (ptr: %p)\n", 
+            fprintf(stderr, "[DEBUG] apply_metadata_to_object: Setting metadata on symbol: %s (ptr: %p)\n",
                     symbol_str, (void*)name_sym);
             free((void*)symbol_str);
           }
@@ -1081,12 +1081,12 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
       }
     }
   }
-  
+
   // Apply metadata if provided (if not already handled above)
   if (meta) {
     meta_set(obj, meta);
   }
-  
+
 #ifdef ENABLE_META
   // Automatically add source code location metadata
   CljObject *location_meta = make_location_meta(reader, st);
@@ -1108,7 +1108,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     RELEASE(location_meta);
   }
 #endif // ENABLE_META
-  
+
   if (meta) RELEASE(meta);
   return AUTORELEASE(obj);
 }
@@ -1122,7 +1122,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 static ID parse_meta(Reader *reader, EvalState *st) {
   // Consume the '^' character (we know it's '^' because parse_expr checked it)
   reader_next(reader);
-  
+
   // Check if this is ^#^{...} syntax (metadata map)
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == '#') {
@@ -1134,7 +1134,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
       return parse_meta_map(reader, st);
     }
   }
-  
+
   // Check if this is ^:keyword syntax (shorthand for ^{:keyword true})
   reader_skip_all(reader);
   if (!reader_eof(reader) && reader_current(reader) == ':') {
@@ -1142,7 +1142,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     ID keyword_meta = parse_expr(reader, st);
     if (!keyword_meta)
       return NULL;
-    
+
     // Convert keyword to metadata map {:keyword true}
     // In Clojure, ^:keyword means ^{:keyword true}
     CljMap *meta_map = make_map(4);
@@ -1150,14 +1150,14 @@ static ID parse_meta(Reader *reader, EvalState *st) {
       RELEASE(keyword_meta);
       return NULL;
     }
-    
+
     // Associate keyword with true
     // map_assoc always returns a new map (COW disabled), so we need to use the result
     CljMap *updated_map = map_assoc(meta_map, keyword_meta, (ID)clj_true);
     RELEASE(meta_map);  // Release original map (map_assoc creates new one)
     meta_map = updated_map;
     RELEASE(keyword_meta);
-    
+
     // Parse the object (which might have more metadata)
     reader_skip_all(reader);
     ID obj = parse_expr(reader, st);
@@ -1165,7 +1165,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
       RELEASE(meta_map);
       return NULL;
     }
-    
+
     // Merge metadata with object (handles existing metadata)
     ID result = merge_metadata_with_object(obj, (ID)meta_map);
     if (!result) {
@@ -1174,7 +1174,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     // Apply location metadata if enabled
     return apply_metadata_to_object(reader, st, NULL, result);
   }
-  
+
   // Regular ^meta syntax (map or other expression)
   reader_skip_all(reader);
   ID meta = parse_expr(reader, st);
@@ -1186,7 +1186,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     RELEASE(meta);
     return NULL;
   }
-  
+
   // Merge metadata with object (handles existing metadata)
   ID result = merge_metadata_with_object(obj, meta);
   if (!result) {
@@ -1209,13 +1209,13 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Consume '('
   if (reader_next(reader) != '(')
     return NULL;
-  
+
   reader_skip_all(reader);
-  
+
   // Parse the body (list contents)
   // Note: parse_list_rest does NOT consume the closing ')', so we need to do it
   ID body = parse_list_rest(reader, st);
-  
+
   // Consume closing ')'
   reader_skip_all(reader);
   if (reader_peek_char(reader) != ')') {
@@ -1224,7 +1224,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
     return NULL;
   }
   reader_next(reader); // Consume ')'
-  
+
   if (!body) {
     // Empty function body - return (fn [] ())
     CljSymbol *fn_sym = intern_symbol_global("fn");
@@ -1233,15 +1233,15 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
     ID elements[3] = {fn_sym, empty_vec, empty_list_val};
     return AUTORELEASE(make_list_from_stack((CljValue*)elements, 3));
   }
-  
+
   // Collect all % and %N references in the body to determine parameters
   // For simplicity, we'll scan for % and create parameters [% %1 %2 ...]
   // This is a simplified implementation - full version would need proper AST traversal
-  
+
   // For now, create a simple version that handles % and %1, %2, etc.
   // We'll create parameters based on what we find
   // This is a simplified approach - in a full implementation, we'd traverse the AST
-  
+
   // Simple approach: create (fn [%] body) for #(...)
   // This handles the most common case: #(+ % 1)
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
@@ -1249,7 +1249,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   CljSymbol *percent_sym = intern_symbol_global("%");
   CljValue param_vec = make_vector(1, CLJ_VECTOR);
   vector_conj((CljVector*)param_vec, percent_sym);
-  
+
   // Create (fn [%] body)
   ID elements[3] = {fn_sym, param_vec, body};
   return AUTORELEASE(make_list_from_stack((CljValue*)elements, 3));
@@ -1276,7 +1276,7 @@ static ID parse_meta_map(Reader *reader,
     return NULL;
   }
   reader_next(reader);  // Consume '^'
-  
+
   reader_skip_all(reader);
   ID meta = parse_map(reader, st);
   if (!meta)
@@ -1287,7 +1287,7 @@ static ID parse_meta_map(Reader *reader,
     RELEASE(meta);
     return NULL;
   }
-  
+
   return apply_metadata_to_object(reader, st, meta, obj);
 }
 

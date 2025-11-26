@@ -111,6 +111,7 @@ typedef struct {
 // Global memory statistics
 extern MemoryStats g_memory_stats;
 extern bool g_memory_verbose_mode;
+extern bool g_memory_profiling_enabled;  // Direct access for performance-critical code
 
 /**
  * @brief Initialize the memory profiler system

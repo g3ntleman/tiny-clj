@@ -58,7 +58,7 @@ bool validate_min_arity(unsigned int argc, unsigned int min_arity, const char *f
  * @brief Throws IndexOutOfBoundsException with a descriptive message.
  */
 void throw_index_out_of_bounds(const char *function_name, unsigned int index, unsigned int count, const char *collection_type) {
-    throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+    throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
             "%s: index %u is out of bounds for %s with %u elements", 
             function_name, index, collection_type, count);
 }

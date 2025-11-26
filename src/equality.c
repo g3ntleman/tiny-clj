@@ -1,6 +1,6 @@
 /*
  * Equality Comparison
- * 
+ *
  * Structural equality comparison for Clojure values.
  * Implements clj_equal() for comparing Clojure objects by value.
  */
@@ -22,7 +22,7 @@ extern CljString* string_empty_singleton;
 bool clj_equal(ID a, ID b) {
     if (a == b) return true;  // Pointer-Gleichheit (für Singletons und Symbole)
     if (!a || !b) return false;
-    
+
     // Handle tagged integers (fixnums) - most common case
     if (is_fixnum(a) || is_fixnum(b)) {
         if (is_fixnum(a) && is_fixnum(b)) {
@@ -30,7 +30,7 @@ bool clj_equal(ID a, ID b) {
         }
         return false;  // Different types
     }
-    
+
     // Handle other immediate types (bool, etc.)
     if (is_immediate(a) || is_immediate(b)) {
         if (is_immediate(a) && is_immediate(b)) {
@@ -38,34 +38,34 @@ bool clj_equal(ID a, ID b) {
         }
         return false;  // Different types
     }
-    
+
     // Handle CljObject* types
     CljObject *a_obj = (CljObject*)a;
     CljObject *b_obj = (CljObject*)b;
-    
+
     // Check that both objects have the same type
     if (!a_obj || !b_obj || a_obj->type != b_obj->type) return false;
-    
+
     // Inhalt-Vergleich basierend auf Typ
     // Hinweis: CLJ_BOOL, CLJ_SYMBOL werden bereits durch Pointer-Vergleich abgefangen
     switch (a_obj->type) {
         // CLJ_INT, CLJ_FLOAT removed - handled as immediates
-            
+
         // Komplexe Typen - Inhalt-Vergleich
         case CLJ_STRING: {
             CljString *str_a = (CljString*)a;
             CljString *str_b = (CljString*)b;
             if (!str_a || !str_b) return false;
-            
+
             // Special case: empty string singleton comparison
             if (str_a == string_empty_singleton && str_b == string_empty_singleton) {
                 return true;
             }
-            
+
             // Compare string data directly
             return strcmp(str_a->data, str_b->data) == 0;
         }
-        
+
         case CLJ_VECTOR:
         case CLJ_VECTOR_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
@@ -85,7 +85,7 @@ bool clj_equal(ID a, ID b) {
             }
             return true;
         }
-        
+
         case CLJ_MAP: {
             CljMap *map_a = as_map(a);
             CljMap *map_b = as_map(b);
@@ -98,36 +98,40 @@ bool clj_equal(ID a, ID b) {
             }
             return true;
         }
-        
+
         case CLJ_SYMBOL: {
             // Symbol comparison: name and namespace must match
             CljSymbol *sym_a = as_symbol(a);
             CljSymbol *sym_b = as_symbol(b);
             if (!sym_a || !sym_b) return false;
-            if (!sym_a->name || !sym_b->name) return false;
-            if (strcmp(sym_a->name, sym_b->name) != 0) return false;
-            
+            if (!sym_a->cname || !sym_b->cname) return false;
+
+            // Compare symbol names (must match)
+            if (strcmp(sym_a->cname, sym_b->cname) != 0) return false;
+
             // Compare namespaces (pointer comparison works due to interning)
-            if (sym_a->ns == sym_b->ns) return true;
-            
+            if (sym_a->ns_name == sym_b->ns_name) return true;
+
             // If both symbols are unqualified (no namespace), they are equal
             // This handles cases where symbols are parsed in different contexts
             // but are structurally equivalent (e.g., unqualified symbols)
-            if (!sym_a->ns && !sym_b->ns) return true;
-            
+            if (!sym_a->ns_name && !sym_b->ns_name) return true;
+
             // If one has a namespace and the other doesn't, they are not equal
-            if (!sym_a->ns || !sym_b->ns) return false;
-            
-            // Both have namespaces - compare namespace name strings
-            return strcmp(sym_a->ns->name, sym_b->ns->name) == 0;
+            if (!sym_a->ns_name || !sym_b->ns_name) return false;
+
+            // Both have namespaces - compare namespace name strings (must match)
+            // CRITICAL: Both name and namespace name must match for symbols to be equal
+            if (!sym_a->ns_name->cname || !sym_b->ns_name->cname) return false;
+            return strcmp(sym_a->ns_name->cname, sym_b->ns_name->cname) == 0;
         }
-        
+
         case CLJ_LIST: {
             // Structural equality for lists (needed for metadata lookup)
             CljList *list_a = as_list(a);
             CljList *list_b = as_list(b);
             if (!list_a || !list_b) return false;
-            
+
             // Compare lists element by element
             CljList *curr_a = list_a;
             CljList *curr_b = list_b;
@@ -156,13 +160,13 @@ bool clj_equal(ID a, ID b) {
             // Both should be NULL at the same time
             return curr_a == curr_b;
         }
-        
+
         // Referenz-Typen - nur Pointer-Vergleich (bereits durch a == b abgefangen)
         case CLJ_FUNC:
         case CLJ_CLOSURE:
             // Functions are only equal if they're the same instance
             return a == b;
-        
+
         // Unbekannte oder nicht unterstützte Typen
         default:
             return false;

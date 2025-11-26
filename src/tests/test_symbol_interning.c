@@ -48,11 +48,11 @@ TEST(test_inc_symbol_interning_during_load) {
                 if (key && TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
-                    if (!first_symbol && sym->name) {
-                        first_symbol = sym->name;
+                    if (!first_symbol && sym->cname) {
+                        first_symbol = sym->cname;
                     }
                     // Check if this is inc by name
-                    if (sym->name && strcmp(sym->name, "inc") == 0) {
+                    if (sym->cname && strcmp(sym->cname, "inc") == 0) {
                         // Found inc by name - check if it's the same pointer
                         CljSymbol *key_sym = (CljSymbol*)key;
                         if (key_sym != inc_sym_after) {

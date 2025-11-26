@@ -25,7 +25,7 @@ CljByteArray* make_byte_array(int length) {
     assert(length >= 0 && "byte_array length must be non-negative");
     
     if (length < 0) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "byte-array length must be non-negative, got %d", length);
         return NULL;
     }
@@ -78,7 +78,7 @@ uint8_t byte_array_get(CljValue arr, int index) {
     assert(index >= 0 && index < ba->length && "Index out of bounds");
     
     if (index < 0 || index >= ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Index %d out of bounds for byte array of length %d", index, ba->length);
         return 0;
     }
@@ -94,7 +94,7 @@ void byte_array_set(CljValue arr, int index, uint8_t value) {
     assert(index >= 0 && index < ba->length && "Index out of bounds");
     
     if (index < 0 || index >= ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Index %d out of bounds for byte array of length %d", index, ba->length);
         return;
     }
@@ -141,7 +141,7 @@ void byte_array_copy_from(CljValue dest, int dest_offset, const uint8_t *src, in
     }
     
     if (dest_offset + length > ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Copy from offset %d with length %d exceeds array length %d",
                 dest_offset, length, ba->length);
         return;
@@ -169,7 +169,7 @@ void byte_array_copy_to(CljValue src, int src_offset, uint8_t *dest, int length)
     }
     
     if (src_offset + length > ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Copy from offset %d with length %d exceeds array length %d",
                 src_offset, length, ba->length);
         return;
@@ -202,14 +202,14 @@ void byte_array_copy(CljValue dest, int dest_offset, CljValue src, int src_offse
     }
     
     if (dest_offset + length > dest_ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Copy to offset %d with length %d exceeds destination length %d",
                 dest_offset, length, dest_ba->length);
         return;
     }
     
     if (src_offset + length > src_ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Copy from offset %d with length %d exceeds source length %d",
                 src_offset, length, src_ba->length);
         return;
@@ -236,7 +236,7 @@ CljValue byte_array_slice(CljValue arr, int offset, int length) {
     }
     
     if (offset + length > ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Slice from offset %d with length %d exceeds array length %d",
                 offset, length, ba->length);
         return NULL;
@@ -258,7 +258,7 @@ ID byte_array_get_id(CljValue arr, int index) {
     assert(index + sizeof(ID) <= (size_t)ba->length && "ID read would exceed array bounds");
     
     if (index < 0 || index + sizeof(ID) > (size_t)ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "ID read at index %d (size %zu) exceeds array length %d",
                 index, sizeof(ID), ba->length);
         return NULL;
@@ -278,7 +278,7 @@ void byte_array_set_id(CljValue arr, int index, ID value) {
     assert(index + sizeof(ID) <= (size_t)ba->length && "ID write would exceed array bounds");
     
     if (index < 0 || index + sizeof(ID) > (size_t)ba->length) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "ID write at index %d (size %zu) exceeds array length %d",
                 index, sizeof(ID), ba->length);
         return;

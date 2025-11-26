@@ -34,7 +34,10 @@ void runtime_init(TinyClJRuntime *runtime) {
     // ASSIGN automatically handles releasing old values, so multiple calls are safe
     
     // Reset namespace registry (transient Map: Symbol → CljNamespace*)
-    ns_reset_registry();
+    // Only reset if not already initialized (allows multiple calls without losing state)
+    if (!runtime->ns_registry) {
+        ns_reset_registry();
+    }
     
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
@@ -43,8 +46,11 @@ void runtime_init(TinyClJRuntime *runtime) {
     }
     
     // Initialize/reset CljObject* fields
-    ASSIGN(runtime->meta_registry, NULL);
-    ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
+    // NOTE: meta_registry is managed by meta_registry_init/meta_registry_cleanup
+    // and should not be cleared here to avoid losing metadata across runtime_init()
+    if (!runtime->resolve_cache) {
+        ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
+    }
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {

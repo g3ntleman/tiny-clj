@@ -192,25 +192,25 @@ void clj_assert_args(const char *function_name, bool condition, const char *mess
 void clj_assert_args_multiple(const char *function_name, int condition_count, ...);
 
 /** @brief Standard error message: EOF while reading vector */
-extern const char *ERROR_EOF_VECTOR;
+extern const char *EXCEPTION_EOF_VECTOR;
 /** @brief Standard error message: EOF while reading map */
-extern const char *ERROR_EOF_MAP;
+extern const char *EXCEPTION_EOF_MAP;
 /** @brief Standard error message: EOF while reading list */
-extern const char *ERROR_EOF_LIST;
+extern const char *EXCEPTION_EOF_LIST;
 /** @brief Standard error message: Unmatched delimiter */
-extern const char *ERROR_UNMATCHED_DELIMITER;
+extern const char *EXCEPTION_UNMATCHED_DELIMITER;
 /** @brief Standard error message: Division by zero */
-extern const char *ERROR_DIVISION_BY_ZERO;
+extern const char *EXCEPTION_DIVISION_BY_ZERO;
 /** @brief Standard error message: Invalid syntax */
-extern const char *ERROR_INVALID_SYNTAX;
+extern const char *EXCEPTION_INVALID_SYNTAX;
 /** @brief Standard error message: Undefined variable */
-extern const char *ERROR_UNDEFINED_VARIABLE;
+extern const char *EXCEPTION_UNDEFINED_VARIABLE;
 /** @brief Standard error message: Type mismatch */
-extern const char *ERROR_TYPE_MISMATCH;
+extern const char *EXCEPTION_TYPE_MISMATCH;
 /** @brief Standard error message: Stack overflow */
-extern const char *ERROR_STACK_OVERFLOW;
+extern const char *EXCEPTION_STACK_OVERFLOW;
 /** @brief Standard error message: Memory allocation failed */
-extern const char *ERROR_MEMORY_ALLOCATION;
+extern const char *EXCEPTION_MEMORY_ALLOCATION;
 
 // ============================================================================
 // STATIC EXCEPTION TYPE CONSTANTS
@@ -242,5 +242,8 @@ extern const char *EXCEPTION_DIVISION_BY_ZERO;
 
 /** @brief Static exception type: ZombieAccessException */
 extern const char *EXCEPTION_ZOMBIE_ACCESS;
+
+/** @brief Static exception type: IndexOutOfBoundsException */
+extern const char *EXCEPTION_INDEX_OUT_OF_BOUNDS;
 
 #endif

@@ -30,27 +30,27 @@ CljMap* make_map(int capacity) {
   if (capacity <= 0) {
     return map_empty();
   }
-  
+
   // Allocate struct + data array in ONE malloc
   size_t struct_size = sizeof(CljMap);
   size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
   size_t total_size = struct_size + data_size;
-  
+
   CljMap *map = (CljMap*)malloc(total_size);
   if (!map) {
     throw_oom();
   }
-  
+
   map->base.type = CLJ_MAP;
   map->base.rc = 1;
   map->count = 0;
   map->capacity = capacity;
-  
+
   // Initialize embedded array to NULL
   for (int i = 0; i < capacity * 2; i++) {
     map->data[i] = NULL;
   }
-  
+
   return map;
 }
 
@@ -58,7 +58,7 @@ ID map_get(CljMap *map, ID key, ID not_found) {
   if (map) {
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     CljObject *key_obj = (CljObject*)key;
-    
+
     MAP_FOR_EACH(map, stored_key, value) {
       // Happy path: pointer comparison first (for interned symbols and nil keys)
       if (stored_key == key_obj) {
@@ -73,14 +73,14 @@ ID map_get(CljMap *map, ID key, ID not_found) {
               "Symbol '%s' found by structural equality but not pointer equality. "
               "This indicates that symbols are not correctly interned. "
               "Stored symbol: %p, Key symbol: %p",
-              stored_sym->name ? stored_sym->name : "unknown",
+              stored_sym->cname ? stored_sym->cname : "unknown",
               stored_key, key_obj);
         }
         return (ID)value;
       }
     }
   }
-  
+
   return not_found;
 }
 
@@ -94,7 +94,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
     CljObject *key_obj = (CljObject*)key;
     CljObject *value_obj = (CljObject*)value;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
-  
+
 #if 0
   // COW HOT-PATH: RC=1 → in-place mutation (disabled by default)
   // To re-enable COW: Change #if 0 to #if 1 above
@@ -121,7 +121,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
       ASSIGN(KV_VALUE(map->data, found_idx), value_obj);
       return map;  // Return SAME map
     }
-    
+
     // Key not found: add new entry if capacity allows
     if (map->count < map->capacity) {
       // Direct in-place mutation (no branches after this)
@@ -131,18 +131,18 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
       map->count++;
       return map;  // Return SAME map
     }
-    
+
     // Out of capacity - need to grow (fall through to COW path)
   }
 #endif
-  
+
   // Always create a new map (COW disabled)
   int new_capacity = map->capacity;
   if (map->count >= map->capacity) {
     new_capacity = map->capacity * 2;
     if (new_capacity < 4) new_capacity = 4;
   }
-  
+
   // Allocate new map with embedded data array
   size_t struct_size = sizeof(CljMap);
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
@@ -150,21 +150,21 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   if (!new_map) {
     throw_oom();
   }
-  
+
   new_map->base.type = CLJ_MAP;
   new_map->base.rc = 1;
   new_map->count = 0;  // Start with 0, will be set correctly below
   new_map->capacity = new_capacity;
-  
+
   // Initialize new data array
   for (int i = 0; i < new_capacity * 2; i++) {
     new_map->data[i] = NULL;
   }
-  
+
   // Copy existing entries with RETAIN
   bool key_found = false;
   int new_idx = 0;
-  
+
   MAP_FOR_EACH(map, k, v) {
     // Fast path: pointer comparison first (for interned symbols/keywords)
     if (k == key_obj) {
@@ -187,20 +187,22 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
       new_idx++;
     }
   }
-  
+
   // Add new key if not found
   if (!key_found && new_idx < new_map->capacity) {
     ASSIGN(KV_KEY(new_map->data, new_idx), key_obj);
     ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
     new_idx++;
   }
-  
+
   // Set final count - new_idx is the number of entries copied/updated/added
   new_map->count = new_idx;
-  
+
+  // ASSERT removed for performance - was verifying with map_get after every map_assoc
+
   return new_map;  // Return NEW map
   }
-  
+
   // Error case: invalid map or wrong type
   return map;  // Return original map on error
 }
@@ -279,7 +281,7 @@ void map_foreach(CljMap *map, void (*func)(ID, ID)) {
 }
 
 /** Return 1 if key exists (pointer equality fast-path, fallback to structural equality).
- * 
+ *
  * NOTE: This function is consistent with map_get() which also uses structural equality
  * as a fallback. If all symbols are correctly interned, pointer equality should be
  * sufficient. The structural equality fallback is for edge cases where symbols might
@@ -290,7 +292,7 @@ int map_contains(CljMap *map, ID key) {
     return 0;
   // Note: key can be NULL (nil) - that's a valid key in Clojure!
   CljObject *key_obj = (CljObject*)key;
-  
+
   // Use same logic as map_get: pointer equality first, then structural equality
   MAP_FOR_EACH(map, stored_key, value) {
     (void)value;  // unused
@@ -307,13 +309,13 @@ int map_contains(CljMap *map, ID key) {
             "Symbol '%s' found by structural equality but not pointer equality. "
             "This indicates that symbols are not correctly interned. "
             "Stored symbol: %p, Key symbol: %p",
-            stored_sym->name ? stored_sym->name : "unknown",
+            stored_sym->cname ? stored_sym->cname : "unknown",
             stored_key, key_obj);
       }
       return 1;
     }
   }
-  
+
   return 0;
 }
 
@@ -326,16 +328,16 @@ CljMap* map_remove(CljMap *map, ID key) {
   CljObject *key_obj = (CljObject*)key;
   if (!key_obj)
     return map;  // Return original map on error
-  
+
   CljMap *map_data = map;
   if (!map_data)
     return map;  // Return original map on error
-  
+
   int index = KV_FIND_INDEX(map_data->data, map_data->count, key_obj);
   if (index == INDEX_NOT_FOUND) {
     return map;  // Key not found - return original map
   }
-  
+
   // Key found - create new map without this key
   // Allocate new map with same capacity
   size_t struct_size = sizeof(CljMap);
@@ -344,17 +346,17 @@ CljMap* map_remove(CljMap *map, ID key) {
   if (!new_map) {
     throw_oom();
   }
-  
+
   new_map->base.type = CLJ_MAP;
   new_map->base.rc = 1;
   new_map->count = 0;
   new_map->capacity = map_data->capacity;
-  
+
   // Initialize new data array
   for (int i = 0; i < map_data->capacity * 2; i++) {
     new_map->data[i] = NULL;
   }
-  
+
   // Copy all entries except the one at index
   MAP_FOR_EACH(map_data, k, v) {
     if (_i != index) {
@@ -364,7 +366,7 @@ CljMap* map_remove(CljMap *map, ID key) {
       new_map->count++;
     }
   }
-  
+
   return new_map;  // Return NEW map
 }
 
@@ -380,24 +382,24 @@ CljMap* make_transient_map_from_kv(unsigned int count, ...) {
         CljMap *tmap = map_transient(empty);
         return tmap;
     }
-    
+
     CljMap *map = make_map(count);  // throws OOM exception if allocation fails
-    
+
     CljMap *tmap = map_transient(map);
     RELEASE(map);
     // map_transient throws OOM exception if allocation fails, so no NULL check needed
-    
+
     va_list args;
     va_start(args, count);
-    
+
     for (unsigned int i = 0; i < count; i++) {
         ID key = va_arg(args, ID);
         ID value = va_arg(args, ID);
         map_conj(tmap, key, value);
     }
-    
+
     va_end(args);
-    
+
     return tmap;
 }
 
@@ -422,14 +424,14 @@ CljMap* make_map_from_stack(CljObject **pairs, int pair_count) {
 
 /** Copy a map with optional type change (DRY helper function).
  * Creates a new map with the same capacity and entries as the source map.
- * 
+ *
  * @param src Source map to copy from (must not be NULL)
  * @param new_type Type for the new map (CLJ_MAP or CLJ_MAP_TRANSIENT)
  * @return New map with copied entries, or NULL on error
  */
 static CljMap* map_copy(CljMap *src, CljType new_type) {
     if (!src) return NULL;
-    
+
     // Allocate new map with embedded data array
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)src->capacity * 2 * sizeof(CljObject*);
@@ -437,32 +439,32 @@ static CljMap* map_copy(CljMap *src, CljType new_type) {
     if (!new_map) {
         throw_oom();
     }
-    
+
     // Initialize new map
     new_map->base.type = new_type;
     new_map->base.rc = 1;
     new_map->count = src->count;
     new_map->capacity = src->capacity;
-    
+
     // Initialize data array
     for (int i = 0; i < src->capacity * 2; i++) {
         new_map->data[i] = NULL;
     }
-    
+
     // Copy all entries with ASSIGN (handles RETAIN automatically)
     for (int i = 0; i < src->count * 2; i++) {
         if (src->data[i]) {
             ASSIGN(new_map->data[i], src->data[i]);
         }
     }
-    
+
     return new_map;
 }
 
 /** Copy map and add/update key-value pairs using transient map (optimized for embedded).
  * This function creates a transient map, adds all bindings in-place, then makes it immutable.
  * This avoids multiple heap allocations and is very efficient for embedded platforms.
- * 
+ *
  * @param parent_map Source map to copy from (can be NULL)
  * @param additions Array of key-value pairs to add/update (key at index i*2, value at i*2+1)
  * @param addition_count Number of key-value pairs in additions array
@@ -473,7 +475,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     int parent_count = parent_map ? parent_map->count : 0;
     int total_capacity = parent_count + addition_count + 4;  // Extra headroom
     if (total_capacity < 4) total_capacity = 4;
-    
+
     // Allocate transient map with embedded data array (single heap allocation)
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)total_capacity * 2 * sizeof(CljObject*);
@@ -481,18 +483,18 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
     if (!tmap) {
         return NULL;  // OOM
     }
-    
+
     // Initialize as transient map (allows in-place mutation)
     tmap->base.type = CLJ_MAP_TRANSIENT;
     tmap->base.rc = 1;
     tmap->count = 0;
     tmap->capacity = total_capacity;
-    
+
     // Initialize data array
     for (int i = 0; i < total_capacity * 2; i++) {
         tmap->data[i] = NULL;
     }
-    
+
     // First, copy all parent bindings in-place
     if (parent_map) {
         MAP_FOR_EACH(parent_map, key, value) {
@@ -502,7 +504,7 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
             }
         }
     }
-    
+
     // Then, add/update with additions in-place (later additions override earlier ones)
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     for (int i = 0; i < addition_count; i++) {
@@ -512,10 +514,10 @@ CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int a
         // map_conj now handles NULL keys correctly
         map_conj(tmap, key, value);
     }
-    
+
     // Make immutable by simply changing the type (no copy needed!)
     tmap->base.type = CLJ_MAP;
-    
+
     return tmap;
 }
 
@@ -528,7 +530,7 @@ CljMap* map_transient(CljMap *map) {
     if (obj->type != CLJ_MAP) {
         return NULL;
     }
-    
+
     // Use map_copy helper (DRY)
     CljMap *tmap = map_copy(map, CLJ_MAP_TRANSIENT);
     return tmap;
@@ -541,14 +543,14 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
     // Only check tmap, not key or value
     if (!tmap) return NULL;
     CljObject *obj = (CljObject*)tmap;
-    
+
     // Assertion: Only transient maps (and persistent maps with RC=1 in COW cases) can be mutated
     CLJ_ASSERT((obj->type == CLJ_MAP_TRANSIENT || obj->type == CLJ_MAP) && "map_conj requires transient map or persistent map with RC=1");
     // In COW cases, persistent maps with RC=1 can be mutated, but map_conj is primarily for transient maps
     if (obj->type == CLJ_MAP) {
         CLJ_ASSERT(obj->rc == 1 && "map_conj on persistent map requires RC=1 for COW");
     }
-    
+
     // Runtime check: map_conj is primarily for transient maps
     if (obj->type != CLJ_MAP_TRANSIENT) {
         // Allow persistent maps with RC=1 for COW cases (but this should be rare)
@@ -559,14 +561,14 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
             return NULL;  // Not a transient map and not a COW case
         }
     }
-    
+
     CljMap *m = tmap;
     if (!m) return NULL;
-    
+
     // Check if key already exists (pointer equality first, then structural)
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     CljObject *key_obj = (CljObject*)key;
-    
+
     bool key_found = false;
     for (int i = 0; i < m->count; i++) {
         CljObject *existing_key = m->data[i * 2];
@@ -598,7 +600,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
             return tmap;
         }
     }
-    
+
     // If key was not found, we should add it (if capacity allows)
     // This can happen if intern_symbol returns different pointers (symbol interning issue)
     // We don't abort here, but return NULL if capacity is exceeded
@@ -606,18 +608,20 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
         // Capacity exceeded - cannot add new key-value pair
         return NULL;
     }
-    
+
     // Add new key-value pair
     if (m->count >= m->capacity) {
         // Cannot grow embedded arrays - transient maps have fixed capacity
         // This is a limitation of the embedded array approach
         return NULL;  // Out of capacity
     }
-    
+
     ASSIGN(m->data[m->count * 2], (CljObject*)key);
     ASSIGN(m->data[m->count * 2 + 1], value ? (CljObject*)value : NULL);
     m->count++;
-    
+
+    // ASSERT removed for performance - was verifying with map_get after every map_conj
+
     return tmap; // In-place mutation
 }
 
@@ -628,16 +632,16 @@ CljMap* map_persistent(CljMap *tmap) {
     if (obj->type != CLJ_MAP_TRANSIENT) {
         return NULL;
     }
-    
+
     CljMap *m = tmap;
     if (!m) return NULL;
-    
+
     // Use map_copy helper (DRY) - Clojure semantics: Create NEW persistent collection
     CljMap *new_map = map_copy(m, CLJ_MAP);
-    
+
     // Original transient becomes "invalidated" (can be implemented later)
     // m->base.type = CLJ_INVALID;  // TODO: Implement invalidation
-    
+
     return new_map; // NEW persistent collection
 }
 

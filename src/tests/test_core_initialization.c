@@ -40,10 +40,10 @@ TEST(test_core_initialization_inc_loaded) {
         if (key && TAG(key) == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(key);
             symbol_count++;
-            if (!first_symbol_name && sym->name) {
-                first_symbol_name = sym->name;
+            if (!first_symbol_name && sym->cname) {
+                first_symbol_name = sym->cname;
             }
-            if (sym->name && strcmp(sym->name, "inc") == 0) {
+            if (sym->cname && strcmp(sym->cname, "inc") == 0) {
                 found_inc = true;
             }
         }
@@ -150,12 +150,12 @@ TEST(test_clojure_core_loads_inc) {
                 if (key && TAG(key) == CLJ_SYMBOL) {
                     CljSymbol *sym = as_symbol(key);
                     symbol_count++;
-                    if (!first_symbol && sym->name) {
-                        first_symbol = sym->name;
+                    if (!first_symbol && sym->cname) {
+                        first_symbol = sym->cname;
                     }
                     // Check if this is inc by name
-                    if (sym->name && strcmp(sym->name, "inc") == 0) {
-                        inc_symbol_found = sym->name;
+                    if (sym->cname && strcmp(sym->cname, "inc") == 0) {
+                        inc_symbol_found = sym->cname;
                         inc_symbol_ptr = key;
                     }
                 }
@@ -272,8 +272,8 @@ TEST(test_def_inc_evaluation_during_load) {
                     if (key && TAG(key) == CLJ_SYMBOL) {
                         CljSymbol *sym = as_symbol(key);
                         symbol_count++;
-                        if (!first_symbol && sym->name) {
-                            first_symbol = sym->name;
+                        if (!first_symbol && sym->cname) {
+                            first_symbol = sym->cname;
                         }
                     }
                 }

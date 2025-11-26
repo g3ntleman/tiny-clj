@@ -22,8 +22,8 @@ TEST(test_keyword_evaluates_to_itself) {
     
     CljSymbol *sym = as_symbol(result);
     TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-    TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
+    TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+    TEST_ASSERT_EQUAL_STRING("done", sym->cname + 1);
     
 }
 
@@ -39,8 +39,8 @@ TEST(test_keyword_in_function_body) {
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("done", sym->cname + 1);
     } CATCH(ex) {
         // If defn fails, test keyword evaluation in fn instead
         TRY {
@@ -50,8 +50,8 @@ TEST(test_keyword_in_function_body) {
             
             CljSymbol *sym = as_symbol(result);
             TEST_ASSERT_NOT_NULL(sym);
-            TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-            TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
+            TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+            TEST_ASSERT_EQUAL_STRING("done", sym->cname + 1);
         } CATCH(ex2) {
             TEST_FAIL_MESSAGE(ex2->message[0] ? ex2->message : "Exception thrown");
         } END_TRY
@@ -71,8 +71,8 @@ TEST(test_keyword_in_if_statement) {
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("yes", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("yes", sym->cname + 1);
         
         // Test: (if false :yes :no) should return :no
         result = eval_string("(if false :yes :no)", g_test_eval_state);
@@ -82,8 +82,8 @@ TEST(test_keyword_in_if_statement) {
         
         sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("no", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("no", sym->cname + 1);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE(ex->message[0] ? ex->message : "Exception thrown");
     } END_TRY
@@ -104,8 +104,8 @@ TEST(test_keyword_in_recur_function) {
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("done", sym->cname + 1);
         
         // Test keyword in another if statement
         result = eval_string("(if false :not-done :done)", g_test_eval_state);
@@ -114,8 +114,8 @@ TEST(test_keyword_in_recur_function) {
         
         sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("done", sym->cname + 1);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE(ex->message[0] ? ex->message : "Exception thrown");
     } END_TRY
@@ -133,8 +133,8 @@ TEST(test_keyword_in_let_binding) {
     
     CljSymbol *sym = as_symbol(result);
     TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-    TEST_ASSERT_EQUAL_STRING("done", sym->name + 1);
+    TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+    TEST_ASSERT_EQUAL_STRING("done", sym->cname + 1);
     
 }
 
@@ -151,8 +151,8 @@ TEST(test_keyword_in_nested_function_call) {
         
         CljSymbol *sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("active", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("active", sym->cname + 1);
         
         // Test keyword in another fn call with parameter
         result = eval_string("((fn [x] (if x :active :inactive)) true)", g_test_eval_state);
@@ -161,8 +161,8 @@ TEST(test_keyword_in_nested_function_call) {
         
         sym = as_symbol(result);
         TEST_ASSERT_NOT_NULL(sym);
-        TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
-        TEST_ASSERT_EQUAL_STRING("active", sym->name + 1);
+        TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+        TEST_ASSERT_EQUAL_STRING("active", sym->cname + 1);
     } CATCH(ex) {
         TEST_FAIL_MESSAGE(ex->message[0] ? ex->message : "Exception thrown");
     } END_TRY
@@ -180,7 +180,7 @@ TEST(test_multiple_keywords_in_expression) {
     
     CljSymbol *sym = as_symbol(result);
     TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_EQUAL_CHAR(':', sym->name[0]);
+    TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
     
 }
 

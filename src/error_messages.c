@@ -5,25 +5,25 @@ const char *ERR_WRONG_ARITY_ZERO = "Wrong number of args: 0";
 const char *ERR_DIVIDE_BY_ZERO = "Divide by zero";
 
 /** @brief Standard error message: EOF while reading vector */
-const char *ERROR_EOF_VECTOR = "EOF while reading vector";
+const char *EXCEPTION_EOF_VECTOR = "EOF while reading vector";
 /** @brief Standard error message: EOF while reading map */
-const char *ERROR_EOF_MAP = "EOF while reading map";
+const char *EXCEPTION_EOF_MAP = "EOF while reading map";
 /** @brief Standard error message: EOF while reading list */
-const char *ERROR_EOF_LIST = "EOF while reading list";
+const char *EXCEPTION_EOF_LIST = "EOF while reading list";
 /** @brief Standard error message: Unmatched delimiter */
-const char *ERROR_UNMATCHED_DELIMITER = "Unmatched delimiter";
+const char *EXCEPTION_UNMATCHED_DELIMITER = "Unmatched delimiter";
 /** @brief Standard error message: Division by zero */
-const char *ERROR_DIVISION_BY_ZERO = "Division by zero";
+// const char *EXCEPTION_DIVISION_BY_ZERO = "Division by zero";  // Defined in exception.c
 /** @brief Standard error message: Invalid syntax */
-const char *ERROR_INVALID_SYNTAX = "Invalid syntax";
+const char *EXCEPTION_INVALID_SYNTAX = "Invalid syntax";
 /** @brief Standard error message: Undefined variable */
-const char *ERROR_UNDEFINED_VARIABLE = "Undefined variable";
+const char *EXCEPTION_UNDEFINED_VARIABLE = "Undefined variable";
 /** @brief Standard error message: Type mismatch */
-const char *ERROR_TYPE_MISMATCH = "Type mismatch";
+const char *EXCEPTION_TYPE_MISMATCH = "Type mismatch";
 /** @brief Standard error message: Stack overflow */
-const char *ERROR_STACK_OVERFLOW = "Stack overflow";
+// const char *EXCEPTION_STACK_OVERFLOW = "Stack overflow";  // Defined in exception.c
 /** @brief Standard error message: Memory allocation failed */
-const char *ERROR_MEMORY_ALLOCATION = "Memory allocation failed";
+const char *EXCEPTION_MEMORY_ALLOCATION = "Memory allocation failed";
 
 // Exception type constants
 /** @brief Exception type: ArithmeticException */

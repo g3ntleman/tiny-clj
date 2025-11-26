@@ -12,8 +12,8 @@ typedef struct CljSymbol CljSymbol;
 
 struct CljSymbol {
     CljObject base;
-    CljSymbol *ns;  // Namespace name symbol (Clojure-compatible: Symbol->ns is a Symbol, not Namespace object)
-    const char *name;
+    struct CljSymbol *ns_name;  // Namespace name symbol (Clojure-compatible: Symbol->ns_name is a Symbol, not Namespace object)
+    const char *cname;
 };
 
 // Type-safe casting
@@ -25,7 +25,7 @@ static inline CljSymbol* as_symbol(ID obj) {
 static inline bool is_keyword(ID obj) {
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
     CljSymbol *sym = as_symbol(obj);
-    return sym->name && sym->name[0] == ':';
+    return sym->cname && sym->cname[0] == ':';
 }
 #define IS_KEYWORD(obj) is_keyword(obj)
 
@@ -71,6 +71,7 @@ extern CljSymbol *SYM_PRINT;
 extern CljSymbol *SYM_STR;
 extern CljSymbol *SYM_CONJ;
 extern CljSymbol *SYM_NTH;
+extern CljSymbol *SYM_TRIM;
 extern CljSymbol *SYM_FIRST;
 extern CljSymbol *SYM_REST;
 extern CljSymbol *SYM_COUNT;
@@ -104,7 +105,7 @@ extern CljSymbol *SYM_NS_STAR;
 CljSymbol* make_symbol(const char *name, const char *ns);
 CljSymbol* intern_symbol(const char *ns, const char *name);
 CljSymbol* intern_symbol_global(const char *name);  // Without namespace
-void symbol_table_add(const char *ns, const char *name, CljSymbol *symbol);
+void symbol_table_add(CljSymbol *symbol);
 void symbol_table_cleanup();
 
 // Helper functions for namespace lookup (DRY principle)

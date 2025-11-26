@@ -45,21 +45,21 @@ struct CljString* make_string(const char *str) {
     if (!str || str[0] == '\0') {
         return string_empty_singleton;
     }
-    
+
     // Allocate CljString + space for string data + null terminator
     size_t len = strlen(str);
-    
+
     // Assert that string length fits in 16-bit field (max 65,535 characters)
     assert(len <= UINT16_MAX && "String length exceeds 16-bit limit (65,535 chars)");
-    
+
     CljString *s = (CljString*)alloc(sizeof(CljString) + len + 1, 1, CLJ_STRING);
     if (!s) throw_oom();
-    
+
     s->base.type = CLJ_STRING;
     s->base.rc = 1;
     s->length = (uint16_t)len;
     memcpy(s->data, str, len + 1);  // includes null terminator
-    
+
     return s;
 }
 
@@ -68,27 +68,27 @@ CljString* make_string_buffer(size_t length) {
     if (length == 0) {
         return string_empty_singleton;
     }
-    
+
     // Check that length fits in 16-bit field (max 65,535 characters)
     if (length > UINT16_MAX) {
         throw_exception(EXCEPTION_RUNTIME, "make_string_buffer: length exceeds maximum (65,535)",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    
+
     // Allocate CljString + space for string data + null terminator
     CljString *s = (CljString*)alloc(sizeof(CljString) + length + 1, 1, CLJ_STRING);
     if (!s) {
         throw_oom();
         return NULL;
     }
-    
+
     s->base.type = CLJ_STRING;
     s->base.rc = 1;
     s->length = (uint16_t)length;
     // Zero-initialize the buffer (including null terminator)
     memset(s->data, 0, length + 1);
-    
+
     return s;
 }
 
@@ -113,7 +113,7 @@ static size_t escape_string_calc_length(CljString *s) {
 static void escape_string_write(CljString *s, char *buffer, size_t *offset) {
     buffer[*offset] = '"';
     (*offset)++;
-    
+
     const char *data = s->data;
     size_t len = s->length;
     for (size_t i = 0; i < len; i++) {
@@ -124,7 +124,7 @@ static void escape_string_write(CljString *s, char *buffer, size_t *offset) {
         buffer[*offset] = data[i];
         (*offset)++;
     }
-    
+
     buffer[*offset] = '"';
     (*offset)++;
 }
@@ -169,10 +169,10 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_SYMBOL: {
                 CljSymbol *sym = as_symbol(v);
             if (!sym) return 3; // "nil"
-                if (sym->ns && sym->ns->name) {
-                return strlen(sym->ns->name) + 1 + strlen(sym->name); // "ns/name"
+                if (sym->ns_name && sym->ns_name->cname) {
+                return strlen(sym->ns_name->cname) + 1 + strlen(sym->cname); // "ns/name"
                 }
-            return strlen(sym->name);
+            return strlen(sym->cname);
             }
 
         case CLJ_VECTOR:
@@ -193,7 +193,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return len;
         }
-        
+
         case CLJ_LIST: {
             size_t len = 2; // "( )"
             ID current = (ID)v;
@@ -209,7 +209,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
                 }
             return len;
         }
-        
+
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map = as_map(v);
@@ -229,7 +229,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return len;
         }
-        
+
         case CLJ_FUNC: {
             CljCFunc *native_func = (CljCFunc*)v;
             if (native_func->name) {
@@ -237,12 +237,12 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return 20; // "#<native function>"
         }
-        
+
         case CLJ_CLOSURE: {
             CljFunction *clj_func = (CljFunction*)v;
             if (clj_func && clj_func->name) {
                 CljNamespace *ns = ns_find_for_object((CljObject*)v);
-                const char *ns_name = ns && ns->name && ns->name->name ? ns->name->name : NULL;
+                const char *ns_name = ns && ns->name && ns->name->cname ? ns->name->cname : NULL;
                 size_t len = 20; // "#<Clojure function "
                 if (ns_name) {
                     len += strlen(ns_name) + 1; // "ns/"
@@ -252,7 +252,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return 20; // "#<Clojure function>"
         }
-        
+
         case CLJ_SEQ: {
             CljSeqIterator *seq = as_seq(v);
             if (!seq) return 2; // "()"
@@ -270,7 +270,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return len;
         }
-        
+
         case CLJ_EXCEPTION: {
             CLJException *exc = (CLJException*)v;
             if (exc->file[0] != '\0') {
@@ -278,7 +278,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
             return strlen(exc->type) + 2 + strlen(exc->message) + 30; // approximate
         }
-        
+
         case CLJ_ATOM: {
             CljAtom *atom = as_atom(v);
             size_t len = 12; // "#<Atom@: >"
@@ -301,7 +301,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             len += 2; // "]>"
             return len;
         }
-        
+
         default:
             return 9; // "#<unknown>"
     }
@@ -314,7 +314,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         *offset += 3;
         return;
     }
-    
+
     if (is_immediate(v)) {
         if (is_fixnum(v)) {
             int written = snprintf(buffer + *offset, 32, "%d", as_fixnum(v));
@@ -349,7 +349,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
     }
-    
+
     switch(v->type) {
         case CLJ_STRING: {
             CljString *s = (CljString*)v;
@@ -361,7 +361,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
             return;
         }
-        
+
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
             if (!sym) {
@@ -369,19 +369,19 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 *offset += 3;
                 return;
             }
-            if (sym->ns && sym->ns->name) {
-                size_t ns_len = strlen(sym->ns->name);
-                memcpy(buffer + *offset, sym->ns->name, ns_len);
+            if (sym->ns_name && sym->ns_name->cname) {
+                size_t ns_len = strlen(sym->ns_name->cname);
+                memcpy(buffer + *offset, sym->ns_name->cname, ns_len);
                 *offset += ns_len;
                 buffer[*offset] = '/';
                 *offset += 1;
             }
-            size_t name_len = strlen(sym->name);
-            memcpy(buffer + *offset, sym->name, name_len);
+            size_t name_len = strlen(sym->cname);
+            memcpy(buffer + *offset, sym->cname, name_len);
             *offset += name_len;
             return;
                 }
-                
+
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_WEAK: {
@@ -415,7 +415,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
             return;
         }
-        
+
         case CLJ_LIST: {
             buffer[*offset] = '(';
             *offset += 1;
@@ -485,14 +485,14 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
             return;
             }
-        
+
         case CLJ_CLOSURE: {
                 CljFunction *clj_func = (CljFunction*)v;
                 if (clj_func && clj_func->name) {
                     CljNamespace *ns = ns_find_for_object((CljObject*)v);
-                    const char *ns_name = ns && ns->name && ns->name->name ? ns->name->name : NULL;
-                int written = snprintf(buffer + *offset, 256, "#<Clojure function %s%s%s>", 
-                             ns_name ? ns_name : "", 
+                    const char *ns_name = ns && ns->name && ns->name->cname ? ns->name->cname : NULL;
+                int written = snprintf(buffer + *offset, 256, "#<Clojure function %s%s%s>",
+                             ns_name ? ns_name : "",
                              ns_name ? "/" : "",
                              clj_func->name);
                 *offset += written;
@@ -534,14 +534,14 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_EXCEPTION: {
                 CLJException *exc = (CLJException*)v;
             int written = exc->file[0] != '\0'
-                ? snprintf(buffer + *offset, 1024, "%s: %s at %s:%d:%d", 
+                ? snprintf(buffer + *offset, 1024, "%s: %s at %s:%d:%d",
                           exc->type, exc->message, exc->file, exc->line, exc->col)
-                : snprintf(buffer + *offset, 512, "%s: %s at line %d, col %d", 
+                : snprintf(buffer + *offset, 512, "%s: %s at line %d, col %d",
                           exc->type, exc->message, exc->line, exc->col);
             *offset += written;
             return;
         }
-        
+
         case CLJ_ATOM: {
             CljAtom *atom = as_atom(v);
             int written = snprintf(buffer + *offset, 256, "#<Atom@%p: ", (void*)atom);
@@ -584,6 +584,22 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
             }
 
+        case CLJ_NAMESPACE:
+            {
+                CljNamespace *ns = (CljNamespace*)v;
+                if (!ns || !ns->name || !ns->name->cname) {
+                    memcpy(buffer + *offset, "#<namespace>", 12);
+                    *offset += 12;
+                    return;
+                }
+                // Write namespace name to buffer
+                const char *ns_name = ns->name->cname;
+                size_t ns_name_len = strlen(ns_name);
+                memcpy(buffer + *offset, ns_name, ns_name_len);
+                *offset += ns_name_len;
+                return;
+            }
+
         default:
             memcpy(buffer + *offset, "#<unknown>", 10);
             *offset += 10;
@@ -602,14 +618,14 @@ const char* to_cstring_with_escape(CljObject *v, bool escape_strings) {
     if (!result) {
         return strdup("#<error>");
     }
-    
+
     size_t offset = 0;
     to_string_build_string(v, result, &offset, escape_strings);
     result[offset] = '\0';
-    
+
         return result;
     }
-    
+
 const char* pr_str(CljObject *v) {
     // pr_str adds quotes around strings and escapes quotes inside
     // For all types: use to_cstring_with_escape with escape_strings=true

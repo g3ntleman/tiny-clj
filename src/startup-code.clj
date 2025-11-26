@@ -1,7 +1,7 @@
 R"CLOJURE(
 (do
   (defn main []
-    (println "Hello STM32!")
+    (println "Hello ESP32!")
     (println "Embedded Clojure running!"))
   (main))
 

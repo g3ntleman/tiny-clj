@@ -51,7 +51,7 @@ static int form_balance(const char *s, int *error_pos) {
     bool in_str = false; bool esc = false;
     int pos = 0;
     int first_error_pos = -1;
-    
+
     for (const char *x = s; *x; ++x, ++pos) {
         char ch = *x;
         if (in_str) {
@@ -64,17 +64,17 @@ static int form_balance(const char *s, int *error_pos) {
         if (ch == '(') p++; else if (ch == ')') p--;
         else if (ch == '[') b++; else if (ch == ']') b--;
         else if (ch == '{') c++; else if (ch == '}') c--;
-        
+
         // Check for negative balance (too many closing)
         if ((p < 0 || b < 0 || c < 0) && first_error_pos == -1) {
             first_error_pos = pos;
         }
     }
-    
+
     if (error_pos) {
         *error_pos = first_error_pos;
     }
-    
+
     // Return total imbalance (positive = incomplete, negative = too many closing)
     return p + b + c + (in_str ? 1 : 0);
 }
@@ -85,9 +85,9 @@ static int form_balance(const char *s, int *error_pos) {
  */
 static void print_prompt(EvalState *st, bool balanced) {
     const char *ns_name = "user";  // Default
-    if (st && st->current_ns && st->current_ns->name && st->current_ns->name->name) {
-        if (st->current_ns->name->name[0] != '\0') {
-            ns_name = st->current_ns->name->name;
+    if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
+        if (st->current_ns->name->cname[0] != '\0') {
+            ns_name = st->current_ns->name->cname;
         }
     }
     printf("%s%s ", ns_name, balanced ? "=>" : "...");
@@ -111,7 +111,7 @@ static void print_result(CljObject *v) {
 
 /** @brief Process pending event loop tasks (up to max iterations).
  *  @param st Evaluation state
- *  
+ *
  *  This function processes up to REPL_EVENT_LOOP_MAX_ITERATIONS tasks from
  *  the event loop queue, stopping early if the queue becomes empty.
  */
@@ -121,52 +121,52 @@ static void repl_process_event_loop(EvalState *st) {
     }
 }
 
-/** @brief Evaluate multiple expressions from a multiline string.
- *  @param code Multiline string containing multiple expressions
+/** @brief Evaluate multiple forms from a string.
+ *  @param code String containing multiple forms/expressions
  *  @param st Evaluation state
  *  @return true if successful, false on parse or evaluation error
  */
-static bool eval_multiline_string(const char *code, EvalState *st) {
+bool eval_multiform_string(const char *code, EvalState *st) {
     bool result = true; // Start optimistic
-    
+
     // Use WITH_AUTORELEASE_POOL for automatic cleanup
     WITH_AUTORELEASE_POOL({
         Reader reader;
         reader_init(&reader, code);
-        
+
         // Loop: Parse and evaluate each expression until EOF
         while (!reader_is_eof(&reader)) {
             // Skip whitespace and comments
             reader_skip_all(&reader);
-            
+
             // Check if we're at EOF after skipping whitespace
             if (reader_is_eof(&reader)) {
                 break;
             }
-            
+
             // Use TRY/CATCH to handle exceptions for each expression
             TRY {
                 // Parse one expression using the new parse_from_reader function
                 CljValue parsed = parse_from_reader(&reader, st);
-                
+
                 // Evaluate the parsed expression (can be NULL for nil, e.g., () parses to nil)
                 ID eval_result = eval_parsed(parsed, st, NULL);
-                
+
                 // Print the result (can be NULL for nil)
                 print_result(eval_result);
-                
+
                 // Check for EOF after processing (in case this was the last expression)
                 if (reader_is_eof(&reader)) {
                     break; // Normal EOF, exit loop
                 }
-                
+
             } CATCH(ex) {
                 // Print exception and continue with next expression
                 print_exception((CLJException*)ex);
                 result = false; // Mark as failed, but continue processing
                 // Note: History is saved after evaluation in run_interactive_repl
                 // No need to save here to avoid double-saving and memory issues
-                
+
                 // Skip to next line to avoid infinite loop on same expression
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
                     reader_next(&reader);
@@ -177,7 +177,7 @@ static bool eval_multiline_string(const char *code, EvalState *st) {
             } END_TRY
         }
     });
-    
+
     return result;
 }
 
@@ -216,7 +216,7 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
  */
 bool history_save_to_file(CljVector *vec, const char *path) {
     if (!path || !vec) return false;
-    
+
     CljObject *persistent_vec = (CljObject*)vec;
     if (TAG((CljObject*)vec) == CLJ_VECTOR_TRANSIENT) {
         persistent_vec = (CljObject*)vector_persistent(vec);
@@ -225,26 +225,26 @@ bool history_save_to_file(CljVector *vec, const char *path) {
             return false;
         }
     }
-    
+
     if (TAG(persistent_vec) != CLJ_VECTOR) {
         if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
         return false;
     }
-    
+
     CljObject *trimmed = history_trim_last_n(persistent_vec, 50);
     if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
     if (!trimmed) return false;
-    
+
     const char *s = pr_str(trimmed);
     RELEASE(trimmed);
     if (!s) return false;
-    
+
     FILE *fp = fopen(path, "w");
     if (!fp) {
         free((void*)s);
         return false;
     }
-    
+
     size_t len = strlen(s);
     size_t n = fwrite(s, 1, len, fp);
     if (n > 0) fputc('\n', fp);
@@ -253,7 +253,7 @@ bool history_save_to_file(CljVector *vec, const char *path) {
     // fsync(fileno(fp));
     int close_result = fclose(fp);
     free((void*)s);
-    
+
     return (n == len && close_result == 0);
 }
 
@@ -263,29 +263,29 @@ bool history_save_to_file(CljVector *vec, const char *path) {
  */
 CljVector* history_load_from_file(const char *path) {
     if (!path) return empty_vector();
-    
+
     EvalState *st = evalstate_new(false);
     if (!st) return empty_vector();
-    
+
     CljVector *string_history = NULL;
-    
+
     WITH_AUTORELEASE_POOL({
         TRY {
             // Use file_slurp utility function directly (no eval_string needed)
             // file_slurp throws exceptions on errors
             CljString *content = file_slurp(path);
-            
+
             if (content) {
                 // Read directly from the CljString buffer
                 // The Reader only reads from the buffer, it doesn't store the pointer
                 const char *buf = clj_string_data(content);
                 Reader rd; reader_init(&rd, buf);
                 ID parsed = value_by_parsing_expr(&rd, st);
-                
+
                 // Validate it's a vector
                 if (parsed && TAG(parsed) == CLJ_VECTOR) {
                     string_history = as_vector((CljObject*)parsed);
-                    
+
                     // RETAIN before pool pop to keep it alive
                     RETAIN(string_history);
                 }
@@ -295,9 +295,9 @@ CljVector* history_load_from_file(const char *path) {
             string_history = NULL;
         } END_TRY
     }); // Pool popped, but string_history is retained (rc > 0), so it survives
-    
+
     evalstate_free(st);
-    
+
     // Return retained object - caller must release or autorelease it
     return string_history ? string_history : empty_vector();
 }
@@ -339,7 +339,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
-    
+
     // Set verbose memory mode based on command line argument
     g_memory_verbose_mode = memory_debug;
 #endif
@@ -368,11 +368,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
     char acc[4096]; acc[0] = '\0';
     bool prompt_shown = false;
-    
+
     // Print initial prompt immediately (before history loading to ensure it's visible)
     print_prompt(st, true);
     prompt_shown = true;
-    
+
 #ifdef ENABLE_LINE_EDITING
     // Initialize line editor
     LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string);
@@ -422,7 +422,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             if (result == LINE_EDITOR_EOF) break;
             if (result == LINE_EDITOR_LINE_READY) {
                 LineEditorState state;
-                if (line_editor_get_state(editor, &state) == LINE_EDITOR_SUCCESS && 
+                if (line_editor_get_state(editor, &state) == LINE_EDITOR_SUCCESS &&
                     state.length > 0) {
                     if (acc[0] != '\0') strncat(acc, "\n", sizeof(acc) - strlen(acc) - 1);
                     strncat(acc, state.buffer, sizeof(acc) - strlen(acc) - 1);
@@ -491,10 +491,10 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
         // (Entfernt) REPL interne History-Kommandos
 
-        bool success = eval_multiline_string(acc, st);
-        
+        bool success = eval_multiform_string(acc, st);
+
         repl_process_event_loop(st);
-        
+
         // Add to history and save after each expression evaluation (success or failure)
         if (acc[0] != '\0') {
 #ifdef ENABLE_LINE_EDITING
@@ -514,11 +514,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             }
 #endif
         }
-        
+
         if (!success) {
             // Error already printed by eval_string_repl
         }
-        
+
         acc[0] = '\0';
         prompt_shown = false; // show fresh prompt after evaluation
     }
@@ -563,7 +563,7 @@ int main(int argc, char **argv) {
     bool start_repl = false;
     bool zombie_mode = false;
     bool memory_debug = false;
-    
+
     // First pass: count -e arguments
     for (int i = 1; i < argc; i++) {
         if ((strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0) && i + 1 < argc) {
@@ -571,13 +571,13 @@ int main(int argc, char **argv) {
             i++; // skip the argument value
         }
     }
-    
+
     // Allocate array for eval arguments
     if (eval_count > 0) {
         eval_args = malloc(sizeof(char*) * eval_count);
         if (!eval_args) return 1;
     }
-    
+
     // Second pass: collect all arguments
     int eval_idx = 0;
     for (int i = 1; i < argc; i++) {
@@ -609,7 +609,7 @@ int main(int argc, char **argv) {
     WITH_AUTORELEASE_POOL({
         // Register builtin functions first (they may be used during core loading)
         register_builtins();
-        
+
         if (!no_core) {
             // Load clojure.core in autorelease pool to handle AUTORELEASE calls
             load_clojure_core(st);
@@ -624,28 +624,46 @@ int main(int argc, char **argv) {
     }
 
     if (file_arg) {
-        // Simple file evaluation without TRY/CATCH
+        // Load entire file into memory for proper parsing (handles metadata across lines)
         FILE *fp = fopen(file_arg, "r");
         if (!fp) {
             printf("Error: Cannot open file '%s': %s\n", file_arg, strerror(errno));
             cleanup_and_exit(eval_args, 1);
         }
-        
-        char line[1024];
-        char acc[8192]; acc[0] = '\0';
-        while (fgets(line, sizeof(line), fp)) {
-            strncat(acc, line, sizeof(acc) - strlen(acc) - 1);
-            if (form_balance(acc, NULL) != 0) continue;
-            
-            bool success = eval_multiline_string(acc, st);
-            if (!success) {
-                // Parse error or evaluation failed
-                fclose(fp);
-                cleanup_and_exit(eval_args, 1);
-            }
-            acc[0] = '\0';
+
+        // Get file size
+        if (fseek(fp, 0, SEEK_END) != 0) {
+            fclose(fp);
+            printf("Error: Cannot seek in file '%s': %s\n", file_arg, strerror(errno));
+            cleanup_and_exit(eval_args, 1);
         }
+        long sz = ftell(fp);
+        if (sz < 0) {
+            fclose(fp);
+            printf("Error: Cannot get file size for '%s': %s\n", file_arg, strerror(errno));
+            cleanup_and_exit(eval_args, 1);
+        }
+        rewind(fp);
+
+        // Allocate buffer (sz + 1 for null terminator)
+        char *buffer = (char*)malloc((size_t)sz + 1);
+        if (!buffer) {
+            fclose(fp);
+            printf("Error: Out of memory\n");
+            cleanup_and_exit(eval_args, 1);
+        }
+
+        // Read entire file
+        size_t n = fread(buffer, 1, (size_t)sz, fp);
+        buffer[n] = '\0';
         fclose(fp);
+
+        // Evaluate entire file content
+        bool success = eval_multiform_string(buffer, st);
+        free(buffer);
+        if (!success) {
+            cleanup_and_exit(eval_args, 1);
+        }
         if (!start_repl && eval_count == 0) {
             cleanup_and_exit(eval_args, 0);
         }
@@ -657,29 +675,29 @@ int main(int argc, char **argv) {
     int i = 0;
     while (i < eval_count) {
         // Simple eval-args without TRY/CATCH
-        bool success = eval_multiline_string(eval_args[i], st);
+        bool success = eval_multiform_string(eval_args[i], st);
         if (!success) {
             // Parse error or evaluation failed
             cleanup_and_exit(eval_args, 1);
         }
         i++;
     }
-    
+
     if (eval_count > 0 && !start_repl) {
         cleanup_and_exit(eval_args, 0);
     }
 
     // Interactive REPL
     run_interactive_repl(st, zombie_mode, memory_debug);
-    
+
 #ifdef ENABLE_LINE_EDITING
     // Restore terminal settings
     platform_set_raw_mode(0);
 #endif
-    
+
     // Free EvalState before exit (no memory leaks)
     evalstate_free(st);
-    
+
     return 0;
 }
 #endif // UNITY_TESTS

@@ -57,10 +57,10 @@ unsigned int vector_count(CljVector *vec) {
         if (index < vec->count) {
             return vec->data[index];
         }
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
             "vector_nth: index %u is out of bounds for vector with %u elements", index, vec->count);
     }
-    throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_nth: vector is NULL");
     return NULL;
 }
@@ -469,11 +469,11 @@ CljVector* vector_conj(CljVector* vec, ID item) {
 /** Update element at index with COW: RC=1 → in-place, RC>1 → COW. */
 CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
     if (!vec) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_assoc: vector is NULL");
     }
     if (!value) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_assoc: value is NULL");
     }
     
@@ -497,7 +497,7 @@ CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
 
     // Empty vector singleton (RC=0): Not applicable (index >= count)
     if (old_vec->base.rc == 0) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_assoc: cannot modify empty vector singleton");
     }
 

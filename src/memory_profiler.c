@@ -607,6 +607,9 @@ void enable_memory_profiling(bool enabled) {
     } else {
         // Silent: Don't print message on disable
     }
+    // Update cached debug output flag in memory.c
+    extern void memory_update_debug_output_active(void);
+    memory_update_debug_output_active();
 #else
     // In release builds, this is a no-op
     (void)enabled;
@@ -633,6 +636,9 @@ bool is_memory_leak_reporting_enabled(void) {
 void set_memory_verbose_mode(bool verbose) {
 #ifdef ENABLE_MEMORY_PROFILING
     g_memory_verbose_mode = verbose;
+    // Update cached debug output flag in memory.c
+    extern void memory_update_debug_output_active(void);
+    memory_update_debug_output_active();
 #else
     (void)verbose; // Suppress unused parameter warning
 #endif

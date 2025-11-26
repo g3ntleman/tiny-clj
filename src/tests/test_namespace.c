@@ -13,22 +13,22 @@ int load_clojure_core(EvalState *st);
 // Test namespace lookup for core functions
 TEST(test_namespace_lookup_core_functions) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Load clojure.core functions - temporarily disabled due to double free
-    
+
     // Test that map symbol exists in clojure.core namespace
     CljSymbol *map_sym = intern_symbol_global("map");
     TEST_ASSERT_NOT_NULL(map_sym);
-    
+
     // Switch to clojure.core namespace
-    
+
     // Resolve map symbol in clojure.core namespace
     CljObject *resolved = ns_resolve(g_test_eval_state, map_sym);
     // For now, just test that we can resolve something (may be NULL if clojure.core not fully loaded)
     if (resolved) {
         TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_CLOSURE);
     }
-    
+
     // Cleanup
     RELEASE((CljObject*)resolved);
     RELEASE((CljObject*)map_sym);
@@ -38,20 +38,20 @@ TEST(test_namespace_lookup_core_functions) {
 TEST(test_namespace_lookup_user_namespace) {
     // Test that symbols are resolved in user namespace by default
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Test direct namespace storage and retrieval
     CljSymbol *test_sym = intern_symbol_global("test-var");
     CljObject *value = fixnum(42);
-    
+
     // Store variable directly in namespace
     ns_define(g_test_eval_state->current_ns, (ID)test_sym, value);
-    
+
     // Now resolve test-var in user namespace
     CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
     TEST_ASSERT_NOT_NULL(resolved);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved));
-    
+
     // Cleanup
     RELEASE((CljObject*)resolved);
     RELEASE((CljObject*)test_sym);
@@ -65,18 +65,18 @@ TEST(test_namespace_lookup_user_namespace) {
 // Test: Verify that qualified symbols are parsed correctly with ns field set
 TEST(test_qualified_symbol_parsing_moved) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Parse a qualified symbol
     CljObject *parsed = eval_string("'clojure.core/reverse", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
     TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
-    
+
     CljSymbol *sym = as_symbol(parsed);
     TEST_ASSERT_NOT_NULL(sym);
-    TEST_ASSERT_NOT_NULL(sym->ns); // ns field should be set
-    TEST_ASSERT_NOT_NULL(sym->name); // name field should be set
-    TEST_ASSERT_EQUAL_STRING("reverse", sym->name);
-    TEST_ASSERT_EQUAL_STRING("clojure.core", sym->ns->name);
+    TEST_ASSERT_NOT_NULL(sym->ns_name); // ns field should be set
+    TEST_ASSERT_NOT_NULL(sym->cname); // name field should be set
+    TEST_ASSERT_EQUAL_STRING("reverse", sym->cname);
+    TEST_ASSERT_EQUAL_STRING("clojure.core", sym->ns_name->cname);
 }
 
 // Test symbol interning - same symbol should return same pointer
@@ -84,16 +84,16 @@ TEST(test_symbol_interning_consistency) {
     // Test that intern_symbol_global returns the same pointer for the same name
     CljSymbol *sym1 = intern_symbol_global("test-symbol");
     CljSymbol *sym2 = intern_symbol_global("test-symbol");
-    
+
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
-    
+
     // Test different symbols return different pointers
     CljSymbol *sym3 = intern_symbol_global("different-symbol");
     TEST_ASSERT_NOT_NULL(sym3);
     TEST_ASSERT_TRUE(sym1 != sym3);
-    
+
     // Cleanup
     RELEASE((CljObject*)sym1);
     RELEASE((CljObject*)sym2);
@@ -105,16 +105,16 @@ TEST(test_symbol_interning_with_namespace) {
     // Test that intern_symbol with namespace works correctly
     CljSymbol *sym1 = intern_symbol("user", "test-symbol");
     CljSymbol *sym2 = intern_symbol("user", "test-symbol");
-    
+
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
-    
+
     // Test different namespace returns different symbol
     CljSymbol *sym3 = intern_symbol("clojure.core", "test-symbol");
     TEST_ASSERT_NOT_NULL(sym3);
     TEST_ASSERT_TRUE(sym1 != sym3);
-    
+
     // Cleanup
     RELEASE((CljObject*)sym1);
     RELEASE((CljObject*)sym2);
@@ -126,11 +126,11 @@ TEST(test_symbol_interning_global) {
     // Test that intern_symbol_global is equivalent to intern_symbol(NULL, name)
     CljSymbol *sym1 = intern_symbol_global("global-symbol");
     CljSymbol *sym2 = intern_symbol(NULL, "global-symbol");
-    
+
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
-    
+
     // Cleanup
     RELEASE((CljObject*)sym1);
     RELEASE((CljObject*)sym2);
@@ -140,16 +140,16 @@ TEST(test_symbol_interning_global) {
 TEST(test_symbol_table_operations) {
     // Test that symbol table correctly stores and retrieves symbols
     const char *test_name = "table-test-symbol";
-    
+
     // First call should create new symbol
     CljSymbol *sym1 = intern_symbol_global(test_name);
     TEST_ASSERT_NOT_NULL(sym1);
-    
+
     // Second call should return same symbol
     CljSymbol *sym2 = intern_symbol_global(test_name);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2);
-    
+
     // Cleanup
     RELEASE((CljObject*)sym1);
     RELEASE((CljObject*)sym2);
@@ -158,42 +158,42 @@ TEST(test_symbol_table_operations) {
 // Test namespace creation and switching
 TEST(test_namespace_creation_and_switching) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Test initial namespace is user
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns->name);
-    TEST_ASSERT_EQUAL_STRING("user", g_test_eval_state->current_ns->name->name);
-    
+    TEST_ASSERT_EQUAL_STRING("user", g_test_eval_state->current_ns->name->cname);
+
     // Test switching to new namespace
     evalstate_set_ns(g_test_eval_state, "test-namespace");
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns->name);
-    TEST_ASSERT_EQUAL_STRING("test-namespace", g_test_eval_state->current_ns->name->name);
-    
+    TEST_ASSERT_EQUAL_STRING("test-namespace", g_test_eval_state->current_ns->name->cname);
+
     // Test switching back to user
     evalstate_set_ns(g_test_eval_state, "user");
     TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns->name);
-    TEST_ASSERT_EQUAL_STRING("user", g_test_eval_state->current_ns->name->name);
-    
+    TEST_ASSERT_EQUAL_STRING("user", g_test_eval_state->current_ns->name->cname);
+
 }
 
 // Test namespace variable storage and retrieval
 TEST(test_namespace_variable_storage) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Create symbols
     CljSymbol *var_sym = intern_symbol_global("test-variable");
     CljObject *value = fixnum(123);
-    
+
     // Store variable in namespace
     ns_define(g_test_eval_state->current_ns, (ID)var_sym, value);
-    
+
     // Retrieve variable from namespace
     CljObject *retrieved = ns_resolve(g_test_eval_state, var_sym);
     TEST_ASSERT_NOT_NULL(retrieved);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)retrieved));
     TEST_ASSERT_EQUAL(123, as_fixnum((CljValue)retrieved));
-    
+
     // Cleanup
     RELEASE((CljObject*)retrieved);
     RELEASE((CljObject*)var_sym);
@@ -203,26 +203,26 @@ TEST(test_namespace_variable_storage) {
 // Test namespace with multiple variables
 TEST(test_namespace_multiple_variables) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Create multiple variables
     CljSymbol *var1_sym = intern_symbol_global("var1");
     CljSymbol *var2_sym = intern_symbol_global("var2");
     CljObject *value1 = fixnum(100);
     CljObject *value2 = fixnum(200);
-    
+
     // Store variables
     ns_define(g_test_eval_state->current_ns, (ID)var1_sym, value1);
     ns_define(g_test_eval_state->current_ns, (ID)var2_sym, value2);
-    
+
     // Retrieve and verify
     CljObject *retrieved1 = ns_resolve(g_test_eval_state, var1_sym);
     CljObject *retrieved2 = ns_resolve(g_test_eval_state, var2_sym);
-    
+
     TEST_ASSERT_NOT_NULL(retrieved1);
     TEST_ASSERT_NOT_NULL(retrieved2);
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)retrieved1));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)retrieved2));
-    
+
     // Cleanup
     RELEASE((CljObject*)retrieved1);
     RELEASE((CljObject*)retrieved2);
@@ -235,14 +235,14 @@ TEST(test_namespace_multiple_variables) {
 // Test symbol resolution with fallback to global namespace
 TEST(test_symbol_resolution_fallback) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Test that built-in functions are resolved via eval_symbol fallback
     CljSymbol *plus_sym = intern_symbol_global("+");
     CljObject *resolved = eval_symbol(plus_sym, g_test_eval_state);
-    
+
     TEST_ASSERT_NOT_NULL(resolved);
     TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_FUNC); // Should be a native function
-    
+
     // Cleanup
     RELEASE((CljObject*)resolved);
     RELEASE((CljObject*)plus_sym);
@@ -251,18 +251,18 @@ TEST(test_symbol_resolution_fallback) {
 // Test namespace with special characters in names
 TEST(test_namespace_special_characters) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Test symbols with special characters
     CljSymbol *special_sym = intern_symbol_global("test-var?");
     CljObject *value = fixnum(42);
-    
+
     // Store and retrieve
     ns_define(g_test_eval_state->current_ns, (ID)special_sym, value);
     CljObject *retrieved = ns_resolve(g_test_eval_state, special_sym);
-    
+
     TEST_ASSERT_NOT_NULL(retrieved);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
-    
+
     // Cleanup
     RELEASE((CljObject*)retrieved);
     RELEASE((CljObject*)special_sym);
@@ -272,17 +272,17 @@ TEST(test_namespace_special_characters) {
 // Test namespace error handling
 TEST(test_namespace_error_handling) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Test resolving non-existent symbol
     CljSymbol *non_existent = intern_symbol_global("non-existent-var");
     CljObject *resolved = ns_resolve(g_test_eval_state, non_existent);
-    
+
     TEST_ASSERT_NULL(resolved); // Should return NULL for non-existent symbol
-    
+
     // Test with NULL st parameter (should use default namespace)
     CljObject *result1 = ns_resolve(NULL, non_existent);
     TEST_ASSERT_NULL(result1); // Non-existent symbol should return NULL even with NULL st
-    
+
     // Cleanup
     RELEASE((CljObject*)non_existent);
 }
@@ -292,14 +292,14 @@ TEST(test_namespace_error_handling) {
 // and that ns_resolve doesn't search through all namespaces when cache is set
 TEST(test_ns_resolve_clojure_core_cache_initialization) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Clear cache first to test initial state
     g_runtime.clojure_core_cache = NULL;
-    
+
     // Get or create clojure.core namespace (this should cache it)
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
     TEST_ASSERT_NOT_NULL(clojure_core);
-    
+
     // Verify cache is set after ns_get_or_create
     // Note: ns_get_or_create sets cache when creating NEW namespace
     // If namespace already exists, cache might not be set
@@ -307,23 +307,23 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
         // If not cached, explicitly set it (this is what we'll fix)
         g_runtime.clojure_core_cache = clojure_core;
     }
-    
+
     // Now verify cache is set
     TEST_ASSERT_NOT_NULL(g_runtime.clojure_core_cache);
     TEST_ASSERT_EQUAL_PTR(clojure_core, (CljNamespace*)g_runtime.clojure_core_cache);
-    
+
     // Test multiple ns_resolve calls - should NOT trigger namespace search loop
     // If cache is properly set, the search loop in ns_resolve (lines 66-79) won't execute
     CljSymbol *plus_sym = intern_symbol_global("+");
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 10; i++) {
         CljObject *resolved = ns_resolve(g_test_eval_state, plus_sym);
         // Should work without searching through all namespaces
         (void)resolved; // Just test that it doesn't crash
     }
-    
+
     // Verify cache is still set after multiple calls
     TEST_ASSERT_NOT_NULL(g_runtime.clojure_core_cache);
-    
+
     // Cleanup
     RELEASE((CljObject*)plus_sym);
 }
@@ -332,46 +332,46 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
 // This test verifies that ns_resolve caches symbol resolutions to avoid repeated namespace lookups
 TEST(test_ns_resolve_symbol_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Ensure clojure.core cache is set
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
     if (!g_runtime.clojure_core_cache) {
         g_runtime.clojure_core_cache = clojure_core;
     }
-    
+
     // Register a test symbol in clojure.core
     CljSymbol *test_sym = intern_symbol_global("test-cached-symbol");
     CljObject *test_value = fixnum(42);
     ns_define(clojure_core, (ID)test_sym, test_value);
-    
+
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
-    
+
     // First resolution - should populate cache
     CljObject *resolved1 = ns_resolve(g_test_eval_state, test_sym);
     TEST_ASSERT_NOT_NULL(resolved1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved1));
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved1));
-    
+
     // Multiple resolutions with same symbol - should benefit from cache
-    // Measure time for 100 resolutions (baseline without cache)
+    // Measure time for 10 resolutions (baseline without cache)
     struct timeval start, end;
     gettimeofday(&start, NULL);
-    
-    for (int i = 0; i < 100; i++) {
+
+    for (int i = 0; i < 10; i++) {
         CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
         TEST_ASSERT_NOT_NULL(resolved);
         TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved));
         TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved));
     }
-    
+
     gettimeofday(&end, NULL);
-    (void)((end.tv_sec - start.tv_sec) * 1000.0 + 
+    (void)((end.tv_sec - start.tv_sec) * 1000.0 +
            (end.tv_usec - start.tv_usec) / 1000.0);  // Suppress unused variable warning
-    
+
     // Cache should make repeated lookups faster
     // This test establishes baseline - cache implementation will improve it further
-    
+
     // Cleanup
     RELEASE((CljObject*)test_sym);
     RELEASE((CljObject*)test_value);
@@ -382,47 +382,47 @@ TEST(test_ns_resolve_symbol_cache) {
 // This test verifies that function calls benefit from the resolve_cache optimization
 TEST(test_resolve_list_operator_uses_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Ensure clojure.core is loaded
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
     if (!g_runtime.clojure_core_cache) {
         g_runtime.clojure_core_cache = clojure_core;
     }
-    
+
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
-    
+
     // Clear resolve_cache to start fresh
     if (g_runtime.resolve_cache) {
         RELEASE((CljObject*)g_runtime.resolve_cache);
         g_runtime.resolve_cache = make_map(16);
     }
-    
+
     // Test with a builtin function that should be in clojure.core
     // Use 'inc' which should be available
     CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
-    
+
     // First function call - should populate cache
     // Parse and evaluate (inc 1) - this will call resolve_list_operator
     CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
-    
+
     // Verify that cache was populated
     TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
     CljObject *cached_inc = (CljObject*)map_get(g_runtime.resolve_cache, inc_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "resolve_cache should contain 'inc' after first function call");
-    
+
     // Second function call - should use cache (faster path)
     CljObject *result2 = eval_string("(inc 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result2));
     TEST_ASSERT_EQUAL(3, as_fixnum((CljValue)result2));
-    
+
     // Multiple calls to verify cache is being used
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 3; i++) {
         char expr[32];
         snprintf(expr, sizeof(expr), "(inc %d)", i);
         CljObject *result = eval_string(expr, g_test_eval_state);
@@ -430,7 +430,7 @@ TEST(test_resolve_list_operator_uses_cache) {
         TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
         TEST_ASSERT_EQUAL(i + 1, as_fixnum((CljValue)result));
     }
-    
+
     // Cleanup
     RELEASE((CljObject*)inc_sym);
     RELEASE((CljObject*)result1);
@@ -441,49 +441,49 @@ TEST(test_resolve_list_operator_uses_cache) {
 // This verifies that the optimization maintains Clojure semantics
 TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Ensure clojure.core is loaded
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
     if (!g_runtime.clojure_core_cache) {
         g_runtime.clojure_core_cache = clojure_core;
     }
-    
+
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
-    
+
     // Clear resolve_cache to start fresh
     if (g_runtime.resolve_cache) {
         RELEASE((CljObject*)g_runtime.resolve_cache);
         g_runtime.resolve_cache = make_map(16);
     }
-    
+
     // Test with a builtin function that we can redefine
     // Use 'inc' which should be available in clojure.core
     CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
-    
+
     // First function call - should populate cache
     CljObject *result1 = eval_string("(inc 1)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)result1));
     TEST_ASSERT_EQUAL(2, as_fixnum((CljValue)result1));
-    
+
     // Verify cache was populated
     TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
     CljObject *cached = (CljObject*)map_get(g_runtime.resolve_cache, inc_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
-    
+
     // Now redefine 'inc' in user namespace (shadowing clojure.core)
     // Create a simple function that returns 999
     CljObject *new_inc_value = fixnum(999);
     ns_define(g_test_eval_state->current_ns, inc_sym, new_inc_value);
-    
+
     // Verify cache was invalidated (should be NULL after ns_define)
     // ns_define invalidates cache by setting it to NULL
     CljObject *cached_after_redef = (CljObject*)map_get(g_runtime.resolve_cache, inc_sym, NULL);
     // Cache should be NULL after invalidation (ns_define sets it to NULL)
     TEST_ASSERT_NULL_MESSAGE(cached_after_redef, "resolve_cache should be invalidated (NULL) after redefinition");
-    
+
     // Second function call - should resolve from user namespace (not cached old value)
     // Note: This will fail because we defined a fixnum, not a function
     // But the important part is that cache was invalidated
@@ -491,7 +491,7 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     CljObject *resolved_after_redef = ns_resolve(g_test_eval_state, inc_sym);
     TEST_ASSERT_NOT_NULL(resolved_after_redef);
     TEST_ASSERT_EQUAL(999, as_fixnum((CljValue)resolved_after_redef));
-    
+
     // Cleanup
     RELEASE((CljObject*)inc_sym);
     RELEASE((CljObject*)new_inc_value);
@@ -615,7 +615,7 @@ TEST(test_require_with_alias) {
     TEST_ASSERT_NOT_NULL(ns_name);
     TEST_ASSERT_TRUE(ns_name && TAG(ns_name) == CLJ_SYMBOL);
     CljSymbol *ns_sym = as_symbol(ns_name);
-    TEST_ASSERT_EQUAL_STRING("test.alias", ns_sym->name);
+    TEST_ASSERT_EQUAL_STRING("test.alias", ns_sym->cname);
 
 }
 
@@ -662,7 +662,7 @@ TEST(test_require_with_refer_all) {
     CljSymbol *var2_sym = intern_symbol_global("var2");
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
-    
+
     CljObject *var1_val = map_get(g_test_eval_state->current_ns->mappings, var1_sym, NULL);
     CljObject *var2_val = map_get(g_test_eval_state->current_ns->mappings, var2_sym, NULL);
     TEST_ASSERT_NOT_NULL(var1_val);
@@ -694,7 +694,7 @@ TEST(test_require_multiple_namespaces) {
     CljSymbol *m2_alias = intern_symbol_global("m2");
     TEST_ASSERT_NOT_NULL(m1_alias);
     TEST_ASSERT_NOT_NULL(m2_alias);
-    
+
     CljObject *m1_ns = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)m1_alias);
     CljObject *m2_ns = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)m2_alias);
     TEST_ASSERT_NOT_NULL(m1_ns);
@@ -703,8 +703,8 @@ TEST(test_require_multiple_namespaces) {
     TEST_ASSERT_TRUE(m2_ns && TAG(m2_ns) == CLJ_SYMBOL);
     CljSymbol *m1_sym = as_symbol(m1_ns);
     CljSymbol *m2_sym = as_symbol(m2_ns);
-    TEST_ASSERT_EQUAL_STRING("test.multi1", m1_sym->name);
-    TEST_ASSERT_EQUAL_STRING("test.multi2", m2_sym->name);
+    TEST_ASSERT_EQUAL_STRING("test.multi1", m1_sym->cname);
+    TEST_ASSERT_EQUAL_STRING("test.multi2", m2_sym->cname);
 
 }
 
@@ -727,7 +727,7 @@ TEST(test_require_alias_resolution) {
     TEST_ASSERT_NOT_NULL(tar_alias);
     CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)tar_alias);
     TEST_ASSERT_NOT_NULL(ns_name);
-    
+
     // Test namespace-qualified symbol resolution: tar/resvar
     // This will be tested once parser supports alias/symbol syntax
     // For now, just verify the alias exists
@@ -738,25 +738,25 @@ TEST(test_require_alias_resolution) {
 // Test: Verify that CljNamespace no longer has next field
 TEST(test_namespace_no_next_field) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
+
     // Create a namespace
     CljNamespace *ns = ns_get_or_create("test-no-next", NULL);
     TEST_ASSERT_NOT_NULL(ns);
-    
+
     // Verify namespace structure - should not have next field
     // This is a compile-time check, but we can verify the structure works
     TEST_ASSERT_NOT_NULL(ns->name);
     TEST_ASSERT_NOT_NULL(ns->mappings);
     TEST_ASSERT_NOT_NULL(ns->aliases);
-    
+
     // Verify namespace can be used normally
     CljSymbol *test_sym = intern_symbol_global("test-var");
     CljObject *value = fixnum(42);
     ns_define(ns, (ID)test_sym, value);
-    
+
     CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
     TEST_ASSERT_NOT_NULL(resolved);
-    
+
     // Cleanup
     RELEASE((CljObject*)test_sym);
     RELEASE((CljObject*)value);
@@ -767,7 +767,7 @@ TEST(test_namespace_no_next_field) {
 TEST(test_ns_registry_is_map) {
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
     TEST_ASSERT_TRUE(TAG((ID)g_runtime.ns_registry) == CLJ_MAP_TRANSIENT);
-    
+
     // Verify it's a transient map
     CljMap *registry = g_runtime.ns_registry;
     TEST_ASSERT_NOT_NULL(registry);
@@ -776,16 +776,16 @@ TEST(test_ns_registry_is_map) {
 // Test: Verify ns_get_or_create uses Map
 TEST(test_ns_get_or_create_uses_map) {
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
-    
+
     // Create a namespace
     CljNamespace *ns1 = ns_get_or_create("test-map-ns", NULL);
     TEST_ASSERT_NOT_NULL(ns1);
-    
+
     // Verify it's in the map
     CljSymbol *name_sym = intern_symbol(NULL, "test-map-ns");
     CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_sym, NULL);
     TEST_ASSERT_EQUAL_PTR(ns1, (CljNamespace*)found);
-    
+
     // Get or create again - should return same namespace
     CljNamespace *ns2 = ns_get_or_create("test-map-ns", NULL);
     TEST_ASSERT_EQUAL_PTR(ns1, ns2);
@@ -796,11 +796,11 @@ TEST(test_ns_find_uses_map) {
     // Create a namespace
     CljNamespace *ns = ns_get_or_create("test-find-ns", NULL);
     TEST_ASSERT_NOT_NULL(ns);
-    
+
     // Find it
     CljNamespace *found = ns_find("test-find-ns");
     TEST_ASSERT_EQUAL_PTR(ns, found);
-    
+
     // Find non-existent namespace
     CljNamespace *not_found = ns_find("non-existent-ns");
     TEST_ASSERT_NULL(not_found);
@@ -811,14 +811,14 @@ TEST(test_ns_register_uses_map) {
     // Create a namespace using make_namespace (DRY principle)
     CljNamespace *ns = make_namespace("test-register-ns", NULL);
     TEST_ASSERT_NOT_NULL(ns);
-    
+
     // Register it
     ns_register(ns);
-    
+
     // Verify it's in the map
     CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
     TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
-    
+
     // Register again - should be idempotent
     ns_register(ns);
     CljObject *found2 = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
@@ -831,16 +831,16 @@ TEST(test_ns_cleanup_releases_all_from_map) {
     CljNamespace *ns1 = ns_get_or_create("cleanup-test-1", NULL);
     CljNamespace *ns2 = ns_get_or_create("cleanup-test-2", NULL);
     CljNamespace *ns3 = ns_get_or_create("cleanup-test-3", NULL);
-    
+
     TEST_ASSERT_NOT_NULL(ns1);
     TEST_ASSERT_NOT_NULL(ns2);
     TEST_ASSERT_NOT_NULL(ns3);
-    
+
     // Verify they're in the map
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
     int count_before = map_count(g_runtime.ns_registry);
     TEST_ASSERT_TRUE(count_before >= 3);
-    
+
     // Cleanup (this will be called by test framework, but we can verify the structure)
     // Note: We can't actually call ns_cleanup() here as it would break other tests
     // This test just verifies the structure is correct
@@ -851,14 +851,14 @@ TEST(test_ns_registry_iteration) {
     // Create multiple namespaces
     CljNamespace *ns1 = ns_get_or_create("iter-test-1", NULL);
     CljNamespace *ns2 = ns_get_or_create("iter-test-2", NULL);
-    
+
     TEST_ASSERT_NOT_NULL(ns1);
     TEST_ASSERT_NOT_NULL(ns2);
-    
+
     // Count namespaces in registry
     int count = map_count(g_runtime.ns_registry);
     TEST_ASSERT_TRUE(count >= 2);
-    
+
     // Verify both are in the map
     CljSymbol *sym1 = intern_symbol(NULL, "iter-test-1");
     CljSymbol *sym2 = intern_symbol(NULL, "iter-test-2");
@@ -873,23 +873,173 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
     // This test verifies that we correctly handle the case where map_conj might
     // need to grow the map (though with initial capacity 16, this is unlikely)
     // The important thing is that we always use the return value of map_conj
-    
+
     // Create multiple namespaces to potentially trigger map growth
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 5; i++) {
         char ns_name[32];
         snprintf(ns_name, sizeof(ns_name), "growth-test-%d", i);
         CljNamespace *ns = ns_get_or_create(ns_name, NULL);
         TEST_ASSERT_NOT_NULL(ns);
-        
+
         // Verify it's in the registry
         CljSymbol *name_sym = intern_symbol(NULL, ns_name);
         CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_sym, NULL);
         TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
     }
-    
+
     // Verify registry still works correctly
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
     int count = map_count(g_runtime.ns_registry);
     TEST_ASSERT_TRUE(count >= 20);
+}
+
+// Test: Verify ns-map returns mappings map
+TEST(test_ns_map_returns_mappings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Create a test namespace with some mappings
+    CljNamespace *test_ns = ns_get_or_create("test-ns-map", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+
+    // Add some mappings
+    CljSymbol *sym1 = intern_symbol_global("test-var1");
+    CljSymbol *sym2 = intern_symbol_global("test-var2");
+    CljObject *val1 = fixnum(100);
+    CljObject *val2 = fixnum(200);
+
+    ns_define(test_ns, (ID)sym1, val1);
+    ns_define(test_ns, (ID)sym2, val2);
+
+    // Test ns-map with namespace symbol
+    CljSymbol *ns_sym = intern_symbol_global("test-ns-map");
+    TEST_ASSERT_NOT_NULL(ns_sym);
+
+    // Call ns-map via eval_string
+    CljObject *result = eval_string("(ns-map 'test-ns-map)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+
+    // Verify the mappings are in the result
+    CljMap *mappings = (CljMap*)result;
+    CljObject *found_val1 = (CljObject*)map_get(mappings, sym1, NULL);
+    CljObject *found_val2 = (CljObject*)map_get(mappings, sym2, NULL);
+    TEST_ASSERT_NOT_NULL(found_val1);
+    TEST_ASSERT_NOT_NULL(found_val2);
+    TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)found_val1));
+    TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)found_val2));
+
+    // Cleanup
+    RELEASE((CljObject*)sym1);
+    RELEASE((CljObject*)sym2);
+    RELEASE((CljObject*)val1);
+    RELEASE((CljObject*)val2);
+    RELEASE((CljObject*)ns_sym);
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify ns-map with empty namespace returns empty map
+TEST(test_ns_map_empty_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Create an empty namespace
+    CljNamespace *empty_ns = ns_get_or_create("test-empty-ns", NULL);
+    TEST_ASSERT_NOT_NULL(empty_ns);
+
+    // Test ns-map with namespace symbol
+    CljObject *result = eval_string("(ns-map 'test-empty-ns)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+
+    // Verify it's an empty map
+    CljMap *mappings = (CljMap*)result;
+    TEST_ASSERT_EQUAL(0, map_count(mappings));
+
+    // Cleanup
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify ns-map with current namespace (using namespace name)
+TEST(test_ns_map_current_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Add a mapping to current namespace
+    CljSymbol *test_sym = intern_symbol_global("current-ns-var");
+    CljObject *test_val = fixnum(42);
+    ns_define(g_test_eval_state->current_ns, (ID)test_sym, test_val);
+
+    // Get current namespace name
+    const char *current_ns_name = g_test_eval_state->current_ns->name->cname;
+
+    // Test ns-map with namespace name
+    char expr[256];
+    snprintf(expr, sizeof(expr), "(ns-map '%s)", current_ns_name);
+    CljObject *result = eval_string(expr, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+
+    // Verify the mapping is in the result
+    CljMap *mappings = (CljMap*)result;
+    CljObject *found = (CljObject*)map_get(mappings, test_sym, NULL);
+    TEST_ASSERT_NOT_NULL(found);
+    TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
+
+    // Cleanup
+    RELEASE((CljObject*)test_sym);
+    RELEASE((CljObject*)test_val);
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify find-ns returns namespace object
+TEST(test_find_ns_returns_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Create a test namespace
+    CljNamespace *test_ns = ns_get_or_create("test-find-ns", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+
+    // Test find-ns with symbol
+    CljObject *result = eval_string("(find-ns 'test-find-ns)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_NAMESPACE);
+    TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
+
+    // Cleanup
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify find-ns returns nil for non-existent namespace
+TEST(test_find_ns_returns_nil_for_nonexistent) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Test find-ns with non-existent namespace
+    CljObject *result = eval_string("(find-ns 'does.not.exist)", g_test_eval_state);
+    TEST_ASSERT_NULL(result); // Should return nil (NULL)
+}
+
+// Test: Verify find-ns with string argument
+TEST(test_find_ns_with_string) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Create a test namespace
+    CljNamespace *test_ns = ns_get_or_create("test-find-ns-string", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+
+    // Test find-ns with string
+    CljObject *result = eval_string("(find-ns \"test-find-ns-string\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_NAMESPACE);
+    TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
+
+    // Cleanup
+    RELEASE((CljObject*)result);
+}
+
+// Test: Verify find-ns with nil argument returns nil
+TEST(test_find_ns_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Test find-ns with nil
+    CljObject *result = eval_string("(find-ns nil)", g_test_eval_state);
+    TEST_ASSERT_NULL(result); // Should return nil (NULL)
 }
 

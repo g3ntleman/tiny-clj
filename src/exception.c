@@ -104,6 +104,9 @@ const char *EXCEPTION_TYPE = "TypeError";
 /** @brief Static exception type: OutOfMemoryError */
 const char *EXCEPTION_OUT_OF_MEMORY = "OutOfMemoryError";
 
+/** @brief Static exception type: IndexOutOfBoundsException */
+const char *EXCEPTION_INDEX_OUT_OF_BOUNDS = "IndexOutOfBoundsException";
+
 // ============================================================================
 // STATIC OUT OF MEMORY EXCEPTION (no allocation needed)
 // ============================================================================
@@ -180,6 +183,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
 
 /** @brief Throw an exception with type, message, and location */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col) {
+    
     CLJException *exception = make_exception(type, message, file, line, col);
     if (!exception) {
 #ifdef DEBUG
