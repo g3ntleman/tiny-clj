@@ -72,6 +72,10 @@ extern CljSymbol *SYM_STR;
 extern CljSymbol *SYM_CONJ;
 extern CljSymbol *SYM_NTH;
 extern CljSymbol *SYM_TRIM;
+extern CljSymbol *SYM_UPPER_CASE;
+extern CljSymbol *SYM_LOWER_CASE;
+extern CljSymbol *SYM_LAST_INDEX_OF;
+extern CljSymbol *SYM_STRING_REVERSE;
 extern CljSymbol *SYM_FIRST;
 extern CljSymbol *SYM_REST;
 extern CljSymbol *SYM_COUNT;
@@ -96,8 +100,9 @@ extern CljSymbol *SYM_KW_STACK;
 extern CljSymbol *SYM_KW_NS;
 extern CljSymbol *SYM_KW_NATIVE;
 
-// Global symbol for clojure.core namespace name (for fast comparison)
+// Global symbols for namespace names (for fast comparison)
 extern CljSymbol *SYM_CLOJURE_CORE;
+extern CljSymbol *SYM_CLOJURE_STRING;
 
 // Additional symbols for hot path optimization
 extern CljSymbol *SYM_NS_STAR;
@@ -116,5 +121,18 @@ const char* symbol_get_namespace_name(CljSymbol *sym);  // Get namespace name st
 
 // Initialisierung der globalen Symbole
 void init_special_symbols();
+
+// Named struct type for static symbol data (for compile-time initialization)
+typedef struct StaticSymbolData {
+    CljSymbol sym;
+} StaticSymbolData;
+
+// Static symbol data structures for compile-time initialization
+// These are exposed for use in native function lookup tables
+extern StaticSymbolData sym_trim_data;
+extern StaticSymbolData sym_upper_case_data;
+extern StaticSymbolData sym_lower_case_data;
+extern StaticSymbolData sym_last_index_of_data;
+extern StaticSymbolData sym_string_reverse_data;
 
 #endif

@@ -254,7 +254,32 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         return NULL;
     }
     
-    // Always check current namespace first (before cache)
+    // Handle qualified symbols (symbol->ns_name is set during parsing or interning)
+    // For qualified symbols like clojure.string/trim, we need to:
+    // 1. Find the target namespace (clojure.string)
+    // 2. Create an unqualified symbol (trim)
+    // 3. Look up the unqualified symbol in the target namespace
+    if (sym->ns_name && sym->ns_name->cname) {
+        // Qualified symbol - look up in target namespace
+        // Use fast symbol-based lookup (avoids intern_symbol call)
+        CljNamespace *target_ns = ns_find_by_symbol(sym->ns_name);
+        if (target_ns && target_ns->mappings) {
+            // Create unqualified symbol for lookup
+            CljSymbol *name_sym = intern_symbol_global(sym->cname);
+            if (name_sym) {
+                // Use sentinel to distinguish "key not found" from "value is nil"
+                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+                ID resolved = map_get(target_ns->mappings, name_sym, (ID)&not_found_sentinel);
+                if (resolved != (ID)&not_found_sentinel) {
+                    return resolved;  // Found (can be NULL/nil, which is valid)
+                }
+            }
+        }
+        // Qualified symbol not found in target namespace
+        return NULL;
+    }
+    
+    // Unqualified symbol - check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
     // Use sentinel to distinguish "key not found" from "value is nil"
     // In Clojure, nil is a valid value, so we need to distinguish between
@@ -396,15 +421,22 @@ CljNamespace* ns_find_for_object(CljObject *obj) {
     return NULL;
 }
 
+// Fast lookup with symbol (avoids intern_symbol call - DRY principle)
+CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol) {
+    if (!name_symbol || !g_runtime.ns_registry) return NULL;
+    CljObject *ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
+    return (CljNamespace*)ns_obj;
+}
+
+// Lookup with string (for convenience - delegates to symbol version)
 CljNamespace* ns_find(const char *name) {
     if (!name || !g_runtime.ns_registry) return NULL;
     
-    // Look up namespace by name in the map
+    // Intern symbol and delegate to fast symbol-based lookup
     CljSymbol *name_symbol = intern_symbol(NULL, name);
     if (!name_symbol) return NULL;
     
-    CljObject *ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
-    return (CljNamespace*)ns_obj;
+    return ns_find_by_symbol(name_symbol);
 }
 
 void ns_cleanup() {

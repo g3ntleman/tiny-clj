@@ -55,6 +55,11 @@ CljSymbol *SYM_PRINT = NULL;
 CljSymbol *SYM_STR = NULL;
 CljSymbol *SYM_CONJ = NULL;
 CljSymbol *SYM_NTH = NULL;
+CljSymbol *SYM_TRIM = NULL;
+CljSymbol *SYM_UPPER_CASE = NULL;
+CljSymbol *SYM_LOWER_CASE = NULL;
+CljSymbol *SYM_LAST_INDEX_OF = NULL;
+CljSymbol *SYM_STRING_REVERSE = NULL;
 CljSymbol *SYM_FIRST = NULL;
 CljSymbol *SYM_REST = NULL;
 CljSymbol *SYM_COUNT = NULL;
@@ -79,8 +84,9 @@ CljSymbol *SYM_KW_STACK = NULL;
 CljSymbol *SYM_KW_NS = NULL;
 CljSymbol *SYM_KW_NATIVE = NULL;
 
-// Global symbol for clojure.core namespace name (for fast comparison)
+// Global symbols for namespace names (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
+CljSymbol *SYM_CLOJURE_STRING = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
@@ -149,6 +155,24 @@ DEFINE_STATIC_SYMBOL(sym_for_data, "for");
 DEFINE_STATIC_SYMBOL(sym_doseq_data, "doseq");
 DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
 
+// Non-static symbol structs for clojure.string native functions (compile-time initialization)
+// These are non-static so they can be used in builtins.c's native function table
+StaticSymbolData sym_trim_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "trim" }
+};
+StaticSymbolData sym_upper_case_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "upper-case" }
+};
+StaticSymbolData sym_lower_case_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "lower-case" }
+};
+StaticSymbolData sym_last_index_of_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "last-index-of" }
+};
+StaticSymbolData sym_string_reverse_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "reverse" }
+};
+
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
 DEFINE_STATIC_SYMBOL(sym_kw_file_data, ":file");
@@ -168,6 +192,14 @@ DEFINE_STATIC_SYMBOL(sym_ns_star_data, "*ns*");
 #define INIT_SYMBOL(sym_var, data_var) \
     do { \
         sym_var = &data_var.sym; \
+        symbol_table_add(sym_var); \
+    } while(0)
+
+// Macro for symbols with namespace (sets ns_name at runtime)
+#define INIT_SYMBOL_NS(sym_var, data_var, ns_sym) \
+    do { \
+        sym_var = &data_var.sym; \
+        sym_var->ns_name = ns_sym; \
         symbol_table_add(sym_var); \
     } while(0)
 
@@ -245,6 +277,20 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_COUNT, sym_count_data);
 
+    // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
+    SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
+
+    // clojure.string native function symbols - with namespace
+    INIT_SYMBOL_NS(SYM_TRIM, sym_trim_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_UPPER_CASE, sym_upper_case_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_LOWER_CASE, sym_lower_case_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_LAST_INDEX_OF, sym_last_index_of_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_STRING_REVERSE, sym_string_reverse_data, SYM_CLOJURE_STRING);
+
     // Additional symbols - static structs with symbol table registration
     INIT_SYMBOL(SYM_CONS, sym_cons_data);
 
@@ -286,8 +332,9 @@ void init_special_symbols() {
     // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
     SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
 
-    // Clean up macro to avoid namespace pollution
+    // Clean up macros to avoid namespace pollution
     #undef INIT_SYMBOL
+    #undef INIT_SYMBOL_NS
 }
 
 // Helper function to find symbol in vector by comparing name and namespace
@@ -433,7 +480,8 @@ struct CljNamespace* symbol_get_namespace(CljSymbol *sym) {
     }
     
     if (!sym->ns_name->cname) return NULL;
-    return ns_find(sym->ns_name->cname);
+    // Use fast symbol-based lookup (avoids redundant intern_symbol call)
+    return ns_find_by_symbol(sym->ns_name);
 }
 
 // Helper: Get namespace name string from symbol (DRY principle)

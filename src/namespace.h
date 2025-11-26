@@ -51,6 +51,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *name);
+CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol);  // Fast lookup with symbol (avoids intern_symbol call)
 CljNamespace* ns_find_for_object(CljObject *obj);  // Find namespace containing object
 void ns_define(CljNamespace *ns, ID symbol, ID value);
 void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)

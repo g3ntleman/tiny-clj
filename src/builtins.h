@@ -28,7 +28,7 @@ void register_builtins();
 
 // Native function lookup for stubs
 // Returns NULL if not found
-BuiltinFn native_function_lookup(const char *clojure_name);
+BuiltinFn native_function_lookup(CljSymbol *symbol);
 
 // Variadic functions (Phase 1)
 ID native_str(ID *args, unsigned int argc);

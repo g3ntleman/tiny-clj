@@ -1762,30 +1762,49 @@ ID native_string_reverse(ID *args, unsigned int argc) {
 }
 
 // Native function lookup table for stubs
-// Key is Clojure function name (e.g., "trim", not "native_trim")
+// Uses CljSymbol* for efficient pointer comparison (symbols are interned)
+// Initialized at runtime after symbols are interned with correct namespaces
 typedef struct {
-    const char *clojure_name;  // Clojure function name (e.g., "trim")
-    BuiltinFn native_func;     // Native C function pointer
+    CljSymbol *clojure_symbol;  // Clojure function symbol (e.g., SYM_TRIM)
+    BuiltinFn native_func;      // Native C function pointer
 } NativeFunctionEntry;
 
-static const NativeFunctionEntry native_function_table[] = {
-    {"trim", native_trim},
-    {"upper-case", native_upper_case},
-    {"lower-case", native_lower_case},
-    {"last-index-of", native_last_index_of},
-    {"reverse", native_string_reverse},
-    {NULL, NULL}  // Sentinel
-};
+#define NATIVE_FUNCTION_TABLE_SIZE 6
+static NativeFunctionEntry native_function_table[NATIVE_FUNCTION_TABLE_SIZE];
+static bool native_function_table_initialized = false;
 
-// Lookup native function by Clojure name
+// Initialize native function lookup table (called once on first lookup)
+// Must be called after init_special_symbols() has set up the interned symbols
+static void init_native_function_table() {
+    if (native_function_table_initialized) return;
+    
+    // Use the interned global symbols (SYM_*) which have correct namespaces
+    native_function_table[0] = (NativeFunctionEntry){SYM_TRIM, native_trim};
+    native_function_table[1] = (NativeFunctionEntry){SYM_UPPER_CASE, native_upper_case};
+    native_function_table[2] = (NativeFunctionEntry){SYM_LOWER_CASE, native_lower_case};
+    native_function_table[3] = (NativeFunctionEntry){SYM_LAST_INDEX_OF, native_last_index_of};
+    native_function_table[4] = (NativeFunctionEntry){SYM_STRING_REVERSE, native_string_reverse};
+    native_function_table[5] = (NativeFunctionEntry){NULL, NULL};  // Sentinel
+    
+    native_function_table_initialized = true;
+}
+
+// Lookup native function by Clojure symbol
+// Uses pointer comparison for efficiency (symbols are interned)
 // Returns NULL if not found
-BuiltinFn native_function_lookup(const char *clojure_name) {
-    if (!clojure_name) {
+BuiltinFn native_function_lookup(CljSymbol *symbol) {
+    if (!symbol) {
         return NULL;
     }
 
-    for (int i = 0; native_function_table[i].clojure_name != NULL; i++) {
-        if (strcmp(native_function_table[i].clojure_name, clojure_name) == 0) {
+    // Lazy initialization (symbols must be interned first via init_special_symbols)
+    if (!native_function_table_initialized) {
+        init_native_function_table();
+    }
+
+    // Compare symbol pointers directly (efficient due to interning)
+    for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
+        if (native_function_table[i].clojure_symbol == symbol) {
             return native_function_table[i].native_func;
         }
     }

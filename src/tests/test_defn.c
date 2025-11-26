@@ -112,17 +112,15 @@ TEST(test_defn_eval_defn_recognizes_native_marker) {
         TEST_ASSERT_NOT_NULL(g_test_eval_state);
         init_special_symbols();
 
+        // Switch to clojure.string namespace (where trim is defined)
+        eval_string("(ns clojure.string)", g_test_eval_state);
+
         // Parse and evaluate (defn trim [s] :native)
-        // This should not throw an exception (even though native lookup is not yet implemented)
+        // This should succeed now that native lookup is implemented
         const char *code = "(defn trim [s] :native)";
+        CljValue result = eval_string(code, g_test_eval_state);
 
-        // For now, this will fail because native lookup is not implemented
-        // But it should at least parse correctly
-        (void)eval_string(code, g_test_eval_state);
-
-        // Currently, this will fail because we haven't implemented native function lookup
-        // But the parsing should work
-        // TODO: Once native lookup is implemented, this should succeed
+        TEST_ASSERT_NOT_NULL_MESSAGE(result, "defn with :native should succeed");
     });
 }
 
@@ -181,7 +179,9 @@ TEST(test_defn_native_stub_registers_native_function) {
 // TEST: Native Funktion Lookup - trim finden
 // ============================================================================
 TEST(test_native_function_lookup_trim) {
-    BuiltinFn func = native_function_lookup("trim");
+    CljSymbol *trim_sym = intern_symbol("clojure.string", "trim");
+    TEST_ASSERT_NOT_NULL(trim_sym);
+    BuiltinFn func = native_function_lookup(trim_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(func, "native_function_lookup should find trim");
     TEST_ASSERT_EQUAL_PTR_MESSAGE(native_trim, func, "should return native_trim function");
 }
@@ -190,7 +190,9 @@ TEST(test_native_function_lookup_trim) {
 // TEST: Native Funktion Lookup - upper-case finden
 // ============================================================================
 TEST(test_native_function_lookup_upper_case) {
-    BuiltinFn func = native_function_lookup("upper-case");
+    CljSymbol *upper_case_sym = intern_symbol("clojure.string", "upper-case");
+    TEST_ASSERT_NOT_NULL(upper_case_sym);
+    BuiltinFn func = native_function_lookup(upper_case_sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(func, "native_function_lookup should find upper-case");
     TEST_ASSERT_EQUAL_PTR_MESSAGE(native_upper_case, func, "should return native_upper_case function");
 }
@@ -199,7 +201,9 @@ TEST(test_native_function_lookup_upper_case) {
 // TEST: Native Funktion Lookup - nonexistent nicht finden
 // ============================================================================
 TEST(test_native_function_lookup_nonexistent) {
-    BuiltinFn func = native_function_lookup("nonexistent");
+    CljSymbol *nonexistent_sym = intern_symbol("clojure.string", "nonexistent");
+    TEST_ASSERT_NOT_NULL(nonexistent_sym);
+    BuiltinFn func = native_function_lookup(nonexistent_sym);
     TEST_ASSERT_NULL_MESSAGE(func, "native_function_lookup should return NULL for nonexistent function");
 }
 

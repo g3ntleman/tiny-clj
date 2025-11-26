@@ -514,6 +514,7 @@ set(COMMON_TEST_SOURCES
 add_custom_target(run-unit-tests
     COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unity-tests
     DEPENDS unity-tests
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running unit tests"
 )
 

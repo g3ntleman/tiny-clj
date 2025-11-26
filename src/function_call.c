@@ -3045,8 +3045,23 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             return NULL;
         }
 
-        // Lookup native function by Clojure name
-        BuiltinFn native_func = native_function_lookup(name_symbol->cname);
+        // Qualify symbol with current namespace if it's unqualified
+        // Native functions must be looked up with their fully qualified name
+        CljSymbol *qualified_symbol = name_symbol;
+        if (!name_symbol->ns_name && st && st->current_ns && st->current_ns->name) {
+            // Unqualified symbol - qualify it with current namespace
+            qualified_symbol = intern_symbol(st->current_ns->name->cname, name_symbol->cname);
+            if (!qualified_symbol) {
+                free_obj_array((ID*)params, params_stack);
+                throw_exception(EXCEPTION_RUNTIME,
+                               "Failed to qualify symbol for native function lookup",
+                               NULL, 0, 0);
+                return NULL;
+            }
+        }
+
+        // Lookup native function by Clojure symbol (uses pointer comparison for efficiency)
+        BuiltinFn native_func = native_function_lookup(qualified_symbol);
         if (!native_func) {
             free_obj_array((ID*)params, params_stack);
             char error_msg[256];
