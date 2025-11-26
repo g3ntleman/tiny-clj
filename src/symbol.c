@@ -422,16 +422,30 @@ CljSymbol* intern_symbol_global(const char *name) {
 }
 
 // Helper: Get namespace object from symbol's namespace name (DRY principle)
+// Returns clojure.core namespace if symbol has no explicit namespace (ns_name == NULL)
 // Returns NULL if namespace doesn't exist
 struct CljNamespace* symbol_get_namespace(CljSymbol *sym) {
-    if (!sym || !sym->ns_name || !sym->ns_name->cname) return NULL;
+    if (!sym) return NULL;
+    
+    // NULL namespace means clojure.core (default for core symbols)
+    if (!sym->ns_name) {
+        return ns_find("clojure.core");
+    }
+    
+    if (!sym->ns_name->cname) return NULL;
     return ns_find(sym->ns_name->cname);
 }
 
 // Helper: Get namespace name string from symbol (DRY principle)
-// Returns NULL if symbol has no namespace
+// Returns "clojure.core" if symbol has no explicit namespace (ns_name == NULL)
 const char* symbol_get_namespace_name(CljSymbol *sym) {
-    if (!sym || !sym->ns_name) return NULL;
+    if (!sym) return NULL;
+    
+    // NULL namespace means clojure.core (default for core symbols)
+    if (!sym->ns_name) {
+        return "clojure.core";
+    }
+    
     return sym->ns_name->cname;
 }
 

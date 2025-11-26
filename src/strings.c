@@ -169,6 +169,8 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_SYMBOL: {
                 CljSymbol *sym = as_symbol(v);
             if (!sym) return 3; // "nil"
+                // Only show namespace if explicitly set (not NULL = implicit clojure.core)
+                // This matches Clojure's behavior: core symbols print without namespace
                 if (sym->ns_name && sym->ns_name->cname) {
                 return strlen(sym->ns_name->cname) + 1 + strlen(sym->cname); // "ns/name"
                 }
@@ -369,6 +371,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 *offset += 3;
                 return;
             }
+            // Only show namespace if explicitly set (not NULL = implicit clojure.core)
+            // This matches Clojure's behavior: core symbols print without namespace
             if (sym->ns_name && sym->ns_name->cname) {
                 size_t ns_len = strlen(sym->ns_name->cname);
                 memcpy(buffer + *offset, sym->ns_name->cname, ns_len);
