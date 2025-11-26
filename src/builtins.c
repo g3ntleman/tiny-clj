@@ -1763,31 +1763,22 @@ ID native_string_reverse(ID *args, unsigned int argc) {
 
 // Native function lookup table for stubs
 // Uses CljSymbol* for efficient pointer comparison (symbols are interned)
-// Initialized at runtime after symbols are interned with correct namespaces
+// Statically initialized at compile-time using static symbol data structures
 typedef struct {
-    CljSymbol *clojure_symbol;  // Clojure function symbol (e.g., SYM_TRIM)
+    CljSymbol *clojure_symbol;  // Clojure function symbol (e.g., &sym_trim_data.sym)
     BuiltinFn native_func;      // Native C function pointer
 } NativeFunctionEntry;
 
-#define NATIVE_FUNCTION_TABLE_SIZE 6
-static NativeFunctionEntry native_function_table[NATIVE_FUNCTION_TABLE_SIZE];
-static bool native_function_table_initialized = false;
-
-// Initialize native function lookup table (called once on first lookup)
-// Must be called after init_special_symbols() has set up the interned symbols
-static void init_native_function_table() {
-    if (native_function_table_initialized) return;
-    
-    // Use the interned global symbols (SYM_*) which have correct namespaces
-    native_function_table[0] = (NativeFunctionEntry){SYM_TRIM, native_trim};
-    native_function_table[1] = (NativeFunctionEntry){SYM_UPPER_CASE, native_upper_case};
-    native_function_table[2] = (NativeFunctionEntry){SYM_LOWER_CASE, native_lower_case};
-    native_function_table[3] = (NativeFunctionEntry){SYM_LAST_INDEX_OF, native_last_index_of};
-    native_function_table[4] = (NativeFunctionEntry){SYM_STRING_REVERSE, native_string_reverse};
-    native_function_table[5] = (NativeFunctionEntry){NULL, NULL};  // Sentinel
-    
-    native_function_table_initialized = true;
-}
+// Compile-time initialized lookup table (DRY: avoids runtime initialization)
+// Uses static symbol data structures (&sym_*_data.sym) for compile-time references
+static const NativeFunctionEntry native_function_table[] = {
+    {&sym_trim_data.sym, native_trim},
+    {&sym_upper_case_data.sym, native_upper_case},
+    {&sym_lower_case_data.sym, native_lower_case},
+    {&sym_last_index_of_data.sym, native_last_index_of},
+    {&sym_string_reverse_data.sym, native_string_reverse},
+    {NULL, NULL}  // Sentinel
+};
 
 // Lookup native function by Clojure symbol
 // Uses pointer comparison for efficiency (symbols are interned)
@@ -1797,12 +1788,11 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
         return NULL;
     }
 
-    // Lazy initialization (symbols must be interned first via init_special_symbols)
-    if (!native_function_table_initialized) {
-        init_native_function_table();
-    }
-
     // Compare symbol pointers directly (efficient due to interning)
+    // Note: We compare with the static symbol data structures, but since
+    // init_special_symbols() sets up SYM_TRIM = &sym_trim_data.sym and
+    // adds it to the symbol table, intern_symbol("clojure.string", "trim")
+    // will return the same pointer (SYM_TRIM) due to symbol interning.
     for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
         if (native_function_table[i].clojure_symbol == symbol) {
             return native_function_table[i].native_func;
