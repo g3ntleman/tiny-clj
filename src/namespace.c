@@ -681,7 +681,7 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
 void ns_invalidate_resolve_cache(void) {
     if (g_runtime.resolve_cache) {
         RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = NULL;
+        g_runtime.resolve_cache = make_map(RESOLVE_CACHE_SIZE);
     }
 }
 

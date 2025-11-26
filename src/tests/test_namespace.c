@@ -875,7 +875,8 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
     // The important thing is that we always use the return value of map_conj
 
     // Create multiple namespaces to potentially trigger map growth
-    for (int i = 0; i < 5; i++) {
+    // Create enough to exceed initial capacity (16) and test map growth
+    for (int i = 0; i < 18; i++) {
         char ns_name[32];
         snprintf(ns_name, sizeof(ns_name), "growth-test-%d", i);
         CljNamespace *ns = ns_get_or_create(ns_name, NULL);
@@ -887,9 +888,11 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
         TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
     }
 
-    // Verify registry still works correctly
+    // Verify registry still works correctly after growth
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
     int count = map_count(g_runtime.ns_registry);
+    // We created 18 namespaces, plus core ones (user, clojure.core, etc.)
+    // Should have at least 20 total
     TEST_ASSERT_TRUE(count >= 20);
 }
 
