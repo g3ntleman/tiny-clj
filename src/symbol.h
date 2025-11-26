@@ -98,6 +98,7 @@ extern CljSymbol *SYM_KW_DOC;
 extern CljSymbol *SYM_KW_ERROR;
 extern CljSymbol *SYM_KW_STACK;
 extern CljSymbol *SYM_KW_NS;
+extern CljSymbol *SYM_KW_NAME;
 extern CljSymbol *SYM_KW_NATIVE;
 
 // Global symbols for namespace names (for fast comparison)

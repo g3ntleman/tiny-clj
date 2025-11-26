@@ -3092,21 +3092,20 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         // Build standard metadata (:name, :ns)
         CljMap *standard_meta = make_map(4);
         
-        CljSymbol *kw_name = intern_symbol_global(":name");
-        if (kw_name) {
+        if (SYM_KW_NAME) {
             CljString *name_str = make_string(name_symbol->cname);
             if (name_str) {
-                standard_meta = map_assoc(standard_meta, (ID)kw_name, (ID)name_str);
+                standard_meta = map_assoc(standard_meta, (CljObject*)SYM_KW_NAME, (CljObject*)name_str);
                 RELEASE(name_str);
             }
         }
         
         if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
-            standard_meta = map_assoc(standard_meta, (ID)SYM_KW_NS, (ID)st->current_ns->name);
+            standard_meta = map_assoc(standard_meta, (CljObject*)SYM_KW_NS, (CljObject*)st->current_ns->name);
         }
         
         // Get user metadata (from form or symbol)
-        ID user_meta = form_meta ? form_meta : meta_get((CljObject*)name_sym);
+        CljObject *user_meta = form_meta ? (CljObject*)form_meta : meta_get((CljObject*)name_sym);
         
         // Merge: user metadata takes precedence over standard metadata
         CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
@@ -3175,15 +3174,11 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
         if (clojure_core && clojure_core->mappings) {
             CljMap *core_mappings = (CljMap*)clojure_core->mappings;
-            for (int i = 0; i < core_mappings->capacity; i++) {
-                CljValue key = core_mappings->data[i * 2];
-                CljValue val = core_mappings->data[i * 2 + 1];
-                if (key) {
-                    // Only add if not already in fn_env (current namespace mappings take precedence)
-                    if (!map_contains(fn_env, key)) {
-                        CljMap *new_fn_env = map_assoc(fn_env, key, val);
-                        ASSIGN(fn_env, new_fn_env);
-                    }
+            MAP_FOR_EACH(core_mappings, key, val) {
+                // Only add if not already in fn_env (current namespace mappings take precedence)
+                if (!map_contains(fn_env, key)) {
+                    CljMap *new_fn_env = map_assoc(fn_env, key, val);
+                    ASSIGN(fn_env, new_fn_env);
                 }
             }
         }

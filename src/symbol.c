@@ -82,6 +82,7 @@ CljSymbol *SYM_KW_DOC = NULL;
 CljSymbol *SYM_KW_ERROR = NULL;
 CljSymbol *SYM_KW_STACK = NULL;
 CljSymbol *SYM_KW_NS = NULL;
+CljSymbol *SYM_KW_NAME = NULL;
 CljSymbol *SYM_KW_NATIVE = NULL;
 
 // Global symbols for namespace names (for fast comparison)
@@ -180,6 +181,7 @@ DEFINE_STATIC_SYMBOL(sym_kw_doc_data, ":doc");
 DEFINE_STATIC_SYMBOL(sym_kw_error_data, ":error");
 DEFINE_STATIC_SYMBOL(sym_kw_stack_data, ":stack");
 DEFINE_STATIC_SYMBOL(sym_kw_ns_data, ":ns");
+DEFINE_STATIC_SYMBOL(sym_kw_name_data, ":name");
 DEFINE_STATIC_SYMBOL(sym_kw_native_data, ":native");
 
 // Additional symbols for optimization (used in hot path)
@@ -322,6 +324,8 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_STACK, sym_kw_stack_data);
 
     INIT_SYMBOL(SYM_KW_NS, sym_kw_ns_data);
+
+    INIT_SYMBOL(SYM_KW_NAME, sym_kw_name_data);
 
     INIT_SYMBOL(SYM_KW_NATIVE, sym_kw_native_data);
 
