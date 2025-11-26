@@ -3086,22 +3086,34 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         ns_define(st->current_ns, name_sym, (ID)native_func_obj);
 
         // Apply metadata to native function (only in DEBUG builds for memory efficiency)
-        // In Clojure, metadata from ^#^{...} (defn ...) is applied to the function
-        // NOTE: We don't search for existing metadata from register_builtin_in_core because
-        // it only contains technical metadata (:name, :ns) which will be overwritten anyway
+        // Merge user metadata (from ^#^{...}) with standard metadata (:name, :ns)
 #ifdef DEBUG
 #ifdef ENABLE_META
-        // form_meta was captured at the start of eval_defn (from the parsed list object)
-        if (form_meta) {
-            // Form metadata exists - apply directly (overwrites any existing metadata)
-            meta_set((CljObject*)native_func_obj, (CljObject*)form_meta);
-        } else {
-            // Try to get metadata from the function name symbol as fallback
-            ID name_meta = meta_get((CljObject*)name_sym);
-            if (name_meta) {
-                meta_set((CljObject*)native_func_obj, (CljObject*)name_meta);
+        // Build standard metadata (:name, :ns)
+        CljMap *standard_meta = make_map(4);
+        
+        CljSymbol *kw_name = intern_symbol_global(":name");
+        if (kw_name) {
+            CljString *name_str = make_string(name_symbol->cname);
+            if (name_str) {
+                standard_meta = map_assoc(standard_meta, (ID)kw_name, (ID)name_str);
+                RELEASE(name_str);
             }
         }
+        
+        if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
+            standard_meta = map_assoc(standard_meta, (ID)SYM_KW_NS, (ID)st->current_ns->name);
+        }
+        
+        // Get user metadata (from form or symbol)
+        ID user_meta = form_meta ? form_meta : meta_get((CljObject*)name_sym);
+        
+        // Merge: user metadata takes precedence over standard metadata
+        CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
+                            ? map_merge(standard_meta, (CljMap*)user_meta)
+                            : standard_meta;
+        
+        meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
 #endif // ENABLE_META
 #endif // DEBUG
 
@@ -3709,3 +3721,4 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     // If eval_parsed fails, it should throw an exception, not return NULL
     return result;
 }
+

@@ -45,6 +45,8 @@ ID map_get(CljMap *map, ID key, ID not_found);
 
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
 CljMap* map_assoc(CljMap* map, ID key, ID value);
+/** Merge two maps - b's keys take precedence over a's keys. Returns new map. */
+CljMap* map_merge(CljMap* a, CljMap* b);
 /** Return a vector of keys (retained). */
 ID map_keys(CljMap *map);
 /** Return a vector of values (retained). */
