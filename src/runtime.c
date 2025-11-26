@@ -46,8 +46,11 @@ void runtime_init(TinyClJRuntime *runtime) {
     }
     
     // Initialize/reset CljObject* fields
-    ASSIGN(runtime->meta_registry, NULL);
-    ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
+    // NOTE: meta_registry is managed by meta_registry_init/meta_registry_cleanup
+    // and should not be cleared here to avoid losing metadata across runtime_init()
+    if (!runtime->resolve_cache) {
+        ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
+    }
     
     // Initialize event loop queues as transient vectors (only if not already set)
     if (!runtime->task_queue) {

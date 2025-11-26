@@ -3126,6 +3126,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         init_special_symbols();
         CljMap *existing_meta = (CljMap*)meta_get((CljObject*)native_func_obj);
         CljMap *meta_map = existing_meta ? existing_meta : make_map(4);
+        bool meta_changed = false;
         
         if (meta_map) {
             // Add :name (function name as string)
@@ -3140,6 +3141,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                         if (updated != meta_map) {
                             if (!existing_meta) RELEASE(meta_map);
                             meta_map = updated;
+                            meta_changed = true;
                         }
                         RELEASE(name_str);
                     }
@@ -3155,14 +3157,26 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                     if (updated != meta_map) {
                         if (!existing_meta) RELEASE(meta_map);
                         meta_map = updated;
+                        meta_changed = true;
                     }
                 }
             }
             
-            // Set metadata on function object (only if we created a new map or modified existing)
-            if (meta_map != existing_meta) {
+            // Set metadata on function object (always if we created a new map, or if we modified existing)
+            // CRITICAL: Always set metadata if we created a new map (existing_meta was NULL)
+            // This ensures native functions always have metadata with :name and :ns
+            if (!existing_meta) {
+                // We created a new map - always set it, even if it's empty or only partially filled
+                // CRITICAL: meta_set retains the meta_map, so we need to release our reference
                 meta_set((CljObject*)native_func_obj, (CljObject*)meta_map);
-                if (!existing_meta) RELEASE(meta_map);
+                RELEASE(meta_map);
+                
+                // Verify that metadata was set correctly
+                ID verify_meta = meta_get((CljObject*)native_func_obj);
+                CLJ_ASSERT(verify_meta == (ID)meta_map && "meta_set: Metadata should be retrievable immediately after setting");
+            } else if (meta_changed) {
+                // We modified an existing map - set the updated version
+                meta_set((CljObject*)native_func_obj, (CljObject*)meta_map);
             }
         }
 #endif // ENABLE_META

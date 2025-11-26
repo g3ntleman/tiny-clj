@@ -302,6 +302,33 @@ TEST(test_meta_qualified_symbol) {
     CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
     (void)req_result; // require returns nil
     
+    // First, check if trim function exists
+    CljNamespace *string_ns = ns_find("clojure.string");
+    TEST_ASSERT_NOT_NULL_MESSAGE(string_ns, "clojure.string namespace should exist");
+    
+    CljSymbol *trim_sym = intern_symbol_global("trim");
+    TEST_ASSERT_NOT_NULL(trim_sym);
+    
+    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID trim_func = map_get(string_ns->mappings, trim_sym, (ID)&not_found_sentinel);
+    TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim function should exist in clojure.string namespace");
+    
+    // Check if trim function has metadata directly
+    // Note: trim might have been loaded before the changes, so it might not have metadata
+    // In that case, we'll test with a newly defined function
+    ID trim_meta = meta_get((CljObject*)trim_func);
+    if (!trim_meta) {
+        // trim was loaded before changes - redefine it to get metadata
+        evalstate_set_ns(g_test_eval_state, "clojure.string");
+        CljObject *redef_result = eval_string("(defn trim [s] :native)", g_test_eval_state);
+        (void)redef_result;
+        
+        // Check again
+        trim_func = map_get(string_ns->mappings, trim_sym, (ID)&not_found_sentinel);
+        trim_meta = meta_get((CljObject*)trim_func);
+        TEST_ASSERT_NOT_NULL_MESSAGE(trim_meta, "trim function should have metadata after redefinition");
+    }
+    
     // Test: (meta 'clojure.string/trim) should return metadata map
     CljObject *meta_result = eval_string("(meta 'clojure.string/trim)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, 

@@ -19,11 +19,13 @@
 #include "namespace.h"
 #include "value.h"
 #include "common.h"  // For CLJ_ASSERT
+#include "function.h" // For CljCFunc
 // clj_equal is available via map.h -> equality.h
 
 void meta_registry_init() {
-    {
-        g_runtime.meta_registry = make_map(32); // Initial capacity for metadata entries
+    // Only initialize once – keep existing registry to preserve all metadata entries
+    if (!g_runtime.meta_registry) {
+        g_runtime.meta_registry = (CljObject*)make_map(32); // Initial capacity for metadata entries
     }
 }
 
@@ -42,15 +44,16 @@ void meta_set(CljObject *v, CljObject *meta) {
     
     // Use the pointer as key (simple implementation)
     // A real implementation would use a hash of the pointer
-    CljMap *new_registry = map_assoc(g_runtime.meta_registry, (ID)v, (ID)meta);
+    CljMap *registry = (CljMap*)g_runtime.meta_registry;
+    CljMap *new_registry = map_assoc(registry, (ID)v, (ID)meta);
     
     // If map_assoc returned a new map (Copy-on-Write), update registry
     // When RC=1, map_assoc mutates in-place and returns the same map
     // When RC>1 or capacity full, map_assoc creates a new map
-    if (new_registry != g_runtime.meta_registry) {
+    if (new_registry != registry) {
         // New map was created (Copy-on-Write), update registry
         // Use ASSIGN to properly handle reference counting
-        ASSIGN(g_runtime.meta_registry, new_registry);
+        ASSIGN(g_runtime.meta_registry, (CljObject*)new_registry);
     }
     
     // Assertion: Verify that the metadata can be retrieved after setting
@@ -66,13 +69,18 @@ void meta_set(CljObject *v, CljObject *meta) {
 ID meta_get(CljObject *v) {
     if (!v || !g_runtime.meta_registry) return NULL;
     
-    // First try pointer comparison (fast path)
-    ID result = (ID)map_get(g_runtime.meta_registry, (CljValue)v, NULL);
-    if (result) return result;
+    CljMap *registry = (CljMap*)g_runtime.meta_registry;
     
-    // If not found by pointer, try structural equality (for cases where objects are copied)
-    // This is needed when metadata is set on a parsed object but a new object is created during evaluation
-    CljMap *registry = g_runtime.meta_registry;
+    // First try pointer comparison (fast path)
+    // CRITICAL: Use sentinel to distinguish "key not found" from "value is NULL"
+    // In Clojure, nil is a valid metadata value, so we need to distinguish these cases
+    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+    ID result = (ID)map_get((CljValue)registry, (CljValue)v, (ID)&not_found_sentinel);
+    if (result != (ID)&not_found_sentinel) {
+        // Key found (value can be NULL, which is valid - means metadata is explicitly nil)
+        return result;  // Can be NULL if metadata was explicitly set to nil
+    }
+    
     if (!registry) return NULL;
     
     // For lists, we need to handle the case where symbols might have different namespaces
