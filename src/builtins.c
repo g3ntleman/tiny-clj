@@ -3909,7 +3909,7 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
             if (SYM_KW_NAME) {
                 CljString *name_str = make_string(symbol_name);
                 if (name_str) {
-                    CljMap *updated = map_assoc(meta_map, (CljObject*)SYM_KW_NAME, (CljObject*)name_str);
+                    CljMap *updated = map_assoc(meta_map, SYM_KW_NAME, name_str);
                     if (updated != meta_map) {
                         RELEASE(meta_map);
                         meta_map = updated;
@@ -3920,7 +3920,7 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
 
             // Add :ns (namespace name as symbol)
             if (SYM_KW_NS && target_ns && target_ns->name) {
-                CljMap *updated = map_assoc(meta_map, (CljObject*)SYM_KW_NS, (CljObject*)target_ns->name);
+                CljMap *updated = map_assoc(meta_map, SYM_KW_NS, target_ns->name);
                 if (updated != meta_map) {
                     RELEASE(meta_map);
                     meta_map = updated;
@@ -3928,7 +3928,7 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
             }
 
             // Set metadata on function object
-            meta_set((CljObject*)func_obj, (CljObject*)meta_map);
+            meta_set(func_obj, meta_map);
             RELEASE(meta_map);
         }
 #endif // ENABLE_META

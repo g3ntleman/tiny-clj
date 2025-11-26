@@ -3095,24 +3095,24 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         if (SYM_KW_NAME) {
             CljString *name_str = make_string(name_symbol->cname);
             if (name_str) {
-                standard_meta = map_assoc(standard_meta, (CljObject*)SYM_KW_NAME, (CljObject*)name_str);
+                standard_meta = map_assoc(standard_meta, SYM_KW_NAME, name_str);
                 RELEASE(name_str);
             }
         }
         
         if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
-            standard_meta = map_assoc(standard_meta, (CljObject*)SYM_KW_NS, (CljObject*)st->current_ns->name);
+            standard_meta = map_assoc(standard_meta, SYM_KW_NS, st->current_ns->name);
         }
         
         // Get user metadata (from form or symbol)
-        CljObject *user_meta = form_meta ? (CljObject*)form_meta : meta_get((CljObject*)name_sym);
+        CljObject *user_meta = form_meta ? form_meta : meta_get(name_sym);
         
         // Merge: user metadata takes precedence over standard metadata
         CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
                             ? map_merge(standard_meta, (CljMap*)user_meta)
                             : standard_meta;
         
-        meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
+        meta_set(native_func_obj, merged_meta);
 #endif // ENABLE_META
 #endif // DEBUG
 
