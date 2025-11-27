@@ -1056,23 +1056,9 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
         if (rest && rest->first && TAG(rest->first) == CLJ_SYMBOL) {
           // This is a defn form - set metadata on the function name symbol
           CljSymbol *name_sym = as_symbol(rest->first);
-          // Debug: Print symbol information using to_string
-          const char *symbol_str = to_cstring(rest->first);
-          if (symbol_str) {
-            fprintf(stderr, "[DEBUG] apply_metadata_to_object: Setting metadata on symbol: %s (ptr: %p)\n",
-                    symbol_str, (void*)name_sym);
-            free((void*)symbol_str);
-          }
           // RETAIN meta before setting (meta_set will handle it, but we need to ensure it's retained)
           RETAIN((CljObject*)meta);
           meta_set((CljObject*)name_sym, (CljObject*)meta);
-          // Verify metadata was set
-          ID retrieved = meta_get((CljObject*)name_sym);
-          if (retrieved) {
-            fprintf(stderr, "[DEBUG] apply_metadata_to_object: Metadata successfully set on symbol\n");
-          } else {
-            fprintf(stderr, "[DEBUG] apply_metadata_to_object: WARNING - Metadata not found after setting!\n");
-          }
           // Also set on the list for backward compatibility (but symbol takes precedence)
           meta_set(obj, meta);
           // Don't release meta here - it will be released at the end of the function

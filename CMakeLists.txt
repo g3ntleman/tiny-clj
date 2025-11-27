@@ -429,6 +429,11 @@ else()
     endif()
 endif()
 
+# Normalize test file paths in Unity-Ausgabe:
+# Ersetze das Projekt-Wurzelverzeichnis in __FILE__ durch einen relativen Pfad,
+# damit Test-Dateinamen ohne absolute Prefixe erscheinen.
+target_compile_options(unity-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=")
+
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c
 
 
