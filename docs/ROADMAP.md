@@ -92,15 +92,28 @@ Next Priority
 - Clojure Compatibility: ✅ COMPLETED
   - next und rest sind Clojure-kompatibel
   - Native vector für Clojure-kompatible (vector) Builtin
-- Test Framework Enhancements: ✅ COMPLETED (Partially)
+- Test Framework Enhancements: ✅ COMPLETED
   - JUnit-Style Test-Output mit TRY/CATCH Exception-Handling
   - Test-Counting bei unhandled Exceptions gefixt
   - High-Level API statt Low-Level eval_list()
-  - 495 Tests, 0 Failures, 0 Ignored
-  - Remaining: Migrate remaining MinUnit tests to Unity (namespace, function, ui tests)
-  - Remaining: Implement individual test execution: `./unity-tests memory allocation`
-  - Remaining: Add CTest integration for CI/CD pipeline
-  - Remaining: Performance benchmarks for test execution time
+  - 611 Tests, 0 Failures, 11 Ignored
+  - All MinUnit tests migrated to Unity framework
+  - Individual test execution support implemented
+  - Comprehensive test coverage for all core features
+- Metadata Support: ✅ COMPLETED
+  - Full metadata support in Desktop-REPL (DEBUG builds)
+  - Metadata maps with :name, :ns, :doc, etc.
+  - meta and with-meta functions
+  - Metadata merging for native functions
+  - Release builds exclude metadata code for size optimization
+  - Clojure-compatible metadata semantics
+- clojure.string Library: ✅ COMPLETED (Phase 1)
+  - Basic string manipulation functions (21 functions)
+  - Native implementations: trim, upper-case, lower-case, last-index-of, reverse
+  - Pure Clojure implementations: blank?, capitalize, ends-with?, escape, etc.
+  - Full test coverage with namespace introspection (ns-map, find-ns)
+  - Metadata support for all functions
+  - Works without TRE (regex support planned for Phase 2)
 
 Planned
 -------
