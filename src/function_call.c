@@ -66,6 +66,7 @@ void set_suppress_time_output(bool suppress) {
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljMap *env, EvalState *st);
+static ID eval_arg_from_expr(ID expr, CljMap *env, EvalState *st);
 
 
 
@@ -1342,55 +1343,34 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 
 // Helper function to call a function with arguments
 static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *st) {
-    // Count arguments
     int total_count = list_count(list);
-    int argc = total_count - 1; // -1 for the function symbol itself
+    int argc = total_count - 1;
     if (argc < 0) argc = 0;
 
-    // Stack allocate arguments array
-    CljObject *args_stack[16];
-    ID *args = (ID*)alloc_obj_array(argc, args_stack);
+    CLJ_ASSERT(argc <= 16);
+    ID args[16];
 
-    // Evaluate arguments
-    // CRITICAL: Use eval_arg instead of eval_body to avoid infinite recursion
-    // eval_body calls eval_list for lists, which calls call_function_with_args again,
-    // creating an infinite loop. eval_arg has depth protection (g_eval_arg_depth)
-    // which prevents stack overflow when evaluating nested function calls like (update {:a 1} :a inc)
+    // Evaluate arguments with O(n) single-pass traversal
     if (!env || TAG(env) != CLJ_MAP) {
-        // Environment is NULL or not a map - this shouldn't happen
-        // But we should handle it gracefully
         for (int i = 0; i < argc; i++) {
             args[i] = NULL;
         }
     } else {
+        CljList *current = list;
         for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg(list, i + 1, env, st);
-            // CRITICAL: eval_arg returns AUTORELEASE objects, but eval_function_call
-            // needs to use them, so we must retain them before passing to eval_function_call
-            // RETAIN safely handles NULL and immediate values
-            args[i] = RETAIN(args[i]);
+            current = as_list(current->rest);
+            if (!current) {
+                args[i] = NULL;
+                continue;
+            }
+            args[i] = eval_arg_from_expr(current->first, env, st);
         }
     }
 
-    // Call the function
     ID result = eval_function_call(fn, args, argc, env, st);
-
-    // Release arguments before freeing the array
-    // eval_function_call copies arguments with ASSIGN, so we need to release our references
-    for (int i = 0; i < argc; i++) {
-        RELEASE((CljObject*)args[i]);
-    }
-
-    // Cleanup heap-allocated args if any
-    free_obj_array((ID*)args, args_stack);
-
-    // Convert SYM_NIL to NULL (nil evaluates to NULL)
     if (result == SYM_NIL) {
         return NULL;
     }
-
-    // AUTORELEASE to ensure result is managed by caller's pool
-    // AUTORELEASE handles immediates and NULL safely - no check needed
     return AUTORELEASE(result);
 }
 
@@ -3249,88 +3229,61 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     return name_sym;
 }
 
-// Helper function for evaluating arguments
-ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
-    CLJ_ASSERT(list != NULL);
-    if (!list || TAG(list) != CLJ_LIST) return NULL;
+/**
+ * @brief Evaluate a single argument expression
+ * @param expr Expression to evaluate
+ * @param env Environment for symbol resolution
+ * @param st Evaluation state
+ * @return Evaluated result (AUTORELEASE)
+ */
+static ID eval_arg_from_expr(ID expr, CljMap *env, EvalState *st) {
+    if (expr == SYM_NIL) return NULL;
+    if (!expr) return NULL;
 
-    // Get element from list
-    ID element = list_nth(as_list(list), index);
-    
-    // Special case: nil evaluates to NULL (not SYM_NIL)
-    if (element == SYM_NIL) return NULL;
-    
-    if (!element) return NULL;
-
-    // Handle NULL environment gracefully
     if (env == NULL) {
-        // Return the element as-is if no environment is available
-        // RETAIN and AUTORELEASE handle immediates and NULL safely - no check needed
-        return AUTORELEASE(RETAIN(element));
+        return AUTORELEASE(RETAIN(expr));
     }
 
-    // For simple types (numbers, strings, booleans), return as-is
-    if (IS_IMMEDIATE(element) || (element && TAG(element) == CLJ_STRING)) {
-        return element; // Don't retain - caller will handle retention
+    if (IS_IMMEDIATE(expr)) {
+        return expr;
     }
 
-    // For symbols, resolve them from environment
-    if (element && TAG(element) == CLJ_SYMBOL) {
-        // Special case: nil should evaluate to NULL (not SYM_NIL)
-        if (element == SYM_NIL) {
-            // nil is represented as NULL - return NULL directly
+    unsigned char expr_tag = TAG(expr);
+
+    if (expr_tag == CLJ_STRING) {
+        return expr;
+    }
+
+    if (expr_tag == CLJ_SYMBOL) {
+        if (expr == SYM_NIL) {
             return NULL;
         }
-        // Keywords evaluate to themselves (no resolution needed)
-        if (IS_KEYWORD(element)) {
-            return element;
+        if (IS_KEYWORD(expr)) {
+            return expr;
         }
         if (env && TAG(env) == CLJ_MAP) {
-            // CRITICAL: When let is used inside a function, env should be let_env which contains function parameters
-            // This allows eval_arg to resolve function parameters like 'coll' in (rest coll)
-            // Use sentinel to distinguish "key not found" from "value is nil"
-            ID resolved_id = map_get(env, element, &not_found);
+            ID resolved_id = map_get(env, expr, &not_found);
             if (resolved_id != &not_found) {
-                // Key exists in map - get the value (which may be NULL/nil)
-                // CRITICAL: map_get returns a value that is already retained by the map.
-                // eval_arg should return AUTORELEASE objects, so we need to autorelease it.
-                // If resolved is NULL (nil), return NULL directly without RETAIN/AUTORELEASE
                 CljObject *resolved = (CljObject*)resolved_id;
                 if (!resolved) {
                     return NULL;
                 }
-                // RETAIN and AUTORELEASE handle immediates safely - no check needed
                 return AUTORELEASE(RETAIN(resolved));
             }
-            // Key doesn't exist in map - try namespace resolution below
         }
 
-        // If not found in local environment, try namespace
-        // CRITICAL: ns_resolve can handle st == NULL (uses default "user" namespace)
-        CljObject *resolved = ns_resolve(st, as_symbol(element));
+        CljObject *resolved = ns_resolve(st, as_symbol(expr));
         if (resolved) {
-            // CRITICAL: ns_resolve returns AUTORELEASE objects.
-            // eval_arg should return AUTORELEASE objects, so we just return it as-is.
             return resolved;
         }
 
-        // Symbol not found - throw exception
-        // This happens when:
-        // 1. Symbol not found in env AND
-        // 2. ns_resolve(st, ...) returned NULL (not found in any namespace)
-        CljSymbol *sym_obj = as_symbol(element);
+        CljSymbol *sym_obj = as_symbol(expr);
         const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
         throw_unresolved_symbol_exception(sym_name);
         return NULL;
     }
 
-    // For lists, evaluate them directly
-    // CRITICAL: eval_list manages recursion depth itself when calling functions,
-    // so we don't need to increase g_eval_arg_depth here. This prevents double counting.
-    if (element && TAG(element) == CLJ_LIST) {
-        // Evaluate nested list directly
-        // CRITICAL: Use provided st if available, otherwise create a new one
-        // This ensures that eval_list has access to the correct namespace
+    if (expr_tag == CLJ_LIST) {
         EvalState *eval_st = st;
         bool created_st = false;
         if (!eval_st) {
@@ -3338,12 +3291,9 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
             created_st = true;
         }
         CljObject *result = NULL;
-        // CRITICAL: Always cleanup, even if exception is thrown
-        // Use TRY/CATCH to ensure cleanup
         TRY {
-            result = eval_list(as_list(element), env, eval_st, NULL);
+            result = eval_list(as_list(expr), env, eval_st, NULL);
         } CATCH(ex) {
-            // Exception occurred - cleanup and re-throw
             if (created_st) {
                 evalstate_free(eval_st);
             }
@@ -3351,30 +3301,20 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
             return NULL;
         } END_TRY
 
-        // CRITICAL: eval_list returns AUTORELEASE objects.
-        // eval_arg should return AUTORELEASE objects, so we just return it as-is.
-
-        // Normal path - cleanup
         if (created_st) {
             evalstate_free(eval_st);
         }
-
         return result;
     }
 
-    // For maps, evaluate keys and values (similar to eval_body)
-    // This is necessary for cases like (get {nil "value"} nil) where nil should be evaluated to NULL
-    if (element && TAG(element) == CLJ_MAP) {
-        CljMap *map = (CljMap*)element;
+    if (expr_tag == CLJ_MAP) {
+        CljMap *map = (CljMap*)expr;
         CljMap *result = map_empty();
 
         MAP_FOR_EACH(map, key, value) {
-            // Cache TAG values for performance (used multiple times)
             unsigned char key_tag = key ? TAG(key) : 0;
             unsigned char value_tag = value ? TAG(value) : 0;
 
-            // Evaluate key and value (nil should evaluate to NULL)
-            // Check for SYM_NIL before calling eval_body to avoid symbol resolution
             ID eval_key = (key && key_tag == CLJ_SYMBOL && (CljObject*)key == (CljObject*)SYM_NIL)
                 ? NULL
                 : (key ? eval_body(key, env, st, NULL) : NULL);
@@ -3383,19 +3323,23 @@ ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
                 ? NULL
                 : (value ? eval_body(value, env, st, NULL) : NULL);
 
-            // Add evaluated key-value pair to result map
-            // eval_body returns AUTORELEASE objects; map_assoc will retain them
             ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
 
         return AUTORELEASE(result);
     }
 
-    // For vectors, etc., return as-is
-    return element; // Don't retain - caller will handle retention
+    return expr;
 }
 
-// is_symbol is already defined in namespace.c
+// Helper function for evaluating arguments
+ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
+    CLJ_ASSERT(list != NULL);
+    if (!list || TAG(list) != CLJ_LIST) return NULL;
+
+    ID element = list_nth(as_list(list), index);
+    return eval_arg_from_expr(element, env, st);
+}
 
 ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
     // Assertion: Environment must not be NULL when expected
