@@ -143,6 +143,7 @@ static void print_new_usage(const char *program_name) {
     printf("\nExamples:\n");
     printf("  %s                      Run all tests\n", program_name);
     printf("  %s --test test_atom/*   Run all atom tests\n", program_name);
+    printf("  %s --test test_let/*    Run all let binding tests\n", program_name);
     printf("  %s --memory-summary     Run all tests with memory summary\n", program_name);
 }
 
@@ -286,7 +287,7 @@ int main(int argc, char **argv) {
             set_memory_leak_reporting_enabled(true);
 #endif
             run_tests_by_registry();
-        } else if (strcmp(argv[1], "--test") == 0) {
+        } else if (strcmp(argv[1], "--test") == 0 || strcmp(argv[1], "-test") == 0) {
             if (argc < 3) {
                 return 1;
             }
