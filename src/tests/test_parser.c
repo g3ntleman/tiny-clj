@@ -617,8 +617,7 @@ TEST(test_meta_set_and_get) {
 TEST(test_meta_automatic_sourcecode_references) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Set file and namespace for source code references
-    eval_state->file = "test.clj";
+    // Set namespace for source code references
     eval_state->current_ns = ns_get_or_create("test", "test.clj");
 
     // Parse metadata - should automatically add :line, :column, :file, :ns
@@ -650,11 +649,8 @@ TEST(test_meta_automatic_sourcecode_references) {
         TEST_ASSERT_TRUE(as_fixnum(column_value) > 0);
     }
 
-    if (SYM_KW_FILE && eval_state->file) {
-        CljValue file_value = map_get((CljMap*)meta, (CljValue)SYM_KW_FILE, NULL);
-        TEST_ASSERT_NOT_NULL(file_value);
-        TEST_ASSERT_TRUE((CljObject*)file_value && TAG((CljObject*)file_value) == CLJ_STRING);
-    }
+    // Note: :file metadata is no longer available from EvalState
+    // File information would need to come from Reader or other source if needed
 
     if (SYM_KW_NS && eval_state->current_ns && eval_state->current_ns->name) {
         CljValue ns_value = map_get((CljMap*)meta, (CljValue)SYM_KW_NS, NULL);

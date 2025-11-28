@@ -19,8 +19,8 @@ typedef struct CljList {
 } CljList;
 
 // Safe accessor macros. They do not do memory-management. They return the object directly.
-#define LIST_FIRST(list) ((list) ? (list)->first : NULL)
-#define LIST_REST(list) ((list) ? (list)->rest : NULL)
+#define LIST_FIRST(list) ((list) ? (ID)(list)->first : NULL)
+#define LIST_REST(list) ((list) ? (ID)(list)->rest : NULL)
 
 // Check if a list is empty (both first and rest are NULL)
 static inline bool list_empty(CljList *list) {

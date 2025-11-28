@@ -104,7 +104,12 @@ bool clj_equal(ID a, ID b) {
             CljSymbol *sym_a = as_symbol(a);
             CljSymbol *sym_b = as_symbol(b);
             if (!sym_a || !sym_b) return false;
-            if (!sym_a->cname || !sym_b->cname) return false;
+            
+            // Safety check: ensure cname is valid before strcmp
+            if (!sym_a->cname || !sym_b->cname) {
+                // If both are NULL, they are equal; otherwise not equal
+                return (sym_a->cname == NULL && sym_b->cname == NULL);
+            }
 
             // Compare symbol names (must match)
             if (strcmp(sym_a->cname, sym_b->cname) != 0) return false;
@@ -121,9 +126,12 @@ bool clj_equal(ID a, ID b) {
             if (!sym_a->ns_name || !sym_b->ns_name) return false;
 
             // Both have namespaces - compare namespace name strings (must match)
-            // CRITICAL: Both name and namespace name must match for symbols to be equal
-            if (!sym_a->ns_name->cname || !sym_b->ns_name->cname) return false;
-            return strcmp(sym_a->ns_name->cname, sym_b->ns_name->cname) == 0;
+            // Safety check: ensure ns_name is a valid symbol before accessing cname
+            if (TAG(sym_a->ns_name) != CLJ_SYMBOL || TAG(sym_b->ns_name) != CLJ_SYMBOL) return false;
+            CljSymbol *ns_a = as_symbol(sym_a->ns_name);
+            CljSymbol *ns_b = as_symbol(sym_b->ns_name);
+            if (!ns_a || !ns_b || !ns_a->cname || !ns_b->cname) return false;
+            return strcmp(ns_a->cname, ns_b->cname) == 0;
         }
 
         case CLJ_LIST: {

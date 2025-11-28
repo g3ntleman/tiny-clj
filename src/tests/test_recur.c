@@ -403,7 +403,7 @@ TEST(test_eval_body_with_params_fixnum_literal) {
 
     // Test eval_body_with_params with Fixnum literal
     // No parameters, so param_count = 0
-    EvalEnv env_ctx = {.closure_env = NULL, .st = g_test_eval_state};
+    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
     EvalContext ctx = {.params = NULL, .env = &env_ctx, .recur = NULL};
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
@@ -436,7 +436,7 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
 
     // Test: When body is the parameter symbol, it should return the Fixnum value
     ParamContext param_ctx = {.params = params, .values = values, .param_count = param_count};
-    EvalEnv env_ctx = {.closure_env = NULL, .st = g_test_eval_state};
+    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
     EvalContext ctx = {.params = &param_ctx, .env = &env_ctx, .recur = NULL};
     ID result = eval_body_with_params(param_sym_obj, &ctx);
 
@@ -470,7 +470,7 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
 
     // Test: When body is a Fixnum literal (1), it should return the literal directly
     ParamContext param_ctx = {.params = params, .values = values, .param_count = param_count};
-    EvalEnv env_ctx = {.closure_env = NULL, .st = g_test_eval_state};
+    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
     EvalContext ctx = {.params = &param_ctx, .env = &env_ctx, .recur = NULL};
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
@@ -495,7 +495,7 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
 
     // Test eval_body_with_params with Fixnum literal
-    EvalEnv env_ctx = {.closure_env = NULL, .st = g_test_eval_state};
+    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
     EvalContext ctx = {.params = NULL, .env = &env_ctx, .recur = NULL};
     ID result = eval_body_with_params(fixnum_one, &ctx);
 

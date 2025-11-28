@@ -101,7 +101,7 @@ static ID parse_map(Reader *reader, EvalState *st);
 static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
-static ID parse_symbol(Reader *reader);
+static ID parse_symbol(Reader *reader, EvalState *st);
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 
@@ -269,7 +269,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
 
   // Handle symbols starting with :, alphanumeric, ., %, or Unicode
   if (c == ':' || is_alphanumeric(c) || c == '.' || c == '%' || (unsigned char)c >= 0x80) {
-    return parse_symbol(reader);
+    return parse_symbol(reader, st);
   }
 
   // Handle single-character operators
@@ -277,7 +277,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
     char next = reader_peek_ahead(reader, 1);
     if (next && (is_alphanumeric(next) || next == '*' || next == '+' || next == '/' || next == '=' || next == '<' || next == '>' || next == '-' || next == '_' || next == '?' || next == '!' || next == '%' || (unsigned char)next >= 0x80)) {
       // Multi-character symbol like *ns* or *out*
-      return parse_symbol(reader);
+      return parse_symbol(reader, st);
     }
     // Single character operator
     reader_consume(reader);
@@ -689,16 +689,19 @@ static ID parse_character(Reader *reader, EvalState *st) {
  * This ensures pointer equality for the same symbol names, which is critical for
  * map lookups and namespace resolution.
  */
-static ID parse_symbol(Reader *reader) {
+static ID parse_symbol(Reader *reader, EvalState *st) {
   char buffer[MAX_STACK_STRING_SIZE];
   int pos = 0;
   int slash_pos = -1;
+  bool auto_qualify = false;  // Track if :: was detected
 
   // Handle keyword prefix
   if (reader_peek_char(reader) == ':') {
     buffer[pos++] = reader_next(reader);
-    if (reader_peek_char(reader) == ':')
+    if (reader_peek_char(reader) == ':') {
       buffer[pos++] = reader_next(reader);
+      auto_qualify = true;  // :: detected - will auto-qualify with current namespace
+    }
   }
 
   while (!reader_eof(reader) && pos < MAX_STACK_STRING_SIZE - 1) {
@@ -758,6 +761,56 @@ static ID parse_symbol(Reader *reader) {
   if (!utf8valid(buffer))
     throw_parser_exception("Invalid UTF-8 in symbol", reader);
 
+  // Handle auto-qualified keywords: ::keyword or ::alias/keyword
+  if (auto_qualify) {
+    if (slash_pos > 0 && slash_pos < pos - 1) {
+      // ::alias/keyword - auto-qualify with alias namespace
+      buffer[slash_pos] = '\0';
+      const char *alias_str = buffer + 2;  // Skip ::
+      const char *keyword_name = buffer + slash_pos + 1;
+      
+      if (st && st->current_ns && st->current_ns->aliases && alias_str[0] != '\0' && keyword_name[0] != '\0') {
+        CljSymbol *alias_sym = intern_symbol_global(alias_str);
+        if (alias_sym) {
+          CljObject *resolved_ns_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
+          if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
+            CljSymbol *ns_name_sym = as_symbol(resolved_ns_obj);
+            if (ns_name_sym && ns_name_sym->cname) {
+              // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
+              char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+              snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+              CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
+              if (kw) {
+                return AUTORELEASE(kw);
+              }
+            }
+          }
+        }
+      }
+      // If alias resolution fails, fall through to treat as regular qualified keyword
+    } else {
+      // ::keyword - auto-qualify with current namespace
+      if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
+        const char *current_ns_name = st->current_ns->name->cname;
+        const char *keyword_name = buffer + 2;  // Skip ::
+        
+        if (keyword_name[0] != '\0') {
+          CljSymbol *ns_name_sym = intern_symbol_global(current_ns_name);
+          if (ns_name_sym) {
+            // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
+            char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+            CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
+            if (kw) {
+              return AUTORELEASE(kw);
+            }
+          }
+        }
+      }
+      // If auto-qualification fails, fall through to return unqualified keyword
+    }
+  }
+
   // Check for namespace-qualified symbol: namespace/symbol or alias/symbol
   if (slash_pos > 0 && slash_pos < pos - 1) {
     // Split buffer at '/': namespace/alias and symbol
@@ -768,11 +821,33 @@ static ID parse_symbol(Reader *reader) {
     if (ns_str[0] != '\0' && symbol_str[0] != '\0') {
       // CRITICAL: Create symbol with namespace set (not full string name)
       // This allows eval_symbol to quickly check symbol->ns instead of parsing in hot-path
-      CljSymbol *sym = intern_symbol(ns_str, symbol_str);
-      if (sym) {
-        return AUTORELEASE(sym);
+      
+      // For keywords (ns_str starts with ':'), extract namespace name without ':'
+      // and keep ':' prefix in symbol_str for IS_KEYWORD to work
+      bool is_keyword_symbol = (ns_str[0] == ':');
+      
+      if (is_keyword_symbol) {
+        // Skip ':' from namespace
+        const char *actual_ns_str = ns_str + 1;
+        // Add ':' prefix to symbol name for IS_KEYWORD to work
+        char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+        snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", symbol_str);
+        keyword_with_colon[sizeof(keyword_with_colon) - 1] = '\0';
+        CljSymbol *ns_name_sym = actual_ns_str ? intern_symbol_global(actual_ns_str) : NULL;
+        CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
+        if (sym) {
+          return AUTORELEASE(sym);
+        }
+        // If intern fails, fall through to return unqualified symbol
+      } else {
+        // Regular qualified symbol (not a keyword)
+        CljSymbol *ns_name_sym = ns_str ? intern_symbol_global(ns_str) : NULL;
+        CljSymbol *sym = intern_symbol(ns_name_sym, symbol_str);
+        if (sym) {
+          return AUTORELEASE(sym);
+        }
+        // If intern fails, fall through to return unqualified symbol
       }
-      // If intern fails, fall through to return unqualified symbol
     }
   }
 

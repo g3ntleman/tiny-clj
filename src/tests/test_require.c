@@ -355,7 +355,7 @@ TEST(test_require_trim_metadata) {
     (void)eval_string("(require 'clojure.string)", g_test_eval_state);
     
     // Resolve trim function
-    CljSymbol *trim_sym = intern_symbol("clojure.string", "trim");
+    CljSymbol *trim_sym = intern_symbol(SYM_CLOJURE_STRING, "trim");
     TEST_ASSERT_NOT_NULL_MESSAGE(trim_sym, "trim symbol should exist");
     
     ID trim_func = ns_resolve(g_test_eval_state, trim_sym);

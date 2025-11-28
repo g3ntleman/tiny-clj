@@ -104,12 +104,13 @@ extern CljSymbol *SYM_KW_NATIVE;
 // Global symbols for namespace names (for fast comparison)
 extern CljSymbol *SYM_CLOJURE_CORE;
 extern CljSymbol *SYM_CLOJURE_STRING;
+extern CljSymbol *SYM_CLOJURE_LANG;
 
 // Additional symbols for hot path optimization
 extern CljSymbol *SYM_NS_STAR;
 
-CljSymbol* make_symbol(const char *name, const char *ns);
-CljSymbol* intern_symbol(const char *ns, const char *name);
+CljSymbol* make_symbol(const char *name, CljSymbol *ns_name);
+CljSymbol* intern_symbol(CljSymbol *ns_name, const char *name);
 CljSymbol* intern_symbol_global(const char *name);  // Without namespace
 void symbol_table_add(CljSymbol *symbol);
 void symbol_table_cleanup();

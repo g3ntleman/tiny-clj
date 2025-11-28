@@ -31,8 +31,8 @@ CljMap* make_result_channel(void) {
     }
     
     // Initialize with :value = nil and :closed = false
-    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
+    CljObject *kw_value = (CljObject*)intern_symbol_global(":value");
+    CljObject *kw_closed = (CljObject*)intern_symbol_global(":closed");
     
     map_conj(tmap, (ID)kw_value, NULL);  // :value = nil
     map_conj(tmap, (ID)kw_closed, (ID)clj_false);  // :closed = false

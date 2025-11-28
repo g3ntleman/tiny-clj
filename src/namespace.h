@@ -35,11 +35,6 @@ typedef struct {
     struct CljVector *pool;
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
-    
-    // Note: Exception handling moved to global exception stack (independent of EvalState)
-    const char *file;         // current file
-    int line;                 // current line
-    int col;                  // current column
 } EvalState;
 
 // Global namespace registry is now in g_runtime.ns_registry (CljMap*)

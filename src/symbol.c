@@ -88,6 +88,7 @@ CljSymbol *SYM_KW_NATIVE = NULL;
 // Global symbols for namespace names (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
 CljSymbol *SYM_CLOJURE_STRING = NULL;
+CljSymbol *SYM_CLOJURE_LANG = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
@@ -332,24 +333,25 @@ void init_special_symbols() {
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);
 
-    // Global symbol for clojure.core namespace name (for fast comparison)
+    // Global symbols for namespace names (for fast comparison)
     // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
     SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
-
+    SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
+    
     // Clean up macros to avoid namespace pollution
     #undef INIT_SYMBOL
     #undef INIT_SYMBOL_NS
 }
 
 // Helper function to find symbol in vector by comparing name and namespace
-static CljSymbol* find_symbol(CljVector *vec, const char *ns, const char *name) {
+static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *name) {
     if (!vec || !name) return NULL;
 
     // Create temporary symbol structure for comparison (not heap-allocated)
     CljSymbol temp_sym = {
         .base = { .type = CLJ_SYMBOL, .rc = 0 },  // rc=0: not heap-allocated
         .cname = name,
-        .ns_name = ns ? intern_symbol_global(ns) : NULL
+        .ns_name = ns_name  // Use ns_name directly (already a CljSymbol*)
     };
 
     int index = vector_index_of(vec, (ID)&temp_sym);
@@ -363,9 +365,9 @@ static CljSymbol* find_symbol(CljVector *vec, const char *ns, const char *name) 
 }
 
 // Find symbol in the table
-static CljSymbol* symbol_table_find(const char *ns, const char *name) {
+static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *name) {
     if (name && g_runtime.symbol_table) {
-        return find_symbol(g_runtime.symbol_table, ns, name);  // Happy path
+        return find_symbol(g_runtime.symbol_table, ns_name, name);  // Happy path
     }
     return NULL;
 }
@@ -375,14 +377,14 @@ void symbol_table_add(CljSymbol *symbol) {
     if (!symbol || !symbol->cname) return;
 
     // Extract namespace and name from symbol
-    const char *ns = symbol->ns_name ? symbol->ns_name->cname : NULL;
+    CljSymbol *ns_name = symbol->ns_name;  // Already a CljSymbol*
     const char *name = symbol->cname;
 
     if (!g_runtime.symbol_table) {
         g_runtime.symbol_table = make_vector(16, CLJ_VECTOR);
     }
 
-    CljSymbol *existing = find_symbol(g_runtime.symbol_table, ns, name);
+    CljSymbol *existing = find_symbol(g_runtime.symbol_table, ns_name, name);
     if (existing) {
         return;  // Already exists
     }
@@ -393,10 +395,10 @@ void symbol_table_add(CljSymbol *symbol) {
 /**
  * @brief Create a symbol value
  * @param name Symbol name
- * @param ns Namespace (can be NULL)
+ * @param ns_name Namespace name symbol (can be NULL)
  * @return CljSymbol symbol object
  */
-CljSymbol* make_symbol(const char *name, const char *ns) {
+CljSymbol* make_symbol(const char *name, CljSymbol *ns_name) {
     if (!name) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
@@ -434,32 +436,22 @@ CljSymbol* make_symbol(const char *name, const char *ns) {
     // Enforce invariant: symbols always have a name
     CLJ_ASSERT(sym->cname != NULL && "Symbol must have a name after creation");
 
-    // Get interned symbol for namespace name (Clojure-compatible: Symbol->ns is a Symbol, not Namespace object)
-    if (ns) {
-        sym->ns_name = intern_symbol_global(ns);
-        if (!sym->ns_name) {
-            free(sym);
-            throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                    "Failed to intern namespace name symbol '%s' for symbol '%s'", ns, name);
-            return NULL;
-        }
-    } else {
-        sym->ns_name = NULL;
-    }
+    // Use ns_name directly (already a CljSymbol*)
+    sym->ns_name = ns_name;
 
     return sym;
 }
 
 // Actual symbol interning
-CljSymbol* intern_symbol(const char *ns, const char *name) {
+CljSymbol* intern_symbol(CljSymbol *ns_name, const char *name) {
     if (!name) return NULL;
 
-    CljSymbol *existing = symbol_table_find(ns, name);
+    CljSymbol *existing = symbol_table_find(ns_name, name);
     if (existing) {
         return existing;
     }
 
-    CljSymbol *symbol = make_symbol(name, ns);
+    CljSymbol *symbol = make_symbol(name, ns_name);
     if (!symbol) return NULL;
 
     symbol_table_add(symbol);
@@ -483,7 +475,10 @@ struct CljNamespace* symbol_get_namespace(CljSymbol *sym) {
         return ns_find("clojure.core");
     }
     
-    if (!sym->ns_name->cname) return NULL;
+    // Safety check: ensure ns_name is a valid symbol before accessing cname
+    if (TAG(sym->ns_name) != CLJ_SYMBOL) return NULL;
+    CljSymbol *ns_sym = as_symbol(sym->ns_name);
+    if (!ns_sym || !ns_sym->cname) return NULL;
     // Use fast symbol-based lookup (avoids redundant intern_symbol call)
     return ns_find_by_symbol(sym->ns_name);
 }
@@ -498,7 +493,11 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
         return "clojure.core";
     }
     
-    return sym->ns_name->cname;
+    // Safety check: ensure ns_name is a valid symbol before accessing cname
+    if (TAG(sym->ns_name) != CLJ_SYMBOL) return NULL;
+    CljSymbol *ns_sym = as_symbol(sym->ns_name);
+    if (!ns_sym || !ns_sym->cname) return NULL;
+    return ns_sym->cname;
 }
 
 // Clean up symbol table (ONLY for test cleanup, not regular symbols)

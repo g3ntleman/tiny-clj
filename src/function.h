@@ -4,6 +4,7 @@
 #include "object.h"
 #include "map.h"
 #include "vector.h"
+#include "list.h"
 
 typedef struct {
     CljObject base;
@@ -16,11 +17,11 @@ typedef struct {
     CljObject base;
     CljVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;  // Function body (AST to evaluate)
-    CljMap *closure_env;  // Closure environment map (can be NULL)
+    CljList *env_stack;  // Environment stack (list of maps) - idiomatic Clojure-style
     const char *name;
 } CljFunction;
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljMap *closure_env, const char *name);
+CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *name);
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */

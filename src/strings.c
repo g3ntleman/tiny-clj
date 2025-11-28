@@ -167,15 +167,21 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             }
 
         case CLJ_SYMBOL: {
-                CljSymbol *sym = as_symbol(v);
+            CljSymbol *sym = as_symbol(v);
             if (!sym) return 3; // "nil"
-                // Only show namespace if explicitly set (not NULL = implicit clojure.core)
-                // This matches Clojure's behavior: core symbols print without namespace
-                if (sym->ns_name && sym->ns_name->cname) {
-                return strlen(sym->ns_name->cname) + 1 + strlen(sym->cname); // "ns/name"
+            if (!sym->cname) return 3; // "nil" if no name
+            
+            // Only show namespace if explicitly set (not NULL = implicit clojure.core)
+            // This matches Clojure's behavior: core symbols print without namespace
+            // CRITICAL: Use exact same logic as to_string_build_string to ensure consistency
+            if (sym->ns_name && TAG(sym->ns_name) == CLJ_SYMBOL) {
+                CljSymbol *ns_sym = as_symbol(sym->ns_name);
+                if (ns_sym && ns_sym->cname) {
+                    return strlen(ns_sym->cname) + 1 + strlen(sym->cname); // "ns/name"
                 }
-            return strlen(sym->cname);
             }
+            return strlen(sym->cname);
+        }
 
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT:
@@ -235,7 +241,16 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_FUNC: {
             CljCFunc *native_func = (CljCFunc*)v;
             if (native_func->name) {
-                return 19 + strlen(native_func->name); // "#<native function NAME>"
+                // Find namespace containing this function to get fully qualified name
+                CljNamespace *ns = ns_find_for_object((CljObject*)v);
+                const char *ns_name = (ns && ns->name && ns->name->cname) ? ns->name->cname : NULL;
+                
+                // Calculate length for fully qualified name if namespace is available
+                if (ns_name) {
+                    return 20 + strlen(ns_name) + strlen(native_func->name); // "#<native function NS/NAME>"
+                } else {
+                    return 19 + strlen(native_func->name); // "#<native function NAME>"
+                }
             }
             return 20; // "#<native function>"
         }
@@ -371,14 +386,23 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 *offset += 3;
                 return;
             }
+            if (!sym->cname) {
+                memcpy(buffer + *offset, "nil", 3);
+                *offset += 3;
+                return;
+            }
             // Only show namespace if explicitly set (not NULL = implicit clojure.core)
             // This matches Clojure's behavior: core symbols print without namespace
-            if (sym->ns_name && sym->ns_name->cname) {
-                size_t ns_len = strlen(sym->ns_name->cname);
-                memcpy(buffer + *offset, sym->ns_name->cname, ns_len);
-                *offset += ns_len;
-                buffer[*offset] = '/';
-                *offset += 1;
+            // CRITICAL: Use exact same logic as to_string_calc_length to ensure consistency
+            if (sym->ns_name && TAG(sym->ns_name) == CLJ_SYMBOL) {
+                CljSymbol *ns_sym = as_symbol(sym->ns_name);
+                if (ns_sym && ns_sym->cname) {
+                    size_t ns_len = strlen(ns_sym->cname);
+                    memcpy(buffer + *offset, ns_sym->cname, ns_len);
+                    *offset += ns_len;
+                    buffer[*offset] = '/';
+                    *offset += 1;
+                }
             }
             size_t name_len = strlen(sym->cname);
             memcpy(buffer + *offset, sym->cname, name_len);
@@ -481,8 +505,18 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_FUNC: {
                 CljCFunc *native_func = (CljCFunc*)v;
                 if (native_func->name) {
-                int written = snprintf(buffer + *offset, 256, "#<native function %s>", native_func->name);
-                *offset += written;
+                // Find namespace containing this function to get fully qualified name
+                CljNamespace *ns = ns_find_for_object((CljObject*)v);
+                const char *ns_name = (ns && ns->name && ns->name->cname) ? ns->name->cname : NULL;
+                
+                // Build fully qualified name if namespace is available
+                if (ns_name) {
+                    int written = snprintf(buffer + *offset, 256, "#<native function %s/%s>", ns_name, native_func->name);
+                    *offset += written;
+                } else {
+                    int written = snprintf(buffer + *offset, 256, "#<native function %s>", native_func->name);
+                    *offset += written;
+                }
             } else {
                 memcpy(buffer + *offset, "#<native function>", 19);
                 *offset += 19;

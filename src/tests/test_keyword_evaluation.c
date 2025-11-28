@@ -201,3 +201,101 @@ TEST(test_keyword_not_used_as_number) {
     
 }
 
+// Test: Auto-qualified keyword with current namespace (::keyword)
+TEST(test_auto_qualified_keyword_current_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: ::test should be auto-qualified with current namespace (user)
+    // Use parse directly to check the parsed symbol structure
+    CljObject *parsed = parse("::test", g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_TRUE(IS_KEYWORD(sym));
+    
+    // Verify it's qualified with current namespace
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    TEST_ASSERT_NOT_NULL(sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("user", sym->ns_name->cname);
+    TEST_ASSERT_NOT_NULL(sym->cname);
+    // For qualified keywords, cname includes ':' prefix for IS_KEYWORD to work
+    TEST_ASSERT_EQUAL_STRING(":test", sym->cname);
+}
+
+// Test: Auto-qualified keyword with alias (::alias/keyword)
+TEST(test_auto_qualified_keyword_with_alias) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // First, require a namespace with an alias
+    CljObject *req_result = eval_string("(require '[clojure.string :as str])", g_test_eval_state);
+    (void)req_result;
+    
+    // Test: ::str/trim should be auto-qualified with clojure.string namespace
+    // Use parse directly to check the parsed symbol structure
+    CljObject *parsed = parse("::str/trim", g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_TRUE(IS_KEYWORD(sym));
+    
+    // Verify it's qualified with clojure.string namespace (via alias)
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    TEST_ASSERT_NOT_NULL(sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("clojure.string", sym->ns_name->cname);
+    TEST_ASSERT_NOT_NULL(sym->cname);
+    // For qualified keywords, cname includes ':' prefix for IS_KEYWORD to work
+    TEST_ASSERT_EQUAL_STRING(":trim", sym->cname);
+}
+
+// Test: Regular qualified keyword still works (:namespace/keyword)
+TEST(test_regular_qualified_keyword) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: :user/test should work as before
+    // Use parse directly to check the parsed symbol structure
+    CljObject *parsed = parse(":user/test", g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_TRUE(IS_KEYWORD(sym));
+    
+    // Verify it's qualified with user namespace
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    TEST_ASSERT_NOT_NULL(sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("user", sym->ns_name->cname);
+    TEST_ASSERT_NOT_NULL(sym->cname);
+    // For qualified keywords, cname includes ':' prefix for IS_KEYWORD to work
+    TEST_ASSERT_EQUAL_STRING(":test", sym->cname);
+}
+
+// Test: Unqualified keyword still works (:keyword)
+TEST(test_unqualified_keyword_still_works) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: :test should work as before (unqualified)
+    // Use parse directly to check the parsed symbol structure
+    CljObject *parsed = parse(":test", g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_TRUE(IS_KEYWORD(sym));
+    
+    // Verify it's unqualified
+    TEST_ASSERT_NULL(sym->ns_name);
+    TEST_ASSERT_NOT_NULL(sym->cname);
+    // cname should start with ':' for keywords
+    TEST_ASSERT_EQUAL_CHAR(':', sym->cname[0]);
+}
+

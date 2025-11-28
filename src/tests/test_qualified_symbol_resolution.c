@@ -70,7 +70,7 @@ TEST(test_resolve_clojure_core_reverse) {
     load_clojure_core(g_test_eval_state);
 
     // Test direct resolution via eval_symbol
-    CljSymbol *reverse_sym = intern_symbol("clojure.core", "reverse");
+    CljSymbol *reverse_sym = intern_symbol(SYM_CLOJURE_CORE, "reverse");
     TEST_ASSERT_NOT_NULL(reverse_sym);
     TEST_ASSERT_NOT_NULL(reverse_sym->ns_name);
 
@@ -135,7 +135,7 @@ TEST(test_resolve_clojure_string_blank) {
     load_clojure_string_namespace();
 
     // Test direct resolution via eval_symbol
-    CljSymbol *blank_sym = intern_symbol("clojure.string", "blank?");
+    CljSymbol *blank_sym = intern_symbol(SYM_CLOJURE_STRING, "blank?");
     TEST_ASSERT_NOT_NULL(blank_sym);
     TEST_ASSERT_NOT_NULL(blank_sym->ns_name);
 
@@ -165,7 +165,7 @@ TEST(test_resolve_clojure_string_join) {
     load_clojure_string_namespace();
 
     // Test direct resolution via eval_symbol
-    CljSymbol *join_sym = intern_symbol("clojure.string", "join");
+    CljSymbol *join_sym = intern_symbol(SYM_CLOJURE_STRING, "join");
     TEST_ASSERT_NOT_NULL(join_sym);
     TEST_ASSERT_NOT_NULL(join_sym->ns_name);
 
@@ -195,7 +195,7 @@ TEST(test_resolve_clojure_string_reverse) {
     load_clojure_string_namespace();
 
     // Test direct resolution via eval_symbol
-    CljSymbol *reverse_sym = intern_symbol("clojure.string", "reverse");
+    CljSymbol *reverse_sym = intern_symbol(SYM_CLOJURE_STRING, "reverse");
     TEST_ASSERT_NOT_NULL(reverse_sym);
     TEST_ASSERT_NOT_NULL(reverse_sym->ns_name);
 

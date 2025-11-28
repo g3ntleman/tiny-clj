@@ -1,6 +1,41 @@
-# Tiny-CLJ Release Notes (2025-11-06)
+# Tiny-CLJ Release Notes (2025-11-27)
 
 ## Latest Updates (Recent Commits)
+
+### Metadata & clojure.string Support (2025-11-27)
+- **Metadata Support**: Full metadata support in Desktop-REPL (DEBUG builds)
+  - Metadata maps with :name, :ns, :doc, :line, :file, etc.
+  - `meta` and `with-meta` functions fully implemented
+  - Automatic metadata merging for native functions
+  - `map_merge()` helper function for efficient metadata merging
+  - Release builds exclude metadata code for optimal binary size
+  - Clojure-compatible metadata semantics
+- **clojure.string Library (Phase 1)**: Complete string manipulation library
+  - 21 string functions implemented (trim, upper-case, lower-case, etc.)
+  - 5 native implementations for performance-critical operations
+  - 16 pure Clojure implementations (blank?, capitalize, ends-with?, etc.)
+  - Full test coverage with 611 tests passing
+  - Works without regex support (TRE planned for Phase 2)
+- **Namespace Introspection**: Enhanced namespace system
+  - `ns-map` function returns all mappings in a namespace
+  - `find-ns` function returns namespace object by name
+  - `ns-resolve` with symbol resolution cache for performance
+  - `ns_find_by_symbol()` for efficient symbol-based namespace lookup
+- **Symbol System Improvements**:
+  - `SYM_KW_NAME` constant added alongside `SYM_KW_NS`
+  - Compile-time native function table initialization
+  - Static symbol data structures for zero runtime overhead
+  - `MAP_FOR_EACH` macro usage for cleaner iteration
+- **Code Quality**: Major refactoring and cleanup
+  - Removed unnecessary type casts throughout codebase
+  - Fixed all compiler warnings (0 warnings)
+  - Simplified `eval_arg()` with early `SYM_NIL` check
+  - resolve_cache properly maintained (was being destroyed)
+- **Test Framework**: Complete test coverage
+  - 611 tests, 0 failures, 11 ignored
+  - All MinUnit tests migrated to Unity framework
+  - Fixed 3 failing tests (resolve_cache bugs)
+  - Test isolation and reproducibility ensured
 
 ### Async Programming & Event Loop (Latest)
 - **Go-Blöcke (go special form)**: Implementierung von asynchronen Go-Blöcken für kooperative Multitasking

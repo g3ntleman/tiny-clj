@@ -150,9 +150,6 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     int line = reader_line(reader);
     int column = reader_column(reader);
     
-    // Get file from EvalState (if available)
-    const char *file = st ? st->file : NULL;
-    
     // Get namespace from EvalState (if available)
     CljNamespace *current_ns = st ? st->current_ns : NULL;
     CljSymbol *ns_name = current_ns ? current_ns->name : NULL;
@@ -182,15 +179,8 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
         ASSIGN(location_map, (CljMap*)updated_map);
     }
     
-    // Add :file (Clojure-compatible, if available)
-    if (SYM_KW_FILE && file) {
-        struct CljString *file_str = make_string(file);
-        if (file_str) {
-            ID updated_map = map_assoc((CljValue)location_map, (CljValue)SYM_KW_FILE, (CljValue)file_str);
-            ASSIGN(location_map, (CljMap*)updated_map);
-            RELEASE(file_str); // map_assoc retains it
-        }
-    }
+    // Add :file (Clojure-compatible) - file information not available from EvalState
+    // File information would need to come from Reader or other source if needed
     
     // Add :ns (Clojure-compatible, if available)
     if (SYM_KW_NS && ns_name) {

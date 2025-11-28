@@ -637,7 +637,7 @@ static void release_object_deep(CljObject *v) {
                     // Release body - RELEASE handles NULL
                     RELEASE(func->body);
                     // Release closure environment - RELEASE handles NULL
-                    RELEASE((CljObject*)func->closure_env);
+                    RELEASE((CljObject*)func->env_stack);
                     // Free function name (strdup'd in make_function)
                     if (func->name) {
                         free((void*)func->name);

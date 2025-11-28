@@ -40,10 +40,12 @@ TEST(test_namespace_lookup_user_namespace) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Test direct namespace storage and retrieval
+    // ns_define now automatically qualifies unqualified symbols
     CljSymbol *test_sym = intern_symbol_global("test-var");
+    TEST_ASSERT_NOT_NULL(test_sym);
     CljObject *value = fixnum(42);
 
-    // Store variable directly in namespace
+    // Store variable directly in namespace (ns_define will automatically qualify it)
     ns_define(g_test_eval_state->current_ns, (ID)test_sym, value);
 
     // Now resolve test-var in user namespace
@@ -103,15 +105,15 @@ TEST(test_symbol_interning_consistency) {
 // Test symbol interning with namespace
 TEST(test_symbol_interning_with_namespace) {
     // Test that intern_symbol with namespace works correctly
-    CljSymbol *sym1 = intern_symbol("user", "test-symbol");
-    CljSymbol *sym2 = intern_symbol("user", "test-symbol");
+    CljSymbol *sym1 = intern_symbol(intern_symbol_global("user"), "test-symbol");
+    CljSymbol *sym2 = intern_symbol(intern_symbol_global("user"), "test-symbol");
 
     TEST_ASSERT_NOT_NULL(sym1);
     TEST_ASSERT_NOT_NULL(sym2);
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
 
     // Test different namespace returns different symbol
-    CljSymbol *sym3 = intern_symbol("clojure.core", "test-symbol");
+    CljSymbol *sym3 = intern_symbol(SYM_CLOJURE_CORE, "test-symbol");
     TEST_ASSERT_NOT_NULL(sym3);
     TEST_ASSERT_TRUE(sym1 != sym3);
 
@@ -185,7 +187,7 @@ TEST(test_namespace_variable_storage) {
     CljSymbol *var_sym = intern_symbol_global("test-variable");
     CljObject *value = fixnum(123);
 
-    // Store variable in namespace
+    // Store variable in namespace (ns_define now automatically qualifies)
     ns_define(g_test_eval_state->current_ns, (ID)var_sym, value);
 
     // Retrieve variable from namespace
@@ -210,11 +212,17 @@ TEST(test_namespace_multiple_variables) {
     CljObject *value1 = fixnum(100);
     CljObject *value2 = fixnum(200);
 
-    // Store variables
-    ns_define(g_test_eval_state->current_ns, (ID)var1_sym, value1);
-    ns_define(g_test_eval_state->current_ns, (ID)var2_sym, value2);
+    // Store variables (must use qualified symbols)
+    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
+        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
+    CljSymbol *var1_sym_qualified = intern_symbol(ns_name_sym, "var1");
+    CljSymbol *var2_sym_qualified = intern_symbol(ns_name_sym, "var2");
+    TEST_ASSERT_NOT_NULL(var1_sym_qualified);
+    TEST_ASSERT_NOT_NULL(var2_sym_qualified);
+    ns_define(g_test_eval_state->current_ns, (ID)var1_sym_qualified, value1);
+    ns_define(g_test_eval_state->current_ns, (ID)var2_sym_qualified, value2);
 
-    // Retrieve and verify
+    // Retrieve and verify (unqualified symbols for lookup)
     CljObject *retrieved1 = ns_resolve(g_test_eval_state, var1_sym);
     CljObject *retrieved2 = ns_resolve(g_test_eval_state, var2_sym);
 
@@ -256,8 +264,12 @@ TEST(test_namespace_special_characters) {
     CljSymbol *special_sym = intern_symbol_global("test-var?");
     CljObject *value = fixnum(42);
 
-    // Store and retrieve
-    ns_define(g_test_eval_state->current_ns, (ID)special_sym, value);
+    // Store and retrieve (must use qualified symbol)
+    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
+        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
+    CljSymbol *special_sym_qualified = intern_symbol(ns_name_sym, "test-var?");
+    TEST_ASSERT_NOT_NULL(special_sym_qualified);
+    ns_define(g_test_eval_state->current_ns, (ID)special_sym_qualified, value);
     CljObject *retrieved = ns_resolve(g_test_eval_state, special_sym);
 
     TEST_ASSERT_NOT_NULL(retrieved);
@@ -339,15 +351,18 @@ TEST(test_ns_resolve_symbol_cache) {
         g_runtime.clojure_core_cache = clojure_core;
     }
 
-    // Register a test symbol in clojure.core
-    CljSymbol *test_sym = intern_symbol_global("test-cached-symbol");
+    // Register a test symbol in clojure.core (must use qualified symbol)
+    CljSymbol *test_sym_qualified = intern_symbol(SYM_CLOJURE_CORE, "test-cached-symbol");
+    TEST_ASSERT_NOT_NULL(test_sym_qualified);
     CljObject *test_value = fixnum(42);
-    ns_define(clojure_core, (ID)test_sym, test_value);
+    ns_define(clojure_core, (ID)test_sym_qualified, test_value);
 
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
 
-    // First resolution - should populate cache
+    // First resolution - should populate cache (use unqualified symbol for lookup)
+    CljSymbol *test_sym = intern_symbol_global("test-cached-symbol");
+    TEST_ASSERT_NOT_NULL(test_sym);
     CljObject *resolved1 = ns_resolve(g_test_eval_state, test_sym);
     TEST_ASSERT_NOT_NULL(resolved1);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)resolved1));
@@ -474,8 +489,8 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
 
     // Now redefine 'inc' in user namespace (shadowing clojure.core)
-    // Create a simple function that returns 999
-    CljObject *new_inc_value = fixnum(999);
+    // Create a simple value (fixnum) that shadows the function
+    ID new_inc_value = fixnum(999);
     ns_define(g_test_eval_state->current_ns, inc_sym, new_inc_value);
 
     // Verify cache was invalidated (should be NULL after ns_define)
@@ -488,15 +503,18 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // Note: This will fail because we defined a fixnum, not a function
     // But the important part is that cache was invalidated
     // Let's just verify that ns_resolve finds the new value
-    CljObject *resolved_after_redef = ns_resolve(g_test_eval_state, inc_sym);
+    ID resolved_after_redef = ns_resolve(g_test_eval_state, inc_sym);
     TEST_ASSERT_NOT_NULL(resolved_after_redef);
-    TEST_ASSERT_EQUAL(999, as_fixnum((CljValue)resolved_after_redef));
+    // ns_resolve returns ID (can be immediate value or object)
+    // Check if it's a fixnum (immediate value)
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(resolved_after_redef), "resolved_after_redef should be a fixnum");
+    TEST_ASSERT_EQUAL(999, as_fixnum(resolved_after_redef));
 
     // Cleanup
     RELEASE((CljObject*)inc_sym);
-    RELEASE((CljObject*)new_inc_value);
     RELEASE((CljObject*)result1);
-    RELEASE((CljObject*)resolved_after_redef);
+    // resolved_after_redef is an ID (can be immediate), so no RELEASE needed
+    // new_inc_value is an immediate fixnum, so no RELEASE needed
 }
 
 
@@ -633,10 +651,14 @@ TEST(test_require_with_refer) {
     CljObject *req_result = eval_string("(require '[test.refer :refer [func]])", g_test_eval_state);
     (void)req_result; // require returns nil
 
-    // Verify func was copied to current namespace
+    // Verify func was copied to current namespace (must use qualified symbol for map_get)
     CljSymbol *func_sym = intern_symbol_global("func");
     TEST_ASSERT_NOT_NULL(func_sym);
-    CljObject *func_val = map_get(g_test_eval_state->current_ns->mappings, func_sym, NULL);
+    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
+        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
+    CljSymbol *func_sym_qualified = intern_symbol(ns_name_sym, "func");
+    TEST_ASSERT_NOT_NULL(func_sym_qualified);
+    CljObject *func_val = map_get(g_test_eval_state->current_ns->mappings, func_sym_qualified, NULL);
     TEST_ASSERT_NOT_NULL(func_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
@@ -657,14 +679,20 @@ TEST(test_require_with_refer_all) {
     CljObject *req_result = eval_string("(require '[test.referall :refer :all])", g_test_eval_state);
     (void)req_result; // require returns nil
 
-    // Verify both vars were copied to current namespace
+    // Verify both vars were copied to current namespace (must use qualified symbols for map_get)
     CljSymbol *var1_sym = intern_symbol_global("var1");
     CljSymbol *var2_sym = intern_symbol_global("var2");
     TEST_ASSERT_NOT_NULL(var1_sym);
     TEST_ASSERT_NOT_NULL(var2_sym);
+    CljSymbol *ns_name_sym = g_test_eval_state->current_ns && g_test_eval_state->current_ns->name
+        ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
+    CljSymbol *var1_sym_qualified = intern_symbol(ns_name_sym, "var1");
+    CljSymbol *var2_sym_qualified = intern_symbol(ns_name_sym, "var2");
+    TEST_ASSERT_NOT_NULL(var1_sym_qualified);
+    TEST_ASSERT_NOT_NULL(var2_sym_qualified);
 
-    CljObject *var1_val = map_get(g_test_eval_state->current_ns->mappings, var1_sym, NULL);
-    CljObject *var2_val = map_get(g_test_eval_state->current_ns->mappings, var2_sym, NULL);
+    CljObject *var1_val = map_get(g_test_eval_state->current_ns->mappings, var1_sym_qualified, NULL);
+    CljObject *var2_val = map_get(g_test_eval_state->current_ns->mappings, var2_sym_qualified, NULL);
     TEST_ASSERT_NOT_NULL(var1_val);
     TEST_ASSERT_NOT_NULL(var2_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));
@@ -922,10 +950,14 @@ TEST(test_ns_map_returns_mappings) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
 
-    // Verify the mappings are in the result
+    // Verify the mappings are in the result (must use qualified symbols for map_get)
     CljMap *mappings = (CljMap*)result;
-    CljObject *found_val1 = (CljObject*)map_get(mappings, sym1, NULL);
-    CljObject *found_val2 = (CljObject*)map_get(mappings, sym2, NULL);
+    CljSymbol *sym1_qualified = intern_symbol(intern_symbol_global("test-ns-map"), "test-var1");
+    CljSymbol *sym2_qualified = intern_symbol(intern_symbol_global("test-ns-map"), "test-var2");
+    TEST_ASSERT_NOT_NULL(sym1_qualified);
+    TEST_ASSERT_NOT_NULL(sym2_qualified);
+    CljObject *found_val1 = (CljObject*)map_get(mappings, sym1_qualified, NULL);
+    CljObject *found_val2 = (CljObject*)map_get(mappings, sym2_qualified, NULL);
     TEST_ASSERT_NOT_NULL(found_val1);
     TEST_ASSERT_NOT_NULL(found_val2);
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)found_val1));
@@ -980,9 +1012,11 @@ TEST(test_ns_map_current_namespace) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
 
-    // Verify the mapping is in the result
+    // Verify the mapping is in the result (must use qualified symbol for map_get)
     CljMap *mappings = (CljMap*)result;
-    CljObject *found = (CljObject*)map_get(mappings, test_sym, NULL);
+    CljSymbol *test_sym_qualified = intern_symbol(intern_symbol_global(current_ns_name), "current-ns-var");
+    TEST_ASSERT_NOT_NULL(test_sym_qualified);
+    CljObject *found = (CljObject*)map_get(mappings, test_sym_qualified, NULL);
     TEST_ASSERT_NOT_NULL(found);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
 
@@ -1044,5 +1078,167 @@ TEST(test_find_ns_with_nil) {
     // Test find-ns with nil
     CljObject *result = eval_string("(find-ns nil)", g_test_eval_state);
     TEST_ASSERT_NULL(result); // Should return nil (NULL)
+}
+
+// ============================================================================
+// Tests for ambiguous symbol resolution
+// ============================================================================
+
+// Test: Ambiguous symbol in multiple namespaces should throw error
+// In Clojure/JVM, ambiguity is only detected when symbol exists in:
+// - Current namespace AND another namespace, OR
+// - clojure.core AND another namespace
+// This test creates a symbol in the current namespace AND another namespace
+TEST(test_ambiguous_symbol_error) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Define func in current namespace (user)
+    CljObject *def_result = eval_string("(def func 100)", g_test_eval_state);
+    (void)def_result;
+
+    // Prepare another namespace with the same symbol name
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    
+    // Create test.ns1 with func (same symbol name)
+    const char *file_path1 = "libs/test/ns1.clj";
+    const char *src1 = "(ns test.ns1)\n(def func 200)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path1, src1));
+
+    // Load the namespace
+    CljObject *req_result1 = eval_string("(require '[test.ns1])", g_test_eval_state);
+    (void)req_result1;
+
+    // Verify both namespaces contain func
+    CljNamespace *current_ns = g_test_eval_state->current_ns;
+    CljNamespace *ns1 = ns_find("test.ns1");
+    TEST_ASSERT_NOT_NULL(current_ns);
+    TEST_ASSERT_NOT_NULL(ns1);
+    
+    CljSymbol *func_sym = intern_symbol_global("func");
+    TEST_ASSERT_NOT_NULL(func_sym);
+    
+    // Verify func exists in both namespaces (must use qualified symbols)
+    CljSymbol *func_current_qualified = intern_symbol(current_ns->name, "func");
+    CljSymbol *func1_qualified = intern_symbol(intern_symbol_global("test.ns1"), "func");
+    TEST_ASSERT_NOT_NULL(func_current_qualified);
+    TEST_ASSERT_NOT_NULL(func1_qualified);
+    ID func_current = map_get(current_ns->mappings, func_current_qualified, NULL);
+    ID func1 = map_get(ns1->mappings, func1_qualified, NULL);
+    TEST_ASSERT_NOT_NULL(func_current);
+    TEST_ASSERT_NOT_NULL(func1);
+
+    // Try to resolve unqualified symbol - should throw error (ambiguous: exists in current AND test.ns1)
+    bool exception_caught = false;
+    TRY {
+        ID result = ns_resolve(g_test_eval_state, func_sym);
+        (void)result;
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_NOT_NULL(ex->message);
+        // Verify error message contains "perhaps you meant"
+        const char *msg = ex->message;
+        const char *found = strstr(msg, "perhaps you meant");
+        TEST_ASSERT_NOT_NULL_MESSAGE(found, "Error message should contain 'perhaps you meant'");
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Should throw exception for ambiguous symbol");
+}
+
+// Test: Unique symbol in single namespace should work
+TEST(test_unique_symbol_resolution) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Prepare namespace with unique symbol
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    
+    const char *file_path = "libs/test/unique.clj";
+    const char *src = "(ns test.unique)\n(def unique-func 300)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // Load namespace
+    CljObject *req_result = eval_string("(require '[test.unique])", g_test_eval_state);
+    (void)req_result;
+
+    // Use qualified symbol - should work
+    CljObject *result = eval_string("test.unique/unique-func", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL(300, as_fixnum((CljValue)result));
+}
+
+// Test: Symbol only in clojure.core should work
+TEST(test_clojure_core_only_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Use a symbol that exists only in clojure.core (e.g., 'map')
+    // This should work without ambiguity
+    CljSymbol *map_sym = intern_symbol_global("map");
+    TEST_ASSERT_NOT_NULL(map_sym);
+    
+    ID resolved = ns_resolve(g_test_eval_state, map_sym);
+    // Should resolve (may be NULL if clojure.core not fully loaded, but should not throw)
+    // Just verify it doesn't crash
+    TEST_ASSERT_TRUE(resolved == NULL || TAG((CljObject*)resolved) == CLJ_CLOSURE);
+}
+
+// Test: Symbol in clojure.core AND other namespace should throw error
+// In Clojure/JVM, if a symbol exists in clojure.core AND another namespace,
+// using it unqualified causes an ambiguity error
+TEST(test_ambiguous_symbol_with_clojure_core) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Use a symbol that exists in clojure.core (e.g., 'map')
+    // We'll define it in another namespace to create ambiguity
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    
+    // Create namespace with a symbol that conflicts with clojure.core
+    // Note: We can't actually redefine clojure.core symbols, but we can test
+    // the ambiguity detection by using a symbol that exists in clojure.core
+    // and defining it in another namespace
+    const char *file_path = "libs/test/conflict.clj";
+    const char *src = "(ns test.conflict)\n(def map 400)\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // Load namespace
+    CljObject *req_result = eval_string("(require '[test.conflict])", g_test_eval_state);
+    (void)req_result;
+
+    // Verify map exists in both clojure.core and test.conflict
+    CljNamespace *clojure_core = ns_find("clojure.core");
+    CljNamespace *conflict_ns = ns_find("test.conflict");
+    TEST_ASSERT_NOT_NULL(clojure_core);
+    TEST_ASSERT_NOT_NULL(conflict_ns);
+    
+    CljSymbol *map_sym = intern_symbol_global("map");
+    TEST_ASSERT_NOT_NULL(map_sym);
+    
+    // Verify map exists in both namespaces
+    CljSymbol *map_core_qualified = intern_symbol(SYM_CLOJURE_CORE, "map");
+    CljSymbol *map_conflict_qualified = intern_symbol(intern_symbol_global("test.conflict"), "map");
+    TEST_ASSERT_NOT_NULL(map_core_qualified);
+    TEST_ASSERT_NOT_NULL(map_conflict_qualified);
+    ID map_core = map_get(clojure_core->mappings, map_core_qualified, NULL);
+    ID map_conflict = map_get(conflict_ns->mappings, map_conflict_qualified, NULL);
+    // map should exist in clojure.core (may be NULL if not loaded, but that's OK for this test)
+    TEST_ASSERT_NOT_NULL(map_conflict);
+
+    // Try to use unqualified symbol - should throw error (ambiguous: exists in clojure.core AND test.conflict)
+    bool exception_caught = false;
+    TRY {
+        CljObject *result = eval_string("map", g_test_eval_state);
+        (void)result;
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_NOT_NULL(ex->message);
+        // Verify error message contains "perhaps you meant"
+        const char *msg = ex->message;
+        const char *found = strstr(msg, "perhaps you meant");
+        TEST_ASSERT_NOT_NULL_MESSAGE(found, "Error message should contain 'perhaps you meant'");
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Should throw exception for ambiguous symbol");
 }
 

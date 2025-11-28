@@ -888,23 +888,23 @@ ID native_type(ID *args, unsigned int argc) {
     // Switch on tag for immediate values
     switch (tag) {
         case TAG_FIXNUM:
-            return (CljObject*)intern_symbol("clojure.lang", "Long");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Long");
         case TAG_CHAR:
-            return (CljObject*)intern_symbol("clojure.lang", "Character");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Character");
         case TAG_BOOL: {
             int special_type = as_special(val);
             if (special_type == SPECIAL_TRUE || special_type == SPECIAL_FALSE) {
-                return (CljObject*)intern_symbol("clojure.lang", "Boolean");
+                return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Boolean");
             }
-            return (CljObject*)intern_symbol("clojure.lang", "Special");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Special");
         }
         case TAG_FIXED:
-            return (CljObject*)intern_symbol("clojure.lang", "Double");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Double");
         case TAG_POINTER:
             // Heap object - continue to object type switch
             break;
         default:
-            return (CljObject*)intern_symbol("clojure.lang", "Unknown");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Unknown");
     }
 
     // Handle heap objects
@@ -912,35 +912,35 @@ ID native_type(ID *args, unsigned int argc) {
 
     // Check for keyword (symbol with ':' prefix)
     if (IS_KEYWORD(obj)) {
-        return (CljObject*)intern_symbol("clojure.lang", "Keyword");
+        return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Keyword");
     }
 
     // Switch on object type for heap objects
     switch (obj->type) {
         case CLJ_SYMBOL:
-            return (CljObject*)intern_symbol("clojure.lang", "Symbol");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Symbol");
         case CLJ_STRING:
-            return (CljObject*)intern_symbol("clojure.lang", "String");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "String");
         case CLJ_VECTOR:
         case CLJ_VECTOR_WEAK:
-            return (CljObject*)intern_symbol("clojure.lang", "PersistentVector");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "PersistentVector");
         case CLJ_VECTOR_TRANSIENT:
-            return (CljObject*)intern_symbol("clojure.lang", "TransientVector");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "TransientVector");
         case CLJ_MAP_TRANSIENT:
-            return (CljObject*)intern_symbol("clojure.lang", "TransientArrayMap");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "TransientArrayMap");
         case CLJ_MAP:
-            return (CljObject*)intern_symbol("clojure.lang", "PersistentArrayMap");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "PersistentArrayMap");
         case CLJ_LIST:
-            return (CljObject*)intern_symbol("clojure.lang", "PersistentList");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "PersistentList");
         case CLJ_FUNC:
-            return (CljObject*)intern_symbol("clojure.lang", "IFn");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "IFn");
         case CLJ_CLOSURE:
-            return (CljObject*)intern_symbol("clojure.lang", "IFn");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "IFn");
         case CLJ_EXCEPTION:
-            return (CljObject*)intern_symbol("clojure.lang", "Exception");
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "Exception");
         default:
             // Fallback: use type name but still in clojure.lang namespace
-            return (CljObject*)intern_symbol("clojure.lang", clj_type_name(obj->type));
+            return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, clj_type_name(obj->type));
     }
 }
 
@@ -1960,7 +1960,8 @@ ID native_symbol(ID *args, unsigned int argc) {
     }
 
     // Create symbol from string(s)
-    CljSymbol *sym = intern_symbol(ns, name);
+    CljSymbol *ns_name_sym = ns ? intern_symbol_global(ns) : NULL;
+    CljSymbol *sym = intern_symbol(ns_name_sym, name);
     if (!sym) {
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
                 "Failed to create symbol from string");
@@ -2100,10 +2101,21 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
             continue;
         }
 
-        // Look up symbol in source namespace
-        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)sym, NULL);
+        // CRITICAL: Mappings use qualified symbols as keys
+        // Must qualify the symbol with source namespace name for lookup
+        CljSymbol *sym_obj = as_symbol(sym);
+        CljSymbol *qualified_sym = sym_obj;
+        if (sym_obj && !sym_obj->ns_name && source_ns->name && source_ns->name->cname) {
+            qualified_sym = intern_symbol(source_ns->name, sym_obj->cname);
+            if (!qualified_sym) {
+                qualified_sym = sym_obj; // Fallback to original
+            }
+        }
+
+        // Look up symbol in source namespace (must use qualified symbol)
+        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)qualified_sym, NULL);
         if (val) {
-            // Copy to target namespace
+            // Copy to target namespace (ns_define will automatically qualify with target namespace)
             ns_define(target_ns, sym, val);
         }
         // sym lifetime is tied to vector - no release needed
@@ -2122,10 +2134,21 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (!map) return;
 
     // Iterate through all mappings in source namespace
+    // Keys are already qualified symbols (e.g., test.referall/var1)
+    // We need to extract the unqualified symbol name and copy it to target namespace
     MAP_FOR_EACH(map, key, val) {
-        if (key && val) {
-            // Copy to target namespace
-            ns_define(target_ns, key, (CljObject*)val);
+        if (key && val && TAG(key) == CLJ_SYMBOL) {
+            CljSymbol *qualified_key = as_symbol(key);
+            if (qualified_key && qualified_key->cname) {
+                // Extract unqualified symbol name (qualified_key is already qualified)
+                // Create unqualified symbol for target namespace
+                // ns_define will automatically qualify it with target namespace
+                CljSymbol *unqualified_sym = intern_symbol_global(qualified_key->cname);
+                if (unqualified_sym) {
+                    // Copy to target namespace (ns_define will automatically qualify with target namespace)
+                    ns_define(target_ns, (ID)unqualified_sym, (CljObject*)val);
+                }
+            }
         }
     }
 }
@@ -2264,7 +2287,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         if (!needs_loading) {
             // Namespace already fully loaded - just set alias/refer if needed
             if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-                CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
+                CljObject *ns_name_sym = (CljObject*)intern_symbol_global(ns_name);
                 if (ns_name_sym) {
                     ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
                 }
@@ -3892,7 +3915,7 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
     }
 
     // Register the builtin in target namespace
-    CljObject *symbol = (CljObject*)intern_symbol(NULL, symbol_name);
+    CljObject *symbol = (CljObject*)intern_symbol_global(symbol_name);
     CljObject *func_obj = make_named_func(func, NULL, name);
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);

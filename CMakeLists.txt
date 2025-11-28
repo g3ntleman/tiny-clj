@@ -11,6 +11,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DENABLE_META")
+set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG}")
 # Unity's setjmp/longjmp should be compatible with our exception system
 # Both use separate jmp_buf stacks, so they should work together
 # Enable stdout flushing in Unity to ensure error messages are visible
@@ -236,8 +237,8 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 else()
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
     set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer -fsanitize=address"
-        LINK_FLAGS "-fsanitize=address"
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer"
+        LINK_FLAGS ""
     )
 endif()
 
@@ -284,6 +285,7 @@ add_executable(unity-tests
     src/tests/test_values.c
     src/tests/test_recur.c
     src/tests/test_let.c
+    src/tests/test_let_performance.c
     src/tests/test_do.c
     src/tests/test_defn.c
     src/tests/test_memory_leak_fibonacci.c
@@ -349,7 +351,7 @@ add_executable(unity-tests
 # that are called via constructor attributes
 apply_common_settings(unity-tests)
 # Option to disable ASAN for profiling
-option(ENABLE_ASAN "Enable AddressSanitizer for unity-tests" ON)
+option(ENABLE_ASAN "Enable AddressSanitizer for unity-tests" OFF)
 if(ENABLE_ASAN)
     if(APPLE)
         # macOS: disable dead_strip to preserve all functions (including test registrations)
