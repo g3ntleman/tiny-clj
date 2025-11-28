@@ -66,7 +66,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_defn(CljList *list, CljMap *env, EvalState *st);
 
 // Hilfsfunktionen
-ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st);
 bool is_symbol(ID v, const char *name);
 
 // Time output suppression (for tests)

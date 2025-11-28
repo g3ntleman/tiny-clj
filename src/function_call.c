@@ -67,6 +67,7 @@ void set_suppress_time_output(bool suppress) {
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljMap *env, EvalState *st);
 static ID eval_arg_from_expr(ID expr, CljMap *env, EvalState *st);
+static bool eval_all_args(CljList *list, CljMap *env, EvalState *st, ID *args, int argc);
 
 
 
@@ -85,8 +86,10 @@ static CljMap* env_add_namespace_mappings(CljMap *env, EvalState *st);
 
 // Macros for common argument evaluation patterns
 #define EVAL_TWO_ARGS(list, env, a, b) do { \
-    (a) = eval_arg(as_list(list), 1, (env), NULL); \
-    (b) = eval_arg(as_list(list), 2, (env), NULL); \
+    CljList *_r1 = as_list((list)->rest); \
+    CljList *_r2 = _r1 ? as_list(_r1->rest) : NULL; \
+    (a) = eval_arg_from_expr(_r1 ? _r1->first : NULL, (env), NULL); \
+    (b) = eval_arg_from_expr(_r2 ? _r2->first : NULL, (env), NULL); \
     if (!(a) || !(b)) { \
         RELEASE(a); \
         RELEASE(b); \
@@ -267,14 +270,17 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
         }
     }
 
-    // Evaluate all arguments
     CljObject **args = (CljObject**)malloc(sizeof(CljObject*) * argc);
     if (!args) return NULL;
 
+    if (!eval_all_args(list, env, st, (ID*)args, argc)) {
+        free(args);
+        return NULL;
+    }
+
+    // Validate all arguments are numeric
     for (int i = 0; i < argc; i++) {
-        args[i] = eval_arg(list, i + 1, env, st);
         if (!args[i]) {
-            // Clean up already evaluated arguments
             for (int j = 0; j < i; j++) {
                 RELEASE(args[j]);
             }
@@ -282,19 +288,14 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
             return NULL;
         }
 
-        // Check for nil arguments
-        // Note: nil is now represented as NULL, so no special nil check needed
-
-        // Check for non-numeric types
         if (!is_numeric_type(args[i])) {
-            // Clean up already evaluated arguments BEFORE throwing exception
             for (int j = 0; j <= i; j++) {
                 RELEASE(args[j]);
             }
             free(args);
             throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
                 "String cannot be used as a Number");
-            return NULL; // Unreachable, but prevents fallthrough
+            return NULL;
         }
     }
 
@@ -876,7 +877,8 @@ static CljObject* eval_map_lookup(CljList *list, CljMap *env, CljObject *map) {
         return NULL;
     }
 
-    CljObject *key = eval_arg(list, 1, env, NULL);
+    CljList *rest1 = as_list(list->rest);
+    CljObject *key = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, NULL);
     if (!key) return NULL;
 
     CljObject *result = (CljObject*)map_get((CljValue)map, (CljValue)key, NULL);
@@ -1077,7 +1079,8 @@ static CljObject* resolve_list_operator(CljObject *op, CljMap *env, EvalState *s
 static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
                                      const EvalContext *ctx, CljSymbol *op_sym) {
     if (op_sym == SYM_IF) {
-        CljObject *cond_val = eval_arg(list, 1, env, NULL);
+        CljList *rest1 = as_list(list->rest);
+        CljObject *cond_val = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, NULL);
         bool truthy = clj_is_truthy(cond_val);
         RELEASE(cond_val);
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
@@ -1086,7 +1089,8 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
     }
 
     if (op_sym == SYM_WHEN) {
-        CljObject *cond_val = eval_arg(list, 1, env, NULL);
+        CljList *rest1 = as_list(list->rest);
+        CljObject *cond_val = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, NULL);
         // nil is valid (represents false) - check truthiness, not NULL
         bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
         RELEASE(cond_val);
@@ -1106,8 +1110,9 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
 
     if (op_sym == SYM_WHILE) {
         int list_len = list_count(list);
+        CljList *rest1 = as_list(list->rest);
         while (true) {
-            CljObject *cond_val = eval_arg(list, 1, env, st);
+            CljObject *cond_val = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, st);
             if (!cond_val || !clj_is_truthy(cond_val)) {
                 RELEASE(cond_val);
                 return NULL;
@@ -1263,7 +1268,8 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
         int total_count = list_count(list);
         int argc = total_count - 1;
         if (argc == 1) {
-            CljObject *arg = eval_arg(list, 1, env, NULL);
+            CljList *rest1 = as_list(list->rest);
+            CljObject *arg = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, NULL);
             if (arg && TAG(arg) == CLJ_SYMBOL) {
                 CljObject *resolved = eval_symbol(as_symbol(arg), st);
                 if (resolved) {
@@ -1548,7 +1554,8 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         }
     }
     if (original_op_sym == SYM_IF) {
-        CljObject *cond_val = eval_arg(list, 1, env, ctx_st);
+        CljList *rest1 = as_list(list->rest);
+        CljObject *cond_val = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, ctx_st);
         bool truthy = clj_is_truthy(cond_val);
         RELEASE(cond_val);
         CljObject *branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
@@ -1718,12 +1725,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         ID *args = alloc_obj_array(argc, args_stack);
         if (!args) return NULL;
 
-        for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg(list, i + 1, env, NULL);
-            if (!args[i]) {
-                free_obj_array((ID*)args, args_stack);
-                return NULL;
-            }
+        if (!eval_all_args(list, env, st, args, argc)) {
+            free_obj_array((ID*)args, args_stack);
+            return NULL;
         }
 
         CljObject *str_result = (CljObject*)native_str((ID*)args, argc);
@@ -2303,26 +2307,22 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
 static ID eval_and_call_native(CljList *list, CljMap *env, ID (*native_func)(ID*, unsigned int), int max_args) {
     CLJ_ASSERT(env != NULL);
 
-    int argc = list_count(list) - 1;  // -1 for function symbol itself
+    int argc = list_count(list) - 1;
     ID args[max_args];
 
-    // Evaluate arguments
-    for (int i = 0; i < argc && i < max_args; i++) {
-        args[i] = eval_arg(list, i + 1, env, NULL);
+    int to_eval = argc < max_args ? argc : max_args;
+    if (!eval_all_args(list, env, NULL, args, to_eval)) {
+        return NULL;
     }
 
-    // Call native function
-    ID result = native_func(args, argc);
-
-    // Native functions return mixed results: some already AUTORELEASE, some not
-    // For now, return as-is and let caller handle AUTORELEASE
-    return result;
+    return native_func(args, argc);
 }
 
 ID eval_seq(CljList *list, CljMap *env) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
-    CljObject *arg = eval_arg(list, 1, env, NULL);
+    CljList *rest1 = as_list(list->rest);
+    CljObject *arg = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, NULL);
     if (!arg) return NULL;
 
     // If argument is already nil, return nil
@@ -2390,8 +2390,10 @@ ID eval_for(CljList *list, CljMap *env) {
         return NULL;
     }
 
-    CljObject *binding_list = eval_arg(list, 1, env, NULL);
-    CljObject *body = eval_arg(list, 2, env, NULL);
+    CljList *rest1 = as_list(list->rest);
+    CljList *rest2 = rest1 ? as_list(rest1->rest) : NULL;
+    CljObject *binding_list = eval_arg_from_expr(rest1 ? rest1->first : NULL, env, NULL);
+    CljObject *body = eval_arg_from_expr(rest2 ? rest2->first : NULL, env, NULL);
 
     if (!binding_list || TAG(binding_list) != CLJ_LIST) {
         return NULL;
@@ -3332,13 +3334,23 @@ static ID eval_arg_from_expr(ID expr, CljMap *env, EvalState *st) {
     return expr;
 }
 
-// Helper function for evaluating arguments
-ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {
-    CLJ_ASSERT(list != NULL);
-    if (!list || TAG(list) != CLJ_LIST) return NULL;
-
-    ID element = list_nth(as_list(list), index);
-    return eval_arg_from_expr(element, env, st);
+/**
+ * @brief Evaluate all arguments in O(n) with single-pass traversal
+ * @return true on success, false on error
+ */
+static bool eval_all_args(CljList *list, CljMap *env, EvalState *st, ID *args, int argc) {
+    if (!list || !args || argc < 0) return false;
+    
+    CljList *current = list;
+    for (int i = 0; i < argc; i++) {
+        current = as_list(current->rest);
+        if (!current) {
+            args[i] = NULL;
+            continue;
+        }
+        args[i] = eval_arg_from_expr(current->first, env, st);
+    }
+    return true;
 }
 
 ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
