@@ -466,4 +466,3 @@ TEST(test_event_loop_enqueue_updates_count) {
         RELEASE(chan);
     });
 }
-
