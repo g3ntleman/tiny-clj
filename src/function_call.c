@@ -2773,11 +2773,16 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
 #ifdef DEBUG
 #ifdef ENABLE_META
     // Capture user-provided metadata once for later use (symbol or list)
-    ID form_meta = meta_get((CljObject*)name_sym);
+    ID form_meta = NULL;
+    form_meta = meta_get((CljObject*)name_sym);
     if (!form_meta) {
         form_meta = meta_get((CljObject*)list);
     }
+#else
+    ID form_meta = NULL;  // Ensure form_meta is defined even if ENABLE_META is off
 #endif // ENABLE_META
+#else
+    ID form_meta = NULL;  // Ensure form_meta is defined even if DEBUG is off
 #endif // DEBUG
     
     // Get parameter vector (second element after defn)
@@ -3011,7 +3016,17 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         }
         
         // Get user metadata (from form or symbol)
-        CljObject *user_meta = form_meta ? form_meta : meta_get(name_sym);
+        // form_meta is captured at the start of eval_defn (from the parsed list object or name symbol)
+        CljObject *user_meta = NULL;
+#ifdef DEBUG
+#ifdef ENABLE_META
+        user_meta = form_meta ? form_meta : meta_get((CljObject*)name_sym);
+#else
+        user_meta = NULL;
+#endif // ENABLE_META
+#else
+        user_meta = NULL;
+#endif // DEBUG
         
         // Merge: user metadata takes precedence over standard metadata
         CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
@@ -3105,15 +3120,41 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Apply metadata to function (only in DEBUG builds for memory efficiency)
 #ifdef DEBUG
 #ifdef ENABLE_META
-    // form_meta was captured at the start of eval_defn (from the parsed list object)
-    if (form_meta) {
-        meta_set((CljObject*)fn_obj, (CljObject*)form_meta);
-    } else {
-        ID name_meta = meta_get((CljObject*)name_sym);
-        if (name_meta) {
-            meta_set((CljObject*)fn_obj, (CljObject*)name_meta);
+    // Build standard metadata (:name, :ns) - same as for native functions
+    CljMap *standard_meta = make_map(4);
+    
+    if (SYM_KW_NAME) {
+        CljString *name_str = make_string(sym->cname);
+        if (name_str) {
+            standard_meta = map_assoc(standard_meta, SYM_KW_NAME, name_str);
+            RELEASE(name_str);
         }
     }
+    
+    if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
+        standard_meta = map_assoc(standard_meta, SYM_KW_NS, st->current_ns->name);
+    }
+    
+    // Get user metadata (from form or symbol)
+    // form_meta is captured at the start of eval_defn (from the parsed list object or name symbol)
+    CljObject *user_meta = NULL;
+#ifdef DEBUG
+#ifdef ENABLE_META
+    user_meta = form_meta ? form_meta : meta_get((CljObject*)name_sym);
+#else
+    user_meta = NULL;
+#endif // ENABLE_META
+#else
+    user_meta = NULL;
+#endif // DEBUG
+    
+    // Merge: user metadata takes precedence over standard metadata
+    CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
+                        ? map_merge(standard_meta, (CljMap*)user_meta)
+                        : standard_meta;
+    
+    meta_set((CljObject*)fn_obj, (CljObject*)merged_meta);
+    RELEASE(standard_meta);
 #endif // ENABLE_META
 #endif // DEBUG
 
@@ -3594,4 +3635,5 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     // If eval_parsed fails, it should throw an exception, not return NULL
     return result;
 }
+
 

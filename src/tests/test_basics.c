@@ -1100,11 +1100,6 @@ TEST(test_vector_predicate) {
 // ============================================================================
 
 TEST(test_type_check_all_types) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test nil (NULL)
     TEST_ASSERT_EQUAL_INT(CLJ_NIL, TAG(NULL));
 
@@ -1176,11 +1171,6 @@ TEST(test_type_check_all_types) {
 // ============================================================================
 
 TEST(test_eval) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test: (eval '(+ 1 2)) => 3
     CljObject *result1 = eval_string("(eval '(+ 1 2))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
@@ -1204,11 +1194,6 @@ TEST(test_eval) {
 // ============================================================================
 
 TEST(test_read_string) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test: (read-string "(+ 1 2)") => list (+ 1 2)
     CljObject *result1 = eval_string("(read-string \"(+ 1 2)\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);

@@ -10,6 +10,7 @@
 
 #include "tests_common.h"
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <time.h>
 
 // Helper: Get current time in microseconds
@@ -99,6 +100,13 @@ static void write_baseline_results(const char *filename,
                                    double *let_creation_times,
                                    double *nested_resolution_times,
                                    int max_depth) {
+    // Ensure directory exists
+    const char *dir = "benchmark_results";
+    struct stat st = {0};
+    if (stat(dir, &st) == -1) {
+        mkdir(dir, 0700);
+    }
+    
     FILE *fp = fopen(filename, "w");
     if (!fp) {
         fprintf(stderr, "Warning: Could not open %s for writing\n", filename);

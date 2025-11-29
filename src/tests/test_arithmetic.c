@@ -12,11 +12,6 @@
 
 // Test integer overflow detection
 TEST(test_integer_overflow_detection) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test that normal multiplication still works
     CljObject *normal_result = eval_string("(* 2 3 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(normal_result);
@@ -118,27 +113,15 @@ TEST(test_integer_overflow_detection) {
 
 // Test simple arithmetic operations
 TEST(test_simple_arithmetic) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test simple addition
     CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    if (result && TAG(result) == CLJ_INT) {
-        int val = as_fixnum((CljValue)result);
-        TEST_ASSERT_EQUAL_INT(3, val);
-    }
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result));
 }
 
 // Test division by zero exception
 TEST(test_division_by_zero_exception) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     CljObject *result = NULL;
     bool exception_caught = false;
     
@@ -155,11 +138,6 @@ TEST(test_division_by_zero_exception) {
 
 // Test eval_list with simple arithmetic
 TEST(test_eval_list_simple_arithmetic) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test simple addition
     CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
@@ -168,11 +146,6 @@ TEST(test_eval_list_simple_arithmetic) {
 
 // Test multiplication with negative numbers (for reduce tests)
 TEST(test_multiplication_with_negative_numbers) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test: (* 1 -2) => -2 (positive * negative)
     CljObject *result1 = eval_string("(* 1 -2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
@@ -206,11 +179,6 @@ TEST(test_multiplication_with_negative_numbers) {
 
 // Test quot (integer division)
 TEST(test_quot) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test: (quot 10 3) => 3
     CljObject *result1 = eval_string("(quot 10 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
@@ -255,11 +223,6 @@ TEST(test_quot) {
 
 // Test bit-shift-left
 TEST(test_bit_shift_left) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test: (bit-shift-left 1 3) => 8
     CljObject *result1 = eval_string("(bit-shift-left 1 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
@@ -287,11 +250,6 @@ TEST(test_bit_shift_left) {
 
 // Test Math/sqrt
 TEST(test_math_sqrt) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
     // Test: (Math/sqrt 4) => 2.0
     CljObject *result1 = eval_string("(Math/sqrt 4)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);

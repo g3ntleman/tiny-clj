@@ -323,9 +323,20 @@ TEST(test_meta_qualified_symbol) {
         CljObject *redef_result = eval_string("(defn trim [s] :native)", g_test_eval_state);
         (void)redef_result;
         
-        // Check again
-        trim_func = map_get(string_ns->mappings, trim_sym, (ID)&not_found_sentinel);
-        trim_meta = meta_get((CljObject*)trim_func);
+        // Check again - use qualified symbol for lookup
+        CljSymbol *qualified_trim_sym = NULL;
+        if (string_ns->name && string_ns->name->cname) {
+            qualified_trim_sym = intern_symbol(string_ns->name, "trim");
+        }
+        TEST_ASSERT_NOT_NULL_MESSAGE(qualified_trim_sym, "Should be able to create qualified trim symbol");
+        
+        trim_func = qualified_trim_sym ? map_get(string_ns->mappings, qualified_trim_sym, (ID)&not_found_sentinel) : NULL;
+        if (trim_func == (ID)&not_found_sentinel) {
+            trim_func = NULL;
+        }
+        TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim function should exist in clojure.string namespace after redefinition");
+        
+        trim_meta = trim_func ? meta_get((CljObject*)trim_func) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(trim_meta, "trim function should have metadata after redefinition");
     }
     
