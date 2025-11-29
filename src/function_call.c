@@ -928,10 +928,11 @@ static inline ID eval_comparison_dispatch(CljList *list, CljMap *env, ID op) {
 // Forward declarations
 static ID eval_and_call_native(CljList *list, CljMap *env, ID (*native_func)(ID*, unsigned int), int max_args);
 static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *st);
+static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 static ID eval_handle_recur(CljList *list, const EvalContext *ctx);
 static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx);
 static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, CljSymbol *op_sym);
-static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op);
+static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx);
 
 static ID eval_sequence_dispatch(CljList *list, CljMap *env, ID op) {
     CljSymbol *op_sym = (CljSymbol*)op;
@@ -1240,7 +1241,7 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
 }
 
 // Handle function call from resolved operator
-static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op) {
+static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
     if (!op) return NULL;
 
     // Handle keywords as functions (for map lookup)
@@ -1296,7 +1297,7 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
             g_eval_arg_depth++;
             ID result = NULL;
             TRY {
-                result = call_function_with_args(fn, list, env, st);
+                result = call_function_with_args_and_context(fn, list, env, st, ctx);
             } CATCH(ex) {
                 g_eval_arg_depth--;
                 throw_exception_object(ex);
@@ -1320,7 +1321,7 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
         // No TRY/CATCH needed here - exceptions automatically propagate via longjmp
         // Unlike the symbol case (line 1316), we don't need to manage g_eval_arg_depth here
         // because call_function_with_args handles its own exception propagation
-        return call_function_with_args(op, list, env, st);
+        return call_function_with_args_and_context(op, list, env, st, ctx);
     }
 
     return NULL; // Not a function
@@ -1328,6 +1329,10 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 
 // Helper function to call a function with arguments
 static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *st) {
+    return call_function_with_args_and_context(fn, list, env, st, NULL);
+}
+
+static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     int total_count = list_count(list);
     int argc = total_count - 1;
     if (argc < 0) argc = 0;
@@ -1348,7 +1353,7 @@ static ID call_function_with_args(ID fn, CljList *list, CljMap *env, EvalState *
                 args[i] = NULL;
                 continue;
             }
-            args[i] = eval_arg_from_expr(current->first, env, st);
+            args[i] = eval_arg_from_expr_with_context(current->first, env, st, ctx);
         }
     }
 
@@ -1727,7 +1732,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // and we should treat it as an error (not a function call)
     unsigned char op_tag = op ? TAG(op) : 0;
     if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
-        ID func_result = eval_function_call_from_list(list, env, st, op);
+        ID func_result = eval_function_call_from_list(list, env, st, op, ctx);
         // CRITICAL: func_result can be NULL if function returns nil, which is valid
         // If op was a symbol, eval_function_call_from_list tried to resolve and call it.
         // If op was already a function, it was called directly.
@@ -1838,7 +1843,25 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
             return NULL;
         }
     }
+    // CRITICAL: ns_define may modify the symbol (intern it), so we need to get the actual symbol used
+    // For clojure.core, ns_define will use intern_symbol_global
+    // For other namespaces, ns_define will use intern_symbol if the symbol is already qualified
+    // We need to ensure we return the same symbol that was stored
+    CljSymbol *sym_before = qualified_symbol ? qualified_symbol : as_symbol(symbol);
     ns_define(st->current_ns, qualified_symbol ? (ID)qualified_symbol : symbol, value);
+    // After ns_define, get the symbol that was actually stored (may be different due to interning)
+    // For clojure.core, get unqualified symbol from table
+    // For other namespaces, get qualified symbol from table
+    CljSymbol *sym_after = NULL;
+    if (st->current_ns->name == SYM_CLOJURE_CORE && sym_before && sym_before->cname) {
+        sym_after = intern_symbol_global(sym_before->cname);
+    } else if (sym_before && sym_before->ns_name && sym_before->ns_name->cname) {
+        sym_after = intern_symbol(sym_before->ns_name, sym_before->cname);
+    } else if (sym_before && !sym_before->ns_name && st->current_ns->name && st->current_ns->name->cname) {
+        sym_after = intern_symbol(st->current_ns->name, sym_before->cname);
+    }
+    // Use the interned symbol if available, otherwise fall back to original
+    CljSymbol *return_symbol = sym_after ? sym_after : (qualified_symbol ? qualified_symbol : as_symbol(symbol));
 
     // Apply metadata to value (only in DEBUG builds for memory efficiency)
     // In Clojure, metadata from ^#^{...} (def ...) is applied to the value
@@ -1851,8 +1874,8 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     }
 #endif // ENABLE_META
 
-    // Return the symbol (Clojure-compatible: def returns the var/symbol, not the value)
-    return symbol;
+    // Return the symbol that was actually stored (Clojure-compatible: def returns the var/symbol, not the value)
+    return (ID)return_symbol;
 }
 
 ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
@@ -2175,15 +2198,15 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     // This avoids string parsing in the hot-path
     if (symbol->ns_name && symbol->ns_name->cname) {
         // Qualified symbol: find target namespace and resolve symbol
-        const char *ns_name = symbol->ns_name->cname;
+        const char *ns_cname = symbol->ns_name->cname;
 
         // CRITICAL: Check if ns_name is an alias in the current namespace
         // Aliases are stored in current_ns->aliases map: alias -> namespace name symbol
-        const char *actual_ns_name = ns_name;
+        const char *actual_ns_name = ns_cname;
         CljSymbol *actual_ns_symbol = symbol->ns_name;
         if (st && st->current_ns && st->current_ns->aliases) {
             // Create symbol for alias lookup
-            CljSymbol *alias_sym = intern_symbol_global(ns_name);
+            CljSymbol *alias_sym = intern_symbol_global(ns_cname);
             if (alias_sym) {
                 CljObject *resolved_ns_name_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
                 if (resolved_ns_name_obj && TAG(resolved_ns_name_obj) == CLJ_SYMBOL) {
@@ -2208,40 +2231,65 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         }
         if (!target_ns) {
             // Namespace not found - throw exception
-            const char *name = symbol->cname ? symbol->cname : "unknown";
-            size_t qualified_len = strlen(ns_name) + 1 + strlen(name) + 1;
+            const char *cname = symbol->cname ? symbol->cname : "unknown";
+            size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
             char *qualified_name = (char*)malloc(qualified_len);
             if (qualified_name) {
-                snprintf(qualified_name, qualified_len, "%s/%s", ns_name, name);
+                snprintf(qualified_name, qualified_len, "%s/%s", ns_cname, cname);
                 throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
                 free(qualified_name);
             } else {
-                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_name, name);
+                throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
             }
             return NULL;
         }
-        if (target_ns->mappings) {
+        if (target_ns->mappings && symbol->cname) {
             // CRITICAL: Namespace mappings now use fully qualified symbols as keys
-            // Use the fully qualified symbol (symbol itself) for lookup
-            // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-            static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-            ID resolved = map_get(target_ns->mappings, symbol, &not_found_sentinel);
-            if (resolved != &not_found_sentinel) {
-                // Found in target namespace - return it (can be NULL/nil, which is valid)
-                return resolved;
+            // Intern the qualified symbol to get the same pointer as stored in mappings
+            // This ensures pointer equality for map lookup
+            // Use actual_ns_symbol if available (from alias resolution), otherwise use symbol->ns_name
+            CljSymbol *ns_sym_for_intern = actual_ns_symbol ? actual_ns_symbol : symbol->ns_name;
+            CljSymbol *interned_sym = intern_symbol(ns_sym_for_intern, symbol->cname);
+            if (!interned_sym) {
+                // Failed to intern - fall through to error
+            } else {
+                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+                ID resolved = map_get(target_ns->mappings, interned_sym, &not_found_sentinel);
+                if (resolved != &not_found_sentinel) {
+                    // Found in target namespace - return it (can be NULL/nil, which is valid)
+                    return resolved;
+                }
+            }
+        }
+
+        // Qualified symbol not found in mappings - try native function lookup
+        // This handles cases where native functions (like trim) are not yet registered in mappings
+        if (symbol->cname) {
+            CljSymbol *ns_sym_for_lookup = actual_ns_symbol ? actual_ns_symbol : symbol->ns_name;
+            CljSymbol *lookup_sym = intern_symbol(ns_sym_for_lookup, symbol->cname);
+            if (lookup_sym) {
+                BuiltinFn native_func = native_function_lookup(lookup_sym);
+                if (native_func) {
+                    // Found native function - create function object and return it
+                    CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, symbol->cname);
+                    if (native_func_obj) {
+                        return (ID)native_func_obj;
+                    }
+                }
             }
         }
 
         // Qualified symbol not found in target namespace
-        const char *name = symbol->cname ? symbol->cname : "unknown";
-        size_t qualified_len = strlen(ns_name) + 1 + strlen(name) + 1;
+        const char *cname = symbol->cname ? symbol->cname : "unknown";
+        size_t qualified_len = strlen(ns_cname) + 1 + strlen(cname) + 1;
         char *qualified_name = (char*)malloc(qualified_len);
         if (qualified_name) {
-            snprintf(qualified_name, qualified_len, "%s/%s", ns_name, name);
+            snprintf(qualified_name, qualified_len, "%s/%s", ns_cname, cname);
             throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", qualified_name);
             free(qualified_name);
         } else {
-            throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_name, name);
+            throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s/%s in this context", ns_cname, cname);
         }
         return NULL;
     }
@@ -2273,8 +2321,8 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
 
     // Symbol not found
-    const char *name = symbol->cname ? symbol->cname : "unknown";
-    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", name);
+    const char *cname = symbol->cname ? symbol->cname : "unknown";
+    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", cname);
     return NULL;
 }
 
@@ -2831,7 +2879,6 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             }
 
             // Build do block: (do expr1 expr2 ...)
-            CljObject *do_args[16]; // Max 16 body expressions
             if (body_count > 15) {
                 free_obj_array((ID*)params, params_stack);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -2840,18 +2887,24 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                 return NULL;
             }
 
-            do_args[0] = (CljObject*)SYM_DO;
+            // Build do list backwards (from end to start) using make_list
+            CljList *do_result = NULL;
             current = rest;
-            for (int i = 0; i < body_count; i++) {
+            // First collect all body expressions
+            ID body_exprs[15];
+            int actual_count = 0;
+            for (int i = 0; i < body_count && i < 15; i++) {
                 if (current && current->first) {
-                    do_args[i + 1] = current->first;
+                    body_exprs[actual_count++] = current->first;
                 }
                 if (!current->rest) break;
                 current = as_list(current->rest);
             }
-
-            // Create do list
-            body_expr_obj = make_list_from_stack((CljValue*)do_args, body_count + 1);
+            // Build list backwards
+            for (int i = actual_count - 1; i >= 0; i--) {
+                do_result = make_list(body_exprs[i], do_result);
+            }
+            body_expr_obj = (CljObject*)make_list((ID)SYM_DO, do_result);
         }
     }
 
@@ -3003,11 +3056,9 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     int ns_mapping_count = st->current_ns->mappings ? ((CljMap*)st->current_ns->mappings)->count : 0;
     extern TinyClJRuntime g_runtime;
     int core_mapping_count = 0;
-    if (g_runtime.clojure_core_cache) {
-        CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
-        if (clojure_core && clojure_core->mappings) {
-            core_mapping_count = ((CljMap*)clojure_core->mappings)->count;
-        }
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    if (clojure_core && clojure_core->mappings) {
+        core_mapping_count = ((CljMap*)clojure_core->mappings)->count;
     }
     
     CljMap *fn_env = (CljMap*)make_map(ns_mapping_count + core_mapping_count + 4);
@@ -3024,15 +3075,12 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
 
     // Add clojure.core namespace mappings
-    if (fn_env && g_runtime.clojure_core_cache) {
-        CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
-        if (clojure_core && clojure_core->mappings) {
-            CljMap *core_mappings = (CljMap*)clojure_core->mappings;
-            MAP_FOR_EACH(core_mappings, key, val) {
-                if (!map_contains(fn_env, key)) {
-                    CljMap *new_fn_env = map_assoc(fn_env, key, val);
-                    ASSIGN(fn_env, new_fn_env);
-                }
+    if (fn_env && clojure_core && clojure_core->mappings) {
+        CljMap *core_mappings = (CljMap*)clojure_core->mappings;
+        MAP_FOR_EACH(core_mappings, key, val) {
+            if (!map_contains(fn_env, key)) {
+                CljMap *new_fn_env = map_assoc(fn_env, key, val);
+                ASSIGN(fn_env, new_fn_env);
             }
         }
     }
@@ -3074,7 +3122,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Qualify the symbol with current namespace if it's unqualified
     CljSymbol *qualified_name_sym = as_symbol(name_sym);
     if (qualified_name_sym && !qualified_name_sym->ns_name && st && st->current_ns && st->current_ns->name) {
-        qualified_name_sym = intern_symbol(st->current_ns->name->cname, qualified_name_sym->cname);
+        qualified_name_sym = intern_symbol(st->current_ns->name, qualified_name_sym->cname);
         if (!qualified_name_sym) {
             throw_exception(EXCEPTION_RUNTIME, "Failed to qualify symbol for namespace registration", NULL, 0, 0);
             return NULL;
@@ -3195,7 +3243,7 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         }
         CljObject *result = NULL;
         TRY {
-            result = eval_list(as_list(expr), env, eval_st, NULL);
+            result = eval_list(as_list(expr), env, eval_st, ctx);
         } CATCH(ex) {
             if (created_st) {
                 evalstate_free(eval_st);

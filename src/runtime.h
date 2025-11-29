@@ -43,7 +43,6 @@ typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 typedef struct TinyClJRuntime {
     // Namespaces
     CljMap *ns_registry;            // transient Map: Symbol → CljNamespace*
-    CljNamespace *clojure_core_cache;  // CljNamespace*
     CljMap *resolve_cache;          // Symbol resolution cache
     
     // Symbol Table

@@ -1,0 +1,22 @@
+fib
+Running naive recursive fibonacci benchmark...
+nil
+Algorithm: fib(n) = if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))
+nil
+Test: fib(20) = 6765
+nil
+
+nil
+warmup-result
+Warmup: fib(20) = 6765
+nil
+
+nil
+Running 5 iterations of fib(20)...
+nil
+Elapsed time: 1124.52 msecs
+nil
+
+nil
+Benchmark completed!
+nil

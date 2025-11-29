@@ -21,7 +21,7 @@ typedef struct {
     const char *name;
 } CljFunction;
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *name);
+CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname);
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */

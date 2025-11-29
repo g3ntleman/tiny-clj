@@ -19,7 +19,7 @@ ID native_array_map(ID *args, unsigned int argc);
 ID native_vector(ID *args, unsigned int argc);
 
 // Function value constructors
-ID make_named_func(BuiltinFn fn, void *env, const char *name);
+ID make_named_func(BuiltinFn fn, void *env, const char *cname);
 
 // Legacy apply_builtin removed - all builtins now use namespace registration
 

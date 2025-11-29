@@ -104,13 +104,13 @@ void benchmark_export_csv(const char* filename) {
     printf("Benchmark results exported to %s (%d entries)\n", filename, g_benchmark_count);
 }
 
-static void append_history(const char *name, double current_time, int iterations, double ops_per_sec, size_t memory_bytes, double change_percent) {
+static void append_history(const char *cname, double current_time, int iterations, double ops_per_sec, size_t memory_bytes, double change_percent) {
     FILE* file = fopen("benchmark_history.csv", "a");
     if (!file) return;
     time_t now = time(NULL);
     char ts[32];
     strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", localtime(&now));
-    fprintf(file, "%s,%s,%.6f,%d,%.0f,%zu,%.2f\n", ts, name, current_time, iterations, ops_per_sec, memory_bytes, change_percent);
+    fprintf(file, "%s,%s,%.6f,%d,%.0f,%zu,%.2f\n", ts, cname, current_time, iterations, ops_per_sec, memory_bytes, change_percent);
     fclose(file);
 }
 
@@ -134,26 +134,26 @@ void benchmark_compare_with_baseline(const char* baseline_file) {
     const double threshold = 2.0; // percent
 
     while (fgets(line, sizeof(line), file)) {
-        char name[64];
+        char cname[64];
         double baseline_time;
         int iterations;
         double ops_per_sec;
         size_t memory_bytes;
         
         if (sscanf(line, "%*[^,],%63[^,],%lf,%d,%lf,%zu", 
-                   name, &baseline_time, &iterations, &ops_per_sec, &memory_bytes) == 5) {
+                   cname, &baseline_time, &iterations, &ops_per_sec, &memory_bytes) == 5) {
             
             // Find matching current benchmark
             for (int i = 0; i < g_benchmark_count; i++) {
-                if (strcmp(g_benchmarks[i].name, name) == 0) {
+                if (strcmp(g_benchmarks[i].name, cname) == 0) {
                     double current_time = g_benchmarks[i].time_ms;
                     double change_percent = ((current_time - baseline_time) / baseline_time) * 100.0;
                     
                     printf("%-30s %12.6f %12.6f %+11.2f%%\n",
-                           name, current_time, baseline_time, change_percent);
+                           cname, current_time, baseline_time, change_percent);
                     if (fabs(change_percent) >= threshold) {
                         any_significant = 1;
-                        append_history(name,
+                        append_history(cname,
                                        current_time,
                                        g_benchmarks[i].iterations,
                                        g_benchmarks[i].ops_per_sec,

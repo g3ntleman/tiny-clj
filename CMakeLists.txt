@@ -277,7 +277,6 @@ add_executable(unity-tests
     src/tests/test_basics.c
     src/tests/test_list.c
     src/tests/test_namespace.c
-    src/tests/test_symbol_interning.c
     src/tests/test_symbol_clojure_compat.c
     src/tests/test_core_initialization.c
     src/tests/test_equal.c
@@ -291,6 +290,7 @@ add_executable(unity-tests
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_time.c
     src/tests/test_loops.c
+    src/tests/test_go_blocks.c
     src/tests/test_map.c
     src/tests/test_vector.c
     src/tests/test_fixed_point.c

@@ -40,12 +40,12 @@ typedef struct {
 // Global namespace registry is now in g_runtime.ns_registry (CljMap*)
 
 // Namespace functions
-CljNamespace* make_namespace(const char *name, const char *file);
-CljNamespace* ns_get_or_create(const char *name, const char *file);
+CljNamespace* make_namespace(const char *cname, const char *file);
+CljNamespace* ns_get_or_create(const char *cname, const char *file);
 ID ns_resolve(EvalState *st, CljSymbol *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
-CljNamespace* ns_find(const char *name);
+CljNamespace* ns_find(const char *cname);
 CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol);  // Fast lookup with symbol (avoids intern_symbol call)
 CljNamespace* ns_find_for_object(CljObject *obj);  // Find namespace containing object
 void ns_define(CljNamespace *ns, ID symbol, ID value);

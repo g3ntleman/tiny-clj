@@ -163,8 +163,8 @@ static void run_test_with_exception_handling(const Test *test) {
         // Call Unity directly with the line number from the test registry.
         // This avoids using RUN_TEST(__LINE__) from this file, so that the
         // reported line matches the TEST() macro in the test source file.
-        const char *name = test->qualified_name ? test->qualified_name : test->name;
-        UnityDefaultTestRun(test->func, name, (UNITY_LINE_TYPE)test->line);
+        const char *cname = test->qualified_name ? test->qualified_name : test->name;
+        UnityDefaultTestRun(test->func, cname, (UNITY_LINE_TYPE)test->line);
     } CATCH(ex) {
         // Unhandled exception caught - mark test as failed
         if (ex) {

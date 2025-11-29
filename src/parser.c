@@ -236,8 +236,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       }
       if (!quoted) return NULL;
       // Create (quote <expr>) list: (quote expr)
-      ID elements[2] = {SYM_QUOTE, quoted};
-      return AUTORELEASE(make_list_from_stack((CljValue*)elements, 2));
+      return AUTORELEASE(make_list(SYM_QUOTE, make_list(quoted, NULL)));
 
     case '@':
       // Handle deref @x => (deref x)
@@ -252,8 +251,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       }
       if (!atom_expr) return NULL;
       // Create (deref <expr>) list: (deref expr)
-      ID deref_elements[2] = {SYM_DEREF, atom_expr};
-      return AUTORELEASE(make_list_from_stack((CljValue*)deref_elements, 2));
+      return AUTORELEASE(make_list(SYM_DEREF, make_list(atom_expr, NULL)));
 
     case '\\':
       // Handle character literals: \a, \space, \tab, \newline, \return, etc.
@@ -519,26 +517,20 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
       // Build expansion: (let [binding test] (if binding then else?))
       // First, build (if binding then else?)
-      ID if_args[4];
-      if_args[0] = SYM_IF;
-      if_args[1] = binding;
-      if_args[2] = then_expr;
-      int if_arg_count = 3;
+      CljList *if_expr;
       if (else_expr) {
-        if_args[3] = else_expr;
-        if_arg_count = 4;
+        // (if binding then else)
+        if_expr = make_list(SYM_IF, make_list(binding, make_list(then_expr, make_list(else_expr, NULL))));
+      } else {
+        // (if binding then)
+        if_expr = make_list(SYM_IF, make_list(binding, make_list(then_expr, NULL)));
       }
-      ID if_expr = AUTORELEASE(make_list_from_stack((CljValue*)if_args, if_arg_count));
 
       // Build binding vector for let: [binding test]
       ID let_binding_vec = AUTORELEASE(binding_vec);
 
       // Build (let [binding test] (if binding then else?))
-      ID let_args[3];
-      let_args[0] = SYM_LET;
-      let_args[1] = let_binding_vec;
-      let_args[2] = if_expr;
-      ID expanded = AUTORELEASE(make_list_from_stack((CljValue*)let_args, 3));
+      ID expanded = AUTORELEASE(make_list(SYM_LET, make_list(let_binding_vec, make_list((ID)if_expr, NULL))));
 
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
@@ -625,37 +617,37 @@ static ID parse_character(Reader *reader, EvalState *st) {
     return NULL;
   }
 
-  char name[32];
+  char cname[32];
   int pos = 0;
   while (!reader_eof(reader) && pos < 31 && is_alphanumeric(reader_peek_char(reader))) {
-    name[pos++] = reader_next(reader);
+    cname[pos++] = reader_next(reader);
   }
-  name[pos] = '\0';
+  cname[pos] = '\0';
 
   if (pos > 0) {
     // Named character literal - use switch on first char for performance
-    switch (name[0]) {
+    switch (cname[0]) {
       case 's':
-        if (strcmp(name, "space") == 0) return character(' ');
+        if (strcmp(cname, "space") == 0) return character(' ');
         break;
       case 't':
-        if (strcmp(name, "tab") == 0) return character('\t');
+        if (strcmp(cname, "tab") == 0) return character('\t');
         break;
       case 'n':
-        if (strcmp(name, "newline") == 0) return character('\n');
+        if (strcmp(cname, "newline") == 0) return character('\n');
         break;
       case 'r':
-        if (strcmp(name, "return") == 0) return character('\r');
+        if (strcmp(cname, "return") == 0) return character('\r');
         break;
       case 'b':
-        if (strcmp(name, "backspace") == 0) return character('\b');
+        if (strcmp(cname, "backspace") == 0) return character('\b');
         break;
       case 'f':
-        if (strcmp(name, "formfeed") == 0) return character('\f');
+        if (strcmp(cname, "formfeed") == 0) return character('\f');
         break;
     }
     char msg[128];
-    snprintf(msg, sizeof(msg), "Unknown named character: \\%s", name);
+    snprintf(msg, sizeof(msg), "Unknown named character: \\%s", cname);
     throw_parser_exception(msg, reader);
     return NULL;
   } else {
@@ -1291,8 +1283,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
     CljSymbol *fn_sym = intern_symbol_global("fn");
     CljValue empty_vec = make_vector(0, CLJ_VECTOR);
     ID empty_list_val = NULL; // () is nil in Clojure
-    ID elements[3] = {fn_sym, empty_vec, empty_list_val};
-    return AUTORELEASE(make_list_from_stack((CljValue*)elements, 3));
+    return AUTORELEASE(make_list((ID)fn_sym, make_list(empty_vec, make_list(empty_list_val, NULL))));
   }
 
   // Collect all % and %N references in the body to determine parameters
@@ -1312,8 +1303,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   vector_conj((CljVector*)param_vec, percent_sym);
 
   // Create (fn [%] body)
-  ID elements[3] = {fn_sym, param_vec, body};
-  return AUTORELEASE(make_list_from_stack((CljValue*)elements, 3));
+  return AUTORELEASE(make_list((ID)fn_sym, make_list(param_vec, make_list(body, NULL))));
 }
 
 /**

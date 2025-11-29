@@ -25,14 +25,14 @@ TEST(test_list_count) {
     // Test null pointer
     TEST_ASSERT_EQUAL_INT(0, list_count(NULL));
 
-    // Test non-list object (this should not crash)
-    // Create a proper CljObject for testing
-    CljObject *int_obj = AUTORELEASE((CljObject *)make_string("42")); // Use string as non-list object
-    TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)int_obj));
-
-    // Test empty list (clj_nil is not a list)
-    CljObject *empty_list = NULL;
-    TEST_ASSERT_EQUAL_INT(0, list_count((CljList*)empty_list));
+    // Test empty list
+    CljList *empty = empty_list();
+    TEST_ASSERT_EQUAL_INT(0, list_count(empty));
+    
+    // Test list with elements
+    CljList *list = make_list((ID)make_string("a"), make_list((ID)make_string("b"), NULL));
+    TEST_ASSERT_EQUAL_INT(2, list_count(list));
+    RELEASE(list);
 }
 
 TEST(test_list_creation) {

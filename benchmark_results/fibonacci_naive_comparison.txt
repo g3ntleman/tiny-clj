@@ -1,0 +1,21 @@
+Naive Recursive Fibonacci Benchmark Comparison
+===============================================
+Date: Fri Nov 28 00:02:45 CET 2025
+Algorithm: fib(n) = if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))
+Test: 5 iterations of fib(20)
+Measurement: Both sides use (time) function
+
+Results:
+--------
+Clojure:  3.787667ms
+tiny-clj: 1124.52ms
+
+Ratio: tiny-clj is 296.88x slower than Clojure
+
+Notes:
+- Both use the same naive recursive algorithm
+- Both use the same (time) function for measurement
+- Clojure benefits from JIT optimization
+- tiny-clj runs as an interpreter
+- Ratio > 1000x may indicate profiling/debug overhead
+- Expected ratio for interpreter vs JIT: 10-100x

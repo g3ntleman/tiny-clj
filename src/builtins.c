@@ -525,8 +525,12 @@ ID native_list(ID *args, unsigned int argc) {
         return empty_list();
     }
 
-    // Use make_list_from_stack to create list from arguments
-    return AUTORELEASE(make_list_from_stack((CljValue*)args, argc));
+    // Build list backwards (from end to start) using make_list
+    CljList *result = NULL;
+    for (int i = argc - 1; i >= 0; i--) {
+        result = make_list(args[i], result);
+    }
+    return AUTORELEASE(result);
 }
 
 // nil? function that checks if a value is nil
@@ -1064,7 +1068,7 @@ ID native_vec(ID *args, unsigned int argc) {
 
 // make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
 
-ID make_named_func(BuiltinFn fn, void *env, const char *name) {
+ID make_named_func(BuiltinFn fn, void *env, const char *cname) {
     CljCFunc *func = ALLOC(CljCFunc, 1);
     if (!func) return NULL;
 
@@ -1074,11 +1078,11 @@ ID make_named_func(BuiltinFn fn, void *env, const char *name) {
     func->env = env;
 
     // Safely handle name parameter
-    if (name && strlen(name) > 0) {
+    if (cname && strlen(cname) > 0) {
         // Allocate memory for the name to avoid issues with string literals
-        func->name = ALLOC(char, strlen(name) + 1);
+        func->name = ALLOC(char, strlen(cname) + 1);
         if (func->name) {
-            strcpy((char*)func->name, name);
+            strcpy((char*)func->name, cname);
         }
     } else {
         func->name = NULL;
@@ -1917,7 +1921,7 @@ ID native_symbol(ID *args, unsigned int argc) {
     }
 
     const char *ns = NULL;
-    const char *name = NULL;
+    const char *cname = NULL;
 
     if (argc == 2) {
         // Two arguments: namespace (can be nil) and name
@@ -1944,7 +1948,7 @@ ID native_symbol(ID *args, unsigned int argc) {
             ns = NULL;  // nil namespace
         }
 
-        name = string_data(name_arg);
+        cname = string_data(name_arg);
     } else {
         // One argument: name only
         ID name_arg = args[0];
@@ -1956,12 +1960,12 @@ ID native_symbol(ID *args, unsigned int argc) {
         }
 
         CljString *name_str = (CljString*)name_arg;
-        name = clj_string_data(name_str);
+        cname = clj_string_data(name_str);
     }
 
     // Create symbol from string(s)
     CljSymbol *ns_name_sym = ns ? intern_symbol_global(ns) : NULL;
-    CljSymbol *sym = intern_symbol(ns_name_sym, name);
+    CljSymbol *sym = intern_symbol(ns_name_sym, cname);
     if (!sym) {
         throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
                 "Failed to create symbol from string");
@@ -2266,12 +2270,16 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (existing) {
         // Check if namespace has been fully loaded by checking for a marker function
         // For clojure.string, check if blank? exists (first Clojure function defined)
-        // OPTIMIZATION: Cache the blank? symbol lookup to avoid repeated intern_symbol_global calls
+        // OPTIMIZATION: Cache the blank? symbol lookup to avoid repeated intern_symbol calls
+        // CRITICAL: Namespace mappings use qualified symbols as keys, so we must use a qualified symbol
         bool needs_loading = true;
         if (strcmp(ns_name, "clojure.string") == 0 && existing->mappings) {
             static CljSymbol *cached_blank_sym = NULL;
             if (!cached_blank_sym) {
-                cached_blank_sym = intern_symbol_global("blank?");
+                CljSymbol *ns_sym = intern_symbol_global("clojure.string");
+                if (ns_sym) {
+                    cached_blank_sym = intern_symbol(ns_sym, "blank?");
+                }
             }
             if (cached_blank_sym) {
                 // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
@@ -3872,23 +3880,23 @@ ID native_do(ID *args, unsigned int argc) {
 
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
 // Also supports qualified symbols like "Math/sqrt" for other namespaces
-static void register_builtin_in_core(const char *name, BuiltinFn func) {
+static void register_builtin_in_core(const char *cname, BuiltinFn func) {
     EvalState *st = evalstate_new(false);
 
     // Check if name is a qualified symbol (e.g., "Math/sqrt")
-    const char *slash = strchr(name, '/');
+    const char *slash = strchr(cname, '/');
     CljNamespace *target_ns;
     const char *symbol_name;
 
-    if (slash && slash > name && slash[1] != '\0') {
+    if (slash && slash > cname && slash[1] != '\0') {
         // Qualified symbol: split into namespace and name
-        size_t ns_len = slash - name;
+        size_t ns_len = slash - cname;
         char *ns_name = (char*)malloc(ns_len + 1);
         if (!ns_name) {
             evalstate_free(st);
             return;
         }
-        strncpy(ns_name, name, ns_len);
+        strncpy(ns_name, cname, ns_len);
         ns_name[ns_len] = '\0';
 
         symbol_name = slash + 1;
@@ -3897,7 +3905,7 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
     } else {
         // Unqualified symbol: register in clojure.core
         target_ns = ns_get_or_create("clojure.core", NULL);
-        symbol_name = name;
+        symbol_name = cname;
     }
 
     if (!target_ns) {
@@ -3905,18 +3913,12 @@ static void register_builtin_in_core(const char *name, BuiltinFn func) {
         return;
     }
 
-    // Explicitly set clojure.core cache if not already set
-    // This ensures cache is set even if register_builtins is called before load_clojure_core
-    // Note: clojure_core_cache is just a pointer to a CljNamespace in the registry
-    // We don't use ASSIGN here because we're just setting the pointer, not retaining the object
-    extern TinyClJRuntime g_runtime;
-    if (!g_runtime.clojure_core_cache && target_ns->name == SYM_CLOJURE_CORE) {
-        g_runtime.clojure_core_cache = target_ns;
-    }
+    // Namespace is already registered in ns_registry via ns_register
+    // No need for special cache handling
 
     // Register the builtin in target namespace
     CljObject *symbol = (CljObject*)intern_symbol_global(symbol_name);
-    CljObject *func_obj = make_named_func(func, NULL, name);
+    CljObject *func_obj = make_named_func(func, NULL, cname);
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);
 

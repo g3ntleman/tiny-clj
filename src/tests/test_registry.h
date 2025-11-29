@@ -25,10 +25,10 @@ typedef struct {
 } Test;
 
 // Registry API
-void test_registry_add(const char *name, TestFunc func);
-void test_registry_add_with_group(const char *name, TestFunc func, const char *group);
-void test_registry_add_with_file_info(const char *name, TestFunc func, const char *group, const char *file, int line);
-Test *test_registry_find(const char *name);
+void test_registry_add(const char *cname, TestFunc func);
+void test_registry_add_with_group(const char *cname, TestFunc func, const char *group);
+void test_registry_add_with_file_info(const char *cname, TestFunc func, const char *group, const char *file, int line);
+Test *test_registry_find(const char *cname);
 Test *test_registry_find_by_qualified_name(const char *qualified_name);
 Test *test_registry_find_by_pattern(const char *pattern);
 Test *test_registry_get_all(size_t *count);
@@ -38,7 +38,7 @@ void test_registry_list_groups(void);
 void test_registry_clear(void);
 
 // Pattern matching helper
-bool test_name_matches_pattern(const char *name, const char *pattern);
+bool test_name_matches_pattern(const char *cname, const char *pattern);
 
 // Helper function to extract filename from __FILE__ (without path and extension)
 // Returns a dynamically allocated string that caller must free

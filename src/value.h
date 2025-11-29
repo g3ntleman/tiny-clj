@@ -16,7 +16,7 @@ extern struct CljString* string_empty_singleton;
 // Forward declarations for namespace functions (to avoid circular dependency)
 // namespace.h includes map.h, which would include value.h again
 struct CljNamespace;
-extern struct CljNamespace* ns_get_or_create(const char *name, const char *file);
+extern struct CljNamespace* ns_get_or_create(const char *cname, const char *file);
 
 // CljValue is already defined in object.h to avoid circular dependency
 

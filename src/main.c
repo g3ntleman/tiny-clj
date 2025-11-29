@@ -28,9 +28,9 @@ int main() {
         return 1;
     }
     
-    const char *name = platform_name();
+    const char *cname = platform_name();
     char message[128];
-    snprintf(message, sizeof(message), "Hello from %s! (Final Optimized Version)", name);
+    snprintf(message, sizeof(message), "Hello from %s! (Final Optimized Version)", cname);
     platform_print(message);
     
     // Initialize global structures

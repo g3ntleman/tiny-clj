@@ -344,13 +344,13 @@ void init_special_symbols() {
 }
 
 // Helper function to find symbol in vector by comparing name and namespace
-static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *name) {
-    if (!vec || !name) return NULL;
+static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *cname) {
+    if (!vec || !cname) return NULL;
 
     // Create temporary symbol structure for comparison (not heap-allocated)
     CljSymbol temp_sym = {
         .base = { .type = CLJ_SYMBOL, .rc = 0 },  // rc=0: not heap-allocated
-        .cname = name,
+        .cname = cname,
         .ns_name = ns_name  // Use ns_name directly (already a CljSymbol*)
     };
 
@@ -365,9 +365,9 @@ static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *na
 }
 
 // Find symbol in the table
-static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *name) {
-    if (name && g_runtime.symbol_table) {
-        return find_symbol(g_runtime.symbol_table, ns_name, name);  // Happy path
+static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
+    if (cname && g_runtime.symbol_table) {
+        return find_symbol(g_runtime.symbol_table, ns_name, cname);  // Happy path
     }
     return NULL;
 }
@@ -378,13 +378,13 @@ void symbol_table_add(CljSymbol *symbol) {
 
     // Extract namespace and name from symbol
     CljSymbol *ns_name = symbol->ns_name;  // Already a CljSymbol*
-    const char *name = symbol->cname;
+    const char *cname = symbol->cname;
 
     if (!g_runtime.symbol_table) {
         g_runtime.symbol_table = make_vector(16, CLJ_VECTOR);
     }
 
-    CljSymbol *existing = find_symbol(g_runtime.symbol_table, ns_name, name);
+    CljSymbol *existing = find_symbol(g_runtime.symbol_table, ns_name, cname);
     if (existing) {
         return;  // Already exists
     }
@@ -394,22 +394,22 @@ void symbol_table_add(CljSymbol *symbol) {
 
 /**
  * @brief Create a symbol value
- * @param name Symbol name
+ * @param cname Symbol name
  * @param ns_name Namespace name symbol (can be NULL)
  * @return CljSymbol symbol object
  */
-CljSymbol* make_symbol(const char *name, CljSymbol *ns_name) {
-    if (!name) {
+CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
+    if (!cname) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
         return NULL;
     }
 
     // Range check for name length (keep for safety)
-    if (strlen(name) >= SYMBOL_NAME_MAX_LEN) {
+    if (strlen(cname) >= SYMBOL_NAME_MAX_LEN) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "Symbol name '%s' exceeds maximum length of %d characters",
-                name, SYMBOL_NAME_MAX_LEN - 1);
+                cname, SYMBOL_NAME_MAX_LEN - 1);
         return NULL;
     }
 
@@ -417,7 +417,7 @@ CljSymbol* make_symbol(const char *name, CljSymbol *ns_name) {
     CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
     if (!sym) {
         throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                "Failed to allocate memory for symbol '%s'", name);
+                "Failed to allocate memory for symbol '%s'", cname);
         return NULL;
     }
 
@@ -425,11 +425,11 @@ CljSymbol* make_symbol(const char *name, CljSymbol *ns_name) {
     sym->base.rc = 1;  // Heap-allocated symbols start with rc=1
 
     // Store strdup'd name for heap-allocated symbols
-    sym->cname = strdup(name);
+    sym->cname = strdup(cname);
     if (!sym->cname) {
         free(sym);
         throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
-                "Failed to duplicate string for symbol '%s'", name);
+                "Failed to duplicate string for symbol '%s'", cname);
         return NULL;
     }
 
@@ -443,15 +443,15 @@ CljSymbol* make_symbol(const char *name, CljSymbol *ns_name) {
 }
 
 // Actual symbol interning
-CljSymbol* intern_symbol(CljSymbol *ns_name, const char *name) {
-    if (!name) return NULL;
+CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname) {
+    if (!cname) return NULL;
 
-    CljSymbol *existing = symbol_table_find(ns_name, name);
+    CljSymbol *existing = symbol_table_find(ns_name, cname);
     if (existing) {
         return existing;
     }
 
-    CljSymbol *symbol = make_symbol(name, ns_name);
+    CljSymbol *symbol = make_symbol(cname, ns_name);
     if (!symbol) return NULL;
 
     symbol_table_add(symbol);
@@ -460,8 +460,8 @@ CljSymbol* intern_symbol(CljSymbol *ns_name, const char *name) {
 }
 
 // Global symbols (without namespace)
-CljSymbol* intern_symbol_global(const char *name) {
-    return intern_symbol(NULL, name);
+CljSymbol* intern_symbol_global(const char *cname) {
+    return intern_symbol(NULL, cname);
 }
 
 // Helper: Get namespace object from symbol's namespace name (DRY principle)

@@ -16,7 +16,6 @@
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
-    .clojure_core_cache = NULL,
     .resolve_cache = NULL,
     .symbol_table = NULL,
     .meta_registry = NULL,
@@ -95,7 +94,6 @@ void runtime_reset(TinyClJRuntime *runtime) {
     ASSIGN(runtime->resolve_cache, NULL);
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->ns_registry, NULL);
-    ASSIGN(runtime->clojure_core_cache, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     
     // Reset primitive fields

@@ -16,10 +16,9 @@ extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 // Test: Verify that inc is loaded during test initialization
 TEST(test_core_initialization_inc_loaded) {
     // This test runs AFTER setUp(), so clojure.core should already be loaded
-    TEST_ASSERT_NOT_NULL_MESSAGE(g_runtime.clojure_core_cache, 
-                                 "clojure.core cache should be set after setUp()");
-    
-    CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, 
+                                 "clojure.core should be found in registry after setUp()");
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core namespace should exist");
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core->mappings, "clojure.core mappings should exist");
     
@@ -73,7 +72,7 @@ TEST(test_core_initialization_inc_loaded) {
 
 // Test: Verify that all arithmetic functions are loaded
 TEST(test_core_initialization_arithmetic_functions) {
-    CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     TEST_ASSERT_NOT_NULL(clojure_core);
     
     const char *functions[] = {"add", "sub", "mul", "div", "inc", "dec", "square"};
@@ -104,7 +103,7 @@ TEST(test_core_initialization_arithmetic_functions) {
 
 // Test: Verify that + is available (builtin) before loading clojure.core
 TEST(test_core_initialization_plus_available) {
-    CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     TEST_ASSERT_NOT_NULL(clojure_core);
     
     // Get + symbol
@@ -132,7 +131,7 @@ TEST(test_clojure_core_loads_inc) {
     load_clojure_core(g_test_eval_state);
     
     // Check if inc is in clojure.core mappings
-    CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core cache should be set");
     
     if (clojure_core && clojure_core->mappings) {
@@ -191,7 +190,7 @@ TEST(test_clojure_core_loads_all_functions) {
     load_clojure_core(g_test_eval_state);
     
     // Check if key functions are loaded
-    CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core cache should be set");
     
     if (clojure_core && clojure_core->mappings) {
@@ -260,8 +259,13 @@ TEST(test_def_inc_evaluation_during_load) {
         TRY {
             (void)eval_list(list, env, g_test_eval_state, NULL);
             
-            // Check if inc is now in the mappings
-            CljObject *inc_value = map_get(g_test_eval_state->current_ns->mappings, inc_sym_interned, NULL);
+            // CRITICAL: ns_define stores qualified symbols in mappings
+            // Get the qualified symbol from the symbol table for lookup
+            CljSymbol *qualified_inc_sym = NULL;
+            if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
+                qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
+            }
+            CljObject *inc_value = qualified_inc_sym ? map_get(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL) : NULL;
             
             if (!inc_value) {
                 CljMap *map = g_test_eval_state->current_ns->mappings;
@@ -316,7 +320,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL(plus_sym);
     
     // Check if + is in clojure.core mappings
-    CljNamespace *clojure_core = (CljNamespace*)g_runtime.clojure_core_cache;
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core should exist");
     
     if (clojure_core && clojure_core->mappings) {
@@ -373,23 +377,24 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     TRY {
         (void)eval_list(as_list(form), env, g_test_eval_state, NULL);
         
-        // Check if test-var is in the mappings (even if value is nil/NULL)
+        // CRITICAL: ns_define stores qualified symbols in mappings
+        // Get the qualified symbol from the symbol table for lookup
         CljSymbol *test_var_sym = intern_symbol_global("test-var");
         TEST_ASSERT_NOT_NULL(test_var_sym);
         
-        // test_var_value can be NULL if nil was stored
-        (void)map_get(g_test_eval_state->current_ns->mappings, test_var_sym, NULL);
-        // But the key should be in the map
-        // Let's check if the key exists by iterating
-        CljMap *map = g_test_eval_state->current_ns->mappings;
-        bool found_key = false;
-        MAP_FOR_EACH(map, key, value) {
-            (void)value;  // unused
-            if (key && TAG(key) == CLJ_SYMBOL && (CljSymbol*)key == test_var_sym) {
-                found_key = true;
-                break;
-            }
+        CljSymbol *qualified_test_var_sym = NULL;
+        if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
+            qualified_test_var_sym = intern_symbol(g_test_eval_state->current_ns->name, "test-var");
         }
+        TEST_ASSERT_NOT_NULL_MESSAGE(qualified_test_var_sym, "Should be able to create qualified symbol");
+        
+        // test_var_value can be NULL if nil was stored, but the key should be in the map
+        CljObject *test_var_value = map_get(g_test_eval_state->current_ns->mappings, qualified_test_var_sym, NULL);
+        // Even if value is NULL/nil, the key should exist (map_get returns NULL for not found OR nil value)
+        // Use sentinel to distinguish
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        CljObject *test_var_value_check = map_get(g_test_eval_state->current_ns->mappings, qualified_test_var_sym, (ID)&not_found_sentinel);
+        bool found_key = (test_var_value_check != (ID)&not_found_sentinel);
         
         TEST_ASSERT_TRUE_MESSAGE(found_key, 
                                 "test-var should be in mappings after def");

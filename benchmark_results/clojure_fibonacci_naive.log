@@ -1,0 +1,11 @@
+WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/fibonacci_naive.clj
+Running naive recursive fibonacci benchmark...
+Algorithm: fib(n) = if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))
+Test: fib(20) = 6765
+
+Warmup: fib(20) = 6765
+
+Running 5 iterations of fib(20)...
+"Elapsed time: 3.787667 msecs"
+
+Benchmark completed!

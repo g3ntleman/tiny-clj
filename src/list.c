@@ -76,62 +76,30 @@ ID list_nth(CljList *list, int n) {
 int list_count(CljList *list) {
     if (!list) return 0;
     
-    // Check if it's actually a list before calling as_list
-    if (!list || TAG(list) != CLJ_LIST) {
-        return 0;  // Not a list, return 0
-    }
+    // Programmierfehler: list muss CLJ_LIST sein, wenn es nicht NULL ist
+    CLJ_ASSERT(TAG(list) == CLJ_LIST);
     
     // Empty list has first = NULL and rest = NULL
     // A list with nil as element has first = NULL but rest != NULL
-    CljList *list_data = (CljList*)list;  // Safe cast after type check
-    if (!list_data) return 0;
-    
     // Check if this is the empty list singleton (both first and rest are NULL)
-    if (list_empty(list_data)) {
+    if (list_empty(list)) {
         return 0;
     }
     
     int count = 0;
     CljObject *current = (CljObject*)list;
-    while (current && TAG(current) == CLJ_LIST) {
+    while (current) {
+        // Programmierfehler: current muss CLJ_LIST sein, wenn es nicht NULL ist
+        CLJ_ASSERT(TAG(current) == CLJ_LIST);
+        
         CljList *current_list = as_list(current);
         // Count the element (first) of this list node
         // Even if LIST_FIRST is NULL (nil), it's still an element
         count++;
         current = LIST_REST(current_list);
-        if (current && TAG(current) != CLJ_LIST) {
-            current = NULL; // Stop if rest is not a list
-        }
     }
     return count;
 }
 
-/** Create a list from CljValue stack items. Returns new CljList*. */
-CljList* make_list_from_stack(CljValue *stack, int count) {
-    if (count == 0) return empty_list();
-    
-    // Build list from end to start using make_list
-    CljList *result = NULL;
-    for (int i = count - 1; i >= 0; i--) {
-        CljObject *element = stack[i];
-        CljList *new_node = make_list(element, result);
-        // ✅ FIX: make_list already does RETAIN, no need to do it again
-        result = new_node;
-    }
-    return result;
-}
 
-bool is_list(ID v) {
-    return v && TAG(v) == CLJ_LIST;
-}
 
-bool is_symbol(ID v, const char *name) {
-    if (!v || TAG(v) != CLJ_SYMBOL || !name) return false;
-    
-    // Erstelle Symbol für Vergleich (wird interniert)
-    CljSymbol *compare_symbol = intern_symbol_global(name);
-    if (!compare_symbol) return false;
-    
-    // Pointer-Vergleich statt String-Vergleich!
-    return (CljObject*)v == (CljObject*)compare_symbol;
-}

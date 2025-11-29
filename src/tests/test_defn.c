@@ -473,10 +473,8 @@ TEST(test_defn_test_fn_evaluated) {
 
         // Set current namespace to clojure.core
 
-        // Ensure clojure.core cache is set
-        if (g_test_eval_state->current_ns && !g_runtime.clojure_core_cache) {
-            g_runtime.clojure_core_cache = (void*)g_test_eval_state->current_ns;
-        }
+        // Ensure clojure.core namespace exists (already set by evalstate_set_ns)
+        // No special cache handling needed
 
         // Parse and evaluate (defn test-fn [x] (+ x 1))
         Reader reader;
@@ -498,8 +496,14 @@ TEST(test_defn_test_fn_evaluated) {
         TEST_ASSERT_NOT_NULL(ns);
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
 
+        // CRITICAL: ns_define stores qualified symbols in mappings
+        // Get the qualified symbol from the symbol table for lookup
         CljSymbol *test_fn_sym = intern_symbol_global("test-fn");
-        ID test_fn_value = map_get(ns->mappings, test_fn_sym, NULL);
+        CljSymbol *qualified_test_fn_sym = NULL;
+        if (ns->name && ns->name->cname) {
+            qualified_test_fn_sym = intern_symbol(ns->name, "test-fn");
+        }
+        ID test_fn_value = qualified_test_fn_sym ? map_get(ns->mappings, qualified_test_fn_sym, NULL) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_value,
                                      "'test-fn' should be in namespace mappings after eval_defn");
 
@@ -528,10 +532,18 @@ TEST(test_defn_add_stored_in_namespace) {
         TEST_ASSERT_NOT_NULL(ns);
         TEST_ASSERT_NOT_NULL_MESSAGE(ns->mappings, "namespace should have mappings");
 
+        // CRITICAL: ns_define stores qualified symbols in mappings
+        // Get the qualified symbol from the symbol table for lookup
         CljSymbol *add_sym = intern_symbol_global("add");
         TEST_ASSERT_NOT_NULL(add_sym);
+        
+        CljSymbol *qualified_add_sym = NULL;
+        if (ns->name && ns->name->cname) {
+            qualified_add_sym = intern_symbol(ns->name, "add");
+        }
+        TEST_ASSERT_NOT_NULL_MESSAGE(qualified_add_sym, "Should be able to create qualified symbol");
 
-        ID add_value = map_get(ns->mappings, add_sym, NULL);
+        ID add_value = map_get(ns->mappings, qualified_add_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(add_value,
                                      "'add' should be in namespace mappings after defn");
 

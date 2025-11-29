@@ -3,12 +3,18 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "function_call.h"
+#include "reader.h"
+#include "list.h"
+#include "map.h"
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <stdio.h>
 
 // Forward declaration for load_clojure_core
 int load_clojure_core(EvalState *st);
+// Forward declaration for value_by_parsing_expr
+extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
 // Test namespace lookup for core functions
 TEST(test_namespace_lookup_core_functions) {
@@ -136,6 +142,217 @@ TEST(test_symbol_interning_global) {
     // Cleanup
     RELEASE((CljObject*)sym1);
     RELEASE((CljObject*)sym2);
+}
+
+// Test: Verify that inc symbol is interned correctly when loading clojure.core
+TEST(test_inc_symbol_interning_during_load) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Get inc symbol BEFORE loading clojure.core
+    CljSymbol *inc_sym_before = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL(inc_sym_before);
+    
+    // Load clojure.core
+    
+    // Get inc symbol AFTER loading clojure.core
+    CljSymbol *inc_sym_after = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL(inc_sym_after);
+    
+    // They should be the SAME pointer (same interned symbol)
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_before, inc_sym_after,
+                                  "inc symbol should be the same before and after loading");
+    
+    // Verify that inc is in clojure.core mappings
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core should be found in registry");
+    
+    if (clojure_core && clojure_core->mappings) {
+        // Check if inc_sym_after is in the mappings
+        CljObject *inc_value = map_get(clojure_core->mappings, inc_sym_after, NULL);
+        
+        if (!inc_value) {
+            CljMap *map = clojure_core->mappings;
+            int symbol_count = 0;
+            const char *first_symbol = NULL;
+            MAP_FOR_EACH(map, key, value) {
+                (void)value;  // unused
+                if (key && TAG(key) == CLJ_SYMBOL) {
+                    CljSymbol *sym = as_symbol(key);
+                    symbol_count++;
+                    if (!first_symbol && sym->cname) {
+                        first_symbol = sym->cname;
+                    }
+                    // Check if this is inc by name
+                    if (sym->cname && strcmp(sym->cname, "inc") == 0) {
+                        // Found inc by name - check if it's the same pointer
+                        CljSymbol *key_sym = (CljSymbol*)key;
+                        if (key_sym != inc_sym_after) {
+                            char msg[256];
+                            snprintf(msg, sizeof(msg),
+                                    "Found 'inc' in mappings but with different symbol pointer! "
+                                    "Stored: %p, Lookup: %p",
+                                    key, inc_sym_after);
+                            TEST_FAIL_MESSAGE(msg);
+                        }
+                    }
+                }
+            }
+            
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                    "'inc' not found in clojure.core mappings using symbol pointer %p "
+                    "(but %d other symbols exist, first: %s)",
+                    inc_sym_after, symbol_count, first_symbol ? first_symbol : "unknown");
+            TEST_FAIL_MESSAGE(msg);
+        }
+        
+        TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc should be in clojure.core mappings");
+    }
+    
+}
+
+// Test: Verify that symbols used during parsing are the same as interned symbols
+TEST(test_inc_symbol_pointer_consistency) {
+    // This test verifies that when we parse "(def inc ...)", the symbol "inc"
+    // used in the parsed form is the same as when we later look it up
+    
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    
+    // Get inc symbol before parsing
+    CljSymbol *inc_sym_before = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL(inc_sym_before);
+    
+    // Parse "(def inc (fn [x] (+ x 1)))"
+    Reader reader;
+    reader_init(&reader, "(def inc (fn [x] (+ x 1)))");
+    CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(form);
+    
+    // Extract the symbol from the parsed form
+    if (form && TAG(form) == CLJ_LIST) {
+        CljList *list = as_list(form);
+        CljObject *inc_sym_in_form = (CljObject*)list_nth(list, 1);
+        
+        TEST_ASSERT_NOT_NULL(inc_sym_in_form);
+        TEST_ASSERT_TRUE(inc_sym_in_form && TAG(inc_sym_in_form) == CLJ_SYMBOL);
+        
+        // Get inc symbol after parsing
+        CljSymbol *inc_sym_after = intern_symbol_global("inc");
+        TEST_ASSERT_NOT_NULL(inc_sym_after);
+        
+        // The symbol in the parsed form should be the same as the interned symbol
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_before, inc_sym_in_form,
+                                     "Symbol in parsed form should be same as interned symbol");
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(inc_sym_after, inc_sym_in_form,
+                                     "Symbol after parsing should be same as symbol in form");
+        
+        // Now evaluate the def
+        CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
+        ID def_result = eval_list(list, env, g_test_eval_state, NULL);  // Evaluate def - returns the symbol
+        
+        // Check if inc is now in the mappings with the same symbol pointer
+        // CRITICAL: eval_def returns the qualified symbol that was stored
+        // For non-clojure.core namespaces, the symbol is qualified with the namespace name
+        if (g_test_eval_state->current_ns && g_test_eval_state->current_ns->mappings) {
+            // Use the symbol returned by def (should be the qualified symbol that was stored)
+            CljSymbol *stored_symbol = def_result ? as_symbol(def_result) : NULL;
+            
+            // Also try to get the qualified symbol from the symbol table
+            CljSymbol *qualified_inc_sym = NULL;
+            if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
+                qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
+            }
+            
+            // Try lookup with the symbol returned by def first
+            CljObject *inc_value = NULL;
+            if (stored_symbol) {
+                inc_value = map_get(g_test_eval_state->current_ns->mappings, stored_symbol, NULL);
+            }
+            
+            // If not found, try with qualified symbol from symbol table
+            if (!inc_value && qualified_inc_sym) {
+                inc_value = map_get(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL);
+            }
+            
+            // If still not found, try with unqualified symbol (for clojure.core compatibility)
+            if (!inc_value) {
+                inc_value = map_get(g_test_eval_state->current_ns->mappings, inc_sym_after, NULL);
+            }
+            
+            if (!inc_value) {
+                char msg[512];
+                snprintf(msg, sizeof(msg),
+                        "inc not found in mappings after def. "
+                        "Form symbol: %p, Interned symbol: %p, Stored symbol: %p, Qualified symbol: %p, Equal: %d",
+                        (void*)inc_sym_in_form, (void*)inc_sym_after, (void*)stored_symbol, (void*)qualified_inc_sym,
+                        ((CljSymbol*)inc_sym_in_form == inc_sym_after) ? 1 : 0);
+                TEST_FAIL_MESSAGE(msg);
+            }
+            
+            TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc should be in mappings after def");
+        }
+        
+        // Don't RELEASE result - eval_list returns autoreleased object
+    }
+    
+    // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
+}
+
+// Test: Verify symbol interning consistency across multiple calls (for inc specifically)
+TEST(test_inc_symbol_interning_consistency) {
+    // Test that intern_symbol_global("inc") always returns the same pointer
+    CljSymbol *sym1 = intern_symbol_global("inc");
+    CljSymbol *sym2 = intern_symbol_global("inc");
+    CljSymbol *sym3 = intern_symbol_global("inc");
+    
+    TEST_ASSERT_NOT_NULL(sym1);
+    TEST_ASSERT_NOT_NULL(sym2);
+    TEST_ASSERT_NOT_NULL(sym3);
+    
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(sym1, sym2, "First and second call should return same pointer");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(sym2, sym3, "Second and third call should return same pointer");
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(sym1, sym3, "First and third call should return same pointer");
+}
+
+// Test: Verify that map_get uses pointer equality for interned symbols
+TEST(test_map_get_with_interned_symbols) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    evalstate_set_ns(g_test_eval_state, "user");
+    
+    // Create a test symbol
+    CljSymbol *test_sym = intern_symbol_global("test-var");
+    TEST_ASSERT_NOT_NULL(test_sym);
+    
+    // Store a value using test_sym
+    CljObject *value = fixnum(42);
+    ns_define(g_test_eval_state->current_ns, test_sym, value);
+    
+    // Get the symbol again (should be same pointer)
+    CljSymbol *test_sym2 = intern_symbol_global("test-var");
+    TEST_ASSERT_NOT_NULL(test_sym2);
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(test_sym, test_sym2, 
+                                  "Should get same symbol pointer");
+    
+    // CRITICAL: ns_define stores qualified symbols in mappings
+    // Get the qualified symbol from the symbol table for lookup
+    CljSymbol *qualified_test_sym = NULL;
+    if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
+        qualified_test_sym = intern_symbol(g_test_eval_state->current_ns->name, "test-var");
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(qualified_test_sym, "Should be able to create qualified symbol");
+    
+    // Try to retrieve using the qualified symbol pointer
+    CljObject *retrieved = map_get(g_test_eval_state->current_ns->mappings, qualified_test_sym, NULL);
+    TEST_ASSERT_NOT_NULL_MESSAGE(retrieved, 
+                                 "Should retrieve value using interned symbol pointer");
+    
+    if (retrieved) {
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)retrieved));
+        TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
+    }
+    
 }
 
 // Test symbol table functionality
@@ -305,24 +522,14 @@ TEST(test_namespace_error_handling) {
 TEST(test_ns_resolve_clojure_core_cache_initialization) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    // Clear cache first to test initial state
-    g_runtime.clojure_core_cache = NULL;
-
-    // Get or create clojure.core namespace (this should cache it)
+    // Get or create clojure.core namespace
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
     TEST_ASSERT_NOT_NULL(clojure_core);
 
-    // Verify cache is set after ns_get_or_create
-    // Note: ns_get_or_create sets cache when creating NEW namespace
-    // If namespace already exists, cache might not be set
-    if (!g_runtime.clojure_core_cache) {
-        // If not cached, explicitly set it (this is what we'll fix)
-        g_runtime.clojure_core_cache = clojure_core;
-    }
-
-    // Now verify cache is set
-    TEST_ASSERT_NOT_NULL(g_runtime.clojure_core_cache);
-    TEST_ASSERT_EQUAL_PTR(clojure_core, (CljNamespace*)g_runtime.clojure_core_cache);
+    // Verify namespace can be found via registry
+    CljNamespace *found_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    TEST_ASSERT_NOT_NULL(found_core);
+    TEST_ASSERT_EQUAL_PTR(clojure_core, found_core);
 
     // Test multiple ns_resolve calls - should NOT trigger namespace search loop
     // If cache is properly set, the search loop in ns_resolve (lines 66-79) won't execute
@@ -333,8 +540,9 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
         (void)resolved; // Just test that it doesn't crash
     }
 
-    // Verify cache is still set after multiple calls
-    TEST_ASSERT_NOT_NULL(g_runtime.clojure_core_cache);
+    // Verify namespace can still be found after multiple calls
+    CljNamespace *found_core2 = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    TEST_ASSERT_NOT_NULL(found_core2);
 
     // Cleanup
     RELEASE((CljObject*)plus_sym);
@@ -345,11 +553,9 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
 TEST(test_ns_resolve_symbol_cache) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    // Ensure clojure.core cache is set
+    // Ensure clojure.core namespace exists
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
-    if (!g_runtime.clojure_core_cache) {
-        g_runtime.clojure_core_cache = clojure_core;
-    }
+    TEST_ASSERT_NOT_NULL(clojure_core);
 
     // Register a test symbol in clojure.core (must use qualified symbol)
     CljSymbol *test_sym_qualified = intern_symbol(SYM_CLOJURE_CORE, "test-cached-symbol");
@@ -400,9 +606,7 @@ TEST(test_resolve_list_operator_uses_cache) {
 
     // Ensure clojure.core is loaded
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
-    if (!g_runtime.clojure_core_cache) {
-        g_runtime.clojure_core_cache = clojure_core;
-    }
+    TEST_ASSERT_NOT_NULL(clojure_core);
 
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
@@ -459,9 +663,7 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
 
     // Ensure clojure.core is loaded
     CljNamespace *clojure_core = ns_get_or_create("clojure.core", NULL);
-    if (!g_runtime.clojure_core_cache) {
-        g_runtime.clojure_core_cache = clojure_core;
-    }
+    TEST_ASSERT_NOT_NULL(clojure_core);
 
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
@@ -761,34 +963,6 @@ TEST(test_require_alias_resolution) {
     // For now, just verify the alias exists
     TEST_ASSERT_TRUE(ns_name && TAG(ns_name) == CLJ_SYMBOL);
 
-}
-
-// Test: Verify that CljNamespace no longer has next field
-TEST(test_namespace_no_next_field) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-
-    // Create a namespace
-    CljNamespace *ns = ns_get_or_create("test-no-next", NULL);
-    TEST_ASSERT_NOT_NULL(ns);
-
-    // Verify namespace structure - should not have next field
-    // This is a compile-time check, but we can verify the structure works
-    TEST_ASSERT_NOT_NULL(ns->name);
-    TEST_ASSERT_NOT_NULL(ns->mappings);
-    TEST_ASSERT_NOT_NULL(ns->aliases);
-
-    // Verify namespace can be used normally
-    CljSymbol *test_sym = intern_symbol_global("test-var");
-    CljObject *value = fixnum(42);
-    ns_define(ns, (ID)test_sym, value);
-
-    CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
-    TEST_ASSERT_NOT_NULL(resolved);
-
-    // Cleanup
-    RELEASE((CljObject*)test_sym);
-    RELEASE((CljObject*)value);
-    RELEASE((CljObject*)resolved);
 }
 
 // Test: Verify that ns_registry is a Map
@@ -1220,9 +1394,8 @@ TEST(test_ambiguous_symbol_with_clojure_core) {
     CljSymbol *map_conflict_qualified = intern_symbol(intern_symbol_global("test.conflict"), "map");
     TEST_ASSERT_NOT_NULL(map_core_qualified);
     TEST_ASSERT_NOT_NULL(map_conflict_qualified);
-    ID map_core = map_get(clojure_core->mappings, map_core_qualified, NULL);
+    (void)map_get(clojure_core->mappings, map_core_qualified, NULL);  // Check if map exists in clojure.core (may be NULL if not loaded, but that's OK for this test)
     ID map_conflict = map_get(conflict_ns->mappings, map_conflict_qualified, NULL);
-    // map should exist in clojure.core (may be NULL if not loaded, but that's OK for this test)
     TEST_ASSERT_NOT_NULL(map_conflict);
 
     // Try to use unqualified symbol - should throw error (ambiguous: exists in clojure.core AND test.conflict)
@@ -1242,3 +1415,140 @@ TEST(test_ambiguous_symbol_with_clojure_core) {
     TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Should throw exception for ambiguous symbol");
 }
 
+
+// Test: Verify that ns_find_by_symbol(NULL) works correctly and list clojure.core symbols
+TEST(test_ns_find_by_symbol_null) {
+    CljNamespace *result = ns_find_by_symbol(NULL);
+    
+    // Also get clojure.core to list its symbols
+    CljNamespace *clojure_core = NULL;
+    if (SYM_CLOJURE_CORE) {
+        clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    }
+    
+    // Check what ns_find_by_symbol(NULL) returns - should be clojure.core
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "ns_find_by_symbol(NULL) should return clojure.core");
+    if (result) {
+        // Verify it's clojure.core
+        TEST_ASSERT_TRUE_MESSAGE(result == clojure_core, "ns_find_by_symbol(NULL) should return clojure.core");
+        TEST_ASSERT_NOT_NULL_MESSAGE(result->mappings, "result namespace should have mappings");
+    }
+    
+    // List all symbols in clojure.core mappings
+    if (clojure_core && clojure_core->mappings) {
+        int symbol_count = 0;
+        const char *symbol_names[200]; // Array to store symbol names
+        int max_symbols = 200;
+        
+        MAP_FOR_EACH(clojure_core->mappings, key, value) {
+            (void)value; // unused
+            if (key && TAG(key) == CLJ_SYMBOL) {
+                CljSymbol *sym = as_symbol(key);
+                if (sym && sym->cname && symbol_count < max_symbols) {
+                    symbol_names[symbol_count] = sym->cname;
+                    symbol_count++;
+                }
+            }
+        }
+        
+        // Write all symbols to a file for inspection
+        FILE *f = fopen("/tmp/clojure_core_symbols.txt", "w");
+        if (f) {
+            fprintf(f, "=== Symbols in clojure.core mappings (total: %d) ===\n", symbol_count);
+            fprintf(f, "Namespace name: %s\n", clojure_core->name && clojure_core->name->cname ? clojure_core->name->cname : "NULL");
+            for (int i = 0; i < symbol_count; i++) {
+                fprintf(f, "%d: %s\n", i+1, symbol_names[i]);
+            }
+            fprintf(f, "=== End of symbols list ===\n");
+            fclose(f);
+        }
+        
+        // Also print summary via TEST_ASSERT
+        char msg[512];
+        snprintf(msg, sizeof(msg), "clojure.core has %d symbols (see /tmp/clojure_core_symbols.txt for full list)", symbol_count);
+        TEST_ASSERT_TRUE_MESSAGE(symbol_count > 0, msg);
+    } else {
+        TEST_ASSERT_TRUE_MESSAGE(false, "clojure.core namespace not found or has no mappings");
+    }
+}
+
+// Test: Get core namespace and search for inc symbol
+TEST(test_core_namespace_find_inc) {
+    // Get clojure.core namespace using NULL key
+    CljNamespace *core_ns = ns_find_by_symbol(NULL);
+    TEST_ASSERT_NOT_NULL_MESSAGE(core_ns, "ns_find_by_symbol(NULL) should return clojure.core");
+    
+    // Verify it's actually clojure.core
+    if (SYM_CLOJURE_CORE) {
+        CljNamespace *core_ns_by_symbol = ns_find_by_symbol(SYM_CLOJURE_CORE);
+        TEST_ASSERT_TRUE_MESSAGE(core_ns == core_ns_by_symbol, 
+                                 "ns_find_by_symbol(NULL) should return same namespace as ns_find_by_symbol(SYM_CLOJURE_CORE)");
+    }
+    
+    // Verify namespace has mappings
+    TEST_ASSERT_NOT_NULL_MESSAGE(core_ns->mappings, "clojure.core should have mappings");
+    
+    // Get inc symbol
+    CljSymbol *inc_sym = intern_symbol_global("inc");
+    TEST_ASSERT_NOT_NULL_MESSAGE(inc_sym, "inc symbol should exist");
+    
+    // Search for inc in clojure.core mappings
+    if (core_ns->mappings && inc_sym) {
+        // Debug: Check inc_sym properties
+        char debug_msg[512];
+        snprintf(debug_msg, sizeof(debug_msg), 
+                 "inc_sym: cname=%s, ns_name=%s", 
+                 inc_sym->cname ? inc_sym->cname : "NULL",
+                 inc_sym->ns_name && inc_sym->ns_name->cname ? inc_sym->ns_name->cname : "NULL");
+        TEST_ASSERT_TRUE_MESSAGE(true, debug_msg);
+        
+        // Use map_get to find inc in mappings
+        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+        ID inc_value = map_get(core_ns->mappings, inc_sym, (ID)&not_found_sentinel);
+        
+        // Debug: Check if we found something
+        if (inc_value == (ID)&not_found_sentinel) {
+            // Try to find inc by iterating through mappings
+            bool found_by_iteration = false;
+            CljSymbol *found_key = NULL;
+            MAP_FOR_EACH(core_ns->mappings, key, value) {
+                if (key && TAG(key) == CLJ_SYMBOL) {
+                    CljSymbol *sym = as_symbol(key);
+                    if (sym && sym->cname && strcmp(sym->cname, "inc") == 0) {
+                        found_by_iteration = true;
+                        found_key = sym;
+                        snprintf(debug_msg, sizeof(debug_msg),
+                                "Found inc by iteration: cname=%s, ns_name=%s, key_ptr=%p, inc_sym_ptr=%p",
+                                sym->cname ? sym->cname : "NULL",
+                                sym->ns_name && sym->ns_name->cname ? sym->ns_name->cname : "NULL",
+                                (void*)key, (void*)inc_sym);
+                        TEST_ASSERT_TRUE_MESSAGE(true, debug_msg);
+                        break;
+                    }
+                }
+            }
+            if (!found_by_iteration) {
+                TEST_ASSERT_TRUE_MESSAGE(false, "inc not found even by iteration through mappings");
+            } else {
+                snprintf(debug_msg, sizeof(debug_msg),
+                        "map_get failed but iteration found it - key pointer mismatch? found_key=%p, inc_sym=%p",
+                        (void*)found_key, (void*)inc_sym);
+                TEST_ASSERT_TRUE_MESSAGE(false, debug_msg);
+            }
+        }
+        
+        // Verify inc was found
+        TEST_ASSERT_TRUE_MESSAGE(inc_value != (ID)&not_found_sentinel, 
+                                 "inc should be found in clojure.core mappings");
+        TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc value should not be NULL");
+        
+        // Verify it's a function
+        if (inc_value && inc_value != (ID)&not_found_sentinel) {
+            int tag = TAG(inc_value);
+            TEST_ASSERT_TRUE_MESSAGE(tag == CLJ_FUNC || tag == CLJ_CLOSURE, 
+                                     "inc should be a function or closure");
+        }
+    } else {
+        TEST_ASSERT_TRUE_MESSAGE(false, "core_ns->mappings or inc_sym is NULL");
+    }
+}

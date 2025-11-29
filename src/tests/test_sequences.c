@@ -153,11 +153,6 @@ TEST(test_seq_rest_performance) {
     // vec2, r1, r2, r3, r4 are automatically managed by eval_string
 }
 
-TEST(test_seq_iterator_verification) {
-    // Test disabled due to implementation issues
-    TEST_ASSERT_TRUE(true);
-}
-
 // ============================================================================
 // Tests for filter function
 // ============================================================================
