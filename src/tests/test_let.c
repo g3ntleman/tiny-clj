@@ -610,15 +610,9 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         TEST_ASSERT_TRUE(parsed && TAG(parsed) == CLJ_LIST);
         CljList *list = as_list(parsed);
         
-        // Test 1: Direct eval_arg call (should work)
-        ID result = eval_arg(list, 1, let_env, g_test_eval_state);
-        TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_arg should resolve symbol 'i' from let_env (direct call)");
-        TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_ATOM, "eval_arg should return atom for symbol 'i' (direct call)");
-        TEST_ASSERT_EQUAL_PTR_MESSAGE(atom, result, "eval_arg should return the same atom (direct call)");
-        
-        // Test 2: Call via eval_list (which uses call_function_with_args internally)
+        // Test: Call via eval_list (which uses call_function_with_args internally)
         // This simulates what happens when (swap! i inc) is evaluated in a let body
-        // eval_list will call call_function_with_args, which will call eval_arg_retained_with_st
+        // eval_list will call call_function_with_args with let_env
         // The question is: does the environment get passed correctly through this chain?
         // 
         // First, reset the atom to 0 to test the swap! call
@@ -627,10 +621,9 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         // Now call eval_list - this should:
         // 1. Resolve swap! from namespace (should work)
         // 2. Call call_function_with_args with let_env
-        // 3. call_function_with_args should call eval_arg_retained_with_st(list, 1, let_env, st) for "i"
-        // 4. eval_arg should find "i" in let_env (this is what we're testing)
-        // 5. call_function_with_args should call eval_arg_retained_with_st(list, 2, let_env, st) for "inc"
-        // 6. eval_arg should find "inc" in namespace (should work)
+        // 3. call_function_with_args uses eval_all_args to evaluate arguments
+        // 4. Arguments should find "i" in let_env (this is what we're testing)
+        // 5. Should find "inc" in namespace (should work)
         ID result2 = eval_list(list, let_env, g_test_eval_state, NULL);
         
         // Check if eval_list returned NULL (indicates failure)
@@ -653,11 +646,10 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         }
         
         // If swap! works correctly, it should have incremented the atom value from 0 to 1
-        // So dereferencing the atom should return 1
         CljAtom *atom_after = (CljAtom*)atom;
         ID atom_value = atom_deref(atom_after);
-        TEST_ASSERT_NOT_NULL_MESSAGE(result2, "eval_list should execute swap! successfully");
+        TEST_ASSERT_NOT_NULL_MESSAGE(result2, "eval_list should execute swap! successfully (environment passed correctly)");
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum(atom_value), "atom value should be a fixnum after swap!");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(atom_value), "atom value should be 1 after swap! inc");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, as_fixnum(atom_value), "atom value should be 1 after swap! inc (symbol 'i' found in let_env)");
     });
 }
