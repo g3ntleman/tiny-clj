@@ -101,5 +101,3 @@ int list_count(CljList *list) {
     return count;
 }
 
-
-
