@@ -618,6 +618,76 @@ TEST(test_reduce_with_identity_function) {
     } END_TRY
 }
 
+// LOW-LEVEL TEST: Parameter resolution in function body
+TEST(test_parameter_resolution_in_function_body) {
+    // Test: Simple function parameter access
+    // ((fn [x] x) 42) => 42
+    CljObject *result = eval_string("((fn [x] x) 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// LOW-LEVEL TEST: Parameter resolution in let inside function
+TEST(test_parameter_resolution_in_let) {
+    // Test: Parameter access in let binding
+    // ((fn [x] (let [y x] y)) 42) => 42
+    CljObject *result = eval_string("((fn [x] (let [y x] y)) 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// LOW-LEVEL TEST: Parameter resolution in nested function call
+TEST(test_parameter_resolution_in_nested_call) {
+    // Test: Parameter access in nested function call
+    // ((fn [x] (first (list x))) 42) => 42
+    CljObject *result = eval_string("((fn [x] (first (list x))) 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// LOW-LEVEL TEST: Parameter resolution with empty? (like in reduce)
+TEST(test_parameter_resolution_with_empty) {
+    // Test: Parameter access with empty? function (similar to reduce)
+    // ((fn [coll] (empty? coll)) (list)) => true
+    CljObject *result = eval_string("((fn [coll] (empty? coll)) (list))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    // empty? returns true for empty list
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+}
+
+// LOW-LEVEL TEST: Parameter resolution with first (like in reduce)
+TEST(test_parameter_resolution_with_first) {
+    // Test: Parameter access with first function (similar to reduce)
+    // ((fn [coll] (first coll)) (list 42)) => 42
+    CljObject *result = eval_string("((fn [coll] (first coll)) (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// LOW-LEVEL TEST: Two parameters (like reduce with f and coll)
+TEST(test_two_parameters_resolution) {
+    // Test: Two parameters access
+    // ((fn [f coll] (f (first coll))) (fn [x] x) (list 42)) => 42
+    CljObject *result = eval_string("((fn [f coll] (f (first coll))) (fn [x] x) (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
+// LOW-LEVEL TEST: Parameter in let with two parameters
+TEST(test_parameter_in_let_with_two_params) {
+    // Test: Two parameters, use second in let
+    // ((fn [f coll] (let [x (first coll)] x)) (fn [x] x) (list 42)) => 42
+    CljObject *result = eval_string("((fn [f coll] (let [x (first coll)] x)) (fn [x] x) (list 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
+}
+
 // EDGE CASE 14: Reduce with two elements
 TEST(test_reduce_two_elements) {
     // Use global st from setUp (clojure.core already loaded)

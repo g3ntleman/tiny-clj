@@ -80,4 +80,48 @@ extern EvalState* test_get_eval_state(void);
     } \
     static void name##_body(void)
 
+// ============================================================================
+// HELPER FUNCTIONS FOR COMMON TEST PATTERNS
+// ============================================================================
+
+// Helper: Assert that object is a fixnum with expected value
+static inline void assert_fixnum(CljObject *obj, int expected) {
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(obj));
+    TEST_ASSERT_EQUAL_INT(expected, as_fixnum((CljValue)obj));
+}
+
+// Helper: Assert that object is a fixed-point number with expected value
+static inline void assert_fixed(CljObject *obj, float expected, float tolerance) {
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_TRUE(is_fixed((CljValue)obj));
+    TEST_ASSERT_FLOAT_WITHIN(tolerance, expected, as_fixed((CljValue)obj));
+}
+
+// Helper: Assert that object is a string with expected value
+static inline void assert_string(CljObject *obj, const char *expected) {
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(obj));
+    CljString *str = as_clj_string(obj);
+    TEST_ASSERT_EQUAL_STRING(expected, clj_string_data(str));
+}
+
+// Helper: Assert that object is a list
+static inline void assert_list(CljObject *obj) {
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(obj));
+}
+
+// Helper: Assert that object is a vector
+static inline void assert_vector(CljObject *obj) {
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(obj));
+}
+
+// Helper: Assert that object is a map
+static inline void assert_map(CljObject *obj) {
+    TEST_ASSERT_NOT_NULL(obj);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(obj));
+}
+
 #endif // TESTS_COMMON_H

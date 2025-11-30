@@ -959,9 +959,17 @@ TEST(test_require_alias_resolution) {
     TEST_ASSERT_NOT_NULL(ns_name);
 
     // Test namespace-qualified symbol resolution: tar/resvar
-    // This will be tested once parser supports alias/symbol syntax
-    // For now, just verify the alias exists
-    TEST_ASSERT_TRUE(ns_name && TAG(ns_name) == CLJ_SYMBOL);
+    CljObject *parsed = parse("tar/resvar", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+
+    // Verify: ns_name should be test.aliasres (resolved), not tar (alias)
+    TEST_ASSERT_EQUAL_STRING("test.aliasres", sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("resvar", sym->cname);
 
 }
 

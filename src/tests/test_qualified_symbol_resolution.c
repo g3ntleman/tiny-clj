@@ -308,6 +308,82 @@ TEST(test_nonexistent_qualified_symbol_throws) {
     } END_TRY
 }
 
+// Test: Parser resolves alias for symbols
+TEST(test_parser_resolves_symbol_alias) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Setup: Create namespace with alias
+    load_clojure_string_namespace();
+    eval_string("(ns test-parser-alias (:require [clojure.string :as str]))", g_test_eval_state);
+    
+    // Test: Parse str/blank? - should resolve alias in parser
+    CljObject *parsed = parse("str/blank?", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    
+    // Verify: ns_name should be clojure.string (resolved), not str (alias)
+    TEST_ASSERT_EQUAL_STRING("clojure.string", sym->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("blank?", sym->cname);
+}
+
+// Test: Common alias resolution for keywords and symbols
+TEST(test_common_alias_resolution_for_keywords_and_symbols) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Setup: Create namespace with alias
+    load_clojure_string_namespace();
+    eval_string("(ns test-common (:require [clojure.string :as str]))", g_test_eval_state);
+    
+    // Test: Both keyword and symbol should resolve to same namespace
+    CljObject *kw_parsed = parse(":str/trim", g_test_eval_state);
+    CljObject *sym_parsed = parse("str/blank?", g_test_eval_state);
+    
+    TEST_ASSERT_NOT_NULL(kw_parsed);
+    TEST_ASSERT_NOT_NULL(sym_parsed);
+    
+    CljSymbol *kw = as_symbol(kw_parsed);
+    CljSymbol *sym = as_symbol(sym_parsed);
+    
+    // Both should resolve to clojure.string namespace
+    TEST_ASSERT_EQUAL_STRING("clojure.string", kw->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING("clojure.string", sym->ns_name->cname);
+}
+
+// Test: No runtime fallback for alias (alias not available at parse time)
+TEST(test_no_runtime_fallback_for_alias) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Setup: Parse symbol BEFORE alias is set (simulating require outside ns)
+    CljObject *parsed = parse("str/blank?", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    
+    CljSymbol *sym = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(sym);
+    
+    // At parse time, alias doesn't exist - should use original ns_str
+    // After removing runtime fallback, this should remain as "str" (not resolved)
+    TEST_ASSERT_NOT_NULL(sym->ns_name);
+    TEST_ASSERT_EQUAL_STRING("str", sym->ns_name->cname);
+    
+    // Now set alias
+    load_clojure_string_namespace();
+    eval_string("(require '[clojure.string :as str])", g_test_eval_state);
+    
+    // Evaluate the parsed symbol - should fail (no runtime fallback)
+    TRY {
+        (void)eval_symbol(sym, g_test_eval_state);
+        // If we get here, runtime fallback still exists (should be removed)
+        TEST_FAIL_MESSAGE("Runtime fallback should be removed - eval should fail");
+    } CATCH(ex) {
+        // Expected: No runtime fallback, so unresolved symbol
+        TEST_ASSERT_NOT_NULL(ex);
+    } END_TRY
+}
+
 // Test: Non-existent namespace should throw exception
 TEST(test_nonexistent_namespace_throws) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);

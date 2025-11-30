@@ -77,9 +77,13 @@ R"CLOJURE(
 (def reduce (fn [f coll]
   (if (empty? coll)
     nil
-    (let [step (fn [f coll acc]
-                  (if (empty? coll)
-                    acc
-                    (step f (rest coll) (f acc (first coll)))))]
-      (step f (rest coll) (first coll))))))
+    (let [first-val (first coll)
+          rest-coll (rest coll)]
+      (if (empty? rest-coll)
+        first-val
+        (let [step (fn [acc remaining]
+                     (if (empty? remaining)
+                       acc
+                       (step (f acc (first remaining)) (rest remaining))))]
+          (step first-val rest-coll)))))))
 )CLOJURE"

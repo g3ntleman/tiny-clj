@@ -191,11 +191,6 @@ TEST(test_if_keywords_truthy) {
 
 // Isolated test: Check if function call works
 TEST(test_if_function_call_works) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     CljObject *fn_def = eval_string("(def test-fn (fn [n] n))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn_def);
 
@@ -209,11 +204,6 @@ TEST(test_if_function_call_works) {
 
 // Isolated test: Check if if works in function without comparison
 TEST(test_if_in_function_simple) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     CljObject *fn_def = eval_string("(def test-if-simple (fn [n] (if n :yes :no)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn_def);
 
@@ -237,11 +227,6 @@ TEST(test_if_in_function_simple) {
 
 // Isolated test: Check if if works in function with comparison
 TEST(test_if_in_function_with_comparison) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     CljObject *fn_def = eval_string("(def test-if-comp (fn [n] (if (= n 0) :yes :no)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fn_def);
 
@@ -257,11 +242,6 @@ TEST(test_if_in_function_with_comparison) {
 
 // Isolated test: Check if recur state affects if evaluation
 TEST(test_if_after_recur_state) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // First, trigger a recur to set g_recur_arg_count
     // Use a simpler recur function that we know works
     CljObject *recur_def = eval_string("(def test-recur-simple (fn [n] (if (= n 0) n (recur (- n 1)))))", g_test_eval_state);
@@ -287,11 +267,6 @@ TEST(test_if_after_recur_state) {
 
 // Test automatic TCO for factorial without explicit recur
 TEST(test_automatic_tco_factorial) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // TCO DISABLED: Test with small values only (without TCO, deep recursion would hang)
     // Test function definition WITHOUT recur - TCO transformation is disabled
     CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", g_test_eval_state);
@@ -317,11 +292,6 @@ TEST(test_automatic_tco_factorial) {
 
 // Test automatic TCO for deep recursion without explicit recur
 TEST(test_automatic_tco_deep_recursion) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test function definition WITHOUT recur - tests deep recursion
     CljObject *deep_def = eval_string("(defn deep [n acc] (if (= n 0) acc (deep (- n 1) (+ acc 1))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(deep_def);
@@ -335,11 +305,6 @@ TEST(test_automatic_tco_deep_recursion) {
 
 // Test automatic TCO for sum without explicit recur
 TEST(test_automatic_tco_sum) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test function definition WITHOUT recur - tests deep recursion
     CljObject *sum_def = eval_string("(defn sum [n acc] (if (= n 0) acc (sum (- n 1) (+ acc n))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(sum_def);
@@ -353,11 +318,6 @@ TEST(test_automatic_tco_sum) {
 
 // Test automatic TCO for fibonacci without explicit recur
 TEST(test_automatic_tco_fibonacci) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test function definition WITHOUT recur - tests deep recursion
     CljObject *fib_def = eval_string("(defn fib [n a b] (if (= n 0) a (fib (- n 1) b (+ a b))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(fib_def);
@@ -371,11 +331,6 @@ TEST(test_automatic_tco_fibonacci) {
 
 // Test TCO transformation verification
 TEST(test_tco_artificially_generates_recur) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Test that functions without explicit recur still work
     // This verifies that the system handles recursive calls correctly
     CljObject *factorial_def = eval_string("(defn factorial [n acc] (if (= n 0) acc (factorial (- n 1) (* n acc))))", g_test_eval_state);
@@ -511,11 +466,6 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
 // Test: Function A calls function B, both use recur
 // This tests if nested recur contexts are handled correctly
 TEST(test_nested_recur_outer_calls_inner) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Define inner function B that uses recur
     CljObject *inner_def = eval_string("(def inner (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(inner_def);
@@ -536,11 +486,6 @@ TEST(test_nested_recur_outer_calls_inner) {
 // Test: Function A uses recur, and within the recur loop calls function B that also uses recur
 // This is a more complex nested scenario
 TEST(test_nested_recur_in_recur_loop) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Define helper function that uses recur
     CljObject *helper_def = eval_string("(def helper (fn [x] (if (= x 0) 0 (recur (- x 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(helper_def);
@@ -560,11 +505,6 @@ TEST(test_nested_recur_in_recur_loop) {
 // Test: More complex nested recur - outer function uses recur, inner function also uses recur
 // The inner function is called from within the outer function's recur loop
 TEST(test_nested_recur_complex) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Define inner function that sums using recur
     CljObject *sum_inner_def = eval_string("(def sum-inner (fn [n acc] (if (= n 0) acc (recur (- n 1) (+ acc n)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(sum_inner_def);
@@ -584,11 +524,6 @@ TEST(test_nested_recur_complex) {
 // Test: Simple nested recur - outer function uses recur, calls inner function that also uses recur
 // This is the simplest case to test if nested recur contexts work correctly
 TEST(test_nested_recur_simple) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Define inner function that uses recur
     CljObject *inner_def = eval_string("(def inner (fn [x] (if (= x 0) 0 (recur (- x 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(inner_def);
@@ -608,11 +543,6 @@ TEST(test_nested_recur_simple) {
 // Test: Nested recur where inner function's recur might interfere with outer function's recur
 // This tests if the RecurContext is properly isolated between nested function calls
 TEST(test_nested_recur_isolation) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-
     // Define helper function that uses recur to count down
     CljObject *helper_def = eval_string("(def helper (fn [n] (if (= n 0) 0 (recur (- n 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(helper_def);

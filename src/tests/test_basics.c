@@ -51,10 +51,7 @@ TEST(test_list_creation) {
 
     // Test count function
     CljObject *count_result = eval_string("(count (list 1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(count_result);
-    if (count_result && is_fixnum(count_result)) {
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
-    }
+    assert_fixnum(count_result, 3);
 
     // Clean up
 }
@@ -528,36 +525,19 @@ TEST(test_load_multiline_file) {
 
 
 TEST(test_first_function) {
-
-    // Test first on vectors (builtin function)
     CljObject *first_result = eval_string("(first [1 2 3])", g_test_eval_state);
-    if (first_result) {
-        TEST_ASSERT_TRUE(is_fixnum(first_result));
-        TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
-    }
-
+    assert_fixnum(first_result, 1);
 }
 
 TEST(test_rest_function) {
-
-    // Test rest on vectors (builtin function)
     CljObject *rest_test = eval_string("(rest [1 2 3])", g_test_eval_state);
-    if (rest_test) {
-        TEST_ASSERT_NOT_NULL(rest_test);
-        TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
-    }
-
+    TEST_ASSERT_NOT_NULL(rest_test);
+    TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
 }
 
 TEST(test_cons_function) {
-
-    // Test cons (builtin function)
     CljObject *cons_test = eval_string("(cons 1 '(2 3))", g_test_eval_state);
-    if (cons_test) {
-        TEST_ASSERT_NOT_NULL(cons_test);
-        TEST_ASSERT_EQUAL_INT(CLJ_LIST, cons_test->type);
-    }
-
+    assert_list(cons_test);
 }
 
 TEST(test_identity_function) {
@@ -596,36 +576,18 @@ TEST(test_identity_function) {
 }
 
 TEST(test_count_vector) {
-
-    // Test count on vector
     CljObject *count_result = eval_string("(count [1 2 3 4])", g_test_eval_state);
-    if (count_result) {
-        TEST_ASSERT_TRUE(is_fixnum(count_result));
-        TEST_ASSERT_EQUAL_INT(4, as_fixnum(count_result));
-    }
-
+    assert_fixnum(count_result, 4);
 }
 
 TEST(test_count_list) {
-
-    // Test count on list
     CljObject *list_count_result = eval_string("(count (list 1 2 3))", g_test_eval_state);
-    if (list_count_result) {
-        TEST_ASSERT_TRUE(is_fixnum(list_count_result));
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_count_result));
-    }
-
+    assert_fixnum(list_count_result, 3);
 }
 
 TEST(test_count_string) {
-
-    // Test count on string
     CljObject *string_count_result = eval_string("(count \"hello\")", g_test_eval_state);
-    if (string_count_result) {
-        TEST_ASSERT_TRUE(is_fixnum(string_count_result));
-        TEST_ASSERT_EQUAL_INT(5, as_fixnum(string_count_result));
-    }
-
+    assert_fixnum(string_count_result, 5);
 }
 
 TEST(test_map_function) {
@@ -635,10 +597,7 @@ TEST(test_map_function) {
 
     // Test map count
     CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", g_test_eval_state);
-    if (map_count_result) {
-        TEST_ASSERT_TRUE(is_fixnum(map_count_result));
-        TEST_ASSERT_EQUAL_INT(3, as_fixnum(map_count_result));
-    }
+    assert_fixnum(map_count_result, 3);
 
     // Test nil count - (count nil) throws IllegalArgumentException (Clojure-compatible)
     TRY {

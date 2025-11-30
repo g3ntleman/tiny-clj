@@ -38,6 +38,10 @@
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
 
+// Thread-local EvalState for builtins that need it (eval, read-string, meta, require)
+// Set/cleared in eval_function_call before/after calling builtins
+_Thread_local EvalState *g_current_eval_state = NULL;
+
 // Helper function to validate builtin arguments (DRY principle)
 static bool validate_builtin_args(unsigned int argc, unsigned int expected, const char *func_name) {
     if (argc != expected) {
@@ -1889,7 +1893,6 @@ ID native_meta(ID *args, unsigned int argc) {
     if (TAG(obj) == CLJ_SYMBOL) {
         // Get current eval state from builtin context to resolve symbol
         // Forward declaration for static variable
-        extern _Thread_local EvalState *g_current_eval_state;
         if (g_current_eval_state && g_current_eval_state->current_ns) {
             ID resolved = ns_resolve(g_current_eval_state, (CljSymbol*)obj);
             if (resolved) {
@@ -2416,7 +2419,21 @@ ID native_require(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    EvalState *st = evalstate_new(false);
+    // Use current EvalState if available (set by builtin_set_eval_state before calling builtins)
+    // NOTE: g_current_eval_state is thread-local and defined at the top of this file (line ~42)
+    // It's set/cleared in eval_function_call before/after calling builtins
+    // This follows the same pattern as native_eval and native_read_string
+    // TODO: Consider refactoring BuiltinFn signature to accept EvalState as parameter
+    //       instead of using thread-local variable (would require changing runtime.h)
+    EvalState *st = g_current_eval_state;
+    bool created_st = false;
+    
+    if (!st) {
+        // Fallback: create temporary EvalState if not available via thread-local
+        // This can happen if require is called outside normal evaluation context
+        st = evalstate_new(false);
+        created_st = true;
+    }
 
     // Process each require spec (support multiple specs: (require '[ns1 :as n1] '[ns2 :as n2]))
     for (unsigned int i = 0; i < argc; i++) {
@@ -2427,7 +2444,10 @@ ID native_require(ID *args, unsigned int argc) {
         }
     }
 
-    evalstate_free(st);
+    // Only free if we created it (don't free thread-local EvalState)
+    if (created_st) {
+        evalstate_free(st);
+    }
     return NULL; // Clojure-compatible: require returns nil
 }
 #endif // ESP32_BUILD
@@ -3249,9 +3269,6 @@ ID native_format(ID *args, unsigned int argc) {
 
     return AUTORELEASE(result);
 }
-
-// Thread-local EvalState for builtins that need it (eval, read-string, meta)
-_Thread_local EvalState *g_current_eval_state = NULL;
 
 // Set current EvalState (called by eval_function_call before calling builtins)
 void builtin_set_eval_state(EvalState *st) {

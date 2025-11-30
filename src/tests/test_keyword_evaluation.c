@@ -11,6 +11,19 @@
 
 #include "tests_common.h"
 
+// ============================================================================
+// HELPER: Load clojure.string namespace
+// ============================================================================
+
+static void load_clojure_string_namespace(void) {
+    CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
+    (void)req_result; // require returns nil
+}
+
+// ============================================================================
+// TESTS FOR KEYWORD EVALUATION
+// ============================================================================
+
 // Test: Keywords evaluate to themselves when evaluated directly
 TEST(test_keyword_evaluates_to_itself) {
     
@@ -251,6 +264,29 @@ TEST(test_auto_qualified_keyword_with_alias) {
     TEST_ASSERT_NOT_NULL(sym->cname);
     // For qualified keywords, cname includes ':' prefix for IS_KEYWORD to work
     TEST_ASSERT_EQUAL_STRING(":trim", sym->cname);
+}
+
+// Test: Parser resolves alias for keywords
+TEST(test_parser_resolves_keyword_alias) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Setup: Create namespace with alias
+    load_clojure_string_namespace();
+    eval_string("(ns test-keyword-alias (:require [clojure.string :as str]))", g_test_eval_state);
+    
+    // Test: Parse :str/trim - should resolve alias in parser
+    CljObject *parsed = parse(":str/trim", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_TRUE(TAG(parsed) == CLJ_SYMBOL);
+    TEST_ASSERT_TRUE(IS_KEYWORD(parsed));
+    
+    CljSymbol *kw = as_symbol(parsed);
+    TEST_ASSERT_NOT_NULL(kw);
+    TEST_ASSERT_NOT_NULL(kw->ns_name);
+    
+    // Verify: ns_name should be clojure.string (resolved), not str (alias)
+    TEST_ASSERT_EQUAL_STRING("clojure.string", kw->ns_name->cname);
+    TEST_ASSERT_EQUAL_STRING(":trim", kw->cname);
 }
 
 // Test: Regular qualified keyword still works (:namespace/keyword)

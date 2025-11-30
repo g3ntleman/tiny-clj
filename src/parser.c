@@ -672,6 +672,33 @@ static ID parse_character(Reader *reader, EvalState *st) {
 }
 
 /**
+ * @brief Resolve namespace alias to actual namespace name symbol
+ * @param st Evaluation state
+ * @param alias_str Alias string (without ':' prefix)
+ * @return Resolved namespace name symbol, or NULL if alias not found
+ */
+static CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
+    if (!st || !st->current_ns || !alias_str || alias_str[0] == '\0') {
+        return NULL;
+    }
+    
+    // Check if aliases map exists
+    if (!st->current_ns->aliases) {
+        return NULL;
+    }
+    
+    CljSymbol *alias_sym = intern_symbol_global(alias_str);
+    if (!alias_sym) return NULL;
+    
+    CljObject *resolved_ns_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
+    if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
+        return as_symbol(resolved_ns_obj);
+    }
+    
+    return NULL;
+}
+
+/**
  * @brief Parse symbol literal (identifier) using Reader
  * @param reader Reader instance for input
  * @param st Evaluation state
@@ -761,21 +788,15 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       const char *alias_str = buffer + 2;  // Skip ::
       const char *keyword_name = buffer + slash_pos + 1;
       
-      if (st && st->current_ns && st->current_ns->aliases && alias_str[0] != '\0' && keyword_name[0] != '\0') {
-        CljSymbol *alias_sym = intern_symbol_global(alias_str);
-        if (alias_sym) {
-          CljObject *resolved_ns_obj = ns_get_alias(st->current_ns, (CljObject*)alias_sym);
-          if (resolved_ns_obj && TAG(resolved_ns_obj) == CLJ_SYMBOL) {
-            CljSymbol *ns_name_sym = as_symbol(resolved_ns_obj);
-            if (ns_name_sym && ns_name_sym->cname) {
-              // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
-              char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-              snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
-              CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
-              if (kw) {
-                return AUTORELEASE(kw);
-              }
-            }
+      if (alias_str[0] != '\0' && keyword_name[0] != '\0') {
+        CljSymbol *ns_name_sym = resolve_alias_in_namespace(st, alias_str);
+        if (ns_name_sym && ns_name_sym->cname) {
+          // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
+          char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
+          snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+          CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
+          if (kw) {
+            return AUTORELEASE(kw);
           }
         }
       }
@@ -818,14 +839,32 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       // and keep ':' prefix in symbol_str for IS_KEYWORD to work
       bool is_keyword_symbol = (ns_str[0] == ':');
       
+      // Resolve alias if available (for both keywords and regular symbols)
+      CljSymbol *resolved_ns_name_sym = NULL;
       if (is_keyword_symbol) {
-        // Skip ':' from namespace
+        // For keywords, skip ':' prefix before alias resolution
         const char *actual_ns_str = ns_str + 1;
+        resolved_ns_name_sym = resolve_alias_in_namespace(st, actual_ns_str);
+      } else {
+        // For regular symbols, try alias resolution
+        resolved_ns_name_sym = resolve_alias_in_namespace(st, ns_str);
+      }
+      
+      // Use resolved namespace if found, otherwise use original ns_str
+      CljSymbol *ns_name_sym = resolved_ns_name_sym;
+      if (!ns_name_sym) {
+        if (is_keyword_symbol) {
+          ns_name_sym = (ns_str + 1) ? intern_symbol_global(ns_str + 1) : NULL;
+        } else {
+          ns_name_sym = ns_str ? intern_symbol_global(ns_str) : NULL;
+        }
+      }
+      
+      if (is_keyword_symbol) {
         // Add ':' prefix to symbol name for IS_KEYWORD to work
         char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
         snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", symbol_str);
         keyword_with_colon[sizeof(keyword_with_colon) - 1] = '\0';
-        CljSymbol *ns_name_sym = actual_ns_str ? intern_symbol_global(actual_ns_str) : NULL;
         CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
         if (sym) {
           return AUTORELEASE(sym);
@@ -833,7 +872,6 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
         // If intern fails, fall through to return unqualified symbol
       } else {
         // Regular qualified symbol (not a keyword)
-        CljSymbol *ns_name_sym = ns_str ? intern_symbol_global(ns_str) : NULL;
         CljSymbol *sym = intern_symbol(ns_name_sym, symbol_str);
         if (sym) {
           return AUTORELEASE(sym);

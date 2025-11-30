@@ -113,11 +113,8 @@ TEST(test_integer_overflow_detection) {
 
 // Test simple arithmetic operations
 TEST(test_simple_arithmetic) {
-    // Test simple addition
     CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
-    TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)result));
+    assert_fixnum(result, 3);
 }
 
 // Test division by zero exception
