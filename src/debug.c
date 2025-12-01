@@ -134,8 +134,8 @@ bool is_zombie(ID o) {
         return false;  // NULL and immediates cannot be zombies
     }
 
-    CljObject *obj = (CljObject*)o;
 #ifdef DEBUG
+    CljObject *obj = (CljObject*)o;
     return obj->rc == ZOMBIE_RC;
 #else
     // In release builds, zombie mode is not available

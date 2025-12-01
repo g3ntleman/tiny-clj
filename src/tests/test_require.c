@@ -374,13 +374,12 @@ TEST(test_require_trim_metadata) {
         CljSymbol *doc_key = intern_symbol_global(":doc");
         TEST_ASSERT_NOT_NULL(doc_key);
         
-        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-        ID doc_value = map_get((CljMap*)trim_meta, (ID)doc_key, (ID)&not_found_sentinel);
+        ID doc_value = map_get((CljMap*)trim_meta, doc_key, NOT_FOUND);
         
-        TEST_ASSERT_TRUE_MESSAGE(doc_value != (ID)&not_found_sentinel, 
+        TEST_ASSERT_TRUE_MESSAGE(doc_value != NOT_FOUND, 
                                  "trim metadata should have :doc key");
         
-        if (doc_value != (ID)&not_found_sentinel) {
+        if (doc_value != NOT_FOUND) {
             TEST_ASSERT_TRUE_MESSAGE(TAG(doc_value) == CLJ_STRING, 
                                      ":doc value should be a string");
         }

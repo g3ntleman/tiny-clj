@@ -752,11 +752,15 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       }
 
       // Advance reader by codepoint
+#if defined(DEBUG)
       size_t before = reader_offset(reader);
+#endif
       reader_next_codepoint(reader);
+#if defined(DEBUG)
       size_t after = reader_offset(reader);
       // Notbremse: Fortschritt garantiert
       CLJ_ASSERT(after > before);
+#endif
     } else {
       break;
     }

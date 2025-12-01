@@ -121,8 +121,10 @@ ID* vector_as_array(CljVector *vec) {
  */
 void vector_increment_count(CljVector *vec) {
     CLJ_ASSERT(vec != NULL);
+#if defined(DEBUG)
     int tag = TAG(vec);
     CLJ_ASSERT(tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_WEAK);
+#endif
     vec->count++;
 }
 

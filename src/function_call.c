@@ -174,11 +174,16 @@ static bool compare_numeric_values(ID a, ID b, ComparisonOp op) {
  * @param op The comparison operation to perform
  * @return CljObject* The result (true/false) or NULL on error
  */
-static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, ComparisonOp op) {
+static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, ComparisonOp op) {
     // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
-    CljObject *a, *b;
-    EVAL_TWO_ARGS(list, env, a, b);
+    ID a = eval_arg_with_context(list, 1, env, st, ctx);
+    ID b = eval_arg_with_context(list, 2, env, st, ctx);
+    if (!a || !b) {
+        RELEASE(a);
+        RELEASE(b);
+        return NULL;
+    }
 
     bool result = compare_numeric_values(a, b, op);
 
@@ -186,7 +191,8 @@ static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, Comparison
         // Check if it's a type error (not just a false comparison)
         float val_a, val_b;
         if (!extract_numeric_values(a, b, &val_a, &val_b)) {
-            RELEASE_TWO_ARGS(a, b);
+            RELEASE(a);
+            RELEASE(b);
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
             return NULL;
         }
@@ -194,7 +200,8 @@ static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, Comparison
         result = false;
     }
 
-    RELEASE_TWO_ARGS(a, b);
+    RELEASE(a);
+    RELEASE(b);
     return result ? clj_true : clj_false;
 }
 
@@ -467,7 +474,54 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
 // DRY: Central symbol resolution function with environment stack support
 // Resolves symbol by searching through environment stack (list of maps)
-static ID resolve_symbol_in_env(CljList *env_stack, ID sym, EvalState *st) {
+static inline CljMap* env_stack_head(CljList *stack) {
+    if (stack && TAG(stack) == CLJ_LIST) {
+        ID first = LIST_FIRST(stack);
+        if (first && TAG(first) == CLJ_MAP) {
+            return (CljMap*)first;
+        }
+    }
+    return NULL;
+}
+
+static EvalState* pick_eval_state(EvalState *st, const EvalContext *ctx) {
+    if (ctx && ctx->env && ctx->env->st) {
+        return ctx->env->st;
+    }
+    return st;
+}
+
+static const EvalContext* ensure_eval_context(CljMap *env,
+                                              EvalState *st,
+                                              const EvalContext *ctx,
+                                              EvalContext *local_ctx,
+                                              EvalEnv *local_env,
+                                              CljList **owned_stack) {
+    *owned_stack = NULL;
+    if (!ctx || !ctx->env) {
+        local_env->st = st;
+        local_env->env_stack = env ? make_list((ID)env, NULL) : NULL;
+        *owned_stack = local_env->env_stack;
+        local_ctx->params = NULL;
+        local_ctx->env = local_env;
+        local_ctx->recur = NULL;
+        return local_ctx;
+    }
+    if (!ctx->env->env_stack && env) {
+        *local_env = *ctx->env;
+        local_env->env_stack = make_list((ID)env, NULL);
+        *owned_stack = local_env->env_stack;
+        *local_ctx = *ctx;
+        local_ctx->env = local_env;
+        return local_ctx;
+    }
+    if (!ctx->env->st && st) {
+        ((EvalEnv*)ctx->env)->st = st;
+    }
+    return ctx;
+}
+
+static ID resolve_symbol_in_env(CljList *env_stack, CljMap *fallback_env, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NULL;
     }
@@ -487,6 +541,34 @@ static ID resolve_symbol_in_env(CljList *env_stack, ID sym, EvalState *st) {
                 // Found in current environment
                 return resolved;
             }
+
+            // Fallback: some legacy bindings (or namespaces that predate qualification)
+            // may store unqualified keys. If the lookup with the fully qualified symbol
+            // failed, try again with an unqualified variant.
+            if (sym && TAG(sym) == CLJ_SYMBOL) {
+                CljSymbol *symbol_obj = as_symbol(sym);
+                if (symbol_obj && symbol_obj->cname) {
+                    // Try qualifying with the current namespace (if available)
+                    if (st && st->current_ns && st->current_ns->name) {
+                        CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, symbol_obj->cname);
+                        if (qualified_sym) {
+                            resolved = map_get(env, (ID)qualified_sym, &not_found);
+                            if (resolved != &not_found) {
+                                return resolved;
+                            }
+                        }
+                    }
+
+                    // Also try the unqualified variant for backward compatibility.
+                    CljSymbol *unqualified_sym = intern_symbol_global(symbol_obj->cname);
+                    if (unqualified_sym) {
+                        resolved = map_get(env, (ID)unqualified_sym, &not_found);
+                        if (resolved != &not_found) {
+                            return resolved;
+                        }
+                    }
+                }
+            }
         }
         
         // Move to next environment in stack
@@ -498,6 +580,14 @@ static ID resolve_symbol_in_env(CljList *env_stack, ID sym, EvalState *st) {
         }
     }
     
+    // Fallback to provided environment map if no stack entry matched
+    if (fallback_env) {
+        ID resolved = map_get(fallback_env, sym, &not_found);
+        if (resolved != &not_found) {
+            return resolved;
+        }
+    }
+
     // Not found in environment stack - try namespace lookup
     if (st) {
         ID resolved_ns = eval_symbol(as_symbol(sym), st);
@@ -600,14 +690,17 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 
         // Use central symbol resolution function (DRY: handles environment stack)
         if (ctx->env && ctx->env->env_stack) {
-            ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, body, ctx->env->st);
+            CljMap *ctx_env_map = env_stack_head(ctx->env->env_stack);
+            ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, ctx_env_map, body, ctx->env->st);
             if (resolved_id) {
                 // If resolved_id is a symbol, it wasn't properly resolved
                 if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
-                    CljSymbol *sym = as_symbol(body);
-                    const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
-                    throw_unresolved_symbol_exception(sym_name);
-                    return NULL;
+                    if (resolved_id == body && !IS_KEYWORD(resolved_id)) {
+                        CljSymbol *sym = as_symbol(body);
+                        const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
+                        throw_unresolved_symbol_exception(sym_name);
+                        return NULL;
+                    }
                 }
                 return resolved_id;
             }
@@ -734,7 +827,8 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             if (ctx && ctx->env && ctx->env->env_stack) {
                 // Use st from context if available, otherwise fall back to parameter
                 EvalState *eval_st = (ctx->env && ctx->env->st) ? ctx->env->st : st;
-                ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, body, eval_st);
+                CljMap *fallback_env = env_stack_head(ctx->env->env_stack);
+                ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, fallback_env, body, eval_st);
                 if (resolved_id) {
                     // If resolved_id is a symbol, it wasn't properly resolved
                     // Exception: Keywords are symbols but evaluate to themselves
@@ -843,7 +937,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
 }
 
 // Helper functions for eval_list optimization
-static ID eval_map_lookup(CljList *list, CljMap *env, ID map) {
+static ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, ID map) {
     int total_count = list_count(list);
     int argc = total_count - 1;
 
@@ -853,7 +947,7 @@ static ID eval_map_lookup(CljList *list, CljMap *env, ID map) {
         return NULL;
     }
 
-    ID key = eval_arg(list, 1, env, NULL);
+    ID key = eval_arg_with_context(list, 1, env, st, ctx);
     if (!key) return NULL;
 
     ID result = map_get((CljValue)map, (CljValue)key, NULL);
@@ -892,12 +986,16 @@ static inline ID eval_arithmetic_dispatch_with_context(CljList *list, CljMap *en
     return NULL;
 }
 
-static inline ID eval_comparison_dispatch(CljList *list, CljMap *env, ID op) {
+static inline ID eval_comparison_dispatch(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, ID op) {
     CljSymbol *op_sym = (CljSymbol*)op;
     if (op_sym == SYM_EQUALS) {
-        ID a;
-        ID b;
-        EVAL_TWO_ARGS(list, env, a, b);
+        ID a = eval_arg_with_context(list, 1, env, st, ctx);
+        ID b = eval_arg_with_context(list, 2, env, st, ctx);
+        if (!a || !b) {
+            RELEASE(a);
+            RELEASE(b);
+            return NULL;
+        }
 
         if (compare_numeric_values(a, b, COMP_EQ)) {
             RELEASE_TWO_ARGS(a, b);
@@ -914,10 +1012,10 @@ static inline ID eval_comparison_dispatch(CljList *list, CljMap *env, ID op) {
         RELEASE_TWO_ARGS(a, b);
         return equal ? clj_true : clj_false;
     }
-    if (op_sym == SYM_LT) return eval_numeric_comparison(list, env, COMP_LT);
-    if (op_sym == SYM_GT) return eval_numeric_comparison(list, env, COMP_GT);
-    if (op_sym == SYM_LE) return eval_numeric_comparison(list, env, COMP_LE);
-    if (op_sym == SYM_GE) return eval_numeric_comparison(list, env, COMP_GE);
+    if (op_sym == SYM_LT) return eval_numeric_comparison(list, env, st, ctx, COMP_LT);
+    if (op_sym == SYM_GT) return eval_numeric_comparison(list, env, st, ctx, COMP_GT);
+    if (op_sym == SYM_LE) return eval_numeric_comparison(list, env, st, ctx, COMP_LE);
+    if (op_sym == SYM_GE) return eval_numeric_comparison(list, env, st, ctx, COMP_GE);
     return NULL;
 }
 
@@ -983,32 +1081,31 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
     }
 
     // Evaluate recur arguments and store them in recur_args
-    int total_count = list_count(list);
-    int arg_count = total_count - 1; // -1 for 'recur' itself
-    if (arg_count < 0) arg_count = 0;
-    if (arg_count > 16) arg_count = 16; // Max 16 arguments
-
     ID recur_args[16] = {NULL};
+    int arg_count = 0;
 
     // Evaluate arguments using eval_body_with_params
     // CRITICAL: Create a new context without RecurContext for argument evaluation
     EvalContext arg_ctx = {.params = ctx->params, .env = ctx->env, .recur = NULL};
-    for (int i = 0; i < arg_count; i++) {
-        ID arg = list_get_element(list, i + 1); // +1 to skip 'recur'
+    CljList *arg_node = list ? as_list(list->rest) : NULL; // skip 'recur' symbol
+    for (int i = 0; arg_node && i < 16; i++) {
+        ID arg = arg_node->first;
         if (arg) {
             ID eval_arg = eval_body_with_params(arg, &arg_ctx);
             if (eval_arg) {
                 recur_args[i] = RETAIN(eval_arg);
             }
         }
+        arg_count++;
+        arg_node = arg_node->rest ? as_list(arg_node->rest) : NULL;
     }
+    
+    CLJ_ASSERT(!arg_node && "recur: maximum 16 arguments supported");
 
     // Store arguments in RecurContext
     if (ctx->recur->recur_args && ctx->recur->recur_arg_count) {
         for (int i = 0; i < arg_count && i < 16; i++) {
-            if (ctx->recur->recur_args[i]) {
-                RELEASE(ctx->recur->recur_args[i]);
-            }
+            RELEASE(ctx->recur->recur_args[i]);
             ctx->recur->recur_args[i] = recur_args[i];
         }
         *ctx->recur->recur_arg_count = arg_count;
@@ -1021,46 +1118,64 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
 static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    (void)env; // Suppress unused parameter warning - env is kept for API consistency
     if (!op || TAG(op) != CLJ_SYMBOL) {
         return op;
     }
 
+    EvalContext local_ctx;
+    EvalEnv local_env;
+    CljList *owned_env_stack = NULL;
+    const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &local_env, &owned_env_stack);
     ID resolved = NULL;
+    CljMap *closure_env = (effective_ctx && effective_ctx->env && effective_ctx->env->env_stack)
+        ? env_stack_head(effective_ctx->env->env_stack)
+        : NULL;
+    EvalState *ctx_st = pick_eval_state(st, effective_ctx);
+    CljMap *resolve_env = closure_env ? closure_env : env;
     
     // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
     // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-    if (ctx && ctx->params && ctx->params->param_count > 0 && ctx->params->params && ctx->params->values) {
-        for (int i = 0; i < ctx->params->param_count; i++) {
-            if (ctx->params->params[i] == op) {
-                return ctx->params->values[i];
+    if (effective_ctx && effective_ctx->params && effective_ctx->params->param_count > 0 &&
+        effective_ctx->params->params && effective_ctx->params->values) {
+        for (int i = 0; i < effective_ctx->params->param_count; i++) {
+            if (effective_ctx->params->params[i] == op) {
+                ID return_value = effective_ctx->params->values[i];
+                RELEASE(owned_env_stack);
+                return return_value;
             }
             // Fallback: structural equality
-            if (ctx->params->params[i] && op && 
-                TAG(ctx->params->params[i]) == CLJ_SYMBOL && TAG(op) == CLJ_SYMBOL &&
-                clj_equal(ctx->params->params[i], op)) {
-                return ctx->params->values[i];
+            if (effective_ctx->params->params[i] && op && 
+                TAG(effective_ctx->params->params[i]) == CLJ_SYMBOL && TAG(op) == CLJ_SYMBOL &&
+                clj_equal(effective_ctx->params->params[i], op)) {
+                ID return_value = effective_ctx->params->values[i];
+                RELEASE(owned_env_stack);
+                return return_value;
             }
         }
     }
     
     // Parameter validation: Check st and ctx before accessing ctx->env
-    if (!st || !ctx) {
+    if (!ctx_st || !effective_ctx) {
         // Fallback to namespace lookup if context not available
-        resolved = eval_symbol(as_symbol(op), st);
-        return resolved ? resolved : op;
+        resolved = eval_symbol(as_symbol(op), ctx_st);
+        ID return_value = resolved ? resolved : op;
+        RELEASE(owned_env_stack);
+        return return_value;
     }
     
     // Use central symbol resolution function (DRY: handles environment stack)
-    CljList *resolve_stack = (ctx->env && ctx->env->env_stack) ? ctx->env->env_stack : NULL;
+    CljList *resolve_stack = (effective_ctx->env && effective_ctx->env->env_stack)
+        ? effective_ctx->env->env_stack : NULL;
     if (resolve_stack) {
-        ID resolved_id = resolve_symbol_in_env(resolve_stack, op, st);
+        CljMap *fallback_env = resolve_env;
+        ID resolved_id = resolve_symbol_in_env(resolve_stack, fallback_env, op, ctx_st);
         if (resolved_id) {
             resolved = resolved_id;
         }
     }
 
     if (resolved) {
+        RELEASE(owned_env_stack);
         return resolved;
     }
 
@@ -1070,12 +1185,14 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     if (g_runtime.resolve_cache) {
         ID cached = map_get(g_runtime.resolve_cache, op, NULL);
         if (cached) {
+            RELEASE(owned_env_stack);
             return cached;
         }
     }
 
     // Fallback to global namespace (will populate cache if found)
     resolved = eval_symbol(as_symbol(op), st);
+    RELEASE(owned_env_stack);
     return resolved ? resolved : op;
 }
 
@@ -1219,7 +1336,7 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
                 ID expr_i = list_get_element(list, i);
                 CljList *new_node = make_list(expr_i, NULL);
                 if (tail) {
-                    tail->rest = new_node;
+                    tail->rest = (CljObject*)new_node;
                     tail = new_node;
                 }
             }
@@ -1227,11 +1344,11 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
         CljVector* empty_params_vec = make_vector(0, CLJ_VECTOR);
         CljList *fn_list = make_list((CljObject*)SYM_FN, NULL);
         if (!fn_list) return NULL;
-        fn_list->rest = make_list(empty_params_vec, NULL);
+        fn_list->rest = (CljObject*)make_list(empty_params_vec, NULL);
         CljList *fn_rest = as_list(fn_list->rest);
         if (fn_rest) {
             ID body_expr = do_list;
-            fn_rest->rest = make_list(body_expr, NULL);
+            fn_rest->rest = (CljObject*)make_list(body_expr, NULL);
         }
         ID fn_obj = eval_fn(fn_list, env, st);
         if (!fn_obj) {
@@ -1269,7 +1386,7 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
         int total_count = list_count(list);
         int argc = total_count - 1;
         if (argc == 1) {
-            ID arg = eval_arg(list, 1, env, NULL);
+            ID arg = eval_arg_with_context(list, 1, env, st, ctx);
             if (arg && TAG(arg) == CLJ_SYMBOL) {
                 ID resolved = eval_symbol(as_symbol((CljObject*)arg), st);
                 if (resolved) {
@@ -1294,7 +1411,7 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 
         unsigned char fn_tag = TAG(fn);
         if (fn_tag == CLJ_MAP) {
-            return eval_map_lookup(list, env, fn);
+            return eval_map_lookup(list, env, st, ctx, fn);
         }
 
         if (fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE) {
@@ -1355,6 +1472,8 @@ static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env,
     CLJ_ASSERT(argc <= 16);
     ID args[16];
 
+    unsigned char fn_tag = TAG(fn);
+
     // Evaluate arguments with O(n) single-pass traversal
     if (!env || TAG(env) != CLJ_MAP) {
         for (int i = 0; i < argc; i++) {
@@ -1372,7 +1491,34 @@ static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env,
         }
     }
 
-    ID result = eval_function_call(fn, args, argc, env, st);
+    CljNamespace *saved_ns = st ? st->current_ns : NULL;
+    CljNamespace *target_ns = NULL;
+    if (fn_tag == CLJ_CLOSURE) {
+        CljFunction *closure_fn = (CljFunction*)fn;
+        target_ns = closure_fn->ns;
+    }
+
+    bool switched_ns = false;
+    if (st && target_ns && st->current_ns != target_ns) {
+        st->current_ns = target_ns;
+        switched_ns = true;
+    }
+
+    ID result = NULL;
+    TRY {
+        result = eval_function_call(fn, args, argc, env, st);
+    } CATCH(ex) {
+        if (st && switched_ns) {
+            st->current_ns = saved_ns;
+        }
+        throw_exception_object(ex);
+        return NULL;
+    } END_TRY
+
+    if (st && switched_ns) {
+        st->current_ns = saved_ns;
+    }
+
     if (result == SYM_NIL) {
         return NULL;
     }
@@ -1443,7 +1589,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     // Handle maps as functions (for key lookup) - must be first
     // Use closure_env instead of env to ensure parameter resolution works correctly
     if (op && op_tag == CLJ_MAP) {
-        return eval_map_lookup(list, closure_env ? closure_env : env, op);
+        return eval_map_lookup(list, closure_env ? closure_env : env, ctx_st, ctx, op);
     }
 
     // Continue with symbol resolution (same as eval_list)
@@ -1462,7 +1608,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     CljObject *result = eval_arithmetic_dispatch_with_context(list, resolve_env, ctx_st, original_op, ctx);
     if (result) return result;
 
-    result = eval_comparison_dispatch(list, resolve_env, original_op);
+    result = eval_comparison_dispatch(list, resolve_env, ctx_st, ctx, original_op);
     if (result) return result;
 
     // Try special form dispatch (handles if, do, and other special forms)
@@ -1521,7 +1667,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Handle maps as functions (for key lookup) - must be first
     if (op && TAG(op) == CLJ_MAP) {
-        return eval_map_lookup(list, env, op);
+        return eval_map_lookup(list, env, st, ctx, op);
     }
 
     // Check if op is a symbol and resolve it
@@ -1556,7 +1702,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (result) return result;
 
     // Tier 2: Comparison operations
-    result = eval_comparison_dispatch(list, env, original_op);
+    result = eval_comparison_dispatch(list, env, st, ctx, original_op);
     if (result) return result;
 
     // Try special form dispatch
@@ -1585,7 +1731,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (!args) return NULL;
 
         for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg(list, i + 1, env, NULL);
+            args[i] = eval_arg_with_context(list, i + 1, env, st, ctx);
             if (!args[i]) {
                 free_obj_array((ID*)args, args_stack);
                 return NULL;
@@ -1924,7 +2070,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Create function object
-    CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, body, fn_env_stack, NULL));
+    CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL));
 
     // Cleanup heap-allocated params if any
     free_obj_array((ID*)params, params_stack);
@@ -2063,12 +2209,25 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
                 // Failed to intern - fall through to error
             } else {
                 // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID resolved = map_get(target_ns->mappings, interned_sym, &not_found_sentinel);
-                if (resolved != &not_found_sentinel) {
+                ID resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
+                if (resolved != NOT_FOUND) {
                     // Found in target namespace - return it (can be NULL/nil, which is valid)
                     return resolved;
                 }
+
+                // clojure.core historically stores unqualified keys (ns_name = NULL)
+                // to match the JVM behavior. Fallback to the global symbol table
+                // so qualified lookups keep working even though the map key is unqualified.
+                if (target_ns->name == SYM_CLOJURE_CORE) {
+                    CljSymbol *unqualified_sym = intern_symbol_global(symbol->cname);
+                    if (unqualified_sym) {
+                        resolved = map_get(target_ns->mappings, unqualified_sym, NOT_FOUND);
+                        if (resolved != NOT_FOUND) {
+                            return resolved;
+                        }
+                    }
+                }
+
             }
         }
 
@@ -2084,6 +2243,8 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
                     // Found native function - create function object and return it
                     CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, symbol->cname);
                     if (native_func_obj) {
+                        // Cache native function in namespace mappings to preserve invariants
+                        ns_define(target_ns, (ID)lookup_sym, (ID)native_func_obj);
                         return (ID)native_func_obj;
                     }
                 }
@@ -2573,20 +2734,13 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
 
-#ifdef DEBUG
-#ifdef ENABLE_META
+#if defined(DEBUG) && defined(ENABLE_META)
     // Capture user-provided metadata once for later use (symbol or list)
-    ID form_meta = NULL;
-    form_meta = meta_get((CljObject*)name_sym);
+    ID form_meta = meta_get((CljObject*)name_sym);
     if (!form_meta) {
         form_meta = meta_get((CljObject*)list);
     }
-#else
-    ID form_meta = NULL;  // Ensure form_meta is defined even if ENABLE_META is off
-#endif // ENABLE_META
-#else
-    ID form_meta = NULL;  // Ensure form_meta is defined even if DEBUG is off
-#endif // DEBUG
+#endif // DEBUG && ENABLE_META
     
     // Get parameter vector (second element after defn)
     rest_obj = rest->rest;
@@ -2801,8 +2955,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
 
         // Apply metadata to native function (only in DEBUG builds for memory efficiency)
         // Merge user metadata (from ^#^{...}) with standard metadata (:name, :ns)
-#ifdef DEBUG
-#ifdef ENABLE_META
+#if defined(DEBUG) && defined(ENABLE_META)
         // Build standard metadata (:name, :ns)
         CljMap *standard_meta = make_map(4);
         
@@ -2820,16 +2973,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         
         // Get user metadata (from form or symbol)
         // form_meta is captured at the start of eval_defn (from the parsed list object or name symbol)
-        CljObject *user_meta = NULL;
-#ifdef DEBUG
-#ifdef ENABLE_META
-        user_meta = form_meta ? form_meta : meta_get((CljObject*)name_sym);
-#else
-        user_meta = NULL;
-#endif // ENABLE_META
-#else
-        user_meta = NULL;
-#endif // DEBUG
+        CljObject *user_meta = form_meta ? (CljObject*)form_meta : meta_get((CljObject*)name_sym);
         
         // Merge: user metadata takes precedence over standard metadata
         CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
@@ -2837,8 +2981,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                             : standard_meta;
         
         meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
-#endif // ENABLE_META
-#endif // DEBUG
+#endif // DEBUG && ENABLE_META
 
         free_obj_array((ID*)params, params_stack);
         return name_sym;  // defn returns the symbol
@@ -2885,9 +3028,23 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     if (st->current_ns->mappings) {
         CljMap *ns_mappings = (CljMap*)st->current_ns->mappings;
         MAP_FOR_EACH(ns_mappings, key, val) {
-            if (key) {
-                CljMap *new_fn_env = map_assoc(fn_env, key, val);
-                ASSIGN(fn_env, new_fn_env);
+            if (!key) continue;
+            CljMap *new_fn_env = map_assoc(fn_env, key, val);
+            ASSIGN(fn_env, new_fn_env);
+
+            // Provide unqualified aliases so functions can refer to same-namespace
+            // vars without qualifying them (matches Clojure semantics).
+            if (TAG(key) == CLJ_SYMBOL) {
+                CljSymbol *qualified_key = as_symbol(key);
+                // clojure.core mappings already use unqualified keys
+                if (qualified_key && qualified_key->ns_name && qualified_key->ns_name->cname &&
+                    st->current_ns->name != SYM_CLOJURE_CORE) {
+                    CljSymbol *unqualified_sym = intern_symbol_global(qualified_key->cname);
+                    if (unqualified_sym && !map_contains(fn_env, (ID)unqualified_sym)) {
+                        CljMap *alias_env = map_assoc(fn_env, (ID)unqualified_sym, val);
+                        ASSIGN(fn_env, alias_env);
+                    }
+                }
             }
         }
     }
@@ -2907,7 +3064,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     CljList *fn_env_stack = make_list((ID)fn_env, parent_stack);
 
     // Create function object with env_stack
-    CljFunction *fn_obj = make_function(params, param_count, transformed_body, fn_env_stack, NULL);
+    CljFunction *fn_obj = make_function(params, param_count, transformed_body, fn_env_stack, NULL, st ? st->current_ns : NULL);
     if (!fn_obj) {
         free_obj_array((ID*)params, params_stack);
         return NULL;
@@ -2921,8 +3078,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
 
     // Apply metadata to function (only in DEBUG builds for memory efficiency)
-#ifdef DEBUG
-#ifdef ENABLE_META
+#if defined(DEBUG) && defined(ENABLE_META)
     // Build standard metadata (:name, :ns) - same as for native functions
     CljMap *standard_meta = make_map(4);
     
@@ -2940,16 +3096,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     // Get user metadata (from form or symbol)
     // form_meta is captured at the start of eval_defn (from the parsed list object or name symbol)
-    CljObject *user_meta = NULL;
-#ifdef DEBUG
-#ifdef ENABLE_META
-    user_meta = form_meta ? form_meta : meta_get((CljObject*)name_sym);
-#else
-    user_meta = NULL;
-#endif // ENABLE_META
-#else
-    user_meta = NULL;
-#endif // DEBUG
+    CljObject *user_meta = form_meta ? (CljObject*)form_meta : meta_get((CljObject*)name_sym);
     
     // Merge: user metadata takes precedence over standard metadata
     CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
@@ -2958,8 +3105,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     meta_set((CljObject*)fn_obj, (CljObject*)merged_meta);
     RELEASE(standard_meta);
-#endif // ENABLE_META
-#endif // DEBUG
+#endif // DEBUG && ENABLE_META
 
     // Register function in namespace (after creation for recursive calls)
     // CRITICAL: Namespace mappings now use fully qualified symbols as keys
@@ -2978,7 +3124,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     CljMap *first_env = (CljMap*)LIST_FIRST(func->env_stack);
     if (first_env) {
         CljObject *func_in_env = map_get((CljValue)first_env, (CljValue)name_sym, NULL);
-        if (func_in_env != fn_obj) {
+        if (func_in_env != (CljObject*)fn_obj) {
             CljMap *new_first_env = map_assoc(first_env, name_sym, fn_obj);
             CljList *new_env_stack = make_list((ID)new_first_env, LIST_REST(func->env_stack));
             ASSIGN(func->env_stack, new_env_stack);
@@ -3055,7 +3201,7 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         // to search through the entire environment stack (for nested let blocks)
         if (ctx && ctx->env && ctx->env->env_stack) {
             EvalState *eval_st = (ctx->env->st) ? ctx->env->st : st;
-            ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, expr, eval_st);
+            ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, env, expr, eval_st);
             if (resolved_id && TAG(resolved_id) != CLJ_SYMBOL) {
                 // Found in env_stack - return it (RETAIN/AUTORELEASE handle immediates safely)
                 return AUTORELEASE(RETAIN(resolved_id));
@@ -3193,7 +3339,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
 
     // Evaluate n_obj if it's a symbol (e.g., when dotimes is used inside let)
     CljObject *n_evaluated = (TAG(n_obj) == CLJ_SYMBOL)
-        ? resolve_symbol_in_env(env ? make_list((ID)env, NULL) : NULL, n_obj, st)
+        ? resolve_symbol_in_env(NULL, env, n_obj, st)
         : n_obj;
 
     if (!n_evaluated || TAG(n_evaluated) != CLJ_INT) {

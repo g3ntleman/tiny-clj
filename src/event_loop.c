@@ -303,16 +303,21 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
             CLJ_ASSERT(obj->rc == 1);
         }
         
+#if defined(DEBUG)
         void *chan_ptr_before = (void*)chan;
+#endif
         
         // Clojure-compatibility: nil is a valid value that can be sent through channels
         // result_channel_put can handle NULL/nil values, so we write the result even if it's nil
         if (ok) {
             result_channel_put(chan, result);
+#if defined(DEBUG)
             CLJ_ASSERT((void*)chan == chan_ptr_before);
+#endif
         }
         
         result_channel_close(chan);
+#if defined(DEBUG)
         CLJ_ASSERT((void*)chan == chan_ptr_before);
         
         CljObject *kw_closed = (CljObject*)intern_symbol_global(":closed");
@@ -320,6 +325,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         CLJ_ASSERT(closed_val != NULL);
         CLJ_ASSERT(is_special(closed_val));
         CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);
+#endif
     } else {
         CLJ_ASSERT(0 && "event_loop_run_next: task.result_chan is NULL");
     }

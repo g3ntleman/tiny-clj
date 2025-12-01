@@ -98,6 +98,24 @@ static bool eval_core_source(const char *src, EvalState *st) {
           is_def_expr = true;
         }
       }
+      if (!g_core_quiet) {
+        const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
+        const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
+        const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
+        int error_line = ex ? ex->line : 0;
+        fprintf(stderr, "[clojure.core] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
+                expr_count + 1,
+                is_def_expr ? " (def)" : "",
+                error_msg,
+                error_file,
+                error_line,
+                error_type);
+#ifdef DEBUG
+        if (is_def_expr && ex) {
+          print_exception(ex);
+        }
+#endif
+      }
       
     } END_TRY
     
@@ -111,7 +129,11 @@ static bool eval_core_source(const char *src, EvalState *st) {
   // This ensures the verification can check the correct namespace
   // target_ns is already registered in ns_registry, no cache needed
   
-  
+  if (!g_core_quiet) {
+    fprintf(stderr, "[clojure.core] Evaluated %d form(s), %d succeeded.\n",
+            expr_count, success_count);
+  }
+
   return success_count > 0;
 }
 

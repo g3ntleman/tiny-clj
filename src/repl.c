@@ -335,6 +335,12 @@ static void __attribute__((unused)) cleanup_and_exit(const char **eval_args, int
  *  @return true on successful completion
  */
 __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zombie_mode, bool memory_debug) {
+#if !defined(DEBUG)
+    CLJ_UNUSED(zombie_mode);
+#endif
+#if !defined(DEBUG) && !defined(ENABLE_MEMORY_PROFILING)
+    CLJ_UNUSED(memory_debug);
+#endif
     // Initialize memory profiling DIRECTLY before the first prompt
 #ifdef ENABLE_MEMORY_PROFILING
     MEMORY_PROFILER_INIT();

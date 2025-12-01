@@ -6,6 +6,8 @@
 #include "vector.h"
 #include "list.h"
 
+struct CljNamespace;
+
 typedef struct {
     CljObject base;
     CljObject* (*fn)(CljObject **args, int argc);
@@ -19,9 +21,10 @@ typedef struct {
     ID body;  // Function body (AST to evaluate)
     CljList *env_stack;  // Environment stack (list of maps) - idiomatic Clojure-style
     const char *name;
+    struct CljNamespace *ns;
 } CljFunction;
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname);
+CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns);
 
 // Function call helpers
 /** Call function with argv; returns result or error object. */

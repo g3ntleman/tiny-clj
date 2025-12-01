@@ -392,9 +392,10 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         CljObject *test_var_value = map_get(g_test_eval_state->current_ns->mappings, qualified_test_var_sym, NULL);
         // Even if value is NULL/nil, the key should exist (map_get returns NULL for not found OR nil value)
         // Use sentinel to distinguish
-        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-        CljObject *test_var_value_check = map_get(g_test_eval_state->current_ns->mappings, qualified_test_var_sym, (ID)&not_found_sentinel);
-        bool found_key = (test_var_value_check != (ID)&not_found_sentinel);
+        CljObject *test_var_value_check = map_get(g_test_eval_state->current_ns->mappings,
+                                                  qualified_test_var_sym,
+                                                  NOT_FOUND);
+        bool found_key = (test_var_value_check != NOT_FOUND);
         
         TEST_ASSERT_TRUE_MESSAGE(found_key, 
                                 "test-var should be in mappings after def");

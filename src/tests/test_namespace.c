@@ -1511,11 +1511,10 @@ TEST(test_core_namespace_find_inc) {
         TEST_ASSERT_TRUE_MESSAGE(true, debug_msg);
         
         // Use map_get to find inc in mappings
-        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-        ID inc_value = map_get(core_ns->mappings, inc_sym, (ID)&not_found_sentinel);
+        ID inc_value = map_get(core_ns->mappings, inc_sym, NOT_FOUND);
         
         // Debug: Check if we found something
-        if (inc_value == (ID)&not_found_sentinel) {
+        if (inc_value == NOT_FOUND) {
             // Try to find inc by iterating through mappings
             bool found_by_iteration = false;
             CljSymbol *found_key = NULL;
@@ -1546,12 +1545,12 @@ TEST(test_core_namespace_find_inc) {
         }
         
         // Verify inc was found
-        TEST_ASSERT_TRUE_MESSAGE(inc_value != (ID)&not_found_sentinel, 
+        TEST_ASSERT_TRUE_MESSAGE(inc_value != NOT_FOUND, 
                                  "inc should be found in clojure.core mappings");
         TEST_ASSERT_NOT_NULL_MESSAGE(inc_value, "inc value should not be NULL");
         
         // Verify it's a function
-        if (inc_value && inc_value != (ID)&not_found_sentinel) {
+        if (inc_value && inc_value != NOT_FOUND) {
             int tag = TAG(inc_value);
             TEST_ASSERT_TRUE_MESSAGE(tag == CLJ_FUNC || tag == CLJ_CLOSURE, 
                                      "inc should be a function or closure");

@@ -45,6 +45,11 @@
     #define CLJ_ASSERT(expr) ((void)0)
 #endif
 
+// Helper macro to silence unused variable warnings intentionally
+#ifndef CLJ_UNUSED
+#define CLJ_UNUSED(x) ((void)(x))
+#endif
+
 // Debug-only assert with stack trace
 #ifdef DEBUG
     #define CLJ_DEBUG_ASSERT(expr) CLJ_ASSERT(expr)

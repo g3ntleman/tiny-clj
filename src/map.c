@@ -23,6 +23,9 @@ static CljMap map_empty_singleton_data = {
 };
 CljMap *map_empty_singleton = &map_empty_singleton_data;
 
+// Global sentinel for map_get "not found" responses
+CljObject g_not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+
 // === CljValue API (Phase 1: Parallel) ===
 
 /** Create a map with given capacity; capacity<=0 returns empty-map singleton. */

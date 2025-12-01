@@ -328,8 +328,12 @@ CljVector *autorelease_pool_push() {
     ensure_pool_stack_initialized();
     
     // Check for stack overflow (assertion check)
+#if defined(DEBUG)
     unsigned int stack_depth = vector_count(g_runtime.pool_stack);
     CLJ_ASSERT(stack_depth < MAX_POOL_DEPTH && "Autorelease pool stack overflow! Maximum depth exceeded.");
+#else
+    CLJ_ASSERT(vector_count(g_runtime.pool_stack) < MAX_POOL_DEPTH && "Autorelease pool stack overflow! Maximum depth exceeded.");
+#endif
     
     CljVector *pool = make_vector(1024, CLJ_VECTOR_WEAK);
 
@@ -638,6 +642,8 @@ static void release_object_deep(CljObject *v) {
                     RELEASE(func->body);
                     // Release closure environment - RELEASE handles NULL
                     RELEASE((CljObject*)func->env_stack);
+                    // Release captured namespace reference
+                    RELEASE((CljObject*)func->ns);
                     // Free function name (strdup'd in make_function)
                     if (func->name) {
                         free((void*)func->name);

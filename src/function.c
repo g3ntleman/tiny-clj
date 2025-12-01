@@ -53,7 +53,7 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
     return 0;
 }
 
-CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname) {
+CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
@@ -64,6 +64,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     func->body = RETAIN(body);
     func->env_stack = RETAIN(env_stack);
     func->name = cname ? strdup(cname) : NULL;
+    func->ns = ns ? (struct CljNamespace*)RETAIN((CljObject*)ns) : NULL;
     
     // Allocate and initialize parameter array
     if (allocate_function_params(func, params, param_count) != 0) {

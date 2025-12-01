@@ -334,10 +334,20 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // CRITICAL: Namespace mappings now use fully qualified symbols as keys
             // Use the interned qualified symbol for lookup (ensures pointer equality)
             // Use sentinel to distinguish "key not found" from "value is nil"
-            static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-            ID resolved = map_get(target_ns->mappings, interned_sym, (ID)&not_found_sentinel);
-            if (resolved != (ID)&not_found_sentinel) {
+            ID resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
+            if (resolved != NOT_FOUND) {
                 return resolved;  // Found (can be NULL/nil, which is valid)
+            }
+
+            // Fallback: if the namespace was populated before qualification
+            // became mandatory, the keys might still be unqualified. Try the
+            // unqualified version to keep lookups robust.
+            CljSymbol *unqualified_sym = intern_symbol_global(sym->cname);
+            if (unqualified_sym) {
+                resolved = map_get(target_ns->mappings, unqualified_sym, NOT_FOUND);
+                if (resolved != NOT_FOUND) {
+                    return resolved;
+                }
             }
         }
         // Qualified symbol not found in target namespace
@@ -351,8 +361,6 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     // Use sentinel to distinguish "key not found" from "value is nil"
     // In Clojure, nil is a valid value, so we need to distinguish between
     // "symbol not found" (should search other namespaces) and "symbol found with nil value" (should return nil)
-    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-    
     // Qualify symbol with current namespace for lookup
     CljSymbol *qualified_sym = sym;
     if (current_ns && current_ns->name && current_ns->name->cname) {
@@ -363,8 +371,8 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         }
     }
     
-    ID v = map_get(current_ns->mappings, qualified_sym, (ID)&not_found_sentinel);
-    if (v != (ID)&not_found_sentinel) {
+    ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
+    if (v != NOT_FOUND) {
         // Found in current namespace - check for ambiguity with other namespaces
         // CRITICAL: clojure.core is automatically available and does NOT cause ambiguity
         // In Clojure/JVM, if symbol exists in current namespace AND another namespace (not clojure.core),
@@ -445,9 +453,8 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     if (clojure_core && clojure_core->mappings && sym->cname) {
         // CRITICAL: clojure.core mappings use unqualified symbols as keys (ns_name = NULL)
         // Use the unqualified symbol directly for lookup
-        static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-        ID resolved = map_get(clojure_core->mappings, sym, (ID)&not_found_sentinel);
-        if (resolved != (ID)&not_found_sentinel) {
+        ID resolved = map_get(clojure_core->mappings, sym, NOT_FOUND);
+        if (resolved != NOT_FOUND) {
             // Found in clojure.core - check for ambiguity with other namespaces
             // In Clojure/JVM, if symbol exists in clojure.core AND another namespace,
             // we should throw an ambiguity error

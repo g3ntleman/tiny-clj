@@ -7,6 +7,10 @@
 // We can't include value.h here due to circular dependency: map.h -> value.h -> namespace.h -> map.h
 // map.c includes value.h where IS_IMMEDIATE is actually needed
 
+// Shared sentinel used by map_get callers to distinguish "not found" from NULL values.
+extern CljObject g_not_found_sentinel;
+#define NOT_FOUND (&g_not_found_sentinel)
+
 // CljMap struct definition
 typedef struct {
     CljObject base;

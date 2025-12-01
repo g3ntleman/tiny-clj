@@ -1778,6 +1778,11 @@ ID native_string_reverse(ID *args, unsigned int argc) {
 // Returns a map of all symbols to their values in the namespace
 ID native_ns_map(ID *args, unsigned int argc) {
     CLJ_ASSERT(argc == 1 && "ns-map: arity check failed");
+    if (argc != 1) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "ns-map expects exactly 1 argument, got %u", argc);
+        return NULL;
+    }
     
     ID ns_arg = args[0];
     if (!ns_arg) {
@@ -1815,6 +1820,11 @@ ID native_ns_map(ID *args, unsigned int argc) {
 // Returns the namespace object or nil if not found
 ID native_find_ns(ID *args, unsigned int argc) {
     CLJ_ASSERT(argc == 1 && "find-ns: arity check failed");
+    if (argc != 1) {
+        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                                  "find-ns expects exactly 1 argument, got %u", argc);
+        return NULL;
+    }
     
     ID ns_arg = args[0];
     if (!ns_arg) return NULL; // nil -> nil (Clojure-compatible)
@@ -2287,9 +2297,8 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             if (cached_blank_sym) {
                 // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
                 // nil (NULL) is a valid value in Clojure, so we can't use NULL as not_found
-                static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-                ID blank_func = map_get(existing->mappings, cached_blank_sym, (ID)&not_found_sentinel);
-                if (blank_func != (ID)&not_found_sentinel) {
+                ID blank_func = map_get(existing->mappings, cached_blank_sym, NOT_FOUND);
+                if (blank_func != NOT_FOUND) {
                     needs_loading = false; // blank? found - namespace is fully loaded
                 }
             }

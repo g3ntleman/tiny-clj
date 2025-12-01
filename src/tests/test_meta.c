@@ -306,11 +306,20 @@ TEST(test_meta_qualified_symbol) {
     CljNamespace *string_ns = ns_find("clojure.string");
     TEST_ASSERT_NOT_NULL_MESSAGE(string_ns, "clojure.string namespace should exist");
     
-    CljSymbol *trim_sym = intern_symbol_global("trim");
-    TEST_ASSERT_NOT_NULL(trim_sym);
+    CljSymbol *trim_sym = NULL;
+    if (string_ns->name && string_ns->name->cname) {
+        trim_sym = intern_symbol(string_ns->name, "trim");
+    }
+    if (!trim_sym) {
+        // Fallback for legacy namespaces that still store unqualified keys
+        trim_sym = intern_symbol_global("trim");
+    }
+    TEST_ASSERT_NOT_NULL_MESSAGE(trim_sym, "trim symbol should exist");
     
-    static CljObject not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
-    ID trim_func = map_get(string_ns->mappings, trim_sym, (ID)&not_found_sentinel);
+    ID trim_func = map_get(string_ns->mappings, trim_sym, NOT_FOUND);
+    if (trim_func == NOT_FOUND) {
+        trim_func = NULL;
+    }
     TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim function should exist in clojure.string namespace");
     
     // Check if trim function has metadata directly
@@ -330,8 +339,8 @@ TEST(test_meta_qualified_symbol) {
         }
         TEST_ASSERT_NOT_NULL_MESSAGE(qualified_trim_sym, "Should be able to create qualified trim symbol");
         
-        trim_func = qualified_trim_sym ? map_get(string_ns->mappings, qualified_trim_sym, (ID)&not_found_sentinel) : NULL;
-        if (trim_func == (ID)&not_found_sentinel) {
+        trim_func = qualified_trim_sym ? map_get(string_ns->mappings, qualified_trim_sym, NOT_FOUND) : NULL;
+        if (trim_func == NOT_FOUND) {
             trim_func = NULL;
         }
         TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim function should exist in clojure.string namespace after redefinition");
@@ -356,8 +365,8 @@ TEST(test_meta_qualified_symbol) {
     TEST_ASSERT_NOT_NULL(kw_ns);
     
     CljMap *meta_map = (CljMap*)meta_result;
-    ID name_value = map_get(meta_map, (ID)kw_name, NULL);
-    ID ns_value = map_get(meta_map, (ID)kw_ns, NULL);
+    ID name_value = map_get(meta_map, kw_name, NULL);
+    ID ns_value = map_get(meta_map, kw_ns, NULL);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(name_value, 
                                  "metadata should contain :name key");
