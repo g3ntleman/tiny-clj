@@ -1530,7 +1530,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // like 'time' should not be resolved (they are not in namespaces)
     CljObject *original_op = op;
 
-    // Check for special forms before symbol resolution (def, ns, time, dotimes)
+    // Check for special forms before symbol resolution (def, ns)
+    // Note: SYM_TIME and SYM_DOTIMES are handled by eval_special_form_dispatch
     if (op && TAG(op) == CLJ_SYMBOL) {
         CljSymbol *op_sym = (CljSymbol*)op;
         if (op_sym == SYM_DEF) {
@@ -1538,16 +1539,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
         if (op_sym == SYM_NS) {
             return eval_ns(list, env, st);
-        }
-        if (op_sym == SYM_TIME) {
-            CljMap *time_env = env;
-            if (!time_env && st && st->current_ns) {
-                time_env = st->current_ns->mappings;
-            }
-            return eval_time(list, time_env, st);
-        }
-        if (op_sym == SYM_DOTIMES) {
-            return eval_dotimes(list, env, st);
         }
     }
 
@@ -1569,20 +1560,12 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (result) return result;
 
     // Try special form dispatch
-    CljSymbol *original_op_sym = (CljSymbol*)original_op;
-    ID special_result = eval_special_form_dispatch(list, env, st, ctx, original_op_sym);
-    // CRITICAL: NULL is always a valid result (nil) for special forms.
-    // eval_special_form_dispatch returns NULL if: 1) it was a special form that returns nil, or 2) it wasn't a special form.
-    // We need to check if it was actually a special form by checking if original_op_sym is a special form symbol.
-    // If it was a special form, return the result (even if NULL/nil). Otherwise, continue to function call handling.
-    if (original_op_sym && (original_op_sym == SYM_IF || original_op_sym == SYM_LET || original_op_sym == SYM_DEFN ||
-        original_op_sym == SYM_DEF || original_op_sym == SYM_FN || original_op_sym == SYM_DO ||
-        original_op_sym == SYM_COND || original_op_sym == SYM_WHEN || original_op_sym == SYM_WHILE ||
-        original_op_sym == SYM_QUOTE || original_op_sym == SYM_RECUR || original_op_sym == SYM_AND ||
-        original_op_sym == SYM_OR || original_op_sym == SYM_NS || original_op_sym == SYM_TRY ||
-        original_op_sym == SYM_CATCH || original_op_sym == SYM_THROW || original_op_sym == SYM_FINALLY ||
-        original_op_sym == SYM_VAR || original_op_sym == SYM_LOOP || original_op_sym == SYM_GO ||
-        original_op_sym == SYM_TIME || original_op_sym == SYM_DOTIMES)) {
+    CljSymbol *original_op_sym = NULL;
+    if (original_op && TAG(original_op) == CLJ_SYMBOL) {
+        original_op_sym = as_symbol(original_op);
+    }
+    if (original_op_sym && is_special_form(original_op_sym)) {
+        ID special_result = eval_special_form_dispatch(list, env, st, ctx, original_op_sym);
         return special_result; // NULL is valid (nil)
     }
     // Not a special form - continue to function call handling
