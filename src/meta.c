@@ -31,7 +31,7 @@ void meta_registry_init() {
 
 void meta_registry_cleanup() {
     if (g_runtime.meta_registry) {
-        RELEASE((CljObject*)g_runtime.meta_registry);
+        RELEASE(g_runtime.meta_registry);
     }
     g_runtime.meta_registry = NULL;
 }
@@ -62,7 +62,7 @@ void meta_set(CljObject *v, CljObject *meta) {
     ID retrieved_meta = meta_get(v);
     if (meta != NULL) {
         CLJ_ASSERT(retrieved_meta != NULL && "meta_set: metadata should be retrievable after setting");
-        CLJ_ASSERT((CljObject*)retrieved_meta == meta && "meta_set: retrieved metadata should match the set metadata");
+        CLJ_ASSERT(retrieved_meta == meta && "meta_set: retrieved metadata should match the set metadata");
     }
     // Note: If meta is NULL, retrieved_meta may also be NULL, which is acceptable
 #endif
@@ -88,13 +88,13 @@ ID meta_get(CljObject *v) {
     // but are structurally equivalent (e.g., unqualified symbols in different contexts)
     if (TAG(v) == CLJ_LIST) {
         MAP_FOR_EACH(registry, stored_key, value) {
-            if (stored_key == (CljObject*)v) {
+            if (stored_key == v) {
                 // Already checked above, but check again for safety
                 return value;
             }
             // For lists, try structural equality with namespace-agnostic symbol comparison
             if (stored_key && TAG(stored_key) == CLJ_LIST) {
-                if (clj_equal(stored_key, (CljObject*)v)) {
+                if (clj_equal(stored_key, v)) {
                     return value;
                 }
             }
@@ -102,12 +102,12 @@ ID meta_get(CljObject *v) {
     } else {
         // For non-lists, use standard structural equality
         MAP_FOR_EACH(registry, stored_key, value) {
-            if (stored_key == (CljObject*)v) {
+            if (stored_key == v) {
                 // Already checked above, but check again for safety
                 return value;
             }
             // Try structural equality for non-interned objects (like lists)
-            if (stored_key && clj_equal(stored_key, (CljObject*)v)) {
+            if (stored_key && clj_equal(stored_key, v)) {
                 return value;
             }
         }
@@ -163,21 +163,21 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     // Get or create :column keyword
     CljSymbol *kw_column = intern_symbol_global(":column");
     if (!kw_column) {
-        RELEASE((CljObject*)location_map);
+        RELEASE(location_map);
         return NULL;
     }
     
     // Add :line (Clojure-compatible)
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     if (SYM_KW_LINE) {
-        ID updated_map = map_assoc((CljValue)location_map, (CljValue)SYM_KW_LINE, fixnum(line));
-        ASSIGN(location_map, (CljMap*)updated_map);
+        CljMap *updated_map = map_assoc(location_map, SYM_KW_LINE, fixnum(line));
+        ASSIGN(location_map, updated_map);
     }
     
     // Add :column (Clojure-compatible)
     if (kw_column) {
-        ID updated_map = map_assoc((CljValue)location_map, (CljValue)kw_column, fixnum(column));
-        ASSIGN(location_map, (CljMap*)updated_map);
+        CljMap *updated_map = map_assoc(location_map, kw_column, fixnum(column));
+        ASSIGN(location_map, updated_map);
     }
     
     // Add :file (Clojure-compatible) - file information not available from EvalState
@@ -185,11 +185,11 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
     
     // Add :ns (Clojure-compatible, if available)
     if (SYM_KW_NS && ns_name) {
-        ID updated_map = map_assoc((CljValue)location_map, (CljValue)SYM_KW_NS, (CljValue)ns_name);
-        ASSIGN(location_map, (CljMap*)updated_map);
+        CljMap *updated_map = map_assoc(location_map, SYM_KW_NS, ns_name);
+        ASSIGN(location_map, updated_map);
     }
     
-    return (CljObject*)location_map;
+    return location_map;
 }
 
 /**
@@ -199,44 +199,38 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
  * @return Merged metadata map or location_meta if existing_meta is NULL
  * 
  * DRY: Wiederverwendbare Funktion zum Zusammenführen von Meta-Maps
- * Only adds location metadata if keys don't already exist (doesn't overwrite)
  */
 CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
     if (!location_meta) return existing_meta;
     if (!existing_meta) return location_meta;
+
+    CljMap *missing_entries = NULL;
+    int has_missing = 0;
     
-    // Check if both are maps
-    if (!existing_meta || TAG(existing_meta) != CLJ_MAP || !location_meta || TAG(location_meta) != CLJ_MAP) {
-        return existing_meta; // Return existing if types don't match
-    }
-    
-    CljMap *existing_map = as_map(existing_meta);
-    CljMap *location_map = as_map(location_meta);
-    if (!existing_map || !location_map) return existing_meta;
-    
-    // Start with existing map
-    CljObject *result = existing_meta;
-    RETAIN(result);
-    
-    // Add location metadata entries only if they don't exist in existing map
-    MAP_FOR_EACH(location_map, key, value) {
+    MAP_FOR_EACH(as_map(location_meta), key, value) {
         if (!key) continue;
-        
-        // Check if key already exists in existing map
-        ID existing_value = map_get((CljMap*)existing_meta, key, NULL);
-        if (!existing_value) {
-            // Key doesn't exist, add it using map_assoc
-            CljMap *new_result = map_assoc((CljMap*)result, key, value);
-            if (new_result != (CljMap*)result) {
-                // New map was created, update result
-                RELEASE(result);
-                result = (CljObject*)new_result;
+        ID existing_value = map_get(as_map(existing_meta), key, NOT_FOUND);
+        if (existing_value == NOT_FOUND) {
+            CljMap *base = missing_entries ? missing_entries : map_empty();
+            CljMap *updated_missing = map_assoc(base, key, value);
+            if (missing_entries && updated_missing != missing_entries) {
+                RELEASE(missing_entries);
             }
+            missing_entries = updated_missing;
+            has_missing = 1;
         }
-        // If key exists, skip it (don't overwrite existing metadata)
     }
     
-    return result;
+    if (!has_missing) {
+        RELEASE(missing_entries);
+        return RETAIN(existing_meta);
+    }
+    
+    CljMap *result = as_map(RETAIN(existing_meta));
+    ASSIGN(result, map_merge(result, missing_entries));
+    RELEASE(missing_entries);
+    
+    return (CljObject*)result;
 }
 
 // Merge metadata maps with second map taking precedence (overwrites conflicting keys)
@@ -244,45 +238,24 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
 CljObject* meta_merge_with_precedence(CljObject *existing_meta, CljObject *form_meta) {
     if (!form_meta) return existing_meta;
     if (!existing_meta) return form_meta;
-    
-    // Check if both are maps
-    if (TAG(existing_meta) != CLJ_MAP || TAG(form_meta) != CLJ_MAP) {
-        return form_meta; // Return form_meta if types don't match (form takes precedence)
-    }
-    
-    CljMap *existing_map = as_map(existing_meta);
-    CljMap *form_map = as_map(form_meta);
-    if (!existing_map || !form_map) return form_meta;
-    
-    // Start with existing map (copy it)
-    CljMap *result = existing_map;
-    RETAIN(result);
+
+    CljMap *result = as_map(RETAIN(existing_meta));
     
     // Add/overwrite all entries from form_meta (form takes precedence)
-    MAP_FOR_EACH(form_map, key, value) {
+    MAP_FOR_EACH(as_map(form_meta), key, value) {
         if (!key) continue;
-        // map_assoc will overwrite existing keys
         CljMap *new_result = map_assoc(result, key, value);
-        if (new_result != result) {
-            RELEASE(result);
-            result = new_result;
-        }
+        ASSIGN(result, new_result);
     }
     
     // Also add keys from existing_meta that don't exist in form_meta
-    MAP_FOR_EACH(existing_map, key, value) {
+    MAP_FOR_EACH(as_map(existing_meta), key, value) {
         if (!key) continue;
-        // Check if key exists in form_meta
-        ID form_value = map_get(form_map, key, NULL);
-        if (!form_value) {
-            // Key doesn't exist in form_meta, add it from existing_meta
+        ID form_value = map_get(as_map(form_meta), key, NOT_FOUND);
+        if (form_value == NOT_FOUND) {
             CljMap *new_result = map_assoc(result, key, value);
-            if (new_result != result) {
-                RELEASE(result);
-                result = new_result;
-            }
+            ASSIGN(result, new_result);
         }
-        // If key exists in form_meta, it was already added above (form takes precedence)
     }
     
     return (CljObject*)result;

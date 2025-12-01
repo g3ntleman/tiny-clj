@@ -314,10 +314,35 @@ TEST(test_core_map_predicate) {
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_TRUE(result1 == clj_true);
     
-    // Test: (map? []) => false
-    CljObject *result2 = eval_string("(map? [])", g_test_eval_state);
+    // Test: (map? {:a 1 :b 2}) => true
+    CljObject *result2 = eval_string("(map? {:a 1 :b 2})", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(result2 == clj_false);
+    TEST_ASSERT_TRUE(result2 == clj_true);
+    
+    // Test: (map? []) => false
+    CljObject *result3 = eval_string("(map? [])", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(result3 == clj_false);
+    
+    // Test: (map? '()) => false
+    CljObject *result4 = eval_string("(map? '())", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result4);
+    TEST_ASSERT_TRUE(result4 == clj_false);
+    
+    // Test: (map? nil) => false
+    CljObject *result5 = eval_string("(map? nil)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result5);
+    TEST_ASSERT_TRUE(result5 == clj_false);
+    
+    // Test: (map? 42) => false
+    CljObject *result6 = eval_string("(map? 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result6);
+    TEST_ASSERT_TRUE(result6 == clj_false);
+    
+    // Test: (map? "string") => false
+    CljObject *result7 = eval_string("(map? \"string\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result7);
+    TEST_ASSERT_TRUE(result7 == clj_false);
 }
 
 // ============================================================================

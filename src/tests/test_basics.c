@@ -195,20 +195,9 @@ TEST(test_nil_creation) {
     CljObject *nil_obj = eval_string("nil", g_test_eval_state);
     TEST_ASSERT_NULL(nil_obj);  // nil is NULL in our system
 
-    // Test nil in expressions - (count nil) throws IllegalArgumentException (Clojure-compatible)
-    TRY {
-        (void)eval_string("(count nil)", g_test_eval_state);
-        // Should not reach here - exception should be thrown
-        TEST_FAIL_MESSAGE("(count nil) should throw IllegalArgumentException");
-    } CATCH(ex) {
-        // Exception expected for nil (Clojure behavior)
-        TEST_ASSERT_NOT_NULL_MESSAGE(ex, "Exception should be thrown");
-        TEST_ASSERT_NOT_NULL_MESSAGE(ex->message, "Exception message should be set");
-        const char *msg = ex->message;
-        const char *found = strstr(msg, "count");
-        if (!found) found = strstr(msg, "nil");
-        TEST_ASSERT_NOT_NULL_MESSAGE(found, "Exception should mention 'count' or 'nil'");
-    } END_TRY
+    // Test nil in expressions - (count nil) => 0 (Clojure-compatible)
+    CljObject *count_nil_result = eval_string("(count nil)", g_test_eval_state);
+    assert_fixnum(count_nil_result, 0);
 
     // Memory is automatically managed by eval_string
 }
@@ -572,14 +561,9 @@ TEST(test_map_function) {
     CljObject *map_count_result = eval_string("(count {:a 1 :b 2 :c 3})", g_test_eval_state);
     assert_fixnum(map_count_result, 3);
 
-    // Test nil count - (count nil) throws IllegalArgumentException (Clojure-compatible)
-    TRY {
-        (void)eval_string("(count nil)", g_test_eval_state);
-        TEST_FAIL_MESSAGE("(count nil) should throw IllegalArgumentException");
-    } CATCH(ex) {
-        // Exception expected for nil (Clojure behavior)
-        TEST_ASSERT_NOT_NULL_MESSAGE(ex, "Exception should be thrown");
-    } END_TRY
+    // Test nil count - (count nil) => 0 (Clojure-compatible)
+    CljObject *nil_count_result = eval_string("(count nil)", g_test_eval_state);
+    assert_fixnum(nil_count_result, 0);
 
     // Test empty vector count
     CljObject *empty_vec_count = eval_string("(count [])", g_test_eval_state);

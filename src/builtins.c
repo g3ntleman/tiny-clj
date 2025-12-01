@@ -537,6 +537,61 @@ ID native_list(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+ID native_reduce(ID *args, unsigned int argc) {
+    if (argc != 2 && argc != 3) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                 "reduce requires exactly 2 or 3 arguments, got %u", argc);
+        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    EvalState *st = g_current_eval_state;
+    if (!st) {
+        throw_exception(EXCEPTION_RUNTIME, "reduce requires EvalState", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    ID fn = args[0];
+    bool has_init = (argc == 3);
+    ID acc = has_init ? args[1] : NULL;
+    ID coll = args[has_init ? 2 : 1];
+    bool acc_owned = false;
+
+    SeqIterator iter;
+    bool has_seq = false;
+    if (coll && !IS_IMMEDIATE(coll)) {
+        has_seq = seq_iter_init(&iter, (CljObject*)coll);
+    }
+
+    if (!has_seq || seq_iter_empty(&iter)) {
+        if (has_init) {
+            return acc;
+        }
+        return eval_function_call(fn, NULL, 0, NULL, st);
+    }
+
+    if (!has_init) {
+        acc = seq_iter_first(&iter);
+        acc_owned = false;
+        seq_iter_next(&iter);
+    }
+
+    while (!seq_iter_empty(&iter)) {
+        ID current = seq_iter_first(&iter);
+        ID call_args[2] = {acc, current};
+        ID new_acc = eval_function_call(fn, call_args, 2, NULL, st);
+        if (acc_owned) {
+            RELEASE((CljObject*)acc);
+        }
+        acc = new_acc;
+        acc_owned = true;
+        seq_iter_next(&iter);
+    }
+
+    return acc;
+}
+
 // nil? function that checks if a value is nil
 ID native_nilp(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
@@ -825,11 +880,9 @@ ID native_count(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 1, "count")) return NULL;
     CljObject *coll = args[0];
-    // Clojure behavior: (count nil) throws IllegalArgumentException
+    // Clojure behavior: (count nil) => 0
     if (!coll) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
-                "Don't know how to count: nil");
-        return NULL;
+        return fixnum(0);
     }
 
     // Handle CLJ_SEQ (sequences from rest, etc.)
@@ -2084,10 +2137,12 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                     reader_next(&reader);
                 }
             } CATCH(ex) {
+#ifdef DEBUG
                 // Log exceptions during namespace loading to help debug issues
                 if (ex) {
                     fprintf(stderr, "[namespace loading] Exception: %s\n", ex->message);
                 }
+#endif
                 // Skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                 if (!reader_is_eof(&reader)) reader_next(&reader);
@@ -3754,6 +3809,11 @@ ID native_vector_p(ID *args, unsigned int argc) {
     return (args[0] && TAG(args[0]) == CLJ_VECTOR) ? clj_true : clj_false;
 }
 
+ID native_map_p(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "map?")) return clj_false;
+    return (args[0] && TAG(args[0]) == CLJ_MAP) ? clj_true : clj_false;
+}
+
 // native_time removed: time is now only a special form (eval_time)
 // This ensures time can measure actual evaluation time, not pre-evaluated arguments
 
@@ -4034,6 +4094,7 @@ void register_builtins() {
     register_builtin_in_core("next", native_next);
     register_builtin_in_core("cons", native_cons);
     register_builtin_in_core("list", native_list);
+    register_builtin_in_core("reduce", native_reduce);
     register_builtin_in_core("count", native_count);
     register_builtin_in_core("nil?", native_nilp);
     register_builtin_in_core("reverse", native_reverse);
@@ -4061,6 +4122,7 @@ void register_builtins() {
     register_builtin_in_core("not=", native_not_eq);
     register_builtin_in_core("identical?", native_identical);
     register_builtin_in_core("vector?", native_vector_p);
+    register_builtin_in_core("map?", native_map_p);
 
     // Time function
     // time is now only a special form (eval_time), not a builtin
