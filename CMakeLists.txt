@@ -300,6 +300,7 @@ add_executable(unity-tests
     src/tests/test_byte_array.c
     src/tests/test_keyword_evaluation.c
     src/tests/test_string.c
+    src/tests/test_core.c
     src/tests/test_require.c
     src/tests/test_require_perf.c
     src/tests/test_qualified_symbol_resolution.c

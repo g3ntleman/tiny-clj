@@ -524,21 +524,7 @@ TEST(test_load_multiline_file) {
 }
 
 
-TEST(test_first_function) {
-    CljObject *first_result = eval_string("(first [1 2 3])", g_test_eval_state);
-    assert_fixnum(first_result, 1);
-}
-
-TEST(test_rest_function) {
-    CljObject *rest_test = eval_string("(rest [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(rest_test);
-    TEST_ASSERT_TRUE(rest_test->type == CLJ_LIST || rest_test->type == CLJ_SEQ);
-}
-
-TEST(test_cons_function) {
-    CljObject *cons_test = eval_string("(cons 1 '(2 3))", g_test_eval_state);
-    assert_list(cons_test);
-}
+// Core function tests moved to test_core.c
 
 TEST(test_identity_function) {
     // Test identity function from clojure.core
@@ -575,20 +561,7 @@ TEST(test_identity_function) {
     TEST_ASSERT_TRUE(result6 && TAG(result6) == CLJ_MAP);
 }
 
-TEST(test_count_vector) {
-    CljObject *count_result = eval_string("(count [1 2 3 4])", g_test_eval_state);
-    assert_fixnum(count_result, 4);
-}
-
-TEST(test_count_list) {
-    CljObject *list_count_result = eval_string("(count (list 1 2 3))", g_test_eval_state);
-    assert_fixnum(list_count_result, 3);
-}
-
-TEST(test_count_string) {
-    CljObject *string_count_result = eval_string("(count \"hello\")", g_test_eval_state);
-    assert_fixnum(string_count_result, 5);
-}
+// Count function tests moved to test_core.c
 
 TEST(test_map_function) {
     // Test the map higher-order function

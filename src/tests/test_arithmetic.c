@@ -111,11 +111,8 @@ TEST(test_integer_overflow_detection) {
     TEST_ASSERT_EQUAL_INT(30, as_fixnum((CljValue)normal_sub));
 }
 
-// Test simple arithmetic operations
-TEST(test_simple_arithmetic) {
-    CljObject *result = eval_string("(+ 1 2)", g_test_eval_state);
-    assert_fixnum(result, 3);
-}
+// Simple arithmetic tests moved to test_core.c
+// This file focuses on edge cases (overflow, division by zero, etc.)
 
 // Test division by zero exception
 TEST(test_division_by_zero_exception) {
