@@ -1374,26 +1374,14 @@ ID native_prn(ID *args, unsigned int argc) {
 // HELPER FUNCTIONS (DRY Principle)
 // ============================================================================
 
-// Helper function to validate numeric arguments
+// Helper function to validate numeric arguments (used by bitwise/div helpers)
 static bool validate_numeric_args(ID *args, int argc) {
     for (int i = 0; i < argc; i++) {
-        // CRITICAL: Check if args[i] is NULL or if it's a valid immediate value
-        // Immediate values (fixnums) have odd tags, so they are never NULL
-        // But we need to check if args[i] is actually NULL (nil) or if it's a valid value
         if (!args[i]) {
-            // ASSERTION: Test thesis that nil is being passed to numeric operations
-            // This tests whether nil is being passed to builtin numeric functions
-            // This is where the "Cannot use nil as a Number" error originates
-            CLJ_ASSERT(args[i] == NULL); // Argument is nil
-
-            // NULL argument (nil) - provide better error message
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
                 "Cannot use nil as a Number");
             return false;
         }
-        // CRITICAL: Check if args[i] is a valid number
-        // Immediate values (fixnums) should pass this check
-        // But if args[i] is a heap object, it must be a number type
         uint16_t tag = TAG(args[i]);
         if (tag != CLJ_INT && tag != CLJ_FLOAT) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
@@ -2599,8 +2587,6 @@ ID native_add_variadic(ID *args, unsigned int argc) {
     if (argc == 0) return create_fixnum_result(0);
     if (argc == 1) return (RETAIN((CljObject*)args[0]));
 
-    if (!validate_numeric_args(args, argc)) return (NULL);
-
     bool sawFixed = false;
     int acc_i = 0;
     int32_t acc_fixed = 0;
@@ -2684,8 +2670,6 @@ ID native_add_variadic(ID *args, unsigned int argc) {
 ID native_mul_variadic(ID *args, unsigned int argc) {
     if (argc == 0) return create_fixnum_result(1);
     if (argc == 1) return (RETAIN((CljObject*)args[0]));
-
-    if (!validate_numeric_args(args, argc)) return (NULL);
 
     bool sawFixed = false;
     int acc_i = 1;
@@ -2821,8 +2805,6 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
         }
     }
 
-    if (!validate_numeric_args(args, argc)) return (NULL);
-
     bool sawFixed = false;
     int32_t acc_fixed = 0;
     int acc_i = 0;
@@ -2892,8 +2874,6 @@ ID native_sub_variadic(ID *args, unsigned int argc) {
 ID native_mod(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "mod")) return NULL;
 
-    if (!validate_numeric_args(args, argc)) return NULL;
-
     uint16_t tag_a = TAG(args[0]);
     uint16_t tag_b = TAG(args[1]);
     if (tag_a == CLJ_INT && tag_b == CLJ_INT) {
@@ -2947,8 +2927,6 @@ ID native_mod(ID *args, unsigned int argc) {
 
 ID native_quot(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "quot")) return NULL;
-
-    if (!validate_numeric_args(args, argc)) return NULL;
 
     uint16_t tag_a = TAG(args[0]);
     uint16_t tag_b = TAG(args[1]);
@@ -3004,8 +2982,6 @@ ID native_quot(ID *args, unsigned int argc) {
 ID native_bit_shift_left(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "bit-shift-left")) return NULL;
 
-    if (!validate_numeric_args(args, argc)) return NULL;
-
     // Both arguments must be integers
     if (TAG(args[0]) != CLJ_INT || TAG(args[1]) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "bit-shift-left requires integer arguments",
@@ -3033,8 +3009,6 @@ ID native_range(ID *args, unsigned int argc) {
             "range requires 1-3 arguments, got %u", argc);
         return NULL;
     }
-
-    if (!validate_numeric_args(args, argc)) return NULL;
 
     int start = 0, end = 0, step = 1;
 
@@ -3132,8 +3106,6 @@ ID native_repeat(ID *args, unsigned int argc) {
 
 ID native_math_sqrt(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "Math/sqrt")) return NULL;
-
-    if (!validate_numeric_args(args, argc)) return NULL;
 
     // Extract numeric value
     float val;
@@ -3423,8 +3395,6 @@ ID native_div_variadic(ID *args, unsigned int argc) {
             }
         }
     }
-
-    if (!validate_numeric_args(args, argc)) return (NULL);
 
     bool sawFixed = false;
     int32_t acc_fixed = 0;

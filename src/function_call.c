@@ -240,7 +240,8 @@ typedef enum {
 // Helper function to check if a type is numeric
 static bool is_numeric_type(CljObject *obj) {
     if (!obj) return false;
-    return IS_IMMEDIATE(obj);
+    uint16_t tag = TAG(obj);
+    return tag == CLJ_INT || tag == CLJ_FLOAT;
 }
 
 // Helper function to throw unresolved symbol exception (DRY principle)
@@ -260,8 +261,11 @@ CljObject* eval_arithmetic_generic(CljList *list, CljMap *env, ArithOp op, EvalS
 CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, ArithOp op, EvalState *st, const EvalContext *ctx) {
     // Clojure-compatible: Accept NULL environment - eval_arg handles it
     // and falls back to namespace lookup for symbol resolution
-    int total_count = list_count(list);
-    int argc = total_count - 1;  // Subtract 1 for the operator
+    CljList *arg_nodes = (list && list->rest) ? as_list(list->rest) : NULL;
+    int argc = 0;
+    for (CljList *tmp = arg_nodes; tmp; tmp = as_list(tmp->rest)) {
+        argc++;
+    }
 
     if (argc == 0) {
         // Handle zero arguments case
@@ -278,34 +282,35 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, Arit
         }
     }
 
-    // Evaluate all arguments
-    ID *args = (ID*)malloc(sizeof(ID) * argc);
+    // Evaluate all arguments (single list traversal, stack buffer for <=16 args)
+    ID args_stack[16];
+    ID *args = alloc_obj_array(argc, args_stack);
     if (!args) return NULL;
 
+    CljList *current = arg_nodes;
     for (int i = 0; i < argc; i++) {
-        args[i] = eval_arg_with_context(list, i + 1, env, st, ctx);
+        ID expr = current ? current->first : NULL;
+        args[i] = eval_arg_from_expr_with_context(expr, env, st, ctx);
         if (!args[i]) {
-            // Clean up already evaluated arguments
             for (int j = 0; j < i; j++) {
                 RELEASE(args[j]);
             }
-            free(args);
+            free_obj_array(args, args_stack);
             return NULL;
         }
 
-        // Check for nil arguments
-
         // Check for non-numeric types
         if (!is_numeric_type(args[i])) {
-            // Clean up already evaluated arguments BEFORE throwing exception
             for (int j = 0; j <= i; j++) {
                 RELEASE(args[j]);
             }
-            free(args);
+            free_obj_array(args, args_stack);
             throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
                 "String cannot be used as a Number");
             return NULL; // Unreachable, but prevents fallthrough
         }
+
+        current = current ? as_list(current->rest) : NULL;
     }
 
     // Call the appropriate variadic function
@@ -329,7 +334,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, Arit
     for (int i = 0; i < argc; i++) {
         RELEASE(args[i]);
     }
-    free(args);
+    free_obj_array(args, args_stack);
 
     // AUTORELEASE handles immediates and NULL safely - no checks needed
     return AUTORELEASE(result);
@@ -1058,6 +1063,7 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx);
 static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx);
 static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, CljSymbol *op_sym);
 static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx);
+static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
 
 static ID eval_sequence_dispatch_with_context(CljList *list, CljMap *env, ID op, const EvalContext *ctx) {
     CljSymbol *op_sym = (CljSymbol*)op;
@@ -3181,12 +3187,12 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
     if (expr == SYM_NIL) return NULL;
     if (!expr) return NULL;
 
-    if (env == NULL) {
-        return AUTORELEASE(RETAIN(expr));
-    }
-
     if (IS_IMMEDIATE(expr)) {
         return expr;
+    }
+
+    if (env == NULL) {
+        return AUTORELEASE(RETAIN(expr));
     }
 
     unsigned char expr_tag = TAG(expr);
@@ -3205,49 +3211,57 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         
         // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
         // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-        if (ctx && ctx->param_count > 0 && ctx->params && ctx->param_values) {
+        ID resolved_value = NULL;
+
+        if (!ctx || !ctx->params || !ctx->param_values || ctx->param_count <= 0) {
+            // no manual check needed
+        } else if (!ctx->env_stack) {
             for (int i = 0; i < ctx->param_count; i++) {
-                if (ctx->params[i] == expr) {
-                    ID param_value = ctx->param_values[i];
-                    // param_value is already retained - return AUTORELEASE for consistency
-                    return AUTORELEASE(RETAIN(param_value));
-                }
-                // Fallback: structural equality
-                if (ctx->params[i] && expr && 
-                    TAG(ctx->params[i]) == CLJ_SYMBOL && TAG(expr) == CLJ_SYMBOL &&
-                    clj_equal(ctx->params[i], expr)) {
-                    ID param_value = ctx->param_values[i];
-                    return AUTORELEASE(RETAIN(param_value));
+                ID param_sym = ctx->params[i];
+                if (!param_sym) continue;
+                if (param_sym == expr ||
+                    (TAG(param_sym) == CLJ_SYMBOL && TAG(expr) == CLJ_SYMBOL &&
+                     clj_equal(param_sym, expr))) {
+                    resolved_value = ctx->param_values[i];
+                    break;
                 }
             }
         }
         
         // CRITICAL: If context is provided with env_stack, use resolve_symbol_in_env
         // to search through the entire environment stack (for nested let blocks)
-        if (ctx && ctx->env_stack) {
+        if (!resolved_value && ctx && ctx->env_stack) {
             EvalState *eval_st = get_eval_state(ctx, st);
             ID resolved_id = resolve_symbol_in_env(ctx->env_stack, env, expr, eval_st);
             if (resolved_id && TAG(resolved_id) != CLJ_SYMBOL) {
-                // Found in env_stack - return it (RETAIN/AUTORELEASE handle immediates safely)
-                return AUTORELEASE(RETAIN(resolved_id));
+                resolved_value = resolved_id;
             }
             // Not found in env_stack or still a symbol, fall through to namespace resolution
         }
         
-        if (env && TAG(env) == CLJ_MAP) {
+        if (!resolved_value && env && TAG(env) == CLJ_MAP) {
             // Use sentinel to distinguish "key not found" from "value is nil"
             ID resolved_id = map_get(env, expr, &not_found);
             if (resolved_id != &not_found) {
                 // Key exists in map (value may be NULL/nil)
                 // map_get returns retained value, eval_arg should return AUTORELEASE
                 if (!resolved_id) return NULL; // nil
-                return AUTORELEASE(RETAIN(resolved_id));
+                resolved_value = resolved_id;
             }
         }
 
-        CljObject *resolved = ns_resolve(st, as_symbol(expr));
-        if (resolved) {
-            return resolved;
+        if (!resolved_value) {
+            CljObject *resolved = ns_resolve(st, as_symbol(expr));
+            if (resolved) {
+                resolved_value = resolved;
+            }
+        }
+
+        if (resolved_value) {
+            if (IS_IMMEDIATE(resolved_value)) {
+                return resolved_value;
+            }
+            return AUTORELEASE(RETAIN(resolved_value));
         }
 
         CljSymbol *sym_obj = as_symbol(expr);
