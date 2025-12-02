@@ -167,7 +167,7 @@
 - Parser: Non-ASCII defaults to `parse_symbol`; UTF-8 validation via `external/utf8.h`.
 - Tests: Added UTF-8 tests in `src/tests/test_parser.c`.
 - Memory: `autorelease()` pushes into a weak vector; pool pop releases elements and vector.
-- Types: `as_vector()` accepts `CLJ_VECTOR` and `CLJ_WEAK_VECTOR`; added finalizer for `CLJ_WEAK_VECTOR`.
+- Types: `as_vector()` accepts `CLJ_VECTOR` and `CLJ_VECTOR_TRANSIENT_WEAK`; added finalizer for `CLJ_VECTOR_TRANSIENT_WEAK`.
 - Docs: Expanded Design Decisions in `README.md` with the memory model.
 
 ## Benchmarks (current run)

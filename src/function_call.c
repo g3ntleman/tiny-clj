@@ -3212,10 +3212,10 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
         // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
         ID resolved_value = NULL;
+        bool param_found = false;  // Track if parameter was found (even if value is nil)
 
-        if (!ctx || !ctx->params || !ctx->param_values || ctx->param_count <= 0) {
-            // no manual check needed
-        } else if (!ctx->env_stack) {
+        // Always check function parameters first, regardless of env_stack
+        if (ctx && ctx->params && ctx->param_values && ctx->param_count > 0) {
             for (int i = 0; i < ctx->param_count; i++) {
                 ID param_sym = ctx->params[i];
                 if (!param_sym) continue;
@@ -3223,9 +3223,22 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
                     (TAG(param_sym) == CLJ_SYMBOL && TAG(expr) == CLJ_SYMBOL &&
                      clj_equal(param_sym, expr))) {
                     resolved_value = ctx->param_values[i];
+                    param_found = true;  // Parameter found (value may be nil/NULL)
                     break;
                 }
             }
+        }
+        
+        // If parameter was found, return its value (even if nil/NULL)
+        if (param_found) {
+            // nil is represented as NULL in C - this is a valid value
+            if (!resolved_value) {
+                return NULL;  // Return nil
+            }
+            if (IS_IMMEDIATE(resolved_value)) {
+                return resolved_value;
+            }
+            return AUTORELEASE(RETAIN(resolved_value));
         }
         
         // CRITICAL: If context is provided with env_stack, use resolve_symbol_in_env

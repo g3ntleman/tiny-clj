@@ -36,7 +36,7 @@ typedef enum {
     CLJ_SYMBOL = 2,   // Interned symbols
     CLJ_STRING = 4,   // Strings
     CLJ_VECTOR = 6,   // Vectors
-    CLJ_VECTOR_WEAK = 8,
+    CLJ_VECTOR_TRANSIENT_WEAK = 8,
     CLJ_MAP = 10,
     CLJ_LIST = 12,
     CLJ_SEQ = 14,         // Sequence iterator

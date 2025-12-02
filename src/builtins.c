@@ -829,15 +829,16 @@ ID native_conj_bang(ID *args, unsigned int argc) {
     CljObject *coll = args[0];
     if (!coll) return NULL;
 
-
-    if (coll && TAG(coll) == CLJ_VECTOR_TRANSIENT) {
+    int tag = TAG(coll);
+    if (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
         CljVector *result = (CljVector*)coll;
+        // vector_conj automatically handles transient vectors correctly (always in-place)
         for (unsigned int i = 1; i < argc; i++) {
-            result = clj_conj(result, (CljValue)args[i]);
+            result = vector_conj(result, args[i]);
             if (!result) return NULL;
         }
         return (CljObject*)result;
-    } else if (coll && TAG(coll) == CLJ_MAP_TRANSIENT) {
+    } else if (tag == CLJ_MAP_TRANSIENT) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
         return (CljObject*)map_conj((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
     }
@@ -983,9 +984,9 @@ ID native_type(ID *args, unsigned int argc) {
         case CLJ_STRING:
             return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "String");
         case CLJ_VECTOR:
-        case CLJ_VECTOR_WEAK:
             return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "PersistentVector");
         case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK:
             return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "TransientVector");
         case CLJ_MAP_TRANSIENT:
             return (CljObject*)intern_symbol(SYM_CLOJURE_LANG, "TransientArrayMap");

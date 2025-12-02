@@ -386,8 +386,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
         return NULL;
       }
 
-      // Use vector_conj_bang for transient vectors (guaranteed in-place)
-      tvec = vector_conj_bang((CljVector*)tvec, value);
+      // Use vector_conj for transient vectors (guaranteed in-place)
+      tvec = vector_conj((CljVector*)tvec, value);
       if (!tvec) {
         throw_parser_exception("Failed to append to vector", reader);
         return NULL;

@@ -678,6 +678,29 @@ TEST(test_two_parameters_resolution) {
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
 }
 
+// LOW-LEVEL REGRESSION TEST: Parameter resolution in let block (from-index bug)
+// This tests the specific bug where function parameters are not resolved when used
+// inside a let block within a function body. This is the pattern used in
+// clojure.string/index-of where 'from-index' parameter is used in a let binding.
+TEST(test_parameter_resolution_from_index_in_let) {
+    // Test: Parameter 'from-index' used in let binding within function
+    // ((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) "hello" "l" nil) => 0
+    CljObject *result = eval_string("((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) \"hello\" \"l\" nil)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+}
+
+// LOW-LEVEL REGRESSION TEST: Parameter resolution in let block with non-nil value
+TEST(test_parameter_resolution_from_index_in_let_non_nil) {
+    // Test: Parameter 'from-index' used in let binding with non-nil value
+    // ((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) "hello" "l" 2) => 2
+    CljObject *result = eval_string("((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) \"hello\" \"l\" 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
 // LOW-LEVEL TEST: Parameter in let with two parameters
 TEST(test_parameter_in_let_with_two_params) {
     // Test: Two parameters, use second in let

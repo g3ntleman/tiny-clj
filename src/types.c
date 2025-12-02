@@ -14,7 +14,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_STRING: return "String";
         case CLJ_SYMBOL: return "Symbol";
         case CLJ_VECTOR: return "Vector";
-        case CLJ_VECTOR_WEAK: return "WeakVector";
+        case CLJ_VECTOR_TRANSIENT_WEAK: return "WeakVector";
         case CLJ_MAP: return "Map";
         case CLJ_LIST: return "List";
         case CLJ_FUNC: return "Function";

@@ -67,7 +67,7 @@ bool clj_equal(ID a, ID b) {
         }
 
         case CLJ_VECTOR:
-        case CLJ_VECTOR_WEAK:
+        case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
             CljVector *vec_a = (CljVector*)a;
             CljVector *vec_b = (CljVector*)b;

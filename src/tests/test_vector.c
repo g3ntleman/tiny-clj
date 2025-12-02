@@ -1408,16 +1408,12 @@ TEST(test_vector_for_each_with_null_elements) {
     TEST_ASSERT_TRUE(found_null);  // NULL element should be found
 }
 
-// Test vector_set_nth with reference count checks
+// Test vector_set_nth with reference count checks (transient vector)
 TEST(test_vector_set_nth_with_reference_counts) {
-    // Test 1: RC=1 - In-place mutation
-    // Create vector with RC=1
-    CljVector *vec = make_vector(4, CLJ_VECTOR);
+    CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
     
-    // Add elements - use strings (heap objects) for reference count testing
-    // make_string returns retained objects (RC=1)
     CljObject *old_val = AUTORELEASE(make_string("old"));
     CljObject *new_val = AUTORELEASE(make_string("new"));
     
@@ -1428,27 +1424,21 @@ TEST(test_vector_set_nth_with_reference_counts) {
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
     
-    // Check old_val reference count (should be 2: one in vector, one from make_string)
     int old_val_rc_before = get_retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
-    // Set element at index 0
     CljVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
-    
-    // For RC=1, should return same vector (in-place mutation)
     TEST_ASSERT_EQUAL_PTR(vec, result);
     TEST_ASSERT_EQUAL_INT(1, get_retain_count(result));
     
-    // Old value should be released (RC decreased by 1)
+    // For transient vectors, old value is NOT released
     int old_val_rc_after = get_retain_count(old_val);
-    TEST_ASSERT_EQUAL_INT(old_val_rc_before - 1, old_val_rc_after);
+    TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);
     
-    // New value should be retained (RC increased by 1)
     int new_val_rc_after = get_retain_count(new_val);
-    TEST_ASSERT_TRUE(new_val_rc_after > 0);  // Should be retained
+    TEST_ASSERT_TRUE(new_val_rc_after > 0);
     
-    // Verify element was actually changed
     ID elem = vector_nth(result, 0);
     TEST_ASSERT_NOT_NULL(elem);
     TEST_ASSERT_TRUE(TAG(elem) == CLJ_STRING);
@@ -1459,10 +1449,9 @@ TEST(test_vector_set_nth_with_reference_counts) {
     AUTORELEASE(vec);
 }
 
-// Test vector_set_nth with RC>1 (Copy-on-Write)
+// Test vector_set_nth with transient vector and multiple references
 TEST(test_vector_set_nth_copy_on_write) {
-    // Create vector with RC=1
-    CljVector *vec = make_vector(4, CLJ_VECTOR);
+    CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     
     CljObject *old_val = AUTORELEASE(make_string("old"));
@@ -1474,54 +1463,36 @@ TEST(test_vector_set_nth_copy_on_write) {
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
     
-    // Increase reference count to trigger COW
     RETAIN(vec);
     TEST_ASSERT_EQUAL_INT(2, get_retain_count(vec));
     
-    // Check old_val reference count before
     int old_val_rc_before = get_retain_count(old_val);
-    TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);  // One in vector, one from make_string
+    TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
-    // Set element at index 0 - should trigger COW
     CljVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_PTR(vec, result);
+    TEST_ASSERT_EQUAL_INT(2, get_retain_count(vec));
     
-    // For RC>1, should return NEW vector (Copy-on-Write)
-    TEST_ASSERT_TRUE(vec != result);
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(result));
-    TEST_ASSERT_EQUAL_INT(2, get_retain_count(vec));  // Original still has RC=2
-    
-    // Old value in original vector should still be retained
+    // For transient vectors, old value is NOT released
     int old_val_rc_after = get_retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);
     
-    // New value should be retained in new vector
     int new_val_rc_after = get_retain_count(new_val);
-    TEST_ASSERT_EQUAL_INT(2, new_val_rc_after);  // One in new vector, one from make_string
+    TEST_ASSERT_EQUAL_INT(2, new_val_rc_after);
     
-    // Verify original vector unchanged
-    ID orig_elem = vector_nth(vec, 0);
-    TEST_ASSERT_NOT_NULL(orig_elem);
-    TEST_ASSERT_TRUE(TAG(orig_elem) == CLJ_STRING);
-    CljString *orig_str = as_clj_string(orig_elem);
-    TEST_ASSERT_NOT_NULL(orig_str);
-    TEST_ASSERT_EQUAL_STRING("old", orig_str->data);
-    
-    // Verify new vector changed
-    ID new_elem = vector_nth(result, 0);
-    TEST_ASSERT_NOT_NULL(new_elem);
-    TEST_ASSERT_TRUE(TAG(new_elem) == CLJ_STRING);
-    CljString *new_str = as_clj_string(new_elem);
-    TEST_ASSERT_NOT_NULL(new_str);
-    TEST_ASSERT_EQUAL_STRING("new", new_str->data);
+    ID elem = vector_nth(result, 0);
+    TEST_ASSERT_NOT_NULL(elem);
+    TEST_ASSERT_TRUE(TAG(elem) == CLJ_STRING);
+    CljString *str = as_clj_string(elem);
+    TEST_ASSERT_NOT_NULL(str);
+    TEST_ASSERT_EQUAL_STRING("new", str->data);
     
     AUTORELEASE(vec);
-    AUTORELEASE(result);
 }
 
 // Test vector_set_nth with transient vector
 TEST(test_vector_set_nth_transient) {
-    // Create transient vector
     CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR_TRANSIENT);
@@ -1534,19 +1505,14 @@ TEST(test_vector_set_nth_transient) {
     
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     
-    // Check old_val reference count before set_nth (should be 2: one in vector, one from make_string)
     int old_val_rc_before = get_retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
-    // Set element at index 0 - should mutate in-place
     CljVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
-    
-    // Transient vectors always mutate in-place
     TEST_ASSERT_EQUAL_PTR(vec, result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
     
-    // Verify element was changed
     ID elem = vector_nth(result, 0);
     TEST_ASSERT_NOT_NULL(elem);
     TEST_ASSERT_TRUE(TAG(elem) == CLJ_STRING);
@@ -1554,14 +1520,12 @@ TEST(test_vector_set_nth_transient) {
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_EQUAL_STRING("new", str->data);
     
-    // Old value reference count after set_nth
-    // Note: For transient vectors, the old value is NOT released (see vector_assoc line 552: !is_transient check)
+    // For transient vectors, old value is NOT released
     int old_val_rc_after = get_retain_count(old_val);
-    TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);  // Not released for transient vectors
+    TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);
     
-    // New value should be retained in vector
     int new_val_rc_after = get_retain_count(new_val);
-    TEST_ASSERT_TRUE(new_val_rc_after > 0);  // Should be retained
+    TEST_ASSERT_TRUE(new_val_rc_after > 0);
     
     AUTORELEASE(vec);
 }
@@ -1573,21 +1537,40 @@ TEST(test_vector_set_nth_edge_cases) {
     TEST_ASSERT_NULL(result1);
     
     // Test 2: Out-of-bounds index should return NULL
-    CljVector *vec = make_vector(4, CLJ_VECTOR);
+    CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     vec = vector_conj(vec, fixnum(10));
     vec = vector_conj(vec, fixnum(20));
-    
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     
     // Index 2 is out of bounds (count is 2, valid indices are 0 and 1)
     CljVector *result2 = vector_set_nth(vec, 2, fixnum(30));
     TEST_ASSERT_NULL(result2);
     
-    // Test 3: NULL value should throw exception (vector_assoc checks for NULL value)
+    // Test 3: NULL value should throw exception
     CljObject *exception_caught = NULL;
     TRY {
         vector_set_nth(vec, 0, NULL);
+    } CATCH(ex) {
+        exception_caught = ex;
+    } END_TRY
+    TEST_ASSERT_NOT_NULL(exception_caught);
+    
+    AUTORELEASE(vec);
+}
+
+// Test that vector_set_nth throws exception for persistent vectors
+TEST(test_vector_set_nth_persistent_throws_exception) {
+    CljVector *vec = make_vector(4, CLJ_VECTOR);
+    TEST_ASSERT_NOT_NULL(vec);
+    vec = vector_conj(vec, fixnum(10));
+    vec = vector_conj(vec, fixnum(20));
+    vec = vector_conj(vec, fixnum(30));
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    
+    CljObject *exception_caught = NULL;
+    TRY {
+        vector_set_nth(vec, 0, fixnum(100));
     } CATCH(ex) {
         exception_caught = ex;
     } END_TRY
