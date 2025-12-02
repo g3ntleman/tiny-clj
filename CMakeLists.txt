@@ -614,7 +614,7 @@ if(NOT REPL_OUTPUT_DIR)
     set(REPL_OUTPUT_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 endif()
 add_test(NAME repl-history-multiple 
-    COMMAND bash -c "echo -e '(+ 1 2)\n(* 3 4)\n(str \"test\")' | timeout 5s \"${REPL_OUTPUT_DIR}/tiny-clj-repl\""
+    COMMAND bash -c "printf '(+ 1 2)\n(* 3 4)\n(str \"test\")\n' | timeout 5s \"${REPL_OUTPUT_DIR}/tiny-clj-repl\""
 )
 set_tests_properties(repl-history-multiple PROPERTIES 
     PASS_REGULAR_EXPRESSION "3.*12.*\"test\""

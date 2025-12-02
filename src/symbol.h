@@ -109,7 +109,7 @@ extern CljSymbol *SYM_CLOJURE_LANG;
 // Additional symbols for hot path optimization
 extern CljSymbol *SYM_NS_STAR;
 
-CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name);
+// make_symbol is internal - use intern_symbol instead for proper symbol interning
 CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname);
 CljSymbol* intern_symbol_global(const char *cname);  // Without namespace
 void symbol_table_add(CljSymbol *symbol);

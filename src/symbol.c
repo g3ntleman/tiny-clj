@@ -6,7 +6,6 @@
 #include "namespace.h"
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h" // For ASSIGN
-#include "memory.h"
 #include "vector.h"  // For vector operations
 #include <stdbool.h>
 #include <stdlib.h>
@@ -344,21 +343,30 @@ void init_special_symbols() {
 }
 
 // Helper function to find symbol in vector by comparing name and namespace
+// Uses direct strcmp comparison instead of clj_equal for performance
 static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *cname) {
     if (!vec || !cname) return NULL;
 
-    // Create temporary symbol structure for comparison (not heap-allocated)
-    CljSymbol temp_sym = {
-        .base = { .type = CLJ_SYMBOL, .rc = 0 },  // rc=0: not heap-allocated
-        .cname = cname,
-        .ns_name = ns_name  // Use ns_name directly (already a CljSymbol*)
-    };
-
-    int index = vector_index_of(vec, (ID)&temp_sym);
-    if (index != INDEX_NOT_FOUND) {
-        ID elem = vector_nth(vec, (unsigned int)index);
-        CLJ_ASSERT(elem && TAG(elem) == CLJ_SYMBOL && "vector_index_of should only return indices of symbols when searching for a symbol");
-        return as_symbol(elem);
+    // Direct iteration with strcmp - much faster than clj_equal
+    unsigned int count = vector_count(vec);
+    for (unsigned int i = 0; i < count; i++) {
+        ID elem = vector_nth(vec, i);
+        if (TAG(elem) != CLJ_SYMBOL) continue;
+        CljSymbol *sym = as_symbol(elem);
+        if (!sym || !sym->cname) continue;
+        
+        // Compare symbol name using strcmp
+        if (strcmp(sym->cname, cname) != 0) continue;
+        
+        // Compare namespaces (pointer comparison works due to interning)
+        if (sym->ns_name == ns_name) {
+            return sym;
+        }
+        
+        // Both unqualified (no namespace) - equal
+        if (!sym->ns_name && !ns_name) {
+            return sym;
+        }
     }
 
     return NULL;
@@ -393,12 +401,13 @@ void symbol_table_add(CljSymbol *symbol) {
 }
 
 /**
- * @brief Create a symbol value
+ * @brief Create a symbol value (internal use only - not interned)
  * @param cname Symbol name
  * @param ns_name Namespace name symbol (can be NULL)
  * @return CljSymbol symbol object
+ * @note This function is internal. Use intern_symbol() instead for proper symbol interning.
  */
-CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
+static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     if (!cname) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");

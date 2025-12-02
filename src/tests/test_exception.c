@@ -134,7 +134,7 @@ TEST(test_repl_crash_scenario) {
         // Create some objects that will be in the autorelease pool
         // CljObject *obj1 = fixnum(42); // Unused variable removed
         // CljValue obj2 = make_string("test"); // Unused variable removed
-        // CljObject *obj3 = AUTORELEASE(make_symbol("test", NULL)); // Unused variable removed
+        // CljObject *obj3 = AUTORELEASE(intern_symbol_global("test")); // Unused variable removed
         
         // Throw exception - this should cause memory corruption
         // when the autorelease pool is cleaned up
@@ -155,12 +155,12 @@ TEST(test_map_arity_exception_zero_args) {
     TRY {
         // Create a map and bind it to 'm'
         CljValue map_obj = AUTORELEASE(make_map(2));
-        CljObject *key = AUTORELEASE(make_symbol(":a", NULL));
+        CljObject *key = AUTORELEASE(intern_symbol_global(":a"));
         CljObject *val = fixnum(1);
         (void)map_assoc(map_obj, key, val);
         
         // Define 'm' in current namespace (use global g_test_eval_state from setUp)
-        CljObject *m_sym = AUTORELEASE(make_symbol("m", NULL));
+        CljObject *m_sym = AUTORELEASE(intern_symbol_global("m"));
         ns_define(g_test_eval_state->current_ns, m_sym, (CljObject*)map_obj);
         
         // Try to call map function with 0 arguments: (map)
@@ -190,8 +190,8 @@ TEST(test_with_autorelease_pool_swallows_exceptions) {
         // This should throw an exception inside WITH_AUTORELEASE_POOL
         WITH_AUTORELEASE_POOL({
             // Create some objects to test memory cleanup
-            CljObject *obj1 = AUTORELEASE(make_symbol("test1", NULL));
-            CljObject *obj2 = AUTORELEASE(make_symbol("test2", NULL));
+            CljObject *obj1 = AUTORELEASE(intern_symbol_global("test1"));
+            CljObject *obj2 = AUTORELEASE(intern_symbol_global("test2"));
             TEST_ASSERT_NOT_NULL(obj1);
             TEST_ASSERT_NOT_NULL(obj2);
             

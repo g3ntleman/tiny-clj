@@ -77,12 +77,13 @@ struct CljObject {
 // Unified tag extraction (handles NULL, immediates, and heap objects)
 // Returns CljType for type safety - values match immediate tags (CLJ_INT=1=TAG_FIXNUM, etc.)
 static inline CljType TAG(ID obj) {
-    if (!obj) return CLJ_NIL;
     // Check if it's an immediate (tagged pointer with odd tag)
     if ((uintptr_t)obj & 0x1) {
         // It's an immediate - tag value directly maps to CljType
         return (CljType)((uintptr_t)obj & 0x7);
     }
+    if (!obj) return CLJ_NIL;
+
     // It's a heap object - return obj->type directly
     CljObject *obj_ptr = (CljObject*)obj;
 #ifdef DEBUG
