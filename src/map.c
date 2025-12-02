@@ -210,19 +210,24 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   return map;  // Return original map on error
 }
 
-/** Merge two maps - b's keys take precedence over a's keys. Returns new map. */
-CljMap* map_merge(CljMap* a, CljMap* b) {
+/** Merge two maps with optional overwrite. */
+CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
   if (!a) return b;
   if (!b) return a;
-  
-  // Start with a copy of map a
+
   CljMap *result = a;
-  
-  // Add all entries from b (overwriting conflicts)
+
   MAP_FOR_EACH(b, key, value) {
+    if (!key) continue;
+    if (!overwrite) {
+      ID existing_value = map_get(result, key, NOT_FOUND);
+      if (existing_value != NOT_FOUND) {
+        continue;
+      }
+    }
     result = map_assoc(result, key, value);
   }
-  
+
   return result;
 }
 

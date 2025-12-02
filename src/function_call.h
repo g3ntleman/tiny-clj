@@ -6,31 +6,25 @@
 #include "namespace.h"
 #include "list.h"
 
-// Evaluation context structures for parameter substitution
-// Parameter substitution context
+// Evaluation context used during function, let, recur, etc.
+// All fields are direct pointers to already-managed objects (see MEMORY_POLICY.md).
+// EvalContext instances themselves live on the stack and require no retain/release.
 typedef struct {
-    ID *params;      // Parameter names
-    ID *values;      // Parameter values
-    int param_count; // Number of parameters
-} ParamContext;
+    // Environment (direct pointers, no nested structs)
+    CljMap *env;           // Current environment map (can be NULL)
+    CljList *env_stack;    // Environment stack for closures (can be NULL)
 
-// Evaluation environment
-typedef struct {
-    CljList *env_stack;        // List of environment maps (most recent first) - idiomatic Clojure-style environment chain
-    EvalState *st;             // Evaluation state
-} EvalEnv;
+    // Evaluation state
+    EvalState *st;         // Evaluation state (can be NULL)
 
-// Recur state (optional - only needed for recur)
-typedef struct {
-    ID *recur_args;      // Recur arguments (pointer to local array in caller)
-    int *recur_arg_count; // Recur argument count (pointer to local variable in caller)
-} RecurContext;
+    // Parameter substitution
+    ID *params;            // Parameter names (can be NULL)
+    ID *param_values;      // Parameter values (can be NULL)
+    int param_count;       // Number of parameters (0 if none)
 
-// Combined evaluation context
-typedef struct {
-    ParamContext *params;  // Parameter substitution (can be NULL if no params)
-    EvalEnv *env;          // Evaluation environment (required)
-    RecurContext *recur;   // Recur state (can be NULL if not in recur context)
+    // Recur state
+    ID *recur_args;        // Recur arguments (can be NULL)
+    int *recur_arg_count;  // Pointer to recur argument count (can be NULL)
 } EvalContext;
 
 // Erweiterte Funktionsaufruf-Funktionen

@@ -853,12 +853,12 @@ void parse_error(const char *msg, EvalState *st) {
 CljObject* eval_try(CljObject *form, EvalState *st) {
     if (!form || form->type != CLJ_LIST) return NULL;
     
-    CljObject *result = NULL;
+    ID result = NULL;
     
     TRY {
         // normaler Body (zweites Element)
         CljObject *body = (CljObject*)list_nth(as_list(form), 1);
-        result = (CljObject*)eval_parsed(body, st, NULL);
+        result = eval_parsed(body, st, NULL);
     } CATCH(ex) {
         // We arrived here via eval_error
         // Search for catch clauses
@@ -872,7 +872,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
                 // CRITICAL: map_assoc may return a new map (COW), so we must use the result
                 CljMap *updated_mappings = map_assoc((CljMap*)st->current_ns->mappings, sym, ex);
                 ASSIGN(st->current_ns->mappings, (CljObject*)updated_mappings);
-                result = (CljObject*)eval_parsed(body, st, NULL);
+                result = eval_parsed(body, st, NULL);
                 return result;
             }
         }

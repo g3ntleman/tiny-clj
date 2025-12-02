@@ -138,7 +138,7 @@ void meta_clear(CljObject *v) {
  * 
  * DRY: Wiederverwendbare Funktion zum Erstellen von Sourcecode-Meta-Map
  */
-CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
+CljMap* make_location_meta(void *reader_ptr, void *st_ptr) {
     Reader *reader = (Reader*)reader_ptr;
     EvalState *st = (EvalState*)st_ptr;
     if (!reader) return NULL;
@@ -200,16 +200,16 @@ CljObject* make_location_meta(void *reader_ptr, void *st_ptr) {
  * 
  * DRY: Wiederverwendbare Funktion zum Zusammenführen von Meta-Maps
  */
-CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
+CljMap* meta_merge(CljMap *existing_meta, CljMap *location_meta) {
     if (!location_meta) return existing_meta;
     if (!existing_meta) return location_meta;
 
     CljMap *missing_entries = NULL;
     int has_missing = 0;
     
-    MAP_FOR_EACH(as_map(location_meta), key, value) {
+    MAP_FOR_EACH(location_meta, key, value) {
         if (!key) continue;
-        ID existing_value = map_get(as_map(existing_meta), key, NOT_FOUND);
+        ID existing_value = map_get(existing_meta, key, NOT_FOUND);
         if (existing_value == NOT_FOUND) {
             CljMap *base = missing_entries ? missing_entries : map_empty();
             CljMap *updated_missing = map_assoc(base, key, value);
@@ -227,29 +227,29 @@ CljObject* meta_merge(CljObject *existing_meta, CljObject *location_meta) {
     }
     
     CljMap *result = as_map(RETAIN(existing_meta));
-    ASSIGN(result, map_merge(result, missing_entries));
+    ASSIGN(result, map_merge(result, missing_entries, false));
     RELEASE(missing_entries);
     
-    return (CljObject*)result;
+    return result;
 }
 
 // Merge metadata maps with second map taking precedence (overwrites conflicting keys)
 // Used when form metadata should override existing metadata (e.g., from register_builtins)
-CljObject* meta_merge_with_precedence(CljObject *existing_meta, CljObject *form_meta) {
+CljMap* meta_merge_with_precedence(CljMap *existing_meta, CljMap *form_meta) {
     if (!form_meta) return existing_meta;
     if (!existing_meta) return form_meta;
 
     CljMap *result = as_map(RETAIN(existing_meta));
     
     // Add/overwrite all entries from form_meta (form takes precedence)
-    MAP_FOR_EACH(as_map(form_meta), key, value) {
+    MAP_FOR_EACH(form_meta, key, value) {
         if (!key) continue;
         CljMap *new_result = map_assoc(result, key, value);
         ASSIGN(result, new_result);
     }
     
     // Also add keys from existing_meta that don't exist in form_meta
-    MAP_FOR_EACH(as_map(existing_meta), key, value) {
+    MAP_FOR_EACH(existing_meta, key, value) {
         if (!key) continue;
         ID form_value = map_get(as_map(form_meta), key, NOT_FOUND);
         if (form_value == NOT_FOUND) {
@@ -258,7 +258,7 @@ CljObject* meta_merge_with_precedence(CljObject *existing_meta, CljObject *form_
         }
     }
     
-    return (CljObject*)result;
+    return result;
 }
 
 #endif // ENABLE_META

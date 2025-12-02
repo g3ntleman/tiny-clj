@@ -388,10 +388,7 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         }
         TEST_ASSERT_NOT_NULL_MESSAGE(qualified_test_var_sym, "Should be able to create qualified symbol");
         
-        // test_var_value can be NULL if nil was stored, but the key should be in the map
-        CljObject *test_var_value = map_get(g_test_eval_state->current_ns->mappings, qualified_test_var_sym, NULL);
-        // Even if value is NULL/nil, the key should exist (map_get returns NULL for not found OR nil value)
-        // Use sentinel to distinguish
+        // map_get can return NULL both for nil values and missing keys, so use sentinel to distinguish
         CljObject *test_var_value_check = map_get(g_test_eval_state->current_ns->mappings,
                                                   qualified_test_var_sym,
                                                   NOT_FOUND);

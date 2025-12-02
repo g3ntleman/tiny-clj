@@ -279,7 +279,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, Arit
     }
 
     // Evaluate all arguments
-    CljObject **args = (CljObject**)malloc(sizeof(CljObject*) * argc);
+    ID *args = (ID*)malloc(sizeof(ID) * argc);
     if (!args) return NULL;
 
     for (int i = 0; i < argc; i++) {
@@ -309,19 +309,19 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, Arit
     }
 
     // Call the appropriate variadic function
-    CljObject *result = NULL;
+    ID result = NULL;
     switch (op) {
         case ARITH_ADD:
-            result = (CljObject*)native_add_variadic((ID*)(void**)args, argc);
+            result = native_add_variadic(args, argc);
             break;
         case ARITH_SUB:
-            result = (CljObject*)native_sub_variadic((ID*)(void**)args, argc);
+            result = native_sub_variadic(args, argc);
             break;
         case ARITH_MUL:
-            result = (CljObject*)native_mul_variadic((ID*)(void**)args, argc);
+            result = native_mul_variadic(args, argc);
             break;
         case ARITH_DIV:
-            result = (CljObject*)native_div_variadic((ID*)(void**)args, argc);
+            result = native_div_variadic(args, argc);
             break;
     }
 
@@ -411,11 +411,17 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             recur_args[i] = NULL;
         }
 
-        // Evaluate function body with context
-        ParamContext param_ctx = {.params = params_array, .values = current_args, .param_count = current_argc};
-        EvalEnv env_ctx = {.env_stack = call_env_stack, .st = st};
-        RecurContext recur_ctx = {.recur_args = recur_args, .recur_arg_count = &recur_arg_count};
-        EvalContext ctx = {.params = &param_ctx, .env = &env_ctx, .recur = &recur_ctx};
+        // Evaluate function body with context (stack-only, no allocations)
+        EvalContext ctx = {
+            .env = NULL,
+            .env_stack = call_env_stack,
+            .st = st,
+            .params = params_array,
+            .param_values = current_args,
+            .param_count = current_argc,
+            .recur_args = recur_args,
+            .recur_arg_count = &recur_arg_count
+        };
         // If an exception is thrown, longjmp will jump to the outer handler and this function
         // will never return, so the loop will not continue
         ID new_result = eval_body_with_params(func->body, &ctx);
@@ -441,7 +447,6 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             // Recreate call_env_stack with new parameters
             CljList *new_call_env_stack = env_extend_stack(func->env_stack, params_array, (ID*)current_args, current_argc);
             ASSIGN(call_env_stack, new_call_env_stack);
-            env_ctx.env_stack = call_env_stack;
 
             // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
@@ -484,41 +489,64 @@ static inline CljMap* env_stack_head(CljList *stack) {
     return NULL;
 }
 
-static EvalState* pick_eval_state(EvalState *st, const EvalContext *ctx) {
-    if (ctx && ctx->env && ctx->env->st) {
-        return ctx->env->st;
+static inline CljMap *get_closure_env(const EvalContext *ctx) {
+    if (!ctx) {
+        return NULL;
     }
-    return st;
+    CljMap *from_stack = env_stack_head(ctx->env_stack);
+    if (from_stack) {
+        return from_stack;
+    }
+    return ctx->env;
+}
+
+static inline EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallback) {
+    if (ctx && ctx->st) {
+        return ctx->st;
+    }
+    return fallback;
 }
 
 static const EvalContext* ensure_eval_context(CljMap *env,
                                               EvalState *st,
                                               const EvalContext *ctx,
                                               EvalContext *local_ctx,
-                                              EvalEnv *local_env,
                                               CljList **owned_stack) {
     *owned_stack = NULL;
-    if (!ctx || !ctx->env) {
-        local_env->st = st;
-        local_env->env_stack = env ? make_list((ID)env, NULL) : NULL;
-        *owned_stack = local_env->env_stack;
-        local_ctx->params = NULL;
-        local_ctx->env = local_env;
-        local_ctx->recur = NULL;
+    if (!ctx) {
+        *local_ctx = (EvalContext){
+            .env = env,
+            .env_stack = env ? make_list((ID)env, NULL) : NULL,
+            .st = st,
+            .params = NULL,
+            .param_values = NULL,
+            .param_count = 0,
+            .recur_args = NULL,
+            .recur_arg_count = NULL
+        };
+        *owned_stack = local_ctx->env_stack;
         return local_ctx;
     }
-    if (!ctx->env->env_stack && env) {
-        *local_env = *ctx->env;
-        local_env->env_stack = make_list((ID)env, NULL);
-        *owned_stack = local_env->env_stack;
-        *local_ctx = *ctx;
-        local_ctx->env = local_env;
-        return local_ctx;
+
+    *local_ctx = *ctx;
+
+    if (!local_ctx->env_stack && env) {
+        local_ctx->env_stack = make_list((ID)env, NULL);
+        *owned_stack = local_ctx->env_stack;
     }
-    if (!ctx->env->st && st) {
-        ((EvalEnv*)ctx->env)->st = st;
+
+    if (!local_ctx->env) {
+        local_ctx->env = get_closure_env(local_ctx);
+        if (!local_ctx->env) {
+            local_ctx->env = env;
+        }
     }
-    return ctx;
+
+    if (!local_ctx->st) {
+        local_ctx->st = st;
+    }
+
+    return local_ctx;
 }
 
 static ID resolve_symbol_in_env(CljList *env_stack, CljMap *fallback_env, ID sym, EvalState *st) {
@@ -647,9 +675,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     }
 
     // Assertion: Parameters and values must not be NULL when param_count > 0
-    if (ctx->params && ctx->params->param_count > 0) {
-        assert(ctx->params->params != NULL);
-        assert(ctx->params->values != NULL);
+    if (ctx && ctx->param_count > 0) {
+        assert(ctx->params != NULL);
+        assert(ctx->param_values != NULL);
     }
 
     if (body && TAG(body) == CLJ_SYMBOL) {
@@ -659,8 +687,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         CljSymbol *body_sym = as_symbol(body);
         if (!body_sym) {
             // This should never happen, but if it does, try to resolve from namespace
-            if (ctx->env && ctx->env->st) {
-                CljObject *resolved = ns_resolve(ctx->env->st, body_sym);
+            EvalState *ctx_state = get_eval_state(ctx, NULL);
+            if (ctx_state) {
+                CljObject *resolved = ns_resolve(ctx_state, body_sym);
                 // ns_resolve returns retained values - object survives until pool-pop
                 return resolved;
             }
@@ -670,12 +699,12 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
 
         // This avoids expensive closure_env map lookups for parameter access
-        if (ctx->params && ctx->params->param_count > 0 && ctx->params->params && ctx->params->values) {
+        if (ctx && ctx->param_count > 0 && ctx->params && ctx->param_values) {
             // Iterate through parameter arrays to find matching symbol
-            for (int i = 0; i < ctx->params->param_count; i++) {
-                if (ctx->params->params[i] == body) {
+            for (int i = 0; i < ctx->param_count; i++) {
+                if (ctx->params[i] == body) {
                     // Found matching parameter - return its value
-                    ID param_value = ctx->params->values[i];
+                    ID param_value = ctx->param_values[i];
                     // param_value is already retained - object survives until pool-pop
                     return param_value;
                 }
@@ -689,9 +718,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         }
 
         // Use central symbol resolution function (DRY: handles environment stack)
-        if (ctx->env && ctx->env->env_stack) {
-            CljMap *ctx_env_map = env_stack_head(ctx->env->env_stack);
-            ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, ctx_env_map, body, ctx->env->st);
+        if (ctx && ctx->env_stack) {
+            CljMap *ctx_env_map = env_stack_head(ctx->env_stack);
+            ID resolved_id = resolve_symbol_in_env(ctx->env_stack, ctx_env_map, body, get_eval_state(ctx, NULL));
             if (resolved_id) {
                 // If resolved_id is a symbol, it wasn't properly resolved
                 if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
@@ -708,8 +737,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         // If still not found, try namespace lookup (for recursive function calls)
         // ns_resolve takes CljObject* (only objects, not immediates) and returns ID
         // body is a symbol (CljObject*), so we can pass it directly
-        if (ctx->env && ctx->env->st) {
-            ID resolved_id = ns_resolve(ctx->env->st, as_symbol(body));
+        EvalState *ctx_state_after_env = get_eval_state(ctx, NULL);
+        if (ctx_state_after_env) {
+            ID resolved_id = ns_resolve(ctx_state_after_env, as_symbol(body));
             if (resolved_id) {
                 // This can happen if a symbol is stored in namespace instead of its value
                 // In this case, we should throw an exception instead of returning the symbol
@@ -767,14 +797,15 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     switch (body_obj->type) {
         case CLJ_LIST: {
             // Evaluate list using eval_list_with_context to support recur
-            CljMap *env_map = (ctx->env && ctx->env->env_stack) ? (CljMap*)LIST_FIRST(ctx->env->env_stack) : NULL;
-            if (!ctx->env || !ctx->env->st) {
+            CljMap *env_map = get_closure_env(ctx);
+            EvalState *ctx_state = get_eval_state(ctx, NULL);
+            if (!ctx_state) {
                 EvalState *temp_st = evalstate_new(false);
                 ID result = eval_list_with_context(as_list(body), env_map, temp_st, ctx);
                 evalstate_free(temp_st);
                 return result;
             }
-            return eval_list_with_context(as_list(body), env_map, ctx->env->st, ctx);
+            return eval_list_with_context(as_list(body), env_map, ctx_state, ctx);
         }
 
         default:
@@ -824,11 +855,11 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // CRITICAL: If context is provided with env_stack, use resolve_symbol_in_env
             // to search through the entire environment stack (for nested let blocks)
             // This allows nested let blocks to access variables from outer scopes
-            if (ctx && ctx->env && ctx->env->env_stack) {
+            if (ctx && ctx->env_stack) {
                 // Use st from context if available, otherwise fall back to parameter
-                EvalState *eval_st = (ctx->env && ctx->env->st) ? ctx->env->st : st;
-                CljMap *fallback_env = env_stack_head(ctx->env->env_stack);
-                ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, fallback_env, body, eval_st);
+                EvalState *eval_st = get_eval_state(ctx, st);
+                CljMap *fallback_env = env_stack_head(ctx->env_stack);
+                ID resolved_id = resolve_symbol_in_env(ctx->env_stack, fallback_env, body, eval_st);
                 if (resolved_id) {
                     // If resolved_id is a symbol, it wasn't properly resolved
                     // Exception: Keywords are symbols but evaluate to themselves
@@ -1075,7 +1106,7 @@ static inline ID eval_loop_dispatch(CljList *list, CljMap *env, ID op, EvalState
 
 // Handle recur special form
 static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
-    if (!ctx || !ctx->recur) {
+    if (!ctx || !ctx->recur_args || !ctx->recur_arg_count) {
         throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies", NULL, 0, 0);
         return NULL;
     }
@@ -1086,7 +1117,16 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
 
     // Evaluate arguments using eval_body_with_params
     // CRITICAL: Create a new context without RecurContext for argument evaluation
-    EvalContext arg_ctx = {.params = ctx->params, .env = ctx->env, .recur = NULL};
+    EvalContext arg_ctx = {
+        .env = ctx->env,
+        .env_stack = ctx->env_stack,
+        .st = ctx->st,
+        .params = ctx->params,
+        .param_values = ctx->param_values,
+        .param_count = ctx->param_count,
+        .recur_args = NULL,
+        .recur_arg_count = NULL
+    };
     CljList *arg_node = list ? as_list(list->rest) : NULL; // skip 'recur' symbol
     for (int i = 0; arg_node && i < 16; i++) {
         ID arg = arg_node->first;
@@ -1102,14 +1142,12 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
     
     CLJ_ASSERT(!arg_node && "recur: maximum 16 arguments supported");
 
-    // Store arguments in RecurContext
-    if (ctx->recur->recur_args && ctx->recur->recur_arg_count) {
-        for (int i = 0; i < arg_count && i < 16; i++) {
-            RELEASE(ctx->recur->recur_args[i]);
-            ctx->recur->recur_args[i] = recur_args[i];
-        }
-        *ctx->recur->recur_arg_count = arg_count;
+    // Store arguments in context recur buffers
+    for (int i = 0; i < arg_count && i < 16; i++) {
+        RELEASE(ctx->recur_args[i]);
+        ctx->recur_args[i] = recur_args[i];
     }
+    *ctx->recur_arg_count = arg_count;
 
     // recur returns NULL (indicates tail call)
     return NULL;
@@ -1123,31 +1161,28 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     }
 
     EvalContext local_ctx;
-    EvalEnv local_env;
     CljList *owned_env_stack = NULL;
-    const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &local_env, &owned_env_stack);
+    const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
     ID resolved = NULL;
-    CljMap *closure_env = (effective_ctx && effective_ctx->env && effective_ctx->env->env_stack)
-        ? env_stack_head(effective_ctx->env->env_stack)
-        : NULL;
-    EvalState *ctx_st = pick_eval_state(st, effective_ctx);
+    CljMap *closure_env = effective_ctx ? get_closure_env(effective_ctx) : NULL;
+    EvalState *ctx_st = get_eval_state(effective_ctx, st);
     CljMap *resolve_env = closure_env ? closure_env : env;
     
     // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
     // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-    if (effective_ctx && effective_ctx->params && effective_ctx->params->param_count > 0 &&
-        effective_ctx->params->params && effective_ctx->params->values) {
-        for (int i = 0; i < effective_ctx->params->param_count; i++) {
-            if (effective_ctx->params->params[i] == op) {
-                ID return_value = effective_ctx->params->values[i];
+    if (effective_ctx && effective_ctx->param_count > 0 &&
+        effective_ctx->params && effective_ctx->param_values) {
+        for (int i = 0; i < effective_ctx->param_count; i++) {
+            if (effective_ctx->params[i] == op) {
+                ID return_value = effective_ctx->param_values[i];
                 RELEASE(owned_env_stack);
                 return return_value;
             }
             // Fallback: structural equality
-            if (effective_ctx->params->params[i] && op && 
-                TAG(effective_ctx->params->params[i]) == CLJ_SYMBOL && TAG(op) == CLJ_SYMBOL &&
-                clj_equal(effective_ctx->params->params[i], op)) {
-                ID return_value = effective_ctx->params->values[i];
+            if (effective_ctx->params[i] && op && 
+                TAG(effective_ctx->params[i]) == CLJ_SYMBOL && TAG(op) == CLJ_SYMBOL &&
+                clj_equal(effective_ctx->params[i], op)) {
+                ID return_value = effective_ctx->param_values[i];
                 RELEASE(owned_env_stack);
                 return return_value;
             }
@@ -1164,8 +1199,7 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     }
     
     // Use central symbol resolution function (DRY: handles environment stack)
-    CljList *resolve_stack = (effective_ctx->env && effective_ctx->env->env_stack)
-        ? effective_ctx->env->env_stack : NULL;
+    CljList *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
     if (resolve_stack) {
         CljMap *fallback_env = resolve_env;
         ID resolved_id = resolve_symbol_in_env(resolve_stack, fallback_env, op, ctx_st);
@@ -1532,9 +1566,9 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         return NULL;
     }
 
-    // Cache ctx->env values early for performance
-    CljMap *closure_env = (ctx && ctx->env && ctx->env->env_stack) ? (CljMap*)LIST_FIRST(ctx->env->env_stack) : NULL;
-    EvalState *ctx_st = ctx && ctx->env ? ctx->env->st : st;
+    // Cache context-derived values early for performance
+    CljMap *closure_env = get_closure_env(ctx);
+    EvalState *ctx_st = get_eval_state(ctx, st);
 
     ID head = LIST_FIRST(list);
 
@@ -1738,7 +1772,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             }
         }
 
-        CljObject *str_result = (CljObject*)native_str((ID*)args, argc);
+        ID str_result = native_str((ID*)args, argc);
         free_obj_array((ID*)args, args_stack);
         return str_result;
     }
@@ -2058,9 +2092,9 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     // CRITICAL: Use env_stack from context if available (for closures)
     // This ensures that nested functions can access outer function parameters
     CljList *fn_env_stack = NULL;
-    if (ctx && ctx->env && ctx->env->env_stack) {
+    if (ctx && ctx->env_stack) {
         // Use the env_stack from the context (contains outer function parameters)
-        fn_env_stack = RETAIN(ctx->env->env_stack);
+        fn_env_stack = RETAIN(ctx->env_stack);
     } else {
         // Fallback: Create env_stack from env if provided, otherwise use namespace mappings
         fn_env_stack = env ? make_list((ID)env, NULL) : NULL;
@@ -2585,7 +2619,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     // Create new environment stack extending the current one
     // Get parent stack from ctx if available, otherwise create from env
-    CljList *parent_stack = (ctx && ctx->env && ctx->env->env_stack) ? ctx->env->env_stack : (env ? make_list((ID)env, NULL) : NULL);
+    CljList *parent_stack = (ctx && ctx->env_stack) ? ctx->env_stack : (env ? make_list((ID)env, NULL) : NULL);
     
     // Create empty map for let bindings
     CljMap *let_env = make_map(16);
@@ -2596,20 +2630,12 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // Create env_stack with let_env as first element and parent_stack as rest
     CljList *let_env_stack = make_list((ID)let_env, parent_stack);
 
-    // Create EvalEnv and EvalContext before processing bindings
-    EvalEnv let_env_ctx;
-    EvalContext let_ctx;
-    if (ctx) {
-        let_ctx = *ctx;
-        let_env_ctx.env_stack = let_env_stack;
-        let_env_ctx.st = ctx->env ? ctx->env->st : st;
-        let_ctx.env = &let_env_ctx;
-    } else {
-        let_env_ctx.env_stack = let_env_stack;
-        let_env_ctx.st = st;
-        let_ctx.env = &let_env_ctx;
-        let_ctx.params = NULL;
-        let_ctx.recur = NULL;
+    // Create EvalContext before processing bindings
+    EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
+    let_ctx.env_stack = let_env_stack;
+    let_ctx.env = (CljMap*)LIST_FIRST(let_env_stack);
+    if (!let_ctx.st) {
+        let_ctx.st = st;
     }
 
     // Process bindings sequentially (each binding can reference previous ones)
@@ -2653,9 +2679,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         // Update env_stack with new let_env
         CljList *new_let_env_stack = make_list((ID)new_let_env, parent_stack);
         ASSIGN(let_env_stack, new_let_env_stack);
-        if (let_ctx.env) {
-            let_ctx.env->env_stack = let_env_stack;
-        }
+        let_ctx.env_stack = let_env_stack;
+        let_ctx.env = (CljMap*)LIST_FIRST(let_env_stack);
 
         // If value is a function, update its env_stack to point to the new let_env_stack
         if (value && TAG(value) == CLJ_CLOSURE) {
@@ -2977,7 +3002,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         
         // Merge: user metadata takes precedence over standard metadata
         CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
-                            ? map_merge(standard_meta, (CljMap*)user_meta)
+                            ? map_merge(standard_meta, (CljMap*)user_meta, true)
                             : standard_meta;
         
         meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
@@ -3100,7 +3125,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     // Merge: user metadata takes precedence over standard metadata
     CljMap *merged_meta = (user_meta && TAG(user_meta) == CLJ_MAP)
-                        ? map_merge(standard_meta, (CljMap*)user_meta)
+                        ? map_merge(standard_meta, (CljMap*)user_meta, true)
                         : standard_meta;
     
     meta_set((CljObject*)fn_obj, (CljObject*)merged_meta);
@@ -3180,18 +3205,18 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         
         // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
         // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-        if (ctx && ctx->params && ctx->params->param_count > 0 && ctx->params->params && ctx->params->values) {
-            for (int i = 0; i < ctx->params->param_count; i++) {
-                if (ctx->params->params[i] == expr) {
-                    ID param_value = ctx->params->values[i];
+        if (ctx && ctx->param_count > 0 && ctx->params && ctx->param_values) {
+            for (int i = 0; i < ctx->param_count; i++) {
+                if (ctx->params[i] == expr) {
+                    ID param_value = ctx->param_values[i];
                     // param_value is already retained - return AUTORELEASE for consistency
                     return AUTORELEASE(RETAIN(param_value));
                 }
                 // Fallback: structural equality
-                if (ctx->params->params[i] && expr && 
-                    TAG(ctx->params->params[i]) == CLJ_SYMBOL && TAG(expr) == CLJ_SYMBOL &&
-                    clj_equal(ctx->params->params[i], expr)) {
-                    ID param_value = ctx->params->values[i];
+                if (ctx->params[i] && expr && 
+                    TAG(ctx->params[i]) == CLJ_SYMBOL && TAG(expr) == CLJ_SYMBOL &&
+                    clj_equal(ctx->params[i], expr)) {
+                    ID param_value = ctx->param_values[i];
                     return AUTORELEASE(RETAIN(param_value));
                 }
             }
@@ -3199,9 +3224,9 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         
         // CRITICAL: If context is provided with env_stack, use resolve_symbol_in_env
         // to search through the entire environment stack (for nested let blocks)
-        if (ctx && ctx->env && ctx->env->env_stack) {
-            EvalState *eval_st = (ctx->env->st) ? ctx->env->st : st;
-            ID resolved_id = resolve_symbol_in_env(ctx->env->env_stack, env, expr, eval_st);
+        if (ctx && ctx->env_stack) {
+            EvalState *eval_st = get_eval_state(ctx, st);
+            ID resolved_id = resolve_symbol_in_env(ctx->env_stack, env, expr, eval_st);
             if (resolved_id && TAG(resolved_id) != CLJ_SYMBOL) {
                 // Found in env_stack - return it (RETAIN/AUTORELEASE handle immediates safely)
                 return AUTORELEASE(RETAIN(resolved_id));

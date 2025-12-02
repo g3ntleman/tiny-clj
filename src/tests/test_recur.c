@@ -358,8 +358,16 @@ TEST(test_eval_body_with_params_fixnum_literal) {
 
     // Test eval_body_with_params with Fixnum literal
     // No parameters, so param_count = 0
-    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
-    EvalContext ctx = {.params = NULL, .env = &env_ctx, .recur = NULL};
+    EvalContext ctx = {
+        .env = NULL,
+        .env_stack = NULL,
+        .st = g_test_eval_state,
+        .params = NULL,
+        .param_values = NULL,
+        .param_count = 0,
+        .recur_args = NULL,
+        .recur_arg_count = NULL
+    };
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
     // Result should be the same Fixnum literal, not NULL
@@ -390,9 +398,16 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     int param_count = 1;
 
     // Test: When body is the parameter symbol, it should return the Fixnum value
-    ParamContext param_ctx = {.params = params, .values = values, .param_count = param_count};
-    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
-    EvalContext ctx = {.params = &param_ctx, .env = &env_ctx, .recur = NULL};
+    EvalContext ctx = {
+        .env = NULL,
+        .env_stack = NULL,
+        .st = g_test_eval_state,
+        .params = params,
+        .param_values = values,
+        .param_count = param_count,
+        .recur_args = NULL,
+        .recur_arg_count = NULL
+    };
     ID result = eval_body_with_params(param_sym_obj, &ctx);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum value, not NULL");
@@ -424,9 +439,16 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     int param_count = 1;
 
     // Test: When body is a Fixnum literal (1), it should return the literal directly
-    ParamContext param_ctx = {.params = params, .values = values, .param_count = param_count};
-    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
-    EvalContext ctx = {.params = &param_ctx, .env = &env_ctx, .recur = NULL};
+    EvalContext ctx = {
+        .env = NULL,
+        .env_stack = NULL,
+        .st = g_test_eval_state,
+        .params = params,
+        .param_values = values,
+        .param_count = param_count,
+        .recur_args = NULL,
+        .recur_arg_count = NULL
+    };
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");
@@ -450,8 +472,16 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
 
     // Test eval_body_with_params with Fixnum literal
-    EvalEnv env_ctx = {.env_stack = NULL, .st = g_test_eval_state};
-    EvalContext ctx = {.params = NULL, .env = &env_ctx, .recur = NULL};
+    EvalContext ctx = {
+        .env = NULL,
+        .env_stack = NULL,
+        .st = g_test_eval_state,
+        .params = NULL,
+        .param_values = NULL,
+        .param_count = 0,
+        .recur_args = NULL,
+        .recur_arg_count = NULL
+    };
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum literal, not NULL");

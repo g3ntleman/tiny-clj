@@ -498,7 +498,6 @@ TEST(test_defn_test_fn_evaluated) {
 
         // CRITICAL: ns_define stores qualified symbols in mappings
         // Get the qualified symbol from the symbol table for lookup
-        CljSymbol *test_fn_sym = intern_symbol_global("test-fn");
         CljSymbol *qualified_test_fn_sym = NULL;
         if (ns->name && ns->name->cname) {
             qualified_test_fn_sym = intern_symbol(ns->name, "test-fn");

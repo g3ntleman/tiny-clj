@@ -1,6 +1,7 @@
 #ifndef TINY_CLJ_MAP_H
 #define TINY_CLJ_MAP_H
 
+#include <stdbool.h>
 #include "object.h"
 #include "common.h"  // For CLJ_ASSERT
 // Forward declaration for IS_IMMEDIATE macro (defined in value.h)
@@ -49,8 +50,8 @@ ID map_get(CljMap *map, ID key, ID not_found);
 
 /** Associate key->value with Copy-on-Write - returns same or new map depending on RC. */
 CljMap* map_assoc(CljMap* map, ID key, ID value);
-/** Merge two maps - b's keys take precedence over a's keys. Returns new map. */
-CljMap* map_merge(CljMap* a, CljMap* b);
+/** Merge two maps. If overwrite is true, b's keys replace a's; otherwise only missing keys copied. */
+CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite);
 /** Return a vector of keys (retained). */
 ID map_keys(CljMap *map);
 /** Return a vector of values (retained). */

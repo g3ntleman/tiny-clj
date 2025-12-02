@@ -13,6 +13,10 @@
 #include <sys/stat.h>
 #include <time.h>
 
+enum {
+    LET_PERF_MAX_DEPTH = 10
+};
+
 // Helper: Get current time in microseconds
 static long get_time_us(void) {
     struct timeval tv;
@@ -164,9 +168,9 @@ TEST(test_let_creation_time_baseline) {
 // ============================================================================
 TEST(test_nested_let_resolution_time_baseline) {
     WITH_AUTORELEASE_POOL({
-        const int max_depth = 10;
+        const int max_depth = LET_PERF_MAX_DEPTH;
         const int iterations = 100;
-        double times[max_depth];
+        double times[LET_PERF_MAX_DEPTH];
         
         // Measure resolution time for different nesting depths
         for (int depth = 1; depth <= max_depth; depth++) {
@@ -197,9 +201,9 @@ TEST(test_let_performance_baseline_complete) {
         let_creation_times[2] = measure_let_creation_time(1000);
         
         // Measure nested let resolution times
-        const int max_depth = 10;
+        const int max_depth = LET_PERF_MAX_DEPTH;
         const int iterations = 100;
-        double nested_resolution_times[max_depth];
+        double nested_resolution_times[LET_PERF_MAX_DEPTH];
         
         for (int depth = 1; depth <= max_depth; depth++) {
             nested_resolution_times[depth - 1] = measure_nested_let_resolution_time(depth, iterations);

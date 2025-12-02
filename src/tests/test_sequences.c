@@ -389,13 +389,13 @@ TEST(test_reduce_debug) {
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
 }
 
-// EDGE CASE 1: Empty collection should return nil
+// EDGE CASE 1: Empty collection should call reducer with zero args
 TEST(test_reduce_empty_collection) {
     // Use global st from setUp (clojure.core already loaded)
     
-    // Test: (reduce + (list)) => nil
+    // Test: (reduce + (list)) => 0 (calls + with zero arguments)
     CljObject *result = eval_string("(reduce + (list))", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // Empty collection returns nil
+    assert_fixnum(result, 0);
     
     // Note: Vector support may require seq handling - test with list for now
     // Empty list test is sufficient for edge case coverage
@@ -418,13 +418,13 @@ TEST(test_reduce_single_element) {
     TEST_ASSERT_EQUAL_INT(5, as_fixnum(result2));
 }
 
-// EDGE CASE 3: Nil collection should return nil
+// EDGE CASE 3: Nil collection should call reducer with zero args
 TEST(test_reduce_nil_collection) {
     // Use global st from setUp (clojure.core already loaded)
     
-    // Test: (reduce + nil) => nil
+    // Test: (reduce + nil) => 0 (calls + with zero arguments)
     CljObject *result = eval_string("(reduce + nil)", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // nil collection returns nil
+    assert_fixnum(result, 0);
 }
 
 // EDGE CASE 4: Basic reduce with addition

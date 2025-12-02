@@ -677,11 +677,11 @@ TEST(test_meta_merge_does_not_overwrite) {
     // Create location metadata with :line
     Reader reader;
     reader_init(&reader, "test");
-    CljObject *location_meta = make_location_meta(&reader, eval_state);
+    CljMap *location_meta = (CljMap*)make_location_meta(&reader, eval_state);
     TEST_ASSERT_NOT_NULL(location_meta);
 
     // Merge - existing :line should not be overwritten
-    CljObject *merged = meta_merge((CljObject*)existing_meta, location_meta);
+    CljMap *merged = (CljMap*)meta_merge(existing_meta, location_meta);
     TEST_ASSERT_NOT_NULL(merged);
 
     // Check that existing :line is preserved
@@ -693,10 +693,8 @@ TEST(test_meta_merge_does_not_overwrite) {
     }
 
     RELEASE((CljObject*)existing_meta);
-    RELEASE(location_meta);
-    if (merged != (CljObject*)existing_meta) {
-        RELEASE(merged);
-    }
+    RELEASE((CljObject*)location_meta);
+    RELEASE((CljObject*)merged);
     evalstate_free(eval_state);
 }
 
@@ -719,7 +717,7 @@ TEST(test_meta_clojure_compatible_keys) {
     // Create location metadata
     Reader reader;
     reader_init(&reader, "test");
-    CljObject *location_meta = make_location_meta(&reader, eval_state);
+    CljMap *location_meta = (CljMap*)make_location_meta(&reader, eval_state);
     TEST_ASSERT_NOT_NULL(location_meta);
 
     // Verify all Clojure-compatible keys are present
@@ -735,7 +733,7 @@ TEST(test_meta_clojure_compatible_keys) {
         TEST_ASSERT_TRUE(is_fixnum(column_value));
     }
 
-    RELEASE(location_meta);
+    RELEASE((CljObject*)location_meta);
     evalstate_free(eval_state);
 }
 

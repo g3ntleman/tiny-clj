@@ -53,7 +53,7 @@ R"CLOJURE(
 (def map (fn [f coll]
   (if (empty? coll)
     (list)
-    (cons (f (first coll)) (recur f (rest coll))))))
+    (cons (f (first coll)) (map f (rest coll))))))
 
 (def filter (fn [pred coll]
   (let [step (fn [pred coll acc]
@@ -72,18 +72,6 @@ R"CLOJURE(
 (def constantly (fn [x] (fn [y] x)))
 
 ; ============================================================================
-; Reduce Function
+; Reduce is provided as a native builtin (see native_reduce in builtins.c)
 ; ============================================================================
-(def reduce (fn [f coll]
-  (if (empty? coll)
-    nil
-    (let [first-val (first coll)
-          rest-coll (rest coll)]
-      (if (empty? rest-coll)
-        first-val
-        (let [step (fn [acc remaining]
-                     (if (empty? remaining)
-                       acc
-                       (step (f acc (first remaining)) (rest remaining))))]
-          (step first-val rest-coll)))))))
 )CLOJURE"

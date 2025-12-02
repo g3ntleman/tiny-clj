@@ -1122,11 +1122,17 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
   ID existing_meta = meta_get((CljObject*)obj);
   if (existing_meta) {
     // Merge existing metadata with new metadata (existing takes precedence)
-    CljObject *merged_meta = meta_merge((CljObject*)existing_meta, (CljObject*)new_meta);
-    if (merged_meta != (CljObject*)existing_meta) {
-      // Apply merged metadata to object
-      meta_set((CljObject*)obj, merged_meta);
-      RELEASE(merged_meta);
+    CljMap *existing_map = as_map(existing_meta);
+    CljMap *new_map = as_map(new_meta);
+    if (existing_map && new_map) {
+      CljMap *merged_meta = (CljMap*)meta_merge(existing_map, new_map);
+      if (merged_meta) {
+        if ((ID)merged_meta != existing_meta) {
+          // Apply merged metadata to object
+          meta_set((CljObject*)obj, (CljObject*)merged_meta);
+        }
+        RELEASE((CljObject*)merged_meta);
+      }
     }
     RELEASE(new_meta);
     return obj;  // Return object (caller will handle AUTORELEASE)
@@ -1184,23 +1190,26 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 
 #ifdef ENABLE_META
   // Automatically add source code location metadata
-  CljObject *location_meta = make_location_meta(reader, st);
+  CljMap *location_meta = (CljMap*)make_location_meta(reader, st);
   if (location_meta) {
     // Get current metadata (might be from meta parameter or existing)
     ID current_meta = meta ? (ID)meta : meta_get((CljObject*)obj);
-    if (current_meta) {
+    CljMap *current_map = current_meta ? as_map(current_meta) : NULL;
+    if (current_map) {
       // Merge location metadata with existing metadata (doesn't overwrite)
-      CljObject *merged_meta = meta_merge((CljObject*)current_meta, location_meta);
-      if (merged_meta != (CljObject*)current_meta) {
-        // Update meta if it was merged
-        meta_set(obj, merged_meta);
-        RELEASE(merged_meta);
+      CljMap *merged_meta = (CljMap*)meta_merge(current_map, location_meta);
+      if (merged_meta) {
+        if ((ID)merged_meta != current_meta) {
+          // Update meta if it was merged
+          meta_set(obj, (CljObject*)merged_meta);
+        }
+        RELEASE((CljObject*)merged_meta);
       }
     } else {
       // No existing metadata, just set location metadata
       meta_set(obj, (CljObject*)location_meta);
     }
-    RELEASE(location_meta);
+    RELEASE((CljObject*)location_meta);
   }
 #endif // ENABLE_META
 
