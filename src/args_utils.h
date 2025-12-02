@@ -14,7 +14,7 @@
  * @param argc Number of arguments
  * @return Allocated argument array or NULL on failure
  */
-CljObject **allocate_args_array(int argc);
+ID *allocate_args_array(int argc);
 
 /**
  * @brief Cleans up argument array and frees memory.
@@ -24,7 +24,7 @@ CljObject **allocate_args_array(int argc);
  * @param args Argument array to clean up
  * @param argc Number of arguments
  */
-void cleanup_args_array(CljObject **args, int argc);
+void cleanup_args_array(ID *args, int argc);
 
 /**
  * @brief Macro for safe argument array allocation and cleanup.
@@ -40,7 +40,7 @@ void cleanup_args_array(CljObject **args, int argc);
  */
 #define WITH_ARGS_ARRAY(args_var, argc_var, code_block) \
     do { \
-        CljObject **args_var = allocate_args_array(argc_var); \
+        ID *args_var = allocate_args_array(argc_var); \
         if (args_var) { \
             code_block \
             cleanup_args_array(args_var, argc_var); \

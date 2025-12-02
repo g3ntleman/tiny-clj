@@ -11,10 +11,10 @@
  * @param argc Number of arguments
  * @return Allocated argument array or NULL on failure
  */
-CljObject **allocate_args_array(int argc) {
+ID *allocate_args_array(int argc) {
     if (argc <= 0) return NULL;
     
-    CljObject **args = (CljObject**)malloc(sizeof(CljObject*) * argc);
+    ID *args = (ID*)malloc(sizeof(ID) * argc);
     if (!args) return NULL;
     
     // Initialize all pointers to NULL
@@ -33,13 +33,11 @@ CljObject **allocate_args_array(int argc) {
  * @param args Argument array to clean up
  * @param argc Number of arguments
  */
-void cleanup_args_array(CljObject **args, int argc) {
+void cleanup_args_array(ID *args, int argc) {
     if (!args) return;
     
     for (int i = 0; i < argc; i++) {
-        if (args[i]) {
-            RELEASE(args[i]);
-        }
+        RELEASE(args[i]);
     }
     
     free(args);

@@ -207,13 +207,13 @@ static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, EvalState 
 
 
 /** @brief Allocate array with stack optimization (size <= 16 on stack, else heap) */
-static inline ID* alloc_obj_array(int size, CljObject **stack_buffer) {
-    return size <= 16 ? (ID*)stack_buffer : (ID*)malloc(sizeof(CljObject*) * size);
+static inline ID* alloc_obj_array(int size, ID *stack_buffer) {
+    return size <= 16 ? stack_buffer : (ID*)malloc(sizeof(ID) * size);
 }
 
 /** @brief Free array allocated with alloc_obj_array */
-static inline void free_obj_array(ID *array, CljObject **stack_buffer) {
-    if (array != (ID*)stack_buffer) free((void*)array);
+static inline void free_obj_array(ID *array, ID *stack_buffer) {
+    if (array != stack_buffer) free((void*)array);
 }
 
 /** @brief Get raw nth element from a list (0=head). Returns NULL if out of bounds */
@@ -396,7 +396,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
     // Create call_env_stack with parameters, extending func->env_stack
     ID *params_array = vector_as_array(func->params);
-    CljList *call_env_stack = env_extend_stack(func->env_stack, params_array, (ID*)current_args, current_argc);
+    CljList *call_env_stack = env_extend_stack(func->env_stack, params_array, current_args, current_argc);
 
     // TCO Loop - iterate on recur
     ID result = NULL;
@@ -445,7 +445,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             }
 
             // Recreate call_env_stack with new parameters
-            CljList *new_call_env_stack = env_extend_stack(func->env_stack, params_array, (ID*)current_args, current_argc);
+            CljList *new_call_env_stack = env_extend_stack(func->env_stack, params_array, current_args, current_argc);
             ASSIGN(call_env_stack, new_call_env_stack);
 
             // Continue loop - recur_arg_count will be reset at the start of the next iteration
@@ -1760,20 +1760,20 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         int argc = total_count - 1;
         if (argc < 0) argc = 0;
 
-        CljObject *args_stack[16];
+        ID args_stack[16];
         ID *args = alloc_obj_array(argc, args_stack);
         if (!args) return NULL;
 
         for (int i = 0; i < argc; i++) {
             args[i] = eval_arg_with_context(list, i + 1, env, st, ctx);
             if (!args[i]) {
-                free_obj_array((ID*)args, args_stack);
+                free_obj_array(args, args_stack);
                 return NULL;
             }
         }
 
-        ID str_result = native_str((ID*)args, argc);
-        free_obj_array((ID*)args, args_stack);
+        ID str_result = native_str(args, argc);
+        free_obj_array(args, args_stack);
         return str_result;
     }
 
@@ -2072,7 +2072,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         param_count = list_count(as_list(params_list));
     }
 
-    CljObject *params_stack[16];
+    ID params_stack[16];
     ID *params = alloc_obj_array(param_count, params_stack);
 
     for (int i = 0; i < param_count; i++) {
@@ -2084,7 +2084,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
         if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
             // Invalid parameter
-            free_obj_array((ID*)params, params_stack);
+            free_obj_array(params, params_stack);
             return NULL;
         }
     }
@@ -2107,7 +2107,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL));
 
     // Cleanup heap-allocated params if any
-    free_obj_array((ID*)params, params_stack);
+    free_obj_array(params, params_stack);
 
     return fn;
 }
@@ -2805,13 +2805,13 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
 
     int param_count = vector_count(params_vec_data);
-    CljObject *params_stack[16];
+    ID params_stack[16];
     ID *params = alloc_obj_array(param_count, params_stack);
 
     for (int i = 0; i < param_count; i++) {
         params[i] = vector_nth(params_vec_data, i);
         if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
-            free_obj_array((ID*)params, params_stack);
+            free_obj_array(params, params_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                            "defn parameters must be symbols",
                            NULL, 0, 0);
@@ -2867,7 +2867,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
 
             // Build do block: (do expr1 expr2 ...)
             if (body_count > 15) {
-                free_obj_array((ID*)params, params_stack);
+                free_obj_array(params, params_stack);
                 throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                                "defn body has too many expressions (max 15)",
                                NULL, 0, 0);
@@ -2920,7 +2920,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         // Extract Clojure function name
         CljSymbol *name_symbol = as_symbol(name_sym);
         if (!name_symbol || !name_symbol->cname) {
-            free_obj_array((ID*)params, params_stack);
+            free_obj_array(params, params_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                            "defn with :native requires a valid function name",
                            NULL, 0, 0);
@@ -2934,7 +2934,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             // Unqualified symbol - qualify it with current namespace
             qualified_symbol = intern_symbol(st->current_ns->name, name_symbol->cname);
             if (!qualified_symbol) {
-                free_obj_array((ID*)params, params_stack);
+                free_obj_array(params, params_stack);
                 throw_exception(EXCEPTION_RUNTIME,
                                "Failed to qualify symbol for native function lookup",
                                NULL, 0, 0);
@@ -2945,7 +2945,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         // Lookup native function by Clojure symbol (uses pointer comparison for efficiency)
         BuiltinFn native_func = native_function_lookup(qualified_symbol);
         if (!native_func) {
-            free_obj_array((ID*)params, params_stack);
+            free_obj_array(params, params_stack);
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg),
                     "Native function not found for: %s", name_symbol->cname);
@@ -2957,7 +2957,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         // Use Clojure function name (already interned symbol name)
         CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, name_symbol->cname);
         if (!native_func_obj) {
-            free_obj_array((ID*)params, params_stack);
+            free_obj_array(params, params_stack);
             throw_exception(EXCEPTION_RUNTIME,
                            "Failed to create native function object",
                            NULL, 0, 0);
@@ -2971,7 +2971,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         if (qualified_name_sym && !qualified_name_sym->ns_name && st && st->current_ns && st->current_ns->name) {
             qualified_name_sym = intern_symbol(st->current_ns->name, qualified_name_sym->cname);
             if (!qualified_name_sym) {
-                free_obj_array((ID*)params, params_stack);
+                free_obj_array(params, params_stack);
                 throw_exception(EXCEPTION_RUNTIME, "Failed to qualify symbol for namespace registration", NULL, 0, 0);
                 return NULL;
             }
@@ -3008,7 +3008,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
 #endif // DEBUG && ENABLE_META
 
-        free_obj_array((ID*)params, params_stack);
+        free_obj_array(params, params_stack);
         return name_sym;  // defn returns the symbol
     }
 
@@ -3029,7 +3029,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Use current namespace mappings as environment for function evaluation
     // This ensures that builtin functions like + are available in closures
     if (!st || !st->current_ns) {
-        free_obj_array((ID*)params, params_stack);
+        free_obj_array(params, params_stack);
         throw_exception(EXCEPTION_RUNTIME, "defn requires an evaluation state with namespace", NULL, 0, 0);
         return NULL;
     }
@@ -3091,7 +3091,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // Create function object with env_stack
     CljFunction *fn_obj = make_function(params, param_count, transformed_body, fn_env_stack, NULL, st ? st->current_ns : NULL);
     if (!fn_obj) {
-        free_obj_array((ID*)params, params_stack);
+        free_obj_array(params, params_stack);
         return NULL;
     }
 
@@ -3157,7 +3157,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
 
     RELEASE((CljObject*)fn_obj);
-    free_obj_array((ID*)params, params_stack);
+    free_obj_array(params, params_stack);
     return name_sym;
 }
 
