@@ -2777,12 +2777,26 @@ ID native_require(ID *args, unsigned int argc) {
         created_st = true;
     }
 
+    // Validate all arguments are either Symbol or Vector (like standard Clojure)
+    for (unsigned int i = 0; i < argc; i++) {
+        if (args[i] && TAG(args[i]) != CLJ_SYMBOL && TAG(args[i]) != CLJ_VECTOR) {
+            throw_exception(EXCEPTION_TYPE, "require expects a symbol or vector", __FILE__, __LINE__, 0);
+            if (created_st) {
+                evalstate_free(st);
+            }
+            return NULL;
+        }
+    }
+
     // Process each require spec (support multiple specs: (require '[ns1 :as n1] '[ns2 :as n2]))
     for (unsigned int i = 0; i < argc; i++) {
         if (!process_require_spec(args[i], st)) {
-            // Graceful failure: continue with next spec instead of throwing
-            // This allows partial success (e.g., one namespace loads, another fails)
-            continue;
+            // Invalid spec - throw exception (like standard Clojure)
+            throw_exception(EXCEPTION_TYPE, "require spec must be a symbol or vector", __FILE__, __LINE__, 0);
+            if (created_st) {
+                evalstate_free(st);
+            }
+            return NULL;
         }
     }
 

@@ -105,6 +105,28 @@ static ID parse_symbol(Reader *reader, EvalState *st);
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 
+#ifdef ENABLE_META
+/**
+ * @brief Attach location metadata (:line, :column) to parsed object
+ * @param reader Reader instance for location information
+ * @param st Evaluation state
+ * @param obj Object to attach metadata to
+ * @return Object with location metadata attached
+ */
+static inline ID attach_location_meta(Reader *reader, EvalState *st, ID obj) {
+  if (!obj) {
+    return obj;
+  }
+  return apply_metadata_to_object(reader, st, NULL, obj);
+}
+#else
+static inline ID attach_location_meta(Reader *reader, EvalState *st, ID obj) {
+  (void)reader;
+  (void)st;
+  return obj;
+}
+#endif
+
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
 static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
   size_t before = reader_offset(reader);
@@ -404,7 +426,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       return NULL;
     }
 
-    return AUTORELEASE(vec);
+    ID vector_obj = AUTORELEASE(vec);
+    return attach_location_meta(reader, st, vector_obj);
   }
   return NULL;
 }
@@ -437,7 +460,8 @@ static ID parse_map(Reader *reader, EvalState *st) {
     return NULL;
   }
   // Use constructor API (owned) and return autoreleased
-  return AUTORELEASE(make_map_from_stack((CljObject**)pairs, pair_count));
+  ID map_obj = AUTORELEASE(make_map_from_stack((CljObject**)pairs, pair_count));
+  return attach_location_meta(reader, st, map_obj);
 }
 
 /**
@@ -540,6 +564,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
         return NULL;
       }
 
+      expanded = attach_location_meta(reader, st, expanded);
       return expanded;
     }
   }
@@ -549,7 +574,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
-  CljValue result = AUTORELEASE(make_list(first, (CljList*)rest));
+  ID result = AUTORELEASE(make_list(first, (CljList*)rest));
 
   // Skip whitespace before checking for closing parenthesis
   reader_skip_all(reader);
@@ -560,7 +585,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
     return NULL;
   }
 
-  return result;
+  return attach_location_meta(reader, st, result);
 }
 
 /**
@@ -808,7 +833,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
           snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
           CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
           if (kw) {
-            return AUTORELEASE(kw);
+            return attach_location_meta(reader, st, AUTORELEASE(kw));
           }
         }
       }
@@ -827,7 +852,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
             CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
             if (kw) {
-              return AUTORELEASE(kw);
+              return attach_location_meta(reader, st, AUTORELEASE(kw));
             }
           }
         }
@@ -879,21 +904,21 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
         keyword_with_colon[sizeof(keyword_with_colon) - 1] = '\0';
         CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
         if (sym) {
-          return AUTORELEASE(sym);
+          return attach_location_meta(reader, st, AUTORELEASE(sym));
         }
         // If intern fails, fall through to return unqualified symbol
       } else {
         // Regular qualified symbol (not a keyword)
         CljSymbol *sym = intern_symbol(ns_name_sym, symbol_str);
         if (sym) {
-          return AUTORELEASE(sym);
+          return attach_location_meta(reader, st, AUTORELEASE(sym));
         }
         // If intern fails, fall through to return unqualified symbol
       }
     }
   }
 
-  return AUTORELEASE(intern_symbol_global(buffer));
+  return attach_location_meta(reader, st, AUTORELEASE(intern_symbol_global(buffer)));
 }
 
 /**
@@ -1012,7 +1037,7 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
   }
   // Create string object - memory is managed via AUTORELEASE
   ID result = AUTORELEASE(make_string(buf));
-  return result;
+  return attach_location_meta(reader, st, result);
 }
 
 /**

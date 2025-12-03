@@ -2,7 +2,8 @@
 ;; Provides utilities for interactive development
 
 (ns clojure.repl
-  (:require [clojure.core :refer [meta str println if-let let when empty? doseq find-ns ns-map get keys count]]))
+  (:require [clojure.core :refer [meta str println if-let let when empty? doseq find-ns ns-map get keys count]]
+            [clojure.string :as str]))
 
 ;; ============================================================================
 ;; Documentation and Help Functions
@@ -69,17 +70,17 @@
   (if (nil? pattern)
     nil
     (let [pattern-str (str pattern)
-          pattern-lower (clojure.string/lower-case pattern-str)
+          pattern-lower (str/lower-case pattern-str)
           search-ns (fn [ns-name]
                       (let [ns-obj (find-ns ns-name)
                             ns-map (if ns-obj (ns-map ns-obj) {})]
                         (if (empty? ns-map)
                           nil
                           (doseq [[k v] ns-map]
-                            (if-let [m (meta v)]
-                              (if-let [doc-str (:doc m)]
-                                (let [doc-lower (clojure.string/lower-case (str doc-str))]
-                                  (if (clojure.string/includes? doc-lower pattern-lower)
+                            (when-let [m (meta v)]
+                              (when-let [doc-str (:doc m)]
+                                (let [doc-lower (str/lower-case (str doc-str))]
+                                  (when (str/includes? doc-lower pattern-lower)
                                     (doc v)))))))))]
       (search-ns 'clojure.core)
       (search-ns 'clojure.string)

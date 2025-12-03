@@ -973,6 +973,33 @@ TEST(test_require_alias_resolution) {
 
 }
 
+// Test: Invalid require syntax - symbol with keyword (should throw parse error)
+TEST(test_require_invalid_syntax_symbol_with_keyword) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    TRY {
+        (void)eval_string("(require 'clojure.string :as str)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected exception for invalid require syntax");
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+        // Parser throws ParseError before require is called
+        TEST_ASSERT_TRUE(strcmp(ex->type, EXCEPTION_PARSE) == 0 || strcmp(ex->type, EXCEPTION_TYPE) == 0);
+    } END_TRY
+}
+
+// Test: Invalid require syntax - non-vector, non-symbol argument
+TEST(test_require_invalid_syntax_non_vector) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    TRY {
+        (void)eval_string("(require 123)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("Expected exception for invalid require syntax");
+    } CATCH(ex) {
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_TYPE, ex->type);
+    } END_TRY
+}
+
 // Test: Verify that ns_registry is a Map
 TEST(test_ns_registry_is_map) {
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);

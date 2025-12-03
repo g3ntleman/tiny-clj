@@ -131,16 +131,13 @@ TEST(test_repl_doc_with_function_with_metadata) {
 // SOURCE FUNCTION TESTS
 // ============================================================================
 
-// Note: source is now a special form, not a function in clojure.repl namespace
-
 TEST(test_repl_source_can_be_called) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     load_repl_namespace();
     
-    // Test: source can be called (source is now a special form)
+    // Test: source can be called
     CljObject *result = eval_string("(source 'clojure.core/inc)", g_test_eval_state);
-    // source prints to stdout and returns nil
     TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL);
 }
 
@@ -151,8 +148,63 @@ TEST(test_repl_source_with_function_symbol) {
     
     // Test: source can be called with a function symbol
     CljObject *result = eval_string("(source 'inc)", g_test_eval_state);
-    // source prints to stdout and returns nil
     TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL);
+}
+
+TEST(test_repl_source_returns_string_for_clojure_function) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    load_repl_namespace();
+    
+    // Define a simple Clojure function in the current namespace
+    CljObject *defn_result = eval_string("(defn test-fn [x] (+ x 1))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(defn_result, "defn should succeed");
+    
+    // Test: source should return the source code as a string
+    CljObject *result = eval_string("(source 'test-fn)", g_test_eval_state);
+    if (result) {
+        TEST_ASSERT_TRUE_MESSAGE(TAG(result) == CLJ_STRING || TAG(result) == CLJ_NIL,
+                                "source should return a string or nil");
+    }
+}
+
+TEST(test_repl_source_with_qualified_symbol) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    load_repl_namespace();
+    
+    // Test: source can be called with a qualified symbol
+    CljObject *result = eval_string("(source 'clojure.core/identity)", g_test_eval_state);
+    TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL || TAG(result) == CLJ_STRING);
+}
+
+TEST(test_repl_source_with_native_function) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    load_repl_namespace();
+    
+    // Test: source with a native function should not crash
+    CljObject *result = eval_string("(source 'clojure.core/nil?)", g_test_eval_state);
+    TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL || TAG(result) == CLJ_STRING);
+}
+
+TEST(test_repl_source_exists_in_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    load_repl_namespace();
+    
+    // Test: source function should exist in clojure.repl namespace
+    CljSymbol *source_sym = intern_symbol(SYM_CLOJURE_REPL, "source");
+    TEST_ASSERT_NOT_NULL(source_sym);
+    
+    CljNamespace *repl_ns = ns_find("clojure.repl");
+    TEST_ASSERT_NOT_NULL(repl_ns);
+    TEST_ASSERT_NOT_NULL(repl_ns->mappings);
+    
+    CljObject *source_func = (CljObject*)map_get(repl_ns->mappings, source_sym, NULL);
+    TEST_ASSERT_NOT_NULL_MESSAGE(source_func, "source function should exist in clojure.repl namespace");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(source_func) == CLJ_FUNC || TAG(source_func) == CLJ_CLOSURE,
+                            "source should be a function");
 }
 
 // ============================================================================

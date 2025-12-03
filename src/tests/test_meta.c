@@ -20,6 +20,23 @@
 #include "../meta.h"
 #include <sys/time.h>
 
+static void assert_meta_has_line_info(CljObject *meta_result, const char *context) {
+    TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, context);
+    TEST_ASSERT_TRUE_MESSAGE(TAG(meta_result) == CLJ_MAP, context);
+
+    CljSymbol *kw_line = intern_symbol_global(":line");
+    TEST_ASSERT_NOT_NULL(kw_line);
+
+    CljMap *meta_map = (CljMap*)meta_result;
+    ID line_value = map_get(meta_map, kw_line, NULL);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(line_value, context);
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(line_value), context);
+
+    int line_number = as_fixnum(line_value);
+    TEST_ASSERT_GREATER_THAN_MESSAGE(0, line_number, context);
+}
+
 // ============================================================================
 // TEST: meta_registry_init initializes registry
 // ============================================================================
@@ -386,4 +403,50 @@ TEST(test_meta_qualified_symbol) {
                                         ":name should be \"trim\"");
     }
 }
+
+// ============================================================================
+// TEST: meta returns :line information for native functions
+// ============================================================================
+TEST(test_meta_contains_line_info) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (meta nil?) should return metadata with :line information
+    CljObject *meta_result = eval_string("(meta nil?)", g_test_eval_state);
+    assert_meta_has_line_info(meta_result, "(meta nil?) should include :line metadata");
+}
+
+#ifdef ENABLE_META
+// ============================================================================
+// TEST: metadata contains :line for various literal forms
+// ============================================================================
+TEST(test_meta_list_literal_contains_line_info) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta '(+ 1 2))", g_test_eval_state);
+    assert_meta_has_line_info(meta_result, "(meta '(+ 1 2)) should include :line metadata");
+}
+
+TEST(test_meta_vector_literal_contains_line_info) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta '[1 2 3])", g_test_eval_state);
+    assert_meta_has_line_info(meta_result, "(meta '[1 2 3]) should include :line metadata");
+}
+
+TEST(test_meta_map_literal_contains_line_info) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta '{:a 1 :b 2})", g_test_eval_state);
+    assert_meta_has_line_info(meta_result, "(meta '{:a 1 :b 2}) should include :line metadata");
+}
+
+TEST(test_meta_symbol_literal_contains_line_info) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta 'inc)", g_test_eval_state);
+    assert_meta_has_line_info(meta_result, "(meta 'inc) should include :line metadata");
+}
+
+TEST(test_meta_string_literal_contains_line_info) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta \"hello world\")", g_test_eval_state);
+    assert_meta_has_line_info(meta_result, "(meta \"hello world\") should include :line metadata");
+}
+#endif
 
