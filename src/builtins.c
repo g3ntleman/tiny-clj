@@ -2274,7 +2274,8 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                     continue;
                 }
 
-                if (kw->cname[0] == ':' && strcmp(kw->cname, ":as") == 0) {
+                // Use pointer comparison for :as and :refer keywords (more efficient and reliable)
+                if (kw == SYM_KW_AS) {
                     // :as alias
                     if (i + 1 < vec_count) {
                         alias_sym = (CljObject*)vector_nth(vec, i + 1);
@@ -2282,7 +2283,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                         i++; // Skip next element
                     }
                     RELEASE(elem);
-                } else if (kw->cname[0] == ':' && strcmp(kw->cname, ":refer") == 0) {
+                } else if (kw == SYM_KW_REFER) {
                     // :refer [symbols] or :refer :all
                     if (i + 1 < vec_count) {
                         CljObject *refer_arg = (CljObject*)vector_nth(vec, i + 1);
@@ -2346,16 +2347,25 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
 
         if (!needs_loading) {
             // Namespace already fully loaded - just set alias/refer if needed
-            if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-                CljObject *ns_name_sym = (CljObject*)intern_symbol_global(ns_name);
-                if (ns_name_sym) {
-                    ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+            // CRITICAL: Ensure st->current_ns is valid before setting alias
+            // This is the namespace where the alias should be stored
+            if (st && st->current_ns) {
+                // Set alias if provided
+                // NOTE: alias_sym is extracted from vector in lines 2227-2234
+                // It should be set by the time we reach here if :as was in the vector
+                // CRITICAL: Use same logic as the working case (line 2412) for consistency
+                if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
+                    CljObject *ns_name_sym = (CljObject*)intern_symbol_global(ns_name);
+                    if (ns_name_sym) {
+                        ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
+                    }
                 }
-            }
-            if (refer_all) {
-                copy_all_symbols_to_namespace(existing, st->current_ns);
-            } else if (refer_syms) {
-                copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
+                // Handle refer
+                if (refer_all) {
+                    copy_all_symbols_to_namespace(existing, st->current_ns);
+                } else if (refer_syms) {
+                    copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
+                }
             }
             // ns_name is from autoreleased CljString - no free needed
             return true;
@@ -2384,9 +2394,11 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     }
 
     // Evaluate source in current state
-    const char *orig_ns = NULL;
-    if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
-        orig_ns = st->current_ns->name->cname;
+    // Save the original namespace pointer (not just the name) to restore it later
+    // This ensures aliases are set in the correct namespace
+    CljNamespace *orig_ns = NULL;
+    if (st && st->current_ns) {
+        orig_ns = st->current_ns;
     }
 
     // CRITICAL: Ensure target namespace exists before loading
@@ -2404,7 +2416,9 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     }
     bool ok = eval_source_in_current_state(source, st);
     // Restore original namespace
-    if (st && orig_ns) evalstate_set_ns(st, orig_ns);
+    if (st && orig_ns) {
+        st->current_ns = orig_ns;
+    }
 
     free(source);
     free(rel);
@@ -2426,10 +2440,11 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     }
 
     // Now that namespace is loaded, set alias/refer if needed
+    // Note: st->current_ns has been restored to orig_ns, so aliases are set in the correct namespace
     CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns) {
         if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-            CljObject *ns_name_sym = (CljObject*)intern_symbol(NULL, ns_name);
+            CljObject *ns_name_sym = (CljObject*)intern_symbol_global(ns_name);
             if (ns_name_sym) {
                 ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
             }

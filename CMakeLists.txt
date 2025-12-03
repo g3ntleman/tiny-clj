@@ -304,6 +304,8 @@ add_executable(unity-tests
     src/tests/test_require.c
     src/tests/test_require_perf.c
     src/tests/test_qualified_symbol_resolution.c
+    src/tests/test_alias.c
+    src/tests/test_alias_lowlevel.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
     src/tests/test_timer.c

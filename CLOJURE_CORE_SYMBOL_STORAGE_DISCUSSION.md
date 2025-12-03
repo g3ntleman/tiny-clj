@@ -247,3 +247,4 @@ user=> (resolve 'clojure.core/inc)
 - Bestehende qualifizierte Symbole in Mappings müssen migriert werden
 - Oder: Lookup unterstützt beide Varianten (qualifiziert und unqualifiziert)
 
+

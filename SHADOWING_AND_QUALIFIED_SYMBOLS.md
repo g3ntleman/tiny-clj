@@ -200,3 +200,4 @@ map_get(clojure_core->mappings, unqualified, ...);  // → func
 - **Qualifizierte Symbole**: Einfache Änderung: Entferne Qualifizierung vor Lookup
 - **Vorteil**: Pointer-Konsistenz wird verbessert
 
+

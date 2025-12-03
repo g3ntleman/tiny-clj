@@ -137,3 +137,4 @@
 2. **Environment-Stack prüfen**: Verifizieren, dass `env_extend_stack` korrekt funktioniert
 3. **Qualified Symbols testen**: Prüfen, ob qualified symbols korrekt geparst und aufgelöst werden
 
+

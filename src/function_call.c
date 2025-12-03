@@ -70,6 +70,19 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
 static bool is_special_form(CljSymbol *symbol);
 
+// Helper macro for creating context without recur (no heap allocation)
+#define CONTEXT_WITHOUT_RECUR(ctx) \
+    ((EvalContext){ \
+        .env = (ctx)->env, \
+        .env_stack = (ctx)->env_stack, \
+        .st = (ctx)->st, \
+        .params = (ctx)->params, \
+        .param_values = (ctx)->param_values, \
+        .param_count = (ctx)->param_count, \
+        .recur_args = NULL, \
+        .recur_arg_count = NULL \
+    })
+
 
 
 // Forward declarations for loop evaluation
@@ -507,6 +520,21 @@ static inline EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallb
         return ctx->st;
     }
     return fallback;
+}
+
+// Helper function for initializing let context (no heap allocation)
+static inline EvalContext init_let_context(const EvalContext *ctx, CljList *let_env_stack, EvalState *st) {
+    EvalState *ctx_st = get_eval_state(ctx, st);
+    return (EvalContext){
+        .env = (CljMap*)LIST_FIRST(let_env_stack),
+        .env_stack = let_env_stack,
+        .st = ctx_st,
+        .params = ctx ? ctx->params : NULL,
+        .param_values = ctx ? ctx->param_values : NULL,
+        .param_count = ctx ? ctx->param_count : 0,
+        .recur_args = ctx ? ctx->recur_args : NULL,
+        .recur_arg_count = ctx ? ctx->recur_arg_count : NULL
+    };
 }
 
 static const EvalContext* ensure_eval_context(CljMap *env,
@@ -1118,16 +1146,7 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
 
     // Evaluate arguments using eval_body_with_params
     // CRITICAL: Create a new context without RecurContext for argument evaluation
-    EvalContext arg_ctx = {
-        .env = ctx->env,
-        .env_stack = ctx->env_stack,
-        .st = ctx->st,
-        .params = ctx->params,
-        .param_values = ctx->param_values,
-        .param_count = ctx->param_count,
-        .recur_args = NULL,
-        .recur_arg_count = NULL
-    };
+    EvalContext arg_ctx = CONTEXT_WITHOUT_RECUR(ctx);
     CljList *arg_node = list ? as_list(list->rest) : NULL; // skip 'recur' symbol
     for (int i = 0; arg_node && i < 16; i++) {
         ID arg = arg_node->first;
@@ -2754,12 +2773,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CljList *let_env_stack = make_list((ID)let_env, parent_stack);
 
     // Create EvalContext before processing bindings
-    EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
-    let_ctx.env_stack = let_env_stack;
-    let_ctx.env = (CljMap*)LIST_FIRST(let_env_stack);
-    if (!let_ctx.st) {
-        let_ctx.st = st;
-    }
+    EvalContext let_ctx = init_let_context(ctx, let_env_stack, st);
 
     // Process bindings sequentially (each binding can reference previous ones)
     for (int i = 0; i < binding_count; i += 2) {
@@ -3362,7 +3376,8 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         // to search through the entire environment stack (for nested let blocks)
         if (!resolved_value && ctx && ctx->env_stack) {
             EvalState *eval_st = get_eval_state(ctx, st);
-            ID resolved_id = resolve_symbol_in_env(ctx->env_stack, env, expr, eval_st);
+            CljMap *fallback_env = env_stack_head(ctx->env_stack);
+            ID resolved_id = resolve_symbol_in_env(ctx->env_stack, fallback_env, expr, eval_st);
             if (resolved_id && TAG(resolved_id) != CLJ_SYMBOL) {
                 resolved_value = resolved_id;
             }

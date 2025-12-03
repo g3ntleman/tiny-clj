@@ -203,3 +203,4 @@ Die O(n) Komplexität ist akzeptabel, weil:
 
 **Fazit**: Die O(n) Suche ist notwendig, aber nur beim ersten Aufruf pro Symbol. Danach ist der Pointer bekannt und wird direkt zurückgegeben.
 
+
