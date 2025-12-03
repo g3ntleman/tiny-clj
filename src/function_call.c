@@ -1767,12 +1767,8 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
 
     // Try special form dispatch (handles if, do, and other special forms)
     CljSymbol *original_op_sym = NULL;
-    if (original_op) {
-        if (op_sym && original_op == op) {
-            original_op_sym = op_sym;
-        } else if (TAG(original_op) == CLJ_SYMBOL) {
-            original_op_sym = as_symbol(original_op);
-        }
+    if (original_op && TAG(original_op) == CLJ_SYMBOL) {
+        original_op_sym = as_symbol(original_op);
     }
     if (original_op_sym && is_special_form(original_op_sym)) {
         CljMap *special_form_env = closure_env ? closure_env : env;
@@ -1853,10 +1849,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // OPTIMIZATION: AST rewriting - replace unqualified symbol with qualified symbol in-place
     // This allows cache hits for recursive calls by using qualified symbols in the AST
     // Only rewrite if symbol was resolved from current namespace (not clojure.core)
-    if (resolved_op && TAG(resolved_op) != CLJ_SYMBOL && op && TAG(op) == CLJ_SYMBOL) {
+    if (resolved_op && TAG(resolved_op) != CLJ_SYMBOL && op && TAG(op) == CLJ_SYMBOL && st && st->current_ns && st->current_ns->name && st->current_ns->mappings) {
         CljSymbol *original_sym = as_symbol(op);
-        if (original_sym && !original_sym->ns_name && original_sym->cname && 
-            st && st->current_ns && st->current_ns->name && st->current_ns->mappings) {
+        if (original_sym && !original_sym->ns_name && original_sym->cname) {
             CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, original_sym->cname);
             if (qualified_sym) {
                 ID check_resolved = map_get(st->current_ns->mappings, qualified_sym, NOT_FOUND);
