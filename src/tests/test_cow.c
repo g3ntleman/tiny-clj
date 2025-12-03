@@ -142,14 +142,14 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         
         // Now COW should trigger
         CljMap *new_map = map_assoc(map, fixnum(2), fixnum(20));
-        TEST_ASSERT_EQUAL(2, map->base.rc);  // Original RC bleibt 2
-        TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map); // NEUER Pointer!
+        TEST_ASSERT_EQUAL(2, map->base.rc);  // Original RC unchanged
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)map, (CljValue)new_map); // NEW pointer!
         
         // Verify original map unchanged
         CljValue val1_orig = map_get((CljMap*)map, fixnum(1), NULL);
         CljValue val2_orig = map_get((CljMap*)map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1_orig);
-        TEST_ASSERT_NULL(val2_orig);  // Original hat key=2 nicht
+        TEST_ASSERT_NULL(val2_orig);  // Original doesn't have key=2
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1_orig));
         
         // Verify new map has both entries
@@ -268,14 +268,14 @@ TEST(test_cow_closure_environment_sharing) {
         
         // Closure-Operation sollte COW triggern
         CljMap *new_env = map_assoc(env, intern_symbol_global("y"), fixnum(2));
-        TEST_ASSERT_EQUAL(2, env->base.rc);  // Original unverändert
-        TEST_ASSERT_NOT_EQUAL((CljValue)env, (CljValue)new_env); // NEUER Pointer!
+        TEST_ASSERT_EQUAL(2, env->base.rc);  // Original unchanged
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)env, (CljValue)new_env); // NEW pointer!
         
         // Verify original env unchanged
         CljValue orig_x = map_get((CljMap*)env, intern_symbol_global("x"), NULL);
         CljValue orig_y = map_get((CljMap*)env, intern_symbol_global("y"), NULL);
         TEST_ASSERT_NOT_NULL(orig_x);
-        TEST_ASSERT_NULL(orig_y);  // Original hat y nicht
+        TEST_ASSERT_NULL(orig_y);  // Original doesn't have y
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(orig_x));
         
         
@@ -345,7 +345,7 @@ TEST(test_cow_actual_cow_demonstration) {
         // COW operation
         CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
         TEST_ASSERT_EQUAL(2, map->base.rc);
-        TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map);
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)map, (CljValue)new_map);
         
         // Verify original unchanged
         CljValue val3_orig = map_get((CljMap*)map, fixnum(3), NULL);
@@ -419,7 +419,7 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         
         // Now COW should trigger
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(20));
-        TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc); // Original RC unchanged
         
         // Verify original vector unchanged
@@ -454,7 +454,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
         
         // Add more - should trigger COW with growth
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
-        TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, new_vec); // NEW pointer!
         
         CljVector *new_vec_data = as_vector(new_vec);
         // Capacity is implementation detail, only check count
@@ -579,7 +579,7 @@ TEST(test_vector_assoc_cow_rc_greater_one) {
         
         // Now COW should trigger
         CljVector *new_vec = vector_assoc(vec, 1, fixnum(99));
-        TEST_ASSERT_NOT_EQUAL((CljValue)vec, (CljValue)new_vec); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc); // Original RC unchanged
         
         // Verify original vector unchanged
@@ -612,6 +612,9 @@ TEST(test_vector_assoc_cow_original_unchanged) {
         // RETAIN to trigger COW
         RETAIN(vec);
         CljVector *new_vec = vector_assoc(vec, 0, fixnum(99));
+        
+        // Should be different pointer (COW triggered)
+        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec);
         
         // Original should be unchanged
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
