@@ -593,9 +593,6 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
 // This function will be eliminated by dead-code-elimination in production builds
 // since it's only called from test files
 void symbol_table_cleanup() {
-    if (g_runtime.symbol_table) {
-        RELEASE(g_runtime.symbol_table);
-        g_runtime.symbol_table = NULL;
-    }
+    ASSIGN(g_runtime.symbol_table, NULL);
 }
 
