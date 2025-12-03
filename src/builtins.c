@@ -74,22 +74,19 @@ ID nth2(ID *args, unsigned int argc) {
 
     // Validate index
     if (!idx || TAG(idx) != CLJ_INT) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "nth requires an integer index");
-        return NULL;
     }
     int i = AS_FIXNUM(idx);
     if (i < 0) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is negative", i);
-        return NULL;
     }
 
     // Handle nil collection
     if (!coll) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for nil collection", i);
-        return NULL;
     }
 
     // Fast path: Vectors (O(1) access) - includes transient vectors
@@ -99,64 +96,51 @@ ID nth2(ID *args, unsigned int argc) {
         int count = vector_count(v);
         if (!v || i >= count) {
             // Out of bounds: throw exception
-            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for collection with %d elements", i, count);
-            return NULL;
         }
         // Index is valid - check if element is nil
         // vector_nth throws exception if out of bounds
-        ID elem = vector_nth(v, i);
-
-        // Element exists and is not nil - retain it for return value
-        return elem ? RETAIN(elem) : NULL;
+        // vector_nth returns element with lifetime tied to vector - no retain needed
+        return vector_nth(v, i);
     }
 
     // Fast path: Lists (O(n) access via list_nth)
     if (TAG(coll) == CLJ_LIST) {
         CljList *list = as_list(coll);
         if (!list) {
-            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for nil collection", i);
-            return NULL;
         }
         // list_nth throws exception if index is out-of-bounds
-        // Return what's actually stored (may be NULL or SYM_NIL for nil elements)
-        ID result = list_nth(list, i);
-        if (!result) {
-            return NULL;  // nil element stored as NULL
-        }
-        // Return SYM_NIL as-is (will be converted to NULL during evaluation)
-        return RETAIN(result);
+        // list_nth returns element with lifetime tied to list - no retain needed
+        return list_nth(list, i);
     }
 
     // Slow path: Sequences (O(n) access via iterator)
     if (!is_seqable(coll)) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "nth not supported on this type");
-        return NULL;
     }
 
     SeqIterator iter;
     if (!seq_iter_init(&iter, (CljObject*)coll)) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for empty sequence", i);
-        return NULL;
     }
 
     // Iterate to index i
     for (int j = 0; j < i; j++) {
         if (seq_iter_empty(&iter)) {
-            throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for sequence (reached end at index %d)", i, j);
-            return NULL;
         }
         seq_iter_next(&iter);
     }
 
     if (seq_iter_empty(&iter)) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for sequence", i);
-        return NULL;
     }
 
     return seq_iter_first(&iter);
@@ -170,8 +154,8 @@ ID native_peek(ID *args, unsigned int argc) {
     CljVector *v = as_vector(vec);
     int count = vector_count(v);
     if (!count) return NULL;  // nil for empty vector
-    ID elem = vector_nth(v, count - 1);
-    return elem ? RETAIN(elem) : NULL;  // Retain element for return value
+    // vector_nth returns element with lifetime tied to vector - no retain needed
+    return vector_nth(v, count - 1);
 }
 
 // pop: returns new vector without last element, or empty vector if empty
@@ -214,15 +198,13 @@ ID native_subvec(ID *args, unsigned int argc) {
 
     // Type validation
     if (!vec || TAG(vec) != CLJ_VECTOR) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "subvec requires a vector as first argument");
-        return NULL;
     }
 
     if (!start_idx || TAG(start_idx) != CLJ_INT) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "subvec requires a number as start index");
-        return NULL;
     }
 
     CljVector *v = as_vector(vec);
@@ -234,9 +216,8 @@ ID native_subvec(ID *args, unsigned int argc) {
     // Determine end index: if not provided, use vector count
     if (end_idx) {
         if (TAG(end_idx) != CLJ_INT) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                     "subvec requires a number as end index");
-            return NULL;
         }
         end = AS_FIXNUM(end_idx);
     } else {
@@ -245,22 +226,19 @@ ID native_subvec(ID *args, unsigned int argc) {
 
     // Bounds validation
     if (start < 0) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "subvec start index %d is negative", start);
-        return NULL;
     }
 
     int v_count = vector_count(v);
     if (end > v_count) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "subvec end index %d is greater than vector count %d", end, v_count);
-        return NULL;
     }
 
     if (start > end) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "subvec start index %d is greater than end index %d", start, end);
-        return NULL;
     }
 
     // Calculate sub-vector size
@@ -1079,9 +1057,8 @@ ID native_vec(ID *args, unsigned int argc) {
 
     // Check if collection is seqable
     if (!is_seqable(coll)) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vec requires a seqable collection");
-        return NULL;
     }
 
     // Use stack-based iterator to iterate through collection (avoid code duplication)
@@ -1102,9 +1079,8 @@ ID native_vec(ID *args, unsigned int argc) {
     // make_vector throws OOM exception or returns valid object
     CljVector* vec = make_vector(4, CLJ_VECTOR);
     if (!vec) {
-        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Failed to create vector");
-        return NULL;
     }
 
     // Iterate through sequence and add elements using vector_conj (reuse existing logic)
@@ -1392,14 +1368,12 @@ static ID create_fixed_result(int32_t acc_fixed) {
 
 // Helper function to throw arithmetic overflow exceptions (DRY principle)
 static ID throw_arithmetic_overflow(const char* err_msg, int a, int b) {
-    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
-    return NULL;
+    return throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg, a, b);
 }
 
 // Helper function to throw fixed-point overflow exceptions
 static ID throw_fixed_overflow(const char* err_msg) {
-    throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
-    return NULL;
+    return throw_exception_formatted(EXCEPTION_ARITHMETIC, __FILE__, __LINE__, 0, err_msg);
 }
 
 // Helper function to create fixnum result
@@ -1481,16 +1455,14 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (!str_arg || TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "subs requires a string as first argument");
-        return NULL;
     }
 
     // Validate start index
     if (!start_arg || TAG(start_arg) != CLJ_INT) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "subs requires a number as start index");
-        return NULL;
     }
 
     CljString *str = as_clj_string(str_arg);
@@ -1503,9 +1475,8 @@ ID native_subs(ID *args, unsigned int argc) {
     // Determine end index: if not provided, use string length
     if (end_arg) {
         if (TAG(end_arg) != CLJ_INT) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                     "subs requires a number as end index");
-            return NULL;
         }
         end = AS_FIXNUM(end_arg);
     } else {
@@ -1514,21 +1485,18 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Bounds validation
     if (start < 0) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "subs start index %d is negative", start);
-        return NULL;
     }
 
     if (end > str_len) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "subs end index %d is greater than string length %d", end, str_len);
-        return NULL;
     }
 
     if (start > end) {
-        throw_exception_formatted("IndexOutOfBoundsException", __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "subs start index %d is greater than end index %d", start, end);
-        return NULL;
     }
 
     // Calculate substring length
@@ -1567,7 +1535,7 @@ ID native_trim(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "trim requires a string argument");
         return NULL;
     }
@@ -1608,7 +1576,7 @@ ID native_trim(ID *args, unsigned int argc) {
 // String upper-case: (upper-case s) - converts string to upper-case
 ID native_upper_case(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                                   "upper-case requires 1 argument, got %u", argc);
         return NULL;
     }
@@ -1622,7 +1590,7 @@ ID native_upper_case(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "upper-case requires a string argument");
         return NULL;
     }
@@ -1647,7 +1615,7 @@ ID native_upper_case(ID *args, unsigned int argc) {
 // String lower-case: (lower-case s) - converts string to lower-case
 ID native_lower_case(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                                   "lower-case requires 1 argument, got %u", argc);
         return NULL;
     }
@@ -1661,7 +1629,7 @@ ID native_lower_case(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "lower-case requires a string argument");
         return NULL;
     }
@@ -1686,7 +1654,7 @@ ID native_lower_case(ID *args, unsigned int argc) {
 // String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
 ID native_last_index_of(ID *args, unsigned int argc) {
     if (argc != 2 && argc != 3) {
-        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                                   "last-index-of requires 2 or 3 arguments, got %u", argc);
         return NULL;
     }
@@ -1697,14 +1665,14 @@ ID native_last_index_of(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (!str_arg || TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "last-index-of requires a string as first argument");
         return NULL;
     }
 
     // Validate value argument
     if (!value_arg || TAG(value_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "last-index-of requires a string as second argument");
         return NULL;
     }
@@ -1728,7 +1696,7 @@ ID native_last_index_of(ID *args, unsigned int argc) {
     int from_index = str_len - 1; // Default: search from end
     if (from_index_arg) {
         if (TAG(from_index_arg) != CLJ_INT) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                       "last-index-of requires an integer as from-index");
             return NULL;
         }
@@ -1762,7 +1730,7 @@ ID native_last_index_of(ID *args, unsigned int argc) {
 // String reverse: (reverse s) - reverses a string (not lists)
 ID native_string_reverse(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                                   "reverse requires 1 argument, got %u", argc);
         return NULL;
     }
@@ -1776,7 +1744,7 @@ ID native_string_reverse(ID *args, unsigned int argc) {
 
     // Validate string argument
     if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "reverse requires a string argument");
         return NULL;
     }
@@ -1808,14 +1776,14 @@ ID native_string_reverse(ID *args, unsigned int argc) {
 ID native_ns_map(ID *args, unsigned int argc) {
     CLJ_ASSERT(argc == 1 && "ns-map: arity check failed");
     if (argc != 1) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "ns-map expects exactly 1 argument, got %u", argc);
         return NULL;
     }
     
     ID ns_arg = args[0];
     if (!ns_arg) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "ns-map: argument must not be nil");
         return NULL;
     }
@@ -1830,13 +1798,13 @@ ID native_ns_map(ID *args, unsigned int argc) {
     } else if (tag == CLJ_NAMESPACE) {
         target_ns = (CljNamespace*)ns_arg;
     } else {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "ns-map: argument must be a symbol, string, or namespace");
         return NULL;
     }
 
     if (!target_ns) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "Namespace not found");
         return NULL;
     }
@@ -1850,7 +1818,7 @@ ID native_ns_map(ID *args, unsigned int argc) {
 ID native_find_ns(ID *args, unsigned int argc) {
     CLJ_ASSERT(argc == 1 && "find-ns: arity check failed");
     if (argc != 1) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                   "find-ns expects exactly 1 argument, got %u", argc);
         return NULL;
     }
@@ -1865,7 +1833,7 @@ ID native_find_ns(ID *args, unsigned int argc) {
         return (ID)ns_find(string_data(ns_arg));
     }
     
-    throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "find-ns: argument must be a symbol or string");
     return NULL;
 }
@@ -1958,7 +1926,7 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
 // Meta function: (meta obj) - returns metadata map or nil
 ID native_meta(ID *args, unsigned int argc) {
     if (argc != 1) {
-        throw_exception_formatted("ArityException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                                   "meta requires 1 argument, got %u", argc);
         return NULL;
     }
@@ -2015,13 +1983,13 @@ ID native_symbol(ID *args, unsigned int argc) {
 
         // Namespace can be nil (NULL) or a string
         if (ns_arg && TAG(ns_arg) != CLJ_STRING) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                     "symbol namespace must be a string or nil");
             return NULL;
         }
 
         if (!name_arg || TAG(name_arg) != CLJ_STRING) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                     "symbol requires a string for name");
             return NULL;
         }
@@ -2039,7 +2007,7 @@ ID native_symbol(ID *args, unsigned int argc) {
         ID name_arg = args[0];
 
         if (!name_arg || TAG(name_arg) != CLJ_STRING) {
-            throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                     "symbol requires a string argument");
             return NULL;
         }
@@ -2052,7 +2020,7 @@ ID native_symbol(ID *args, unsigned int argc) {
     CljSymbol *ns_name_sym = ns ? intern_symbol_global(ns) : NULL;
     CljSymbol *sym = intern_symbol(ns_name_sym, cname);
     if (!sym) {
-        throw_exception_formatted("RuntimeException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Failed to create symbol from string");
         return NULL;
     }
@@ -2790,7 +2758,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
 
 ID native_sub_variadic(ID *args, unsigned int argc) {
     if (argc == 0) {
-        throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO);
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO);
         return NULL;
     }
     if (argc == 1) {
@@ -3362,7 +3330,7 @@ ID native_read_string(ID *args, unsigned int argc) {
 
 ID native_div_variadic(ID *args, unsigned int argc) {
     if (argc == 0) {
-        throw_exception_formatted("ArityError", __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO);
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO);
         return NULL;
     }
     if (argc == 1) {
@@ -3499,7 +3467,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
         case CLJ_INT: {
             int size = AS_FIXNUM(args[0]);
             if (size < 0) {
-                throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                         "byte-array size must be non-negative, got %d", size);
                 return NULL;
             }
@@ -3536,7 +3504,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
             // elem lifetime is tied to vector - no release needed
             if (val < 0 || val > 255) {
                 RELEASE((CljObject*)arr);
-                throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                         "byte values must be 0-255, got %d", val);
                 return NULL;
             }
@@ -3598,7 +3566,7 @@ ID native_aset(ID *args, unsigned int argc) {
     int value = AS_FIXNUM(args[2]);
 
     if (value < 0 || value > 255) {
-        throw_exception_formatted("IllegalArgumentException", __FILE__, __LINE__, 0,
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "byte value must be 0-255, got %d", value);
         return NULL;
     }

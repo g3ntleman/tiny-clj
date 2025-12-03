@@ -417,10 +417,9 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
                     ? current_ns->name->cname : "unknown";
                 const char *ns2_name = other_ns->name && other_ns->name->cname
                     ? other_ns->name->cname : "unknown";
-                throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
+                return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
                     "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
                     sym_name, ns1_name, sym_name, ns2_name, sym_name);
-                return NULL;
             }
         }
         
@@ -552,10 +551,9 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
                 ? search_ctx.result_ns->name->cname : "unknown";
             const char *ns2_name = search_ctx.second_ns->name && search_ctx.second_ns->name->cname
                 ? search_ctx.second_ns->name->cname : "unknown";
-            throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
+            return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
                 "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
                 sym_name, ns1_name, sym_name, ns2_name, sym_name);
-            return NULL;
         }
         
         // CRITICAL: Even if found in exactly one namespace, we do NOT return it.

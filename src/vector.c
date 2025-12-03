@@ -57,12 +57,11 @@ unsigned int vector_count(CljVector *vec) {
         if (index < vec->count) {
             return vec->data[index];
         }
-        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
             "vector_nth: index %u is out of bounds for vector with %u elements", index, vec->count);
     }
-    throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+    return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_nth: vector is NULL");
-    return NULL;
 }
 
 /** Find index of element using clj_equal for comparison.

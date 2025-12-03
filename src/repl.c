@@ -201,8 +201,8 @@ CljObject* history_trim_last_n(CljObject *vec, int limit) {
         nth_args[1] = fixnum(start + i);
         ID elem = nth2(nth_args, 2);
         if (elem) {
+            // nth2 returns element with lifetime tied to vector - no release needed
             out = vector_conj(out, elem);
-            RELEASE(elem);
         }
     }
     return (CljObject*)out;

@@ -45,8 +45,10 @@ void print_exception(CLJException *ex);
 // Exception throwing functions
 /** Throw exception via longjmp; transfers ownership to runtime. */
 void throw_exception(const char *type, const char *message, const char *file, int line, int col);
-/** Throw exception with printf-style formatting; transfers ownership to runtime. */
-void throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
+/** Throw exception with printf-style formatting; transfers ownership to runtime.
+ *  Returns NULL to allow shorter call-sites: return throw_exception_formatted(...);
+ */
+void* throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
 /** Re-throw existing exception object; transfers ownership to runtime. */
 void throw_exception_object(CLJException *ex);
 

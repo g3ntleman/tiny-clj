@@ -25,9 +25,8 @@ CljByteArray* make_byte_array(int length) {
     assert(length >= 0 && "byte_array length must be non-negative");
     
     if (length < 0) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "byte-array length must be non-negative, got %d", length);
-        return NULL;
     }
     
     CljByteArray *ba = ALLOC(CljByteArray, 1);
@@ -236,10 +235,9 @@ CljValue byte_array_slice(CljValue arr, int offset, int length) {
     }
     
     if (offset + length > ba->length) {
-        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "Slice from offset %d with length %d exceeds array length %d",
                 offset, length, ba->length);
-        return NULL;
     }
     
     return make_byte_array_from_bytes(ba->data + offset, length);
@@ -258,10 +256,9 @@ ID byte_array_get_id(CljValue arr, int index) {
     assert(index + sizeof(ID) <= (size_t)ba->length && "ID read would exceed array bounds");
     
     if (index < 0 || index + sizeof(ID) > (size_t)ba->length) {
-        throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "ID read at index %d (size %zu) exceeds array length %d",
                 index, sizeof(ID), ba->length);
-        return NULL;
     }
     
     ID value;

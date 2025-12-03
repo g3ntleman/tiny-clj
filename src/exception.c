@@ -151,7 +151,7 @@ const char *EXCEPTION_ZOMBIE_ACCESS = "ZombieAccessException";
  * @param format printf-style format string
  * @param ... Variable arguments for formatting
  */
-void throw_exception_formatted(const char *type, const char *file, int line, int code, 
+void* throw_exception_formatted(const char *type, const char *file, int line, int code, 
                               const char *format, ...) {
     char message[512];  // Increased buffer size for longer messages
     va_list args;
@@ -179,6 +179,7 @@ void throw_exception_formatted(const char *type, const char *file, int line, int
     }
     
     throw_exception_object(exception);
+    return NULL;  // Never reached (longjmp), but allows return throw_exception_formatted(...);
 }
 
 /** @brief Throw an exception with type, message, and location */

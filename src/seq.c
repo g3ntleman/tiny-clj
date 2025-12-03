@@ -125,7 +125,7 @@ ID seq_iter_first(const SeqIterator *iter) {
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
             if (iter->state.vec.index < iter->state.vec.count) {
-                // vector_nth retains the element - caller must release
+                // vector_nth returns element with lifetime tied to vector - no retain needed
                 CljVector *vec = (CljVector*)iter->container;
                 return vector_nth(vec, iter->state.vec.index);
             }

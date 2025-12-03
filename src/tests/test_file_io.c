@@ -699,7 +699,7 @@ TEST(test_history_load_from_file_scenario) {
                             TEST_ASSERT_TRUE(TAG(elem) == CLJ_STRING);
                             ID expected_str = make_string(expected[i]);
                             TEST_ASSERT_TRUE(clj_equal(elem, expected_str));
-                            RELEASE(elem);
+                            // nth2 returns element with lifetime tied to vector - no release needed
                             RELEASE(expected_str);
                         }
 

@@ -171,9 +171,8 @@ ID parse_expr(Reader *reader, EvalState *st) {
         }
         invalid_decimal[pos] = '\0';
 
-        throw_exception_formatted(EXCEPTION_PARSE, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_PARSE, __FILE__, __LINE__, 0,
             "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
-        return NULL;
       }
       break;
 

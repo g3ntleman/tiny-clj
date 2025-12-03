@@ -412,25 +412,22 @@ void symbol_table_add(CljSymbol *symbol) {
  */
 static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     if (!cname) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
-        return NULL;
     }
 
     // Range check for name length (keep for safety)
     if (strlen(cname) >= SYMBOL_NAME_MAX_LEN) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "Symbol name '%s' exceeds maximum length of %d characters",
                 cname, SYMBOL_NAME_MAX_LEN - 1);
-        return NULL;
     }
 
     // Use malloc directly instead of ALLOC macro
     CljSymbol *sym = (CljSymbol*)malloc(sizeof(CljSymbol));
     if (!sym) {
-        throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to allocate memory for symbol '%s'", cname);
-        return NULL;
     }
 
     sym->base.type = CLJ_SYMBOL;
@@ -440,9 +437,8 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     sym->cname = strdup(cname);
     if (!sym->cname) {
         free(sym);
-        throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to duplicate string for symbol '%s'", cname);
-        return NULL;
     }
 
     // Enforce invariant: symbols always have a name

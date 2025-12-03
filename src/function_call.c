@@ -193,8 +193,7 @@ static CljObject* eval_numeric_comparison(CljList *list, CljMap *env, EvalState 
         if (!extract_numeric_values(a, b, &val_a, &val_b)) {
             RELEASE(a);
             RELEASE(b);
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return NULL;
+            return throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
         }
         // It's a valid comparison that returned false
         result = false;
@@ -276,9 +275,8 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, Arit
                 return fixnum(1);  // (*) → 1
             case ARITH_SUB:
             case ARITH_DIV:
-                throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                     "Wrong number of args: 0");
-                return NULL;
         }
     }
 
@@ -305,9 +303,8 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list, CljMap *env, Arit
                 RELEASE(args[j]);
             }
             free_obj_array(args, args_stack);
-            throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
+            return throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
                 "String cannot be used as a Number");
-            return NULL; // Unreachable, but prevents fallthrough
         }
 
         current = current ? as_list(current->rest) : NULL;
@@ -698,9 +695,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 // ns_resolve returns retained values - object survives until pool-pop
                 return resolved;
             }
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Unable to resolve symbol: invalid symbol object");
-            return NULL;
         }
 
         // This avoids expensive closure_env map lookups for parameter access
@@ -978,9 +974,8 @@ static ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalC
     int argc = total_count - 1;
 
     if (argc != 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
             "Wrong number of args (%d) passed to: clojure.lang.PersistentArrayMap", argc);
-        return NULL;
     }
 
     ID key = eval_arg_with_context(list, 1, env, st, ctx);
@@ -1413,8 +1408,32 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
             return AUTORELEASE((ID)make_string("nil"));
         }
         
-        // Simply convert the AST to string as-is (no special handling, no new lists)
-        // Use native_str to get CljString directly (simpler than to_cstring + make_string)
+        // If form is a symbol, try to resolve it to get the function
+        ID resolved = NULL;
+        if (TAG(form) == CLJ_SYMBOL && !IS_KEYWORD(form)) {
+            // Try to resolve symbol in environment
+            if (env) {
+                resolved = map_get(env, form, NOT_FOUND);
+                if (resolved == NOT_FOUND) {
+                    resolved = NULL;
+                }
+            }
+            // If not found in env, try namespace lookup
+            if (!resolved && st) {
+                resolved = ns_resolve(st, as_symbol(form));
+            }
+        }
+        
+        // If resolved to a function, return its body AST
+        if (resolved && TAG(resolved) == CLJ_CLOSURE) {
+            CljFunction *fn = as_function(resolved);
+            if (fn && fn->body) {
+                ID args[] = { fn->body };
+                return AUTORELEASE(native_str(args, 1));
+            }
+        }
+        
+        // Otherwise, convert the form to string as-is (no evaluation)
         ID args[] = { form };
         return AUTORELEASE(native_str(args, 1));
     }
@@ -1543,9 +1562,8 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
         }
 
         if (fn_tag == CLJ_LIST) {
-            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                     "Cannot call list as a function");
-            return NULL;
         }
 
         return AUTORELEASE(RETAIN(fn));
@@ -1901,20 +1919,18 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Error: first element is not a function
     if (IS_IMMEDIATE(op) || (op && TAG(op) == CLJ_STRING)) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call %s as a function", clj_type_name(op->type));
-        return NULL;
     }
 
     // Error: op is a list (should have been evaluated earlier)
     if (op && TAG(op) == CLJ_LIST) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call list as a function");
-        return NULL;
     }
 
     // Error: first element is not a function and not a symbol
-    throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+    return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
             "Cannot call %s as a function", clj_type_name(op->type));
     return NULL;
 }
