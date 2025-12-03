@@ -1411,25 +1411,44 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
         // If form is a symbol, try to resolve it to get the function
         ID resolved = NULL;
         if (TAG(form) == CLJ_SYMBOL && !IS_KEYWORD(form)) {
-            // Try to resolve symbol in environment
             if (env) {
                 resolved = map_get(env, form, NOT_FOUND);
                 if (resolved == NOT_FOUND) {
                     resolved = NULL;
                 }
             }
-            // If not found in env, try namespace lookup
             if (!resolved && st) {
                 resolved = ns_resolve(st, as_symbol(form));
             }
         }
         
-        // If resolved to a function, return its body AST
+        // If resolved to a function, return its full definition AST: (fn [params*] body)
         if (resolved && TAG(resolved) == CLJ_CLOSURE) {
             CljFunction *fn = as_function(resolved);
             if (fn && fn->body) {
-                ID args[] = { fn->body };
-                return AUTORELEASE(native_str(args, 1));
+                // Construct (fn [params] body) AST: (fn . ([params] . (body . nil)))
+                CljList *body_list = make_list(fn->body, NULL);
+                if (!body_list) {
+                    throw_oom();
+                    return NULL;
+                }
+                CljList *params_body_list = make_list(fn->params ? (ID)fn->params : NULL, body_list);
+                if (!params_body_list) {
+                    RELEASE((CljObject*)body_list);
+                    throw_oom();
+                    return NULL;
+                }
+                CljList *fn_list = make_list((ID)SYM_FN, params_body_list);
+                if (!fn_list) {
+                    RELEASE((CljObject*)params_body_list);
+                    throw_oom();
+                    return NULL;
+                }
+                
+                ID args[] = { (ID)fn_list };
+                CljString *result = native_str(args, 1);
+                RELEASE((CljObject*)fn_list);
+                return AUTORELEASE((ID)result);
             }
         }
         
@@ -1728,7 +1747,6 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     if (result) return result;
 
     // Try special form dispatch (handles if, do, and other special forms)
-    // Use closure_env to access closure variables
     CljSymbol *original_op_sym = NULL;
     if (original_op) {
         if (op_sym && original_op == op) {
@@ -1737,13 +1755,10 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
             original_op_sym = as_symbol(original_op);
         }
     }
-    if (original_op_sym) {
+    if (original_op_sym && is_special_form(original_op_sym)) {
         CljMap *special_form_env = closure_env ? closure_env : env;
         ID special_result = eval_special_form_dispatch(list, special_form_env, ctx_st, ctx, original_op_sym);
-        // Check if it was actually a special form by checking if original_op_sym is a special form symbol
-        if (is_special_form(original_op_sym)) {
-            return special_result; // NULL is valid (nil)
-        }
+        return special_result; // NULL is valid (nil)
     }
 
     // CRITICAL: For all other operations, delegate to eval_list
@@ -1752,6 +1767,14 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     // closure_env is only used for parameter resolution in eval_body_with_params, not for symbol resolution in eval_list
     // CRITICAL: NULL is always a valid result (nil). Errors throw exceptions, not return NULL.
     return eval_list(list, env, st, ctx);
+}
+
+// AST rewriting: Replace unqualified symbol with qualified symbol in-place
+// This allows cache hits for recursive calls by using qualified symbols in the AST
+static void rewrite_ast_symbol(CljList *list, CljSymbol *qualified_sym) {
+    // Rewrite AST in-place: replace first element with qualified symbol
+    // ASSIGN checks if values differ, so no need to check here
+    ASSIGN(list->first, qualified_sym);
 }
 
 // Simplified list evaluation (optionally accepts EvalContext for recur support)
@@ -1810,34 +1833,16 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     
     // OPTIMIZATION: AST rewriting - replace unqualified symbol with qualified symbol in-place
     // This allows cache hits for recursive calls by using qualified symbols in the AST
-    // CRITICAL: Only rewrite ONCE per symbol occurrence - check if already qualified (!ns_name)
-    // This ensures rewriting happens only 2x for fib (once per call site), not on every recursive call
+    // Only rewrite if symbol was resolved from current namespace (not clojure.core)
     if (resolved_op && TAG(resolved_op) != CLJ_SYMBOL && op && TAG(op) == CLJ_SYMBOL) {
         CljSymbol *original_sym = as_symbol(op);
-        // Only rewrite if symbol is NOT already qualified (prevents repeated rewriting)
         if (original_sym && !original_sym->ns_name && original_sym->cname && 
-            st && st->current_ns && st->current_ns->name) {
-            // CRITICAL: Check if symbol was resolved from current namespace (not clojure.core)
-            // Only qualify symbols that are actually defined in current namespace
-            // This ensures we don't qualify clojure.core builtins like "=" or "empty?"
-            CljSymbol *qualified_sym_check = intern_symbol(st->current_ns->name, original_sym->cname);
-            if (qualified_sym_check && st->current_ns->mappings) {
-                // Use NOT_FOUND sentinel to distinguish "key not found" from "value is nil"
-                ID check_resolved = map_get(st->current_ns->mappings, qualified_sym_check, NOT_FOUND);
-                // Only rewrite if symbol exists in current namespace mappings AND matches resolved_op
-                // This ensures we only qualify symbols that were actually resolved from current namespace
+            st && st->current_ns && st->current_ns->name && st->current_ns->mappings) {
+            CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, original_sym->cname);
+            if (qualified_sym) {
+                ID check_resolved = map_get(st->current_ns->mappings, qualified_sym, NOT_FOUND);
                 if (check_resolved != NOT_FOUND && check_resolved == resolved_op) {
-                    CljList *list_obj = as_list((ID)list);
-                    if (list_obj) {
-                        // Create qualified symbol (e.g., "fib" -> "user/fib")
-                        CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, original_sym->cname);
-                        if (qualified_sym && qualified_sym != (CljSymbol*)op) {
-                            // Rewrite AST in-place: replace first element with qualified symbol
-                            // This happens only ONCE per symbol occurrence (subsequent calls see qualified symbol)
-                            RELEASE((CljObject*)list_obj->first);  // Release old symbol
-                            list_obj->first = RETAIN((CljObject*)qualified_sym);  // Retain new symbol
-                        }
-                    }
+                    rewrite_ast_symbol(list, qualified_sym);
                 }
             }
         }
