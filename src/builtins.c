@@ -39,6 +39,89 @@
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
 
+// Forward declarations for native functions used in native_function_table
+ID native_add_variadic(ID *args, unsigned int argc);
+ID native_sub_variadic(ID *args, unsigned int argc);
+ID native_mul_variadic(ID *args, unsigned int argc);
+ID native_div_variadic(ID *args, unsigned int argc);
+ID native_mod(ID *args, unsigned int argc);
+ID native_quot(ID *args, unsigned int argc);
+ID native_bit_shift_left(ID *args, unsigned int argc);
+ID native_range(ID *args, unsigned int argc);
+ID native_repeat(ID *args, unsigned int argc);
+ID native_math_sqrt(ID *args, unsigned int argc);
+ID native_format(ID *args, unsigned int argc);
+ID native_str(ID *args, unsigned int argc);
+ID native_subs(ID *args, unsigned int argc);
+ID native_symbol(ID *args, unsigned int argc);
+ID native_type(ID *args, unsigned int argc);
+ID native_array_map(ID *args, unsigned int argc);
+ID native_vector(ID *args, unsigned int argc);
+ID native_vec(ID *args, unsigned int argc);
+ID native_peek(ID *args, unsigned int argc);
+ID native_pop(ID *args, unsigned int argc);
+ID native_subvec(ID *args, unsigned int argc);
+ID native_conj(ID *args, unsigned int argc);
+ID native_first(ID *args, unsigned int argc);
+ID native_rest(ID *args, unsigned int argc);
+ID native_next(ID *args, unsigned int argc);
+ID native_cons(ID *args, unsigned int argc);
+ID native_list(ID *args, unsigned int argc);
+ID native_reduce(ID *args, unsigned int argc);
+ID native_count(ID *args, unsigned int argc);
+ID native_nilp(ID *args, unsigned int argc);
+ID native_reverse(ID *args, unsigned int argc);
+ID assoc3(ID *args, unsigned int argc);
+ID native_dissoc(ID *args, unsigned int argc);
+ID native_transient(ID *args, unsigned int argc);
+ID native_persistent_bang(ID *args, unsigned int argc);
+ID native_conj_bang(ID *args, unsigned int argc);
+ID native_get(ID *args, unsigned int argc);
+ID native_keys(ID *args, unsigned int argc);
+ID native_vals(ID *args, unsigned int argc);
+ID native_println(ID *args, unsigned int argc);
+ID native_print(ID *args, unsigned int argc);
+ID native_pr(ID *args, unsigned int argc);
+ID native_prn(ID *args, unsigned int argc);
+ID native_lt(ID *args, unsigned int argc);
+ID native_gt(ID *args, unsigned int argc);
+ID native_le(ID *args, unsigned int argc);
+ID native_ge(ID *args, unsigned int argc);
+ID native_eq(ID *args, unsigned int argc);
+ID native_not_eq(ID *args, unsigned int argc);
+ID native_identical(ID *args, unsigned int argc);
+ID native_vector_p(ID *args, unsigned int argc);
+ID native_map_p(ID *args, unsigned int argc);
+ID native_sleep(ID *args, unsigned int argc);
+ID native_ns_map(ID *args, unsigned int argc);
+ID native_find_ns(ID *args, unsigned int argc);
+ID native_do(ID *args, unsigned int argc);
+ID native_byte_array(ID *args, unsigned int argc);
+ID native_aget(ID *args, unsigned int argc);
+ID native_aset(ID *args, unsigned int argc);
+ID native_alength(ID *args, unsigned int argc);
+ID native_aclone(ID *args, unsigned int argc);
+ID native_run_next_task(ID *args, unsigned int argc);
+ID native_schedule(ID *args, unsigned int argc);
+ID native_schedule_periodic(ID *args, unsigned int argc);
+ID native_cancel_timer(ID *args, unsigned int argc);
+ID native_atom(ID *args, unsigned int argc);
+ID native_deref(ID *args, unsigned int argc);
+ID native_reset_bang(ID *args, unsigned int argc);
+ID native_swap_bang(ID *args, unsigned int argc);
+#ifndef ESP32_BUILD
+ID native_slurp(ID *args, unsigned int argc);
+ID native_spit(ID *args, unsigned int argc);
+#endif
+ID native_trim(ID *args, unsigned int argc);
+ID native_upper_case(ID *args, unsigned int argc);
+ID native_lower_case(ID *args, unsigned int argc);
+ID native_last_index_of(ID *args, unsigned int argc);
+ID native_string_reverse(ID *args, unsigned int argc);
+ID native_source(ID *args, unsigned int argc);
+ID native_meta(ID *args, unsigned int argc);
+ID nth2(ID *args, unsigned int argc);
+
 // Thread-local EvalState for builtins that need it (eval, read-string, meta, require)
 // Set/cleared in eval_function_call before/after calling builtins
 _Thread_local EvalState *g_current_eval_state = NULL;
@@ -1838,48 +1921,86 @@ ID native_find_ns(ID *args, unsigned int argc) {
     return NULL;
 }
 
-// ============================================================================
-// DEBUG FUNCTIONS (REPL utilities)
-// ============================================================================
-
-/**
- * @brief Print AST structure for debugging (similar to Clojure's macroexpand-1)
- * @param args Array of arguments (expects 1 argument: the form to inspect)
- * @param argc Number of arguments (must be 1)
- * @return nil (prints AST to stdout)
- * 
- * Usage: (ast form) or (ast (read-string "(+ 1 2)"))
- * 
- * This function is useful for inspecting the AST structure of Clojure forms,
- * similar to clojure.repl functions in standard Clojure.
- */
-ID native_ast(ID *args, unsigned int argc) {
+// source: Print source code for a function (native implementation for clojure.repl namespace)
+// Usage: (source 'function-name) or (source function-var)
+// Note: In Clojure, source is a normal function, not a special form
+// The argument is evaluated: (source 'inc) evaluates 'inc to the symbol inc, then resolves it
+ID native_source(ID *args, unsigned int argc) {
     if (argc != 1) {
         throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "ast expects exactly 1 argument, got %u", argc);
+                                  "source requires 1 argument, got %u", argc);
         return NULL;
     }
     
-    ID form = args[0];
-    if (!form) {
-        printf("nil\n");
+    ID arg = args[0];
+    if (!arg) {
+        printf("Source not available\n");
         return NULL;
     }
     
-    // Use print_ast to convert form to string representation
-    const char *ast_str = print_ast((CljObject*)form);
-    if (ast_str) {
-        printf("%s\n", ast_str);
-        // print_ast uses ALLOC, so we need to free the string
-        // Note: print_ast returns a raw char* allocated with ALLOC, not a CljObject
-        // We need to use free() directly, not DEALLOC (which expects CljObject*)
-        free((void*)ast_str);
+    // If arg is already a function (closure), use it directly
+    ID target_func = NULL;
+    if (TAG(arg) == CLJ_CLOSURE) {
+        target_func = arg;
+    } else if (TAG(arg) == CLJ_SYMBOL && !IS_KEYWORD(arg)) {
+        // If arg is a symbol, resolve it to get the function
+        // g_current_eval_state is thread-local and defined at the top of this file
+        if (g_current_eval_state) {
+            target_func = ns_resolve(g_current_eval_state, as_symbol(arg));
+        }
+    }
+    
+    // If we have a function, print its full definition AST: (fn [params*] body)
+    if (target_func && TAG(target_func) == CLJ_CLOSURE) {
+        CljFunction *fn = as_function(target_func);
+        if (fn && fn->body) {
+            // Construct (fn [params] body) AST: (fn . ([params] . (body . nil)))
+            CljList *body_list = make_list(fn->body, NULL);
+            if (!body_list) {
+                throw_oom();
+                return NULL;
+            }
+            CljList *params_body_list = make_list(fn->params ? (ID)fn->params : NULL, body_list);
+            if (!params_body_list) {
+                RELEASE((CljObject*)body_list);
+                throw_oom();
+                return NULL;
+            }
+            CljList *fn_list = make_list((ID)SYM_FN, params_body_list);
+            if (!fn_list) {
+                RELEASE((CljObject*)params_body_list);
+                throw_oom();
+                return NULL;
+            }
+            
+            ID args_str[] = { (ID)fn_list };
+            CljString *result = native_str(args_str, 1);
+            if (result) {
+                printf("%s\n", string_data(result));
+                RELEASE((CljObject*)result);
+            }
+            RELEASE((CljObject*)fn_list);
+            return NULL;
+        }
+    }
+    
+    // Otherwise, print the argument as-is
+    ID args_str[] = { arg };
+    CljString *result = native_str(args_str, 1);
+    if (result) {
+        printf("%s\n", string_data(result));
+        RELEASE((CljObject*)result);
     } else {
-        printf("#<error: failed to print AST>\n");
+        printf("Source not available\n");
     }
-    
     return NULL;
 }
+
+
+
+
+// Forward declarations for native functions used in lookup table
+ID native_meta(ID *args, unsigned int argc);
 
 // ============================================================================
 // Native function lookup table for stubs
@@ -1893,11 +2014,91 @@ typedef struct {
 // Compile-time initialized lookup table (DRY: avoids runtime initialization)
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
 static const NativeFunctionEntry native_function_table[] = {
+    // clojure.string functions
     {&sym_trim_data.sym, native_trim},
     {&sym_upper_case_data.sym, native_upper_case},
     {&sym_lower_case_data.sym, native_lower_case},
     {&sym_last_index_of_data.sym, native_last_index_of},
     {&sym_string_reverse_data.sym, native_string_reverse},
+    // clojure.repl functions
+    {&sym_source_data.sym, native_source},
+    // clojure.core functions
+    {&sym_meta_data.sym, native_meta},
+    {&sym_reduce_data.sym, native_reduce},
+    {&sym_plus_data.sym, native_add_variadic},
+    {&sym_minus_data.sym, native_sub_variadic},
+    {&sym_multiply_data.sym, native_mul_variadic},
+    {&sym_divide_data.sym, native_div_variadic},
+    {&sym_mod_data.sym, native_mod},
+    {&sym_quot_data.sym, native_quot},
+    {&sym_bit_shift_left_data.sym, native_bit_shift_left},
+    {&sym_range_data.sym, native_range},
+    {&sym_repeat_data.sym, native_repeat},
+    {&sym_math_sqrt_data.sym, native_math_sqrt},
+    {&sym_sqrt_data.sym, native_math_sqrt},
+    {&sym_format_data.sym, native_format},
+    {&sym_str_data.sym, native_str},
+    {&sym_subs_data.sym, native_subs},
+    {&sym_symbol_data.sym, native_symbol},
+    {&sym_type_data.sym, native_type},
+    {&sym_array_map_data.sym, native_array_map},
+    {&sym_vector_data.sym, native_vector},
+    {&sym_vec_data.sym, native_vec},
+    {&sym_nth_data.sym, nth2},
+    {&sym_peek_data.sym, native_peek},
+    {&sym_pop_data.sym, native_pop},
+    {&sym_subvec_data.sym, native_subvec},
+    {&sym_conj_data.sym, native_conj},
+    {&sym_first_data.sym, native_first},
+    {&sym_rest_data.sym, native_rest},
+    {&sym_next_data.sym, native_next},
+    {&sym_cons_data.sym, native_cons},
+    {&sym_list_data.sym, native_list},
+    {&sym_count_data.sym, native_count},
+    {&sym_nilp_data.sym, native_nilp},
+    {&sym_reverse_data.sym, native_reverse},
+    {&sym_assoc_data.sym, assoc3},
+    {&sym_dissoc_data.sym, native_dissoc},
+    {&sym_transient_data.sym, native_transient},
+    {&sym_persistent_bang_data.sym, native_persistent_bang},
+    {&sym_conj_bang_data.sym, native_conj_bang},
+    {&sym_get_data.sym, native_get},
+    {&sym_keys_data.sym, native_keys},
+    {&sym_vals_data.sym, native_vals},
+    {&sym_println_data.sym, native_println},
+    {&sym_print_data.sym, native_print},
+    {&sym_pr_data.sym, native_pr},
+    {&sym_prn_data.sym, native_prn},
+    {&sym_lt_data.sym, native_lt},
+    {&sym_gt_data.sym, native_gt},
+    {&sym_le_data.sym, native_le},
+    {&sym_ge_data.sym, native_ge},
+    {&sym_equals_data.sym, native_eq},
+    {&sym_not_eq_data.sym, native_not_eq},
+    {&sym_identical_data.sym, native_identical},
+    {&sym_vector_p_data.sym, native_vector_p},
+    {&sym_map_p_data.sym, native_map_p},
+    {&sym_sleep_data.sym, native_sleep},
+    {&sym_ns_map_data.sym, native_ns_map},
+    {&sym_find_ns_data.sym, native_find_ns},
+    {&sym_do_data.sym, native_do},
+    {&sym_byte_array_data.sym, native_byte_array},
+    {&sym_aget_data.sym, native_aget},
+    {&sym_aset_data.sym, native_aset},
+    {&sym_alength_data.sym, native_alength},
+    {&sym_aclone_data.sym, native_aclone},
+    {&sym_run_next_task_data.sym, native_run_next_task},
+    {&sym_schedule_data.sym, native_schedule},
+    {&sym_schedule_periodic_data.sym, native_schedule_periodic},
+    {&sym_cancel_timer_data.sym, native_cancel_timer},
+    {&sym_atom_data.sym, native_atom},
+    {&sym_deref_data.sym, native_deref},
+    {&sym_reset_bang_data.sym, native_reset_bang},
+    {&sym_swap_bang_data.sym, native_swap_bang},
+#ifndef ESP32_BUILD
+    {&sym_slurp_data.sym, native_slurp},
+    {&sym_spit_data.sym, native_spit},
+#endif
     {NULL, NULL}  // Sentinel
 };
 
@@ -1916,6 +2117,58 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
     // will return the same pointer (SYM_TRIM) due to symbol interning.
     for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
         if (native_function_table[i].clojure_symbol == symbol) {
+            return native_function_table[i].native_func;
+        }
+    }
+    
+    const char *cname = symbol->cname ? symbol->cname : NULL;
+    const char *ns_name = (symbol->ns_name && symbol->ns_name->cname) ? symbol->ns_name->cname : NULL;
+    if (!cname) {
+        return NULL;
+    }
+
+    // First, try to find an entry whose namespace matches exactly (if symbol is qualified)
+    if (ns_name && ns_name[0]) {
+        char qualified_name[128];
+        snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
+
+        for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
+            CljSymbol *table_sym = native_function_table[i].clojure_symbol;
+            if (!table_sym || !table_sym->cname) continue;
+            if (table_sym->ns_name && table_sym->ns_name->cname &&
+                strcmp(table_sym->ns_name->cname, ns_name) == 0 &&
+                strcmp(table_sym->cname, cname) == 0) {
+                return native_function_table[i].native_func;
+            }
+        }
+
+        // Special case: clojure.core entries are stored without namespace (for compatibility)
+        // If no namespaced entry was found, allow matching unqualified entries only for clojure.core
+        if (strcmp(ns_name, "clojure.core") == 0) {
+            for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
+                CljSymbol *table_sym = native_function_table[i].clojure_symbol;
+                if (!table_sym || table_sym->ns_name || !table_sym->cname) continue;
+                if (strcmp(table_sym->cname, cname) == 0) {
+                    return native_function_table[i].native_func;
+                }
+            }
+        }
+
+        // Handle pseudo-qualified names stored as single cname (e.g., "Math/sqrt")
+        for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
+            CljSymbol *table_sym = native_function_table[i].clojure_symbol;
+            if (!table_sym || table_sym->ns_name || !table_sym->cname) continue;
+            if (strcmp(table_sym->cname, qualified_name) == 0) {
+                return native_function_table[i].native_func;
+            }
+        }
+        return NULL;
+    }
+
+    // Unqualified symbol: fall back to name match (for cases where symbol pointers differ)
+    for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
+        CljSymbol *table_sym = native_function_table[i].clojure_symbol;
+        if (table_sym && table_sym->cname && strcmp(table_sym->cname, cname) == 0) {
             return native_function_table[i].native_func;
         }
     }
@@ -2076,19 +2329,42 @@ static char* namespace_to_relpath(const char *ns_name) {
     return buf;
 }
 
-static char* read_file_cstr(const char *path) {
+static char* read_file_once(const char *path) {
+    if (!path) return NULL;
     FILE *fp = fopen(path, "r");
     if (!fp) return NULL;
     if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
     long sz = ftell(fp);
     if (sz < 0) { fclose(fp); return NULL; }
-    rewind(fp);
+    if (fseek(fp, 0, SEEK_SET) != 0) { fclose(fp); return NULL; }
     char *buffer = (char*)malloc((size_t)sz + 1);
     if (!buffer) { fclose(fp); return NULL; }
     size_t n = fread(buffer, 1, (size_t)sz, fp);
     buffer[n] = '\0';
     fclose(fp);
     return buffer;
+}
+
+static char* read_file_cstr(const char *path) {
+    char *buffer = read_file_once(path);
+    if (buffer) return buffer;
+    
+    // If path is relative, also try "../path" and "../../path" to support running from build directories
+    if (!path || path[0] == '\0') {
+        return NULL;
+    }
+    
+    char parent_path[512];
+    if (snprintf(parent_path, sizeof(parent_path), "../%s", path) < (int)sizeof(parent_path)) {
+        buffer = read_file_once(parent_path);
+        if (buffer) return buffer;
+    }
+    if (snprintf(parent_path, sizeof(parent_path), "../../%s", path) < (int)sizeof(parent_path)) {
+        buffer = read_file_once(parent_path);
+        if (buffer) return buffer;
+    }
+    
+    return NULL;
 }
 
 static bool eval_source_in_current_state(const char *src, EvalState *st) {
@@ -2160,19 +2436,23 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
             continue;
         }
 
-        // CRITICAL: Mappings use qualified symbols as keys
-        // Must qualify the symbol with source namespace name for lookup
+        // CRITICAL: Mappings use qualified symbols as keys (except clojure.core uses unqualified)
+        // Must qualify the symbol with source namespace name for lookup (unless source is clojure.core)
         CljSymbol *sym_obj = as_symbol(sym);
-        CljSymbol *qualified_sym = sym_obj;
-        if (sym_obj && !sym_obj->ns_name && source_ns->name && source_ns->name->cname) {
-            qualified_sym = intern_symbol(source_ns->name, sym_obj->cname);
-            if (!qualified_sym) {
-                qualified_sym = sym_obj; // Fallback to original
+        CljSymbol *lookup_sym = sym_obj;
+        if (source_ns->name == SYM_CLOJURE_CORE) {
+            // clojure.core uses unqualified symbols as keys - use symbol as-is
+            lookup_sym = sym_obj;
+        } else if (sym_obj && !sym_obj->ns_name && source_ns->name && source_ns->name->cname) {
+            // Other namespaces: qualify the symbol for lookup
+            lookup_sym = intern_symbol(source_ns->name, sym_obj->cname);
+            if (!lookup_sym) {
+                lookup_sym = sym_obj; // Fallback to original
             }
         }
 
-        // Look up symbol in source namespace (must use qualified symbol)
-        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)qualified_sym, NULL);
+        // Look up symbol in source namespace
+        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)lookup_sym, NULL);
         if (val) {
             // Copy to target namespace (ns_define will automatically qualify with target namespace)
             ns_define(target_ns, sym, val);
@@ -2193,16 +2473,29 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
     if (!map) return;
 
     // Iterate through all mappings in source namespace
-    // Keys are already qualified symbols (e.g., test.referall/var1)
+    // Keys are qualified symbols (e.g., test.referall/var1 or clojure.repl/doc)
+    // EXCEPTION: clojure.core uses unqualified symbols as keys (ns_name = NULL)
     // We need to extract the unqualified symbol name and copy it to target namespace
     MAP_FOR_EACH(map, key, val) {
         if (key && val && TAG(key) == CLJ_SYMBOL) {
-            CljSymbol *qualified_key = as_symbol(key);
-            if (qualified_key && qualified_key->cname) {
-                // Extract unqualified symbol name (qualified_key is already qualified)
+            CljSymbol *key_sym = as_symbol(key);
+            if (key_sym && key_sym->cname) {
+                const char *unqualified_name = NULL;
+                
+                if (source_ns->name == SYM_CLOJURE_CORE) {
+                    // clojure.core uses unqualified symbols as keys - cname is already unqualified
+                    unqualified_name = key_sym->cname;
+                } else {
+                    // Other namespaces: extract unqualified name from qualified symbol
+                    // Qualified symbols have format "namespace/name" (e.g., "clojure.repl/doc")
+                    const char *cname = key_sym->cname;
+                    const char *slash = strrchr(cname, '/');
+                    unqualified_name = slash ? slash + 1 : cname;
+                }
+                
                 // Create unqualified symbol for target namespace
                 // ns_define will automatically qualify it with target namespace
-                CljSymbol *unqualified_sym = intern_symbol_global(qualified_key->cname);
+                CljSymbol *unqualified_sym = intern_symbol_global(unqualified_name);
                 if (unqualified_sym) {
                     // Copy to target namespace (ns_define will automatically qualify with target namespace)
                     ns_define(target_ns, (ID)unqualified_sym, (CljObject*)val);
@@ -4011,114 +4304,22 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
 }
 
 void register_builtins() {
-    // Register all builtins in clojure.core namespace (unified system)
-    register_builtin_in_core("+", native_add_variadic);
-    register_builtin_in_core("-", native_sub_variadic);
-    register_builtin_in_core("*", native_mul_variadic);
-    register_builtin_in_core("/", native_div_variadic);
-    register_builtin_in_core("mod", native_mod);
-    register_builtin_in_core("quot", native_quot);
-    register_builtin_in_core("bit-shift-left", native_bit_shift_left);
-    register_builtin_in_core("range", native_range);
-    register_builtin_in_core("repeat", native_repeat);
-    register_builtin_in_core("Math/sqrt", native_math_sqrt);
-    register_builtin_in_core("format", native_format);
+    // NOTE: Most functions are now registered via :native stubs in clojure.core.clj
+    // This allows metadata (docstrings) to be properly attached.
+    // Only functions needed in --no-core mode are registered here directly.
+    
+    // Functions needed before clojure.core.clj is loaded (--no-core mode)
     register_builtin_in_core("eval", native_eval);
     register_builtin_in_core("read-string", native_read_string);
-    register_builtin_in_core("str", native_str);
-    register_builtin_in_core("subs", native_subs);
-    register_builtin_in_core("symbol", native_symbol);
-    register_builtin_in_core("meta", native_meta);
-
+#ifndef ESP32_BUILD
+    register_builtin_in_core("require", native_require);
+#endif
+    
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
     // This allows metadata (docstrings) to be properly attached.
-#ifndef ESP32_BUILD
-    register_builtin_in_core("slurp", native_slurp);
-    register_builtin_in_core("spit", native_spit);
-    register_builtin_in_core("require", native_require);
-#endif
-    register_builtin_in_core("type", native_type);
-    register_builtin_in_core("array-map", native_array_map);
-    register_builtin_in_core("vector", native_vector);
-    register_builtin_in_core("vec", native_vec);
-    register_builtin_in_core("nth", nth2);
-    register_builtin_in_core("peek", native_peek);
-    register_builtin_in_core("pop", native_pop);
-    register_builtin_in_core("subvec", native_subvec);
-    register_builtin_in_core("conj", native_conj);
-    register_builtin_in_core("first", native_first);
-    register_builtin_in_core("rest", native_rest);
-    register_builtin_in_core("next", native_next);
-    register_builtin_in_core("cons", native_cons);
-    register_builtin_in_core("list", native_list);
-    register_builtin_in_core("reduce", native_reduce);
-    register_builtin_in_core("count", native_count);
-    register_builtin_in_core("nil?", native_nilp);
-    register_builtin_in_core("reverse", native_reverse);
-    register_builtin_in_core("assoc", assoc3);
-    register_builtin_in_core("dissoc", native_dissoc);
-    register_builtin_in_core("transient", native_transient);
-    register_builtin_in_core("persistent!", native_persistent_bang);
-    register_builtin_in_core("conj!", native_conj_bang);
-    register_builtin_in_core("get", native_get);
-    register_builtin_in_core("keys", native_keys);
-    register_builtin_in_core("vals", native_vals);
-    register_builtin_in_core("println", native_println);
-
-    // Register print functions
-    register_builtin_in_core("print", native_print);
-    register_builtin_in_core("pr", native_pr);
-    register_builtin_in_core("prn", native_prn);
-
-    // Register comparison operators as normal functions
-    register_builtin_in_core("<", native_lt);
-    register_builtin_in_core(">", native_gt);
-    register_builtin_in_core("<=", native_le);
-    register_builtin_in_core(">=", native_ge);
-    register_builtin_in_core("=", native_eq);
-    register_builtin_in_core("not=", native_not_eq);
-    register_builtin_in_core("identical?", native_identical);
-    register_builtin_in_core("vector?", native_vector_p);
-    register_builtin_in_core("map?", native_map_p);
-
-    // Time function
-    // time is now only a special form (eval_time), not a builtin
-    // This ensures time can measure actual evaluation time, not pre-evaluated arguments
-    register_builtin_in_core("sleep", native_sleep);
-
-    // Namespace introspection functions
-    register_builtin_in_core("ns-map", native_ns_map);
-    register_builtin_in_core("find-ns", native_find_ns);
-
-    // Note: ast is now a special form (not a builtin) so it receives unevaluated arguments
-
-    // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments
-    // They are handled directly in eval_list() via eval_def() and eval_ns()
-
-    // Control flow functions
-    register_builtin_in_core("do", native_do);
-
-    // Loop constructs
-    // dotimes is now implemented as a special form, not a builtin
-
-    // Byte array functions
-    register_builtin_in_core("byte-array", native_byte_array);
-    register_builtin_in_core("aget", native_aget);
-    register_builtin_in_core("aset", native_aset);
-    register_builtin_in_core("alength", native_alength);
-    register_builtin_in_core("aclone", native_aclone);
-    // Event-loop builtin
-    register_builtin_in_core("run-next-task", native_run_next_task);
-
-    // Timer builtins
-    register_builtin_in_core("schedule", native_schedule);
-    register_builtin_in_core("schedule-periodic", native_schedule_periodic);
-    register_builtin_in_core("cancel-timer", native_cancel_timer);
-
-    // Atom functions
-    register_builtin_in_core("atom", native_atom);
-    register_builtin_in_core("deref", native_deref);
-    register_builtin_in_core("reset!", native_reset_bang);
-    register_builtin_in_core("swap!", native_swap_bang);
+    
+    // NOTE: clojure.repl/source is registered here because it's in a different namespace
+    // and needs to be available before clojure.repl.clj is loaded.
+    register_builtin_in_core("clojure.repl/source", native_source);
 }

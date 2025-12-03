@@ -129,6 +129,35 @@ static void escape_string_write(CljString *s, char *buffer, size_t *offset) {
     (*offset)++;
 }
 
+// Check if symbol is a special form (matches Clojure behavior)
+// Uses compact array-based lookup for smaller code size
+static inline bool is_special_symbol(CljSymbol *symbol) {
+    if (!symbol) return false;
+    return (symbol == SYM_IF ||
+            symbol == SYM_LET ||
+            symbol == SYM_DEFN ||
+            symbol == SYM_DEF ||
+            symbol == SYM_FN ||
+            symbol == SYM_DO ||
+            symbol == SYM_COND ||
+            symbol == SYM_WHEN ||
+            symbol == SYM_WHILE ||
+            symbol == SYM_QUOTE ||
+            symbol == SYM_RECUR ||
+            symbol == SYM_AND ||
+            symbol == SYM_OR ||
+            symbol == SYM_NS ||
+            symbol == SYM_TRY ||
+            symbol == SYM_CATCH ||
+            symbol == SYM_THROW ||
+            symbol == SYM_FINALLY ||
+            symbol == SYM_VAR ||
+            symbol == SYM_LOOP ||
+            symbol == SYM_GO ||
+            symbol == SYM_TIME ||
+            symbol == SYM_SOURCE);
+}
+
 // Recursive helper: Calculate string length without allocating
 static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
     if (!v) {
@@ -170,6 +199,11 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             CljSymbol *sym = as_symbol(v);
             if (!sym) return 3; // "nil"
             if (!sym->cname) return 3; // "nil" if no name
+            
+            // Special forms are printed as #<special-form name> (like in Clojure)
+            if (is_special_symbol(sym)) {
+                return 17 + strlen(sym->cname); // "#<special-form name>" = 16 + name + 1
+            }
             
             // Only show namespace if explicitly set (not NULL = implicit clojure.core)
             // This matches Clojure's behavior: core symbols print without namespace
@@ -389,6 +423,17 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             if (!sym->cname) {
                 memcpy(buffer + *offset, "nil", 3);
                 *offset += 3;
+                return;
+            }
+            // Special forms are printed as #<special-form name> (like in Clojure)
+            if (is_special_symbol(sym)) {
+                memcpy(buffer + *offset, "#<special-form ", 16);
+                *offset += 16;
+                size_t name_len = strlen(sym->cname);
+                memcpy(buffer + *offset, sym->cname, name_len);
+                *offset += name_len;
+                buffer[*offset] = '>';
+                *offset += 1;
                 return;
             }
             // Only show namespace if explicitly set (not NULL = implicit clojure.core)
@@ -651,7 +696,7 @@ CljString* to_string(ID v) {
 
 CljString* to_string_with_escape(ID v, bool escape_strings) {
     size_t len = to_string_calc_length((CljObject*)v, escape_strings);
-    CljString *result = AUTORELEASE(make_string_buffer(len));
+    CljString *result = (CljString*)AUTORELEASE((ID)make_string_buffer(len));
 
     size_t offset = 0;
     to_string_build_string((CljObject*)v, result->data, &offset, escape_strings);

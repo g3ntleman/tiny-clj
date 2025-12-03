@@ -109,6 +109,9 @@ ID native_lower_case(ID *args, unsigned int argc);
 ID native_last_index_of(ID *args, unsigned int argc);
 ID native_string_reverse(ID *args, unsigned int argc);
 
+// REPL functions (clojure.repl namespace)
+ID native_source(ID *args, unsigned int argc);
+
 // Loop constructs converted to builtins
 // Note: dotimes is now implemented as a special form, not a builtin
 

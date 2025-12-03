@@ -48,7 +48,7 @@ static bool is_alpha(char c) {
 
 /** @brief Check if character is alphanumeric or symbol character */
 static bool is_alphanumeric(char c) {
-  return is_alpha(c) || is_digit(c) || c == '-' || c == '_' || c == '?' ||
+  return is_alpha(c) || is_digit(c) || c == '-' || c == '_' || c == '?' || c == '&' ||
          c == '!' || c == '/' || c == '.';
 }
 
@@ -677,7 +677,16 @@ static ID parse_character(Reader *reader, EvalState *st) {
  * @return Resolved namespace name symbol, or NULL if alias not found
  */
 static CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
-    if (!st || !st->current_ns || !alias_str || alias_str[0] == '\0') {
+    if (!alias_str || alias_str[0] == '\0') {
+        return NULL;
+    }
+
+    // Built-in alias: Math -> clojure.core (for Math/sqrt style lookups)
+    if (strcmp(alias_str, "Math") == 0 && SYM_CLOJURE_CORE) {
+        return SYM_CLOJURE_CORE;
+    }
+    
+    if (!st || !st->current_ns) {
         return NULL;
     }
     

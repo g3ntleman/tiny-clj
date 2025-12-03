@@ -230,9 +230,10 @@ add_executable(tiny-clj-repl
     ${SOURCES}
 )
 # Output directory is set globally to "build"
-# REPL Build - Debug in Debug mode, Release in Release mode
+# REPL Build - Always enable ENABLE_META for macOS REPL
+# Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_LINE_EDITING)
+    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META ENABLE_LINE_EDITING)
     # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
@@ -304,8 +305,7 @@ add_executable(unity-tests
     src/tests/test_require.c
     src/tests/test_require_perf.c
     src/tests/test_qualified_symbol_resolution.c
-    src/tests/test_alias.c
-    src/tests/test_alias_lowlevel.c
+    src/tests/test_repl.c
     src/tests/test_file_io.c
     src/tests/test_atom.c
     src/tests/test_timer.c

@@ -8,7 +8,7 @@
 #include "value.h"  // For IS_IMMEDIATE macro
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
-#include "function_call.h"  // For SYM_DEF
+#include "function_call.h"  // For SYM_DEF, SYM_NS
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include <stdbool.h>
@@ -29,6 +29,35 @@ const char *clojure_core_code =
 // Forward declaration for value_by_parsing_expr
 extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
+// Helper: Read entire text file into memory (caller frees)
+static char* read_file_cstr_local(const char *path) {
+  if (!path) return NULL;
+  FILE *fp = fopen(path, "r");
+  if (!fp) return NULL;
+  if (fseek(fp, 0, SEEK_END) != 0) {
+    fclose(fp);
+    return NULL;
+  }
+  long sz = ftell(fp);
+  if (sz < 0) {
+    fclose(fp);
+    return NULL;
+  }
+  if (fseek(fp, 0, SEEK_SET) != 0) {
+    fclose(fp);
+    return NULL;
+  }
+  char *buffer = (char*)malloc((size_t)sz + 1);
+  if (!buffer) {
+    fclose(fp);
+    return NULL;
+  }
+  size_t read_sz = fread(buffer, 1, (size_t)sz, fp);
+  buffer[read_sz] = '\0';
+  fclose(fp);
+  return buffer;
+}
+
 static bool eval_core_source(const char *src, EvalState *st) {
   if (!src || !st)
     return false;
@@ -39,10 +68,19 @@ static bool eval_core_source(const char *src, EvalState *st) {
   
   // CRITICAL: Use the namespace from registry if it exists, otherwise use current_ns
   // This ensures we use the same namespace object that register_builtins() may have created
-  CljNamespace *target_ns = ns_find_by_symbol(SYM_CLOJURE_CORE);
-  if (target_ns) {
-    st->current_ns = target_ns;
+  // Note: For clojure.repl, we use st->current_ns which is already set to clojure.repl
+  CljNamespace *target_ns = NULL;
+  // Only use clojure.core from registry if current_ns is clojure.core
+  // Otherwise, use current_ns (which is already set correctly for clojure.repl)
+  if (st->current_ns && st->current_ns->name == SYM_CLOJURE_CORE) {
+    target_ns = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    if (target_ns) {
+      st->current_ns = target_ns;
+    } else {
+      target_ns = st->current_ns;
+    }
   } else {
+    // For other namespaces (like clojure.repl), use current_ns directly
     target_ns = st->current_ns;
   }
   
@@ -76,14 +114,21 @@ static bool eval_core_source(const char *src, EvalState *st) {
       } else {
         // NULL result could be nil (legitimate) or evaluation failure
         // For def expressions, the symbol should be stored even if result is NULL
-        // Check if this was a def expression that might have stored something
+        // For ns expressions, nil is a valid return value
+        // Check if this was a def or ns expression that might have stored something
         if (form && TAG(form) == CLJ_LIST) {
           CljList *list = as_list(form);
           CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
-            // def returns the symbol, not the value
-            // Even if value evaluation failed, def might have stored nil
-            success_count++;
+          if (first && TAG(first) == CLJ_SYMBOL) {
+            CljSymbol *first_sym = as_symbol(first);
+            if (first_sym == SYM_DEF) {
+              // def returns the symbol, not the value
+              // Even if value evaluation failed, def might have stored nil
+              success_count++;
+            } else if (first_sym == SYM_NS) {
+              // ns returns nil, which is a valid result
+              success_count++;
+            }
           }
         }
       }
@@ -98,12 +143,21 @@ static bool eval_core_source(const char *src, EvalState *st) {
           is_def_expr = true;
         }
       }
-      if (!g_core_quiet) {
-        const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
-        const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
-        const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
-        int error_line = ex ? ex->line : 0;
-        fprintf(stderr, "[clojure.core] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
+      const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
+      const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
+      const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
+      int error_line = ex ? ex->line : 0;
+      const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
+                            ? target_ns->name->cname 
+                            : "clojure.core";
+      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
+      bool is_clojure_repl = target_ns && target_ns->name && 
+                             target_ns->name->cname && 
+                             strcmp(target_ns->name->cname, "clojure.repl") == 0;
+      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
+      if (!g_core_quiet || is_clojure_repl) {
+        fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
+                ns_name,
                 expr_count + 1,
                 is_def_expr ? " (def)" : "",
                 error_msg,
@@ -130,8 +184,19 @@ static bool eval_core_source(const char *src, EvalState *st) {
   // target_ns is already registered in ns_registry, no cache needed
   
   if (!g_core_quiet) {
-    fprintf(stderr, "[clojure.core] Evaluated %d form(s), %d succeeded.\n",
-            expr_count, success_count);
+    const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
+                          ? target_ns->name->cname 
+                          : "clojure.core";
+    fprintf(stderr, "[%s] Evaluated %d form(s), %d succeeded.\n",
+            ns_name, expr_count, success_count);
+  }
+
+  // Ensure Math alias points to clojure.core so Math/sqrt style symbols resolve
+  if (target_ns && target_ns->name == SYM_CLOJURE_CORE) {
+    CljSymbol *math_alias = intern_symbol_global("Math");
+    if (math_alias && SYM_CLOJURE_CORE) {
+      ns_set_alias(target_ns, (CljObject*)math_alias, (CljObject*)SYM_CLOJURE_CORE);
+    }
   }
 
   return success_count > 0;
@@ -207,3 +272,73 @@ void clojure_core_set_quiet(bool quiet) {
 }
 
 void clojure_core_set_source(const char *src) { clojure_core_code = src; }
+
+// Load clojure.repl namespace from file
+int load_clojure_repl(EvalState *st) {
+  if (!st) return 0;
+  
+  // Convert namespace to relative path (clojure.repl -> clojure/repl.clj)
+  const char *ns_name = "clojure.repl";
+  size_t len = strlen(ns_name);
+  char *rel = (char*)malloc(len + 5); // +5 for ".clj" and potential slashes
+  if (!rel) return 0;
+  
+  // Replace dots with slashes
+  for (size_t i = 0; i < len; i++) {
+    rel[i] = (ns_name[i] == '.') ? '/' : ns_name[i];
+  }
+  rel[len] = '\0';
+  strcat(rel, ".clj");
+  
+  // Search order: libs/<rel>, <rel>, ../libs/<rel>, ../<rel>
+  char libs_path[512];
+  snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
+  char parent_libs_path[512];
+  snprintf(parent_libs_path, sizeof(parent_libs_path), "../%s", libs_path);
+  char parent_rel_path[512];
+  snprintf(parent_rel_path, sizeof(parent_rel_path), "../%s", rel);
+  const char *candidates[] = {
+    libs_path,
+    rel,
+    parent_libs_path,
+    parent_rel_path
+  };
+  
+  char *source = NULL;
+  for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
+    source = read_file_cstr_local(candidates[i]);
+    if (source) break;
+  }
+  
+  if (!source) {
+    free(rel);
+    return 0;
+  }
+  
+  // Save original namespace
+  CljNamespace *orig_ns = st->current_ns;
+  
+  // Ensure target namespace exists
+  CljNamespace *target_ns = ns_get_or_create(ns_name, NULL);
+  if (!target_ns) {
+    free(source);
+    free(rel);
+    return 0;
+  }
+  
+  // Temporarily switch to target namespace
+  st->current_ns = target_ns;
+  
+  // Evaluate source using same approach as eval_core_source
+  bool ok = eval_core_source(source, st);
+  
+  // Restore original namespace
+  if (orig_ns) {
+    st->current_ns = orig_ns;
+  }
+  
+  free(source);
+  free(rel);
+  
+  return ok ? 1 : 0;
+}

@@ -68,20 +68,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljMap *env, EvalState *st);
 ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
-static bool is_special_form(CljSymbol *symbol);
-
-// Helper macro for creating context without recur (no heap allocation)
-#define CONTEXT_WITHOUT_RECUR(ctx) \
-    ((EvalContext){ \
-        .env = (ctx)->env, \
-        .env_stack = (ctx)->env_stack, \
-        .st = (ctx)->st, \
-        .params = (ctx)->params, \
-        .param_values = (ctx)->param_values, \
-        .param_count = (ctx)->param_count, \
-        .recur_args = NULL, \
-        .recur_arg_count = NULL \
-    })
+static inline bool is_special_symbol(CljSymbol *symbol);
+static inline bool is_builtin_function(CljSymbol *symbol);
 
 
 
@@ -520,21 +508,6 @@ static inline EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallb
         return ctx->st;
     }
     return fallback;
-}
-
-// Helper function for initializing let context (no heap allocation)
-static inline EvalContext init_let_context(const EvalContext *ctx, CljList *let_env_stack, EvalState *st) {
-    EvalState *ctx_st = get_eval_state(ctx, st);
-    return (EvalContext){
-        .env = (CljMap*)LIST_FIRST(let_env_stack),
-        .env_stack = let_env_stack,
-        .st = ctx_st,
-        .params = ctx ? ctx->params : NULL,
-        .param_values = ctx ? ctx->param_values : NULL,
-        .param_count = ctx ? ctx->param_count : 0,
-        .recur_args = ctx ? ctx->recur_args : NULL,
-        .recur_arg_count = ctx ? ctx->recur_arg_count : NULL
-    };
 }
 
 static const EvalContext* ensure_eval_context(CljMap *env,
@@ -1146,7 +1119,16 @@ static ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
 
     // Evaluate arguments using eval_body_with_params
     // CRITICAL: Create a new context without RecurContext for argument evaluation
-    EvalContext arg_ctx = CONTEXT_WITHOUT_RECUR(ctx);
+    EvalContext arg_ctx = {
+        .env = ctx->env,
+        .env_stack = ctx->env_stack,
+        .st = ctx->st,
+        .params = ctx->params,
+        .param_values = ctx->param_values,
+        .param_count = ctx->param_count,
+        .recur_args = NULL,
+        .recur_arg_count = NULL
+    };
     CljList *arg_node = list ? as_list(list->rest) : NULL; // skip 'recur' symbol
     for (int i = 0; arg_node && i < 16; i++) {
         ID arg = arg_node->first;
@@ -1418,63 +1400,6 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
         return RETAIN(quoted_expr);
     }
 
-    if (op_sym == SYM_AST) {
-        // Get first argument: (ast form) -> form is at index 1 (after operator)
-        CljList *rest = as_list(LIST_REST(list));
-        ID form = rest ? LIST_FIRST(rest) : NULL;
-        if (!form) {
-            // Return "nil" as string
-            return AUTORELEASE((ID)make_string("nil"));
-        }
-        
-        // If form is a symbol, try to resolve it to get the function
-        ID resolved = NULL;
-        if (TAG(form) == CLJ_SYMBOL && !IS_KEYWORD(form)) {
-            if (env) {
-                resolved = map_get(env, form, NOT_FOUND);
-                if (resolved == NOT_FOUND) {
-                    resolved = NULL;
-                }
-            }
-            if (!resolved && st) {
-                resolved = ns_resolve(st, as_symbol(form));
-            }
-        }
-        
-        // If resolved to a function, return its full definition AST: (fn [params*] body)
-        if (resolved && TAG(resolved) == CLJ_CLOSURE) {
-            CljFunction *fn = as_function(resolved);
-            if (fn && fn->body) {
-                // Construct (fn [params] body) AST: (fn . ([params] . (body . nil)))
-                CljList *body_list = make_list(fn->body, NULL);
-                if (!body_list) {
-                    throw_oom();
-                    return NULL;
-                }
-                CljList *params_body_list = make_list(fn->params ? (ID)fn->params : NULL, body_list);
-                if (!params_body_list) {
-                    RELEASE((CljObject*)body_list);
-                    throw_oom();
-                    return NULL;
-                }
-                CljList *fn_list = make_list((ID)SYM_FN, params_body_list);
-                if (!fn_list) {
-                    RELEASE((CljObject*)params_body_list);
-                    throw_oom();
-                    return NULL;
-                }
-                
-                ID args[] = { (ID)fn_list };
-                CljString *result = native_str(args, 1);
-                RELEASE((CljObject*)fn_list);
-                return AUTORELEASE((ID)result);
-            }
-        }
-        
-        // Otherwise, convert the form to string as-is (no evaluation)
-        ID args[] = { form };
-        return AUTORELEASE(native_str(args, 1));
-    }
 
     if (op_sym == SYM_RECUR) {
         return eval_handle_recur(list, ctx);
@@ -1770,7 +1695,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     if (original_op && TAG(original_op) == CLJ_SYMBOL) {
         original_op_sym = as_symbol(original_op);
     }
-    if (original_op_sym && is_special_form(original_op_sym)) {
+    if (original_op_sym && is_special_symbol(original_op_sym)) {
         CljMap *special_form_env = closure_env ? closure_env : env;
         ID special_result = eval_special_form_dispatch(list, special_form_env, ctx_st, ctx, original_op_sym);
         return special_result; // NULL is valid (nil)
@@ -1882,7 +1807,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op && TAG(original_op) == CLJ_SYMBOL) {
         original_op_sym = as_symbol(original_op);
     }
-    if (original_op_sym && is_special_form(original_op_sym)) {
+    if (original_op_sym && is_special_symbol(original_op_sym)) {
         ID special_result = eval_special_form_dispatch(list, env, st, ctx, original_op_sym);
         return special_result; // NULL is valid (nil)
     }
@@ -2056,7 +1981,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Use the interned symbol if available, otherwise fall back to original
     CljSymbol *return_symbol = sym_after ? sym_after : (qualified_symbol ? qualified_symbol : as_symbol(symbol));
 
-    // Apply metadata to value (only in DEBUG builds for memory efficiency)
+    // Apply metadata to value
     // In Clojure, metadata from ^#^{...} (def ...) is applied to the value
 #ifdef ENABLE_META
     // Try to get metadata from the def form (list object)
@@ -2248,73 +2173,60 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     return fn;
 }
 
-// Helper: Check if symbol is a special form or builtin (fast pointer comparison)
-// Check if symbol is a special form (not a builtin function)
-static bool is_special_form(CljSymbol *symbol) {
+// Check if symbol is a special form (if, let, defn, etc.)
+// Uses compact array-based lookup for smaller code size
+static inline bool is_special_symbol(CljSymbol *symbol) {
     if (!symbol) return false;
-
-    // Common special forms
-    if (symbol == SYM_IF) return true;
-    if (symbol == SYM_LET) return true;
-    if (symbol == SYM_DEFN) return true;
-    if (symbol == SYM_DEF) return true;
-    if (symbol == SYM_FN) return true;
-    if (symbol == SYM_DO) return true;
-    if (symbol == SYM_COND) return true;
-    if (symbol == SYM_WHEN) return true;
-    if (symbol == SYM_WHILE) return true;
-    if (symbol == SYM_QUOTE) return true;
-    if (symbol == SYM_AST) return true;
-    if (symbol == SYM_RECUR) return true;
-    if (symbol == SYM_AND) return true;
-    if (symbol == SYM_OR) return true;
-    if (symbol == SYM_NS) return true;
-    if (symbol == SYM_TRY) return true;
-    if (symbol == SYM_CATCH) return true;
-    if (symbol == SYM_THROW) return true;
-    if (symbol == SYM_FINALLY) return true;
-    if (symbol == SYM_VAR) return true;
-    if (symbol == SYM_LOOP) return true;
-    if (symbol == SYM_GO) return true;
-    if (symbol == SYM_TIME) return true;
-
-    return false;
+    return (symbol == SYM_IF ||
+            symbol == SYM_LET ||
+            symbol == SYM_DEFN ||
+            symbol == SYM_DEF ||
+            symbol == SYM_FN ||
+            symbol == SYM_DO ||
+            symbol == SYM_COND ||
+            symbol == SYM_WHEN ||
+            symbol == SYM_WHILE ||
+            symbol == SYM_QUOTE ||
+            symbol == SYM_RECUR ||
+            symbol == SYM_AND ||
+            symbol == SYM_OR ||
+            symbol == SYM_NS ||
+            symbol == SYM_TRY ||
+            symbol == SYM_CATCH ||
+            symbol == SYM_THROW ||
+            symbol == SYM_FINALLY ||
+            symbol == SYM_VAR ||
+            symbol == SYM_LOOP ||
+            symbol == SYM_GO ||
+            symbol == SYM_TIME ||
+            symbol == SYM_SOURCE);
 }
 
-static bool is_special_form_or_builtin(CljSymbol *symbol) {
+// Check if symbol is a builtin function (+, -, *, /, etc.)
+// Uses compact array-based lookup for smaller code size
+static inline bool is_builtin_function(CljSymbol *symbol) {
     if (!symbol) return false;
-
-    // Check special forms first
-    if (is_special_form(symbol)) return true;
-
-    // Most frequently used symbols first (arithmetic operators)
-    if (symbol == SYM_PLUS) return true;
-    if (symbol == SYM_MINUS) return true;
-    if (symbol == SYM_MULTIPLY) return true;
-    if (symbol == SYM_DIVIDE) return true;
-
-    // Comparison operators
-    if (symbol == SYM_EQUALS) return true;
-    if (symbol == SYM_LT) return true;
-    if (symbol == SYM_GT) return true;
-    if (symbol == SYM_LE) return true;
-    if (symbol == SYM_GE) return true;
-
-    // Builtin functions
-    if (symbol == SYM_PRINT) return true;
-    if (symbol == SYM_STR) return true;
-    if (symbol == SYM_NTH) return true;
-    if (symbol == SYM_FIRST) return true;
-    if (symbol == SYM_REST) return true;
-    if (symbol == SYM_COUNT) return true;
-    if (symbol == SYM_CONS) return true;
-    if (symbol == SYM_SEQ) return true;
-    if (symbol == SYM_NEXT) return true;
-    if (symbol == SYM_FOR) return true;
-    if (symbol == SYM_DOSEQ) return true;
-    if (symbol == SYM_DOTIMES) return true;
-
-    return false;
+    return (symbol == SYM_PLUS ||
+            symbol == SYM_MINUS ||
+            symbol == SYM_MULTIPLY ||
+            symbol == SYM_DIVIDE ||
+            symbol == SYM_EQUALS ||
+            symbol == SYM_LT ||
+            symbol == SYM_GT ||
+            symbol == SYM_LE ||
+            symbol == SYM_GE ||
+            symbol == SYM_PRINT ||
+            symbol == SYM_STR ||
+            symbol == SYM_NTH ||
+            symbol == SYM_FIRST ||
+            symbol == SYM_REST ||
+            symbol == SYM_COUNT ||
+            symbol == SYM_CONS ||
+            symbol == SYM_SEQ ||
+            symbol == SYM_NEXT ||
+            symbol == SYM_FOR ||
+            symbol == SYM_DOSEQ ||
+            symbol == SYM_DOTIMES);
 }
 
 ID eval_symbol(CljSymbol *symbol, EvalState *st) {
@@ -2437,10 +2349,10 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return NULL;
     }
 
-    // OPTIMIZATION: Check special forms FIRST (fast pointer comparison)
-    // Special forms return themselves, but builtin functions need to be resolved from namespace
-    if (is_special_form(symbol)) {
-        return symbol;  // Special forms return themselves
+    // Check special forms first - they return themselves
+    // Builtin functions need to be resolved from namespace
+    if (is_special_symbol(symbol)) {
+        return symbol;
     }
 
     // For builtin functions, resolve from namespace to get the actual function object
@@ -2455,11 +2367,9 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return value;
     }
 
-    // If not found in namespace but is a builtin, it might not be registered yet
-    // Check if it's a builtin function (not a special form)
-    if (is_special_form_or_builtin(symbol) && !is_special_form(symbol)) {
-        // Builtin function not found in namespace - this shouldn't happen
-        // but return the symbol as fallback (will be handled by eval_list)
+    // If not found in namespace but is a builtin, return symbol as fallback
+    // (will be handled by eval_list)
+    if (is_builtin_function(symbol)) {
         return symbol;
     }
 
@@ -2768,7 +2678,12 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CljList *let_env_stack = make_list((ID)let_env, parent_stack);
 
     // Create EvalContext before processing bindings
-    EvalContext let_ctx = init_let_context(ctx, let_env_stack, st);
+    EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
+    let_ctx.env_stack = let_env_stack;
+    let_ctx.env = (CljMap*)LIST_FIRST(let_env_stack);
+    if (!let_ctx.st) {
+        let_ctx.st = st;
+    }
 
     // Process bindings sequentially (each binding can reference previous ones)
     for (int i = 0; i < binding_count; i += 2) {
@@ -2891,13 +2806,13 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
 
-#if defined(DEBUG) && defined(ENABLE_META)
+#ifdef ENABLE_META
     // Capture user-provided metadata once for later use (symbol or list)
     ID form_meta = meta_get((CljObject*)name_sym);
     if (!form_meta) {
         form_meta = meta_get((CljObject*)list);
     }
-#endif // DEBUG && ENABLE_META
+#endif // ENABLE_META
     
     // Get parameter vector (second element after defn)
     rest_obj = rest->rest;
@@ -3110,9 +3025,9 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         }
         ns_define(st->current_ns, qualified_name_sym ? (ID)qualified_name_sym : name_sym, (ID)native_func_obj);
 
-        // Apply metadata to native function (only in DEBUG builds for memory efficiency)
+        // Apply metadata to native function
         // Merge user metadata (from ^#^{...}) with standard metadata (:name, :ns)
-#if defined(DEBUG) && defined(ENABLE_META)
+#ifdef ENABLE_META
         // Build standard metadata (:name, :ns)
         CljMap *standard_meta = make_map(4);
         
@@ -3138,7 +3053,8 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
                             : standard_meta;
         
         meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
-#endif // DEBUG && ENABLE_META
+        RELEASE(standard_meta);
+#endif // ENABLE_META
 
         free_obj_array(params, params_stack);
         return name_sym;  // defn returns the symbol
@@ -3234,8 +3150,8 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         func->name = strdup(sym->cname);
     }
 
-    // Apply metadata to function (only in DEBUG builds for memory efficiency)
-#if defined(DEBUG) && defined(ENABLE_META)
+    // Apply metadata to function
+#ifdef ENABLE_META
     // Build standard metadata (:name, :ns) - same as for native functions
     CljMap *standard_meta = make_map(4);
     
@@ -3262,7 +3178,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     
     meta_set((CljObject*)fn_obj, (CljObject*)merged_meta);
     RELEASE(standard_meta);
-#endif // DEBUG && ENABLE_META
+#endif // ENABLE_META
 
     // Register function in namespace (after creation for recursive calls)
     // CRITICAL: Namespace mappings now use fully qualified symbols as keys
@@ -3371,8 +3287,7 @@ static ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, c
         // to search through the entire environment stack (for nested let blocks)
         if (!resolved_value && ctx && ctx->env_stack) {
             EvalState *eval_st = get_eval_state(ctx, st);
-            CljMap *fallback_env = env_stack_head(ctx->env_stack);
-            ID resolved_id = resolve_symbol_in_env(ctx->env_stack, fallback_env, expr, eval_st);
+            ID resolved_id = resolve_symbol_in_env(ctx->env_stack, env, expr, eval_st);
             if (resolved_id && TAG(resolved_id) != CLJ_SYMBOL) {
                 resolved_value = resolved_id;
             }

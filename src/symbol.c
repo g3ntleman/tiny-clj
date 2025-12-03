@@ -27,7 +27,9 @@ CljSymbol *SYM_QUOTE = NULL;
 CljSymbol *SYM_QUASIQUOTE = NULL;
 CljSymbol *SYM_UNQUOTE = NULL;
 CljSymbol *SYM_SPLICE_UNQUOTE = NULL;
-CljSymbol *SYM_AST = NULL;
+CljSymbol *SYM_SOURCE = NULL;
+static CljSymbol *SYM_SOURCE_NATIVE = NULL;
+static CljSymbol *SYM_SQRT_NATIVE = NULL;
 CljSymbol *SYM_DO = NULL;
 CljSymbol *SYM_LOOP = NULL;
 CljSymbol *SYM_RECUR = NULL;
@@ -90,14 +92,22 @@ CljSymbol *SYM_KW_REFER = NULL;
 // Global symbols for namespace names (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
 CljSymbol *SYM_CLOJURE_STRING = NULL;
+CljSymbol *SYM_CLOJURE_REPL = NULL;
 CljSymbol *SYM_CLOJURE_LANG = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
 
 // Macro to reduce boilerplate for static symbol declarations (DRY principle)
+// Note: For symbols that need to be extern (used in other files), use DEFINE_EXTERN_SYMBOL instead
 #define DEFINE_STATIC_SYMBOL(var_name, symbol_name) \
     static struct { CljSymbol sym; } var_name = { \
+        .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = symbol_name } \
+    }
+
+// Macro for non-static (extern) symbols that are statically initialized (compile-time, not dynamically allocated)
+#define DEFINE_EXTERN_SYMBOL(var_name, symbol_name) \
+    StaticSymbolData var_name = { \
         .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = symbol_name } \
     }
 
@@ -113,14 +123,19 @@ DEFINE_STATIC_SYMBOL(sym_let_data, "let");
 DEFINE_STATIC_SYMBOL(sym_fn_data, "fn");
 DEFINE_STATIC_SYMBOL(sym_def_data, "def");
 DEFINE_STATIC_SYMBOL(sym_defn_data, "defn");
-DEFINE_STATIC_SYMBOL(sym_deref_data, "deref");
+DEFINE_EXTERN_SYMBOL(sym_deref_data, "deref");
 DEFINE_STATIC_SYMBOL(sym_nil_data, "nil");
 DEFINE_STATIC_SYMBOL(sym_quote_data, "quote");
 DEFINE_STATIC_SYMBOL(sym_quasiquote_data, "quasiquote");
 DEFINE_STATIC_SYMBOL(sym_unquote_data, "unquote");
 DEFINE_STATIC_SYMBOL(sym_splice_unquote_data, "splice-unquote");
-DEFINE_STATIC_SYMBOL(sym_ast_data, "ast");
-DEFINE_STATIC_SYMBOL(sym_do_data, "do");
+// Extern symbol structs for native functions (compile-time initialization, statically allocated)
+// These are extern so they can be used in builtins.c's native function table
+DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
+DEFINE_EXTERN_SYMBOL(sym_source_data, "source");
+DEFINE_EXTERN_SYMBOL(sym_meta_data, "meta");
+DEFINE_EXTERN_SYMBOL(sym_do_data, "do");
+DEFINE_EXTERN_SYMBOL(sym_reduce_data, "reduce");
 DEFINE_STATIC_SYMBOL(sym_loop_data, "loop");
 DEFINE_STATIC_SYMBOL(sym_recur_data, "recur");
 DEFINE_STATIC_SYMBOL(sym_throw_data, "throw");
@@ -130,53 +145,100 @@ DEFINE_STATIC_SYMBOL(sym_ns_data, "ns");
 DEFINE_STATIC_SYMBOL(sym_time_data, "time");
 DEFINE_STATIC_SYMBOL(sym_go_data, "go");
 
-// Static symbol structs for built-in functions (compile-time initialization)
-DEFINE_STATIC_SYMBOL(sym_plus_data, "+");
-DEFINE_STATIC_SYMBOL(sym_minus_data, "-");
-DEFINE_STATIC_SYMBOL(sym_multiply_data, "*");
-DEFINE_STATIC_SYMBOL(sym_divide_data, "/");
-DEFINE_STATIC_SYMBOL(sym_equals_data, "=");
-DEFINE_STATIC_SYMBOL(sym_lt_data, "<");
-DEFINE_STATIC_SYMBOL(sym_gt_data, ">");
-DEFINE_STATIC_SYMBOL(sym_le_data, "<=");
-DEFINE_STATIC_SYMBOL(sym_ge_data, ">=");
-DEFINE_STATIC_SYMBOL(sym_println_data, "println");
-DEFINE_STATIC_SYMBOL(sym_print_data, "print");
-DEFINE_STATIC_SYMBOL(sym_str_data, "str");
-DEFINE_STATIC_SYMBOL(sym_conj_data, "conj");
-DEFINE_STATIC_SYMBOL(sym_nth_data, "nth");
-DEFINE_STATIC_SYMBOL(sym_first_data, "first");
-DEFINE_STATIC_SYMBOL(sym_rest_data, "rest");
-DEFINE_STATIC_SYMBOL(sym_count_data, "count");
+// Extern symbol structs for native functions (compile-time initialization, statically allocated)
+// These are extern so they can be used in builtins.c's native function table
+DEFINE_EXTERN_SYMBOL(sym_plus_data, "+");
+DEFINE_EXTERN_SYMBOL(sym_minus_data, "-");
+DEFINE_EXTERN_SYMBOL(sym_multiply_data, "*");
+DEFINE_EXTERN_SYMBOL(sym_divide_data, "/");
+DEFINE_EXTERN_SYMBOL(sym_equals_data, "=");
+DEFINE_EXTERN_SYMBOL(sym_lt_data, "<");
+DEFINE_EXTERN_SYMBOL(sym_gt_data, ">");
+DEFINE_EXTERN_SYMBOL(sym_le_data, "<=");
+DEFINE_EXTERN_SYMBOL(sym_ge_data, ">=");
+DEFINE_EXTERN_SYMBOL(sym_println_data, "println");
+DEFINE_EXTERN_SYMBOL(sym_print_data, "print");
+DEFINE_EXTERN_SYMBOL(sym_str_data, "str");
+DEFINE_EXTERN_SYMBOL(sym_conj_data, "conj");
+DEFINE_EXTERN_SYMBOL(sym_nth_data, "nth");
+DEFINE_EXTERN_SYMBOL(sym_first_data, "first");
+DEFINE_EXTERN_SYMBOL(sym_rest_data, "rest");
+DEFINE_EXTERN_SYMBOL(sym_count_data, "count");
 
-// Static symbol structs for additional symbols (compile-time initialization)
-DEFINE_STATIC_SYMBOL(sym_cons_data, "cons");
-DEFINE_STATIC_SYMBOL(sym_seq_data, "seq");
-DEFINE_STATIC_SYMBOL(sym_next_data, "next");
-DEFINE_STATIC_SYMBOL(sym_list_data, "list");
+// Extern symbol structs for native functions (compile-time initialization, statically allocated)
+// These are extern so they can be used in builtins.c's native function table
+DEFINE_EXTERN_SYMBOL(sym_cons_data, "cons");
+DEFINE_EXTERN_SYMBOL(sym_seq_data, "seq");
+DEFINE_EXTERN_SYMBOL(sym_next_data, "next");
+DEFINE_EXTERN_SYMBOL(sym_list_data, "list");
 DEFINE_STATIC_SYMBOL(sym_and_data, "and");
 DEFINE_STATIC_SYMBOL(sym_or_data, "or");
 DEFINE_STATIC_SYMBOL(sym_for_data, "for");
 DEFINE_STATIC_SYMBOL(sym_doseq_data, "doseq");
 DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
 
-// Non-static symbol structs for clojure.string native functions (compile-time initialization)
-// These are non-static so they can be used in builtins.c's native function table
-StaticSymbolData sym_trim_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "trim" }
-};
-StaticSymbolData sym_upper_case_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "upper-case" }
-};
-StaticSymbolData sym_lower_case_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "lower-case" }
-};
-StaticSymbolData sym_last_index_of_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "last-index-of" }
-};
-StaticSymbolData sym_string_reverse_data = {
-    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = "reverse" }
-};
+// Extern symbol structs for clojure.string native functions (compile-time initialization, statically allocated)
+// These are extern so they can be used in builtins.c's native function table
+DEFINE_EXTERN_SYMBOL(sym_trim_data, "trim");
+DEFINE_EXTERN_SYMBOL(sym_upper_case_data, "upper-case");
+DEFINE_EXTERN_SYMBOL(sym_lower_case_data, "lower-case");
+DEFINE_EXTERN_SYMBOL(sym_last_index_of_data, "last-index-of");
+DEFINE_EXTERN_SYMBOL(sym_string_reverse_data, "reverse");
+
+// Extern symbol structs for clojure.core native functions (compile-time initialization, statically allocated)
+// These are extern so they can be used in builtins.c's native function table
+DEFINE_EXTERN_SYMBOL(sym_mod_data, "mod");
+DEFINE_EXTERN_SYMBOL(sym_quot_data, "quot");
+DEFINE_EXTERN_SYMBOL(sym_bit_shift_left_data, "bit-shift-left");
+DEFINE_EXTERN_SYMBOL(sym_range_data, "range");
+DEFINE_EXTERN_SYMBOL(sym_repeat_data, "repeat");
+DEFINE_EXTERN_SYMBOL(sym_math_sqrt_data, "Math/sqrt");
+DEFINE_EXTERN_SYMBOL(sym_sqrt_data, "sqrt");
+DEFINE_EXTERN_SYMBOL(sym_format_data, "format");
+DEFINE_EXTERN_SYMBOL(sym_subs_data, "subs");
+DEFINE_EXTERN_SYMBOL(sym_symbol_data, "symbol");
+DEFINE_EXTERN_SYMBOL(sym_type_data, "type");
+DEFINE_EXTERN_SYMBOL(sym_array_map_data, "array-map");
+DEFINE_EXTERN_SYMBOL(sym_vector_data, "vector");
+DEFINE_EXTERN_SYMBOL(sym_vec_data, "vec");
+DEFINE_EXTERN_SYMBOL(sym_peek_data, "peek");
+DEFINE_EXTERN_SYMBOL(sym_pop_data, "pop");
+DEFINE_EXTERN_SYMBOL(sym_subvec_data, "subvec");
+DEFINE_EXTERN_SYMBOL(sym_reverse_data, "reverse");
+DEFINE_EXTERN_SYMBOL(sym_assoc_data, "assoc");
+DEFINE_EXTERN_SYMBOL(sym_dissoc_data, "dissoc");
+DEFINE_EXTERN_SYMBOL(sym_transient_data, "transient");
+DEFINE_EXTERN_SYMBOL(sym_persistent_bang_data, "persistent!");
+DEFINE_EXTERN_SYMBOL(sym_conj_bang_data, "conj!");
+DEFINE_EXTERN_SYMBOL(sym_get_data, "get");
+DEFINE_EXTERN_SYMBOL(sym_keys_data, "keys");
+DEFINE_EXTERN_SYMBOL(sym_vals_data, "vals");
+DEFINE_EXTERN_SYMBOL(sym_nilp_data, "nil?");
+DEFINE_EXTERN_SYMBOL(sym_not_eq_data, "not=");
+DEFINE_EXTERN_SYMBOL(sym_identical_data, "identical?");
+DEFINE_EXTERN_SYMBOL(sym_vector_p_data, "vector?");
+DEFINE_EXTERN_SYMBOL(sym_map_p_data, "map?");
+DEFINE_EXTERN_SYMBOL(sym_sleep_data, "sleep");
+DEFINE_EXTERN_SYMBOL(sym_ns_map_data, "ns-map");
+DEFINE_EXTERN_SYMBOL(sym_find_ns_data, "find-ns");
+DEFINE_EXTERN_SYMBOL(sym_pr_data, "pr");
+DEFINE_EXTERN_SYMBOL(sym_prn_data, "prn");
+DEFINE_EXTERN_SYMBOL(sym_byte_array_data, "byte-array");
+DEFINE_EXTERN_SYMBOL(sym_aget_data, "aget");
+DEFINE_EXTERN_SYMBOL(sym_aset_data, "aset");
+DEFINE_EXTERN_SYMBOL(sym_alength_data, "alength");
+DEFINE_EXTERN_SYMBOL(sym_aclone_data, "aclone");
+DEFINE_EXTERN_SYMBOL(sym_run_next_task_data, "run-next-task");
+DEFINE_EXTERN_SYMBOL(sym_schedule_data, "schedule");
+DEFINE_EXTERN_SYMBOL(sym_schedule_periodic_data, "schedule-periodic");
+DEFINE_EXTERN_SYMBOL(sym_cancel_timer_data, "cancel-timer");
+DEFINE_EXTERN_SYMBOL(sym_atom_data, "atom");
+DEFINE_EXTERN_SYMBOL(sym_reset_bang_data, "reset!");
+DEFINE_EXTERN_SYMBOL(sym_swap_bang_data, "swap!");
+#ifndef ESP32_BUILD
+DEFINE_EXTERN_SYMBOL(sym_slurp_data, "slurp");
+DEFINE_EXTERN_SYMBOL(sym_spit_data, "spit");
+#endif
 
 // Static symbol structs for keywords (compile-time initialization)
 DEFINE_STATIC_SYMBOL(sym_kw_line_data, ":line");
@@ -227,7 +289,6 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_QUASIQUOTE, sym_quasiquote_data);
     INIT_SYMBOL(SYM_UNQUOTE, sym_unquote_data);
     INIT_SYMBOL(SYM_SPLICE_UNQUOTE, sym_splice_unquote_data);
-    INIT_SYMBOL(SYM_AST, sym_ast_data);
     INIT_SYMBOL(SYM_DO, sym_do_data);
     INIT_SYMBOL(SYM_LOOP, sym_loop_data);
     INIT_SYMBOL(SYM_RECUR, sym_recur_data);
@@ -288,7 +349,15 @@ void init_special_symbols() {
 
     // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
     SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
+    
+    // Initialize clojure.repl namespace symbol (needed for REPL helper functions)
+    SYM_CLOJURE_REPL = intern_symbol_global("clojure.repl");
 
+    // Global symbols for namespace names (for fast comparison)
+    // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
+    SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
+    SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
+    
     // clojure.string native function symbols - with namespace
     INIT_SYMBOL_NS(SYM_TRIM, sym_trim_data, SYM_CLOJURE_STRING);
 
@@ -299,6 +368,15 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_LAST_INDEX_OF, sym_last_index_of_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_STRING_REVERSE, sym_string_reverse_data, SYM_CLOJURE_STRING);
+    
+    // Special form symbol for `source` (unqualified)
+    INIT_SYMBOL(SYM_SOURCE, sym_source_special_data);
+    
+    // clojure.repl native function symbol (namespaced) for source
+    INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
+    
+    // clojure.core sqrt native function symbol
+    INIT_SYMBOL_NS(SYM_SQRT_NATIVE, sym_sqrt_data, SYM_CLOJURE_CORE);
 
     // Additional symbols - static structs with symbol table registration
     INIT_SYMBOL(SYM_CONS, sym_cons_data);
@@ -343,11 +421,6 @@ void init_special_symbols() {
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);
 
-    // Global symbols for namespace names (for fast comparison)
-    // Use intern_symbol_global to ensure same symbol is returned by intern_symbol
-    SYM_CLOJURE_CORE = intern_symbol_global("clojure.core");
-    SYM_CLOJURE_LANG = intern_symbol_global("clojure.lang");
-    
     // Clean up macros to avoid namespace pollution
     #undef INIT_SYMBOL
     #undef INIT_SYMBOL_NS

@@ -2,6 +2,17 @@
 
 ## Latest Updates (Recent Commits)
 
+### clojure.repl Functions Available (Latest)
+- **REPL Helper Functions**: Complete implementation of clojure.repl namespace utilities
+  - `doc` - Print documentation for a var (with metadata support)
+  - `source` - Print source code for a function (native implementation)
+  - `dir` - List all public functions in a namespace
+  - `find-doc` - Search documentation across namespaces (simplified)
+  - `pst` - Print stack trace (simplified, full implementation planned)
+  - All functions available via `(require 'clojure.repl)` or qualified calls
+  - Clojure-compatible API and behavior
+  - Note: `ast` function has been removed (was previously available for debugging)
+
 ### Metadata & clojure.string Support (2025-11-27)
 - **Metadata Support**: Full metadata support in Desktop-REPL (DEBUG builds)
   - Metadata maps with :name, :ns, :doc, :line, :file, etc.

@@ -2,12 +2,37 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Tiny-CLJ REPL (run only)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/tiny-clj-repl",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "build-repl",
+      "console": "integratedTerminal",
+      "stopOnEntry": false,
+      "MIMode": "lldb",
+      "miDebuggerPath": "/usr/bin/lldb",
+      "setupCommands": [
+        {
+          "description": "Disable debugger features - run REPL as normal program",
+          "text": "settings set target.process.stop-on-sharedlibrary-events false",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Continue immediately - don't stop at entry",
+          "text": "process continue",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
       "name": "Tiny-CLJ REPL",
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/build/tiny-clj-repl",
       "cwd": "${workspaceFolder}",
-      "args": ["--repl"],
+      "args": [],
       "preLaunchTask": "build-repl"
     },
     {

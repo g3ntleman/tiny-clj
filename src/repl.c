@@ -616,6 +616,13 @@ int main(int argc, char **argv) {
         if (!no_core) {
             // Load clojure.core in autorelease pool to handle AUTORELEASE calls
             load_clojure_core(st);
+            // Load clojure.repl namespace for REPL helper functions
+            load_clojure_repl(st);
+            // Require clojure.repl with :refer :all to make functions available in user namespace
+            // This ensures functions like doc, source, dir, etc. are available without namespace prefix
+            evalstate_set_ns(st, "user");
+            const char *require_code = "(require '[clojure.repl :refer :all])";
+            eval_multiform_string(require_code, st);
         }
     });
 
