@@ -1255,9 +1255,11 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
 
     // Associate keyword with true
-    // map_assoc always returns a new map (COW disabled), so we need to use the result
+    // map_assoc may return same map (COW in-place) or new map (COW copy)
     CljMap *updated_map = map_assoc(meta_map, keyword_meta, (ID)clj_true);
-    RELEASE(meta_map);  // Release original map (map_assoc creates new one)
+    if (updated_map != meta_map) {
+        RELEASE(meta_map);  // Release original map only if new map was created
+    }
     meta_map = updated_map;
     RELEASE(keyword_meta);
 

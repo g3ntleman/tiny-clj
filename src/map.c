@@ -89,8 +89,7 @@ ID map_get(CljMap *map, ID key, ID not_found) {
 
 
 
-/** Associate key->value - always returns a new map (COW disabled).
- * To re-enable COW: Change #if 0 to #if 1 below to enable RC=1 hot-path.
+/** Associate key->value with COW: RC=1 → in-place mutation, RC>1 → COW.
  */
 CljMap* map_assoc(CljMap* map, ID key, ID value) {
   if (map && TAG(map) == CLJ_MAP) {
@@ -98,9 +97,8 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
     CljObject *value_obj = (CljObject*)value;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
 
-#if 0
-  // COW HOT-PATH: RC=1 → in-place mutation (disabled by default)
-  // To re-enable COW: Change #if 0 to #if 1 above
+#if 1
+  // COW HOT-PATH: RC=1 → in-place mutation
   if (map->base.rc == 1) {
     // Check if key exists - update value (linear search necessary)
     // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
@@ -139,7 +137,7 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
   }
 #endif
 
-  // Always create a new map (COW disabled)
+  // COW path: RC>1 or capacity insufficient → create new map
   int new_capacity = map->capacity;
   if (map->count >= map->capacity) {
     new_capacity = map->capacity * 2;

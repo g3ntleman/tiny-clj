@@ -63,7 +63,9 @@ TEST(test_meta_function_set_and_get) {
     
     CljMap *new_meta = map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value);
     TEST_ASSERT_NOT_NULL(new_meta);
-    RELEASE(meta_map);
+    if (new_meta != meta_map) {
+        RELEASE(meta_map);  // Only release if new map was created (COW)
+    }
     meta_map = new_meta;
     
     // Set metadata
@@ -129,7 +131,9 @@ TEST(test_meta_returns_metadata) {
     
     CljMap *new_meta = map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value);
     TEST_ASSERT_NOT_NULL(new_meta);
-    RELEASE(meta_map);
+    if (new_meta != meta_map) {
+        RELEASE(meta_map);  // Only release if new map was created (COW)
+    }
     meta_map = new_meta;
     
     // Set metadata
@@ -178,7 +182,9 @@ TEST(test_meta_resolves_symbols) {
     
     CljMap *new_meta = map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value);
     TEST_ASSERT_NOT_NULL(new_meta);
-    RELEASE(meta_map);
+    if (new_meta != meta_map) {
+        RELEASE(meta_map);  // Only release if new map was created (COW)
+    }
     meta_map = new_meta;
     
     // Set metadata on the value
