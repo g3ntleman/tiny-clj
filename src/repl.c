@@ -102,10 +102,9 @@ static void print_result(CljObject *v) {
         printf("nil\n");
         return;
     }
-    const char *s = pr_str(v);
+    CljString *s = pr_str(v);
     if (s) {
-        printf("%s\n", s);
-        free((void*)s);
+        printf("%s\n", string_data(s));
     }
 }
 
@@ -235,24 +234,22 @@ bool history_save_to_file(CljVector *vec, const char *path) {
     if (persistent_vec != (CljObject*)vec) RELEASE(persistent_vec);
     if (!trimmed) return false;
 
-    const char *s = pr_str(trimmed);
+    CljString *s = pr_str(trimmed);
     RELEASE(trimmed);
     if (!s) return false;
 
     FILE *fp = fopen(path, "w");
     if (!fp) {
-        free((void*)s);
         return false;
     }
 
-    size_t len = strlen(s);
-    size_t n = fwrite(s, 1, len, fp);
+    size_t len = string_length(s);
+    size_t n = fwrite(string_data(s), 1, len, fp);
     if (n > 0) fputc('\n', fp);
     fflush(fp);
     // Don't use fsync - it can block and cause REPL to hang
     // fsync(fileno(fp));
     int close_result = fclose(fp);
-    free((void*)s);
 
     return (n == len && close_result == 0);
 }

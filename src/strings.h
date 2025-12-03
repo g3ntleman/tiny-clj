@@ -70,11 +70,12 @@ static inline const char* clj_string_data(CljString *str) {
 }
 
 // String representation functions
-/** Return newly allocated C-string representation (caller frees). */
-const char* pr_str(CljObject *v);
-const char* print_str(CljObject *v);
-const char* to_cstring(CljObject *v);
+/** Return CljString representation (caller must release). */
+CljString* pr_str(ID v);
+CljString* print_str(ID v);
+CljString* to_string(ID v);
 /** Internal function with escape_strings parameter. */
-const char* to_cstring_with_escape(CljObject *v, bool escape_strings);
+CljString* to_string_with_escape(ID v, bool escape_strings);
+
 
 #endif // TINY_CLJ_STRINGS_H

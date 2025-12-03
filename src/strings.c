@@ -645,35 +645,29 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
     }
 }
 
-const char* to_cstring(CljObject *v) {
-    return to_cstring_with_escape(v, false);
+CljString* to_string(ID v) {
+    return to_string_with_escape(v, false);
 }
 
-const char* to_cstring_with_escape(CljObject *v, bool escape_strings) {
-    // Calculate length and build string using helper functions
-    size_t len = to_string_calc_length(v, escape_strings);
-    char *result = ALLOC(char, len + 1);
-    if (!result) {
-        return strdup("#<error>");
-    }
+CljString* to_string_with_escape(ID v, bool escape_strings) {
+    size_t len = to_string_calc_length((CljObject*)v, escape_strings);
+    CljString *result = AUTORELEASE(make_string_buffer(len));
 
     size_t offset = 0;
-    to_string_build_string(v, result, &offset, escape_strings);
-    result[offset] = '\0';
+    to_string_build_string((CljObject*)v, result->data, &offset, escape_strings);
+    result->data[offset] = '\0';
+    result->length = (uint16_t)offset;
 
-        return result;
-    }
-
-const char* pr_str(CljObject *v) {
-    // pr_str adds quotes around strings and escapes quotes inside
-    // For all types: use to_cstring_with_escape with escape_strings=true
-    return to_cstring_with_escape(v, true);
+    return result;
 }
 
-const char* print_str(CljObject *v) {
-    // print_str does NOT add quotes around strings (unlike pr_str)
-    // For all types including strings: use to_cstring_with_escape with escape_strings=false
-    return to_cstring_with_escape(v, false);
+CljString* pr_str(ID v) {
+    return to_string_with_escape(v, true);
 }
+
+CljString* print_str(ID v) {
+    return to_string_with_escape(v, false);
+}
+
 
 

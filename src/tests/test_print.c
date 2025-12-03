@@ -18,24 +18,21 @@
 TEST(test_print_str_basic_functionality) {
     WITH_AUTORELEASE_POOL({
         // Test: print_str() with nil should return "nil"
-        char *result = print_str(NULL);
+        CljString *result = print_str(NULL);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("nil", result);
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("nil", string_data(result));
         
         // Test: print_str() with fixnum should return number without quotes
         CljValue num = fixnum(42);
         result = print_str((CljObject*)num);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("42", result);
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("42", string_data(result));
         
         // Test: print_str() with string should return string WITHOUT quotes
         CljObject *str = make_string("Hello");
         result = print_str(str);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("Hello", result);  // No quotes!
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("Hello", string_data(result));  // No quotes!
         RELEASE(str);
     });
 }
@@ -48,16 +45,14 @@ TEST(test_print_str_vs_pr_str_difference) {
         CljObject *str = make_string("Hello");
         
         // print_str() should return string without quotes
-        char *print_result = print_str(str);
+        CljString *print_result = print_str(str);
         TEST_ASSERT_NOT_NULL(print_result);
-        TEST_ASSERT_EQUAL_STRING("Hello", print_result);
-        free(print_result);
+        TEST_ASSERT_EQUAL_STRING("Hello", string_data(print_result));
         
         // pr_str() should return string with quotes
-        char *pr_result = pr_str(str);
+        CljString *pr_result = pr_str(str);
         TEST_ASSERT_NOT_NULL(pr_result);
-        TEST_ASSERT_EQUAL_STRING("\"Hello\"", pr_result);
-        free(pr_result);
+        TEST_ASSERT_EQUAL_STRING("\"Hello\"", string_data(pr_result));
         
         RELEASE(str);
     });
@@ -75,13 +70,13 @@ TEST(test_pr_str_with_containers) {
         vec = vector_conj(vec, (ID)str1);
         vec = vector_conj(vec, (ID)str2);
         
-        const char *result = pr_str((CljObject*)vec);
+        CljString *result = pr_str((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(result);
         // Should be ["\"hello\"" "\"world\""] or ["hello" "world"] depending on format
         // The strings inside should have quotes
-        TEST_ASSERT_TRUE(strstr(result, "\"hello\"") != NULL || strstr(result, "hello") != NULL);
-        TEST_ASSERT_TRUE(strstr(result, "\"world\"") != NULL || strstr(result, "world") != NULL);
-        free((void*)result);
+        TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
+        TEST_ASSERT_TRUE(strstr(string_data(result), "\"world\"") != NULL || strstr(string_data(result), "world") != NULL);
+        RELEASE((CljObject*)result);
         RELEASE((CljObject*)vec);
         RELEASE(str1);
         RELEASE(str2);
@@ -95,8 +90,7 @@ TEST(test_pr_str_with_containers) {
         result = pr_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
         // The string values should have quotes
-        TEST_ASSERT_TRUE(strstr(result, "\"hello\"") != NULL || strstr(result, "hello") != NULL);
-        free((void*)result);
+        TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
         RELEASE((CljObject*)map);
         RELEASE(key_str);
         RELEASE(val_str);
@@ -111,8 +105,7 @@ TEST(test_pr_str_with_containers) {
         result = pr_str((CljObject*)outer_vec);
         TEST_ASSERT_NOT_NULL(result);
         // Nested string should have quotes
-        TEST_ASSERT_TRUE(strstr(result, "\"nested\"") != NULL || strstr(result, "nested") != NULL);
-        free((void*)result);
+        TEST_ASSERT_TRUE(strstr(string_data(result), "\"nested\"") != NULL || strstr(string_data(result), "nested") != NULL);
         RELEASE((CljObject*)outer_vec);
         RELEASE((CljObject*)inner_vec);
         RELEASE(nested_str);
@@ -131,10 +124,9 @@ TEST(test_print_str_different_types) {
         vec_data->data[1] = (CljObject*)fixnum(2);
         vec_data->count = 2;
         
-        char *result = print_str(vec);
+        CljString *result = print_str(vec);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("[1 2]", result);
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("[1 2]", string_data(result));
         RELEASE(vec);
         
         // Test with map (simplified - just test basic functionality)
@@ -145,8 +137,7 @@ TEST(test_print_str_different_types) {
         result = print_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
         // Map format may vary, just check it's not empty
-        TEST_ASSERT_TRUE(strlen(result) > 0);
-        free(result);
+        TEST_ASSERT_TRUE(string_length(result) > 0);
         RELEASE((CljObject*)map);
     });
 }
@@ -158,24 +149,21 @@ TEST(test_print_str_special_values) {
     WITH_AUTORELEASE_POOL({
         // Test with boolean true
         CljValue true_val = make_special(SPECIAL_TRUE);
-        char *result = print_str((CljObject*)true_val);
+        CljString *result = print_str((CljObject*)true_val);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("true", result);
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("true", string_data(result));
         
         // Test with boolean false
         CljValue false_val = make_special(SPECIAL_FALSE);
         result = print_str((CljObject*)false_val);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("false", result);
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("false", string_data(result));
         
         // Test with character
         CljValue char_val = character('A');
         result = print_str((CljObject*)char_val);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_STRING("A", result);  // Characters print without backslash
-        free(result);
+        TEST_ASSERT_EQUAL_STRING("A", string_data(result));  // Characters print without backslash
     });
 }
 

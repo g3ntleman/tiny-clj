@@ -45,6 +45,7 @@ extern CljSymbol *SYM_QUOTE;
 extern CljSymbol *SYM_QUASIQUOTE;
 extern CljSymbol *SYM_UNQUOTE;
 extern CljSymbol *SYM_SPLICE_UNQUOTE;
+extern CljSymbol *SYM_AST;
 extern CljSymbol *SYM_DO;
 extern CljSymbol *SYM_LOOP;
 extern CljSymbol *SYM_RECUR;

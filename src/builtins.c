@@ -34,6 +34,7 @@
 #include "parser.h"
 #include "meta.h"
 #include "function_call.h"
+#include "debug.h"  // For print_ast
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -1327,9 +1328,10 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
     // Print all arguments separated by spaces
     for (unsigned int i = 0; i < argc; i++) {
         if (args[i]) {
-            const char *str = readable ? pr_str((CljObject*)args[i]) : print_str((CljObject*)args[i]);
-            printf("%s", str);
-            free((char*)str);
+            CljString *str = readable ? pr_str((CljObject*)args[i]) : print_str((CljObject*)args[i]);
+            if (str) {
+                printf("%s", string_data(str));
+            }
 
             // Add space between arguments (except for the last one)
             if (i < argc - 1) {
@@ -1374,23 +1376,6 @@ ID native_prn(ID *args, unsigned int argc) {
 // ============================================================================
 // HELPER FUNCTIONS (DRY Principle)
 // ============================================================================
-
-// Helper function to validate numeric arguments (used by bitwise/div helpers)
-static bool validate_numeric_args(ID *args, int argc) {
-    for (int i = 0; i < argc; i++) {
-        if (!args[i]) {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0,
-                "Cannot use nil as a Number");
-            return false;
-        }
-        uint16_t tag = TAG(args[i]);
-        if (tag != CLJ_INT && tag != CLJ_FLOAT) {
-            throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-            return false;
-        }
-    }
-    return true;
-}
 
 // Helper function to apply saturation to fixed-point values
 static int32_t apply_saturation(int32_t acc_fixed) {
@@ -1453,9 +1438,10 @@ ID native_str(ID *args, unsigned int argc) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
             total_len += string_length(args[i]);
         } else {
-            const char *s = to_cstring(args[i]);
-            total_len += strlen(s);
-            free((char*)s);
+            CljString *s = to_string(args[i]);
+            if (s) {
+                total_len += string_length(s);
+            }
         }
     }
 
@@ -1468,9 +1454,10 @@ ID native_str(ID *args, unsigned int argc) {
         if (args[i] && TAG(args[i]) == CLJ_STRING) {
             strcat(buffer, string_data(args[i]));
         } else {
-            const char *s = to_cstring(args[i]);
-            strcat(buffer, s);
-            free((char*)s);
+            CljString *s = to_string(args[i]);
+            if (s) {
+                strcat(buffer, string_data(s));
+            }
         }
     }
 
@@ -1884,6 +1871,49 @@ ID native_find_ns(ID *args, unsigned int argc) {
 }
 
 // ============================================================================
+// DEBUG FUNCTIONS (REPL utilities)
+// ============================================================================
+
+/**
+ * @brief Print AST structure for debugging (similar to Clojure's macroexpand-1)
+ * @param args Array of arguments (expects 1 argument: the form to inspect)
+ * @param argc Number of arguments (must be 1)
+ * @return nil (prints AST to stdout)
+ * 
+ * Usage: (ast form) or (ast (read-string "(+ 1 2)"))
+ * 
+ * This function is useful for inspecting the AST structure of Clojure forms,
+ * similar to clojure.repl functions in standard Clojure.
+ */
+ID native_ast(ID *args, unsigned int argc) {
+    if (argc != 1) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "ast expects exactly 1 argument, got %u", argc);
+        return NULL;
+    }
+    
+    ID form = args[0];
+    if (!form) {
+        printf("nil\n");
+        return NULL;
+    }
+    
+    // Use print_ast to convert form to string representation
+    const char *ast_str = print_ast((CljObject*)form);
+    if (ast_str) {
+        printf("%s\n", ast_str);
+        // print_ast uses ALLOC, so we need to free the string
+        // Note: print_ast returns a raw char* allocated with ALLOC, not a CljObject
+        // We need to use free() directly, not DEALLOC (which expects CljObject*)
+        free((void*)ast_str);
+    } else {
+        printf("#<error: failed to print AST>\n");
+    }
+    
+    return NULL;
+}
+
+// ============================================================================
 // Native function lookup table for stubs
 // Uses CljSymbol* for efficient pointer comparison (symbols are interned)
 // Statically initialized at compile-time using static symbol data structures
@@ -2038,19 +2068,19 @@ ID native_symbol(ID *args, unsigned int argc) {
 ID native_slurp(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "slurp")) return NULL;
 
-    // Convert argument to C-string
-    const char *filename_str = to_cstring(args[0]);
-    if (!filename_str) {
+    // Convert argument to CljString, then get C-string data
+    CljString *filename_str_obj = to_string(args[0]);
+    if (!filename_str_obj) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "slurp requires a string or symbol argument",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
+    const char *filename_str = string_data(filename_str_obj);
 
     // Use file_slurp utility function
     // file_slurp throws exceptions on errors (file not found, etc.)
     CljString *result = file_slurp(filename_str);
-    free((void*)filename_str);
 
     // file_slurp throws exception on errors, so if we get here, result is valid
     return result ? AUTORELEASE(result) : NULL;
@@ -2229,7 +2259,6 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     bool refer_all = false;
 
     CljVector *vec = NULL;
-    bool ns_name_allocated = false;
 
     // Handle simple Symbol case: (require 'namespace)
     if (spec && TAG(spec) == CLJ_SYMBOL) {
@@ -2254,13 +2283,12 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             }
             ns_name = ns_sym->cname;
         } else {
-            const char *ns_str = to_cstring(ns_obj);
-            if (!ns_str) {
+            CljString *ns_str_obj = to_string(ns_obj);
+            if (!ns_str_obj) {
                 RELEASE(ns_obj);
                 return false;
             }
-            ns_name = ns_str;
-            ns_name_allocated = true;
+            ns_name = string_data(ns_str_obj);
         }
         // ns_obj lifetime is tied to vector - no release needed
 
@@ -2361,9 +2389,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
             } else if (refer_syms) {
                 copy_symbols_to_namespace(existing, st->current_ns, refer_syms);
             }
-            if (ns_name_allocated) {
-                free((char*)ns_name);
-            }
+            // ns_name is from autoreleased CljString - no free needed
             return true;
         }
         // Fall through to load Clojure code even though namespace exists
@@ -2372,9 +2398,6 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     // Convert namespace to relative path
     char *rel = namespace_to_relpath(ns_name);
     if (!rel) {
-        if (ns_name_allocated) {
-            free((char*)ns_name);
-        }
         return false;
     }
 
@@ -2389,9 +2412,6 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
 
     if (!source) {
         free(rel);
-        if (ns_name_allocated) {
-            free((char*)ns_name);
-        }
         return false;
     }
 
@@ -2407,9 +2427,6 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (!target_ns) {
         free(source);
         free(rel);
-        if (ns_name_allocated) {
-            free((char*)ns_name);
-        }
         return false;
     }
 
@@ -2433,9 +2450,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         CljNamespace *loaded_ns = ns_find(ns_name);
         if (!loaded_ns) {
             // Namespace wasn't even created - this is a real failure
-            if (ns_name_allocated) {
-                free((char*)ns_name);
-            }
+            // ns_name is from autoreleased CljString - no free needed
             return false;
         }
         // Namespace exists but some expressions failed - continue anyway
@@ -2459,9 +2474,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     }
 
     // Free ns_name if it was allocated
-    if (ns_name_allocated) {
-        free((char*)ns_name);
-    }
+    // ns_name is from autoreleased CljString - no free needed
 
     return true;
 }
@@ -2510,24 +2523,25 @@ ID native_require(ID *args, unsigned int argc) {
 ID native_spit(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "spit")) return NULL;
 
-    // Convert first argument (filename) to C-string
-    const char *filename_str = to_cstring(args[0]);
-    if (!filename_str) {
+    // Convert first argument (filename) to CljString, then get C-string data
+    CljString *filename_str_obj = to_string(args[0]);
+    if (!filename_str_obj) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "spit requires a string or symbol as first argument (filename)",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
+    const char *filename_str = string_data(filename_str_obj);
 
-    // Convert second argument (content) to C-string
-    const char *content_str = to_cstring(args[1]);
-    if (!content_str) {
-        free((void*)filename_str);
+    // Convert second argument (content) to CljString, then get C-string data
+    CljString *content_str_obj = to_string(args[1]);
+    if (!content_str_obj) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "spit requires a string or symbol as second argument (content)",
                        __FILE__, __LINE__, 0);
         return NULL;
     }
+    const char *content_str = string_data(content_str_obj);
 
     // Open file for writing (overwrites if exists - Clojure-compatible)
     FILE *fp = fopen(filename_str, "w");
@@ -2535,15 +2549,13 @@ ID native_spit(ID *args, unsigned int argc) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg),
                 "Cannot open file '%s' for writing: %s", filename_str, strerror(errno));
-        free((void*)filename_str);
-        free((void*)content_str);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
         return NULL;
     }
 
     // Write content to file
-    size_t content_len = strlen(content_str);
+    size_t content_len = string_length(content_str_obj);
     size_t bytes_written = fwrite(content_str, 1, content_len, fp);
 
     // Check for write errors
@@ -2551,8 +2563,6 @@ ID native_spit(ID *args, unsigned int argc) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg),
                 "Error writing to file '%s': %s", filename_str, strerror(errno));
-        free((void*)filename_str);
-        free((void*)content_str);
         fclose(fp);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
@@ -2564,8 +2574,6 @@ ID native_spit(ID *args, unsigned int argc) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg),
                 "Error flushing file '%s': %s", filename_str, strerror(errno));
-        free((void*)filename_str);
-        free((void*)content_str);
         fclose(fp);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                        __FILE__, __LINE__, 0);
@@ -2573,8 +2581,6 @@ ID native_spit(ID *args, unsigned int argc) {
     }
 
     // Cleanup
-    free((void*)filename_str);
-    free((void*)content_str);
     fclose(fp);
 
     // Clojure-compatible: spit returns nil
@@ -3230,26 +3236,24 @@ ID native_format(ID *args, unsigned int argc) {
                         CljString *str = (TAG(args[arg_idx]) == CLJ_STRING) ? (CljString*)args[arg_idx] : NULL;
                         if (!str) {
                             // Try to convert to string
-                            const char *str_repr = print_str(args[arg_idx]);
+                            CljString *str_repr = print_str(args[arg_idx]);
                             if (str_repr) {
-                                int n = snprintf(out, remaining, "%s", str_repr);
+                                int n = snprintf(out, remaining, "%s", string_data(str_repr));
                                 if (n < 0 || n >= (int)remaining) {
                                     size_t used = out - buffer;
                                     buf_size *= 2;
                                     buffer = realloc(buffer, buf_size);
                                     if (!buffer) {
-                                        free((void*)str_repr);
                                         throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
                                                        __FILE__, __LINE__, 0);
                                         return NULL;
                                     }
                                     out = buffer + used;
                                     remaining = buf_size - used - 1;
-                                    n = snprintf(out, remaining, "%s", str_repr);
+                                    n = snprintf(out, remaining, "%s", string_data(str_repr));
                                 }
                                 out += n;
                                 remaining -= n;
-                                free((void*)str_repr);
                             }
                         } else {
                             int n = snprintf(out, remaining, "%s", str->data);
@@ -4103,6 +4107,8 @@ void register_builtins() {
     // Namespace introspection functions
     register_builtin_in_core("ns-map", native_ns_map);
     register_builtin_in_core("find-ns", native_find_ns);
+
+    // Note: ast is now a special form (not a builtin) so it receives unevaluated arguments
 
     // Note: def and ns are special forms (not builtins) because they require non-evaluated arguments
     // They are handled directly in eval_list() via eval_def() and eval_ns()

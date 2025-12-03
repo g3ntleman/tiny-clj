@@ -35,7 +35,7 @@
 #include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
-#include "strings.h"
+#include "strings.h"  // For pr_str
 
 // Use C stack for recur state - each function call has its own stack frame
 // No global variables needed - local variables in eval_function_call are automatically isolated
@@ -1204,6 +1204,38 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         return return_value;
     }
     
+    // OPTIMIZATION: Check resolve_cache FIRST for namespace symbols (before environment lookup)
+    // Symbols from namespace are stable (syntactic scope) and can be safely cached
+    // This allows recursive calls to benefit from cache hits even when symbol is in environment
+    // CRITICAL: Only check cache for unqualified symbols (qualified symbols are already namespace-specific)
+    if (g_runtime.resolve_cache) {
+        CljSymbol *op_sym = as_symbol(op);
+        if (op_sym && !op_sym->ns_name && op_sym->cname && ctx_st && ctx_st->current_ns && ctx_st->current_ns->name) {
+            // Try qualified symbol first (e.g., "user/fib")
+            CljSymbol *qualified_sym = intern_symbol(ctx_st->current_ns->name, op_sym->cname);
+            if (qualified_sym) {
+                ID cached = map_get(g_runtime.resolve_cache, qualified_sym, NULL);
+                if (cached) {
+                    RELEASE(owned_env_stack);
+                    return cached;
+                }
+            }
+            // Fallback: try unqualified symbol
+            ID cached = map_get(g_runtime.resolve_cache, op, NULL);
+            if (cached) {
+                RELEASE(owned_env_stack);
+                return cached;
+            }
+        } else {
+            // Qualified symbol or no namespace - try direct cache lookup
+            ID cached = map_get(g_runtime.resolve_cache, op, NULL);
+            if (cached) {
+                RELEASE(owned_env_stack);
+                return cached;
+            }
+        }
+    }
+
     // Use central symbol resolution function (DRY: handles environment stack)
     CljList *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
     if (resolve_stack) {
@@ -1211,6 +1243,9 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         ID resolved_id = resolve_symbol_in_env(resolve_stack, fallback_env, op, ctx_st);
         if (resolved_id) {
             resolved = resolved_id;
+            // CRITICAL: Don't cache Environment-lookups - they are context-specific
+            // Caching Environment-lookups can cause wrong values to be returned
+            // in different contexts (e.g., let blocks with same symbol names)
         }
     }
 
@@ -1219,19 +1254,27 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         return resolved;
     }
 
-    // OPTIMIZATION: Check resolve_cache before calling eval_symbol
-    // This avoids the overhead of eval_symbol + first check in ns_resolve
-    // for repeated function calls
-    if (g_runtime.resolve_cache) {
-        ID cached = map_get(g_runtime.resolve_cache, op, NULL);
-        if (cached) {
-            RELEASE(owned_env_stack);
-            return cached;
-        }
-    }
-
     // Fallback to global namespace (will populate cache if found)
     resolved = eval_symbol(as_symbol(op), st);
+    
+    // OPTIMIZATION: If resolved from namespace, cache qualified symbol for future lookups
+    // Symbols from namespace are stable (syntactic scope) and can be safely cached
+    if (resolved && st && st->current_ns && st->current_ns->name && g_runtime.resolve_cache) {
+        CljSymbol *op_sym = as_symbol(op);
+        if (op_sym && !op_sym->ns_name && op_sym->cname && TAG(resolved) != CLJ_SYMBOL) {
+            // Create qualified symbol (e.g., "fib" -> "user/fib")
+            CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, op_sym->cname);
+            if (qualified_sym && qualified_sym != op) {
+                // Cache the qualified symbol -> resolved value mapping
+                ID updated_cache = map_assoc(g_runtime.resolve_cache, qualified_sym, resolved);
+                ASSIGN(g_runtime.resolve_cache, updated_cache);
+                // Also cache unqualified symbol for backward compatibility
+                ID updated_cache2 = map_assoc(g_runtime.resolve_cache, op, resolved);
+                ASSIGN(g_runtime.resolve_cache, updated_cache2);
+            }
+        }
+    }
+    
     RELEASE(owned_env_stack);
     return resolved ? resolved : op;
 }
@@ -1359,6 +1402,21 @@ static ID eval_special_form_dispatch(CljList *list, CljMap *env, EvalState *st,
         ID quoted_expr = list_get_element(list, 1);
         if (!quoted_expr) return NULL;
         return RETAIN(quoted_expr);
+    }
+
+    if (op_sym == SYM_AST) {
+        // Get first argument: (ast form) -> form is at index 1 (after operator)
+        CljList *rest = as_list(LIST_REST(list));
+        ID form = rest ? LIST_FIRST(rest) : NULL;
+        if (!form) {
+            // Return "nil" as string
+            return AUTORELEASE((ID)make_string("nil"));
+        }
+        
+        // Simply convert the AST to string as-is (no special handling, no new lists)
+        // Use native_str to get CljString directly (simpler than to_cstring + make_string)
+        ID args[] = { form };
+        return AUTORELEASE(native_str(args, 1));
     }
 
     if (op_sym == SYM_RECUR) {
@@ -1730,7 +1788,44 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Resolve operator symbol
     // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
-    op = resolve_list_operator(op, env, st, ctx);
+    ID resolved_op = resolve_list_operator(op, env, st, ctx);
+    
+    // OPTIMIZATION: AST rewriting - replace unqualified symbol with qualified symbol in-place
+    // This allows cache hits for recursive calls by using qualified symbols in the AST
+    // CRITICAL: Only rewrite ONCE per symbol occurrence - check if already qualified (!ns_name)
+    // This ensures rewriting happens only 2x for fib (once per call site), not on every recursive call
+    if (resolved_op && TAG(resolved_op) != CLJ_SYMBOL && op && TAG(op) == CLJ_SYMBOL) {
+        CljSymbol *original_sym = as_symbol(op);
+        // Only rewrite if symbol is NOT already qualified (prevents repeated rewriting)
+        if (original_sym && !original_sym->ns_name && original_sym->cname && 
+            st && st->current_ns && st->current_ns->name) {
+            // CRITICAL: Check if symbol was resolved from current namespace (not clojure.core)
+            // Only qualify symbols that are actually defined in current namespace
+            // This ensures we don't qualify clojure.core builtins like "=" or "empty?"
+            CljSymbol *qualified_sym_check = intern_symbol(st->current_ns->name, original_sym->cname);
+            if (qualified_sym_check && st->current_ns->mappings) {
+                // Use NOT_FOUND sentinel to distinguish "key not found" from "value is nil"
+                ID check_resolved = map_get(st->current_ns->mappings, qualified_sym_check, NOT_FOUND);
+                // Only rewrite if symbol exists in current namespace mappings AND matches resolved_op
+                // This ensures we only qualify symbols that were actually resolved from current namespace
+                if (check_resolved != NOT_FOUND && check_resolved == resolved_op) {
+                    CljList *list_obj = as_list((ID)list);
+                    if (list_obj) {
+                        // Create qualified symbol (e.g., "fib" -> "user/fib")
+                        CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, original_sym->cname);
+                        if (qualified_sym && qualified_sym != (CljSymbol*)op) {
+                            // Rewrite AST in-place: replace first element with qualified symbol
+                            // This happens only ONCE per symbol occurrence (subsequent calls see qualified symbol)
+                            RELEASE((CljObject*)list_obj->first);  // Release old symbol
+                            list_obj->first = RETAIN((CljObject*)qualified_sym);  // Retain new symbol
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    op = resolved_op;
 
     // OPTIMIZED: Dispatch to helper functions for common patterns
     // Tier 1: Arithmetic operations (most frequent)
@@ -2134,6 +2229,7 @@ static bool is_special_form(CljSymbol *symbol) {
     if (symbol == SYM_WHEN) return true;
     if (symbol == SYM_WHILE) return true;
     if (symbol == SYM_QUOTE) return true;
+    if (symbol == SYM_AST) return true;
     if (symbol == SYM_RECUR) return true;
     if (symbol == SYM_AND) return true;
     if (symbol == SYM_OR) return true;

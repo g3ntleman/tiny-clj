@@ -118,12 +118,11 @@ TEST(test_history_load_current_format) {
   TEST_ASSERT_NOT_NULL(elem0);
   TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(elem0));
 
-  // Verify string content using to_cstring
-  const char *str_content = to_cstring((CljObject*)elem0);
+  // Verify string content using to_string
+  CljString *str_content = to_string(elem0);
   RELEASE(elem0);
   TEST_ASSERT_NOT_NULL(str_content);
-  TEST_ASSERT_EQUAL_STRING("(list 1 1.0 \"1\" \"one\")", str_content);
-  free((void *)str_content);
+  TEST_ASSERT_EQUAL_STRING("(list 1 1.0 \"1\" \"one\")", string_data(str_content));
 
   // Cleanup
   RELEASE(loaded);
@@ -210,19 +209,18 @@ TEST(test_pr_str_escapes_quotes) {
   TEST_ASSERT_NOT_NULL(str);
 
   // Test pr_str on the string
-  const char *result = pr_str(str);
+  CljString *result = pr_str(str);
   TEST_ASSERT_NOT_NULL(result);
 
   // Verify that quotes are escaped
   // Expected: "(list 1 1.0 \"1\" \"one\")"
   // The quotes inside should be escaped as \"
-  TEST_ASSERT_EQUAL_STRING("\"(list 1 1.0 \\\"1\\\" \\\"one\\\")\"", result);
+  TEST_ASSERT_EQUAL_STRING("\"(list 1 1.0 \\\"1\\\" \\\"one\\\")\"", string_data(result));
 
   // Verify that the result contains escaped quotes
-  const char *escaped_quote = strstr(result, "\\\"");
+  const char *escaped_quote = strstr(string_data(result), "\\\"");
   TEST_ASSERT_NOT_NULL(escaped_quote);
 
-  free((void *)result);
   RELEASE(str);
 }
 

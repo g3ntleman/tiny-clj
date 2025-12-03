@@ -72,11 +72,10 @@ TEST(test_symbol_string_representation) {
     TEST_ASSERT_NOT_NULL_MESSAGE(sym, "Symbol should be created");
 
     // String representation should work
-    const char *str = to_cstring((CljObject*)sym);
+    CljString *str = to_string((ID)sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(str, "String representation should work");
-    TEST_ASSERT_TRUE_MESSAGE(strstr(str, "my-ns") != NULL && strstr(str, "my-var") != NULL,
+    TEST_ASSERT_TRUE_MESSAGE(strstr(string_data(str), "my-ns") != NULL && strstr(string_data(str), "my-var") != NULL,
                              "String representation should contain namespace and name");
-    free((void*)str);
 
     RELEASE((CljObject*)sym);
     RELEASE((CljObject*)ns_name_sym);

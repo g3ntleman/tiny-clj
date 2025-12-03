@@ -293,10 +293,9 @@ TEST(test_atom_reference_sharing) {
 
 TEST(test_atom_print_representation) {
     CljAtom *atom = make_atom(fixnum(42));
-    const char *str = pr_str((CljObject*)atom);
+    CljString *str = pr_str((ID)atom);
     TEST_ASSERT_NOT_NULL(str);
-    TEST_ASSERT_NOT_NULL(strstr(str, "Atom"));
-    free((void*)str);
+    TEST_ASSERT_NOT_NULL(strstr(string_data(str), "Atom"));
     RELEASE((CljObject*)atom);
 }
 

@@ -1548,7 +1548,7 @@ TEST(test_vector_set_nth_edge_cases) {
     TEST_ASSERT_NULL(result2);
     
     // Test 3: NULL value should throw exception
-    CljObject *exception_caught = NULL;
+    CLJException *exception_caught = NULL;
     TRY {
         vector_set_nth(vec, 0, NULL);
     } CATCH(ex) {
@@ -1568,7 +1568,7 @@ TEST(test_vector_set_nth_persistent_throws_exception) {
     vec = vector_conj(vec, fixnum(30));
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     
-    CljObject *exception_caught = NULL;
+    CLJException *exception_caught = NULL;
     TRY {
         vector_set_nth(vec, 0, fixnum(100));
     } CATCH(ex) {

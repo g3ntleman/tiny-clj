@@ -38,7 +38,13 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
             CljSymbol *sym = as_symbol((ID)v);
             if (sym && sym->cname) {
                 // Output symbol name as Clojure code (no "SYM:" prefix)
-                *offset += snprintf(buf + *offset, buf_size - *offset, "%s", sym->cname);
+                // If symbol has namespace, output as "namespace/name"
+                if (sym->ns_name && sym->ns_name->cname) {
+                    *offset += snprintf(buf + *offset, buf_size - *offset, "%s/%s", 
+                                       sym->ns_name->cname, sym->cname);
+                } else {
+                    *offset += snprintf(buf + *offset, buf_size - *offset, "%s", sym->cname);
+                }
             } else {
                 *offset += snprintf(buf + *offset, buf_size - *offset, "?");
             }

@@ -1548,6 +1548,60 @@ TEST(test_get_nil_key_from_map_literal) {
     });
 }
 
+// Test: NOT_FOUND sentinel correctly distinguishes "key not found" from "key found with nil value"
+// This is critical for namespace lookups where nil is a valid value
+TEST(test_map_get_not_found_sentinel_edge_cases) {
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = (CljMap*)AUTORELEASE((CljObject*)map_empty());
+        CljSymbol *key1 = (CljSymbol*)AUTORELEASE((CljObject*)intern_symbol_global("key1"));
+        CljSymbol *key2 = (CljSymbol*)AUTORELEASE((CljObject*)intern_symbol_global("key2"));
+        CljSymbol *key3 = (CljSymbol*)AUTORELEASE((CljObject*)intern_symbol_global("key3"));
+        CljSymbol *missing_key = (CljSymbol*)AUTORELEASE((CljObject*)intern_symbol_global("missing"));
+        
+        // Add key1 with non-nil value
+        CljObject *value1 = (CljObject*)fixnum(42);
+        map = map_assoc(map, (ID)key1, (ID)value1);
+        
+        // Add key2 with nil value (NULL)
+        map = map_assoc(map, (ID)key2, NULL);
+        
+        // Add key3 with another non-nil value
+        CljObject *value3 = (CljObject*)fixnum(100);
+        map = map_assoc(map, (ID)key3, (ID)value3);
+        
+        TEST_ASSERT_EQUAL_INT(3, map->count);
+        
+        // Test 1: Key exists with non-nil value -> should return value, not NOT_FOUND
+        ID result1 = map_get(map, (ID)key1, NOT_FOUND);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result1, "key1 should return value, not NOT_FOUND");
+        TEST_ASSERT_TRUE_MESSAGE(result1 != NOT_FOUND, "key1 should not return NOT_FOUND");
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result1), "key1 value should be fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum(result1), "key1 value should be 42");
+        
+        // Test 2: Key exists with nil value -> should return NULL, not NOT_FOUND
+        ID result2 = map_get(map, (ID)key2, NOT_FOUND);
+        TEST_ASSERT_NULL_MESSAGE(result2, "key2 should return NULL (nil value), not NOT_FOUND");
+        TEST_ASSERT_TRUE_MESSAGE(result2 != NOT_FOUND, "key2 should not return NOT_FOUND (key exists)");
+        
+        // Test 3: Key exists with non-nil value -> should return value, not NOT_FOUND
+        ID result3 = map_get(map, (ID)key3, NOT_FOUND);
+        TEST_ASSERT_NOT_NULL_MESSAGE(result3, "key3 should return value, not NOT_FOUND");
+        TEST_ASSERT_TRUE_MESSAGE(result3 != NOT_FOUND, "key3 should not return NOT_FOUND");
+        TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result3), "key3 value should be fixnum");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(100, as_fixnum(result3), "key3 value should be 100");
+        
+        // Test 4: Key does not exist -> should return NOT_FOUND, not NULL
+        ID result4 = map_get(map, (ID)missing_key, NOT_FOUND);
+        TEST_ASSERT_TRUE_MESSAGE(result4 == NOT_FOUND, "missing_key should return NOT_FOUND, not NULL");
+        
+        // Test 5: Verify map_contains correctly identifies all cases
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, (ID)key1), "key1 should exist");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, (ID)key2), "key2 should exist (even with nil value)");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, (ID)key3), "key3 should exist");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, map_contains(map, (ID)missing_key), "missing_key should not exist");
+    });
+}
+
 // Test MAP_FOR_EACH macro - iterate over all key-value pairs
 TEST(test_map_for_each_macro) {
     CljMap *map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));

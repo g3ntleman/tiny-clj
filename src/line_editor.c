@@ -533,10 +533,9 @@ void line_editor_set_history_from_vector(LineEditor *editor, CljVector *vec) {
         nth_args[1] = fixnum(i);
         ID elem = nth2(nth_args, 2);
         if (elem && TAG(elem) == CLJ_STRING) {
-            const char *plain = to_cstring(elem);
-            if (plain) {
-                line_editor_add_to_history(editor, plain);
-                free((void*)plain);
+            CljString *plain_str = to_string((CljObject*)elem);
+            if (plain_str) {
+                line_editor_add_to_history(editor, string_data(plain_str));
             }
             RELEASE(elem);
         }

@@ -399,10 +399,9 @@ TEST(test_parse_empty_string) {
 
     // Test 5: Test to_cstring function on empty string (this should fail with NULL pointer)
     // Note: to_cstring returns const char* but allocates memory that must be freed
-    const char *str_repr = to_cstring(empty_str_result);
+    CljString *str_repr = to_string(empty_str_result);
     TEST_ASSERT_NOT_NULL(str_repr);
-    TEST_ASSERT_EQUAL_STRING("", str_repr);
-    free((char*)str_repr);
+    TEST_ASSERT_EQUAL_STRING("", string_data(str_repr));
 
     evalstate_free(eval_state);
 }
