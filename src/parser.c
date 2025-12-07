@@ -11,8 +11,9 @@
  */
 
 #include "parser.h"
-#include "function_call.h"
+#include "eval.h"
 #include "list.h"
+#include "ast.h"
 #include "vector.h"
 #include <string.h>
 #include "map.h"
@@ -26,17 +27,56 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 // Helper function for parser exceptions
 static void throw_parser_exception(const char *message, Reader *reader) {
-    throw_exception(EXCEPTION_PARSE, message, "parser", reader->line, reader->column);
+    if (reader && reader->src) {
+        enum { PREVIEW_LEN = 64 };
+        size_t start = reader->index;
+        if (start > reader->length) {
+            start = reader->length;
+        }
+        char preview[PREVIEW_LEN + 1];
+        size_t copied = 0;
+        for (size_t i = 0; i < PREVIEW_LEN && (start + i) < reader->length; i++) {
+            char c = reader->src[start + i];
+            if (c == '\n' || c == '\r') {
+                break;
+            }
+            if ((unsigned char)c < 32 || (unsigned char)c == 127) {
+                c = '?';
+            }
+            preview[copied++] = c;
+        }
+        preview[copied] = '\0';
+        const char *source_name = reader_get_source_name(reader);
+        if (!source_name || !source_name[0]) {
+            source_name = "parser";
+        }
+        throw_exception_formatted(EXCEPTION_PARSE, source_name, reader->line, reader->column,
+                                  "%s (line %d, column %d, near \"%s\")",
+                                  message, reader->line, reader->column, preview);
+    } else {
+        throw_exception(EXCEPTION_PARSE, message, "parser", reader ? reader->line : 0, reader ? reader->column : 0);
+    }
+}
+
+static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
+    enum { MSG_LEN = 256 };
+    char buffer[MSG_LEN];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    throw_parser_exception(buffer, reader);
 }
 
 // Stack-based parser constants
 #define MAX_STACK_VECTOR_SIZE 64
 #define MAX_STACK_MAP_PAIRS 32
 #define MAX_STACK_LIST_SIZE 64
-#define MAX_STACK_STRING_SIZE 256
+#define MAX_STACK_STRING_SIZE 2048
 
 /** @brief Check if character is a digit */
 static bool is_digit(char c) { return c >= '0' && c <= '9'; }
@@ -193,8 +233,10 @@ ID parse_expr(Reader *reader, EvalState *st) {
         }
         invalid_decimal[pos] = '\0';
 
-        return throw_exception_formatted(EXCEPTION_PARSE, __FILE__, __LINE__, 0,
-            "Syntax error compiling.\nUnable to resolve symbol: %s in this context", invalid_decimal);
+        throw_parser_exceptionf(reader,
+            "Syntax error compiling.\nUnable to resolve symbol: %s in this context",
+            invalid_decimal);
+        return NULL;
       }
       break;
 
@@ -257,7 +299,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       }
       if (!quoted) return NULL;
       // Create (quote <expr>) list: (quote expr)
-      return AUTORELEASE(make_list(SYM_QUOTE, make_list(quoted, NULL)));
+      return AUTORELEASE(make_ast_list(SYM_QUOTE, make_ast_list(quoted, NULL)));
 
     case '@':
       // Handle deref @x => (deref x)
@@ -272,7 +314,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
       }
       if (!atom_expr) return NULL;
       // Create (deref <expr>) list: (deref expr)
-      return AUTORELEASE(make_list(SYM_DEREF, make_list(atom_expr, NULL)));
+      return AUTORELEASE(make_ast_list(SYM_DEREF, make_ast_list(atom_expr, NULL)));
 
     case '\\':
       // Handle character literals: \a, \space, \tab, \newline, \return, etc.
@@ -342,7 +384,7 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
     if (IS_IMMEDIATE(parsed_expr)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
         result = parsed_expr;
-    } else if (parsed_expr && TAG(parsed_expr) == CLJ_LIST) {
+    } else if (parsed_expr && list_type_matches(TAG(parsed_expr))) {
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
         if (!eval_env) {
@@ -543,17 +585,17 @@ static ID parse_list(Reader *reader, EvalState *st) {
       CljList *if_expr;
       if (else_expr) {
         // (if binding then else)
-        if_expr = make_list(SYM_IF, make_list(binding, make_list(then_expr, make_list(else_expr, NULL))));
+        if_expr = make_ast_list(SYM_IF, make_ast_list(binding, make_ast_list(then_expr, make_ast_list(else_expr, NULL))));
       } else {
         // (if binding then)
-        if_expr = make_list(SYM_IF, make_list(binding, make_list(then_expr, NULL)));
+        if_expr = make_ast_list(SYM_IF, make_ast_list(binding, make_ast_list(then_expr, NULL)));
       }
 
       // Build binding vector for let: [binding test]
       ID let_binding_vec = AUTORELEASE(binding_vec);
 
       // Build (let [binding test] (if binding then else?))
-      ID expanded = AUTORELEASE(make_list(SYM_LET, make_list(let_binding_vec, make_list((ID)if_expr, NULL))));
+      ID expanded = AUTORELEASE(make_ast_list(SYM_LET, make_ast_list(let_binding_vec, make_ast_list((ID)if_expr, NULL))));
 
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
@@ -574,7 +616,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
 
   // Build list from first and rest
   // Return autoreleased object - caller can use until pool is popped
-  ID result = AUTORELEASE(make_list(first, (CljList*)rest));
+  ID result = AUTORELEASE(make_ast_list(first, (CljList*)rest));
 
   // Skip whitespace before checking for closing parenthesis
   reader_skip_all(reader);
@@ -616,14 +658,14 @@ static ID parse_list_rest(Reader *reader, EvalState *st) {
 
   // If next is ')', stop recursion early
   if (reader_peek_char(reader) == ')') {
-    return AUTORELEASE(make_list(element, NULL));
+    return AUTORELEASE(make_ast_list(element, NULL));
   }
 
   // Parse remaining elements recursively
   ID rest = parse_list_rest(reader, st);
 
   // Build list node
-  return AUTORELEASE(make_list(element, (CljList*)rest));
+  return AUTORELEASE(make_ast_list(element, (CljList*)rest));
 }
 
 /**
@@ -1131,6 +1173,7 @@ ID parse(const char *input, EvalState *st) {
 
   Reader reader;
   reader_init(&reader, input);
+  reader_set_source_name(&reader, "<string input>");
 
   // Delegate to parse_from_reader (DRY principle)
   // Don't create autorelease pool here - let caller manage memory
@@ -1186,6 +1229,8 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
  * @return Object with applied metadata (autoreleased) or NULL on error
  */
 static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID obj) {
+  (void)reader;  // Unused parameter
+  (void)st;      // Unused parameter
   if (!obj) {
     if (meta) RELEASE(meta);
     return NULL;
@@ -1193,7 +1238,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
 
   // Special handling for defn forms: set metadata on the function name symbol instead of the list
   // This ensures metadata persists even if the list object changes during evaluation
-  if (meta && TAG(obj) == CLJ_LIST) {
+  if (meta && list_type_matches(TAG(obj))) {
     CljList *list = as_list(obj);
     if (list && list->first && TAG(list->first) == CLJ_SYMBOL) {
       CljSymbol *first_sym = as_symbol(list->first);
@@ -1369,7 +1414,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
     CljSymbol *fn_sym = intern_symbol_global("fn");
     CljValue empty_vec = make_vector(0, CLJ_VECTOR);
     ID empty_list_val = NULL; // () is nil in Clojure
-    return AUTORELEASE(make_list((ID)fn_sym, make_list(empty_vec, make_list(empty_list_val, NULL))));
+    return AUTORELEASE(make_ast_list((ID)fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
 
   // Collect all % and %N references in the body to determine parameters
@@ -1389,7 +1434,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   vector_conj((CljVector*)param_vec, percent_sym);
 
   // Create (fn [%] body)
-  return AUTORELEASE(make_list((ID)fn_sym, make_list(param_vec, make_list(body, NULL))));
+  return AUTORELEASE(make_ast_list((ID)fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
 }
 
 /**

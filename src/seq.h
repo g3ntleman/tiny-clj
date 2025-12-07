@@ -11,6 +11,8 @@
 #include "object.h"
 #include <stdbool.h>
 
+struct CljMap;  // Forward declaration to avoid including map.h here
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,6 +44,11 @@ typedef struct {
             int index;           // Current character position
             int length;          // Total length
         } str;
+        struct {
+            struct CljMap *map;  // Map being iterated
+            int index;           // Current entry index
+            int count;           // Total entries
+        } map;
     } state;
     CljType seq_type;        // Type of sequence (for dispatch)
 } SeqIterator;
@@ -130,6 +137,7 @@ CljSeqIterator* make_seq(ID obj);
 ID seq_first(ID seq);
 ID seq_rest(ID seq);
 ID seq_next(ID seq);
+ID seq_next_inplace(ID seq);
 bool seq_empty(ID seq);
 int seq_count(ID obj);
 

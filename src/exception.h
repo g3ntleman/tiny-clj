@@ -248,4 +248,7 @@ extern const char *EXCEPTION_ZOMBIE_ACCESS;
 /** @brief Static exception type: IndexOutOfBoundsException */
 extern const char *EXCEPTION_INDEX_OUT_OF_BOUNDS;
 
+/** @brief Static exception type: FileNotFoundException */
+extern const char *EXCEPTION_FILE_NOT_FOUND;
+
 #endif

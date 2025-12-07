@@ -16,6 +16,7 @@
 #include "exception.h"
 #include "map.h"
 #include "list.h"
+#include "ast.h"
 #include "byte_array.h"
 #include "atom.h"
 #include "function.h"  // For CljFunction
@@ -538,23 +539,9 @@ static void release_object_deep(CljObject *v) {
     // Type-specific cleanup based on object type
     switch (v->type) {
         case CLJ_STRING:
-            {
-                if (g_debug_output_active) {
-                    printf("🔍 release_object_deep: Freeing STRING object %p\n", v);
-                }
-                // Free string data stored directly after CljObject header
-                char **str_ptr = (char**)((char*)v + sizeof(CljObject));
-                if (*str_ptr) {
-                    if (g_debug_output_active) {
-                        printf("🔍 release_object_deep: Freeing string data: '%s'\n", *str_ptr);
-                    }
-                    free(*str_ptr);
-                } else {
-                    if (g_debug_output_active) {
-                        printf("🔍 release_object_deep: String data is NULL\n");
-                    }
-                }
-            }
+            /* Strings store their data inline (flexible array member).
+             * DEALLOC(v) frees both header and characters, so nothing
+             * extra to do here. */
             break;
             
         case CLJ_SYMBOL:
@@ -627,7 +614,35 @@ static void release_object_deep(CljObject *v) {
                 RELEASE(list->rest);
             }
             break;
+
+        case CLJ_AST_NODE:
+            {
+                CljASTNode *node = as_ast_node((ID)v);
+                if (!node) {
+                    break;
+                }
+                if (g_debug_output_active) {
+                    printf("🔍 release_object_deep: Freeing AST node %p, first=%p, rest=%p, meta=%p, cache=%p\n",
+                           v, node->first, node->rest, node->metadata, node->callsite_cache);
+                }
+                RELEASE(node->first);
+                RELEASE(node->rest);
+                RELEASE(node->metadata);
+                RELEASE(node->callsite_cache);
+            }
+            break;
+
             
+        case CLJ_CALLSITE_CACHE:
+            {
+                CljCallsiteCache *cache = as_callsite_cache((ID)v);
+                if (!cache) {
+                    break;
+                }
+                ASSIGN(cache->resolved, NULL);
+            }
+            break;
+
         case CLJ_FUNC:
             // Native functions are static - no cleanup needed
             break;

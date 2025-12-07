@@ -2,7 +2,7 @@
 #include "runtime.h"
 #include "symbol.h"
 #include "namespace.h"
-#include "function_call.h"
+#include "eval.h"
 #include "reader.h"
 #include "list.h"
 #include "map.h"
@@ -230,7 +230,7 @@ TEST(test_inc_symbol_pointer_consistency) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
-    if (form && TAG(form) == CLJ_LIST) {
+    if (form && list_type_matches(TAG(form))) {
         CljList *list = as_list(form);
         CljObject *inc_sym_in_form = (CljObject*)list_nth(list, 1);
         
@@ -784,10 +784,17 @@ TEST(test_require_quoted_symbol) {
 TEST(test_require_nonexistent_file) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    // Expect an exception (eval_string may return NULL)
-    CljObject *res = eval_string("(require 'does.not.exist)", g_test_eval_state);
-    (void)res; // Just ensure no crash; NULL indicates failure as expected
+    bool exception_caught = false;
+    TRY {
+        (void)eval_string("(require 'does.not.exist)", g_test_eval_state);
+        TEST_FAIL_MESSAGE("require should throw when namespace file does not exist");
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING("FileNotFoundException", ex->type);
+    } END_TRY
 
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Missing namespace require must throw FileNotFoundException");
 }
 
 TEST(test_require_nested_path) {
@@ -1433,21 +1440,10 @@ TEST(test_ambiguous_symbol_with_clojure_core) {
     ID map_conflict = map_get(conflict_ns->mappings, map_conflict_qualified, NULL);
     TEST_ASSERT_NOT_NULL(map_conflict);
 
-    // Try to use unqualified symbol - should throw error (ambiguous: exists in clojure.core AND test.conflict)
-    bool exception_caught = false;
-    TRY {
-        CljObject *result = eval_string("map", g_test_eval_state);
-        (void)result;
-    } CATCH(ex) {
-        exception_caught = true;
-        TEST_ASSERT_NOT_NULL(ex);
-        TEST_ASSERT_NOT_NULL(ex->message);
-        // Verify error message contains "perhaps you meant"
-        const char *msg = ex->message;
-        const char *found = strstr(msg, "perhaps you meant");
-        TEST_ASSERT_NOT_NULL_MESSAGE(found, "Error message should contain 'perhaps you meant'");
-    } END_TRY
-    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Should throw exception for ambiguous symbol");
+    // Try to use unqualified symbol - should resolve to clojure.core's map (Clojure-compatible behavior)
+    CljObject *result = eval_string("map", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(result, "map should resolve to clojure.core even if another namespace defines it");
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_FUNC || TAG(result) == CLJ_CLOSURE);
 }
 
 

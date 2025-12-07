@@ -39,7 +39,7 @@ static bool is_last_in_list(CljObject *expr, CljList *list) {
 
 // Check if an expression is in tail position within a body
 bool is_tail_position(CljObject *expr, CljObject *body) {
-    if (!expr || !body || TAG(body) != CLJ_LIST) return false;
+    if (!expr || !body || !list_type_matches(TAG(body))) return false;
 
     CljList *body_list = as_list(body);
 
@@ -91,7 +91,7 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
 
 // Check if a function call is recursive
 bool is_recursive_call(CljObject *call_expr, CljObject *func_name) {
-    if (!call_expr || !func_name || TAG(call_expr) != CLJ_LIST) return false;
+    if (!call_expr || !func_name || !list_type_matches(TAG(call_expr))) return false;
     CljList *call_list = as_list(call_expr);
     CljObject *called_name = call_list->first;
     if (!called_name || TAG(called_name) != CLJ_SYMBOL) return false;
@@ -102,7 +102,7 @@ bool is_recursive_call(CljObject *call_expr, CljObject *func_name) {
 
 // Validate that all recur calls are in tail position
 void validate_recur_positions(CljObject *body, CljObject *parent_body) {
-    if (!body || TAG(body) != CLJ_LIST) return;
+    if (!body || !list_type_matches(TAG(body))) return;
     CljList *body_list = as_list(body);
     if (!body_list) return;
 
@@ -114,7 +114,7 @@ void validate_recur_positions(CljObject *body, CljObject *parent_body) {
 
     // Recursively check all elements
     CljObject *rest_obj = body_list->rest;
-    while (rest_obj && TAG(rest_obj) == CLJ_LIST) {
+    while (rest_obj && list_type_matches(TAG(rest_obj))) {
         CljList *rest = as_list(rest_obj);
         if (!rest) break;
         validate_recur_positions(rest->first, body);
@@ -129,7 +129,7 @@ static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
     CljObject *rest_obj = call_list->rest;
     CljList *new_list = (CljList*)make_list((CljObject*)SYM_RECUR, NULL);
     if (!new_list) return NULL;
-    if (rest_obj && TAG(rest_obj) == CLJ_LIST) {
+    if (rest_obj && list_type_matches(TAG(rest_obj))) {
         RETAIN(rest_obj);
         new_list->rest = rest_obj;
     }
@@ -214,7 +214,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
                                          CljObject **params, int param_count,
                                          CljObject *parent_body) {
     if (!body) return NULL;
-    if (TAG(body) != CLJ_LIST) return RETAIN(body), body;
+    if (!list_type_matches(TAG(body))) return RETAIN(body), body;
 
     CljList *body_list = as_list(body);
 

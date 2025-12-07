@@ -2,7 +2,7 @@
 ;; Provides utilities for interactive development
 
 (ns clojure.repl
-  (:require [clojure.core :refer [meta str println if-let let when empty? doseq find-ns ns-map get keys count]]
+  (:require [clojure.core :refer [meta str println if-let let when empty? doseq find-ns ns-map all-ns get keys count]]
             [clojure.string :as str]))
 
 ;; ============================================================================
@@ -12,20 +12,27 @@
 ;; doc - Print documentation for a var
 ;; Note: Requires metadata support
 ;; Format matches Clojure/JVM: 25 dashes, name, params (if available), doc, 25 dashes
+^#^{:doc "Prints documentation for x (var, function, or symbol). Uses metadata to show name, arglists, and docstring."}
 (defn doc [x]
   (if-let [m (meta x)]
     (let [name (or (get m :name) (:name m))
-          doc-str (or (get m :doc) (:doc m))
-          arglists (or (get m :arglists) (:arglists m))]
+          arglists (or (get m :arglists) (:arglists m))
+          doc-str (or (get m :doc) (:doc m))]
       (println "-------------------------")
       (when name
-        (println (str name)))
+        (let [s (str name)]
+          (when (not= s "")
+            (println s))))
       ;; Print parameter lists if available (like ([x]) or ([x y]))
       (when arglists
-        (println (str arglists)))
+        (let [s (str arglists)]
+          (when (not= s "")
+            (println s))))
       ;; Print documentation string if available
       (when doc-str
-        (println (str "  " doc-str)))
+        (let [doc-str-val (str "  " doc-str)]
+          (when (not= doc-str-val "  ")
+            (println doc-str-val))))
       (println "-------------------------")
       nil)  ; Explicitly return nil (Clojure convention for side-effect functions)
     (do
@@ -40,13 +47,9 @@
 
 ;; dir - List all public functions in a namespace
 ;; Format matches Clojure/JVM: just function names, one per line, no extra text
-(defn dir [ns-name]
-  (let [ns-obj (find-ns ns-name)
-        ns-map (if ns-obj (ns-map ns-obj) {})]
-    (if (empty? ns-map)
-      nil
-      (doseq [[k v] ns-map]
-        (println k)))))
+^#^{:doc "Prints all public vars in the namespace ns-name, one per line."}
+(defn dir [& args]
+  :native)
 
 ;; ============================================================================
 ;; Utility Functions
@@ -59,31 +62,26 @@
 ;;   3. EvalState integration: Track function calls with namespace/name info
 ;;   4. Currently only C-level stack traces available (via backtrace)
 ;; In Clojure/JVM: Prints the stack trace of the last exception (*e)
+^#^{:doc "Prints the last stack trace (placeholder implementation)."}
 (defn pst []
   (println "Stack trace not yet fully implemented"))
 
-;; find-doc - Find documentation matching a pattern (simplified)
-;; Note: Full implementation would require access to all loaded namespaces
-;; This version searches common namespaces: clojure.core, clojure.string, clojure.repl
-;; In Clojure/JVM: Searches all loaded namespaces for doc strings containing pattern
+;; find-doc - Find documentation matching a pattern across all namespaces
+^#^{:doc "Searches docstrings in all loaded namespaces for the given pattern string."}
 (defn find-doc [pattern]
   (if (nil? pattern)
     nil
     (let [pattern-str (str pattern)
           pattern-lower (str/lower-case pattern-str)
-          search-ns (fn [ns-name]
-                      (let [ns-obj (find-ns ns-name)
-                            ns-map (if ns-obj (ns-map ns-obj) {})]
-                        (if (empty? ns-map)
-                          nil
-                          (doseq [[k v] ns-map]
-                            (when-let [m (meta v)]
-                              (when-let [doc-str (:doc m)]
-                                (let [doc-lower (str/lower-case (str doc-str))]
-                                  (when (str/includes? doc-lower pattern-lower)
-                                    (doc v)))))))))]
-      (search-ns 'clojure.core)
-      (search-ns 'clojure.string)
-      (search-ns 'clojure.repl)
+          search-ns (fn [ns-obj]
+                      (let [ns-map (or (ns-map ns-obj) {})]
+                        (doseq [[_ v] ns-map]
+                          (when-let [m (meta v)]
+                            (when-let [doc-str (:doc m)]
+                              (let [doc-lower (str/lower-case (str doc-str))]
+                                (when (str/includes? doc-lower pattern-lower)
+                                  (doc v))))))))]
+      (doseq [ns-obj (all-ns)]
+        (search-ns ns-obj))
       nil)))
 

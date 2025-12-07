@@ -80,6 +80,7 @@ extern CljSymbol *SYM_STRING_REVERSE;
 extern CljSymbol *SYM_FIRST;
 extern CljSymbol *SYM_REST;
 extern CljSymbol *SYM_COUNT;
+extern CljSymbol *SYM_ALL_NS;
 
 // Additional symbols for optimization
 extern CljSymbol *SYM_CONS;
@@ -141,6 +142,7 @@ extern StaticSymbolData sym_lower_case_data;
 extern StaticSymbolData sym_last_index_of_data;
 extern StaticSymbolData sym_string_reverse_data;
 extern StaticSymbolData sym_source_data;
+extern StaticSymbolData sym_dir_data;
 extern StaticSymbolData sym_meta_data;
 extern StaticSymbolData sym_reduce_data;
 extern StaticSymbolData sym_do_data;
@@ -198,6 +200,7 @@ extern StaticSymbolData sym_map_p_data;
 extern StaticSymbolData sym_sleep_data;
 extern StaticSymbolData sym_ns_map_data;
 extern StaticSymbolData sym_find_ns_data;
+extern StaticSymbolData sym_all_ns_data;
 extern StaticSymbolData sym_pr_data;
 extern StaticSymbolData sym_prn_data;
 extern StaticSymbolData sym_byte_array_data;

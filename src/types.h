@@ -39,16 +39,18 @@ typedef enum {
     CLJ_VECTOR_TRANSIENT_WEAK = 8,
     CLJ_MAP = 10,
     CLJ_LIST = 12,
-    CLJ_SEQ = 14,         // Sequence iterator
-    CLJ_FUNC = 16,        // Native C functions
-    CLJ_CLOSURE = 18,     // Interpreted Clojure functions
-    CLJ_EXCEPTION = 20,
-    CLJ_BYTE_ARRAY = 22,  // Mutable byte array
-    CLJ_ATOM = 24,         // Mutable atom container
-    CLJ_VECTOR_TRANSIENT = 26,
-    CLJ_MAP_TRANSIENT = 28,
-    CLJ_NAMESPACE = 30,    // Namespace objects
-    CLJ_RAW_MEMORY = 32   // Raw memory allocations (ID arrays, etc.)
+    CLJ_AST_NODE = 14,
+    CLJ_CALLSITE_CACHE = 16,
+    CLJ_SEQ = 18,         // Sequence iterator
+    CLJ_FUNC = 20,        // Native C functions
+    CLJ_CLOSURE = 22,     // Interpreted Clojure functions
+    CLJ_EXCEPTION = 24,
+    CLJ_BYTE_ARRAY = 26,  // Mutable byte array
+    CLJ_ATOM = 28,         // Mutable atom container
+    CLJ_VECTOR_TRANSIENT = 30,
+    CLJ_MAP_TRANSIENT = 32,
+    CLJ_NAMESPACE = 34,    // Namespace objects
+    CLJ_RAW_MEMORY = 36   // Raw memory allocations (ID arrays, etc.)
 } CljType;
 
 #define CLJ_TYPE_COUNT (CLJ_RAW_MEMORY + 1)

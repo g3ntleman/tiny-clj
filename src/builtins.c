@@ -33,7 +33,7 @@
 #include "reader.h"
 #include "parser.h"
 #include "meta.h"
-#include "function_call.h"
+#include "eval.h"
 #include "debug.h"  // For print_ast
 
 // Forward declaration for eval_body_with_env
@@ -95,6 +95,7 @@ ID native_map_p(ID *args, unsigned int argc);
 ID native_sleep(ID *args, unsigned int argc);
 ID native_ns_map(ID *args, unsigned int argc);
 ID native_find_ns(ID *args, unsigned int argc);
+ID native_all_ns(ID *args, unsigned int argc);
 ID native_do(ID *args, unsigned int argc);
 ID native_byte_array(ID *args, unsigned int argc);
 ID native_aget(ID *args, unsigned int argc);
@@ -119,8 +120,12 @@ ID native_lower_case(ID *args, unsigned int argc);
 ID native_last_index_of(ID *args, unsigned int argc);
 ID native_string_reverse(ID *args, unsigned int argc);
 ID native_source(ID *args, unsigned int argc);
+ID native_repl_dir(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
 ID nth2(ID *args, unsigned int argc);
+
+static CljNamespace* namespace_from_value(ID value);
+static int compare_symbol_names(const void *a, const void *b);
 
 // Thread-local EvalState for builtins that need it (eval, read-string, meta, require)
 // Set/cleared in eval_function_call before/after calling builtins
@@ -189,7 +194,7 @@ ID nth2(ID *args, unsigned int argc) {
     }
 
     // Fast path: Lists (O(n) access via list_nth)
-    if (TAG(coll) == CLJ_LIST) {
+    if (list_type_matches(TAG(coll))) {
         CljList *list = as_list(coll);
         if (!list) {
             return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
@@ -504,8 +509,21 @@ ID native_next(ID *args, unsigned int argc) {
     // If so, we must NOT release it, as it's owned by the caller (args[0])
     bool seq_is_original = (seq == (CljSeqIterator*)coll);
 
-    // Return next of the created seq
-    ID result = seq_next(seq);
+    bool reused_seq = false;
+    ID result = NULL;
+
+    if (!seq_is_original && seq && seq->iter.seq_type != CLJ_LIST && seq->base.rc == 1) {
+        ID moved = seq_next_inplace(seq);
+        if (moved) {
+            result = moved;
+            reused_seq = true;
+        }
+    }
+
+    if (!reused_seq) {
+        // Return next of the created seq
+        result = seq_next(seq);
+    }
 
     // seq_next now returns AUTORELEASE objects (already in pool) or NULL
     // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
@@ -526,7 +544,7 @@ ID native_next(ID *args, unsigned int argc) {
 
     // Only release the seq if we created it (not if it was the original object)
     // If seq_is_original, the caller (eval_and_call_native) will release args[0]
-    if (!seq_is_original) {
+    if (!seq_is_original && !reused_seq) {
         RELEASE(seq);
     }
     return result;
@@ -683,7 +701,7 @@ ID native_reverse(ID *args, unsigned int argc) {
     }
 
     // Handle lists
-    if (coll && TAG(coll) == CLJ_LIST) {
+    if (coll && list_type_matches(TAG(coll))) {
         // Safe cast - we already checked is_type
         CljList *list = (CljList*)coll;
         // Use list_count to check if list is empty (handles nil elements correctly)
@@ -695,7 +713,7 @@ ID native_reverse(ID *args, unsigned int argc) {
         CljList *result = NULL;
         CljObject *current = coll;
 
-        while (current && TAG(current) == CLJ_LIST) {
+        while (current && list_type_matches(TAG(current))) {
             // Safe cast - we already checked is_type
             CljList *list = (CljList*)current;
             if (!list) break;
@@ -919,8 +937,8 @@ ID native_get(ID *args, unsigned int argc) {
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    CljObject *map = (CljObject*)args[0];
-    CljObject *key_obj = (CljObject*)args[1];
+    CljObject *map = args[0];
+    CljObject *key_obj = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     if (!map) return NULL;
@@ -960,9 +978,9 @@ ID native_count(ID *args, unsigned int argc) {
         } else if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
             CljVector *vec = as_vector(coll);
             return (fixnum(vec ? vector_count(vec) : 0));
-        } else if (tag == CLJ_LIST) {
+        } else if (list_type_matches(tag)) {
             CljList *list = as_list(coll);
-            return (fixnum(list_count(list)));
+            return (fixnum(list ? list_count(list) : 0));
         } else if (tag == CLJ_STRING) {
             CljString *str = (CljString*)coll;
 
@@ -976,7 +994,7 @@ ID native_count(ID *args, unsigned int argc) {
 
 ID native_keys(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "keys")) return NULL;
-    CljObject *map = (CljObject*)args[0];
+    CljObject *map = args[0];
     if (!map) return (NULL);
 
     int tag = TAG(map);
@@ -989,7 +1007,7 @@ ID native_keys(ID *args, unsigned int argc) {
 
 ID native_vals(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "vals")) return NULL;
-    CljObject *map = (CljObject*)args[0];
+    CljObject *map = args[0];
     if (!map) return (NULL);
 
     int tag = TAG(map);
@@ -1088,8 +1106,8 @@ ID native_array_map(ID *args, unsigned int argc) {
     // Add all key-value pairs
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     for (unsigned int i = 0; i < argc; i += 2) {
-        CljObject *key = (CljObject*)args[i];
-        CljObject *value = (CljObject*)args[i + 1];
+        CljObject *key = args[i];
+        CljObject *value = args[i + 1];
         CljMap *updated_map = map_assoc(map, key, value);
         ASSIGN(map, updated_map);
     }
@@ -1387,7 +1405,7 @@ static void print_helper(ID *args, unsigned int argc, bool readable, bool newlin
     // Print all arguments separated by spaces
     for (unsigned int i = 0; i < argc; i++) {
         if (args[i]) {
-            CljString *str = readable ? pr_str((CljObject*)args[i]) : print_str((CljObject*)args[i]);
+            CljString *str = readable ? pr_str(args[i]) : print_str(args[i]);
             if (str) {
                 printf("%s", string_data(str));
             }
@@ -1587,7 +1605,7 @@ ID native_subs(ID *args, unsigned int argc) {
 
     // Special case: empty substring (start == end)
     if (substr_len == 0) {
-        return (ID)string_empty_singleton;
+        return string_empty_singleton;
     }
 
     // Create CljString directly without temporary C-string
@@ -1646,7 +1664,7 @@ ID native_trim(ID *args, unsigned int argc) {
 
     // Special case: empty string or all whitespace
     if (trimmed_len <= 0) {
-        return (ID)string_empty_singleton;
+        return string_empty_singleton;
     }
 
     // Create CljString directly without temporary C-string
@@ -1683,7 +1701,7 @@ ID native_upper_case(ID *args, unsigned int argc) {
     uint16_t str_len = string_length(str);
 
     if (str_len == 0) {
-        return (ID)string_empty_singleton;
+        return string_empty_singleton;
     }
 
     // Convert to upper-case directly in CljString buffer
@@ -1722,7 +1740,7 @@ ID native_lower_case(ID *args, unsigned int argc) {
     uint16_t str_len = string_length(str);
 
     if (str_len == 0) {
-        return (ID)string_empty_singleton;
+        return string_empty_singleton;
     }
 
     // Convert to lower-case directly in CljString buffer
@@ -1837,7 +1855,7 @@ ID native_string_reverse(ID *args, unsigned int argc) {
     uint16_t str_len = string_length(str);
 
     if (str_len == 0) {
-        return (ID)string_empty_singleton;
+        return string_empty_singleton;
     }
 
     // Reverse string directly in CljString buffer
@@ -1892,7 +1910,7 @@ ID native_ns_map(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    return (ID)(target_ns->mappings ? target_ns->mappings : make_map(0));
+    return target_ns->mappings ? target_ns->mappings : make_map(0);
 }
 
 // find-ns: Returns the namespace object for the given name
@@ -1911,14 +1929,73 @@ ID native_find_ns(ID *args, unsigned int argc) {
 
     int tag = TAG(ns_arg);
     if (tag == CLJ_SYMBOL) {
-        return (ID)ns_find_by_symbol(as_symbol(ns_arg));
+        return ns_find_by_symbol(as_symbol(ns_arg));
     } else if (tag == CLJ_STRING) {
-        return (ID)ns_find(string_data(ns_arg));
+        return ns_find(string_data(ns_arg));
     }
     
     throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                               "find-ns: argument must be a symbol or string");
     return NULL;
+}
+
+// all-ns: Returns a list of all namespace objects
+// Usage: (all-ns)
+ID native_all_ns(ID *args, unsigned int argc) {
+    (void)args;
+    if (argc != 0) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "all-ns expects no arguments, got %u", argc);
+        return NULL;
+    }
+
+    if (!g_runtime.ns_registry) {
+        return empty_list();
+    }
+
+    CljObject *result = NULL;
+    MAP_FOR_EACH(g_runtime.ns_registry, key, val) {
+        (void)key;
+        if (!val) {
+            continue;
+        }
+        result = (CljObject*)make_list(val, (CljList*)result);
+    }
+
+    if (!result) {
+        return empty_list();
+    }
+
+    return AUTORELEASE(result);
+}
+
+// Helper for dir: convert argument to namespace
+static CljNamespace* namespace_from_value(ID value) {
+    if (!value) {
+        return NULL;
+    }
+
+    int tag = TAG(value);
+    if (tag == CLJ_NAMESPACE) {
+        return (CljNamespace*)value;
+    } else if (tag == CLJ_SYMBOL) {
+        if (IS_KEYWORD(value)) {
+            return NULL;
+        }
+        return ns_find_by_symbol(as_symbol(value));
+    } else if (tag == CLJ_STRING) {
+        return ns_find(string_data((CljString*)value));
+    }
+    return NULL;
+}
+
+static int compare_symbol_names(const void *lhs, const void *rhs) {
+    const char *left = lhs ? *(const char* const*)lhs : NULL;
+    const char *right = rhs ? *(const char* const*)rhs : NULL;
+    if (left == right) return 0;
+    if (!left) return 1;
+    if (!right) return -1;
+    return strcmp(left, right);
 }
 
 // source: Print source code for a function (native implementation for clojure.repl namespace)
@@ -1953,33 +2030,30 @@ ID native_source(ID *args, unsigned int argc) {
     // If we have a function, print its full definition AST: (fn [params*] body)
     if (target_func && TAG(target_func) == CLJ_CLOSURE) {
         CljFunction *fn = as_function(target_func);
-        if (fn && fn->body) {
-            // Construct (fn [params] body) AST: (fn . ([params] . (body . nil)))
-            CljList *body_list = make_list(fn->body, NULL);
-            if (!body_list) {
-                throw_oom();
+        if (fn) {
+    ID params_id = NULL;
+    if (fn->params) {
+        params_id = fn->params;
+    }
+            ID body_id = fn->body ? fn->body : NULL;
+
+            bool previous_mode = strings_set_special_form_rendering(false);
+            CljString *params_repr = to_string(params_id);
+            CljString *body_repr = to_string(body_id);
+            strings_set_special_form_rendering(previous_mode);
+
+            if (!params_repr || !body_repr) {
+                printf("Source not available\n");
                 return NULL;
             }
-            CljList *params_body_list = make_list(fn->params ? (ID)fn->params : NULL, body_list);
-            if (!params_body_list) {
-                RELEASE((CljObject*)body_list);
-                throw_oom();
-                return NULL;
-            }
-            CljList *fn_list = make_list((ID)SYM_FN, params_body_list);
-            if (!fn_list) {
-                RELEASE((CljObject*)params_body_list);
-                throw_oom();
-                return NULL;
-            }
-            
-            ID args_str[] = { (ID)fn_list };
-            CljString *result = native_str(args_str, 1);
-            if (result) {
-                printf("%s\n", string_data(result));
-                RELEASE((CljObject*)result);
-            }
-            RELEASE((CljObject*)fn_list);
+
+            RETAIN((CljObject*)params_repr);
+            RETAIN((CljObject*)body_repr);
+
+            printf("(fn %s %s)\n", string_data(params_repr), string_data(body_repr));
+
+            RELEASE((CljObject*)body_repr);
+            RELEASE((CljObject*)params_repr);
             return NULL;
         }
     }
@@ -1996,8 +2070,70 @@ ID native_source(ID *args, unsigned int argc) {
     return NULL;
 }
 
+ID native_repl_dir(ID *args, unsigned int argc) {
+    if (argc > 1) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "dir accepts at most 1 argument, got %u", argc);
+        return NULL;
+    }
 
+    EvalState *st = g_current_eval_state;
+    CljNamespace *target_ns = NULL;
 
+    if (argc == 0) {
+        if (st && st->current_ns) {
+            target_ns = st->current_ns;
+        } else {
+            target_ns = ns_find("user");
+            if (!target_ns) {
+                target_ns = ns_find("clojure.core");
+            }
+        }
+    } else {
+        target_ns = namespace_from_value(args[0]);
+    }
+
+    if (!target_ns || !target_ns->mappings) {
+        printf("Namespace not found\n");
+        return NULL;
+    }
+
+    int entry_count = 0;
+    MAP_FOR_EACH(target_ns->mappings, key, value) {
+        if (key && TAG(key) == CLJ_SYMBOL) {
+            entry_count++;
+        }
+    }
+
+    if (entry_count == 0) {
+        return NULL;
+    }
+
+    const char **names = (const char**)malloc(sizeof(char*) * entry_count);
+    if (!names) {
+        throw_oom();
+        return NULL;
+    }
+
+    int idx_names = 0;
+    MAP_FOR_EACH(target_ns->mappings, key, value) {
+        if (key && TAG(key) == CLJ_SYMBOL) {
+            CljSymbol *sym = as_symbol(key);
+            if (sym && sym->cname) {
+                names[idx_names++] = sym->cname;
+            }
+        }
+    }
+
+    qsort(names, idx_names, sizeof(char*), compare_symbol_names);
+    for (int i = 0; i < idx_names; i++) {
+        if (names[i]) {
+            printf("%s\n", names[i]);
+        }
+    }
+    free(names);
+    return NULL;
+}
 
 // Forward declarations for native functions used in lookup table
 ID native_meta(ID *args, unsigned int argc);
@@ -2022,6 +2158,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_string_reverse_data.sym, native_string_reverse},
     // clojure.repl functions
     {&sym_source_data.sym, native_source},
+    {&sym_dir_data.sym, native_repl_dir},
     // clojure.core functions
     {&sym_meta_data.sym, native_meta},
     {&sym_reduce_data.sym, native_reduce},
@@ -2081,6 +2218,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_sleep_data.sym, native_sleep},
     {&sym_ns_map_data.sym, native_ns_map},
     {&sym_find_ns_data.sym, native_find_ns},
+    {&sym_all_ns_data.sym, native_all_ns},
     {&sym_do_data.sym, native_do},
     {&sym_byte_array_data.sym, native_byte_array},
     {&sym_aget_data.sym, native_aget},
@@ -2345,9 +2483,22 @@ static char* read_file_once(const char *path) {
     return buffer;
 }
 
-static char* read_file_cstr(const char *path) {
+static void store_resolved_path(char *dest, size_t dest_size, const char *value) {
+    if (!dest || dest_size == 0) return;
+    if (!value) {
+        dest[0] = '\0';
+        return;
+    }
+    strncpy(dest, value, dest_size - 1);
+    dest[dest_size - 1] = '\0';
+}
+
+static char* read_file_cstr(const char *path, char *resolved_path, size_t resolved_path_size) {
     char *buffer = read_file_once(path);
-    if (buffer) return buffer;
+    if (buffer) {
+        store_resolved_path(resolved_path, resolved_path_size, path);
+        return buffer;
+    }
     
     // If path is relative, also try "../path" and "../../path" to support running from build directories
     if (!path || path[0] == '\0') {
@@ -2357,22 +2508,35 @@ static char* read_file_cstr(const char *path) {
     char parent_path[512];
     if (snprintf(parent_path, sizeof(parent_path), "../%s", path) < (int)sizeof(parent_path)) {
         buffer = read_file_once(parent_path);
-        if (buffer) return buffer;
+        if (buffer) {
+            store_resolved_path(resolved_path, resolved_path_size, parent_path);
+            return buffer;
+        }
     }
     if (snprintf(parent_path, sizeof(parent_path), "../../%s", path) < (int)sizeof(parent_path)) {
         buffer = read_file_once(parent_path);
-        if (buffer) return buffer;
+        if (buffer) {
+            store_resolved_path(resolved_path, resolved_path_size, parent_path);
+            return buffer;
+        }
     }
     
     return NULL;
 }
 
-static bool eval_source_in_current_state(const char *src, EvalState *st) {
+static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st) {
     if (!src || !st) return false;
     int success_count = 0;
     WITH_AUTORELEASE_POOL({
         Reader reader;
         reader_init(&reader, src);
+        if (src_name && src_name[0]) {
+            reader_set_source_name(&reader, src_name);
+        } else if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
+            reader_set_source_name(&reader, st->current_ns->name->cname);
+        } else {
+            reader_set_source_name(&reader, "<namespace>");
+        }
         while (!reader_is_eof(&reader)) {
             reader_skip_all(&reader);
             if (reader_is_eof(&reader)) break;
@@ -2380,8 +2544,9 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
             // Save reader position before parsing to detect if we're stuck
             size_t pos_before = reader_offset(&reader);
 
+            CljValue form = NULL;
             TRY {
-                CljValue form = value_by_parsing_expr(&reader, st);
+                form = value_by_parsing_expr(&reader, st);
                 if (!form) {
                     if (reader_is_eof(&reader)) break;
                     // Parse failed - skip to next line to avoid infinite loop
@@ -2404,6 +2569,22 @@ static bool eval_source_in_current_state(const char *src, EvalState *st) {
                 // Log exceptions during namespace loading to help debug issues
                 if (ex) {
                     fprintf(stderr, "[namespace loading] Exception: %s\n", ex->message);
+                    if (form) {
+                        CljObject *form_obj = (CljObject*)form;
+                        unsigned int tag = (unsigned int)TAG(form_obj);
+                        unsigned int type = (unsigned int)(form_obj ? form_obj->type : 0);
+                        fprintf(stderr, "[namespace loading] Form tag=%u type=%u\n", tag, type);
+                        if (tag == CLJ_LIST && form_obj) {
+                            CljList *list = as_list(form_obj);
+                            CljObject *first = LIST_FIRST(list);
+                            if (first && TAG(first) == CLJ_SYMBOL) {
+                                CljSymbol *sym = as_symbol(first);
+                                if (sym && sym->cname) {
+                                    fprintf(stderr, "[namespace loading] Form head=%s\n", sym->cname);
+                                }
+                            }
+                        }
+                    }
                 }
 #endif
                 // Skip to next line to avoid infinite loop
@@ -2430,7 +2611,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     CljVector *vec = as_vector(symbols);
     int count = vector_count(vec);
     for (int i = 0; i < count; i++) {
-        CljObject *sym = (CljObject*)vector_nth(vec, i);
+        CljObject *sym = vector_nth(vec, i);
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
             RELEASE(sym);
             continue;
@@ -2452,7 +2633,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
         }
 
         // Look up symbol in source namespace
-        CljObject *val = (CljObject*)map_get((CljValue)source_ns->mappings, (CljValue)lookup_sym, NULL);
+        CljObject *val = map_get((CljValue)source_ns->mappings, (CljValue)lookup_sym, NULL);
         if (val) {
             // Copy to target namespace (ns_define will automatically qualify with target namespace)
             ns_define(target_ns, sym, val);
@@ -2497,8 +2678,7 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
                 // ns_define will automatically qualify it with target namespace
                 CljSymbol *unqualified_sym = intern_symbol_global(unqualified_name);
                 if (unqualified_sym) {
-                    // Copy to target namespace (ns_define will automatically qualify with target namespace)
-                    ns_define(target_ns, (ID)unqualified_sym, (CljObject*)val);
+                    ns_define(target_ns, unqualified_sym, val);
                 }
             }
         }
@@ -2533,7 +2713,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         if (vector_count(vec) < 1) return false;
 
         // First element should be namespace name (Symbol or String)
-        CljObject *ns_obj = (CljObject*)vector_nth(vec, 0);
+        CljObject *ns_obj = vector_nth(vec, 0);
         if (!ns_obj) return false;
 
         if (ns_obj && TAG(ns_obj) == CLJ_SYMBOL) {
@@ -2556,7 +2736,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
         // Parse keywords: :as, :refer
         int vec_count = vector_count(vec);
         for (int i = 1; i < vec_count; i++) {
-            CljObject *elem = (CljObject*)vector_nth(vec, i);
+            CljObject *elem = vector_nth(vec, i);
             if (!elem) continue;
 
             // Check if it's a keyword (Symbol starting with :)
@@ -2571,7 +2751,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                 if (kw == SYM_KW_AS) {
                     // :as alias
                     if (i + 1 < vec_count) {
-                        alias_sym = (CljObject*)vector_nth(vec, i + 1);
+                        alias_sym = vector_nth(vec, i + 1);
                         // Don't release alias_sym - it's stored for later use
                         i++; // Skip next element
                     }
@@ -2579,7 +2759,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                 } else if (kw == SYM_KW_REFER) {
                     // :refer [symbols] or :refer :all
                     if (i + 1 < vec_count) {
-                        CljObject *refer_arg = (CljObject*)vector_nth(vec, i + 1);
+                        CljObject *refer_arg = vector_nth(vec, i + 1);
                         if (refer_arg && TAG(refer_arg) == CLJ_SYMBOL) {
                             CljSymbol *refer_sym = as_symbol(refer_arg);
                             if (refer_sym && refer_sym->cname && strcmp(refer_sym->cname, ":all") == 0) {
@@ -2616,11 +2796,26 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljNamespace *existing = ns_find(ns_name);
     if (existing) {
         // Check if namespace has been fully loaded by checking for a marker function
+        // For clojure.core, check if inc exists (core function)
         // For clojure.string, check if blank? exists (first Clojure function defined)
-        // OPTIMIZATION: Cache the blank? symbol lookup to avoid repeated intern_symbol calls
+        // OPTIMIZATION: Cache symbol lookups to avoid repeated intern_symbol calls
         // CRITICAL: Namespace mappings use qualified symbols as keys, so we must use a qualified symbol
         bool needs_loading = true;
-        if (strcmp(ns_name, "clojure.string") == 0 && existing->mappings) {
+        if (strcmp(ns_name, "clojure.core") == 0 && existing->mappings) {
+            // clojure.core is loaded from C code, so if it has mappings, it's fully loaded
+            // Check for a marker function like 'inc' to confirm it's loaded
+            static CljSymbol *cached_inc_sym = NULL;
+            if (!cached_inc_sym) {
+                cached_inc_sym = intern_symbol_global("inc");
+            }
+            if (cached_inc_sym) {
+                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+                ID inc_func = map_get(existing->mappings, cached_inc_sym, NOT_FOUND);
+                if (inc_func != NOT_FOUND) {
+                    needs_loading = false; // inc found - namespace is fully loaded
+                }
+            }
+        } else if (strcmp(ns_name, "clojure.string") == 0 && existing->mappings) {
             static CljSymbol *cached_blank_sym = NULL;
             if (!cached_blank_sym) {
                 CljSymbol *ns_sym = intern_symbol_global("clojure.string");
@@ -2676,12 +2871,25 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     char libs_path[512];
     snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
 
-    char *source = read_file_cstr(libs_path);
-    if (!source) {
-        source = read_file_cstr(rel);
+    char resolved_path[512];
+    resolved_path[0] = '\0';
+    const char *source_path = NULL;
+    char *source = read_file_cstr(libs_path, resolved_path, sizeof(resolved_path));
+    if (source) {
+        source_path = resolved_path;
+    } else {
+        source = read_file_cstr(rel, resolved_path, sizeof(resolved_path));
+        if (source) {
+            source_path = resolved_path;
+        }
     }
 
     if (!source) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                 "Require failed: namespace '%s' not found (expected file %s or libs/%s)",
+                 ns_name, rel, rel);
+        throw_exception(EXCEPTION_FILE_NOT_FOUND, error_msg, __FILE__, __LINE__, 0);
         free(rel);
         return false;
     }
@@ -2707,7 +2915,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     if (st) {
         st->current_ns = target_ns;
     }
-    bool ok = eval_source_in_current_state(source, st);
+    bool ok = eval_source_in_current_state(source, source_path, st);
     // Restore original namespace
     if (st && orig_ns) {
         st->current_ns = orig_ns;
@@ -2755,57 +2963,145 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     return true;
 }
 
+static ID normalize_require_spec(ID spec, bool *needs_release) {
+    if (needs_release) {
+        *needs_release = false;
+    }
+    if (!spec) {
+        return spec;
+    }
+
+    unsigned int tag = TAG(spec);
+    if (tag == CLJ_SYMBOL || tag == CLJ_VECTOR) {
+        return spec;
+    }
+
+    if (list_type_matches(tag)) {
+        CljList *list = as_list(spec);
+        if (!list) return spec;
+        
+        // Handle (quote symbol) => symbol
+        ID first = LIST_FIRST(list);
+        if (first && TAG(first) == CLJ_SYMBOL) {
+            CljSymbol *first_sym = as_symbol(first);
+            if (first_sym == SYM_QUOTE) {
+                // (quote x) => x
+                ID quoted = LIST_REST(list) ? LIST_FIRST(as_list(LIST_REST(list))) : NULL;
+                if (quoted && (TAG(quoted) == CLJ_SYMBOL || TAG(quoted) == CLJ_VECTOR)) {
+                    return quoted;
+                }
+            }
+        }
+        
+        // Convert list to vector for other cases
+        CljVector *vec = make_vector(4, CLJ_VECTOR);
+        if (!vec) {
+            return NULL;
+        }
+        CljVector *transient_vec = vector_transient(vec);
+        RELEASE(vec);
+        if (!transient_vec) {
+            return NULL;
+        }
+
+        CljList *current = list;
+        while (current) {
+            ID elem = LIST_FIRST(current);
+            transient_vec = vector_conj(transient_vec, elem);
+            if (!transient_vec) {
+                return NULL;
+            }
+            current = LIST_REST(current) ? as_list(LIST_REST(current)) : NULL;
+        }
+
+        CljVector *persistent_vec = vector_persistent(transient_vec);
+        RELEASE(transient_vec);
+        if (!persistent_vec) {
+            return NULL;
+        }
+        if (needs_release) {
+            *needs_release = true;
+        }
+        return (ID)persistent_vec;
+    }
+
+    return spec;
+}
+
 ID native_require(ID *args, unsigned int argc) {
     if (argc == 0) {
         throw_exception(EXCEPTION_ARITY, "require requires at least 1 argument", __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    // Use current EvalState if available (set by builtin_set_eval_state before calling builtins)
-    // NOTE: g_current_eval_state is thread-local and defined at the top of this file (line ~42)
-    // It's set/cleared in eval_function_call before/after calling builtins
-    // This follows the same pattern as native_eval and native_read_string
-    // TODO: Consider refactoring BuiltinFn signature to accept EvalState as parameter
-    //       instead of using thread-local variable (would require changing runtime.h)
+    ID normalized_specs[argc];
+    bool needs_release[argc];
+    memset(needs_release, 0, sizeof(needs_release));
+
     EvalState *st = g_current_eval_state;
     bool created_st = false;
-    
     if (!st) {
-        // Fallback: create temporary EvalState if not available via thread-local
-        // This can happen if require is called outside normal evaluation context
         st = evalstate_new(false);
         created_st = true;
     }
 
-    // Validate all arguments are either Symbol or Vector (like standard Clojure)
     for (unsigned int i = 0; i < argc; i++) {
-        if (args[i] && TAG(args[i]) != CLJ_SYMBOL && TAG(args[i]) != CLJ_VECTOR) {
+        bool release_spec = false;
+        ID spec = normalize_require_spec(args[i], &release_spec);
+        if (!spec) {
+            if (created_st) {
+                evalstate_free(st);
+            }
+            for (unsigned int j = 0; j < i; j++) {
+                if (needs_release[j]) {
+                    RELEASE((CljObject*)normalized_specs[j]);
+                }
+            }
+            return NULL;
+        }
+        normalized_specs[i] = spec;
+        needs_release[i] = release_spec;
+
+        if (spec && TAG(spec) != CLJ_SYMBOL && TAG(spec) != CLJ_VECTOR) {
             throw_exception(EXCEPTION_TYPE, "require expects a symbol or vector", __FILE__, __LINE__, 0);
             if (created_st) {
                 evalstate_free(st);
             }
-            return NULL;
-        }
-    }
-
-    // Process each require spec (support multiple specs: (require '[ns1 :as n1] '[ns2 :as n2]))
-    for (unsigned int i = 0; i < argc; i++) {
-        if (!process_require_spec(args[i], st)) {
-            // Invalid spec - throw exception (like standard Clojure)
-            throw_exception(EXCEPTION_TYPE, "require spec must be a symbol or vector", __FILE__, __LINE__, 0);
-            if (created_st) {
-                evalstate_free(st);
+            for (unsigned int j = 0; j <= i; j++) {
+                if (needs_release[j]) {
+                    RELEASE((CljObject*)normalized_specs[j]);
+                }
             }
             return NULL;
         }
     }
 
-    // Only free if we created it (don't free thread-local EvalState)
+    for (unsigned int i = 0; i < argc; i++) {
+        if (!process_require_spec((CljObject*)normalized_specs[i], st)) {
+            if (created_st) {
+                evalstate_free(st);
+            }
+            for (unsigned int j = 0; j < argc; j++) {
+                if (needs_release[j]) {
+                    RELEASE((CljObject*)normalized_specs[j]);
+                }
+            }
+            return NULL;
+        }
+    }
+
     if (created_st) {
         evalstate_free(st);
     }
+
+    for (unsigned int i = 0; i < argc; i++) {
+        if (needs_release[i]) {
+            RELEASE((CljObject*)normalized_specs[i]);
+        }
+    }
     return NULL; // Clojure-compatible: require returns nil
 }
+
 #endif // ESP32_BUILD
 
 // File I/O: spit - write string to file
@@ -4282,7 +4578,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
         CljMap *meta_map = make_map(4);
         if (meta_map) {
             // Add :name (function name as string)
-            if (SYM_KW_NAME) {
+            if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0') {
                 CljString *name_str = make_string(symbol_name);
                 if (name_str) {
                     CljMap *updated = map_assoc(meta_map, SYM_KW_NAME, name_str);
@@ -4336,4 +4632,5 @@ void register_builtins() {
     // NOTE: clojure.repl/source is registered here because it's in a different namespace
     // and needs to be available before clojure.repl.clj is loaded.
     register_builtin_in_core("clojure.repl/source", native_source);
+    register_builtin_in_core("clojure.repl/dir", native_repl_dir);
 }

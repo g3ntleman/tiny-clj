@@ -5,7 +5,7 @@
 #include "map.h"
 #include "kv_macros.h"
 #include "reader.h"
-#include "function_call.h"
+#include "eval.h"
 #include "list.h"
 
 // Forward declaration for load_clojure_core
@@ -238,7 +238,7 @@ TEST(test_def_inc_evaluation_during_load) {
     TEST_ASSERT_NOT_NULL(form);
     
     // Extract the symbol from the parsed form
-    if (form && TAG(form) == CLJ_LIST) {
+    if (form && list_type_matches(TAG(form))) {
         CljList *list = as_list(form);
         CljSymbol *inc_sym = as_symbol(list_nth(list, 1));
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);

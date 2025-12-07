@@ -164,7 +164,7 @@ TEST(test_filter_basic) {
     // Use list instead of vector to avoid potential vector handling issues
     CljObject *result = eval_string("(filter even? (list 1 2 3 4 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 2
     CljList *list = as_list((ID)result);
@@ -197,7 +197,7 @@ TEST(test_filter_all_match) {
     // Test: (filter pos? [1 2 3]) => (1 2 3)
     CljObject *result = eval_string("(filter pos? [1 2 3])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 3
     CljObject *count_result = eval_string("(count (filter pos? [1 2 3]))", g_test_eval_state);
@@ -222,7 +222,7 @@ TEST(test_filter_with_custom_predicate) {
     // Test: (filter (fn [x] (> x 2)) [1 2 3 4 5]) => (3 4 5)
     CljObject *result = eval_string("(filter (fn [x] (> x 2)) [1 2 3 4 5])", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 3
     CljObject *count_result = eval_string("(count (filter (fn [x] (> x 2)) [1 2 3 4 5]))", g_test_eval_state);
@@ -242,7 +242,7 @@ TEST(test_reverse_basic) {
     // Test: (reverse (list 1 2 3)) => (3 2 1)
     CljObject *result = eval_string("(reverse (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 3
     CljObject *count_result = eval_string("(count (reverse (list 1 2 3)))", g_test_eval_state);
@@ -264,7 +264,7 @@ TEST(test_reverse_empty) {
     // Test: (reverse (list)) => empty list
     CljObject *result = eval_string("(reverse (list))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 0
     CljObject *count_result = eval_string("(count (reverse (list)))", g_test_eval_state);
@@ -280,7 +280,7 @@ TEST(test_reverse_nil) {
     // Test: (reverse nil) => empty list
     CljObject *result = eval_string("(reverse nil)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 0
     CljObject *count_result = eval_string("(count (reverse nil))", g_test_eval_state);
@@ -296,7 +296,7 @@ TEST(test_reverse_single_element) {
     // Test: (reverse (list 1)) => (1)
     CljObject *result = eval_string("(reverse (list 1))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 1
     CljObject *count_result = eval_string("(count (reverse (list 1)))", g_test_eval_state);
@@ -318,7 +318,7 @@ TEST(test_reverse_multiple_elements) {
     // Test: (reverse (list 1 2 3 4 5)) => (5 4 3 2 1)
     CljObject *result = eval_string("(reverse (list 1 2 3 4 5))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify count is 5
     CljObject *count_result = eval_string("(count (reverse (list 1 2 3 4 5)))", g_test_eval_state);

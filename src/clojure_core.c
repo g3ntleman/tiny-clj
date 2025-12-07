@@ -8,7 +8,7 @@
 #include "value.h"  // For IS_IMMEDIATE macro
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
-#include "function_call.h"  // For SYM_DEF, SYM_NS
+#include "eval.h"  // For SYM_DEF, SYM_NS
 #include "map.h"     // For map_get
 #include "parser.h"  // For eval_parsed
 #include <stdbool.h>
@@ -58,7 +58,7 @@ static char* read_file_cstr_local(const char *path) {
   return buffer;
 }
 
-static bool eval_core_source(const char *src, EvalState *st) {
+static bool eval_core_source(const char *src, const char *source_name, EvalState *st) {
   if (!src || !st)
     return false;
   
@@ -87,6 +87,15 @@ static bool eval_core_source(const char *src, EvalState *st) {
   // Use Reader to parse multiple expressions
   Reader reader;
   reader_init(&reader, src);
+  const char *label = source_name;
+  if (!label || !label[0]) {
+    if (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname) {
+      label = st->current_ns->name->cname;
+    } else {
+      label = "<core>";
+    }
+  }
+  reader_set_source_name(&reader, label);
   
   int expr_count = 0;
   int success_count = 0;
@@ -116,7 +125,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
         // For def expressions, the symbol should be stored even if result is NULL
         // For ns expressions, nil is a valid return value
         // Check if this was a def or ns expression that might have stored something
-        if (form && TAG(form) == CLJ_LIST) {
+        if (form && list_type_matches(TAG(form))) {
           CljList *list = as_list(form);
           CljObject *first = LIST_FIRST(list);
           if (first && TAG(first) == CLJ_SYMBOL) {
@@ -136,7 +145,7 @@ static bool eval_core_source(const char *src, EvalState *st) {
       // Exception occurred during evaluation
       // Log the exception for debugging (always log for def expressions to catch silent failures)
       bool is_def_expr = false;
-        if (form && TAG(form) == CLJ_LIST) {
+        if (form && list_type_matches(TAG(form))) {
           CljList *list = as_list(form);
           CljObject *first = LIST_FIRST(list);
           if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
@@ -232,7 +241,7 @@ int load_clojure_core(EvalState *st) {
   // Save original namespace to restore after loading
   CljNamespace *original_ns = st->current_ns;
   
-  bool ok = eval_core_source(clojure_core_code, st);
+  bool ok = eval_core_source(clojure_core_code, "clojure.core.clj", st);
   
   // Restore original namespace after loading
   if (original_ns && original_ns != clojure_core) {
@@ -305,9 +314,13 @@ int load_clojure_repl(EvalState *st) {
   };
   
   char *source = NULL;
+  const char *source_label = NULL;
   for (size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); i++) {
     source = read_file_cstr_local(candidates[i]);
-    if (source) break;
+    if (source) {
+      source_label = candidates[i];
+      break;
+    }
   }
   
   if (!source) {
@@ -330,7 +343,7 @@ int load_clojure_repl(EvalState *st) {
   st->current_ns = target_ns;
   
   // Evaluate source using same approach as eval_core_source
-  bool ok = eval_core_source(source, st);
+  bool ok = eval_core_source(source, source_label, st);
   
   // Restore original namespace
   if (orig_ns) {

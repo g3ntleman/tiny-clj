@@ -83,7 +83,7 @@ list(APPEND SOURCES
     src/parser.c
     src/byte_array.c
     src/reader.c
-    src/function_call.c
+    src/eval.c
     src/function.c
     src/optimize.c
     src/environment.c
@@ -91,6 +91,7 @@ list(APPEND SOURCES
     src/event_loop.c
     src/channel.c
     src/list.c
+    src/ast.c
     src/vector.c
     src/map.c
     src/atom.c
@@ -106,6 +107,11 @@ list(APPEND SOURCES
     src/validation.c
     src/args_utils.c
     src/meta.c
+    src/eval_arithmetic.c
+    src/eval_dispatch.c
+    src/eval_comparison.c
+    src/eval_sequence.c
+    src/eval_special_forms.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -130,7 +136,7 @@ set(STM32_SOURCES
     src/parser.c
     src/byte_array.c
     src/reader.c
-    src/function_call.c
+    src/eval.c
     src/function.c
     src/optimize.c
     src/environment.c
@@ -138,6 +144,7 @@ set(STM32_SOURCES
     src/event_loop.c
     src/channel.c
     src/list.c
+    src/ast.c
     src/vector.c
     src/map.c
     src/atom.c
@@ -152,6 +159,11 @@ set(STM32_SOURCES
     src/validation.c
     src/args_utils.c
     src/meta.c
+    src/eval_arithmetic.c
+    src/eval_dispatch.c
+    src/eval_comparison.c
+    src/eval_sequence.c
+    src/eval_special_forms.c
 )
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -171,12 +183,13 @@ add_executable(tiny-clj-esp32
     src/parser.c
     src/byte_array.c
     src/reader.c
-    src/function_call.c
+    src/eval.c
     src/function.c
     src/optimize.c
     src/environment.c
     src/equality.c
     src/list.c
+    src/ast.c
     src/vector.c
     src/map.c
     src/atom.c
@@ -191,6 +204,11 @@ add_executable(tiny-clj-esp32
     src/validation.c
     src/args_utils.c
     src/meta.c
+    src/eval_arithmetic.c
+    src/eval_dispatch.c
+    src/eval_comparison.c
+    src/eval_sequence.c
+    src/eval_special_forms.c
 )
 
 
@@ -267,7 +285,7 @@ set_target_properties(tiny-clj-esp32-repl PROPERTIES
 # ============================================================================
 
 # Unity Test Framework (central runner with separate test files)
-add_executable(unity-tests
+add_executable(unit-tests
     ${SOURCES}
     src/tests/unity_test_runner.c
     src/tests/test_registry.c
@@ -323,7 +341,7 @@ add_executable(unity-tests
     src/namespace.c
     src/parser.c
     src/reader.c
-    src/function_call.c
+    src/eval.c
     src/function.c
     src/environment.c
     src/equality.c
@@ -349,19 +367,19 @@ add_executable(unity-tests
 
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE
-# Remove any dependency on CMAKE_BUILD_TYPE for unity-tests
+# Remove any dependency on CMAKE_BUILD_TYPE for unit-tests
 # IMPORTANT: Disable dead code elimination to preserve test registration functions
 # that are called via constructor attributes
-apply_common_settings(unity-tests)
+apply_common_settings(unit-tests)
 # Option to disable ASAN for profiling
-option(ENABLE_ASAN "Enable AddressSanitizer for unity-tests" OFF)
+option(ENABLE_ASAN "Enable AddressSanitizer for unit-tests" OFF)
 if(ENABLE_ASAN)
     if(APPLE)
         # macOS: disable dead_strip to preserve all functions (including test registrations)
         # Use target_link_options to properly set linker flags
-        set_target_properties(unity-tests PROPERTIES
+        set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_SUPPRESS_PASS_OUTPUT"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -371,27 +389,27 @@ if(ENABLE_ASAN)
         # Override global linker flags to prevent dead code elimination
         # This ensures test registration functions (called via constructors) are preserved
         # Use target_link_options to properly set linker flags without dead_strip
-        target_link_options(unity-tests PRIVATE
+        target_link_options(unit-tests PRIVATE
             -fsanitize=address
         )
         # Remove dead_strip from global flags if present
         string(REPLACE "-Wl,-dead_strip" "" TMP_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
         string(REPLACE "-Wl,-S" "" TMP_FLAGS "${TMP_FLAGS}")
         if(TMP_FLAGS)
-            target_link_options(unity-tests PRIVATE ${TMP_FLAGS})
+            target_link_options(unit-tests PRIVATE ${TMP_FLAGS})
         endif()
     else()
         # Linux/other: disable gc-sections to preserve all functions
-        set_target_properties(unity-tests PROPERTIES
+        set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_SUPPRESS_PASS_OUTPUT"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
         )
-        target_link_options(unity-tests PRIVATE
+        target_link_options(unit-tests PRIVATE
             -fsanitize=address
             -Wl,--no-gc-sections
         )
@@ -399,9 +417,9 @@ if(ENABLE_ASAN)
 else()
     if(APPLE)
         # macOS: disable dead_strip to preserve all functions (including test registrations)
-        set_target_properties(unity-tests PROPERTIES
+        set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_SUPPRESS_PASS_OUTPUT"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -415,20 +433,20 @@ else()
         string(REPLACE "-Wl,-dead_strip" "" TMP_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
         string(REPLACE "-Wl,-S" "" TMP_FLAGS "${TMP_FLAGS}")
         if(TMP_FLAGS)
-            target_link_options(unity-tests PRIVATE ${TMP_FLAGS})
+            target_link_options(unit-tests PRIVATE ${TMP_FLAGS})
         endif()
     else()
         # Linux/other: disable gc-sections to preserve all functions
-        set_target_properties(unity-tests PROPERTIES
+        set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_SUPPRESS_PASS_OUTPUT"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
         )
-        target_link_options(unity-tests PRIVATE
+        target_link_options(unit-tests PRIVATE
             -Wl,--no-gc-sections
         )
     endif()
@@ -437,7 +455,7 @@ endif()
 # Normalize test file paths in Unity-Ausgabe:
 # Ersetze das Projekt-Wurzelverzeichnis in __FILE__ durch einen relativen Pfad,
 # damit Test-Dateinamen ohne absolute Prefixe erscheinen.
-target_compile_options(unity-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=")
+target_compile_options(unit-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=")
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c
 
@@ -471,7 +489,7 @@ set(COMMON_TEST_SOURCES
     src/namespace.c
     src/parser.c
     src/reader.c
-    src/function_call.c
+    src/eval.c
     src/function.c
     src/environment.c
     src/equality.c
@@ -522,8 +540,8 @@ set(COMMON_TEST_SOURCES
 
 # Test targets for easy execution
 add_custom_target(run-unit-tests
-    COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unity-tests
-    DEPENDS unity-tests
+    COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unit-tests
+    DEPENDS unit-tests
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running unit tests"
 )
@@ -532,14 +550,14 @@ add_custom_target(run-unit-tests
 add_custom_target(benchmark
     COMMAND ${CMAKE_COMMAND} -E echo "=== All Tests Passed! Running Performance Benchmarks with Analysis ==="
     COMMAND ${CMAKE_SOURCE_DIR}/scripts/benchmark_with_analysis.sh
-    DEPENDS unity-tests
+    DEPENDS unit-tests
     COMMENT "Running all tests first, then benchmarks with change analysis"
 )
 
 add_custom_target(benchmark-analyze
     COMMAND ${CMAKE_COMMAND} -E echo "=== Running Enhanced Benchmark Analysis ==="
     COMMAND ${CMAKE_SOURCE_DIR}/scripts/benchmark_with_analysis.sh --update-baseline
-    DEPENDS unity-tests
+    DEPENDS unit-tests
     COMMENT "Running enhanced benchmark analysis"
 )
 
@@ -557,7 +575,7 @@ add_custom_target(benchmark-compare
     COMMAND make test-benchmark-simple > /dev/null 2>&1
     COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/test-benchmark-simple > ${CMAKE_SOURCE_DIR}/benchmark_output.txt
     COMMAND ${CMAKE_SOURCE_DIR}/scripts/benchmark_with_analysis.sh
-    DEPENDS unity-tests
+    DEPENDS unit-tests
     COMMENT "Running performance change analysis"
 )
 

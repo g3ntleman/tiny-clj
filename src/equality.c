@@ -118,7 +118,7 @@ bool clj_equal(ID a, ID b) {
                 if (!rest_a && !rest_b) return true;
                 if (!rest_a || !rest_b) return false;
                 // Check if rest is a list
-                if (TAG(rest_a) != CLJ_LIST || TAG(rest_b) != CLJ_LIST) {
+                if (!list_type_matches(TAG(rest_a)) || !list_type_matches(TAG(rest_b))) {
                     // Rest is not a list - compare directly
                     if (!clj_equal((ID)rest_a, (ID)rest_b)) {
                         return false;

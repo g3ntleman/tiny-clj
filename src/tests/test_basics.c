@@ -42,12 +42,12 @@ TEST(test_list_creation) {
     // Test empty list creation - (list) returns empty list in Clojure
     CljObject *list = eval_string("(list)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);  // (list) returns empty list, not nil
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list->type);
+    assert_list(list);
 
     // Test list with elements
     CljObject *list_with_elements = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list_with_elements);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_with_elements->type);
+    assert_list(list_with_elements);
 
     // Test count function
     CljObject *count_result = eval_string("(count (list 1 2 3))", g_test_eval_state);
@@ -483,19 +483,19 @@ TEST(test_load_multiline_file) {
     const char *multiline_def = "(def add-nums\n  (fn [a b]\n    (+ a b)))";
     CljObject *parsed1 = parse(multiline_def, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed1);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed1->type);
+    assert_list(parsed1);
 
     // Test 2: Multiline function with inline comments
     const char *multiline_with_comments = "(def multiply\n  (fn [x y] ; parameters\n    (* x y))) ; body";
     CljObject *parsed2 = parse(multiline_with_comments, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed2);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed2->type);
+    assert_list(parsed2);
 
     // Test 3: Multiline vector definition
     const char *multiline_vec = "(def my-vec\n  [1\n   2\n   3])";
     CljObject *parsed3 = parse(multiline_vec, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(parsed3);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, parsed3->type);
+    assert_list(parsed3);
 
     // Test 4: Multiline map
     const char *multiline_map = "{:a 1\n :b 2\n :c 3}";
@@ -533,7 +533,7 @@ TEST(test_identity_function) {
     // Test with list
     CljObject *result3 = eval_string("(identity (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(result3 && TAG(result3) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result3 && list_type_matches(TAG(result3)));
 
     // Test with nil
     CljObject *result4 = eval_string("(identity nil)", g_test_eval_state);
@@ -652,7 +652,7 @@ TEST(test_as_list_valid) {
     // Create a simple list: (list 1 2 3)
     CljObject *list = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_TRUE(list && TAG(list) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list && list_type_matches(TAG(list)));
 
     // Test as_list conversion
     CljList *list_data = as_list(list);
@@ -672,7 +672,7 @@ TEST(test_as_list_invalid) {
 
     // Verify the integer is valid and not a list
     TEST_ASSERT_TRUE(IS_IMMEDIATE(int_obj));
-    TEST_ASSERT_FALSE(int_obj && TAG(int_obj) == CLJ_LIST);
+    TEST_ASSERT_FALSE(int_obj && list_type_matches(TAG(int_obj)));
 
     // Note: We can't test as_list with NULL or non-list types as it throws an exception
     // This is expected behavior - as_list should only be called with valid lists
@@ -685,7 +685,7 @@ TEST(test_list_first_valid) {
     // Create a simple list: (list 42)
     CljObject *list = eval_string("(list 42)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_TRUE(list && TAG(list) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list && list_type_matches(TAG(list)));
 
     CljList *list_data = as_list(list);
     TEST_ASSERT_NOT_NULL(list_data);
@@ -703,14 +703,14 @@ TEST(test_is_type_function) {
     // Test with list
     CljObject *list = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_TRUE(list && TAG(list) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list && list_type_matches(TAG(list)));
     TEST_ASSERT_FALSE(list && TAG(list) == CLJ_SYMBOL);
 
     // Test with symbol - use a defined symbol
     CljObject *symbol = eval_string("'test-symbol", g_test_eval_state);  // Quote the symbol to avoid evaluation
     TEST_ASSERT_NOT_NULL(symbol);
     TEST_ASSERT_TRUE(symbol && TAG(symbol) == CLJ_SYMBOL);
-    TEST_ASSERT_FALSE(symbol && TAG(symbol) == CLJ_LIST);
+    TEST_ASSERT_FALSE(symbol && list_type_matches(TAG(symbol)));
 
     // Test with number
     CljObject *number = eval_string("42", g_test_eval_state);
@@ -1067,7 +1067,7 @@ TEST(test_type_check_all_types) {
     // Test with non-empty collections
     ID list_with_elems = parse("(1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(list_with_elems);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(list_with_elems));
+    TEST_ASSERT_TRUE(list_type_matches(TAG(list_with_elems)));
 
     ID vector_with_elems = parse("[1 2 3]", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(vector_with_elems);
@@ -1113,7 +1113,7 @@ TEST(test_read_string) {
     // Test: (read-string "(+ 1 2)") => list (+ 1 2)
     CljObject *result1 = eval_string("(read-string \"(+ 1 2)\")", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(result1));
+    TEST_ASSERT_TRUE(result1 && list_type_matches(TAG(result1)));
 
     // Test: (read-string "42") => 42
     CljObject *result2 = eval_string("(read-string \"42\")", g_test_eval_state);

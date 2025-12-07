@@ -20,6 +20,7 @@
 #include "value.h"
 #include "common.h"  // For CLJ_ASSERT
 #include "function.h" // For CljCFunc
+#include "list.h"
 // clj_equal is available via map.h -> equality.h
 
 void meta_registry_init() {
@@ -86,14 +87,14 @@ ID meta_get(CljObject *v) {
     
     // For lists, we need to handle the case where symbols might have different namespaces
     // but are structurally equivalent (e.g., unqualified symbols in different contexts)
-    if (TAG(v) == CLJ_LIST) {
+    if (list_type_matches(TAG(v))) {
         MAP_FOR_EACH(registry, stored_key, value) {
             if (stored_key == v) {
                 // Already checked above, but check again for safety
                 return value;
             }
             // For lists, try structural equality with namespace-agnostic symbol comparison
-            if (stored_key && TAG(stored_key) == CLJ_LIST) {
+            if (stored_key && list_type_matches(TAG(stored_key))) {
                 if (clj_equal(stored_key, v)) {
                     return value;
                 }

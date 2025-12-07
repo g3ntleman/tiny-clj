@@ -7,7 +7,7 @@
 #include "tests_common.h"
 #include "symbol.h"
 #include "namespace.h"
-#include "function_call.h"
+#include "eval.h"
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
@@ -89,7 +89,7 @@ TEST(test_eval_clojure_core_reverse_expression) {
     // Test: (clojure.core/reverse '(1 2 3)) => '(3 2 1)
     CljObject *result = eval_string("(clojure.core/reverse '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
 }
 
 // Test: Resolve clojure.core/reverse in let binding
@@ -102,7 +102,7 @@ TEST(test_resolve_clojure_core_reverse_in_let) {
     // Test: (let [rev clojure.core/reverse] (rev '(1 2 3)))
     CljObject *result = eval_string("(let [rev clojure.core/reverse] (rev '(1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
 }
 
 // Test: Resolve clojure.core/reverse in function
@@ -120,7 +120,7 @@ TEST(test_resolve_clojure_core_reverse_in_function) {
     // Call the function
     CljObject *call_result = eval_string("((fn [x] (clojure.core/reverse x)) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(call_result);
-    TEST_ASSERT_TRUE(TAG(call_result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(call_result)));
 }
 
 // ============================================================================
@@ -236,7 +236,7 @@ TEST(test_resolve_clojure_core_reverse_in_local_fn) {
     // Call the function
     CljObject *call_result = eval_string("((fn [x] (clojure.core/reverse x)) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(call_result);
-    TEST_ASSERT_TRUE(TAG(call_result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(call_result)));
 }
 
 // Test: Resolve clojure.core/reverse in let binding with function
@@ -249,7 +249,7 @@ TEST(test_resolve_clojure_core_reverse_in_let_with_fn) {
     // Test: (let [step (fn [x] (clojure.core/reverse x))] (step '(1 2 3)))
     CljObject *result = eval_string("(let [step (fn [x] (clojure.core/reverse x))] (step '(1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
 }
 
 // Test: Resolve clojure.string/join in local function

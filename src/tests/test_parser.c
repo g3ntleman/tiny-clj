@@ -55,7 +55,7 @@ TEST(test_parse_collections) {
     // Test list parsing
     CljObject *list_result = parse("(1 2 3)", eval_state);
     TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_result->type);
+    assert_list(list_result);
 
     // Test map parsing with keywords
     CljMap *map_result = (CljMap*)parse("{:a 1 :b 2}", eval_state);
@@ -317,7 +317,7 @@ TEST(test_keyword_map_access) {
         CljObject *key_access = parse("(:a {:a 1 :b 2})", eval_state);
         if (key_access) {
             // The result should be a list with the value
-            TEST_ASSERT_EQUAL_INT(CLJ_LIST, key_access->type);
+            assert_list(key_access);
         }
     } else {
         // If parsing fails, that's also a valid test result
@@ -333,7 +333,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 1: Simple multiline list
     CljObject *list_result = parse("(+ 1\n   2\n   3)", eval_state);
     TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, list_result->type);
+    assert_list(list_result);
 
     // Test 2: Multiline vector with comments
     CljObject *vec_result = parse("[1 ; first element\n 2\n 3]", eval_state);
@@ -350,7 +350,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 4: Multiline function definition
     CljObject *fn_result = parse("(def foo\n  (fn [x]\n    (* x 2)))", eval_state);
     TEST_ASSERT_NOT_NULL(fn_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, fn_result->type);
+    assert_list(fn_result);
 
     // Test 5: Nested multiline structures with various whitespace
     CljObject *nested_result = parse("[\n  {:a 1\n   :b 2}\n  (+ 1\n     2)\n  3\n]", eval_state);
@@ -362,7 +362,7 @@ TEST(test_parse_multiline_expressions) {
     // Test 6: Multiline with tabs and mixed whitespace
     CljObject *mixed_ws_result = parse("(+\t1\n\t\t2\r\n   3)", eval_state);
     TEST_ASSERT_NOT_NULL(mixed_ws_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, mixed_ws_result->type);
+    assert_list(mixed_ws_result);
 
     // Test 7: Multiline with commas (Clojure treats commas as whitespace)
     CljObject *comma_result = parse("[1,\n 2,\n 3]", eval_state);
@@ -462,7 +462,7 @@ TEST(test_parse_from_reader_multiple_expressions) {
     // Parse second expression
     CljValue result2 = parse_from_reader(&reader1, eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, ((CljObject*)result2)->type);
+    TEST_ASSERT_TRUE(list_type_matches(TAG((CljObject*)result2)));
 
     // Test 2: Three expressions with different types
     const char *input2 = "\"hello\"\n:keyword\n[1 2 3]";
@@ -498,7 +498,7 @@ TEST(test_parse_from_reader_multiple_expressions) {
     // Parse second expression (after comment)
     CljValue list_result = parse_from_reader(&reader3, eval_state);
     TEST_ASSERT_NOT_NULL(list_result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, ((CljObject*)list_result)->type);
+    TEST_ASSERT_TRUE(list_type_matches(TAG((CljObject*)list_result)));
 
     evalstate_free(eval_state);
 }
@@ -510,7 +510,7 @@ TEST(test_parse_quote_form_with_nil) {
     // Quote forms should parse to (quote (1 nil 3))
     CljObject *parsed = parse("'(1 nil 3)", eval_state);
     TEST_ASSERT_NOT_NULL(parsed);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(parsed));
+    TEST_ASSERT_TRUE(list_type_matches(TAG(parsed)));
 
     // The parsed form should be (quote (1 nil 3))
     CljList *quote_list = as_list(parsed);
@@ -526,7 +526,7 @@ TEST(test_parse_quote_form_with_nil) {
     TEST_ASSERT_NOT_NULL(rest);
     CljObject *quoted_list = LIST_FIRST(rest);
     TEST_ASSERT_NOT_NULL(quoted_list);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(quoted_list));
+    TEST_ASSERT_TRUE(list_type_matches(TAG(quoted_list)));
 
     // Check the quoted list structure: (1 nil 3)
     CljList *inner_list = as_list(quoted_list);

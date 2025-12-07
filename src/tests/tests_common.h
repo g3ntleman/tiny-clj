@@ -29,7 +29,7 @@
 #include "../list.h"
 #include "../vector.h"
 #include "../function.h"
-#include "../function_call.h"
+#include "../eval.h"
 #include "../byte_array.h"
 #include "../meta.h"
 #include "../runtime.h"
@@ -106,10 +106,10 @@ static inline void assert_string(CljObject *obj, const char *expected) {
     TEST_ASSERT_EQUAL_STRING(expected, clj_string_data(str));
 }
 
-// Helper: Assert that object is a list
+// Helper: Assert that object is a list or AST-backed list
 static inline void assert_list(CljObject *obj) {
     TEST_ASSERT_NOT_NULL(obj);
-    TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(obj));
+    TEST_ASSERT_TRUE(list_type_matches(TAG(obj)));
 }
 
 // Helper: Assert that object is a vector

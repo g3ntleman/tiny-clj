@@ -107,6 +107,9 @@ const char *EXCEPTION_OUT_OF_MEMORY = "OutOfMemoryError";
 /** @brief Static exception type: IndexOutOfBoundsException */
 const char *EXCEPTION_INDEX_OUT_OF_BOUNDS = "IndexOutOfBoundsException";
 
+/** @brief Static exception type: FileNotFoundException */
+const char *EXCEPTION_FILE_NOT_FOUND = "FileNotFoundException";
+
 // ============================================================================
 // STATIC OUT OF MEMORY EXCEPTION (no allocation needed)
 // ============================================================================

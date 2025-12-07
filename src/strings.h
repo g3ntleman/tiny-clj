@@ -77,5 +77,7 @@ CljString* to_string(ID v);
 /** Internal function with escape_strings parameter. */
 CljString* to_string_with_escape(ID v, bool escape_strings);
 
+bool strings_set_special_form_rendering(bool as_tags);
+bool strings_get_special_form_rendering(void);
 
 #endif // TINY_CLJ_STRINGS_H

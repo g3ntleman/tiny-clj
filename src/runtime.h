@@ -44,6 +44,7 @@ typedef struct TinyClJRuntime {
     // Namespaces
     CljMap *ns_registry;            // transient Map: Symbol → CljNamespace*
     CljMap *resolve_cache;          // Symbol resolution cache
+    uint64_t resolve_cache_epoch;   // Epoch for call-site cache invalidation
     
     // Symbol Table
     CljVector *symbol_table;        // Vector of CljSymbol*

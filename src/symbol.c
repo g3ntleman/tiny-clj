@@ -29,6 +29,7 @@ CljSymbol *SYM_UNQUOTE = NULL;
 CljSymbol *SYM_SPLICE_UNQUOTE = NULL;
 CljSymbol *SYM_SOURCE = NULL;
 static CljSymbol *SYM_SOURCE_NATIVE = NULL;
+static CljSymbol *SYM_DIR_NATIVE = NULL;
 static CljSymbol *SYM_SQRT_NATIVE = NULL;
 CljSymbol *SYM_DO = NULL;
 CljSymbol *SYM_LOOP = NULL;
@@ -65,6 +66,7 @@ CljSymbol *SYM_STRING_REVERSE = NULL;
 CljSymbol *SYM_FIRST = NULL;
 CljSymbol *SYM_REST = NULL;
 CljSymbol *SYM_COUNT = NULL;
+CljSymbol *SYM_ALL_NS = NULL;
 
 // Additional symbols for optimization
 CljSymbol *SYM_CONS = NULL;
@@ -133,6 +135,7 @@ DEFINE_STATIC_SYMBOL(sym_splice_unquote_data, "splice-unquote");
 // These are extern so they can be used in builtins.c's native function table
 DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_source_data, "source");
+DEFINE_EXTERN_SYMBOL(sym_dir_data, "dir");
 DEFINE_EXTERN_SYMBOL(sym_meta_data, "meta");
 DEFINE_EXTERN_SYMBOL(sym_do_data, "do");
 DEFINE_EXTERN_SYMBOL(sym_reduce_data, "reduce");
@@ -221,6 +224,7 @@ DEFINE_EXTERN_SYMBOL(sym_map_p_data, "map?");
 DEFINE_EXTERN_SYMBOL(sym_sleep_data, "sleep");
 DEFINE_EXTERN_SYMBOL(sym_ns_map_data, "ns-map");
 DEFINE_EXTERN_SYMBOL(sym_find_ns_data, "find-ns");
+DEFINE_EXTERN_SYMBOL(sym_all_ns_data, "all-ns");
 DEFINE_EXTERN_SYMBOL(sym_pr_data, "pr");
 DEFINE_EXTERN_SYMBOL(sym_prn_data, "prn");
 DEFINE_EXTERN_SYMBOL(sym_byte_array_data, "byte-array");
@@ -347,6 +351,8 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_COUNT, sym_count_data);
 
+    INIT_SYMBOL(SYM_ALL_NS, sym_all_ns_data);
+
     // Initialize clojure.string namespace symbol first (needed for clojure.string functions)
     SYM_CLOJURE_STRING = intern_symbol_global("clojure.string");
     
@@ -374,6 +380,8 @@ void init_special_symbols() {
     
     // clojure.repl native function symbol (namespaced) for source
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
+    // clojure.repl native function symbol for dir
+    INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
     
     // clojure.core sqrt native function symbol
     INIT_SYMBOL_NS(SYM_SQRT_NATIVE, sym_sqrt_data, SYM_CLOJURE_CORE);
@@ -492,10 +500,16 @@ void symbol_table_add(CljSymbol *symbol) {
  * @note This function is internal. Use intern_symbol() instead for proper symbol interning.
  */
 static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
+    // Assertion: name must not be NULL
+    CLJ_ASSERT(cname != NULL && "make_symbol: name cannot be NULL");
+    
     if (!cname) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "make_symbol: name cannot be NULL");
     }
+
+    // Assertion: name must not be empty
+    CLJ_ASSERT(cname[0] != '\0' && "make_symbol: name cannot be empty");
 
     // Range check for name length (keep for safety)
     if (strlen(cname) >= SYMBOL_NAME_MAX_LEN) {

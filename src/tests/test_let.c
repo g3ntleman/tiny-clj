@@ -287,7 +287,7 @@ TEST(test_let_with_local_function_using_reverse) {
     // This tests if local functions can use namespace functions like reverse
     CljObject *result = eval_string("(let [step (fn [coll] (reverse coll))] (step (list 1 2 3)))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 3
     CljList *list = as_list((ID)result);
@@ -379,7 +379,7 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with (fn [x] true) returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Test if even? works: (even? 2) => true
     CljObject *even_result = eval_string("(even? 2)", g_test_eval_state);
@@ -413,7 +413,7 @@ TEST(test_let_filter_function_call) {
         TEST_FAIL_MESSAGE("filter with even? returned NULL");
         return;
     }
-    TEST_ASSERT_TRUE(result2 && TAG(result2) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result2 && list_type_matches(TAG(result2)));
     
     // Verify first element is 2
     CljList *list = as_list((ID)result2);
@@ -463,7 +463,7 @@ TEST(test_let_recursive_function_with_namespace_function) {
         return;
     }
     
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (1 2 3)
     CljList *list = as_list((ID)result);
@@ -500,7 +500,7 @@ TEST(test_let_filter_step_pattern) {
         return;
     }
     
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (2)
     CljList *list = as_list((ID)result);
@@ -544,7 +544,7 @@ TEST(test_let_recursive_function_namespace_access) {
         return;
     }
     
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (1 2 3)
     CljList *list = as_list((ID)result);
@@ -607,7 +607,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         // Use parse() to build the list structure: (swap! i inc)
         ID parsed = parse("(swap! i inc)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(parsed);
-        TEST_ASSERT_TRUE(parsed && TAG(parsed) == CLJ_LIST);
+        TEST_ASSERT_TRUE(parsed && list_type_matches(TAG(parsed)));
         CljList *list = as_list(parsed);
         
         // Test: Call via eval_list (which uses call_function_with_args internally)

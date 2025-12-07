@@ -7,6 +7,19 @@
 #include <stdint.h>
 #include "object.h"
 #include "strings.h"
+
+static bool g_print_special_forms_as_tags = true;
+
+bool strings_set_special_form_rendering(bool as_tags) {
+    bool previous = g_print_special_forms_as_tags;
+    g_print_special_forms_as_tags = as_tags;
+    return previous;
+}
+
+bool strings_get_special_form_rendering(void) {
+    return g_print_special_forms_as_tags;
+}
+
 #include "namespace.h"  // For CljNamespace definition
 #include "value.h"
 #include "symbol.h"
@@ -154,8 +167,7 @@ static inline bool is_special_symbol(CljSymbol *symbol) {
             symbol == SYM_VAR ||
             symbol == SYM_LOOP ||
             symbol == SYM_GO ||
-            symbol == SYM_TIME ||
-            symbol == SYM_SOURCE);
+            symbol == SYM_TIME);
 }
 
 // Recursive helper: Calculate string length without allocating
@@ -201,7 +213,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             if (!sym->cname) return 3; // "nil" if no name
             
             // Special forms are printed as #<special-form name> (like in Clojure)
-            if (is_special_symbol(sym)) {
+            if (g_print_special_forms_as_tags && is_special_symbol(sym)) {
                 return 17 + strlen(sym->cname); // "#<special-form name>" = 16 + name + 1
             }
             
@@ -236,11 +248,12 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             return len;
         }
 
-        case CLJ_LIST: {
+        case CLJ_LIST:
+        case CLJ_AST_NODE: {
             size_t len = 2; // "( )"
             ID current = (ID)v;
             int count = 0;
-            while (current && TAG(current) == CLJ_LIST && count < 1000) {
+            while (current && list_type_matches(TAG(current)) && count < 1000) {
                 CljList *current_list = as_list(current);
                 if (current_list && current_list->first) {
                     len += to_string_calc_length(current_list->first, escape_strings);
@@ -426,7 +439,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 return;
             }
             // Special forms are printed as #<special-form name> (like in Clojure)
-            if (is_special_symbol(sym)) {
+            if (g_print_special_forms_as_tags && is_special_symbol(sym)) {
                 memcpy(buffer + *offset, "#<special-form ", 16);
                 *offset += 16;
                 size_t name_len = strlen(sym->cname);
@@ -489,12 +502,13 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             return;
         }
 
-        case CLJ_LIST: {
+        case CLJ_LIST:
+        case CLJ_AST_NODE: {
             buffer[*offset] = '(';
             *offset += 1;
             ID current = (ID)v;
             int count = 0;
-                while (current && TAG(current) == CLJ_LIST && count < 1000) {
+                while (current && list_type_matches(TAG(current)) && count < 1000) {
                     CljList *current_list = as_list(current);
                     if (current_list && current_list->first) {
                     if (count > 0) {

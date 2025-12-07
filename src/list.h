@@ -11,6 +11,8 @@
 #include <stdlib.h> // For free
 #endif
 
+#include "ast.h"
+
 // CljList represents a Clojure-style linked list
 typedef struct CljList {
     CljObject base;
@@ -21,6 +23,14 @@ typedef struct CljList {
 // Safe accessor macros. They do not do memory-management. They return the object directly.
 #define LIST_FIRST(list) ((list) ? (ID)(list)->first : NULL)
 #define LIST_REST(list) ((list) ? (ID)(list)->rest : NULL)
+
+static inline bool list_type_matches(CljType type) {
+    return type == CLJ_LIST || type == CLJ_AST_NODE;
+}
+
+static inline bool is_list_like(ID obj) {
+    return obj && list_type_matches(TAG(obj));
+}
 
 // Check if a list is empty (both first and rest are NULL)
 static inline bool list_empty(CljList *list) {
@@ -36,7 +46,7 @@ CljList* empty_list(void);
 // Throws exception if obj is not NULL and not a CLJ_LIST
 static inline CljList* as_list(ID obj) {
     // Happy path: obj is not NULL and has correct type
-    if (obj && TAG(obj) == CLJ_LIST) {
+    if (obj && list_type_matches(TAG(obj))) {
         return (CljList*)obj;  // Direct return, no jumps
     }
     // NULL is valid (e.g., end of list) - return NULL
@@ -67,7 +77,7 @@ static inline CljList* as_list(ID obj) {
 ID list_nth(CljList *list, int n);
 int list_count(CljList *list);
 static inline bool is_list(ID v) {
-    return v && TAG(v) == CLJ_LIST;
+    return is_list_like(v);
 }
 
 #endif

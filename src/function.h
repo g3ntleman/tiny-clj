@@ -26,11 +26,6 @@ typedef struct {
 
 CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns);
 
-// Function call helpers
-/** Call function with argv; returns result or error object. */
-ID clj_call_function(ID fn, int argc, ID *argv);
-/** Apply function to array args in given env; returns result. */
-ID clj_apply_function(ID fn, ID *args, int argc, ID env);
 
 // Type-safe casting
 static inline CljFunction* as_function(ID obj) {

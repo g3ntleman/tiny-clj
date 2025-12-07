@@ -9,6 +9,21 @@ void reader_init(Reader *reader, const char *src) {
     reader->index = 0;
     reader->line = 1;
     reader->column = 1;
+    reader->source_name = NULL;
+}
+
+void reader_init_with_source(Reader *reader, const char *src, const char *source_name) {
+    reader_init(reader, src);
+    reader_set_source_name(reader, source_name);
+}
+
+void reader_set_source_name(Reader *reader, const char *source_name) {
+    if (!reader) return;
+    reader->source_name = source_name;
+}
+
+const char* reader_get_source_name(const Reader *reader) {
+    return reader ? reader->source_name : NULL;
 }
 
 bool reader_eof(const Reader *reader) {

@@ -17,6 +17,8 @@ const char* clj_type_name(CljType type) {
         case CLJ_VECTOR_TRANSIENT_WEAK: return "WeakVector";
         case CLJ_MAP: return "Map";
         case CLJ_LIST: return "List";
+        case CLJ_AST_NODE: return "ASTNode";
+        case CLJ_CALLSITE_CACHE: return "CallsiteCache";
         case CLJ_FUNC: return "Function";
         case CLJ_CLOSURE: return "Closure";
         case CLJ_EXCEPTION: return "Exception";

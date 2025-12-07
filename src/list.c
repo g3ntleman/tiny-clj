@@ -52,7 +52,7 @@ ID list_nth(CljList *list, int n) {
     CljObject *current = (CljObject*)list;
     
     // Traverse the list properly
-    for (int i = 0; i <= n && current && TAG(current) == CLJ_LIST; i++) {
+    for (int i = 0; i <= n && current && list_type_matches(TAG(current)); i++) {
         if (i == n) {
             CljList *current_list = as_list(current);
             // Element found - return it (may be NULL if element is nil)
@@ -60,7 +60,7 @@ ID list_nth(CljList *list, int n) {
         }
         CljList *current_list = as_list(current);
         current = LIST_REST(current_list);
-        if (current && TAG(current) != CLJ_LIST) {
+        if (current && !list_type_matches(TAG(current))) {
             current = NULL; // Stop if rest is not a list
         }
     }
@@ -74,7 +74,7 @@ int list_count(CljList *list) {
     if (!list) return 0;
     
     // Programmierfehler: list muss CLJ_LIST sein, wenn es nicht NULL ist
-    CLJ_ASSERT(TAG(list) == CLJ_LIST);
+    CLJ_ASSERT(list_type_matches(TAG(list)));
     
     // Empty list has first = NULL and rest = NULL
     // A list with nil as element has first = NULL but rest != NULL
@@ -87,7 +87,7 @@ int list_count(CljList *list) {
     CljObject *current = (CljObject*)list;
     while (current) {
         // Programmierfehler: current muss CLJ_LIST sein, wenn es nicht NULL ist
-        CLJ_ASSERT(TAG(current) == CLJ_LIST);
+        CLJ_ASSERT(list_type_matches(TAG(current)));
         
         CljList *current_list = as_list(current);
         // Count the element (first) of this list node

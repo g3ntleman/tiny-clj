@@ -28,7 +28,7 @@ TEST(test_list_direct_call) {
     // Test: Direct call to list function
     CljObject *result = eval_string("(list)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "list should work with no arguments");
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Don't RELEASE result - eval_string returns autoreleased object
 }
@@ -37,7 +37,7 @@ TEST(test_list_with_args) {
     // Test: list with arguments
     CljObject *result = eval_string("(list 1 2 3)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "list should work with arguments");
-    TEST_ASSERT_TRUE(result && TAG(result) == CLJ_LIST);
+    TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 1
     CljList *list = as_list((ID)result);

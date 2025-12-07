@@ -13,19 +13,19 @@ fi
 TEST_NAME="$1"
 DURATION=10  # Fixed 10 seconds sampling duration
 
-# Use build directory for unity-tests
-UNITY_TESTS_BIN="./build/unity-tests"
-if [ ! -f "$UNITY_TESTS_BIN" ]; then
-    echo "Warning: $UNITY_TESTS_BIN not found, searching for unity-tests"
-    UNITY_TESTS_BIN=$(find . -name "unity-tests" -type f -executable 2>/dev/null | head -1)
-    if [ -z "$UNITY_TESTS_BIN" ]; then
-        echo "Error: unity-tests not found. Please build the project first."
+# Use build directory for unit-tests
+UNIT_TESTS_BIN="./build/unit-tests"
+if [ ! -f "$UNIT_TESTS_BIN" ]; then
+    echo "Warning: $UNIT_TESTS_BIN not found, searching for unit-tests"
+    UNIT_TESTS_BIN=$(find . -name "unit-tests" -type f -executable 2>/dev/null | head -1)
+    if [ -z "$UNIT_TESTS_BIN" ]; then
+        echo "Error: unit-tests not found. Please build the project first."
         exit 1
     fi
 fi
 
 echo "Profiling test: $TEST_NAME"
-echo "Using binary: $UNITY_TESTS_BIN"
+echo "Using binary: $UNIT_TESTS_BIN"
 echo "Sampling duration: ${DURATION} seconds"
 echo ""
 
@@ -33,9 +33,9 @@ OUTPUT_FILE="sample_${TEST_NAME//\//_}_$(date +%Y%m%d_%H%M%S).txt"
 echo "Output file: $OUTPUT_FILE"
 echo ""
 
-# Start sample in background, waiting for unity-tests process
-echo "Starting sample (waiting for unity-tests process)..."
-sample "$UNITY_TESTS_BIN" $DURATION -wait -mayDie -f "$OUTPUT_FILE" > /dev/null 2>&1 &
+# Start sample in background, waiting for unit-tests process
+echo "Starting sample (waiting for unit-tests process)..."
+sample "$UNIT_TESTS_BIN" $DURATION -wait -mayDie -f "$OUTPUT_FILE" > /dev/null 2>&1 &
 SAMPLE_PID=$!
 
 # Give sample a moment to start waiting
@@ -47,7 +47,7 @@ START_TIME=$(date +%s)
 TEST_EXIT_CODE=0
 
 while [ $(($(date +%s) - START_TIME)) -lt $DURATION ]; do
-    $UNITY_TESTS_BIN --test "$TEST_NAME" --quiet > /dev/null 2>&1
+    $UNIT_TESTS_BIN --test "$TEST_NAME" --quiet > /dev/null 2>&1
     TEST_EXIT_CODE=$?
     if [ $TEST_EXIT_CODE -ne 0 ]; then
         break

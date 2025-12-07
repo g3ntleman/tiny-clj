@@ -10,8 +10,28 @@
 #include "list.h"
 #include "vector.h"
 #include "strings.h"
+#include "map.h"
 #include <string.h>
 #include <stdlib.h>
+
+static ID make_map_entry_vector(CljMap *map, int index) {
+    if (!map || index < 0 || index >= map->count) {
+        return NULL;
+    }
+
+    CljObject *key = map->data[index * 2];
+    CljObject *value = map->data[index * 2 + 1];
+
+    CljVector *entry = make_vector(2, CLJ_VECTOR);
+    if (!entry) {
+        return NULL;
+    }
+
+    entry = vector_conj(entry, (ID)key);
+    entry = vector_conj(entry, (ID)value);
+
+    return (ID)AUTORELEASE(entry);
+}
 
 // ============================================================================
 // FAST SEQ IMPLEMENTATION
@@ -32,7 +52,8 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     iter->container = obj;
     
     switch (obj->type) {
-        case CLJ_LIST: {
+        case CLJ_LIST:
+        case CLJ_AST_NODE: {
             CljList *list_data = as_list(obj);
             // Note: LIST_FIRST can be NULL (nil) - it's a valid value in Clojure lists
             // A list is only empty if list_data itself is NULL or the list structure is invalid
@@ -99,6 +120,19 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
             return true;
         }
         
+        case CLJ_MAP: {
+            CljMap *map = as_map((ID)obj);
+            if (!map || map->count == 0) {
+                return true;  // Empty map
+            }
+
+            iter->state.map.map = (struct CljMap *)map;
+            iter->state.map.index = 0;
+            iter->state.map.count = map->count;
+            iter->seq_type = CLJ_MAP;
+            return true;
+        }
+
         // Note: nil is now represented as NULL, handled above
         return true;
         
@@ -140,6 +174,13 @@ ID seq_iter_first(const SeqIterator *iter) {
             }
             return NULL;
         }
+
+        case CLJ_MAP: {
+            if (iter->state.map.index < iter->state.map.count) {
+                return make_map_entry_vector((CljMap *)iter->state.map.map, iter->state.map.index);
+            }
+            return NULL;
+        }
         
         default:
             return NULL;
@@ -156,7 +197,7 @@ bool seq_iter_next(SeqIterator *iter) {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
                 CljObject *rest = LIST_REST(node);
-                if (rest && TAG(rest) == CLJ_LIST) {
+                if (rest && list_type_matches(TAG(rest))) {
                     iter->state.list.current = rest;
                     iter->state.list.index++;
                     return true;
@@ -186,6 +227,15 @@ bool seq_iter_next(SeqIterator *iter) {
             }
             // Mark as exhausted
             iter->state.str.index = iter->state.str.length;
+            return false;
+        }
+
+        case CLJ_MAP: {
+            if (iter->state.map.index < iter->state.map.count - 1) {
+                iter->state.map.index++;
+                return true;
+            }
+            iter->state.map.index = iter->state.map.count;
             return false;
         }
         
@@ -235,6 +285,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
         
         case CLJ_STRING:
             return iter->state.str.index >= iter->state.str.length;
+
+        case CLJ_MAP:
+            return iter->state.map.index >= iter->state.map.count;
         
         default:
             // If seq_type is 0 (not set), it's an empty sequence
@@ -254,6 +307,8 @@ int seq_iter_position(const SeqIterator *iter) {
             return iter->state.vec.index;
         case CLJ_STRING:
             return iter->state.str.index;
+        case CLJ_MAP:
+            return iter->state.map.index;
         default:
             return 0;
     }
@@ -277,7 +332,7 @@ CljSeqIterator* make_seq(ID obj) {
     if (obj && TAG(obj) == CLJ_VECTOR) {
         CljVector *vec = as_vector((CljObject*)obj);
         if (vec && vector_count(vec) == 0) return NULL;
-    } else if (obj && TAG(obj) == CLJ_LIST) {
+    } else if (obj && list_type_matches(TAG(obj))) {
         CljList *list = as_list((CljObject*)obj);
         if (!LIST_FIRST(list)) return NULL;
     }
@@ -364,7 +419,7 @@ ID seq_next(ID seq_obj) {
         // Empty list - return nil
         return NULL;
     }
-    
+
     // For other types (CLJ_VECTOR, CLJ_STRING, etc.), use seq_rest
     // Get rest sequence (DRY: reuse seq_rest implementation)
     ID rest_seq = seq_rest(seq_obj);
@@ -378,6 +433,23 @@ ID seq_next(ID seq_obj) {
     
     // Rest is non-empty, return it
     return rest_seq;
+}
+
+ID seq_next_inplace(ID seq_obj) {
+    if (!seq_obj) return NULL;
+    
+    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    if (!seq) return NULL;
+    
+    if (seq->iter.seq_type == CLJ_LIST) {
+        return seq_next(seq_obj);
+    }
+    
+    if (!seq_iter_next(&seq->iter)) {
+        return NULL;
+    }
+    
+    return seq_obj;
 }
 
 bool seq_empty(ID seq_obj) {
@@ -439,6 +511,7 @@ bool is_seqable(ID obj) {
     
     switch (((CljObject*)obj)->type) {
         case CLJ_LIST:
+        case CLJ_AST_NODE:
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT:
@@ -453,6 +526,10 @@ bool is_seqable(ID obj) {
 }
 
 bool is_seq(ID obj) {
-    return TAG((CljObject*)obj) == CLJ_SEQ || TAG((CljObject*)obj) == CLJ_LIST;
+    if (!obj) return false;
+    if (list_type_matches(TAG(obj))) {
+        return true;
+    }
+    return TAG(obj) == CLJ_SEQ;
 }
 

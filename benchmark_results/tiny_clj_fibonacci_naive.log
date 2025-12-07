@@ -1,3 +1,4 @@
+nil
 fib
 Running naive recursive fibonacci benchmark...
 nil
@@ -7,14 +8,14 @@ Test: fib(20) = 6765
 nil
 
 nil
-warmup-result
-Warmup: fib(20) = 6765
+user/warmup-result
+#<unknown>
 nil
 
 nil
 Running 5 iterations of fib(20)...
 nil
-Elapsed time: 1124.52 msecs
+Elapsed time: 0.03 msecs
 nil
 
 nil

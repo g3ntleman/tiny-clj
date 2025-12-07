@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>  // For fprintf in DEBUG mode
+#include <stdint.h>
 #include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
@@ -30,6 +31,29 @@ struct ns_search_ctx {
 
 // Global context pointer for callback (thread-local would be better, but this works for single-threaded)
 static struct ns_search_ctx *g_ns_search_ctx = NULL;
+
+static bool namespace_is_clojure_core(const CljNamespace *ns) {
+    return ns && ns->name == SYM_CLOJURE_CORE;
+}
+
+static bool ambiguity_should_throw(const struct ns_search_ctx *ctx, CljNamespace *current_ns) {
+    if (!ctx || !ctx->ambiguous || !ctx->result_ns || !ctx->second_ns) {
+        return false;
+    }
+
+    if (current_ns) {
+        bool first_is_current = ctx->result_ns == current_ns;
+        bool second_is_current = ctx->second_ns == current_ns;
+        bool first_is_core = namespace_is_clojure_core(ctx->result_ns);
+        bool second_is_core = namespace_is_clojure_core(ctx->second_ns);
+
+        if ((first_is_current && second_is_core) || (second_is_current && first_is_core)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 // Helper function for map_foreach to search namespaces
 static void search_namespace_callback(ID key, ID value) {
@@ -83,6 +107,19 @@ static void search_namespace_callback(ID key, ID value) {
     }
 }
 
+static ID throw_ambiguous_symbol_error(CljSymbol *sym,
+                                       CljNamespace *first_ns,
+                                       CljNamespace *second_ns) {
+    const char *sym_name = (sym && sym->cname) ? sym->cname : "unknown";
+    const char *ns1_name = (first_ns && first_ns->name && first_ns->name->cname)
+        ? first_ns->name->cname : "unknown";
+    const char *ns2_name = (second_ns && second_ns->name && second_ns->name->cname)
+        ? second_ns->name->cname : "unknown";
+    return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
+        "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
+        sym_name, ns1_name, sym_name, ns2_name, sym_name);
+}
+
 // Helper context for namespace cleanup in ns_cleanup()
 // (no context needed, just release each namespace)
 static void release_namespace_callback(ID key, ID value) {
@@ -107,7 +144,7 @@ static CljMap* grow_transient_map(CljMap *old_map) {
     // Allocate new map with larger capacity
     size_t struct_size = sizeof(CljMap);
     size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
-    CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
+    CljMap *new_map = malloc(struct_size + data_size);
     if (!new_map) return NULL;
     
     // Initialize new transient map
@@ -373,58 +410,24 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
     if (v != NOT_FOUND) {
-        // Found in current namespace - check for ambiguity with other namespaces
-        // CRITICAL: clojure.core is automatically available and does NOT cause ambiguity
-        // In Clojure/JVM, if symbol exists in current namespace AND another namespace (not clojure.core),
-        // we should throw an ambiguity error
         if (g_runtime.ns_registry) {
             struct ns_search_ctx search_ctx = {
                 .sym = sym,
-                .result = NULL,
-                .result_ns = NULL,
+                .result = v,
+                .result_ns = current_ns,
                 .second_ns = NULL,
-                .current_ns = current_ns,  // Skip current namespace in search
+                .current_ns = current_ns,
                 .ambiguous = false
             };
             g_ns_search_ctx = &search_ctx;
-            
-            // Search all namespaces (including clojure.core) to check for ambiguity
-            // We already know it exists in current_ns, so we're looking for other namespaces
-            // NOTE: clojure.core will be found but should be ignored in ambiguity check
             map_foreach(g_runtime.ns_registry, search_namespace_callback);
-            
             g_ns_search_ctx = NULL;
-            
-            // Filter out clojure.core from ambiguity check (it's automatically available)
-            CljNamespace *other_ns = NULL;
-            if (search_ctx.result_ns && search_ctx.result_ns != current_ns) {
-                // Check if it's clojure.core by comparing name pointer
-                if (search_ctx.result_ns->name != SYM_CLOJURE_CORE) {
-                    other_ns = search_ctx.result_ns;
-                }
-            }
-            if (!other_ns && search_ctx.second_ns && search_ctx.second_ns != current_ns) {
-                // Check if it's clojure.core by comparing name pointer
-                if (search_ctx.second_ns->name != SYM_CLOJURE_CORE) {
-                    other_ns = search_ctx.second_ns;
-                }
-            }
-            
-            // If found in another namespace (not current_ns and not clojure.core), throw ambiguity error
-            if (other_ns) {
-                const char *sym_name = sym->cname ? sym->cname : "unknown";
-                const char *ns1_name = current_ns->name && current_ns->name->cname
-                    ? current_ns->name->cname : "unknown";
-                const char *ns2_name = other_ns->name && other_ns->name->cname
-                    ? other_ns->name->cname : "unknown";
-                return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
-                    "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-                    sym_name, ns1_name, sym_name, ns2_name, sym_name);
+
+            if (ambiguity_should_throw(&search_ctx, current_ns)) {
+                return throw_ambiguous_symbol_error(sym, search_ctx.result_ns, search_ctx.second_ns);
             }
         }
-        
-        // No ambiguity - return value from current namespace
-        // Update cache (map_assoc may return a new map due to COW, so we must use the result)
+
         if (g_runtime.resolve_cache) {
             ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
             ASSIGN(g_runtime.resolve_cache, updated_cache);
@@ -454,62 +457,6 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         // Use the unqualified symbol directly for lookup
         ID resolved = map_get(clojure_core->mappings, sym, NOT_FOUND);
         if (resolved != NOT_FOUND) {
-            // Found in clojure.core - check for ambiguity with other namespaces
-            // In Clojure/JVM, if symbol exists in clojure.core AND another namespace,
-            // we should throw an ambiguity error
-            if (g_runtime.ns_registry) {
-                struct ns_search_ctx search_ctx = {
-                    .sym = sym,
-                    .result = NULL,
-                    .result_ns = NULL,
-                    .second_ns = NULL,
-                    .ambiguous = false
-                };
-                g_ns_search_ctx = &search_ctx;
-                
-                // Search all namespaces to check for ambiguity
-                map_foreach(g_runtime.ns_registry, search_namespace_callback);
-                
-                g_ns_search_ctx = NULL;
-                
-                // If found in another namespace too (not clojure.core), throw ambiguity error
-                // search_ctx.result_ns will be set to the first namespace found (could be clojure.core or another)
-                // search_ctx.second_ns will be set if ambiguous is true
-                if (search_ctx.ambiguous && search_ctx.result_ns && search_ctx.second_ns) {
-                    // Found in at least 2 namespaces - determine which ones
-                    CljNamespace *ns1 = search_ctx.result_ns;
-                    CljNamespace *ns2 = search_ctx.second_ns;
-                    // If one of them is clojure.core, use clojure.core as first
-                    if (ns2 && ns2->name == SYM_CLOJURE_CORE) {
-                        CljNamespace *tmp = ns1;
-                        ns1 = ns2;
-                        ns2 = tmp;
-                    } else if (ns1 && ns1->name != SYM_CLOJURE_CORE) {
-                        // Neither is clojure.core - use clojure.core as first
-                        ns1 = clojure_core;
-                    }
-                    
-                    const char *sym_name = sym->cname ? sym->cname : "unknown";
-                    const char *ns1_name = "clojure.core";
-                    const char *ns2_name = ns2->name && ns2->name->cname ? ns2->name->cname : "unknown";
-                    throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
-                        "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-                        sym_name, ns1_name, sym_name, ns2_name, sym_name);
-                    return NULL;
-                } else if (search_ctx.result_ns && search_ctx.result_ns->name != SYM_CLOJURE_CORE) {
-                    // Found in exactly one other namespace (not clojure.core)
-                    const char *sym_name = sym->cname ? sym->cname : "unknown";
-                    const char *ns1_name = "clojure.core";
-                    const char *ns2_name = search_ctx.result_ns->name && search_ctx.result_ns->name->cname
-                        ? search_ctx.result_ns->name->cname : "unknown";
-                    throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
-                        "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-                        sym_name, ns1_name, sym_name, ns2_name, sym_name);
-                    return NULL;
-                }
-            }
-            
-            // No ambiguity - return value from clojure.core
             if (g_runtime.resolve_cache) {
                 ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, resolved);
                 ASSIGN(g_runtime.resolve_cache, updated_cache);
@@ -534,6 +481,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             .result = NULL,
             .result_ns = NULL,
             .second_ns = NULL,
+            .current_ns = current_ns,
             .ambiguous = false
         };
         g_ns_search_ctx = &search_ctx;
@@ -545,15 +493,8 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         g_ns_search_ctx = NULL;
         
         // If ambiguous (found in 2+ namespaces), throw error with helpful message
-        if (search_ctx.ambiguous && search_ctx.result_ns && search_ctx.second_ns) {
-            const char *sym_name = sym->cname ? sym->cname : "unknown";
-            const char *ns1_name = search_ctx.result_ns->name && search_ctx.result_ns->name->cname
-                ? search_ctx.result_ns->name->cname : "unknown";
-            const char *ns2_name = search_ctx.second_ns->name && search_ctx.second_ns->name->cname
-                ? search_ctx.second_ns->name->cname : "unknown";
-            return throw_exception_formatted(NULL, __FILE__, __LINE__, 0,
-                "Unable to resolve symbol: %s in this context, perhaps you meant: %s/%s or %s/%s",
-                sym_name, ns1_name, sym_name, ns2_name, sym_name);
+        if (ambiguity_should_throw(&search_ctx, current_ns)) {
+            return throw_ambiguous_symbol_error(sym, search_ctx.result_ns, search_ctx.second_ns);
         }
         
         // CRITICAL: Even if found in exactly one namespace, we do NOT return it.
@@ -640,7 +581,7 @@ CljNamespace* ns_find_for_object(CljObject *obj) {
             CljNamespace *ns = (CljNamespace*)ns_val;
             if (ns->mappings) {
                 MAP_FOR_EACH(ns->mappings, key, value) {
-                    if (value == (ID)obj) {
+                    if (value == obj) {
                         return ns;
                     }
                 }
@@ -784,7 +725,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
                 // Must use unqualified symbol for lookup
                 CljSymbol *inc_sym = intern_symbol_global("inc");
                 if (inc_sym) {
-                    CljObject *inc_value = (CljObject*)map_get(clojure_core->mappings, inc_sym, NULL);
+                    CljObject *inc_value = map_get(clojure_core->mappings, inc_sym, NULL);
                     if (!inc_value) {
                         needs_reload = true;
                     }
@@ -855,21 +796,21 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
     
     TRY {
         // normaler Body (zweites Element)
-        CljObject *body = (CljObject*)list_nth(as_list(form), 1);
+        CljObject *body = list_nth(as_list(form), 1);
         result = eval_parsed(body, st, NULL);
     } CATCH(ex) {
         // We arrived here via eval_error
         // Search for catch clauses
         for (int i = 2; i < list_count(as_list(form)); i++) {
-            CljObject *clause = (CljObject*)list_nth(as_list(form), i);
-            if (is_list(clause) && LIST_FIRST(as_list(clause)) == (ID)SYM_CATCH) {
-                CljObject *sym = (CljObject*)list_nth(as_list(clause), 1);
-                CljObject *body = (CljObject*)list_nth(as_list(clause), 2);
+            CljObject *clause = list_nth(as_list(form), i);
+            if (is_list(clause) && LIST_FIRST(as_list(clause)) == SYM_CATCH) {
+                CljObject *sym = list_nth(as_list(clause), 1);
+                CljObject *body = list_nth(as_list(clause), 2);
                 
                 // Bind variable (sym = err) - simplified
                 // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-                CljMap *updated_mappings = map_assoc((CljMap*)st->current_ns->mappings, sym, ex);
-                ASSIGN(st->current_ns->mappings, (CljObject*)updated_mappings);
+                CljMap *updated_mappings = map_assoc(st->current_ns->mappings, sym, ex);
+                ASSIGN(st->current_ns->mappings, updated_mappings);
                 result = eval_parsed(body, st, NULL);
                 return result;
             }
@@ -901,10 +842,16 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
  * The cache will be automatically rebuilt on the next ns_resolve() call.
  */
 void ns_invalidate_resolve_cache(void) {
+    uint64_t next_epoch = g_runtime.resolve_cache_epoch + 1;
+    if (next_epoch == 0) {
+        next_epoch = 1;
+    }
+    g_runtime.resolve_cache_epoch = next_epoch;
+
     if (g_runtime.resolve_cache) {
         RELEASE(g_runtime.resolve_cache);
-        g_runtime.resolve_cache = make_map(RESOLVE_CACHE_SIZE);
     }
+    g_runtime.resolve_cache = make_map(RESOLVE_CACHE_SIZE);
 }
 
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
@@ -955,7 +902,12 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
     // See src/map.c:98 and src/map.c:106-107
     // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
-    CljMap *new_mappings = map_assoc(ns->mappings, qualified_symbol ? (ID)qualified_symbol : symbol, value);
+    ID map_key = symbol;
+    if (qualified_symbol) {
+        map_key = qualified_symbol;
+    }
+
+    CljMap *new_mappings = map_assoc(ns->mappings, map_key, value);
     if (new_mappings != ns->mappings) {
         // Map was copied (COW) - update reference
         RELEASE(ns->mappings);
@@ -980,7 +932,7 @@ CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
     
     // Look up alias in aliases map
-    CljObject *ns_name = (CljObject*)map_get(ns->aliases, alias, NULL);
+    CljObject *ns_name = map_get(ns->aliases, alias, NULL);
     return ns_name;
 }
 

@@ -27,7 +27,7 @@ typedef struct {
     int *recur_arg_count;  // Pointer to recur argument count (can be NULL)
 } EvalContext;
 
-// Erweiterte Funktionsaufruf-Funktionen
+// Extended function-call entry points
 ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st);
 ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx);
 // Internal function - uses EvalContext for parameter substitution
@@ -37,15 +37,17 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
 // Simplified list evaluation (optionally accepts EvalContext for recur support)
 ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
-// Definition und Funktionen
+// Special form evaluators
 ID eval_def(CljList *list, CljMap *env, EvalState *st);
 ID eval_ns(CljList *list, CljMap *env, EvalState *st);
 ID eval_var(CljList *list, CljMap *env, EvalState *st);
 ID eval_list_function(CljList *list, CljMap *env);
 ID eval_fn(CljList *list, CljMap *env, EvalState *st);
+ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_symbol(CljSymbol *symbol, EvalState *st);
+ID eval_time(CljList *list, CljMap *env, EvalState *st);
 
-// Weitere Built-in Funktionen
+// Additional built-in helpers
 ID eval_seq(CljList *list, CljMap *env);
 
 // For-loop functions
@@ -59,9 +61,10 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 // Function definition macro
 ID eval_defn(CljList *list, CljMap *env, EvalState *st);
 
-// Hilfsfunktionen
+// Helper functions
 ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st);
 ID eval_arg_with_context(CljList *list, int index, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
 
 // Time output suppression (for tests)
 void set_suppress_time_output(bool suppress);
@@ -77,5 +80,10 @@ void reset_eval_arg_depth(void);
  * @return The evaluated result (autoreleased) or NULL on error
  */
 ID eval_string(const char* expr_str, EvalState *eval_state);
+
+// Common evaluation helpers
+ID* alloc_obj_array(int size, ID *stack_buffer);
+void free_obj_array(ID *array, ID *stack_buffer);
+CljObject* list_get_element(CljList *list, int index);
 
 #endif

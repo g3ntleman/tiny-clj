@@ -132,6 +132,7 @@ bool eval_multiform_string(const char *code, EvalState *st) {
     WITH_AUTORELEASE_POOL({
         Reader reader;
         reader_init(&reader, code);
+        reader_set_source_name(&reader, "<repl input>");
 
         // Loop: Parse and evaluate each expression until EOF
         while (!reader_is_eof(&reader)) {
@@ -277,6 +278,7 @@ CljVector* history_load_from_file(const char *path) {
                 // The Reader only reads from the buffer, it doesn't store the pointer
                 const char *buf = clj_string_data(content);
                 Reader rd; reader_init(&rd, buf);
+                reader_set_source_name(&rd, path);
                 ID parsed = value_by_parsing_expr(&rd, st);
 
                 // Validate it's a vector
@@ -695,6 +697,43 @@ int main(int argc, char **argv) {
 
     if (eval_count > 0 && !start_repl) {
         cleanup_and_exit(eval_args, 0);
+    }
+
+    bool stdin_is_tty = isatty(STDIN_FILENO) != 0;
+    if (!stdin_is_tty) {
+        size_t capacity = 4096;
+        size_t len = 0;
+        char *buffer = (char*)malloc(capacity);
+        if (!buffer) {
+            fprintf(stderr, "Error: Out of memory while reading stdin\n");
+            cleanup_and_exit(eval_args, 1);
+        }
+
+        int ch;
+        while ((ch = fgetc(stdin)) != EOF) {
+            if (len + 1 >= capacity) {
+                size_t new_cap = capacity * 2;
+                char *tmp = (char*)realloc(buffer, new_cap);
+                if (!tmp) {
+                    free(buffer);
+                    fprintf(stderr, "Error: Out of memory while reading stdin\n");
+                    cleanup_and_exit(eval_args, 1);
+                }
+                buffer = tmp;
+                capacity = new_cap;
+            }
+            buffer[len++] = (char)ch;
+        }
+        buffer[len] = '\0';
+
+        if (len == 0) {
+            free(buffer);
+            cleanup_and_exit(eval_args, 0);
+        }
+
+        bool success = eval_multiform_string(buffer, st);
+        free(buffer);
+        cleanup_and_exit(eval_args, success ? 0 : 1);
     }
 
     // Interactive REPL

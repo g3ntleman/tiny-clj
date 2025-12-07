@@ -12,6 +12,7 @@ typedef struct {
     size_t index;
     int line;
     int column;
+    const char *source_name;
 } Reader;
 
 // Codepoint sentinel constants for reader functions (unsigned variant)
@@ -27,6 +28,9 @@ typedef struct {
 #endif
 
 void reader_init(Reader *reader, const char *src);
+void reader_init_with_source(Reader *reader, const char *src, const char *source_name);
+void reader_set_source_name(Reader *reader, const char *source_name);
+const char* reader_get_source_name(const Reader *reader);
 bool reader_eof(const Reader *reader);
 bool reader_is_eof(const Reader *reader);
 char reader_peek(const Reader *reader);

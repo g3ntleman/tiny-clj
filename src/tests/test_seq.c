@@ -14,6 +14,22 @@
 
 #define TEST_VECTOR_SIZE 3
 
+static CljMap* make_sample_map_with_entries(void) {
+    CljMap *map = make_map(4);
+    TEST_ASSERT_NOT_NULL(map);
+    
+    CljSymbol *key1 = intern_symbol_global("k1");
+    CljSymbol *key2 = intern_symbol_global("k2");
+    TEST_ASSERT_NOT_NULL(key1);
+    TEST_ASSERT_NOT_NULL(key2);
+    
+    map = map_assoc(map, (ID)key1, fixnum(10));
+    map = map_assoc(map, (ID)key2, fixnum(20));
+    TEST_ASSERT_NOT_NULL(map);
+    
+    return map;
+}
+
 // ============================================================================
 // SEQ CREATION TESTS
 // ============================================================================
@@ -74,15 +90,13 @@ TEST(test_make_seq_string) {
 TEST(test_make_seq_map) {
     // Manual memory management - no WITH_AUTORELEASE_POOL
     {
-        // Create a test map
-        CljMap *map = make_map(16);
+        CljMap *map = make_sample_map_with_entries();
+        map = (CljMap*)AUTORELEASE((CljObject*)map);
         TEST_ASSERT_NOT_NULL(map);
         
-        // Create sequence iterator - may return NULL for empty map
         CljSeqIterator *seq = make_seq((CljObject*)map);
-        (void)seq; // Suppress unused variable warning
-        // Note: make_seq may return NULL for empty maps - this is expected behavior
-        // TEST_ASSERT_NOT_NULL(seq); // Commented out - NULL is valid for empty maps
+        TEST_ASSERT_NOT_NULL(seq);
+        RELEASE((ID)seq);
     }
 }
 
@@ -130,6 +144,72 @@ TEST(test_seq_rest) {
         CljObject *rest_seq = (CljObject*)seq_rest((CljObject*)seq);
         TEST_ASSERT_NOT_NULL(rest_seq);
         TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
+    }
+}
+
+TEST(test_seq_map_entry_vector) {
+    {
+        CljMap *map = make_sample_map_with_entries();
+        map = (CljMap*)AUTORELEASE((CljObject*)map);
+        
+        CljSeqIterator *seq = make_seq((CljObject*)map);
+        TEST_ASSERT_NOT_NULL(seq);
+        
+        CljObject *entry = (CljObject*)seq_first((CljObject*)seq);
+        TEST_ASSERT_NOT_NULL(entry);
+        TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, entry->type);
+        
+        CljVector *vec = as_vector(entry);
+        TEST_ASSERT_NOT_NULL(vec);
+        TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
+        
+        CljObject *key = vector_nth(vec, 0);
+        CljObject *value = vector_nth(vec, 1);
+        TEST_ASSERT_TRUE(TAG(key) == CLJ_SYMBOL);
+        TEST_ASSERT_TRUE(is_fixnum((ID)value));
+        CljSymbol *expected_key = intern_symbol_global("k1");
+        TEST_ASSERT_EQUAL_PTR(expected_key, key);
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum((ID)value));
+        
+        RELEASE((ID)seq);
+    }
+}
+
+TEST(test_seq_rest_map_returns_sequence) {
+    {
+        CljMap *map = make_sample_map_with_entries();
+        map = (CljMap*)AUTORELEASE((CljObject*)map);
+        
+        CljSeqIterator *seq = make_seq((CljObject*)map);
+        TEST_ASSERT_NOT_NULL(seq);
+        
+        CljObject *rest_seq = (CljObject*)seq_rest((CljObject*)seq);
+        TEST_ASSERT_NOT_NULL(rest_seq);
+        TEST_ASSERT_EQUAL_INT(CLJ_SEQ, rest_seq->type);
+        
+        TEST_ASSERT_FALSE(seq_empty(rest_seq));
+        
+        RELEASE((ID)seq);
+        RELEASE((ID)rest_seq);
+    }
+}
+
+TEST(test_seq_next_inplace_reuses_iterator) {
+    {
+        CljMap *map = make_sample_map_with_entries();
+        map = (CljMap*)AUTORELEASE((CljObject*)map);
+        
+        CljSeqIterator *seq = make_seq((CljObject*)map);
+        TEST_ASSERT_NOT_NULL(seq);
+        
+        ID advanced = seq_next_inplace((CljObject*)seq);
+        TEST_ASSERT_EQUAL_PTR(seq, (CljSeqIterator*)advanced);
+        
+        // After advancing once, another advance should eventually yield NULL
+        ID exhausted = seq_next_inplace(advanced);
+        TEST_ASSERT_NULL(exhausted);
+        
+        RELEASE((ID)seq);
     }
 }
 

@@ -6,7 +6,7 @@
 #include "meta.h"
 #include "vector.h"
 #include "memory.h"
-#include "function_call.h"  // For reset_eval_arg_depth()
+#include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "map.h"            // For make_map()
 
@@ -17,6 +17,7 @@
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,
     .resolve_cache = NULL,
+    .resolve_cache_epoch = 0,
     .symbol_table = NULL,
     .meta_registry = NULL,
     .pool_stack = NULL,
@@ -49,6 +50,9 @@ void runtime_init(TinyClJRuntime *runtime) {
     // and should not be cleared here to avoid losing metadata across runtime_init()
     if (!runtime->resolve_cache) {
         ASSIGN(runtime->resolve_cache, make_map(RESOLVE_CACHE_SIZE));
+    }
+    if (runtime->resolve_cache_epoch == 0) {
+        runtime->resolve_cache_epoch = 1;
     }
     
     // Initialize event loop queues as transient vectors (only if not already set)
@@ -92,6 +96,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     ASSIGN(runtime->task_queue, NULL);
     ASSIGN(runtime->timer_queue, NULL);
     ASSIGN(runtime->resolve_cache, NULL);
+    runtime->resolve_cache_epoch = 0;
     ASSIGN(runtime->pool_stack, NULL);
     ASSIGN(runtime->ns_registry, NULL);
     ASSIGN(runtime->meta_registry, NULL);
