@@ -335,6 +335,9 @@ CljSeqIterator* make_seq(ID obj) {
     } else if (obj && list_type_matches(TAG(obj))) {
         CljList *list = as_list((CljObject*)obj);
         if (!LIST_FIRST(list)) return NULL;
+    } else if (obj && (TAG(obj) == CLJ_MAP || TAG(obj) == CLJ_MAP_TRANSIENT)) {
+        CljMap *map = as_map((ID)obj);
+        if (!map || map->count == 0) return NULL;
     }
     
     // Allocate heap wrapper
@@ -479,6 +482,8 @@ int seq_count(ID obj) {
                 break;
             case CLJ_STRING:
                 return seq->iter.state.str.length;
+            case CLJ_MAP:
+                return seq->iter.state.map.count;
             default:
                 return 0;
         }

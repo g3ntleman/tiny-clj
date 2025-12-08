@@ -42,10 +42,10 @@ fi
 echo -e "${BLUE}📦 Building clean Release build for tiny-clj...${NC}"
 rm -rf "$BUILD_DIR"
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$BUILD_DIR" -j -t unity-tests
+cmake --build "$BUILD_DIR" -j -t unit-tests
 # Try to build tiny-clj-repl, but don't fail if it doesn't work
 cmake --build "$BUILD_DIR" -j -t tiny-clj-repl 2>/dev/null || true
-TEST_BINARY="$BUILD_DIR/unity-tests"
+TEST_BINARY="$BUILD_DIR/unit-tests"
 
 if [ ! -f "$TEST_BINARY" ]; then
     echo -e "${RED}❌ Failed to build tiny-clj${NC}"

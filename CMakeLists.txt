@@ -226,6 +226,7 @@ endif()
 set_target_properties(tiny-clj-esp32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS_EMBEDDED}"
     LINK_FLAGS "${CMAKE_EXE_LINKER_FLAGS_EMBEDDED}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
 
@@ -252,12 +253,16 @@ add_executable(tiny-clj-repl
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META ENABLE_LINE_EDITING)
+    set_target_properties(tiny-clj-repl PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+    )
     # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
     target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
     set_target_properties(tiny-clj-repl PROPERTIES
         COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer"
         LINK_FLAGS ""
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
 endif()
 
@@ -278,6 +283,7 @@ endif()
 set_target_properties(tiny-clj-esp32-repl PROPERTIES
     COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
     LINK_FLAGS "-Wl,-dead_strip"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
 # ============================================================================

@@ -1816,10 +1816,12 @@ ID eval_seq(CljList *list, CljMap *env) {
         return NULL;
     }
 
-    // For lists, return as-is (lists are already sequences)
+    // For lists, check if empty - if so, return nil
     switch (arg->type) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
+            CljList *list_data = as_list(arg);
+            if (!LIST_FIRST(list_data)) return NULL;  // Empty list -> nil
             return AUTORELEASE(RETAIN(arg));
         }
 
