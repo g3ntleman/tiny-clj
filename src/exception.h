@@ -7,6 +7,7 @@
 #define EXCEPTION_H
 #include "object.h"
 #include "memory.h"
+#include "common.h"  // For CLJ_ASSERT
 #include <setjmp.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -144,6 +145,65 @@ extern GlobalExceptionStack global_exception_stack;
 
 /** @brief Re-throw existing exception object (convenience macro) */
 #define THROW(ex) throw_exception_object(ex)
+
+// Internal helper macro for arity checks (DRY)
+#define _CHECK_ARITY_IMPL(condition, func_name, fmt, ...) \
+    do { \
+        if (condition) { \
+            throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0, \
+                                     fmt, func_name, __VA_ARGS__); \
+            return NULL; \
+        } \
+    } while(0)
+
+/** @brief Check arity and throw ArityException if mismatch.
+ *  @param argc Actual argument count
+ *  @param expected Expected argument count
+ *  @param func_name Function name for error message
+ *  @return NULL if arity mismatch (exception thrown), otherwise no return value
+ *  @note Use as: CHECK_ARITY(argc, expected, "func_name");
+ *  @note The macro performs the check internally and returns NULL if mismatch
+ */
+#define CHECK_ARITY(argc, expected, func_name) \
+    _CHECK_ARITY_IMPL((argc) != (expected), func_name, \
+                     "%s requires %u argument%s, got %u", \
+                     expected, ((expected) == 1 ? "" : "s"), argc)
+
+/** @brief Check maximum arity and throw ArityException if exceeded.
+ *  @param argc Actual argument count
+ *  @param max Maximum allowed argument count
+ *  @param func_name Function name for error message
+ *  @return NULL if arity exceeded (exception thrown), otherwise no return value
+ */
+#define CHECK_ARITY_MAX(argc, max, func_name) \
+    _CHECK_ARITY_IMPL((argc) > (max), func_name, \
+                     "%s accepts at most %u argument%s, got %u", \
+                     max, ((max) == 1 ? "" : "s"), argc)
+
+/** @brief Check minimum arity and throw ArityException if not met.
+ *  @param argc Actual argument count
+ *  @param min Minimum required argument count
+ *  @param func_name Function name for error message
+ *  @return NULL if arity not met (exception thrown), otherwise no return value
+ */
+#define CHECK_ARITY_MIN(argc, min, func_name) \
+    _CHECK_ARITY_IMPL((argc) < (min), func_name, \
+                     "%s requires at least %u argument%s, got %u", \
+                     min, ((min) == 1 ? "" : "s"), argc)
+
+/** @brief Check arity range and throw ArityException if out of range.
+ *  @param argc Actual argument count
+ *  @param min Minimum required argument count
+ *  @param max Maximum allowed argument count
+ *  @param func_name Function name for error message
+ *  @return NULL if arity out of range (exception thrown), otherwise no return value
+ */
+#define CHECK_ARITY_RANGE(argc, min, max, func_name) \
+    do { \
+        _CHECK_ARITY_IMPL((argc) < (min) || (argc) > (max), func_name, \
+                         "%s requires %u-%u arguments, got %u", \
+                         min, max, argc); \
+    } while(0)
 
 /**
  * @brief Create exception with standard error message.

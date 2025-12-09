@@ -143,6 +143,7 @@ extern StaticSymbolData sym_last_index_of_data;
 extern StaticSymbolData sym_string_reverse_data;
 extern StaticSymbolData sym_source_data;
 extern StaticSymbolData sym_dir_data;
+extern StaticSymbolData sym_rt_data;
 extern StaticSymbolData sym_meta_data;
 extern StaticSymbolData sym_reduce_data;
 extern StaticSymbolData sym_do_data;

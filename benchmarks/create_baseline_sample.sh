@@ -74,3 +74,5 @@ else
     echo -e "${RED}❌ Sample file was not created${NC}"
     exit 1
 fi
+
+

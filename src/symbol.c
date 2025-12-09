@@ -30,6 +30,7 @@ CljSymbol *SYM_SPLICE_UNQUOTE = NULL;
 CljSymbol *SYM_SOURCE = NULL;
 static CljSymbol *SYM_SOURCE_NATIVE = NULL;
 static CljSymbol *SYM_DIR_NATIVE = NULL;
+static CljSymbol *SYM_RT_NATIVE = NULL;
 static CljSymbol *SYM_SQRT_NATIVE = NULL;
 CljSymbol *SYM_DO = NULL;
 CljSymbol *SYM_LOOP = NULL;
@@ -136,6 +137,7 @@ DEFINE_STATIC_SYMBOL(sym_splice_unquote_data, "splice-unquote");
 DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_source_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_dir_data, "dir");
+DEFINE_EXTERN_SYMBOL(sym_rt_data, "rt");
 DEFINE_EXTERN_SYMBOL(sym_meta_data, "meta");
 DEFINE_EXTERN_SYMBOL(sym_do_data, "do");
 DEFINE_EXTERN_SYMBOL(sym_reduce_data, "reduce");
@@ -382,6 +384,8 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
+    // clojure.repl native function symbol for rt
+    INIT_SYMBOL_NS(SYM_RT_NATIVE, sym_rt_data, SYM_CLOJURE_REPL);
     
     // clojure.core sqrt native function symbol
     INIT_SYMBOL_NS(SYM_SQRT_NATIVE, sym_sqrt_data, SYM_CLOJURE_CORE);

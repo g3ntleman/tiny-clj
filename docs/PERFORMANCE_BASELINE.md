@@ -90,3 +90,5 @@ Basierend auf den Hotspots und Debug-Overhead:
 - Sample-Erstellung: `benchmarks/create_baseline_sample.sh`
 - Sample-Datei: `sample_baseline_20251205_230957.txt`
 - Vergleichs-Ergebnisse: `benchmark_results/fibonacci_naive_comparison.txt`
+
+

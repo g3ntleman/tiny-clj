@@ -2,6 +2,14 @@
 
 ## Latest Updates (Recent Commits)
 
+### Sequence Support for Maps (Latest)
+- **Map Sequencing**: `seq` now works with maps, returning a sequence of `[key value]` vectors
+  - `(seq {:a 1 :b 2 :c 3})` returns `([:a 1] [:b 2] [:c 3])`
+  - Maps can now be used with all sequence functions (`first`, `rest`, `next`, `map`, etc.)
+  - Clojure-compatible behavior: empty maps return `nil` from `seq`
+  - Copy-on-Write (COW) optimization for map iterators to reduce allocations
+  - Full test coverage with map sequencing tests
+
 ### clojure.repl Functions Available (Latest)
 - **REPL Helper Functions**: Complete implementation of clojure.repl namespace utilities
   - `doc` - Print documentation for a var (with metadata support)

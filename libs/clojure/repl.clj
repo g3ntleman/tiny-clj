@@ -85,3 +85,7 @@
         (search-ns ns-obj))
       nil)))
 
+;; rt - Return retain count of an object
+^#^{:doc "Returns the reference count of an object as an integer. Usage: (rt obj)"}
+(defn rt [x] :native)
+
