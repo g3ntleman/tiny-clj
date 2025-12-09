@@ -1676,11 +1676,7 @@ ID native_trim(ID *args, unsigned int argc) {
 
 // String upper-case: (upper-case s) - converts string to upper-case
 ID native_upper_case(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "upper-case requires 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY(argc, 1, "upper-case");
 
     ID str_arg = args[0];
 
@@ -1715,11 +1711,7 @@ ID native_upper_case(ID *args, unsigned int argc) {
 
 // String lower-case: (lower-case s) - converts string to lower-case
 ID native_lower_case(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "lower-case requires 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY(argc, 1, "lower-case");
 
     ID str_arg = args[0];
 
@@ -1754,11 +1746,7 @@ ID native_lower_case(ID *args, unsigned int argc) {
 
 // String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
 ID native_last_index_of(ID *args, unsigned int argc) {
-    if (argc != 2 && argc != 3) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "last-index-of requires 2 or 3 arguments, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY_RANGE(argc, 2, 3, "last-index-of");
 
     ID str_arg = args[0];
     ID value_arg = args[1];
@@ -1830,11 +1818,7 @@ ID native_last_index_of(ID *args, unsigned int argc) {
 
 // String reverse: (reverse s) - reverses a string (not lists)
 ID native_string_reverse(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "reverse requires 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY(argc, 1, "reverse");
 
     ID str_arg = args[0];
 
@@ -2003,11 +1987,7 @@ static int compare_symbol_names(const void *lhs, const void *rhs) {
 // Note: In Clojure, source is a normal function, not a special form
 // The argument is evaluated: (source 'inc) evaluates 'inc to the symbol inc, then resolves it
 ID native_source(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "source requires 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY(argc, 1, "source");
     
     ID arg = args[0];
     if (!arg) {
@@ -2071,11 +2051,7 @@ ID native_source(ID *args, unsigned int argc) {
 }
 
 ID native_repl_dir(ID *args, unsigned int argc) {
-    if (argc > 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "dir accepts at most 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY_MAX(argc, 1, "dir");
 
     EvalState *st = g_current_eval_state;
     CljNamespace *target_ns = NULL;
@@ -2135,6 +2111,22 @@ ID native_repl_dir(ID *args, unsigned int argc) {
     return NULL;
 }
 
+// rt: Return retain count of an object (native implementation for clojure.repl namespace)
+// Usage: (rt obj) - returns the reference count as an integer
+ID native_rt(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "rt");
+    
+    ID obj = args[0];
+    if (!obj) {
+        // nil has retain count 0
+        return fixnum(0);
+    }
+    
+    // Get retain count using get_retain_count from memory.h
+    int rc = get_retain_count(obj);
+    return fixnum(rc);
+}
+
 // Forward declarations for native functions used in lookup table
 ID native_meta(ID *args, unsigned int argc);
 
@@ -2159,6 +2151,7 @@ static const NativeFunctionEntry native_function_table[] = {
     // clojure.repl functions
     {&sym_source_data.sym, native_source},
     {&sym_dir_data.sym, native_repl_dir},
+    {&sym_rt_data.sym, native_rt},
     // clojure.core functions
     {&sym_meta_data.sym, native_meta},
     {&sym_reduce_data.sym, native_reduce},
@@ -2316,11 +2309,7 @@ BuiltinFn native_function_lookup(CljSymbol *symbol) {
 
 // Meta function: (meta obj) - returns metadata map or nil
 ID native_meta(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-                                  "meta requires 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY(argc, 1, "meta");
 
     ID obj = args[0];
     if (!obj) {
@@ -3375,10 +3364,7 @@ ID native_mul_variadic(ID *args, unsigned int argc) {
 }
 
 ID native_sub_variadic(ID *args, unsigned int argc) {
-    if (argc == 0) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO);
-        return NULL;
-    }
+    CHECK_ARITY_MIN(argc, 1, "sub");
     if (argc == 1) {
         if (!args[0]) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
@@ -3597,11 +3583,7 @@ ID native_bit_shift_left(ID *args, unsigned int argc) {
 }
 
 ID native_range(ID *args, unsigned int argc) {
-    if (argc < 1 || argc > 3) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-            "range requires 1-3 arguments, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY_RANGE(argc, 1, 3, "range");
 
     int start = 0, end = 0, step = 1;
 
@@ -3725,11 +3707,7 @@ ID native_math_sqrt(ID *args, unsigned int argc) {
 }
 
 ID native_format(ID *args, unsigned int argc) {
-    if (argc < 1) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-            "format requires at least 1 argument, got %u", argc);
-        return NULL;
-    }
+    CHECK_ARITY_MIN(argc, 1, "format");
 
     // First argument must be a string (format string)
     if (TAG(args[0]) != CLJ_STRING) {
@@ -3947,10 +3925,7 @@ ID native_read_string(ID *args, unsigned int argc) {
 }
 
 ID native_div_variadic(ID *args, unsigned int argc) {
-    if (argc == 0) {
-        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0, ERR_WRONG_ARITY_ZERO);
-        return NULL;
-    }
+    CHECK_ARITY_MIN(argc, 1, "div");
     if (argc == 1) {
         if (!args[0]) {
             throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
@@ -4633,4 +4608,5 @@ void register_builtins() {
     // and needs to be available before clojure.repl.clj is loaded.
     register_builtin_in_core("clojure.repl/source", native_source);
     register_builtin_in_core("clojure.repl/dir", native_repl_dir);
+    register_builtin_in_core("clojure.repl/rt", native_rt);
 }

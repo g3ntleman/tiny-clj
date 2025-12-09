@@ -35,39 +35,18 @@ TEST(test_memory_leak_fibonacci_reproduction) {
     TEST_ASSERT_NOT_NULL(fib15_result);
     TEST_ASSERT_TRUE(is_fixnum(fib15_result));
     TEST_ASSERT_EQUAL_INT(610, as_fixnum(fib15_result)); // fib(15) = 610
-    
-    // Test with fib(20) - should work without memory leak
-#if 0
-    const char *fib20_code = "(fib 20)";
-    CljValue fib20_result = eval_string(fib20_code, g_test_eval_state);
-    
-    TEST_ASSERT_NOT_NULL(fib20_result);
-    TEST_ASSERT_TRUE(is_fixnum(fib20_result));
-    TEST_ASSERT_EQUAL_INT(6765, as_fixnum(fib20_result)); // fib(20) = 6765
-#endif
-    
 }
 
 // Test to verify that the function object has correct reference count
 TEST(test_fibonacci_function_reference_count) {
-    TEST_IGNORE();
-    
     // Define fibonacci function
     const char *fib_code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
     CljValue result = eval_string(fib_code, g_test_eval_state);
     
     TEST_ASSERT_NOT_NULL(result);
     
-    // Get the function from namespace - simplified approach
-    // Just verify that the function can be called multiple times without issues
-    // We can't easily check the reference count directly, but we can verify
-    // that the function is callable multiple times without memory issues
-    
-    // The function should have a reasonable reference count (not 20k+)
-    // We can't directly check the reference count, but we can verify
-    // that the function is callable multiple times without issues
-    
-    // Call fib(5) multiple times
+    // Verify that the function can be called multiple times without memory issues
+    // (indirect test for correct reference counting)
     for (int i = 0; i < 10; i++) {
         const char *fib5_code = "(fib 5)";
         CljValue fib5_result = eval_string(fib5_code, g_test_eval_state);
@@ -81,8 +60,6 @@ TEST(test_fibonacci_function_reference_count) {
 
 // Test to verify no memory leaks with nested recursive functions
 TEST(test_nested_recursive_functions_no_leak) {
-    TEST_IGNORE();
-    
     // Define two recursive functions
     const char *code1 = "(defn fact [n] (if (<= n 1) 1 (* n (fact (- n 1)))))";
     const char *code2 = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
@@ -111,8 +88,6 @@ TEST(test_nested_recursive_functions_no_leak) {
 
 // Test to verify that recursive calls work without closure_env caching
 TEST(test_recursive_calls_without_closure_env_caching) {
-    TEST_IGNORE();
-    
     // Define a recursive function that calls itself multiple times
     const char *code = "(defn countdown [n] (if (<= n 0) 0 (+ 1 (countdown (- n 1)))))";
     CljValue result = eval_string(code, g_test_eval_state);
@@ -134,28 +109,4 @@ TEST(test_recursive_calls_without_closure_env_caching) {
     TEST_ASSERT_NOT_NULL(countdown20_result);
     TEST_ASSERT_TRUE(is_fixnum(countdown20_result));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(countdown20_result));
-    
 }
-
-// Benchmark test for profiling - only fib(20)
-// DISABLED: This test is redundant (fib(20) is already tested in test_memory_leak_fibonacci_reproduction)
-// and causes significant performance degradation (takes ~3+ seconds due to recursive fibonacci calculation)
-// Use this test only for manual profiling: uncomment and run with --test memory_leak_fibonacci/test_benchmark_fib20
-/*
-TEST(test_benchmark_fib20) {
-    // Define fibonacci function
-    const char *fib_code = "(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))";
-    CljValue result = eval_string(fib_code, g_test_eval_state);
-    
-    // Function definition should succeed
-    TEST_ASSERT_NOT_NULL(result);
-    
-    // Test with fib(20) - benchmark for profiling
-    const char *fib20_code = "(fib 20)";
-    CljValue fib20_result = eval_string(fib20_code, g_test_eval_state);
-    
-    TEST_ASSERT_NOT_NULL(fib20_result);
-    TEST_ASSERT_TRUE(is_fixnum(fib20_result));
-    TEST_ASSERT_EQUAL_INT(6765, as_fixnum(fib20_result)); // fib(20) = 6765
-}
-*/
