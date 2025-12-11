@@ -101,6 +101,10 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
 
 // Forward declarations
 static void release_object_deep(CljObject *v);
+static void release_object_default(CljObject *v);
+static void init_release_dispatch(void);
+static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
+static bool g_release_dispatch_initialized = false;
 static void autorelease_pool_clear(CljVector *pool);
 
 // Ensure pool_stack is initialized as transient vector
@@ -113,6 +117,14 @@ static void ensure_pool_stack_initialized(void) {
             g_runtime.pool_stack = transient_pool;
         }
     }
+}
+
+static void init_release_dispatch(void) {
+    if (g_release_dispatch_initialized) return;
+    for (int i = 0; i < CLJ_TYPE_COUNT; i++) {
+        g_release_dispatch[i] = release_object_default;
+    }
+    g_release_dispatch_initialized = true;
 }
 
 // ============================================================================
@@ -536,7 +548,16 @@ static void release_object_deep(CljObject *v) {
     }
     
     
-    // Type-specific cleanup based on object type
+    init_release_dispatch();
+    SubjectiveCReleaseFn fn = (v->type >= 0 && v->type < CLJ_TYPE_COUNT)
+        ? g_release_dispatch[v->type]
+        : NULL;
+    if (fn) {
+        fn(v);
+    }
+}
+
+static void release_object_default(CljObject *v) {
     switch (v->type) {
         case CLJ_STRING:
             /* Strings store their data inline (flexible array member).
@@ -783,6 +804,12 @@ bool is_pointer_on_stack(const void *ptr) {
     // TODO: Implement proper stack detection without causing issues
     (void)ptr; // Suppress unused parameter warning
     return false;
+}
+
+void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn) {
+    if (type < 0 || type >= CLJ_TYPE_COUNT) return;
+    init_release_dispatch();
+    g_release_dispatch[type] = fn ? fn : release_object_default;
 }
 
 // ============================================================================
