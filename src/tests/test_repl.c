@@ -12,6 +12,10 @@
 #include "kv_macros.h"
 #include "value.h"
 #include "eval.h"
+#include "strings.h"
+#include "../repl.h"
+
+#include <string.h>
 
 // Forward declarations
 int load_clojure_core(EvalState *st);
@@ -207,6 +211,49 @@ TEST(test_repl_source_exists_in_namespace) {
                             "source should be a function");
 }
 
+TEST(test_repl_source_shows_qualified_recursive_call) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    load_repl_namespace();
+
+    CljObject *defn_result = eval_string(
+        "(defn repl-source-foo [n]"
+        "  (if (< n 2)"
+        "      n"
+        "      (+ (repl-source-foo (- n 1))"
+        "         (repl-source-foo (- n 2))))))",
+        g_test_eval_state);
+    if (defn_result && !IS_IMMEDIATE(defn_result)) {
+        RELEASE(defn_result);
+    }
+
+    CljObject *call_result = eval_string("(repl-source-foo 3)", g_test_eval_state);
+    if (call_result && !IS_IMMEDIATE(call_result)) {
+        RELEASE(call_result);
+    }
+
+    CljSymbol *foo_sym = intern_symbol_global("repl-source-foo");
+    TEST_ASSERT_NOT_NULL(foo_sym);
+
+    CljObject *foo_fn_obj = ns_resolve(g_test_eval_state, foo_sym);
+    TEST_ASSERT_NOT_NULL(foo_fn_obj);
+    TEST_ASSERT_EQUAL(CLJ_CLOSURE, TAG(foo_fn_obj));
+
+    CljFunction *foo_fn = as_function(foo_fn_obj);
+    bool prev_mode = strings_set_special_form_rendering(false);
+    CljString *body_str = to_string(foo_fn->body);
+    strings_set_special_form_rendering(prev_mode);
+    TEST_ASSERT_NOT_NULL(body_str);
+
+    const char *body_cstr = string_data(body_str);
+    TEST_ASSERT_NOT_NULL(body_cstr);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(body_cstr, "user/repl-source-foo"),
+        "Function body should contain qualified recursive call");
+
+    RELEASE((CljObject*)body_str);
+    RELEASE(foo_fn_obj);
+}
+
 // ============================================================================
 // DIR FUNCTION TESTS
 // ============================================================================
@@ -369,6 +416,21 @@ TEST(test_repl_namespace_has_all_functions) {
             TAG(func) == CLJ_FUNC || TAG(func) == CLJ_CLOSURE,
             "Function should be a function or closure");
     }
+}
+
+TEST(test_repl_eval_arg_supports_escaped_newlines) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    load_repl_namespace();
+
+    const char *code = "(def repl_eval_arg_value 41)\\n(def repl_eval_arg_value (inc repl_eval_arg_value))\\nrepl_eval_arg_value";
+    bool success = repl_eval_arg(code, g_test_eval_state);
+    TEST_ASSERT_TRUE(success);
+
+    CljObject *result = eval_string("repl_eval_arg_value", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
 }
 
 // ============================================================================

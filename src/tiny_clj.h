@@ -1,6 +1,7 @@
 #ifndef TINY_CLJ_H
 #define TINY_CLJ_H
 
+#include <stdbool.h>
 #include "object.h"
 #include "exception.h"
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
