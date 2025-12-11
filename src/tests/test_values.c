@@ -23,10 +23,10 @@ TEST(test_cljvalue_immediate_helpers) {
         TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_val));
         
         CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(is_char(char_val));
-        TEST_ASSERT_EQUAL_INT('A', as_char(char_val));
+        TEST_ASSERT_TRUE(is_character(char_val));
+        TEST_ASSERT_EQUAL_INT('A', as_character(char_val));
         
-        CljValue bool_val = make_special(SPECIAL_TRUE);
+        CljValue bool_val = clj_true;
         TEST_ASSERT_TRUE(is_bool(bool_val));
         TEST_ASSERT_TRUE(bool_val == clj_true);
         
@@ -127,10 +127,10 @@ TEST(test_cljvalue_wrapper_functions) {
         TEST_ASSERT_EQUAL_INT(123, as_fixnum(fixnum_val));
         
         CljValue char_val = character('Z');
-        TEST_ASSERT_TRUE(is_char(char_val));
-        TEST_ASSERT_EQUAL_INT('Z', as_char(char_val));
+        TEST_ASSERT_TRUE(is_character(char_val));
+        TEST_ASSERT_EQUAL_INT('Z', as_character(char_val));
         
-        CljValue bool_val = make_special(SPECIAL_FALSE);
+        CljValue bool_val = clj_false;
         TEST_ASSERT_TRUE(is_bool(bool_val));
         TEST_ASSERT_TRUE(bool_val == clj_false);
     });
@@ -162,20 +162,20 @@ TEST(test_cljvalue_immediates_char) {
     WITH_AUTORELEASE_POOL({
         // Test char immediates
         CljValue char1 = character('A');
-        TEST_ASSERT_TRUE(is_char(char1));
-        TEST_ASSERT_EQUAL_INT('A', as_char(char1));
+        TEST_ASSERT_TRUE(is_character(char1));
+        TEST_ASSERT_EQUAL_INT('A', as_character(char1));
         
         CljValue char2 = character('z');
-        TEST_ASSERT_TRUE(is_char(char2));
-        TEST_ASSERT_EQUAL_INT('z', as_char(char2));
+        TEST_ASSERT_TRUE(is_character(char2));
+        TEST_ASSERT_EQUAL_INT('z', as_character(char2));
         
         CljValue char3 = character('0');
-        TEST_ASSERT_TRUE(is_char(char3));
-        TEST_ASSERT_EQUAL_INT('0', as_char(char3));
+        TEST_ASSERT_TRUE(is_character(char3));
+        TEST_ASSERT_EQUAL_INT('0', as_character(char3));
         
         CljValue char4 = character(' ');
-        TEST_ASSERT_TRUE(is_char(char4));
-        TEST_ASSERT_EQUAL_INT(' ', as_char(char4));
+        TEST_ASSERT_TRUE(is_character(char4));
+        TEST_ASSERT_EQUAL_INT(' ', as_character(char4));
     });
 }
 
@@ -185,11 +185,11 @@ TEST(test_cljvalue_immediates_special) {
         CljValue nil_val = SPECIAL_NIL;
         TEST_ASSERT_NULL(nil_val);  // nil is NULL in our system
         
-        CljValue true_val = make_special(SPECIAL_TRUE);
+        CljValue true_val = clj_true;
         TEST_ASSERT_TRUE(is_bool(true_val));
         TEST_ASSERT_TRUE(true_val == clj_true);
         
-        CljValue false_val = make_special(SPECIAL_FALSE);
+        CljValue false_val = clj_false;
         TEST_ASSERT_TRUE(is_bool(false_val));
         TEST_ASSERT_TRUE(false_val == clj_false);
         
@@ -225,8 +225,8 @@ TEST(test_cljvalue_parser_immediates) {
         // Test parsing characters - skip for now due to syntax issues
         // CljObject *char_obj = eval_string("\\A", g_test_eval_state);
         // if (char_obj) {
-        //     TEST_ASSERT_TRUE(is_char(char_obj));
-        //     TEST_ASSERT_EQUAL_INT('A', as_char(char_obj));
+        //     TEST_ASSERT_TRUE(is_character(char_obj));
+        //     TEST_ASSERT_EQUAL_INT('A', as_character(char_obj));
         // } else {
         //     // Parse failed due to exception - this is OK
         // }
@@ -260,10 +260,10 @@ TEST(test_cljvalue_memory_efficiency) {
         // TEST_ASSERT_TRUE(IS_IMMEDIATE(fixnum_val)); // Disabled due to implementation issues
         
         CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(is_char(char_val));
+        TEST_ASSERT_TRUE(is_character(char_val));
         // TEST_ASSERT_TRUE(IS_IMMEDIATE(char_val)); // Disabled due to implementation issues
         
-        CljValue bool_val = make_special(SPECIAL_TRUE);
+        CljValue bool_val = clj_true;
         TEST_ASSERT_TRUE(is_bool(bool_val));
         // TEST_ASSERT_TRUE(IS_IMMEDIATE(bool_val)); // Disabled due to implementation issues
         
@@ -302,10 +302,10 @@ TEST(test_cljvalue_immediates_high_level) {
         TEST_ASSERT_EQUAL_INT(42, as_fixnum(fixnum_val));
         
         CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(is_char(char_val));
-        TEST_ASSERT_EQUAL_INT('A', as_char(char_val));
+        TEST_ASSERT_TRUE(is_character(char_val));
+        TEST_ASSERT_EQUAL_INT('A', as_character(char_val));
         
-        CljValue bool_val = make_special(SPECIAL_TRUE);
+        CljValue bool_val = clj_true;
         TEST_ASSERT_TRUE(is_bool(bool_val));
         TEST_ASSERT_TRUE(bool_val == clj_true);
         

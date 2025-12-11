@@ -1,101 +1,10 @@
 #ifndef TINY_CLJ_VECTOR_H
 #define TINY_CLJ_VECTOR_H
 
-#include "object.h"
-#include "common.h"  // For CLJ_ASSERT
-#include "seq.h"  // For SeqIterator
+#include "subjective-c/public/vector.h"
 
-// CljVector is an opaque pointer - structure definition is in vector.c
-typedef struct CljVector CljVector;
-
-// Type alias for convenience
-
-// Type-safe casting
-static inline CljVector* as_vector(ID obj) {
-    // Happy path: obj is not NULL and has correct type
-    if (obj) {
-        int tag = TAG(obj);
-        if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT) {
-            return (CljVector*)obj;  // Direct return, no jumps
-        }
-    }
-    CLJ_ASSERT(0 && "Expected Vector type");
-    return NULL;  // Never reached in DEBUG, but needed for Release builds
+static inline bool is_clj_vector(CljObject *obj) {
+    return is_vector(obj);
 }
-
-// === Legacy API removed - use CljValue API instead ===
-
-// === CljValue API ===
-/** Empty vector singleton (rc=0, do not retain/release). */
-extern CljVector* vector_empty_singleton;
-/** Return empty vector singleton (rc=0, do not retain/release). */
-CljVector* empty_vector(void);
-/** Create a vector with given capacity; capacity<=0 returns empty-vector singleton.
- * @param capacity Initial capacity (0 returns empty singleton for CLJ_VECTOR)
- * @param type Vector type (CLJ_VECTOR or CLJ_VECTOR_TRANSIENT_WEAK)
- */
-CljVector* make_vector(unsigned int capacity, CljType type);
-/** Return a new vector with item appended; original vector remains unchanged.
- * Behavior depends on vector type:
- * - CLJ_VECTOR: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
- * - CLJ_VECTOR_TRANSIENT: Always mutates in-place (transient behavior)
- * - CLJ_VECTOR_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references don't RETAIN)
- */
-CljVector* vector_conj(CljVector* vec, ID item);
-/** Update element at index with COW: RC=1 → in-place mutation, RC>1 → COW. */
-CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value);
-/** Grow vector capacity in-place (for RC=1 or transient vectors).
- * @param v Vector to grow
- * @note Throws exception on OOM
- */
-/** Get vector count. Returns 0 if vec is NULL. */
-unsigned int vector_count(CljVector *vec);
-/** Get element at index. Returns retained element or NULL if index out of bounds or nil. */
-ID vector_nth(CljVector *vec, unsigned int index);
-/** Find index of element using clj_equal for comparison. Returns index or INDEX_NOT_FOUND if not found. */
-int vector_index_of(CljVector *vec, ID value);
-/** Set element at index. Only works for transient vectors.
- * @throws EXCEPTION_ILLEGAL_ARGUMENT if vec is a persistent vector
- */
-CljVector* vector_set_nth(CljVector* vec, unsigned int index, ID value);
-/** Copy vector with specified capacity. */
-CljVector* make_vector_copy(CljVector* vec, unsigned capacity);
-/** Remove last element from vector (in-place if RC=1, COW if RC>1). */
-CljVector* vector_pop(CljVector* vec);
-/** Insert element at index in vector (in-place if RC=1, COW if RC>1).
- * @param vec Vector to insert into
- * @param index Index where to insert (0-based, must be <= count)
- * @param item Item to insert
- * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
- */
-CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item);
-/** Remove element at index from vector (in-place if RC=1, COW if RC>1).
- * @param vec Vector to remove from
- * @param index Index of element to remove (0-based)
- * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
- */
-CljVector* vector_remove_at(CljVector* vec, unsigned int index);
-/** Initialize seq iterator for vector (internal use by seq.c). */
-bool vector_init_seq_iterator(SeqIterator *iter, CljVector *vec);
-/** Get raw data array pointer (no copying, direct access). */
-ID* vector_as_array(CljVector *vec);
-/** Increment count for transient vectors (internal use only). */
-void vector_increment_count(CljVector *vec);
-/** Clear vector by setting count to zero (only for CLJ_VECTOR_TRANSIENT_WEAK or CLJ_VECTOR_TRANSIENT). */
-void vector_clear(CljVector *vec);
-
-// === Transient API (Phase 2) ===
-/** Convert persistent vector to transient. */
-CljVector* vector_transient(CljVector *vec);
-/** Append to transient vector (guaranteed in-place). */
-CljVector* clj_conj(CljVector *tvec, ID item);
-/** Convert transient vector back to persistent. */
-ID vector_persistent(CljVector *tvec);
-
-/* Verwendung: VECTOR_FOR_EACH(vec, elem) { ... } */
-#define VECTOR_FOR_EACH(vector, elem_var) \
-    for (int _i = 0, _cnt = vector_count(vector); (vector) && _i < _cnt; ++_i) \
-        for (ID *_data_ptr = vector_as_array(vector); _data_ptr; _data_ptr = NULL) \
-            for (ID elem_var = _data_ptr[_i]; _data_ptr; _data_ptr = NULL)
 
 #endif

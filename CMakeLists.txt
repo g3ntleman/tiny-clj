@@ -65,7 +65,10 @@ else()
 endif()
 
 # Include directories
-include_directories(include src external)
+include_directories(${CMAKE_SOURCE_DIR} include src external subjective-c/public)
+
+# Subjective-C subproject (static library + early tests)
+add_subdirectory(subjective-c)
 
 # Set output directory for all executables to "build"
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
@@ -79,9 +82,7 @@ list(APPEND SOURCES
     src/runtime.c
     src/namespace.c
     src/symbol.c
-    src/exception.c
     src/parser.c
-    src/byte_array.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -92,17 +93,12 @@ list(APPEND SOURCES
     src/channel.c
     src/list.c
     src/ast.c
-    src/vector.c
-    src/map.c
     src/atom.c
-    src/strings.c
     src/file_utils.c
     src/debug.c
     src/seq.c
-    src/memory.c
     src/error_messages.c
     src/memory_profiler.c
-    src/value.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -116,6 +112,7 @@ list(APPEND SOURCES
 
 # Main executable (not built by default; use REPL)
 add_executable(tiny-clj EXCLUDE_FROM_ALL ${SOURCES})
+target_link_libraries(tiny-clj PRIVATE subjective-c)
 # Main Build - Meta only in Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj PRIVATE)
@@ -132,9 +129,7 @@ set(STM32_SOURCES
     src/runtime.c
     src/namespace.c
     src/symbol.c
-    src/exception.c
     src/parser.c
-    src/byte_array.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -145,16 +140,11 @@ set(STM32_SOURCES
     src/channel.c
     src/list.c
     src/ast.c
-    src/vector.c
-    src/map.c
     src/atom.c
-    src/strings.c
     src/file_utils.c
     src/debug.c
     src/seq.c
-    src/memory.c
     src/error_messages.c
-    src/value.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -179,9 +169,7 @@ add_executable(tiny-clj-esp32
     src/runtime.c
     src/namespace.c
     src/symbol.c
-    src/exception.c
     src/parser.c
-    src/byte_array.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -190,16 +178,11 @@ add_executable(tiny-clj-esp32
     src/equality.c
     src/list.c
     src/ast.c
-    src/vector.c
-    src/map.c
     src/atom.c
-    src/strings.c
     src/debug.c
     src/seq.c
-    src/memory.c
     src/error_messages.c
     src/memory_profiler.c
-    src/value.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -210,6 +193,7 @@ add_executable(tiny-clj-esp32
     src/eval_sequence.c
     src/eval_special_forms.c
 )
+target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 
 
 # ESP32 Ultra-Minimal Build (only core features for <150KB) - DISABLED
@@ -248,6 +232,7 @@ add_executable(tiny-clj-repl
     src/line_editor.c
     ${SOURCES}
 )
+target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 # Output directory is set globally to "build"
 # REPL Build - Always enable ENABLE_META for macOS REPL
 # Debug in Debug mode, Release in Release mode
@@ -274,6 +259,7 @@ add_executable(tiny-clj-esp32-repl
     src/memory_profiler.c
     ${STM32_SOURCES}
 )
+target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
 # STM32 REPL Build - No Meta in Release, Optimized
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj-esp32-repl PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
@@ -336,13 +322,9 @@ add_executable(unit-tests
     src/tests/test_meta.c
     external/unity/src/unity.c
     src/builtins.c
-    src/byte_array.c
     src/object.c
     src/types.c
-    src/vector.c
-    src/map.c
     src/atom.c
-    src/strings.c
     src/symbol.c
     src/namespace.c
     src/parser.c
@@ -356,12 +338,9 @@ add_executable(unit-tests
     src/list.c
     src/seq.c
     src/clojure_core.c
-    src/exception.c
     src/memory_profiler.c
-    src/memory.c
     src/runtime.c
     src/error_messages.c
-    src/value.c
     src/numeric_utils.c
     src/validation.c
     src/args_utils.c
@@ -370,6 +349,7 @@ add_executable(unit-tests
     src/platform_macos.c
     src/line_editor.c
 )
+target_link_libraries(unit-tests PRIVATE subjective-c)
 
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE
@@ -487,10 +467,7 @@ target_compile_options(unit-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR
 set(COMMON_TEST_SOURCES
     src/object.c
     src/types.c
-    src/vector.c
-    src/map.c
     src/atom.c
-    src/strings.c
     src/symbol.c
     src/namespace.c
     src/parser.c
@@ -501,8 +478,6 @@ set(COMMON_TEST_SOURCES
     src/equality.c
     src/list.c
     src/seq.c
-    src/exception.c
-    src/memory.c
     src/memory_profiler.c
     src/runtime.c
     src/clojure_core.c

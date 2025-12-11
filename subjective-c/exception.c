@@ -310,6 +310,35 @@ struct CljString* stacktrace(void) {
 }
 #endif
 
+void exception_print_native_backtrace(void) {
+#if defined(DEBUG) && !defined(ESP32_BUILD)
+#if defined(__APPLE__) || defined(__linux__)
+    void *array[20];
+    int size = backtrace(array, 20);
+    if (size <= 0) {
+        return;
+    }
+
+    char **strings = backtrace_symbols(array, size);
+    if (!strings) {
+        return;
+    }
+
+    for (int i = 0; i < size; i++) {
+        if (strings[i]) {
+            fprintf(stderr, "  %d: %s\n", i, strings[i]);
+        }
+    }
+
+    free(strings);
+#else
+    // Platform without execinfo support
+#endif
+#else
+    // Release builds / ESP32 do not emit backtraces here
+#endif
+}
+
 // print_stacktrace() removed - use stacktrace() function instead
 
 /** @brief Print exception details including stacktrace and object (if available) */

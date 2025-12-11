@@ -49,12 +49,7 @@ static struct {
 
 CljString* string_empty_singleton = (CljString*)&empty_string_data;
 
-/**
- * @brief Create a string value
- * @param str String to create
- * @return CljString object (caller must release)
- */
-struct CljString* make_string(const char *str) {
+static CljString* make_string_impl(const char *str) {
     if (!str || str[0] == '\0') {
         return string_empty_singleton;
     }
@@ -74,6 +69,19 @@ struct CljString* make_string(const char *str) {
     memcpy(s->data, str, len + 1);  // includes null terminator
 
     return s;
+}
+
+CljString* make_clj_string(const char *str) {
+    return make_string_impl(str);
+}
+
+/**
+ * @brief Create a string value
+ * @param str String to create
+ * @return CljString object (caller must release)
+ */
+CljString* make_string(const char *str) {
+    return make_string_impl(str);
 }
 
 CljString* make_string_buffer(size_t length) {
@@ -144,30 +152,62 @@ static void escape_string_write(CljString *s, char *buffer, size_t *offset) {
 
 // Check if symbol is a special form (matches Clojure behavior)
 // Uses compact array-based lookup for smaller code size
+static const char *g_special_form_names[64];
+static size_t g_special_form_count = 0;
+static bool g_special_forms_initialized = false;
+
+static void strings_register_special_form_internal(const char *name) {
+    if (!name || !*name || g_special_form_count >= (sizeof(g_special_form_names) / sizeof(g_special_form_names[0]))) {
+        return;
+    }
+    // Avoid duplicates
+    for (size_t i = 0; i < g_special_form_count; ++i) {
+        if (strcmp(g_special_form_names[i], name) == 0) {
+            return;
+        }
+    }
+    char *copy = strdup(name);
+    if (!copy) {
+        return;
+    }
+    g_special_form_names[g_special_form_count++] = copy;
+}
+
+void strings_clear_special_forms(void) {
+    for (size_t i = 0; i < g_special_form_count; ++i) {
+        free((void*)g_special_form_names[i]);
+        g_special_form_names[i] = NULL;
+    }
+    g_special_form_count = 0;
+    g_special_forms_initialized = false;
+}
+
+void strings_register_special_form(const char *name) {
+    strings_register_special_form_internal(name);
+}
+
+static void ensure_special_forms_initialized(void) {
+    if (g_special_forms_initialized) {
+        return;
+    }
+    const char *defaults[] = {
+        "if","let","defn","def","fn","do","cond","when","while","quote","recur","and","or","ns","try","catch","throw","finally","var","loop","go","time"
+    };
+    for (size_t i = 0; i < sizeof(defaults)/sizeof(defaults[0]); ++i) {
+        strings_register_special_form_internal(defaults[i]);
+    }
+    g_special_forms_initialized = true;
+}
+
 static inline bool is_special_symbol(CljSymbol *symbol) {
-    if (!symbol) return false;
-    return (symbol == SYM_IF ||
-            symbol == SYM_LET ||
-            symbol == SYM_DEFN ||
-            symbol == SYM_DEF ||
-            symbol == SYM_FN ||
-            symbol == SYM_DO ||
-            symbol == SYM_COND ||
-            symbol == SYM_WHEN ||
-            symbol == SYM_WHILE ||
-            symbol == SYM_QUOTE ||
-            symbol == SYM_RECUR ||
-            symbol == SYM_AND ||
-            symbol == SYM_OR ||
-            symbol == SYM_NS ||
-            symbol == SYM_TRY ||
-            symbol == SYM_CATCH ||
-            symbol == SYM_THROW ||
-            symbol == SYM_FINALLY ||
-            symbol == SYM_VAR ||
-            symbol == SYM_LOOP ||
-            symbol == SYM_GO ||
-            symbol == SYM_TIME);
+    if (!symbol || !symbol->cname) return false;
+    ensure_special_forms_initialized();
+    for (size_t i = 0; i < g_special_form_count; ++i) {
+        if (strcmp(symbol->cname, g_special_form_names[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Recursive helper: Calculate string length without allocating

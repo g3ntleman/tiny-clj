@@ -1,6 +1,7 @@
 // Tests für History-Persistenz (Vector<String>) via to-string/Parser
 #include "tests_common.h"
 #include "../vector.h"
+#include <unistd.h>
 
 // Vorwärtsdeklarationen aus repl.c
 extern bool history_save_to_file(CljVector *vec, const char *path);

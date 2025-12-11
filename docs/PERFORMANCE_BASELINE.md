@@ -92,3 +92,4 @@ Basierend auf den Hotspots und Debug-Overhead:
 - Vergleichs-Ergebnisse: `benchmark_results/fibonacci_naive_comparison.txt`
 
 
+
