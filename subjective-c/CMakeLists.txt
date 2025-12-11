@@ -43,6 +43,7 @@ set(SUBJECTIVE_C_TEST_SOURCES
     tests/test_memory.c
     tests/test_value.c
     tests/test_byte_array.c
+    tests/test_exception.c
     tests/test_support_stubs.c
     ${CMAKE_SOURCE_DIR}/external/unity/src/unity.c
     ${CMAKE_SOURCE_DIR}/src/memory_profiler.c

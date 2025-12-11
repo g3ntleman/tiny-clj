@@ -281,7 +281,6 @@ add_executable(unit-tests
     ${SOURCES}
     src/tests/unity_test_runner.c
     src/tests/test_registry.c
-    src/tests/test_memory.c
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
@@ -292,7 +291,6 @@ add_executable(unit-tests
     src/tests/test_core_initialization.c
     src/tests/test_equal.c
     src/tests/test_seq.c
-    src/tests/test_values.c
     src/tests/test_recur.c
     src/tests/test_let.c
     src/tests/test_let_performance.c
@@ -302,15 +300,11 @@ add_executable(unit-tests
     src/tests/test_time.c
     src/tests/test_loops.c
     src/tests/test_go_blocks.c
-    src/tests/test_map.c
-    src/tests/test_vector.c
     src/tests/test_fixed_point.c
     src/tests/test_arithmetic.c
     src/tests/test_sequences.c
     src/tests/test_list_resolution.c
-    src/tests/test_byte_array.c
     src/tests/test_keyword_evaluation.c
-    src/tests/test_string.c
     src/tests/test_core.c
     src/tests/test_require.c
     src/tests/test_require_perf.c
