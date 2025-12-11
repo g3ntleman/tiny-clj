@@ -2624,8 +2624,8 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
         // Look up symbol in source namespace
         CljObject *val = map_get((CljValue)source_ns->mappings, (CljValue)lookup_sym, NULL);
         if (val) {
-            // Copy to target namespace (ns_define will automatically qualify with target namespace)
-            ns_define(target_ns, sym, val);
+            // Copy to target namespace using ns_define_refer for :refer (stores unqualified symbol)
+            ns_define_refer(target_ns, sym, val);
         }
         // sym lifetime is tied to vector - no release needed
     }
@@ -2664,10 +2664,10 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
                 }
                 
                 // Create unqualified symbol for target namespace
-                // ns_define will automatically qualify it with target namespace
+                // Use ns_define_refer to store unqualified symbol (like Clojure/JVM)
                 CljSymbol *unqualified_sym = intern_symbol_global(unqualified_name);
                 if (unqualified_sym) {
-                    ns_define(target_ns, unqualified_sym, val);
+                    ns_define_refer(target_ns, unqualified_sym, val);
                 }
             }
         }
@@ -3011,7 +3011,7 @@ static ID normalize_require_spec(ID spec, bool *needs_release) {
         if (needs_release) {
             *needs_release = true;
         }
-        return (ID)persistent_vec;
+        return persistent_vec;
     }
 
     return spec;

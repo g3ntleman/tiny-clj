@@ -1,5 +1,7 @@
 #include "platform.h"
+#include "common.h"
 #include "tiny_clj.h"
+#include "repl.h"
 #include "parser.h"
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
@@ -179,6 +181,61 @@ bool eval_multiform_string(const char *code, EvalState *st) {
     });
 
     return result;
+}
+
+static char* unescape_eval_arg(const char *raw_code) {
+    CLJ_ASSERT(raw_code != NULL);
+    size_t len = strlen(raw_code);
+    char *buffer = (char*)malloc(len + 1);
+    if (!buffer) {
+        return NULL;
+    }
+
+    size_t w = 0;
+    bool changed = false;
+    for (size_t r = 0; r < len; r++) {
+        char ch = raw_code[r];
+        if (ch == '\\' && r + 1 < len) {
+            char next = raw_code[++r];
+            char replaced = next;
+            switch (next) {
+                case 'n': replaced = '\n'; break;
+                case 'r': replaced = '\r'; break;
+                case 't': replaced = '\t'; break;
+                case 'b': replaced = '\b'; break;
+                case 'f': replaced = '\f'; break;
+                case '\\': replaced = '\\'; break;
+                case '"': replaced = '"'; break;
+                case '\'': replaced = '\''; break;
+                default: replaced = next; break;
+            }
+            if (replaced != next || next == '\\') {
+                changed = true;
+            }
+            buffer[w++] = replaced;
+        } else {
+            buffer[w++] = ch;
+        }
+    }
+    buffer[w] = '\0';
+
+    if (!changed) {
+        free(buffer);
+        return NULL;
+    }
+    return buffer;
+}
+
+bool repl_eval_arg(const char *raw_code, EvalState *st) {
+    CLJ_ASSERT(raw_code != NULL);
+    CLJ_ASSERT(st != NULL);
+    char *unescaped = unescape_eval_arg(raw_code);
+    const char *code = unescaped ? unescaped : raw_code;
+    bool success = eval_multiform_string(code, st);
+    if (unescaped) {
+        free(unescaped);
+    }
+    return success;
 }
 
 
@@ -687,7 +744,7 @@ int main(int argc, char **argv) {
     int i = 0;
     while (i < eval_count) {
         // Simple eval-args without TRY/CATCH
-        bool success = eval_multiform_string(eval_args[i], st);
+        bool success = repl_eval_arg(eval_args[i], st);
         if (!success) {
             // Parse error or evaluation failed
             cleanup_and_exit(eval_args, 1);

@@ -49,6 +49,7 @@ CljNamespace* ns_find(const char *cname);
 CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol);  // Fast lookup with symbol (avoids intern_symbol call)
 CljNamespace* ns_find_for_object(CljObject *obj);  // Find namespace containing object
 void ns_define(CljNamespace *ns, ID symbol, ID value);
+void ns_define_refer(CljNamespace *ns, ID symbol, ID value);  // For :refer - stores unqualified symbol
 void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)
 void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry

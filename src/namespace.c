@@ -15,9 +15,6 @@
 #include "parser.h"  // For eval_parsed
 #include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
-// Symbol resolution cache - uses array-map for DRY principle
-// Cache size: 16 entries (good balance between hit rate and memory usage)
-#define RESOLVE_CACHE_SIZE 16
 
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {
@@ -408,7 +405,14 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         }
     }
     
+    // CRITICAL: For def, symbols are stored qualified (e.g., user/my-var)
+    // For :refer :all, symbols are stored unqualified (e.g., doc -> #'clojure.repl/doc)
+    // Check qualified version first (for def), then unqualified (for :refer)
     ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
+    if (v == NOT_FOUND && qualified_sym != sym) {
+        // Fallback: check unqualified version (for :refer :all cases)
+        v = map_get(current_ns->mappings, sym, NOT_FOUND);
+    }
     if (v != NOT_FOUND) {
         if (g_runtime.ns_registry) {
             struct ns_search_ctx search_ctx = {
@@ -428,19 +432,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             }
         }
 
-        if (g_runtime.resolve_cache) {
-            ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, v);
-            ASSIGN(g_runtime.resolve_cache, updated_cache);
-        }
         return v;
-    }
-    
-    // Not in current namespace - check cache (fast path for repeated lookups)
-    if (g_runtime.resolve_cache) {
-        ID cached = map_get(g_runtime.resolve_cache, sym, NULL);
-        if (cached) {
-            return cached;
-        }
     }
     
     // CRITICAL: In Clojure, unqualified symbols are only resolved in the current namespace
@@ -457,10 +449,6 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         // Use the unqualified symbol directly for lookup
         ID resolved = map_get(clojure_core->mappings, sym, NOT_FOUND);
         if (resolved != NOT_FOUND) {
-            if (g_runtime.resolve_cache) {
-                ID updated_cache = map_assoc(g_runtime.resolve_cache, sym, resolved);
-                ASSIGN(g_runtime.resolve_cache, updated_cache);
-            }
             return resolved;
         }
     }
@@ -842,26 +830,25 @@ CljObject* eval_catch(CljObject *form, EvalState *st) {
  * The cache will be automatically rebuilt on the next ns_resolve() call.
  */
 void ns_invalidate_resolve_cache(void) {
+    // Invalidate callsite caches by incrementing epoch
+    // All existing callsite caches will be invalidated on next access
     uint64_t next_epoch = g_runtime.resolve_cache_epoch + 1;
     if (next_epoch == 0) {
         next_epoch = 1;
     }
     g_runtime.resolve_cache_epoch = next_epoch;
-
-    if (g_runtime.resolve_cache) {
-        RELEASE(g_runtime.resolve_cache);
-    }
-    g_runtime.resolve_cache = make_map(RESOLVE_CACHE_SIZE);
 }
 
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
-    // Allow NULL value (nil) - it's a legitimate case
-    // Only check for NULL ns and symbol
-    if (!ns || !symbol) return;
+    CLJ_ASSERT(ns != NULL);
+    CLJ_ASSERT(symbol != NULL);
     
     // CRITICAL: For clojure.core, use unqualified symbols (ns_name = NULL, as in Clojure/JVM)
     // Other namespaces use fully qualified symbols as keys
     CljSymbol *sym = as_symbol(symbol);
+    if (!sym) {
+        return;
+    }
     CljSymbol *qualified_symbol = sym;
     
     // For clojure.core, always use unqualified symbol (ns_name = NULL)
@@ -876,7 +863,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     } else if (sym && sym->cname) {
         // Other namespaces: ensure symbol is qualified and interned
         if (!sym->ns_name && ns->name && ns->name->cname) {
-            // Unqualified symbol: qualify it and intern it
+            // Unqualified symbol: qualify it and intern it (for def)
             qualified_symbol = intern_symbol(ns->name, sym->cname);
             if (!qualified_symbol) {
                 // Failed to qualify - use original symbol (will fail lookup later, but at least won't crash)
@@ -898,16 +885,9 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         ns->mappings = make_map(32);
     }
     
-    // Store symbol-value binding (overwrites existing)
-    // NOTE: map_assoc() already does RETAIN(value) and RETAIN(symbol) internally
-    // See src/map.c:98 and src/map.c:106-107
-    // CRITICAL: map_assoc may return a new map (COW), so we must update ns->mappings
-    ID map_key = symbol;
-    if (qualified_symbol) {
-        map_key = qualified_symbol;
-    }
-
-    CljMap *new_mappings = map_assoc(ns->mappings, map_key, value);
+    // Store symbol-value binding (overwrites existing). map_assoc already retains.
+    // For def: store qualified symbol (e.g., user/my-var)
+    CljMap *new_mappings = map_assoc(ns->mappings, qualified_symbol, value);
     if (new_mappings != ns->mappings) {
         // Map was copied (COW) - update reference
         RELEASE(ns->mappings);
@@ -919,6 +899,43 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     // This avoids ~23 map_assoc() calls per require and is more efficient.
     // The cache will be automatically rebuilt on the next ns_resolve() call.
+    ns_invalidate_resolve_cache();
+}
+
+// For :refer :all - stores unqualified symbol (like Clojure/JVM)
+void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
+    CLJ_ASSERT(ns != NULL);
+    CLJ_ASSERT(symbol != NULL);
+    
+    CljSymbol *sym = as_symbol(symbol);
+    if (!sym || !sym->cname) {
+        return;
+    }
+    
+    // CRITICAL: For :refer, store unqualified symbol only (like Clojure/JVM)
+    // This matches Clojure behavior where (require '[clojure.repl :refer :all])
+    // stores 'doc -> #'clojure.repl/doc (unqualified key, qualified value)
+    CljSymbol *unqualified_sym = intern_symbol_global(sym->cname);
+    if (!unqualified_sym) {
+        unqualified_sym = sym;  // Fallback to original if interning fails
+    }
+    
+    // Create or update mappings
+    if (!ns->mappings) {
+        // OPTIMIZATION: Start with capacity 32 to reduce map growth during namespace loading
+        ns->mappings = make_map(32);
+    }
+    
+    // Store unqualified symbol -> value binding (overwrites existing). map_assoc already retains.
+    CljMap *new_mappings = map_assoc(ns->mappings, unqualified_sym, value);
+    if (new_mappings != ns->mappings) {
+        // Map was copied (COW) - update reference
+        RELEASE(ns->mappings);
+        ns->mappings = new_mappings;
+        // new_mappings is already retained by map_assoc
+    }
+    
+    // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     ns_invalidate_resolve_cache();
 }
 
