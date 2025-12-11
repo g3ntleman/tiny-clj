@@ -4,6 +4,7 @@
 #include "unity.h"
 #include "test_registry.h"
 #include "subjective-c.h"
+#include "memory.h"
 
 #include <stdbool.h>
 #include <stddef.h>
