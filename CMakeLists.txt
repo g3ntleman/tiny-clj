@@ -73,7 +73,7 @@ add_subdirectory(subjective-c)
 # Set output directory for all executables to "build"
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
 
-# Source files
+# Source files (without main.c - main is target-specific)
 list(APPEND SOURCES
     src/clojure_core.c
     src/types.c
@@ -111,7 +111,11 @@ list(APPEND SOURCES
 )
 
 # Main executable (not built by default; use REPL)
-add_executable(tiny-clj EXCLUDE_FROM_ALL ${SOURCES})
+add_executable(tiny-clj EXCLUDE_FROM_ALL 
+    src/main.c
+    ${SOURCES}
+    src/platform_macos.c
+)
 target_link_libraries(tiny-clj PRIVATE subjective-c)
 # Main Build - Meta only in Debug builds
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -294,6 +298,7 @@ add_executable(unit-tests
     src/tests/test_recur.c
     src/tests/test_let.c
     src/tests/test_let_performance.c
+    src/tests/test_call_frame.c
     src/tests/test_do.c
     src/tests/test_defn.c
     src/tests/test_memory_leak_fibonacci.c

@@ -48,6 +48,12 @@ bool g_zombie_enabled = false;
 void enable_zombie_mode(void) {
     g_zombie_enabled = true;
 }
+#else
+bool g_zombie_enabled = false;
+void enable_zombie_mode(void) {
+    // No-op in non-DEBUG builds
+    g_zombie_enabled = false;
+}
 #endif
 
 // Function to enable debug output after initialization

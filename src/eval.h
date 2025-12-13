@@ -5,6 +5,7 @@
 #include "map.h"  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
 #include "namespace.h"
 #include "list.h"
+#include "environment.h"  // For CallFrame
 
 // Evaluation context used during function, let, recur, etc.
 // All fields are direct pointers to already-managed objects (see MEMORY_POLICY.md).
@@ -12,7 +13,8 @@
 typedef struct {
     // Environment (direct pointers, no nested structs)
     CljMap *env;           // Current environment map (can be NULL)
-    CljList *env_stack;    // Environment stack for closures (can be NULL)
+    CljList *env_stack;    // Environment stack for closures (can be NULL) - LEGACY
+    CallFrame *frame;      // Stack-based call frame (can be NULL) - NEW, preferred
 
     // Evaluation state
     EvalState *st;         // Evaluation state (can be NULL)

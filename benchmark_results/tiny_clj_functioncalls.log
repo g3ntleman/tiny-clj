@@ -1,10 +1,6 @@
-Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/function_call_performance_ultra_simple.clj
+Führe aus: echo '(time (do (defn add [a b] (+ a b)) (defn multiply [a b] (* a b)) (defn test-calls [] (add (multiply 2 3) (add 1 2))) (dotimes [i 1000] (test-calls))))' | ./build/tiny-clj-repl
+[clojure.core] Evaluated 97 form(s), 97 succeeded.
+[clojure.repl] Evaluated 9 form(s), 9 succeeded.
 nil
-println: "Running function call performance benchmark..."
+Elapsed time: 10.90 msecs
 nil
-println: "Function call result = 8"
-nil
-print
-
-🔍 === REPL Memory Profiling Stats ===
-📊 Final memory state before exit

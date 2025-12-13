@@ -37,7 +37,6 @@
 #include "../namespace.h"
 #include "../seq.h"
 #include "../strings.h"
-#include "../strings.h"
 #include "../tiny_clj.h"
 
 // Test Registry

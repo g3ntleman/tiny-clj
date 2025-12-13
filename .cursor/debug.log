@@ -1,0 +1,3 @@
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H7","timestamp":1765623666000,"location":"eval.c:478","message":"frame_chain_entry","data":{"symbol":"frame-null","note":"inherit","ptr":34334917728}}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H7","timestamp":1765623666000,"location":"eval.c:486","message":"frame_chain_entry","data":{"symbol":"frame","note":"bindings","ptr":2}}
+{"sessionId":"debug-session","runId":"run1","hypothesisId":"H7","timestamp":1765623666000,"location":"eval.c:2361","message":"let_env_stack","data":{"symbol":"ns-let","note":"created","ptr":34338900096}}

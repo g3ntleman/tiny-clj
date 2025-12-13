@@ -2,42 +2,51 @@
 ;; Provides utilities for interactive development
 
 (ns clojure.repl
-  (:require [clojure.core :refer [meta str println if-let let when empty? doseq find-ns ns-map all-ns get keys count]]
-            [clojure.string :as str]))
+  (:require [clojure.core :as core :refer [meta if-let let when empty? doseq find-ns ns-map all-ns keys count]]
+            [clojure.string :as cstr]))
 
 ;; ============================================================================
 ;; Documentation and Help Functions
 ;; ============================================================================
 
+;; doc helpers
+(defn normalize-ns-name [ns-val]
+  (when ns-val
+    (core/str ns-val)))
+
+(defn print-doc [m]
+  (core/println "-------------------------")
+  (let [ns-val (core/get m :ns)
+        name-val (core/get m :name)
+        ns-str (when ns-val (normalize-ns-name ns-val))]
+    (when name-val
+      (core/println (if ns-str
+                      (core/str ns-str "/" name-val)
+                      (core/str name-val)))))
+  (let [forms (core/get m :forms)]
+    (when forms
+      (doseq [f forms]
+        (core/print "  ")
+        (core/prn f))))
+  (let [arglists (core/get m :arglists)]
+    (when arglists
+      (core/prn arglists)))
+  (cond
+    (core/get m :special-form) (core/println "Special Form")
+    (core/get m :macro) (core/println "Macro"))
+  (let [doc (core/get m :doc)]
+    (when doc
+      (core/println (core/str " " doc)))))
+
 ;; doc - Print documentation for a var
 ;; Note: Requires metadata support
-;; Format matches Clojure/JVM: 25 dashes, name, params (if available), doc, 25 dashes
-^#^{:doc "Prints documentation for x (var, function, or symbol). Uses metadata to show name, arglists, and docstring."}
+;; Format matches Clojure/JVM: 25 dashes, name, params (if available), doc
+^#^{:doc "Prints documentation for x (var, function, or symbol). Uses metadata to show name, arglists, and docstring."
+    :macro true}
 (defn doc [x]
   (if-let [m (meta x)]
-    (let [name (or (get m :name) (:name m))
-          arglists (or (get m :arglists) (:arglists m))
-          doc-str (or (get m :doc) (:doc m))]
-      (println "-------------------------")
-      (when name
-        (let [s (str name)]
-          (when (not= s "")
-            (println s))))
-      ;; Print parameter lists if available (like ([x]) or ([x y]))
-      (when arglists
-        (let [s (str arglists)]
-          (when (not= s "")
-            (println s))))
-      ;; Print documentation string if available
-      (when doc-str
-        (let [doc-str-val (str "  " doc-str)]
-          (when (not= doc-str-val "  ")
-            (println doc-str-val))))
-      (println "-------------------------")
-      nil)  ; Explicitly return nil (Clojure convention for side-effect functions)
-    (do
-      (println "No metadata available")
-      nil)))  ; Explicitly return nil
+    (print-doc m)
+    (core/println "No metadata available")))
 
 ;; source - Print source code for a function
 ;; Note: In Clojure, source is a normal function (not a special form)
@@ -71,16 +80,18 @@
 (defn find-doc [pattern]
   (if (nil? pattern)
     nil
-    (let [pattern-str (str pattern)
-          pattern-lower (str/lower-case pattern-str)
+    (let [pattern-str (core/str pattern)
+          pattern-lower (cstr/lower-case pattern-str)
           search-ns (fn [ns-obj]
                       (let [ns-map (or (ns-map ns-obj) {})]
                         (doseq [[_ v] ns-map]
-                          (when-let [m (meta v)]
-                            (when-let [doc-str (:doc m)]
-                              (let [doc-lower (str/lower-case (str doc-str))]
-                                (when (str/includes? doc-lower pattern-lower)
-                                  (doc v))))))))]
+                          (let [m (meta v)]
+                            (when m
+                              (let [doc-str (core/get m :doc)]
+                                (when doc-str
+                                  (let [doc-lower (cstr/lower-case (core/str doc-str))]
+                                    (when (cstr/includes? doc-lower pattern-lower)
+                                      (doc v))))))))))]
       (doseq [ns-obj (all-ns)]
         (search-ns ns-obj))
       nil)))

@@ -41,23 +41,6 @@
 #include "eval_comparison.h"
 #include <time.h>
 
-void agent_debug_log_clear_once(void) {
-    // Debug logging disabled.
-}
-
-static inline void agent_log_eval(const char *hypothesis_id,
-                                  const char *location,
-                                  const char *message,
-                                  const char *symbol_name,
-                                  const char *note,
-                                  uintptr_t ptr_val) {
-    (void)hypothesis_id;
-    (void)location;
-    (void)message;
-    (void)symbol_name;
-    (void)note;
-    (void)ptr_val;
-}
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
 #include "eval_dispatch.h"
@@ -100,16 +83,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st);
 
 
 // Helper function to throw unresolved symbol exception (DRY principle)
-static const char *g_last_throw_context = NULL;
-
 static void throw_unresolved_symbol_exception(const char *sym_name) {
-    // #region agent log
-    agent_log_eval("H4", "eval.c:108", "throw_unresolved",
-                   sym_name ? sym_name : "<null>",
-                   "exception", 0);
-    // #endregion agent log
-    fprintf(stderr, "[throw:%s] %s\n", g_last_throw_context ? g_last_throw_context : "unknown",
-            sym_name ? sym_name : "<null>");
     throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
         "Unable to resolve symbol: %s in this context", sym_name);
 }
@@ -120,20 +94,13 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
-    unsigned char fn_tag = TAG(fn);
-    if (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE) {
-        throw_exception(EXCEPTION_TYPE, "Attempt to call non-function value", NULL, 0, 0);
-        return NULL;
-    }
+    CLJ_ASSERT(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
     // Check if it's a native function (CljCFunc) or Clojure function (CljFunction)
     if (is_native_fn(fn)) {
         // It's a native C function (CljCFunc)
         CljCFunc *native_func = (CljCFunc*)fn;
-        if (!native_func || !native_func->fn) {
-            throw_exception(EXCEPTION_TYPE, "Invalid native function", NULL, 0, 0);
-            return NULL;
-        }
+        CLJ_ASSERT(native_func && native_func->fn);
         // Set EvalState for builtins that need it (eval, read-string)
         extern void builtin_set_eval_state(EvalState *st);
         builtin_set_eval_state(st);
@@ -341,97 +308,46 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NULL;
     }
-    const char *sym_name = "<anon>";
-    CljSymbol *sym_obj = as_symbol(sym);
-    if (sym_obj && sym_obj->cname) {
-        sym_name = sym_obj->cname;
-    }
-    // NEW: Search in call frame first (most recent bindings)
-    if (sym_name && (!strcmp(sym_name, "start-idx") || !strcmp(sym_name, "ns-val"))) {
-        // #region agent log
-        agent_log_eval("H3", "eval.c:354", "resolve_entry",
-                       sym_name, "start", (uintptr_t)frame);
-        // #endregion agent log
-    }
+
     if (frame) {
         ID frame_value = FRAME_NIL_SENTINEL;
         if (frame_lookup(frame, sym, &frame_value)) {
-            // DEBUG: Check for x symbol
-            if (sym_name && (!strcmp(sym_name, "start-idx") || !strcmp(sym_name, "ns-val"))) {
-                // #region agent log
-                agent_log_eval("H3", "eval.c:362", "resolve_frame_hit",
-                               sym_name,
-                               (frame_value == FRAME_NIL_SENTINEL) ? "sentinel" : "value",
-                               (uintptr_t)(frame_value == FRAME_NIL_SENTINEL ? NULL : frame_value));
-                // #endregion agent log
-            }
             return frame_value;
         }
     }
 
-    // Search through environment stack (most recent first)
     CljList *current_stack = env_stack;
     while (current_stack && list_type_matches(TAG(current_stack))) {
         ID env_obj_id = LIST_FIRST(current_stack);
-        
-        // Current element should be an environment map
         if (env_obj_id && TAG(env_obj_id) == CLJ_MAP) {
             CljMap *env = (CljMap*)env_obj_id;
-            
-            // Search for symbol in current environment
             ID resolved = map_get(env, sym, NOT_FOUND);
             if (resolved != NOT_FOUND) {
-                if (sym_name && (!strcmp(sym_name, "start-idx") || !strcmp(sym_name, "ns-val"))) {
-                    // #region agent log
-                    agent_log_eval("H3", "eval.c:379", "resolve_stack_hit",
-                                   sym_name, "direct", (uintptr_t)resolved);
-                    // #endregion agent log
-                }
                 return resolved;
             }
 
-            // Fallback: some legacy bindings (or namespaces that predate qualification)
-            // may store unqualified keys. If the lookup with the fully qualified symbol
-            // failed, try again with an unqualified variant.
-            if (sym && TAG(sym) == CLJ_SYMBOL) {
-                CljSymbol *symbol_obj = as_symbol(sym);
-                if (symbol_obj && symbol_obj->cname) {
-                    // Try qualifying with the current namespace (if available)
-                    if (st && st->current_ns && st->current_ns->name) {
-                        CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, symbol_obj->cname);
-                        if (qualified_sym) {
-                            resolved = map_get(env, qualified_sym, NOT_FOUND);
-                            if (resolved != NOT_FOUND) {
-                                if (sym_name && (!strcmp(sym_name, "start-idx") || !strcmp(sym_name, "ns-val"))) {
-                                    // #region agent log
-                                    agent_log_eval("H3", "eval.c:397", "resolve_stack_qualified",
-                                                   sym_name, "qualified", (uintptr_t)resolved);
-                                    // #endregion agent log
-                                }
-                                return resolved;
-                            }
-                        }
-                    }
-
-                    // Also try the unqualified variant for backward compatibility.
-                    CljSymbol *unqualified_sym = intern_symbol_global(symbol_obj->cname);
-                    if (unqualified_sym) {
-                        resolved = map_get(env, unqualified_sym, NOT_FOUND);
+            CljSymbol *symbol_obj = as_symbol(sym);
+            if (symbol_obj && symbol_obj->cname) {
+                if (st && st->current_ns && st->current_ns->name) {
+                    CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, symbol_obj->cname);
+                    if (qualified_sym) {
+                        resolved = map_get(env, qualified_sym, NOT_FOUND);
                         if (resolved != NOT_FOUND) {
-                        if (sym_name && (!strcmp(sym_name, "start-idx") || !strcmp(sym_name, "ns-val"))) {
-                            // #region agent log
-                            agent_log_eval("H3", "eval.c:408", "resolve_stack_unqualified",
-                                           sym_name, "unqualified", (uintptr_t)resolved);
-                            // #endregion agent log
-                        }
                             return resolved;
                         }
                     }
                 }
+
+                CljSymbol *unqualified_sym = intern_symbol_global(symbol_obj->cname);
+                if (unqualified_sym) {
+                    resolved = map_get(env, unqualified_sym, NOT_FOUND);
+                    if (resolved != NOT_FOUND) {
+                        return resolved;
+                    }
+                }
             }
         }
-        
-        // Move to next environment in stack
+
         ID rest_obj_id = LIST_REST(current_stack);
         if (rest_obj_id && list_type_matches(TAG(rest_obj_id))) {
             current_stack = (CljList*)rest_obj_id;
@@ -440,29 +356,16 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
         }
     }
     
-    // Fallback to provided environment map if no stack entry matched
     if (fallback_env) {
         ID resolved = map_get(fallback_env, sym, NOT_FOUND);
         if (resolved != NOT_FOUND) {
-            if (sym_name && (!strcmp(sym_name, "start-idx") || !strcmp(sym_name, "ns-val"))) {
-                // #region agent log
-                agent_log_eval("H3", "eval.c:424", "resolve_fallback",
-                               sym_name, "fallback", (uintptr_t)resolved);
-                // #endregion agent log
-            }
             return resolved;
         }
     }
 
-    // Not found in environment stack - try namespace lookup
     if (st) {
         ID resolved_ns = eval_symbol(as_symbol(sym), st);
-        if (resolved_ns) {
-            // CRITICAL: If eval_symbol returns the symbol itself, it wasn't found
-            // (eval_symbol returns symbol as fallback for builtins not yet registered)
-            if (resolved_ns == sym) {
-                return NULL; // Symbol not found, return NULL to trigger exception
-            }
+        if (resolved_ns && resolved_ns != sym) {
             return resolved_ns;
         }
     }
@@ -473,23 +376,12 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
 // Convert a CallFrame chain into a heap-based env_stack for closures
 static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack) {
     if (!frame) {
-        // #region agent log
-        agent_log_eval("H7", "eval.c:478", "frame_chain_entry",
-                       "frame-null", parent_stack ? "inherit" : "none",
-                       (uintptr_t)parent_stack);
-        // #endregion agent log
         return parent_stack ? RETAIN(parent_stack) : NULL;
     }
 
-    // Recursively build parent chain first to preserve lexical order
     CljList *parent_with_frames = frame_chain_to_env_stack(frame->parent, parent_stack);
 
     int initial_capacity = frame->param_count > 0 ? frame->param_count : 4;
-    // #region agent log
-    agent_log_eval("H7", "eval.c:486", "frame_chain_entry",
-                   "frame", frame->param_count > 0 ? "bindings" : "empty",
-                   (uintptr_t)frame->param_count);
-    // #endregion agent log
     CljMap *frame_map = make_map(initial_capacity);
 
     for (int i = 0; i < frame->param_count; i++) {
@@ -497,17 +389,6 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
         if (!key) continue;
 
         ID value = frame_decode_value(*frame_value_slot(frame, i));
-        if (key && TAG(key) == CLJ_SYMBOL) {
-            CljSymbol *sym_dbg = as_symbol(key);
-            const char *name_dbg = sym_dbg && sym_dbg->cname ? sym_dbg->cname : "<anon>";
-            if (!strcmp(name_dbg, "start-idx") || !strcmp(name_dbg, "ns-val")) {
-                // #region agent log
-                agent_log_eval("H1", "eval.c:438", "frame_chain_to_env_stack",
-                               name_dbg, value ? "non-null" : "null",
-                               (uintptr_t)value);
-                // #endregion agent log
-            }
-        }
         CljMap *new_map = map_assoc(frame_map, key, value);
         ASSIGN(frame_map, new_map);
     }
@@ -561,18 +442,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         return NULL;
     }
 
-    if (TAG(body) == CLJ_SYMBOL) {
-        CljSymbol *sym_dbg = as_symbol(body);
-        const char *name_dbg = sym_dbg && sym_dbg->cname ? sym_dbg->cname : "<anon>";
-        if (!strcmp(name_dbg, "start-idx") || !strcmp(name_dbg, "ns-val")) {
-            // #region agent log
-            agent_log_eval("H8", "eval.c:560", "eval_body_with_params_entry",
-                           name_dbg, ctx ? "ctx-present" : "ctx-null",
-                           (uintptr_t)(ctx ? ctx->frame : NULL));
-            // #endregion agent log
-        }
-    }
-
     // Assertion: Parameters and values must not be NULL when param_count > 0
     if (ctx && ctx->param_count > 0) {
         assert(ctx->params != NULL);
@@ -584,17 +453,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         // This avoids expensive map copying in env_extend_stack for recursive calls
         // Parameters are typically accessed most frequently, so checking them first is optimal
         CljSymbol *body_sym = as_symbol(body);
-        if (!body_sym) {
-            // This should never happen, but if it does, try to resolve from namespace
-            EvalState *ctx_state = get_eval_state(ctx, NULL);
-            if (ctx_state) {
-                CljObject *resolved = ns_resolve(ctx_state, body_sym);
-                // ns_resolve returns retained values - object survives until pool-pop
-                return resolved;
-            }
-            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Unable to resolve symbol: invalid symbol object");
-        }
+        CLJ_ASSERT(body_sym != NULL && "TAG(body)==CLJ_SYMBOL but as_symbol returned NULL");
 
         // This avoids expensive closure_env map lookups for parameter access
         if (ctx && ctx->param_count > 0 && ctx->params && ctx->param_values) {
@@ -621,16 +480,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, ctx->frame, body, get_eval_state(ctx, NULL));
             const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
             if (resolved_id) {
-                const char *resolved_note = "value";
-                if (resolved_id == FRAME_NIL_SENTINEL) {
-                    resolved_note = "sentinel";
-                } else if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
-                    resolved_note = "symbol";
-                }
-                // #region agent log
-                agent_log_eval("H5", "eval.c:612", "ctx_resolved",
-                               log_sym, resolved_note, (uintptr_t)resolved_id);
-                // #endregion agent log
                 if (resolved_id == FRAME_NIL_SENTINEL) {
                     return NULL;
                 }
@@ -646,22 +495,12 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     }
                     if (resolves_to_self) {
                         const char *sym_name = log_sym;
-                        // #region agent log
-                        agent_log_eval("H6", "eval.c:651", "resolved_symbol_guard",
-                                       sym_name, "throw_before", (uintptr_t)resolved_id);
-                        // #endregion agent log
-                        g_last_throw_context = "resolved_symbol_guard";
                         throw_unresolved_symbol_exception(sym_name);
                         return NULL;
                     }
                 }
                 ID ret_val = AUTORELEASE(RETAIN(resolved_id));
                 return ret_val;
-            } else {
-                // #region agent log
-                agent_log_eval("H5", "eval.c:619", "ctx_resolve_miss",
-                               log_sym, "miss", 0);
-                // #endregion agent log
             }
         }
         // If still not found, try namespace lookup (for recursive function calls)
@@ -677,7 +516,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                     // Symbol found in namespace but value is also a symbol - this is an error
                     CljSymbol *sym = as_symbol(body);
                     const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
-                    g_last_throw_context = "ns_resolve_symbol_value";
                     throw_unresolved_symbol_exception(sym_name);
                     return NULL;
                 }
@@ -693,7 +531,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         // Symbol not found - throw exception
         CljSymbol *sym_obj = as_symbol(body);
         const char *sym_name_final = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-        g_last_throw_context = "symbol_not_found_body";
         throw_unresolved_symbol_exception(sym_name_final);
         return NULL;
     }
@@ -775,8 +612,6 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         case CLJ_SYMBOL: {
-            CljSymbol *body_sym = as_symbol(body);
-            const char *watch_sym = NULL;
             // Check if symbol is a keyword - keywords evaluate to themselves
             // CRITICAL: This must come BEFORE symbol resolution attempts
             if (IS_KEYWORD(body)) {
@@ -788,37 +623,12 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 return NULL; // nil evaluates to NULL
             }
 
-            // CRITICAL: If context is provided with env_stack, use resolve_symbol_in_env
-            // to search through the entire environment stack (for nested let blocks)
-            // This allows nested let blocks to access variables from outer scopes
-            if (body_sym && body_sym->cname &&
-                (!strcmp(body_sym->cname, "ns-val") || !strcmp(body_sym->cname, "start-idx"))) {
-                watch_sym = body_sym->cname;
-                // #region agent log
-                agent_log_eval("H9", "eval.c:806", "eval_body_symbol_entry",
-                               body_sym->cname,
-                               ctx ? "ctx-present" : "ctx-null",
-                               ctx ? (uintptr_t)ctx->frame : (uintptr_t)env);
-                // #endregion agent log
-            }
-
             if (ctx) {
                 // Use st from context if available, otherwise fall back to parameter
                 EvalState *eval_st = get_eval_state(ctx, st);
                 CljMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
                 ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, ctx->frame, body, eval_st);
-                const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
                 if (resolved_id) {
-                    const char *resolved_note = "value";
-                    if (resolved_id == FRAME_NIL_SENTINEL) {
-                        resolved_note = "sentinel";
-                    } else if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
-                        resolved_note = "symbol";
-                    }
-                    // #region agent log
-                    agent_log_eval("H5", "eval.c:748", "ctx_resolved",
-                                   log_sym, resolved_note, (uintptr_t)resolved_id);
-                    // #endregion agent log
                     if (resolved_id == FRAME_NIL_SENTINEL) {
                         return NULL;
                     }
@@ -826,17 +636,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     // eval_body should return AUTORELEASE objects
                     // RETAIN and AUTORELEASE macros handle immediate values safely
                     return AUTORELEASE(RETAIN(resolved_id));
-                } else {
-                    // #region agent log
-                    agent_log_eval("H5", "eval.c:764", "ctx_resolve_miss",
-                                   log_sym, "miss", 0);
-                    // #endregion agent log
                 }
-            } else if (watch_sym) {
-                // #region agent log
-                agent_log_eval("H9", "eval.c:836", "ctx_missing_for_symbol",
-                               watch_sym, "ctx-null", (uintptr_t)env);
-                // #endregion agent log
             }
 
             // Resolve symbol - first try local environment, then namespace
@@ -846,19 +646,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
                 ID result_id = map_get((CljMap*)env, body, NOT_FOUND);
                 if (result_id != NOT_FOUND) {
-                    if (watch_sym) {
-                        // #region agent log
-                        agent_log_eval("H9", "eval.c:844", "env_map_hit",
-                                       watch_sym, "env-map", (uintptr_t)result_id);
-                        // #endregion agent log
-                    }
                     return (CljObject*)result_id;
-                }
-                if (watch_sym) {
-                    // #region agent log
-                    agent_log_eval("H9", "eval.c:850", "env_map_miss",
-                                   watch_sym, "env-map", (uintptr_t)env);
-                    // #endregion agent log
                 }
             }
 
@@ -967,17 +755,6 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     }
 
     CljSymbol *op_sym = as_symbol(op);
-    const char *op_name = (op_sym && op_sym->cname) ? op_sym->cname : "<anon>";
-    bool watch_op = false;
-    if (op_name && (!strcmp(op_name, "ns-val") || !strcmp(op_name, "start-idx"))) {
-        watch_op = true;
-        // #region agent log
-        agent_log_eval("H11", "eval.c:1000", "resolve_list_operator_entry",
-                       op_name,
-                       ctx ? "ctx-present" : "ctx-null",
-                       ctx ? (uintptr_t)ctx->frame : (uintptr_t)env);
-        // #endregion agent log
-    }
 
     EvalContext local_ctx;
     CljList *owned_env_stack = NULL;
@@ -1012,12 +789,6 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         ID frame_value = NULL;
         if (frame_lookup(effective_ctx->frame, op, &frame_value)) {
             RELEASE(owned_env_stack);
-            if (watch_op) {
-                // #region agent log
-                agent_log_eval("H11", "eval.c:1032", "resolve_op_frame_hit",
-                               op_name, "frame", (uintptr_t)frame_value);
-                // #endregion agent log
-            }
             return frame_value;
         }
     }
@@ -1049,13 +820,6 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         resolved = eval_symbol(op_sym, ctx_st);
         ID return_value = resolved ? resolved : op;
         RELEASE(owned_env_stack);
-        if (watch_op) {
-            // #region agent log
-            agent_log_eval("H11", "eval.c:1062", "resolve_op_no_ctx",
-                           op_name, resolved ? "resolved" : "symbol",
-                           (uintptr_t)return_value);
-            // #endregion agent log
-        }
         return return_value;
     }
 
@@ -2115,13 +1879,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
 
     // Symbol not found
     const char *cname = symbol->cname ? symbol->cname : "unknown";
-    // #region agent log
-    agent_log_eval("H12", "eval.c:2134", "eval_symbol_fail",
-                   cname,
-                   (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname)
-                        ? st->current_ns->name->cname : "<no-ns>",
-                   (uintptr_t)st);
-    // #endregion agent log
     throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", cname);
     return NULL;
 }
@@ -2493,11 +2250,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CljMap *frame_env_head = NULL;
     if (has_frame) {
         frame_env_stack = frame_chain_to_env_stack(let_frame, parent_stack);
-        // #region agent log
-        agent_log_eval("H7", "eval.c:2361", "let_env_stack",
-                       "ns-let", frame_env_stack ? "created" : "null",
-                       (uintptr_t)frame_env_stack);
-        // #endregion agent log
         let_ctx.env_stack = frame_env_stack;
         // Keep frame for direct symbol resolution (frame_lookup is faster than map lookup)
         let_ctx.frame = let_frame;
@@ -3023,17 +2775,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         }
         
         CljSymbol *sym_obj = as_symbol(expr);
-        const char *watch_sym = NULL;
-        if (sym_obj && sym_obj->cname &&
-            (!strcmp(sym_obj->cname, "ns-val") || !strcmp(sym_obj->cname, "start-idx"))) {
-            watch_sym = sym_obj->cname;
-            // #region agent log
-            agent_log_eval("H10", "eval.c:3005", "eval_arg_symbol_entry",
-                           sym_obj->cname,
-                           ctx ? "ctx-present" : "ctx-null",
-                           ctx ? (uintptr_t)ctx->frame : (uintptr_t)env);
-            // #endregion agent log
-        }
         
         // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
         // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
@@ -3087,7 +2828,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                     }
                     if (resolves_to_self) {
                         const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-                        g_last_throw_context = "eval_arg_symbol_guard";
                         throw_unresolved_symbol_exception(sym_name);
                         return NULL;
                     }
@@ -3105,17 +2845,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                 // map_get returns retained value, eval_arg should return AUTORELEASE
                 if (!resolved_id) return NULL; // nil
                 resolved_value = resolved_id;
-                if (watch_sym) {
-                    // #region agent log
-                    agent_log_eval("H10", "eval.c:3066", "env_map_hit",
-                                   watch_sym, "env-map", (uintptr_t)resolved_id);
-                    // #endregion agent log
-                }
-            } else if (watch_sym) {
-                // #region agent log
-                agent_log_eval("H10", "eval.c:3072", "env_map_miss",
-                               watch_sym, "env-map", (uintptr_t)env);
-                // #endregion agent log
             }
         }
 
@@ -3140,7 +2869,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             }
         }
         const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
-        g_last_throw_context = "eval_arg_not_found";
         throw_unresolved_symbol_exception(sym_name);
         return NULL;
     }

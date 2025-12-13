@@ -98,6 +98,33 @@ TEST(test_let_multiple_body_expressions) {
 }
 
 // ============================================================================
+// TEST: Let closures capture stack-based bindings
+// ============================================================================
+TEST(test_let_closure_captures_value) {
+    WITH_AUTORELEASE_POOL({
+        const char *code = "(let [x 10 f (fn [] x)] (f))";
+        CljValue result = eval_string(code, g_test_eval_state);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum(result));
+    });
+}
+
+// ============================================================================
+// TEST: Let supports up to 16 frame bindings
+// ============================================================================
+TEST(test_let_sixteen_frame_bindings) {
+    WITH_AUTORELEASE_POOL({
+        const char *code =
+            "(let [a0 0 a1 1 a2 2 a3 3 a4 4 a5 5 a6 6 a7 7 "
+                  "a8 8 a9 9 a10 10 a11 11 a12 12 a13 13 a14 14 a15 15]"
+                  " (+ a0 a15))";
+        CljValue result = eval_string(code, g_test_eval_state);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(15, as_fixnum(result));
+    });
+}
+
+// ============================================================================
 // TEST: Nested let
 // ============================================================================
 TEST(test_let_nested) {
