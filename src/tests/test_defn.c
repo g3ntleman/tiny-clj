@@ -146,6 +146,18 @@ TEST(test_defn_normal_body_still_works) {
 }
 
 // ============================================================================
+// TEST: defn closures capture parameters when returning nested fn
+// ============================================================================
+TEST(test_defn_closure_captures_parameter) {
+    WITH_AUTORELEASE_POOL({
+        const char *code = "(do (defn make-adder [x] (fn [] x)) ((make-adder 7)))";
+        CljValue result = eval_string(code, g_test_eval_state);
+        TEST_ASSERT_TRUE(is_fixnum(result));
+        TEST_ASSERT_EQUAL_INT(7, as_fixnum(result));
+    });
+}
+
+// ============================================================================
 // TEST: defn mit :native als Body registriert native Funktion
 // ============================================================================
 TEST(test_defn_native_stub_registers_native_function) {

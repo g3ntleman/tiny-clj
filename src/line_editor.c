@@ -2,8 +2,7 @@
 #include "memory.h"  // For RELEASE
 #include "value.h"  // For make_string, fixnum, CljString
 #include "builtins.h"  // For nth2
-#include "strings.h"  // For to_cstring
-#include "strings.h"  // For string functions
+#include "strings.h"  // For to_cstring and string functions
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdlib.h>

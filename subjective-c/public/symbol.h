@@ -33,6 +33,7 @@ static inline bool is_keyword(ID obj) {
 extern CljSymbol *SYM_TRY;
 extern CljSymbol *SYM_CATCH;
 extern CljSymbol *SYM_IF;
+extern CljSymbol *SYM_IF_LET;
 extern CljSymbol *SYM_COND;
 extern CljSymbol *SYM_WHEN;
 extern CljSymbol *SYM_WHILE;

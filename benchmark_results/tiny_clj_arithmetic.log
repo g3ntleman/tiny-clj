@@ -1,10 +1,6 @@
-Führe aus: ./build-release/tiny-clj-repl -f ./benchmarks/arithmetic_performance_ultra_simple.clj
+Führe aus: echo '(time (do (defn test-arithmetic [] (let [a 1 b 2 c 3 d 4 e 5] (+ (* a b) (- c d) (/ e 2)))) (dotimes [i 1000] (test-arithmetic))))' | ./build/tiny-clj-repl
+[clojure.core] Evaluated 97 form(s), 97 succeeded.
+[clojure.repl] Evaluated 9 form(s), 9 succeeded.
 nil
-println: "Running arithmetic performance benchmark..."
+Elapsed time: 26.88 msecs
 nil
-println: "Arithmetic result = 7"
-nil
-print
-
-🔍 === REPL Memory Profiling Stats ===
-📊 Final memory state before exit

@@ -19,8 +19,6 @@
 #include "symbol.h"
 #include "list.h"
 
-extern void agent_debug_log_clear_once(void);
-
 // ============================================================================
 // CALL FRAME IMPLEMENTATION (Stack-based, zero heap allocation)
 // ============================================================================

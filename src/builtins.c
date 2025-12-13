@@ -29,7 +29,6 @@
 #include "function.h"
 #include "strings.h"
 #include "event_loop.h"
-#include "strings.h"
 #include "reader.h"
 #include "parser.h"
 #include "meta.h"
@@ -529,17 +528,11 @@ ID native_next(ID *args, unsigned int argc) {
     // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
     // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
     // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
-    if (result) {
-        CljObject *obj = (CljObject*)result;
-        // If it's a CLJ_SEQ, it's a new object (rc=1) - need AUTORELEASE
-        // If it's a CLJ_LIST, it's already AUTORELEASE'd by seq_next
-        if (obj->type == CLJ_SEQ) {
-            // CRITICAL: AUTORELEASE before releasing the original seq
-            // This ensures the result is properly managed before we free the original seq
-            // AUTORELEASE already has IS_IMMEDIATE check, so no need to check here
-            result = AUTORELEASE(result);
-        }
-        // CLJ_LIST is already AUTORELEASE'd by seq_next, so no need to do it again
+    if (result && TAG(result) == CLJ_SEQ) {
+        // Only seq_next results that are freshly allocated seq iterators
+        // (TAG == CLJ_SEQ) still need to be autoreleased. LIST results that
+        // came from seq_next are already autoreleased inside seq_next.
+        result = AUTORELEASE(result);
     }
 
     // Only release the seq if we created it (not if it was the original object)

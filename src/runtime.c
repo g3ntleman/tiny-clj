@@ -10,9 +10,6 @@
 #include "event_loop.h"     // For event_loop_clear()
 #include "map.h"            // For make_map()
 
-// Symbol resolution cache size: 16 entries (good balance between hit rate and memory usage)
-#define RESOLVE_CACHE_SIZE 16
-
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {
     .ns_registry = NULL,

@@ -35,11 +35,25 @@ if ! command -v clojure &> /dev/null; then
     exit 1
 fi
 
-TINY_CLJ_PATH="./build/tiny-clj-repl"
-if [ ! -f "$TINY_CLJ_PATH" ]; then
-    echo -e "${YELLOW}⚠️  tiny-clj-repl not found. Building...${NC}"
-    cmake --build build --target tiny-clj-repl
+# Ensure Release build directory exists
+RELEASE_BUILD_DIR="./build-release"
+if [ ! -d "$RELEASE_BUILD_DIR" ]; then
+    echo -e "${YELLOW}⚠️  Release build directory not found. Creating Release build...${NC}"
+    mkdir -p "$RELEASE_BUILD_DIR"
+    (cd "$RELEASE_BUILD_DIR" && cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_LTO=OFF)
 fi
+
+# Build Release version
+echo -e "${YELLOW}🔨 Building Release version of tiny-clj-repl...${NC}"
+(cd "$RELEASE_BUILD_DIR" && cmake --build . --target tiny-clj-repl)
+
+TINY_CLJ_PATH="$RELEASE_BUILD_DIR/tiny-clj-repl"
+if [ ! -f "$TINY_CLJ_PATH" ]; then
+    echo -e "${RED}❌ Could not build tiny-clj-repl in Release mode${NC}"
+    exit 1
+fi
+echo -e "${GREEN}✅ Release build ready${NC}"
+echo ""
 
 # Function to extract time from (time) output
 # Clojure outputs: "Elapsed time: X.XX msecs" (with quotes in some contexts)

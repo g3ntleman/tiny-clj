@@ -1,2 +1,6 @@
-Führe aus: echo '(defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)' | timeout 30 
-Try 'timeout --help' for more information.
+Führe aus: echo '(time (do (defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)))' | timeout 30 ./build/tiny-clj-repl
+[clojure.core] Evaluated 97 form(s), 97 succeeded.
+[clojure.repl] Evaluated 9 form(s), 9 succeeded.
+nil
+Elapsed time: 378.64 msecs
+6765

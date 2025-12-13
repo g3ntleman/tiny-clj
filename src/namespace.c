@@ -837,6 +837,9 @@ void ns_invalidate_resolve_cache(void) {
         next_epoch = 1;
     }
     g_runtime.resolve_cache_epoch = next_epoch;
+
+    // Release current cache map so it will be lazily rebuilt on next use
+    ASSIGN(g_runtime.resolve_cache, NULL);
 }
 
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
@@ -922,20 +925,33 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
     
     // Create or update mappings
     if (!ns->mappings) {
-        // OPTIMIZATION: Start with capacity 32 to reduce map growth during namespace loading
         ns->mappings = make_map(32);
     }
-    
-    // Store unqualified symbol -> value binding (overwrites existing). map_assoc already retains.
-    CljMap *new_mappings = map_assoc(ns->mappings, unqualified_sym, value);
-    if (new_mappings != ns->mappings) {
-        // Map was copied (COW) - update reference
-        RELEASE(ns->mappings);
-        ns->mappings = new_mappings;
-        // new_mappings is already retained by map_assoc
+
+    // Store qualified symbol for consistency with def/defn entries
+    if (ns->name && ns->name->cname) {
+        CljSymbol *qualified_sym = intern_symbol(ns->name, sym->cname);
+        if (!qualified_sym) {
+            qualified_sym = sym;
+        }
+        if (qualified_sym) {
+            CljMap *updated = map_assoc(ns->mappings, qualified_sym, value);
+            if (updated != ns->mappings) {
+                RELEASE(ns->mappings);
+                ns->mappings = updated;
+            }
+        }
     }
-    
-    // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
+
+    // Also store unqualified symbol -> value binding (allows local usage)
+    if (unqualified_sym) {
+        CljMap *updated_unqual = map_assoc(ns->mappings, unqualified_sym, value);
+        if (updated_unqual != ns->mappings) {
+            RELEASE(ns->mappings);
+            ns->mappings = updated_unqual;
+        }
+    }
+
     ns_invalidate_resolve_cache();
 }
 
