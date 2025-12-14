@@ -1682,7 +1682,6 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 static inline bool is_special_symbol(CljSymbol *symbol) {
     if (!symbol) return false;
     return (symbol == SYM_IF ||
-            symbol == SYM_IF_LET ||
             symbol == SYM_LET ||
             symbol == SYM_DEFN ||
             symbol == SYM_DEF ||
