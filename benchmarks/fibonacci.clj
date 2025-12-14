@@ -2,33 +2,16 @@
 ;; Original source: https://benchmarksgame-team.pages.debian.net/benchmarksgame/
 ;; License: BSD-3-Clause
 
-;; Namespace: clojure.benchmarksgame.fibonacci
-;; TODO: Replace with (ns clojure.benchmarksgame.fibonacci) when require/use available
+(ns clojure.benchmarksgame.fibonacci)
 
-;; === Benchmark Implementation ===
-;; Recursive version (causes memory issues in tiny-clj)
-(defn fib-recursive [n]
-  (if (< n 2)
-    n
-    (+ (fib-recursive (- n 1)) (fib-recursive (- n 2)))))
-
-;; Tail-recursive version using recur (memory-efficient)
-(defn fib-helper [a b i]
-  (if (= i 0)
-    a
-    (recur b (+ a b) (- i 1))))
-
+;; Original recursive implementation from Benchmarks Game
 (defn fib [n]
   (if (< n 2)
     n
-    (fib-helper 0 1 n)))
+    (+ (fib (- n 1)) (fib (- n 2)))))
 
-;; === Benchmark Execution ===
-;; Run 10000x more iterations for measurable timing using dotimes
-(defn benchmark-fibonacci []
-  (println "Running fibonacci benchmark (10000x iterations)...")
-  (time
-    (dotimes [i 10000]
-      (fib 20))))
-
-(benchmark-fibonacci)
+;; Benchmark execution
+;; Using fib(47) to match other language benchmarks (e.g., drujensen/fib)
+;; Note: This is exponential and will take a long time (~27 seconds in Clojure)
+;; Result should be: 2971215073
+(println (fib 47))

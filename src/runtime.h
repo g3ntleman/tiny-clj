@@ -20,9 +20,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-// Symbol resolution cache size (good balance between hit rate and memory usage)
-#define RESOLVE_CACHE_SIZE 16
-
 // Memory allocation macros
 // Allocate `count` objects of type `type` on the stack
 #define STACK_ALLOC(type, count) ((type*) alloca(sizeof(type) * (count)))
@@ -39,6 +36,9 @@
 
 // Maximum autorelease pool depth
 #define MAX_POOL_DEPTH 24
+
+// Resolve cache initial size
+#define RESOLVE_CACHE_SIZE 16
 
 typedef ID (*BuiltinFn)(ID *args, unsigned int argc);
 

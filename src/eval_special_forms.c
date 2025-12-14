@@ -185,9 +185,8 @@ ID eval_special_form_dispatch(CljList *list,
         return eval_body(branch, env, st, ctx);
     }
 
-    if (op_sym == SYM_IF_LET) {
-        return eval_if_let(list, env, st, ctx);
-    }
+    // Note: if-let is handled as a macro expansion in the parser, so it never reaches here as SYM_IF_LET
+    // eval_if_let is only called directly from macro-expanded code
 
     if (op_sym == SYM_WHEN) {
         ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
