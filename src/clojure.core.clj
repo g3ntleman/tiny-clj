@@ -9,54 +9,75 @@ R"CLOJURE(
 ; ============================================================================
 ; Arithmetic Functions
 ; ============================================================================
+^#^{:doc "Returns the sum of a and b."}
 (def add (fn [a b] (+ a b)))
+^#^{:doc "Returns the difference of a and b."}
 (def sub (fn [a b] (- a b)))
+^#^{:doc "Returns the product of a and b."}
 (def mul (fn [a b] (* a b)))
+^#^{:doc "Returns the quotient of a and b."}
 (def div (fn [a b] (/ a b)))
+^#^{:doc "Increments a number by 1. Returns the number plus one."}
 (def inc (fn [x] (+ x 1)))
+^#^{:doc "Decrements a number by 1. Returns the number minus one."}
 (def dec (fn [x] (- x 1)))
+^#^{:doc "Returns the square of x (x * x)."}
 (def square (fn [x] (* x x)))
 
 ; ============================================================================
 ; Numeric Predicates
 ; ============================================================================
+^#^{:doc "Returns true if x is zero, false otherwise."}
 (def zero? (fn [x] (= x 0)))
+^#^{:doc "Returns true if x is positive, false otherwise."}
 (def pos? (fn [x] (> x 0)))
+^#^{:doc "Returns true if x is negative, false otherwise."}
 (def neg? (fn [x] (< x 0)))
+^#^{:doc "Returns true if x is even, false otherwise."}
 (def even? (fn [x] (= (mod x 2) 0)))
+^#^{:doc "Returns true if x is odd, false otherwise."}
 (def odd? (fn [x] (not (= (mod x 2) 0))))
 
 ; ============================================================================
 ; Comparison & Logic
 ; ============================================================================
+^#^{:doc "Returns true if x is logical false, false otherwise."}
 (def not (fn [x] (if x false true)))
+^#^{:doc "Returns the maximum of a and b."}
 (def max (fn [a b] (if (> a b) a b)))
+^#^{:doc "Returns the minimum of a and b."}
 (def min (fn [a b] (if (< a b) a b)))
 
 ; ============================================================================
 ; Collection Functions
 ; ============================================================================
+^#^{:doc "Returns the second item in coll. Returns nil if coll contains less than 2 items."}
 (def second (fn [coll] (first (rest coll))))
+^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
 (def empty? (fn [coll] 
   (if coll
     (= (count coll) 0)
     true)))
+^#^{:doc "Updates a value in a map, where the value is computed by calling f with the current value. If the key does not exist, nil is passed as the current value."}
 (def update (fn [map key f]
   (assoc map key (f (get map key)))))
 
 ; ============================================================================
 ; Utility Functions
 ; ============================================================================
+^#^{:doc "Returns its argument."}
 (def identity (fn [x] x))
 
 ; ============================================================================
 ; Higher-Order Functions
 ; ============================================================================
+^#^{:doc "Returns a lazy sequence consisting of the result of applying f to the set of first items of each coll, followed by applying f to the set of second items in each coll, until any one of the colls is exhausted. Any remaining items in other colls are ignored. Function f should accept number-of-colls arguments. Returns a transducer when no collection is provided."}
 (def map (fn [f coll]
   (if (empty? coll)
     (list)
     (cons (f (first coll)) (map f (rest coll))))))
 
+^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
 (def filter (fn [pred coll]
   (let [step (fn [pred coll acc]
                 (if (empty? coll)
@@ -71,7 +92,8 @@ R"CLOJURE(
 ; ============================================================================
 ; Utility Functions
 ; ============================================================================
-(def constantly (fn [x] (fn [y] x)))
+^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
+(def constantly (fn [x] (fn [arg] x)))
 
 ; ============================================================================
 ; Metadata Functions

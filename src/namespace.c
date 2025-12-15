@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>  // For fprintf in DEBUG mode
 #include <stdint.h>
 #include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
@@ -30,23 +29,19 @@ struct ns_search_ctx {
 static struct ns_search_ctx *g_ns_search_ctx = NULL;
 
 static bool namespace_is_clojure_core(const CljNamespace *ns) {
-    return ns && ns->name == SYM_CLOJURE_CORE;
-}
-
-static bool ambiguity_should_throw(const struct ns_search_ctx *ctx, CljNamespace *current_ns) {
-    if (!ctx || !ctx->ambiguous || !ctx->result_ns || !ctx->second_ns) {
+    if (!ns || !ns->name) {
         return false;
     }
+    if (SYM_CLOJURE_CORE && ns->name == SYM_CLOJURE_CORE) {
+        return true;
+    }
+    const char *ns_name = ns->name->cname;
+    return ns_name && strcmp(ns_name, "clojure.core") == 0;
+}
 
-    if (current_ns) {
-        bool first_is_current = ctx->result_ns == current_ns;
-        bool second_is_current = ctx->second_ns == current_ns;
-        bool first_is_core = namespace_is_clojure_core(ctx->result_ns);
-        bool second_is_core = namespace_is_clojure_core(ctx->second_ns);
-
-        if ((first_is_current && second_is_core) || (second_is_current && first_is_core)) {
-            return false;
-        }
+static bool ambiguity_should_throw(const struct ns_search_ctx *ctx) {
+    if (!ctx || !ctx->ambiguous || !ctx->result_ns || !ctx->second_ns) {
+        return false;
     }
 
     return true;
@@ -406,32 +401,11 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     }
     
     // CRITICAL: For def, symbols are stored qualified (e.g., user/my-var)
-    // For :refer :all, symbols are stored unqualified (e.g., doc -> #'clojure.repl/doc)
-    // Check qualified version first (for def), then unqualified (for :refer)
+    // For :refer :all, symbols are also stored qualified (clojure.core is handled separately)
     ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
-    if (v == NOT_FOUND && qualified_sym != sym) {
-        // Fallback: check unqualified version (for :refer :all cases)
-        v = map_get(current_ns->mappings, sym, NOT_FOUND);
-    }
     if (v != NOT_FOUND) {
-        if (g_runtime.ns_registry) {
-            struct ns_search_ctx search_ctx = {
-                .sym = sym,
-                .result = v,
-                .result_ns = current_ns,
-                .second_ns = NULL,
-                .current_ns = current_ns,
-                .ambiguous = false
-            };
-            g_ns_search_ctx = &search_ctx;
-            map_foreach(g_runtime.ns_registry, search_namespace_callback);
-            g_ns_search_ctx = NULL;
-
-            if (ambiguity_should_throw(&search_ctx, current_ns)) {
-                return throw_ambiguous_symbol_error(sym, search_ctx.result_ns, search_ctx.second_ns);
-            }
-        }
-
+        // Symbol found in current namespace - return it immediately
+        // No ambiguity check needed: current namespace always takes precedence
         return v;
     }
     
@@ -446,7 +420,9 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     }
     if (clojure_core && clojure_core->mappings && sym->cname) {
         // CRITICAL: clojure.core mappings use unqualified symbols as keys (ns_name = NULL)
-        // Use the unqualified symbol directly for lookup
+        // OPTIMIZATION: Use symbol directly - map_get uses structural equality as fallback
+        // This avoids expensive intern_symbol_global call in hot path
+        // map_get will use clj_equal if pointer equality fails
         ID resolved = map_get(clojure_core->mappings, sym, NOT_FOUND);
         if (resolved != NOT_FOUND) {
             return resolved;
@@ -481,7 +457,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         g_ns_search_ctx = NULL;
         
         // If ambiguous (found in 2+ namespaces), throw error with helpful message
-        if (ambiguity_should_throw(&search_ctx, current_ns)) {
+        if (ambiguity_should_throw(&search_ctx)) {
             return throw_ambiguous_symbol_error(sym, search_ctx.result_ns, search_ctx.second_ns);
         }
         
@@ -859,26 +835,29 @@ static CljSymbol* get_namespace_mapping_key(CljNamespace *ns, CljSymbol *symbol)
     if (!ns || !symbol || !symbol->cname) {
         return NULL;
     }
-    
-    // OPTIMIZATION: If symbol is already fully qualified, use it directly
-    // This avoids expensive re-interning (find_symbol + strcmp) in hot paths
-    if (symbol->ns_name && symbol->ns_name->cname) {
-        // Symbol is already qualified - return as-is (pointer equality will work)
-        return symbol;
-    }
-    
-    // Unqualified symbol: qualify and intern it
-    // For clojure.core, use unqualified symbol (ns_name = NULL) to match JVM behavior
-    if (ns->name == SYM_CLOJURE_CORE) {
+
+    // clojure.core stores symbols unqualified (ns_name = NULL) to match JVM semantics.
+    // Always intern globally so map_get uses the same pointer everywhere.
+    if (namespace_is_clojure_core(ns)) {
         return intern_symbol_global(symbol->cname);
     }
-    
-    // Other namespaces: qualify the symbol
+
+    // Already-qualified symbol for this namespace? keep pointer (already interned).
+    if (symbol->ns_name && ns->name && symbol->ns_name == ns->name) {
+        return symbol;
+    }
+
+    // Symbol is explicitly qualified to another namespace (e.g. foo/bar) – store as-is.
+    if (symbol->ns_name && symbol->ns_name->cname) {
+        return symbol;
+    }
+
+    // Unqualified symbol for non-core namespace: qualify & intern (ensures pointer equality).
     if (ns->name && ns->name->cname) {
         return intern_symbol(ns->name, symbol->cname);
     }
-    
-    // Fallback: return original symbol (will likely fail lookup, but won't crash)
+
+    // Fallback: return original pointer (should not happen, but avoids crashes).
     return symbol;
 }
 
@@ -914,6 +893,15 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         // new_mappings is already retained by map_assoc
     }
     // If new_mappings == ns->mappings, it was in-place mutation (RC=1), no update needed
+
+    // Provide unqualified alias so direct map_get on the original symbol works (useful for tests/debuggers)
+    if (sym && !sym->ns_name && sym != qualified_symbol) {
+        CljMap *alias_map = map_assoc(ns->mappings, sym, value);
+        if (alias_map != ns->mappings) {
+            RELEASE(ns->mappings);
+            ns->mappings = alias_map;
+        }
+    }
     
     // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     // This avoids ~23 map_assoc() calls per require and is more efficient.
@@ -921,7 +909,7 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
     ns_invalidate_resolve_cache();
 }
 
-// For :refer :all - stores unqualified symbol (like Clojure/JVM)
+// For :refer :all - stores qualified symbol (clojure.core remains special-cased)
 void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
     CLJ_ASSERT(ns != NULL);
     CLJ_ASSERT(symbol != NULL);
@@ -945,25 +933,6 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
             if (updated != ns->mappings) {
                 RELEASE(ns->mappings);
                 ns->mappings = updated;
-            }
-        }
-    }
-
-    // CRITICAL: For :refer, also store unqualified symbol (like Clojure/JVM)
-    // This matches Clojure behavior where (require '[clojure.repl :refer :all])
-    // stores 'doc -> #'clojure.repl/doc (unqualified key, qualified value)
-    // OPTIMIZATION: For fully qualified symbols, skip unqualified entry (not needed)
-    // For unqualified symbols, intern once and reuse
-    if (!sym->ns_name) {
-        CljSymbol *unqualified_sym = intern_symbol_global(sym->cname);
-        if (!unqualified_sym) {
-            unqualified_sym = sym;  // Fallback to original if interning fails
-        }
-        if (unqualified_sym) {
-            CljMap *updated_unqual = map_assoc(ns->mappings, unqualified_sym, value);
-            if (updated_unqual != ns->mappings) {
-                RELEASE(ns->mappings);
-                ns->mappings = updated_unqual;
             }
         }
     }
