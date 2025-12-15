@@ -8,6 +8,7 @@
 #include "map.h"  // Includes FRAME_NIL_SENTINEL definition
 #include "list.h"
 #include "symbol.h"
+#include "kv_macros.h"  // For KV_KEY, KV_VALUE macros
 
 typedef struct CallFrame {
     struct CallFrame *parent;  // Parent frame (for nested calls)
@@ -29,11 +30,11 @@ static inline size_t frame_allocation_size(int capacity) {
 }
 
 static inline ID* frame_param_slot(CallFrame *frame, int index) {
-    return &frame->entries[index * 2];
+    return &KV_KEY(frame->entries, index);
 }
 
 static inline ID* frame_value_slot(CallFrame *frame, int index) {
-    return &frame->entries[index * 2 + 1];
+    return &KV_VALUE(frame->entries, index);
 }
 
 // Frame management functions
