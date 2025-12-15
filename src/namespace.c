@@ -842,44 +842,60 @@ void ns_invalidate_resolve_cache(void) {
     ASSIGN(g_runtime.resolve_cache, NULL);
 }
 
+/**
+ * @brief Get the canonical symbol pointer for namespace mapping lookup (DRY helper)
+ * 
+ * For fully qualified symbols (ns_name set), returns the symbol pointer directly
+ * without re-interning. For unqualified symbols, qualifies and interns them.
+ * 
+ * This eliminates unnecessary strcmp calls in hot paths by avoiding re-interning
+ * of already-qualified symbols.
+ * 
+ * @param ns Target namespace
+ * @param symbol Input symbol (may be qualified or unqualified)
+ * @return Canonical symbol pointer for use in map_get/map_assoc, or NULL on error
+ */
+static CljSymbol* get_namespace_mapping_key(CljNamespace *ns, CljSymbol *symbol) {
+    if (!ns || !symbol || !symbol->cname) {
+        return NULL;
+    }
+    
+    // OPTIMIZATION: If symbol is already fully qualified, use it directly
+    // This avoids expensive re-interning (find_symbol + strcmp) in hot paths
+    if (symbol->ns_name && symbol->ns_name->cname) {
+        // Symbol is already qualified - return as-is (pointer equality will work)
+        return symbol;
+    }
+    
+    // Unqualified symbol: qualify and intern it
+    // For clojure.core, use unqualified symbol (ns_name = NULL) to match JVM behavior
+    if (ns->name == SYM_CLOJURE_CORE) {
+        return intern_symbol_global(symbol->cname);
+    }
+    
+    // Other namespaces: qualify the symbol
+    if (ns->name && ns->name->cname) {
+        return intern_symbol(ns->name, symbol->cname);
+    }
+    
+    // Fallback: return original symbol (will likely fail lookup, but won't crash)
+    return symbol;
+}
+
 void ns_define(CljNamespace *ns, ID symbol, ID value) {
     CLJ_ASSERT(ns != NULL);
     CLJ_ASSERT(symbol != NULL);
     
-    // CRITICAL: For clojure.core, use unqualified symbols (ns_name = NULL, as in Clojure/JVM)
-    // Other namespaces use fully qualified symbols as keys
     CljSymbol *sym = as_symbol(symbol);
     if (!sym) {
         return;
     }
-    CljSymbol *qualified_symbol = sym;
     
-    // For clojure.core, always use unqualified symbol (ns_name = NULL)
-    // CRITICAL: Use intern_symbol_global to ensure we get the same pointer as stored in symbol table
-    // This ensures map_get can find the symbol by pointer equality
-    if (ns->name == SYM_CLOJURE_CORE && sym && sym->cname) {
-        // Get the unqualified symbol from symbol table (ensures pointer equality)
-        qualified_symbol = intern_symbol_global(sym->cname);
-        if (!qualified_symbol) {
-            qualified_symbol = sym;  // Fallback to original if interning fails
-        }
-    } else if (sym && sym->cname) {
-        // Other namespaces: ensure symbol is qualified and interned
-        if (!sym->ns_name && ns->name && ns->name->cname) {
-            // Unqualified symbol: qualify it and intern it (for def)
-            qualified_symbol = intern_symbol(ns->name, sym->cname);
-            if (!qualified_symbol) {
-                // Failed to qualify - use original symbol (will fail lookup later, but at least won't crash)
-                qualified_symbol = sym;
-            }
-        } else if (sym->ns_name && sym->ns_name->cname) {
-            // Already qualified symbol: ensure it's interned (get from symbol table)
-            // This ensures pointer equality for map_get
-            qualified_symbol = intern_symbol(sym->ns_name, sym->cname);
-            if (!qualified_symbol) {
-                qualified_symbol = sym;  // Fallback to original if interning fails
-            }
-        }
+    // DRY: Use helper function to get canonical symbol pointer for namespace mapping
+    // This eliminates duplicate interning logic and avoids re-interning fully qualified symbols
+    CljSymbol *qualified_symbol = get_namespace_mapping_key(ns, sym);
+    if (!qualified_symbol) {
+        qualified_symbol = sym;  // Fallback to original if helper fails
     }
     
     // Create or update mappings
@@ -915,25 +931,15 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
         return;
     }
     
-    // CRITICAL: For :refer, store unqualified symbol only (like Clojure/JVM)
-    // This matches Clojure behavior where (require '[clojure.repl :refer :all])
-    // stores 'doc -> #'clojure.repl/doc (unqualified key, qualified value)
-    CljSymbol *unqualified_sym = intern_symbol_global(sym->cname);
-    if (!unqualified_sym) {
-        unqualified_sym = sym;  // Fallback to original if interning fails
-    }
-    
     // Create or update mappings
     if (!ns->mappings) {
         ns->mappings = make_map(32);
     }
 
+    // DRY: Use helper function for qualified symbol (for consistency with def/defn entries)
     // Store qualified symbol for consistency with def/defn entries
     if (ns->name && ns->name->cname) {
-        CljSymbol *qualified_sym = intern_symbol(ns->name, sym->cname);
-        if (!qualified_sym) {
-            qualified_sym = sym;
-        }
+        CljSymbol *qualified_sym = get_namespace_mapping_key(ns, sym);
         if (qualified_sym) {
             CljMap *updated = map_assoc(ns->mappings, qualified_sym, value);
             if (updated != ns->mappings) {
@@ -943,12 +949,22 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
         }
     }
 
-    // Also store unqualified symbol -> value binding (allows local usage)
-    if (unqualified_sym) {
-        CljMap *updated_unqual = map_assoc(ns->mappings, unqualified_sym, value);
-        if (updated_unqual != ns->mappings) {
-            RELEASE(ns->mappings);
-            ns->mappings = updated_unqual;
+    // CRITICAL: For :refer, also store unqualified symbol (like Clojure/JVM)
+    // This matches Clojure behavior where (require '[clojure.repl :refer :all])
+    // stores 'doc -> #'clojure.repl/doc (unqualified key, qualified value)
+    // OPTIMIZATION: For fully qualified symbols, skip unqualified entry (not needed)
+    // For unqualified symbols, intern once and reuse
+    if (!sym->ns_name) {
+        CljSymbol *unqualified_sym = intern_symbol_global(sym->cname);
+        if (!unqualified_sym) {
+            unqualified_sym = sym;  // Fallback to original if interning fails
+        }
+        if (unqualified_sym) {
+            CljMap *updated_unqual = map_assoc(ns->mappings, unqualified_sym, value);
+            if (updated_unqual != ns->mappings) {
+                RELEASE(ns->mappings);
+                ns->mappings = updated_unqual;
+            }
         }
     }
 

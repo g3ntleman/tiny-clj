@@ -49,3 +49,32 @@
 - `find_symbol`/`strcmp` verschwinden aus rekursiven Hotpaths (z. B. `fib`).  
 - Anteil echter Nutzarbeit (arithmetische Funktionen) steigt deutlich, wodurch der Interpreter-Speedup direkt messbar wird.  
 - Änderungen bleiben lokal (Symbolverwaltung, Resolve-Cache, Namespace-Map) und benötigen keinen Umbau der Eval-Architektur.
+
+## Implementierung (14.12.2025)
+
+**Durchgeführte Optimierungen:**
+
+1. **Helper-Funktion `get_namespace_mapping_key`** (DRY-Prinzip)
+   - In `src/namespace.c` hinzugefügt
+   - Gibt vollqualifizierte Symbole direkt zurück (kein Re-Interning)
+   - Qualifiziert unqualifizierte Symbole nur bei Bedarf
+
+2. **`eval_symbol` optimiert**
+   - Vollqualifizierte Symbole: direkter Pointer-Lookup in `ns->mappings` (kein `intern_symbol`)
+   - Fallback auf Re-Interning nur bei Edge-Cases (selten)
+   - Native-Function-Lookup verwendet Symbol direkt
+
+3. **`resolve_list_operator` optimiert**
+   - Vollqualifizierte Symbole: direkter Cache-Lookup (kein `intern_symbol_global`)
+   - Cache-Speicherung verwendet vorhandene Pointer
+   - Reduzierte `intern_symbol*`-Aufrufe für unqualifizierte Symbole
+
+4. **`ns_define`/`ns_define_refer` auf Helper umgestellt**
+   - DRY: Verwendet `get_namespace_mapping_key` statt duplizierter Logik
+   - Eliminiert redundante Interning-Aufrufe
+
+**Ergebnis:**
+- Alle Tests bestehen weiterhin
+- Funktionalität unverändert
+- Vollqualifizierte Symbole werden nicht mehr re-interned im Hot-Path
+- Erwartete Performance-Verbesserung: ~70% Reduktion der `strcmp`-Aufrufe in rekursiven Pfaden

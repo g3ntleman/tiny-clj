@@ -47,7 +47,8 @@ fi
 echo -e "${YELLOW}🔨 Building Release version of tiny-clj-repl...${NC}"
 (cd "$RELEASE_BUILD_DIR" && cmake --build . --target tiny-clj-repl)
 
-TINY_CLJ_PATH="$RELEASE_BUILD_DIR/tiny-clj-repl"
+# Note: CMake sets CMAKE_RUNTIME_OUTPUT_DIRECTORY to ./build, so the binary is in ./build, not build-release
+TINY_CLJ_PATH="./build/tiny-clj-repl"
 if [ ! -f "$TINY_CLJ_PATH" ]; then
     echo -e "${RED}❌ Could not build tiny-clj-repl in Release mode${NC}"
     exit 1
