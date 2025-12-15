@@ -191,8 +191,6 @@ CljVector* make_vector_copy(CljVector* vec, unsigned capacity) {
     // For transient vectors, use CLJ_VECTOR and convert to transient afterwards
     CljType base_type = (v->base.type == CLJ_VECTOR_TRANSIENT) ? CLJ_VECTOR : v->base.type;
     CljVector *vec_copy = make_vector(capacity, base_type);
-    if (!vec_copy)
-        return NULL;
     
     // If original was transient, convert copy to transient
     if (v->base.type == CLJ_VECTOR_TRANSIENT) {
@@ -407,8 +405,6 @@ CljVector* make_vector(unsigned int capacity, CljType type) {
     
     // Use malloc instead of calloc - we set all fields manually and data[] is filled by vector_conj
     CljVector *vec = (CljVector*)alloc(total_size, 1, type);
-    if (!vec)
-        throw_oom();
 
     vec->base.type = type;
     vec->base.rc = 1;
@@ -447,7 +443,6 @@ CljVector* vector_conj(CljVector* vec, ID item) {
         if (v->count >= (unsigned int)v->capacity || v->capacity == 0) {
             int newcap = MAX(v->capacity * 2, 4);
             CljVector *new_v = make_vector_copy(v, newcap);
-            if (!new_v) { throw_oom(); return NULL; }
             // Preserve vector type
             new_v->base.type = vec_type;
             RELEASE((CljObject*)v);

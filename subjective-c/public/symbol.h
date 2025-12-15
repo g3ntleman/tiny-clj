@@ -13,6 +13,7 @@ typedef struct CljSymbol CljSymbol;
 struct CljSymbol {
     CljObject base;
     struct CljSymbol *ns_name;  // Namespace name symbol (Clojure-compatible: Symbol->ns_name is a Symbol, not Namespace object)
+    struct CljSymbol *unqualified;  // Cached unqualified symbol pointer (ns_name == NULL)
     const char *cname;
 };
 
@@ -112,9 +113,23 @@ extern CljSymbol *SYM_CLOJURE_REPL;
 extern CljSymbol *SYM_CLOJURE_LANG;
 extern CljSymbol *SYM_NS_STAR;
 
-// Symbol API
-CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname);
-CljSymbol* intern_symbol_global(const char *cname);
+#if defined(CLJ_HOT_PATH)
+    #if defined(__clang__) || defined(__GNUC__)
+        // Compile-time enforcement: hot-path code may not intern symbols
+        CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname)
+            __attribute__((error("Symbol interning not allowed in hot path. Symbols must be pre-interned by the parser/setup.")));
+        CljSymbol* intern_symbol_global(const char *cname)
+            __attribute__((error("Symbol interning not allowed in hot path. Symbols must be pre-interned by the parser/setup.")));
+    #else
+        #error "CLJ_HOT_PATH enforcement requires Clang/GCC support for error attributes."
+    #endif
+#else
+    // Symbol API (allowed outside hot path)
+    CljSymbol* intern_symbol(CljSymbol *ns_name, const char *cname);
+    CljSymbol* intern_symbol_global(const char *cname);
+#endif // CLJ_HOT_PATH
+
+// Helpers
 void symbol_table_add(CljSymbol *symbol);
 void symbol_table_cleanup();
 

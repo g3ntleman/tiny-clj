@@ -85,9 +85,12 @@ void memory_update_debug_output_active(void) {
  */
 void* alloc(size_t type_size, size_t count, CljType obj_type) {
     void *result = malloc(type_size * count);
+    if (!result) {
+        throw_oom();  // Never returns
+    }
     
     // Track object creation if it's a CljObject subtype and NOT a singleton
-    if (result != NULL && type_size >= sizeof(CljObject)) {
+    if (type_size >= sizeof(CljObject)) {
         // Only track non-singleton types (singletons have rc==0)
         if (!IS_SINGLETON_TYPE(obj_type)) {
             CljObject *obj = (CljObject*)result;
