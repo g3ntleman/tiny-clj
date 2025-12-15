@@ -105,3 +105,5 @@ TEST(test_autorelease_pool_cleanup_on_exception) {
     TEST_ASSERT_FALSE(is_autorelease_pool_active());
 }
 
+
+

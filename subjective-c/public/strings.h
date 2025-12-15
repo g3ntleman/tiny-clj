@@ -18,7 +18,9 @@ extern CljString* string_empty_singleton;
 #define string_length(str) ((as_clj_string(str))->length)
 
 static inline bool is_string(CljObject *obj) {
-    return obj && obj->type == CLJ_STRING;
+    if (!obj) return false;
+    CljType type = (CljType)obj->type;
+    return type == CLJ_STRING;
 }
 
 CljString* make_clj_string(const char *str);
@@ -29,14 +31,8 @@ static inline const char* clj_string_data(CljString *str) {
     return str ? str->data : "";
 }
 
-CljString* pr_str(ID v);
-CljString* print_str(ID v);
-CljString* to_string(ID v);
-CljString* to_string_with_escape(ID v, bool escape_strings);
-
-bool strings_set_special_form_rendering(bool as_tags);
-bool strings_get_special_form_rendering(void);
-void strings_register_special_form(const char *name);
-void strings_clear_special_forms(void);
+// String escape functions (exported for use in object.c - DRY principle)
+size_t escape_string_calc_length(CljString *s);
+void escape_string_write(CljString *s, char *buffer, size_t *offset);
 
 #endif // SUBJECTIVE_C_STRINGS_H

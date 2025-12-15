@@ -15,6 +15,8 @@ typedef void* CljValue;
 
 #include "types.h"
 #include "common.h"
+#include <stdio.h>
+#include <execinfo.h>
 
 #define INDEX_NOT_FOUND (-1)
 #define LAST_SINGLETON_TYPE CLJ_SYMBOL
@@ -95,6 +97,11 @@ static inline void* assert_type(CljObject *obj, CljType expected_type) {
     if (obj && TAG(obj) == expected_type) {
         return obj;
     }
+    fprintf(stderr, "assert_type failed: expected %d actual %d\n",
+            (int)expected_type, obj ? (int)TAG(obj) : -1);
+    void *trace[16];
+    int trace_count = backtrace(trace, 16);
+    backtrace_symbols_fd(trace, trace_count, fileno(stderr));
     CLJ_ASSERT(0 && "Type assertion failed");
     return NULL;
 }

@@ -37,10 +37,11 @@ typedef enum {
     CLJ_VECTOR_TRANSIENT = 30,
     CLJ_MAP_TRANSIENT = 32,
     CLJ_NAMESPACE = 34,
-    CLJ_RAW_MEMORY = 36
+    CLJ_RAW_MEMORY = 36,
+    CLJ_SYMBOL_TOKEN = 38
 } CljType;
 
-#define CLJ_TYPE_COUNT (CLJ_RAW_MEMORY + 1)
+#define CLJ_TYPE_COUNT (CLJ_SYMBOL_TOKEN + 1)
 
 const char* clj_type_name(CljType type);
 
