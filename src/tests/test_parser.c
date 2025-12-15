@@ -6,6 +6,7 @@
  */
 
 #include "tests_common.h"
+#include "../to_string.h"
 #include "../symbol.h"
 
 // ============================================================================

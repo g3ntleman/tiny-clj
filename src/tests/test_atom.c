@@ -8,6 +8,7 @@
 #include "../tiny_clj.h"
 #include "../memory.h"
 #include "../strings.h"
+#include "../to_string.h"
 #include "../object.h"
 #include "../value.h"
 #include "../runtime.h"

@@ -26,6 +26,7 @@
 #include "event_loop.h"
 #include "channel.h"
 #include "strings.h"  // For pr_str
+#include "to_string.h"  // For is_special_symbol
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"
 #include <time.h>

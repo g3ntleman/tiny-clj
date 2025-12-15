@@ -1,4 +1,5 @@
 #include "tests_common.h"
+#include "../to_string.h"
 
 // Test: Symbol can be created even if namespace does not exist
 TEST(test_symbol_creation_without_namespace) {

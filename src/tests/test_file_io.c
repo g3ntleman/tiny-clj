@@ -1,5 +1,6 @@
 // Tests für History-Persistenz (Vector<String>) via to-string/Parser
 #include "tests_common.h"
+#include "../to_string.h"
 #include "../vector.h"
 #include <unistd.h>
 
