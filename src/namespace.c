@@ -14,7 +14,6 @@
 #include "parser.h"  // For eval_parsed
 #include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
-
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {
     CljSymbol *sym;
