@@ -2548,28 +2548,6 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
                     reader_next(&reader);
                 }
             } CATCH(ex) {
-#ifdef DEBUG
-                // Log exceptions during namespace loading to help debug issues
-                if (ex) {
-                    fprintf(stderr, "[namespace loading] Exception: %s\n", ex->message);
-                    if (form) {
-                        CljObject *form_obj = (CljObject*)form;
-                        unsigned int tag = (unsigned int)TAG(form_obj);
-                        unsigned int type = (unsigned int)(form_obj ? form_obj->type : 0);
-                        fprintf(stderr, "[namespace loading] Form tag=%u type=%u\n", tag, type);
-                        if (tag == CLJ_LIST && form_obj) {
-                            CljList *list = as_list(form_obj);
-                            CljObject *first = LIST_FIRST(list);
-                            if (first && TAG(first) == CLJ_SYMBOL) {
-                                CljSymbol *sym = as_symbol(first);
-                                if (sym && sym->cname) {
-                                    fprintf(stderr, "[namespace loading] Form head=%s\n", sym->cname);
-                                }
-                            }
-                        }
-                    }
-                }
-#endif
                 // Skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                 if (!reader_is_eof(&reader)) reader_next(&reader);

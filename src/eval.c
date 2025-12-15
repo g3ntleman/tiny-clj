@@ -980,16 +980,6 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 
         if (fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE) {
             if (g_eval_arg_depth >= MAX_CALL_STACK_DEPTH) {
-#ifdef DEBUG
-                fprintf(stderr, "STACK OVERFLOW: g_eval_arg_depth=%d, MAX_CALL_STACK_DEPTH=%d\n",
-                        g_eval_arg_depth, MAX_CALL_STACK_DEPTH);
-                if (fn_tag == CLJ_CLOSURE) {
-                    CljFunction *func = as_function(fn);
-                    if (func && func->name) {
-                        fprintf(stderr, "  Function: %s\n", func->name);
-                    }
-                }
-#endif
                 throw_exception(EXCEPTION_STACK_OVERFLOW,
                               "Maximum evaluation depth exceeded in nested function calls",
                               __FILE__, __LINE__, 0);
