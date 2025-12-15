@@ -68,5 +68,12 @@ CljValue parse_from_reader(Reader *reader, EvalState *st);
  */
 ID parse(const char *input, EvalState *st);
 
+/**
+ * @brief Resolve a namespace alias in the current namespace
+ * @param st Evaluation state (for current namespace context)
+ * @param alias_str Alias string (without ':' prefix)
+ * @return Resolved namespace name symbol, or NULL if alias not found
+ */
+CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str);
 
 #endif

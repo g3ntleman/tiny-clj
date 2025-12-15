@@ -13,6 +13,7 @@
 #include "value.h"
 #include "eval.h"
 #include "strings.h"
+#include "../to_string.h"
 #include "../repl.h"
 
 #include <string.h>

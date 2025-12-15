@@ -15,6 +15,7 @@
 #include "strings.h"  // For to_cstring
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
+#include "to_string.h"  // For to_string
 
 // Stacktrace support
 #ifdef __APPLE__

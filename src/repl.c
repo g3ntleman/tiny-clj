@@ -11,6 +11,7 @@
 #include "memory_profiler.h"
 #include "line_editor.h"
 #include "strings.h"
+#include "to_string.h"
 #include "reader.h"
 #include "runtime.h"
 #include "vector.h"

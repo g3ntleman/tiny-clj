@@ -28,6 +28,7 @@
 #include "list.h"
 #include "function.h"
 #include "strings.h"
+#include "to_string.h"
 #include "event_loop.h"
 #include "reader.h"
 #include "parser.h"

@@ -180,7 +180,8 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
         return expr;  // Immediate values don't need canonicalization
     }
 
-    canonicalize_metadata_for_object((CljObject*)expr, st);
+    // NOTE: Metadata canonicalization is done for specific types below (lists, vectors, maps)
+    // to avoid infinite recursion when metadata objects have their own metadata.
     
     unsigned char tag = TAG(expr);
     

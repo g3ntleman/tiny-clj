@@ -743,7 +743,7 @@ static ID parse_character(Reader *reader, EvalState *st) {
  * @param alias_str Alias string (without ':' prefix)
  * @return Resolved namespace name symbol, or NULL if alias not found
  */
-static CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
+CljSymbol* resolve_alias_in_namespace(EvalState *st, const char *alias_str) {
     if (!alias_str || alias_str[0] == '\0') {
         return NULL;
     }
