@@ -835,14 +835,18 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     // OPTIMIZATION: Check resolve_cache FIRST for namespace symbols (before environment lookup)
     // Symbols from namespace are stable (syntactic scope) and can be safely cached
     // This allows recursive calls to benefit from cache hits even when symbol is in environment
-    // CRITICAL: Only check cache for unqualified symbols (qualified symbols are already namespace-specific)
     if (g_runtime.resolve_cache) {
-        CljSymbol *canonical_sym = NULL;
-        if (op_sym && op_sym->cname) {
-            canonical_sym = intern_symbol_global(op_sym->cname);
-        }
-        if (op_sym && !op_sym->ns_name && op_sym->cname && ctx_st && ctx_st->current_ns && ctx_st->current_ns->name) {
-            // Try qualified symbol first (e.g., "user/fib")
+        // OPTIMIZATION: For fully qualified symbols, use pointer directly (no re-interning needed)
+        if (op_sym && op_sym->ns_name) {
+            // Qualified symbol - try direct cache lookup
+            ID cached = map_get(g_runtime.resolve_cache, op, NULL);
+            if (cached) {
+                RELEASE(owned_env_stack);
+                return cached;
+            }
+        } else if (op_sym && !op_sym->ns_name && op_sym->cname && ctx_st && ctx_st->current_ns && ctx_st->current_ns->name) {
+            // Unqualified symbol - try qualified lookup first, then unqualified
+            // Only intern if cache lookup fails (lazy interning)
             CljSymbol *qualified_sym = intern_symbol(ctx_st->current_ns->name, op_sym->cname);
             if (qualified_sym) {
                 ID cached = map_get(g_runtime.resolve_cache, qualified_sym, NULL);
@@ -857,26 +861,12 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
                 RELEASE(owned_env_stack);
                 return cached;
             }
-            if (canonical_sym && canonical_sym != op) {
-                ID cached_canonical = map_get(g_runtime.resolve_cache, canonical_sym, NULL);
-                if (cached_canonical) {
-                    RELEASE(owned_env_stack);
-                    return cached_canonical;
-                }
-            }
         } else {
-            // Qualified symbol or no namespace - try direct cache lookup
+            // No namespace or other case - try direct cache lookup
             ID cached = map_get(g_runtime.resolve_cache, op, NULL);
             if (cached) {
                 RELEASE(owned_env_stack);
                 return cached;
-            }
-            if (canonical_sym && canonical_sym != op) {
-                ID cached_canonical = map_get(g_runtime.resolve_cache, canonical_sym, NULL);
-                if (cached_canonical) {
-                    RELEASE(owned_env_stack);
-                    return cached_canonical;
-                }
             }
         }
     }
@@ -905,27 +895,29 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     // Fallback to global namespace (will populate cache if found)
     resolved = eval_symbol(op_sym, st);
     
-    // OPTIMIZATION: If resolved from namespace, cache qualified symbol for future lookups
+    // OPTIMIZATION: If resolved from namespace, cache symbol for future lookups
     // Symbols from namespace are stable (syntactic scope) and can be safely cached
     if (resolved && st && st->current_ns && st->current_ns->name) {
         if (!g_runtime.resolve_cache) {
             ASSIGN(g_runtime.resolve_cache, make_map(RESOLVE_CACHE_SIZE));
         }
-        if (g_runtime.resolve_cache && op_sym && !op_sym->ns_name && op_sym->cname && TAG(resolved) != CLJ_SYMBOL) {
-            // Create qualified symbol (e.g., "fib" -> "user/fib")
-            CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, op_sym->cname);
-            if (qualified_sym && qualified_sym != op) {
-                // Cache the qualified symbol -> resolved value mapping
-                ID updated_cache = map_assoc(g_runtime.resolve_cache, qualified_sym, resolved);
+        if (g_runtime.resolve_cache && TAG(resolved) != CLJ_SYMBOL) {
+            // OPTIMIZATION: For fully qualified symbols, cache directly (no re-interning)
+            if (op_sym && op_sym->ns_name) {
+                // Qualified symbol - cache directly
+                ID updated_cache = map_assoc(g_runtime.resolve_cache, op, resolved);
                 ASSIGN(g_runtime.resolve_cache, updated_cache);
+            } else if (op_sym && !op_sym->ns_name && op_sym->cname) {
+                // Unqualified symbol - cache both qualified and unqualified versions
+                CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, op_sym->cname);
+                if (qualified_sym && qualified_sym != op) {
+                    // Cache the qualified symbol -> resolved value mapping
+                    ID updated_cache = map_assoc(g_runtime.resolve_cache, qualified_sym, resolved);
+                    ASSIGN(g_runtime.resolve_cache, updated_cache);
+                }
                 // Also cache unqualified symbol for backward compatibility
                 ID updated_cache2 = map_assoc(g_runtime.resolve_cache, op, resolved);
                 ASSIGN(g_runtime.resolve_cache, updated_cache2);
-                CljSymbol *canonical_sym = intern_symbol_global(op_sym->cname);
-                if (canonical_sym && canonical_sym != op && canonical_sym != qualified_sym) {
-                    ID updated_cache3 = map_assoc(g_runtime.resolve_cache, canonical_sym, resolved);
-                    ASSIGN(g_runtime.resolve_cache, updated_cache3);
-                }
             }
             if (call_node && !resolve_stack) {
                 ast_node_update_callsite_cache(call_node, op_sym, resolved, g_runtime.resolve_cache_epoch);
@@ -1755,10 +1747,12 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return intern_symbol_global("user");
     }
 
-    // CRITICAL: Handle qualified symbols (symbol->ns is set during parsing)
+    // CRITICAL: Handle qualified symbols (symbol->ns_name is set during parsing)
     // Parser already splits qualified symbols into name and namespace
     // This avoids string parsing in the hot-path
     // NOTE: Alias resolution is now done in the parser, not at runtime
+    // OPTIMIZATION: For fully qualified symbols, use pointer directly (no re-interning)
+    // This eliminates expensive strcmp calls in hot paths
     if (symbol->ns_name && symbol->ns_name->cname) {
         // Qualified symbol: find target namespace and resolve symbol
         // Try ns_find_by_symbol first (fast path if symbol pointer matches)
@@ -1785,54 +1779,57 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             return NULL;
         }
         if (target_ns->mappings && symbol->cname) {
-            // CRITICAL: Namespace mappings now use fully qualified symbols as keys
-            // Intern the qualified symbol to get the same pointer as stored in mappings
-            // This ensures pointer equality for map lookup
-            // NOTE: Alias resolution is now done in the parser, so symbol->ns_name is already resolved
+            // OPTIMIZATION: For fully qualified symbols, use the symbol pointer directly
+            // This avoids expensive re-interning (find_symbol + strcmp) in hot paths
+            // The parser already creates the correct qualified symbol pointer
+            // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
+            ID resolved = map_get(target_ns->mappings, symbol, NOT_FOUND);
+            if (resolved != NOT_FOUND) {
+                // Found in target namespace - return it (can be NULL/nil, which is valid)
+                return resolved;
+            }
+
+            // Fallback: If direct lookup failed, try re-interning (for edge cases where
+            // pointer doesn't match, e.g., symbol created differently than stored in mappings)
+            // This should rarely happen if parser and ns_define use consistent interning
             CljSymbol *ns_sym_for_intern = symbol->ns_name;
             CljSymbol *interned_sym = intern_symbol(ns_sym_for_intern, symbol->cname);
-            if (!interned_sym) {
-                // Failed to intern - fall through to error
-            } else {
-                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-                ID resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
+            if (interned_sym && interned_sym != symbol) {
+                // Only try if we got a different pointer
+                resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
                 if (resolved != NOT_FOUND) {
-                    // Found in target namespace - return it (can be NULL/nil, which is valid)
                     return resolved;
                 }
+            }
 
-                // clojure.core historically stores unqualified keys (ns_name = NULL)
-                // to match the JVM behavior. Fallback to the global symbol table
-                // so qualified lookups keep working even though the map key is unqualified.
-                if (target_ns->name == SYM_CLOJURE_CORE) {
-                    CljSymbol *unqualified_sym = intern_symbol_global(symbol->cname);
-                    if (unqualified_sym) {
-                        resolved = map_get(target_ns->mappings, unqualified_sym, NOT_FOUND);
-                        if (resolved != NOT_FOUND) {
-                            return resolved;
-                        }
+            // clojure.core historically stores unqualified keys (ns_name = NULL)
+            // to match the JVM behavior. Fallback to the global symbol table
+            // so qualified lookups keep working even though the map key is unqualified.
+            if (target_ns->name == SYM_CLOJURE_CORE) {
+                CljSymbol *unqualified_sym = intern_symbol_global(symbol->cname);
+                if (unqualified_sym) {
+                    resolved = map_get(target_ns->mappings, unqualified_sym, NOT_FOUND);
+                    if (resolved != NOT_FOUND) {
+                        return resolved;
                     }
                 }
-
             }
         }
 
         // Qualified symbol not found in mappings - try native function lookup
         // This handles cases where native functions (like trim) are not yet registered in mappings
         // NOTE: Alias resolution is now done in the parser, so symbol->ns_name is already resolved
+        // OPTIMIZATION: Use symbol directly (already qualified) instead of re-interning
         if (symbol->cname) {
-            CljSymbol *ns_sym_for_lookup = symbol->ns_name;
-            CljSymbol *lookup_sym = intern_symbol(ns_sym_for_lookup, symbol->cname);
-            if (lookup_sym) {
-                BuiltinFn native_func = native_function_lookup(lookup_sym);
-                if (native_func) {
-                    // Found native function - create function object and return it
-                    CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, symbol->cname);
-                    if (native_func_obj) {
-                        // Cache native function in namespace mappings to preserve invariants
-                        ns_define(target_ns, lookup_sym, native_func_obj);
-                        return native_func_obj;
-                    }
+            BuiltinFn native_func = native_function_lookup(symbol);
+            if (native_func) {
+                // Found native function - create function object and return it
+                CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, symbol->cname);
+                if (native_func_obj) {
+                    // Cache native function in namespace mappings to preserve invariants
+                    // Use symbol directly (already qualified) - no need to re-intern
+                    ns_define(target_ns, symbol, native_func_obj);
+                    return native_func_obj;
                 }
             }
         }

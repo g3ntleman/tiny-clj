@@ -1,0 +1,15 @@
+[clojure.repl] Failed to eval form #1: Require failed: namespace 'clojure.core' not found (expected file clojure/core.clj or libs/clojure/core.clj) (/Users/theisen/Projects/tiny-clj/src/builtins.c:2874) [FileNotFoundException]
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+RuntimeException: Unable to resolve symbol: println in this context at src/eval.c:1878:0
+nil
+fib
+user/warmup-result
+Elapsed time: 1984.37 msecs
+nil
