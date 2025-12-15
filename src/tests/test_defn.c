@@ -52,13 +52,16 @@ TEST(test_native_keyword_can_be_parsed) {
         Reader reader;
         reader_init(&reader, ":native");
         ID parsed = value_by_parsing_expr(&reader, g_test_eval_state);
-
         TEST_ASSERT_NOT_NULL_MESSAGE(parsed, ":native should be parseable");
-        TEST_ASSERT_TRUE_MESSAGE(IS_KEYWORD((CljObject*)parsed),
+
+        ID canonical = canonicalize_ast(parsed, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL_MESSAGE(canonical, "canonicalization should succeed");
+
+        TEST_ASSERT_TRUE_MESSAGE(IS_KEYWORD((CljObject*)canonical),
                                  "parsed :native should be a keyword");
 
         // Compare with SYM_KW_NATIVE (pointer equality for interned symbols)
-        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_KW_NATIVE, parsed,
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_KW_NATIVE, canonical,
                                       ":native should match SYM_KW_NATIVE");
     });
 }
@@ -79,7 +82,9 @@ TEST(test_defn_with_native_marker_recognized) {
         TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (defn trim [s] :native)");
 
         // Verify it's a list
-        CljList *list = as_list(form);
+        ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(canonical_form);
+        CljList *list = as_list(canonical_form);
         TEST_ASSERT_NOT_NULL_MESSAGE(list, "parsed form should be a list");
 
         // Get body (should be :native)
@@ -410,8 +415,11 @@ TEST(test_defn_symbol_recognized) {
         ID form = value_by_parsing_expr(&reader, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(form);
 
+        ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(canonical_form);
+
         // Extract the 'defn' symbol from the list
-        CljList *list = as_list(form);
+        CljList *list = as_list(canonical_form);
         TEST_ASSERT_NOT_NULL(list);
         CljObject *defn_sym = LIST_FIRST(list);
         TEST_ASSERT_NOT_NULL(defn_sym);
@@ -451,8 +459,11 @@ TEST(test_defn_test_fn_parsed) {
         ID form = value_by_parsing_expr(&reader, g_test_eval_state);
         TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (defn test-fn ...)");
 
+        ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(canonical_form);
+
         // Verify it's a list
-        CljList *list = as_list(form);
+        CljList *list = as_list(canonical_form);
         TEST_ASSERT_NOT_NULL_MESSAGE(list, "parsed form should be a list");
 
         // Verify first element is 'defn'
@@ -494,9 +505,12 @@ TEST(test_defn_test_fn_evaluated) {
         ID form = value_by_parsing_expr(&reader, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(form);
 
+        ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(canonical_form);
+
         // Evaluate the form
         CljMap *env = g_test_eval_state->current_ns ? (CljMap*)g_test_eval_state->current_ns->mappings : NULL;
-        ID result = eval_list(as_list(form), env, g_test_eval_state, NULL);
+        ID result = eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
 
         // Should return the symbol 'test-fn'
         TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_defn should return the symbol");

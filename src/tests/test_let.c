@@ -634,8 +634,10 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         // Use parse() to build the list structure: (swap! i inc)
         ID parsed = parse("(swap! i inc)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(parsed);
-        TEST_ASSERT_TRUE(parsed && list_type_matches(TAG(parsed)));
-        CljList *list = as_list(parsed);
+        ID canonical = canonicalize_ast(parsed, g_test_eval_state);
+        TEST_ASSERT_NOT_NULL(canonical);
+        TEST_ASSERT_TRUE(canonical && list_type_matches(TAG(canonical)));
+        CljList *list = as_list(canonical);
         
         // Test: Call via eval_list (which uses call_function_with_args internally)
         // This simulates what happens when (swap! i inc) is evaluated in a let body

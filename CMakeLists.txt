@@ -82,7 +82,9 @@ list(APPEND SOURCES
     src/runtime.c
     src/namespace.c
     src/symbol.c
+    src/symbol_token.c
     src/parser.c
+    src/ast_canon.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -133,7 +135,9 @@ set(STM32_SOURCES
     src/runtime.c
     src/namespace.c
     src/symbol.c
+    src/symbol_token.c
     src/parser.c
+    src/ast_canon.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -173,7 +177,9 @@ add_executable(tiny-clj-esp32
     src/runtime.c
     src/namespace.c
     src/symbol.c
+    src/symbol_token.c
     src/parser.c
+    src/ast_canon.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -325,8 +331,10 @@ add_executable(unit-tests
     src/types.c
     src/atom.c
     src/symbol.c
+    src/symbol_token.c
     src/namespace.c
     src/parser.c
+    src/ast_canon.c
     src/reader.c
     src/eval.c
     src/function.c
@@ -470,6 +478,7 @@ set(COMMON_TEST_SOURCES
     src/symbol.c
     src/namespace.c
     src/parser.c
+    src/ast_canon.c
     src/reader.c
     src/eval.c
     src/function.c

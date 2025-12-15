@@ -7,6 +7,8 @@
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h" // For ASSIGN
 #include "vector.h"  // For vector operations
+#include "symbol_token.h"  // For CljSymbolToken
+#include "common.h"  // For CLJ_ASSERT
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -545,6 +547,7 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
 
     // Use ns_name directly (already a CljSymbol*)
     sym->ns_name = ns_name;
+    sym->unqualified = NULL;
 
     return sym;
 }
@@ -571,6 +574,17 @@ CljSymbol* intern_symbol_global(const char *cname) {
     return intern_symbol(NULL, cname);
 }
 
+/**
+ * @brief Get unqualified version of a symbol (cached)
+ * 
+ * NOTE: This function is used as a fallback mechanism for backwards compatibility.
+ * After canonicalization, symbols are already properly interned, but this function
+ * is still used in some places to support both qualified and unqualified lookups
+ * in namespace mappings (e.g., for :refer :all cases).
+ * 
+ * @param symbol Symbol to get unqualified version of
+ * @return Unqualified symbol (cached in symbol->unqualified field)
+ */
 // Helper: Get namespace object from symbol's namespace name (DRY principle)
 // Returns clojure.core namespace if symbol has no explicit namespace (ns_name == NULL)
 // Returns NULL if namespace doesn't exist
@@ -612,5 +626,81 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
 // since it's only called from test files
 void symbol_table_cleanup() {
     ASSIGN(g_runtime.symbol_table, NULL);
+}
+
+// ============================================================================
+// Special Form Management (moved from strings.c)
+// ============================================================================
+
+static bool g_print_special_forms_as_tags = true;
+
+bool strings_set_special_form_rendering(bool as_tags) {
+    bool previous = g_print_special_forms_as_tags;
+    g_print_special_forms_as_tags = as_tags;
+    return previous;
+}
+
+bool strings_get_special_form_rendering(void) {
+    return g_print_special_forms_as_tags;
+}
+
+// Check if symbol is a special form (matches Clojure behavior)
+// Uses compact array-based lookup for smaller code size
+static const char *g_special_form_names[64];
+static size_t g_special_form_count = 0;
+static bool g_special_forms_initialized = false;
+
+static void strings_register_special_form_internal(const char *name) {
+    if (!name || !*name || g_special_form_count >= (sizeof(g_special_form_names) / sizeof(g_special_form_names[0]))) {
+        return;
+    }
+    // Avoid duplicates
+    for (size_t i = 0; i < g_special_form_count; ++i) {
+        if (strcmp(g_special_form_names[i], name) == 0) {
+            return;
+        }
+    }
+    char *copy = strdup(name);
+    if (!copy) {
+        return;
+    }
+    g_special_form_names[g_special_form_count++] = copy;
+}
+
+void strings_clear_special_forms(void) {
+    for (size_t i = 0; i < g_special_form_count; ++i) {
+        free((void*)g_special_form_names[i]);
+        g_special_form_names[i] = NULL;
+    }
+    g_special_form_count = 0;
+    g_special_forms_initialized = false;
+}
+
+void strings_register_special_form(const char *name) {
+    strings_register_special_form_internal(name);
+}
+
+static void ensure_special_forms_initialized(void) {
+    if (g_special_forms_initialized) {
+        return;
+    }
+    const char *defaults[] = {
+        "if","let","defn","def","fn","do","cond","when","while","quote","recur","and","or","ns","try","catch","throw","finally","var","loop","go","time"
+    };
+    for (size_t i = 0; i < sizeof(defaults)/sizeof(defaults[0]); ++i) {
+        strings_register_special_form_internal(defaults[i]);
+    }
+    g_special_forms_initialized = true;
+}
+
+bool is_special_symbol(CljSymbol *symbol) {
+    if (!symbol || !symbol->cname) return false;
+    ensure_special_forms_initialized();
+    for (size_t i = 0; i < g_special_form_count; ++i) {
+        if (strcmp(symbol->cname, g_special_form_names[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
