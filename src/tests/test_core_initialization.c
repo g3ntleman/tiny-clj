@@ -236,10 +236,13 @@ TEST(test_def_inc_evaluation_during_load) {
     reader_init(&reader, "(def inc (fn [x] (+ x 1)))");
     CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
+
+    ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Extract the symbol from the parsed form
-    if (form && list_type_matches(TAG(form))) {
-        CljList *list = as_list(form);
+    if (canonical_form && list_type_matches(TAG(canonical_form))) {
+        CljList *list = as_list(canonical_form);
         CljSymbol *inc_sym = as_symbol(list_nth(list, 1));
         CljObject *fn_expr = (CljObject*)list_nth(list, 2);
         
@@ -334,13 +337,16 @@ TEST(test_plus_available_during_fn_evaluation) {
     reader_init(&reader, "(fn [x] (+ x 1))");
     CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
+
+    ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Evaluate the fn expression
     CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        CljValue result = eval_list(as_list(form), env, g_test_eval_state, NULL);
+        CljValue result = eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(result, 
                                     "fn expression should evaluate to a function");
         TEST_ASSERT_TRUE_MESSAGE(result && TAG(result) == CLJ_FUNC || result && TAG(result) == CLJ_CLOSURE,
@@ -369,13 +375,16 @@ TEST(test_def_stores_symbol_even_if_value_null) {
     reader_init(&reader, "(def test-var nil)");
     CljValue form = value_by_parsing_expr(&reader, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(form);
+
+    ID canonical_form = canonicalize_ast(form, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(canonical_form);
     
     // Evaluate the def expression
     CljMap *env = g_test_eval_state->current_ns ? g_test_eval_state->current_ns->mappings : NULL;
     TEST_ASSERT_NOT_NULL(env);
     
     TRY {
-        (void)eval_list(as_list(form), env, g_test_eval_state, NULL);
+        (void)eval_list(as_list(canonical_form), env, g_test_eval_state, NULL);
         
         // CRITICAL: ns_define stores qualified symbols in mappings
         // Get the qualified symbol from the symbol table for lookup

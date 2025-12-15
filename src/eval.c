@@ -1,15 +1,3 @@
-/*
- * Function Call Implementation
- *
- * Simplified function call system for Tiny-Clj:
- * - eval_function_call: Main function call evaluator
- * - eval_body: Evaluate function body expressions
- * - eval_list: Evaluate list expressions
- * - Built-in function evaluators (add, sub, mul, div, println)
- * - Stack-allocated argument handling
- */
-
-#include "common.h"
 #include "object.h"
 #include "eval.h"
 #include "symbol.h"
@@ -33,6 +21,7 @@
 #include "list.h"
 #include "value.h"
 #include "environment.h"
+#include "ast.h"
 #include "vector.h"
 #include "event_loop.h"
 #include "channel.h"
@@ -44,6 +33,56 @@
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
 #include "eval_dispatch.h"
+
+static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
+    if (!slot || !unqualified || !qualified) {
+        return;
+    }
+    ID expr = *slot;
+    if (!expr || IS_IMMEDIATE(expr)) {
+        return;
+    }
+
+    unsigned char tag = TAG(expr);
+    if (tag == CLJ_SYMBOL) {
+        if ((CljSymbol*)expr == unqualified) {
+            *slot = (ID)qualified;
+        }
+        return;
+    }
+
+    if (tag == CLJ_AST_NODE) {
+        CljASTNode *node = as_ast_node(expr);
+        if (node) {
+            rewrite_recursive_calls_in_slot(&node->first, unqualified, qualified);
+            rewrite_recursive_calls_in_slot(&node->rest, unqualified, qualified);
+        }
+        return;
+    }
+
+    if (tag == CLJ_LIST) {
+        CljList *list = as_list(expr);
+        if (list) {
+            rewrite_recursive_calls_in_slot((ID*)&list->first, unqualified, qualified);
+            rewrite_recursive_calls_in_slot((ID*)&list->rest, unqualified, qualified);
+        }
+        return;
+    }
+
+    if (tag == CLJ_VECTOR) {
+        CljVector *vec = as_vector(expr);
+        if (vec) {
+            unsigned int count = vector_count(vec);
+            ID *data = vector_as_array(vec);
+            if (data) {
+                for (unsigned int i = 0; i < count; ++i) {
+                    rewrite_recursive_calls_in_slot(&data[i], unqualified, qualified);
+                }
+            }
+        }
+        return;
+    }
+}
 
 // Use C stack for recur state - each function call has its own stack frame
 // No global variables needed - local variables in eval_function_call are automatically isolated
@@ -67,12 +106,47 @@ void set_suppress_time_output(bool suppress) {
     g_suppress_time_output = suppress;
 }
 
+// Resolve cache helpers ----------------------------------------------------
+static inline CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) {
+    if (op_sym && op_sym->ns_name) {
+        return op_sym->ns_name;
+    }
+    if (st && st->current_ns && st->current_ns->name) {
+        return st->current_ns->name;
+    }
+    return NULL;
+}
+
+static inline ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
+    if (!ns_key || !g_runtime.resolve_cache) {
+        return NULL;
+    }
+    CljMap *ns_cache = (CljMap*)map_get(g_runtime.resolve_cache, ns_key, NULL);
+    if (!ns_cache) {
+        return NULL;
+    }
+    return map_get(ns_cache, op, NULL);
+}
+
+static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
+    if (!ns_key || !g_runtime.resolve_cache) {
+        return;
+    }
+    CljMap *ns_cache = (CljMap*)map_get(g_runtime.resolve_cache, ns_key, NULL);
+    if (!ns_cache) {
+        ns_cache = make_map(RESOLVE_CACHE_SIZE);
+    }
+    ns_cache = map_assoc(ns_cache, op, resolved);
+    CljMap *updated_cache = map_assoc(g_runtime.resolve_cache, ns_key, ns_cache);
+    ASSIGN(g_runtime.resolve_cache, updated_cache);
+}
+
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljMap *env, EvalState *st);
 ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
-static inline bool is_special_symbol(CljSymbol *symbol);
+// is_special_symbol is now in symbol.c
 static inline bool is_builtin_function(CljSymbol *symbol);
 
 
@@ -326,26 +400,6 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
                 return resolved;
             }
 
-            CljSymbol *symbol_obj = as_symbol(sym);
-            if (symbol_obj && symbol_obj->cname) {
-                if (st && st->current_ns && st->current_ns->name) {
-                    CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, symbol_obj->cname);
-                    if (qualified_sym) {
-                        resolved = map_get(env, qualified_sym, NOT_FOUND);
-                        if (resolved != NOT_FOUND) {
-                            return resolved;
-                        }
-                    }
-                }
-
-                CljSymbol *unqualified_sym = intern_symbol_global(symbol_obj->cname);
-                if (unqualified_sym) {
-                    resolved = map_get(env, unqualified_sym, NOT_FOUND);
-                    if (resolved != NOT_FOUND) {
-                        return resolved;
-                    }
-                }
-            }
         }
 
         ID rest_obj_id = LIST_REST(current_stack);
@@ -823,6 +877,7 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         return return_value;
     }
 
+    CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, st);
     bool allow_callsite_cache = call_node && op_sym && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
     if (allow_callsite_cache) {
         ID cached_call = ast_node_get_cached_resolution(call_node, op_sym, g_runtime.resolve_cache_epoch);
@@ -836,38 +891,10 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     // Symbols from namespace are stable (syntactic scope) and can be safely cached
     // This allows recursive calls to benefit from cache hits even when symbol is in environment
     if (g_runtime.resolve_cache) {
-        // OPTIMIZATION: For fully qualified symbols, use pointer directly (no re-interning needed)
-        if (op_sym && op_sym->ns_name) {
-            // Qualified symbol - try direct cache lookup
-            ID cached = map_get(g_runtime.resolve_cache, op, NULL);
-            if (cached) {
-                RELEASE(owned_env_stack);
-                return cached;
-            }
-        } else if (op_sym && !op_sym->ns_name && op_sym->cname && ctx_st && ctx_st->current_ns && ctx_st->current_ns->name) {
-            // Unqualified symbol - try qualified lookup first, then unqualified
-            // Only intern if cache lookup fails (lazy interning)
-            CljSymbol *qualified_sym = intern_symbol(ctx_st->current_ns->name, op_sym->cname);
-            if (qualified_sym) {
-                ID cached = map_get(g_runtime.resolve_cache, qualified_sym, NULL);
-                if (cached) {
-                    RELEASE(owned_env_stack);
-                    return cached;
-                }
-            }
-            // Fallback: try unqualified symbol
-            ID cached = map_get(g_runtime.resolve_cache, op, NULL);
-            if (cached) {
-                RELEASE(owned_env_stack);
-                return cached;
-            }
-        } else {
-            // No namespace or other case - try direct cache lookup
-            ID cached = map_get(g_runtime.resolve_cache, op, NULL);
-            if (cached) {
-                RELEASE(owned_env_stack);
-                return cached;
-            }
+        ID cached = resolve_cache_lookup_value(cache_ns_key, op);
+        if (cached) {
+            RELEASE(owned_env_stack);
+            return cached;
         }
     }
 
@@ -902,23 +929,7 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
             ASSIGN(g_runtime.resolve_cache, make_map(RESOLVE_CACHE_SIZE));
         }
         if (g_runtime.resolve_cache && TAG(resolved) != CLJ_SYMBOL) {
-            // OPTIMIZATION: For fully qualified symbols, cache directly (no re-interning)
-            if (op_sym && op_sym->ns_name) {
-                // Qualified symbol - cache directly
-                ID updated_cache = map_assoc(g_runtime.resolve_cache, op, resolved);
-                ASSIGN(g_runtime.resolve_cache, updated_cache);
-            } else if (op_sym && !op_sym->ns_name && op_sym->cname) {
-                // Unqualified symbol - cache both qualified and unqualified versions
-                CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, op_sym->cname);
-                if (qualified_sym && qualified_sym != op) {
-                    // Cache the qualified symbol -> resolved value mapping
-                    ID updated_cache = map_assoc(g_runtime.resolve_cache, qualified_sym, resolved);
-                    ASSIGN(g_runtime.resolve_cache, updated_cache);
-                }
-                // Also cache unqualified symbol for backward compatibility
-                ID updated_cache2 = map_assoc(g_runtime.resolve_cache, op, resolved);
-                ASSIGN(g_runtime.resolve_cache, updated_cache2);
-            }
+            resolve_cache_store_value(cache_ns_key, op, resolved);
             if (call_node && !resolve_stack) {
                 ast_node_update_callsite_cache(call_node, op_sym, resolved, g_runtime.resolve_cache_epoch);
             }
@@ -1194,14 +1205,6 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     return fallback_result;
 }
 
-// AST rewriting: Replace unqualified symbol with qualified symbol in-place
-// This allows cache hits for recursive calls by using qualified symbols in the AST
-static void rewrite_ast_symbol(CljList *list, CljSymbol *qualified_sym) {
-    // Rewrite AST in-place: replace first element with qualified symbol
-    // ASSIGN checks if values differ, so no need to check here
-    ASSIGN(list->first, qualified_sym);
-}
-
 // Simplified list evaluation (optionally accepts EvalContext for recur support)
 ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // Clojure-compatible: Accept NULL environment - falls back to namespace lookup
@@ -1263,22 +1266,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Resolve operator symbol
     // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
     ID resolved_op = resolve_list_operator(op, env, st, ctx, call_node);
-    
-    // OPTIMIZATION: AST rewriting - replace unqualified symbol with qualified symbol in-place
-    // This allows cache hits for recursive calls by using qualified symbols in the AST
-    // Only rewrite if symbol was resolved from current namespace (not clojure.core)
-    if (resolved_op && TAG(resolved_op) != CLJ_SYMBOL && op && TAG(op) == CLJ_SYMBOL && st && st->current_ns && st->current_ns->name && st->current_ns->mappings) {
-        CljSymbol *original_sym = as_symbol(op);
-        if (original_sym && !original_sym->ns_name && original_sym->cname) {
-            CljSymbol *qualified_sym = intern_symbol(st->current_ns->name, original_sym->cname);
-            if (qualified_sym) {
-                ID check_resolved = map_get(st->current_ns->mappings, qualified_sym, NOT_FOUND);
-                if (check_resolved != NOT_FOUND && check_resolved == resolved_op) {
-                    rewrite_ast_symbol(list, qualified_sym);
-                }
-            }
-        }
-    }
     
     op = resolved_op;
 
@@ -1355,7 +1342,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Error: first element is not a function
-    if (IS_IMMEDIATE(op) || (op && TAG(op) == CLJ_STRING)) {
+    if (IS_IMMEDIATE(op)) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call %s as a function", clj_type_name(op->type));
     }
@@ -1444,39 +1431,8 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     }
 
     // Store in namespace (value can be NULL/nil - legitimate case)
-    // CRITICAL: Namespace mappings now use fully qualified symbols as keys
-    // Qualify the symbol with current namespace if it's unqualified
-    CljSymbol *qualified_symbol = as_symbol(symbol);
-    if (qualified_symbol && !qualified_symbol->ns_name && st && st->current_ns && st->current_ns->name) {
-        qualified_symbol = intern_symbol(st->current_ns->name, qualified_symbol->cname);
-        if (!qualified_symbol) {
-            throw_exception(EXCEPTION_RUNTIME, "Failed to qualify symbol for namespace registration", NULL, 0, 0);
-            return NULL;
-        }
-    }
-    // CRITICAL: ns_define may modify the symbol (intern it), so we need to get the actual symbol used
-    // For clojure.core, ns_define will use intern_symbol_global
-    // For other namespaces, ns_define will use intern_symbol if the symbol is already qualified
-    // We need to ensure we return the same symbol that was stored
-    CljSymbol *sym_before = qualified_symbol ? qualified_symbol : as_symbol(symbol);
-    ID define_symbol = symbol;
-    if (qualified_symbol) {
-        define_symbol = qualified_symbol;
-    }
-    ns_define(st->current_ns, define_symbol, value);
-    // After ns_define, get the symbol that was actually stored (may be different due to interning)
-    // For clojure.core, get unqualified symbol from table
-    // For other namespaces, get qualified symbol from table
-    CljSymbol *sym_after = NULL;
-    if (st->current_ns->name == SYM_CLOJURE_CORE && sym_before && sym_before->cname) {
-        sym_after = intern_symbol_global(sym_before->cname);
-    } else if (sym_before && sym_before->ns_name && sym_before->ns_name->cname) {
-        sym_after = intern_symbol(sym_before->ns_name, sym_before->cname);
-    } else if (sym_before && !sym_before->ns_name && st->current_ns->name && st->current_ns->name->cname) {
-        sym_after = intern_symbol(st->current_ns->name, sym_before->cname);
-    }
-    // Use the interned symbol if available, otherwise fall back to original
-    CljSymbol *return_symbol = sym_after ? sym_after : (qualified_symbol ? qualified_symbol : as_symbol(symbol));
+    ns_define(st->current_ns, symbol, value);
+    CljSymbol *return_symbol = as_symbol(symbol);
 
     // Apply metadata to value
     // In Clojure, metadata from ^#^{...} (def ...) is applied to the value
@@ -1669,33 +1625,8 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     return fn;
 }
 
-// Check if symbol is a special form (if, let, defn, etc.)
-// Uses compact array-based lookup for smaller code size
-static inline bool is_special_symbol(CljSymbol *symbol) {
-    if (!symbol) return false;
-    return (symbol == SYM_IF ||
-            symbol == SYM_LET ||
-            symbol == SYM_DEFN ||
-            symbol == SYM_DEF ||
-            symbol == SYM_FN ||
-            symbol == SYM_DO ||
-            symbol == SYM_COND ||
-            symbol == SYM_WHEN ||
-            symbol == SYM_WHILE ||
-            symbol == SYM_QUOTE ||
-            symbol == SYM_RECUR ||
-            symbol == SYM_AND ||
-            symbol == SYM_OR ||
-            symbol == SYM_NS ||
-            symbol == SYM_TRY ||
-            symbol == SYM_CATCH ||
-            symbol == SYM_THROW ||
-            symbol == SYM_FINALLY ||
-            symbol == SYM_VAR ||
-            symbol == SYM_LOOP ||
-            symbol == SYM_GO ||
-            symbol == SYM_TIME);
-}
+// is_special_symbol is now in symbol.c (uses dynamic registration)
+// This inline version was removed to use the centralized implementation
 
 // Check if symbol is a builtin function (+, -, *, /, etc.)
 // Uses compact array-based lookup for smaller code size
@@ -1744,7 +1675,8 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         if (st && st->current_ns && st->current_ns->name) {
             return st->current_ns->name;
         }
-        return intern_symbol_global("user");
+        CljNamespace *user_ns = ns_get_or_create("user", NULL);
+        return (user_ns && user_ns->name) ? user_ns->name : NULL;
     }
 
     // CRITICAL: Handle qualified symbols (symbol->ns_name is set during parsing)
@@ -1788,32 +1720,18 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
                 // Found in target namespace - return it (can be NULL/nil, which is valid)
                 return resolved;
             }
-
-            // Fallback: If direct lookup failed, try re-interning (for edge cases where
-            // pointer doesn't match, e.g., symbol created differently than stored in mappings)
-            // This should rarely happen if parser and ns_define use consistent interning
-            CljSymbol *ns_sym_for_intern = symbol->ns_name;
-            CljSymbol *interned_sym = intern_symbol(ns_sym_for_intern, symbol->cname);
-            if (interned_sym && interned_sym != symbol) {
-                // Only try if we got a different pointer
-                resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
+            CljSymbol *symbol_alias = NULL;
+            if (symbol->cname) {
+                symbol_alias = intern_symbol_global(symbol->cname);
+            }
+            if (symbol_alias && symbol_alias != symbol) {
+                resolved = map_get(target_ns->mappings, symbol_alias, NOT_FOUND);
                 if (resolved != NOT_FOUND) {
                     return resolved;
                 }
             }
 
-            // clojure.core historically stores unqualified keys (ns_name = NULL)
-            // to match the JVM behavior. Fallback to the global symbol table
-            // so qualified lookups keep working even though the map key is unqualified.
-            if (target_ns->name == SYM_CLOJURE_CORE) {
-                CljSymbol *unqualified_sym = intern_symbol_global(symbol->cname);
-                if (unqualified_sym) {
-                    resolved = map_get(target_ns->mappings, unqualified_sym, NOT_FOUND);
-                    if (resolved != NOT_FOUND) {
-                        return resolved;
-                    }
-                }
-            }
+            // If direct lookup failed, rely on namespace mappings to contain canonical keys.
         }
 
         // Qualified symbol not found in mappings - try native function lookup
@@ -2486,23 +2404,20 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             return NULL;
         }
 
-        // Qualify symbol with current namespace if it's unqualified
-        // Native functions must be looked up with their fully qualified name
-        CljSymbol *qualified_symbol = name_symbol;
-        if (!name_symbol->ns_name && st && st->current_ns && st->current_ns->name) {
-            // Unqualified symbol - qualify it with current namespace
-            qualified_symbol = intern_symbol(st->current_ns->name, name_symbol->cname);
-            if (!qualified_symbol) {
-                free_obj_array(params, params_stack);
-                throw_exception(EXCEPTION_RUNTIME,
-                               "Failed to qualify symbol for native function lookup",
-                               NULL, 0, 0);
-                return NULL;
+        // Lookup native function by Clojure symbol (uses pointer comparison for efficiency)
+        BuiltinFn native_func = NULL;
+        CljSymbol *lookup_symbol = name_symbol;
+        if (st && st->current_ns && st->current_ns->name && name_symbol->cname) {
+            CljSymbol *qualified =
+                intern_symbol(st->current_ns->name, name_symbol->cname);
+            if (qualified) {
+                lookup_symbol = qualified;
             }
         }
-
-        // Lookup native function by Clojure symbol (uses pointer comparison for efficiency)
-        BuiltinFn native_func = native_function_lookup(qualified_symbol);
+        native_func = native_function_lookup(lookup_symbol);
+        if (!native_func && lookup_symbol != name_symbol) {
+            native_func = native_function_lookup(name_symbol);
+        }
         if (!native_func) {
             free_obj_array(params, params_stack);
             char error_msg[256];
@@ -2524,22 +2439,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         }
 
         // Register native function in namespace (replaces any existing registration)
-        // CRITICAL: Namespace mappings now use fully qualified symbols as keys
-        // Qualify the symbol with current namespace if it's unqualified
-        CljSymbol *qualified_name_sym = as_symbol(name_sym);
-        if (qualified_name_sym && !qualified_name_sym->ns_name && st && st->current_ns && st->current_ns->name) {
-            qualified_name_sym = intern_symbol(st->current_ns->name, qualified_name_sym->cname);
-            if (!qualified_name_sym) {
-                free_obj_array(params, params_stack);
-                throw_exception(EXCEPTION_RUNTIME, "Failed to qualify symbol for namespace registration", NULL, 0, 0);
-                return NULL;
-            }
-        }
-        ID def_symbol = name_sym;
-        if (qualified_name_sym) {
-            def_symbol = qualified_name_sym;
-        }
-        ns_define(st->current_ns, def_symbol, native_func_obj);
+        ns_define(st->current_ns, name_sym, native_func_obj);
 
         // Apply metadata to native function
         // Merge user metadata (from ^#^{...}) with standard metadata (:name, :ns)
@@ -2585,6 +2485,16 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         transformed_body = body_expr_obj;
     }
 
+    CljSymbol *name_symbol = as_symbol(name_sym);
+    if (name_symbol && st && st->current_ns && st->current_ns->name && name_symbol->cname) {
+        CljSymbol *qualified_name = intern_symbol(st->current_ns->name, name_symbol->cname);
+        if (qualified_name && qualified_name != name_symbol) {
+            ID body_id = (ID)transformed_body;
+            rewrite_recursive_calls_in_slot(&body_id, name_symbol, qualified_name);
+            transformed_body = (CljObject*)body_id;
+        }
+    }
+
     // CRITICAL: Don't validate recur positions here - recur is only valid when
     // the function is called, not when it's defined. validate_recur_positions
     // would try to evaluate the body, which would fail because there's no RecurContext.
@@ -2621,18 +2531,15 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
             CljMap *new_fn_env = map_assoc(fn_env, key, val);
             ASSIGN(fn_env, new_fn_env);
 
-            // Provide unqualified aliases so functions can refer to same-namespace
-            // vars without qualifying them (matches Clojure semantics).
-            if (TAG(key) == CLJ_SYMBOL) {
+            if (TAG(key) == CLJ_SYMBOL && st->current_ns->name != SYM_CLOJURE_CORE) {
                 CljSymbol *qualified_key = as_symbol(key);
-                // clojure.core mappings already use unqualified keys
-                if (qualified_key && qualified_key->ns_name && qualified_key->ns_name->cname &&
-                    st->current_ns->name != SYM_CLOJURE_CORE) {
-                    CljSymbol *unqualified_sym = intern_symbol_global(qualified_key->cname);
-                    if (unqualified_sym && !map_contains(fn_env, unqualified_sym)) {
-                        CljMap *alias_env = map_assoc(fn_env, unqualified_sym, val);
-                        ASSIGN(fn_env, alias_env);
-                    }
+                CljSymbol *unqualified_sym = NULL;
+                if (qualified_key && qualified_key->cname) {
+                    unqualified_sym = intern_symbol_global(qualified_key->cname);
+                }
+                if (unqualified_sym && unqualified_sym != qualified_key && !map_contains(fn_env, unqualified_sym)) {
+                    CljMap *alias_env = map_assoc(fn_env, unqualified_sym, val);
+                    ASSIGN(fn_env, alias_env);
                 }
             }
         }
@@ -2696,21 +2603,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
 #endif // ENABLE_META
 
     // Register function in namespace (after creation for recursive calls)
-    // CRITICAL: Namespace mappings now use fully qualified symbols as keys
-    // Qualify the symbol with current namespace if it's unqualified
-    CljSymbol *qualified_name_sym = as_symbol(name_sym);
-    if (qualified_name_sym && !qualified_name_sym->ns_name && st && st->current_ns && st->current_ns->name) {
-        qualified_name_sym = intern_symbol(st->current_ns->name, qualified_name_sym->cname);
-        if (!qualified_name_sym) {
-            throw_exception(EXCEPTION_RUNTIME, "Failed to qualify symbol for namespace registration", NULL, 0, 0);
-            return NULL;
-        }
-    }
-    ID func_symbol = name_sym;
-    if (qualified_name_sym) {
-        func_symbol = qualified_name_sym;
-    }
-    ns_define(st->current_ns, func_symbol, fn_obj);
+    ns_define(st->current_ns, name_sym, fn_obj);
 
     // Add function to env_stack so it can find itself recursively
     CljMap *first_env = (CljMap*)LIST_FIRST(func->env_stack);
@@ -2758,9 +2651,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     unsigned char expr_tag = TAG(expr);
 
-    if (expr_tag == CLJ_STRING) {
-        return expr;
-    }
+    CLJ_ASSERT(expr_tag != CLJ_SYMBOL_TOKEN && "Symbol tokens must be canonicalized before evaluation");
 
     if (expr_tag == CLJ_SYMBOL) {
         if (expr == SYM_NIL) {
@@ -3223,5 +3114,6 @@ CljObject* list_get_element(CljList *list, int index) {
     }
     return LIST_FIRST(node);
 }
+
 
 
