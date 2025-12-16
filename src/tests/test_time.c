@@ -25,7 +25,6 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st);
 // ============================================================================
 
 TEST(test_time_basic_functionality) {
-    TEST_IGNORE();
     // Test that time function executes and returns the result
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -98,7 +97,6 @@ TEST(test_time_basic_functionality) {
 }
 
 TEST(test_time_arity_validation) {
-    TEST_IGNORE();
     // Test that time function validates arity correctly
     // Create (time) with no arguments
     CljObject *time_symbol = (CljObject *)SYM_TIME;
@@ -120,7 +118,6 @@ TEST(test_time_arity_validation) {
 }
 
 TEST(test_time_with_too_many_arguments) {
-    TEST_IGNORE();
     // Test time with too many arguments
     CljObject *expr1 = fixnum(1);
     CljObject *expr2 = fixnum(2);
@@ -150,7 +147,6 @@ TEST(test_time_with_too_many_arguments) {
 }
 
 TEST(test_time_with_sleep) {
-    TEST_IGNORE();
     // Test time function with sleep to get measurable timing
     // Create a sleep expression: (sleep 1) - sleep for 1 second
     CljSymbol *sleep_symbol = intern_symbol_global("sleep");
@@ -179,7 +175,6 @@ TEST(test_time_with_sleep) {
 }
 
 TEST(test_time_no_double_evaluation) {
-    TEST_IGNORE();
     // Test that time does NOT evaluate its argument twice
     // Use a simple arithmetic expression that we can verify
     CljValue result = eval_string("(time (+ 1 2))", g_test_eval_state);
@@ -191,7 +186,6 @@ TEST(test_time_no_double_evaluation) {
 }
 
 TEST(test_time_with_dotimes) {
-    TEST_IGNORE();
     // Test that time works correctly with dotimes
     // Create: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
     
@@ -253,7 +247,6 @@ TEST(test_time_with_dotimes) {
 }
 
 TEST(test_time_returns_expression_result) {
-    TEST_IGNORE();
     // Test that time returns the result of the expression, not the timing
     // This demonstrates Clojure-compatible behavior
     CljValue result = eval_string("(time (+ 1 2 3))", g_test_eval_state);

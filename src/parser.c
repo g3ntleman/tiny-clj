@@ -468,8 +468,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
       return NULL;
     }
 
-    ID vector_obj = AUTORELEASE(vec);
-    return attach_location_meta(reader, st, vector_obj);
+    return AUTORELEASE(vec);  // No location meta - symbols have inline line/col
   }
   return NULL;
 }
@@ -502,8 +501,8 @@ static ID parse_map(Reader *reader, EvalState *st) {
     return NULL;
   }
   // Use constructor API (owned) and return autoreleased
-  ID map_obj = AUTORELEASE(make_map_from_stack((CljObject**)pairs, pair_count));
-  return attach_location_meta(reader, st, map_obj);
+  // No location meta - symbols have inline line/col
+  return AUTORELEASE(make_map_from_stack((CljObject**)pairs, pair_count));
 }
 
 /**
@@ -606,8 +605,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
         return NULL;
       }
 
-      expanded = attach_location_meta(reader, st, expanded);
-      return expanded;
+      return expanded;  // No location meta - symbols have inline line/col
     }
   }
 
@@ -627,7 +625,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
     return NULL;
   }
 
-  return attach_location_meta(reader, st, result);
+  return result;  // No location meta - symbols have inline line/col
 }
 
 /**
@@ -814,7 +812,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       if (!next || next <= current) {
         // Notbremse: Fortschritt sicherstellen
         CLJ_ASSERT(next && next > current);
-        // Fallback: einen Byte voranschreiten, um Hänger zu vermeiden
+        // Fallback: advance one byte to avoid hanging
         next = current + 1;
       }
 
@@ -842,7 +840,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
   }
 
   buffer[pos] = '\0';
-  // Leere Symbole sind ungültig – statt abzubrechen, sauber fehlschlagen
+  // Empty symbols are invalid - fail gracefully instead of aborting
   if (pos == 0) {
     if (!reader_eof(reader)) {
       // Ensure forward progress to avoid parser stalls
@@ -875,7 +873,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
           snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
           CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
           if (kw) {
-            return attach_location_meta(reader, st, AUTORELEASE(kw));
+            return AUTORELEASE(kw);  // No location meta for atoms
           }
         }
       }
@@ -894,7 +892,7 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
             snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
             CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
             if (kw) {
-              return attach_location_meta(reader, st, AUTORELEASE(kw));
+              return AUTORELEASE(kw);  // No location meta for atoms
             }
           }
         }
@@ -946,21 +944,21 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
         keyword_with_colon[sizeof(keyword_with_colon) - 1] = '\0';
         CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
         if (sym) {
-          return attach_location_meta(reader, st, AUTORELEASE(sym));
+          return AUTORELEASE(sym);  // No location meta for atoms
         }
         // If intern fails, fall through to return unqualified symbol
       } else {
         // Regular qualified symbol (not a keyword)
         CljSymbol *sym = intern_symbol(ns_name_sym, symbol_str);
         if (sym) {
-          return attach_location_meta(reader, st, AUTORELEASE(sym));
+          return AUTORELEASE(sym);  // No location meta for atoms
         }
         // If intern fails, fall through to return unqualified symbol
       }
     }
   }
 
-  return attach_location_meta(reader, st, AUTORELEASE(intern_symbol_global(buffer)));
+  return AUTORELEASE(intern_symbol_global(buffer));  // No location meta for atoms
 }
 
 /**
@@ -1078,8 +1076,8 @@ static ID parse_string_internal(Reader *reader, EvalState *st) {
     return NULL;
   }
   // Create string object - memory is managed via AUTORELEASE
-  ID result = AUTORELEASE(make_string(buf));
-  return attach_location_meta(reader, st, result);
+  // No location meta for atoms (strings) - only forms need location info
+  return AUTORELEASE(make_string(buf));
 }
 
 /**

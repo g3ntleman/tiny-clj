@@ -35,7 +35,7 @@ CljList* make_list(ID first, CljList *rest) {
     return list;
 }
 
-// List-Operationen für try/catch
+// List operations for try/catch
 ID list_nth(CljList *list, int n) {
     if (!list || n < 0) {
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,

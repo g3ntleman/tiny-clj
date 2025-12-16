@@ -35,7 +35,7 @@ struct LineEditor {
     bool in_escape_sequence;
     
     // History support using CljVector
-    CljVector *history;        // CljVector für History
+    CljVector *history;        // CljVector for history
     unsigned int history_index;  // Current position in history (UINT_MAX = new line)
     char temp_buffer[512];     // Backup of current line when browsing history
 };

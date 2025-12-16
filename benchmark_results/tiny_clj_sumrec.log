@@ -2,5 +2,5 @@ Führe aus: echo '(time (do (defn sum-rec [n] (if (= n 0) 0 (+ n (sum-rec (- n 1
 [clojure.core] Evaluated 97 form(s), 97 succeeded.
 [clojure.repl] Evaluated 9 form(s), 9 succeeded.
 nil
-Elapsed time: 1.88 msecs
+Elapsed time: 0.31 msecs
 5050

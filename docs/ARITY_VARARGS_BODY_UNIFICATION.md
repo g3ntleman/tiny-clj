@@ -253,3 +253,6 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 | Implementierungs-Aufwand | ✅ **Niedrig** | ⭐⭐⭐ |
 
 **Gesamtbewertung: 7/10** - Empfehlung: **Implementieren**, aber Fallback-Body-Strategie zuerst klären.
+
+
+

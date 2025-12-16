@@ -443,7 +443,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         return false;
     }
     set_line_editor(editor);
-    // Lade History aus Default-Datei und fülle Editor-History (mit Exception-Handling)
+    // Load history from default file and populate editor history (with exception handling)
     CljObject *history_vec = NULL;
     WITH_AUTORELEASE_POOL({
         TRY {
@@ -688,7 +688,7 @@ int main(int argc, char **argv) {
     if (ns_arg) {
         evalstate_set_ns(st, ns_arg);
     } else {
-        // Nach dem Laden von clojure.core explizit zurück in den user-Namespace
+        // After loading clojure.core, explicitly return to user namespace
         evalstate_set_ns(st, "user");
     }
 

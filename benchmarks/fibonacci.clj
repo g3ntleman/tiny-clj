@@ -11,7 +11,12 @@
     (+ (fib (- n 1)) (fib (- n 2)))))
 
 ;; Benchmark execution
-;; Using fib(47) to match other language benchmarks (e.g., drujensen/fib)
-;; Note: This is exponential and will take a long time (~27 seconds in Clojure)
-;; Result should be: 2971215073
-(println (fib 47))
+;; Run (fib 20) five times and measure the total execution time.
+;; Result of fib 20 should be 6765.
+(defn run-benchmark []
+  (time
+    (dotimes [_ 5]
+      (fib 20)))
+  (println (fib 20)))
+
+(run-benchmark)

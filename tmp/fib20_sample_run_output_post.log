@@ -1,1 +1,0 @@
-[clojure.repl] Failed to eval form #1: Require failed: namespace 'clojure.core' not found (expected file clojure/core.clj or libs/clojure/core.clj) (/Users/theisen/Projects/tiny-clj/src/builtins.c:2874) [FileNotFoundException]

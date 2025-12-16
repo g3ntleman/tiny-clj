@@ -19,6 +19,8 @@ set(SUBJECTIVE_C_SOURCES
     exception.c
     map.c
     byte_array.c
+    hashmap.c
+    callbacks.c
 )
 
 add_library(subjective-c STATIC ${SUBJECTIVE_C_SOURCES})
@@ -38,12 +40,16 @@ set(SUBJECTIVE_C_TEST_SOURCES
     tests/test_registry.c
     tests/test_placeholder.c
     tests/test_strings.c
+    tests/test_symbol.c
     tests/test_vectors.c
     tests/test_map.c
     tests/test_memory.c
     tests/test_value.c
     tests/test_byte_array.c
     tests/test_exception.c
+    tests/test_hashmap.c
+    tests/test_hashmap_id_keys.c
+    tests/test_hash.c
     tests/test_support_stubs.c
     ${CMAKE_SOURCE_DIR}/external/unity/src/unity.c
     ${CMAKE_SOURCE_DIR}/src/memory_profiler.c

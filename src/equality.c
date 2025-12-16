@@ -18,7 +18,9 @@
 // Forward declaration for string_empty_singleton
 extern CljString* string_empty_singleton;
 
-bool clj_equal(ID a, ID b) {
+// Full equality implementation for all Clojure types
+// Registered as callback in runtime_init()
+bool clj_equal_full(ID a, ID b) {
     if (a == b) return true;  // Pointer equality (for singletons and interned symbols)
     if (!a || !b) return false;
 

@@ -7,11 +7,14 @@
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h" // For ASSIGN
 #include "vector.h"  // For vector operations
+#include "hashmap.h" // For HashMap symbol table (O(1) lookup)
 #include "symbol_token.h"  // For CljSymbolToken
 #include "common.h"  // For CLJ_ASSERT
+#include "strings.h"  // For string_data()
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>  // For snprintf
 #include <assert.h>
 
 // Globale Symbol-Pointer Definitionen
@@ -440,62 +443,69 @@ void init_special_symbols() {
     #undef INIT_SYMBOL_NS
 }
 
-// Helper function to find symbol in vector by comparing name and namespace
-// Uses direct strcmp comparison instead of clj_equal for performance
-static CljSymbol* find_symbol(CljVector *vec, CljSymbol *ns_name, const char *cname) {
-    if (!vec || !cname) return NULL;
+// Static CljString for temporary lookups (avoids allocations)
+// NOTE: CljString uses flexible array member (char data[]), so we need to manually
+// create a structure with inline buffer
+static struct {
+    CljObject base;
+    uint16_t length;
+    char data[512];
+} g_lookup_string = {
+    .base = { .type = CLJ_STRING, .rc = SINGLETON_RC },
+    .length = 0
+};
 
-    // Direct iteration with strcmp - much faster than clj_equal
-    unsigned int count = vector_count(vec);
-    for (unsigned int i = 0; i < count; i++) {
-        ID elem = vector_nth(vec, i);
-        if (TAG(elem) != CLJ_SYMBOL) continue;
-        CljSymbol *sym = as_symbol(elem);
-        if (!sym || !sym->cname) continue;
-        
-        // Compare symbol name using strcmp
-        if (strcmp(sym->cname, cname) != 0) continue;
-        
-        // Compare namespaces (pointer comparison works due to interning)
-        if (sym->ns_name == ns_name) {
-            return sym;
-        }
-        
-        // Both unqualified (no namespace) - equal
-        if (!sym->ns_name && !ns_name) {
-            return sym;
-        }
+// Helper: Create symbol table key from namespace and name
+// Format: "ns/name" or just "name" for global symbols
+// Returns CljString* for HashMap lookup (uses static buffer)
+static CljString* make_symbol_key(CljSymbol *ns_name, const char *cname) {
+    if (ns_name && ns_name->cname) {
+        snprintf(g_lookup_string.data, sizeof(g_lookup_string.data), "%s/%s", ns_name->cname, cname);
+    } else {
+        snprintf(g_lookup_string.data, sizeof(g_lookup_string.data), "%s", cname);
     }
-
-    return NULL;
+    g_lookup_string.length = (uint16_t)strlen(g_lookup_string.data);
+    return (CljString*)&g_lookup_string;
 }
 
-// Find symbol in the table
+// Find symbol in the table - O(1) HashMap lookup
 static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
-    if (cname && g_runtime.symbol_table) {
-        return find_symbol(g_runtime.symbol_table, ns_name, cname);  // Happy path
-    }
-    return NULL;
+    if (!cname || !g_runtime.symbol_table) return NULL;
+    
+    CljString *key = make_symbol_key(ns_name, cname);
+    return (CljSymbol*)hashmap_get(g_runtime.symbol_table, (ID)key, NULL);
 }
 
-// Add symbol to the table
+// Add symbol to the table - O(1) HashMap insert
 void symbol_table_add(CljSymbol *symbol) {
     if (!symbol || !symbol->cname) return;
 
     // Extract namespace and name from symbol
-    CljSymbol *ns_name = symbol->ns_name;  // Already a CljSymbol*
+    CljSymbol *ns_name = symbol->ns_name;
     const char *cname = symbol->cname;
 
     if (!g_runtime.symbol_table) {
-        g_runtime.symbol_table = make_vector(16, CLJ_VECTOR);
+        g_runtime.symbol_table = make_hashmap(512);  // 512 = good initial capacity for Linear Probing
     }
 
-    CljSymbol *existing = find_symbol(g_runtime.symbol_table, ns_name, cname);
-    if (existing) {
+    // Use static lookup string to check if already exists
+    CljString *lookup_key = make_symbol_key(ns_name, cname);
+    if (hashmap_contains(g_runtime.symbol_table, (ID)lookup_key)) {
         return;  // Already exists
     }
 
-    ASSIGN(g_runtime.symbol_table, vector_conj(g_runtime.symbol_table, (ID)symbol));
+    // CRITICAL: Assert RC == 1 before modification to prevent unexpected COW
+    CLJ_ASSERT(g_runtime.symbol_table->base.rc == 1 && 
+               "symbol_table must have RC=1 before modification (no external references allowed)");
+
+    // Create a real CljString key for HashMap storage
+    // We need to create a new string because the HashMap will retain it
+    CljString *key = make_clj_string(string_data(lookup_key));
+    
+    // Insert symbol into HashMap with CljString key
+    // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference
+    g_runtime.symbol_table = hashmap_assoc(g_runtime.symbol_table, (ID)key, (ID)symbol);
+    RELEASE((ID)key);
 }
 
 /**

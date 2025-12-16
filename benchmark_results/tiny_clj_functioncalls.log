@@ -2,5 +2,5 @@ Führe aus: echo '(time (do (defn add [a b] (+ a b)) (defn multiply [a b] (* a b
 [clojure.core] Evaluated 97 form(s), 97 succeeded.
 [clojure.repl] Evaluated 9 form(s), 9 succeeded.
 nil
-Elapsed time: 10.90 msecs
+Elapsed time: 5.37 msecs
 nil

@@ -21,6 +21,7 @@
 #include "atom.h"
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
+#include "hashmap.h"  // For CljHashMap
 #include <string.h>
 
 // External reference to verbose mode
@@ -616,6 +617,23 @@ static void release_object_default(CljObject *v) {
                     MAP_FOR_EACH(map, key, value) {
                         RELEASE(key);
                         RELEASE(value);
+                    }
+                    // Note: map->data is a flexible array member, part of the struct
+                    // It will be freed automatically when DEALLOC frees the struct
+                }
+            }
+            break;
+            
+        case CLJ_HASHMAP:
+            {
+                CljHashMap *map = (CljHashMap*)v;
+                if (map) {
+                    // Release all key-value pairs
+                    for (unsigned int i = 0; i < map->capacity; i++) {
+                        if (KV_KEY(map->data, i) && KV_KEY(map->data, i) != HASHMAP_TOMBSTONE) {
+                            RELEASE(KV_KEY(map->data, i));
+                            RELEASE(KV_VALUE(map->data, i));
+                        }
                     }
                     // Note: map->data is a flexible array member, part of the struct
                     // It will be freed automatically when DEALLOC frees the struct

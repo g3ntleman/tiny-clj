@@ -15,6 +15,7 @@
 #include "object.h"
 #include "memory.h"
 #include "vector.h"
+#include "hashmap.h"
 #include "namespace.h"
 #include <alloca.h>
 #include <stdlib.h>
@@ -49,8 +50,8 @@ typedef struct TinyClJRuntime {
     CljMap *resolve_cache;          // Symbol resolution cache
     uint64_t resolve_cache_epoch;   // Epoch for call-site cache invalidation
     
-    // Symbol Table
-    CljVector *symbol_table;        // Vector of CljSymbol*
+    // Symbol Table (HashMap for O(1) lookup)
+    CljHashMap *symbol_table;       // HashMap: "ns/name" or "name" → CljSymbol*
     
     // Meta Registry
     void *meta_registry;            // CljObject*

@@ -9,6 +9,12 @@
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "map.h"            // For make_map()
+#include "hashmap.h"        // For hashmap_register_release_fn()
+#include "hash.h"           // For clj_hash_full()
+// clj_equal_full is defined in equality.c
+extern bool clj_equal_full(ID a, ID b);
+#include "to_string.h"      // For to_string()
+#include "subjective-c/public/callbacks.h"  // For clj_set_callbacks
 
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {
@@ -39,7 +45,7 @@ void runtime_init(TinyClJRuntime *runtime) {
     // CRITICAL: Don't reset symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
     // If we reset it here, intern_symbol will create new symbols that don't match SYM_CLOJURE_CORE
     if (!runtime->symbol_table) {
-        runtime->symbol_table = make_vector(16, CLJ_VECTOR);
+        runtime->symbol_table = make_hashmap(512);  // HashMap for O(1) symbol lookup
     }
     
     // Initialize/reset CljObject* fields
@@ -73,6 +79,16 @@ void runtime_init(TinyClJRuntime *runtime) {
     // Reset primitive fields
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
+    
+    // Register hashmap release function with memory system
+    hashmap_register_release_fn();
+    
+    // Register callbacks for subjective-c (HashMap, exceptions, etc.)
+    clj_set_callbacks((CljCallbacks){
+        .hash = clj_hash_full,
+        .equal = clj_equal_full,
+        .to_string = to_string
+    });
 }
 
 void runtime_reset(TinyClJRuntime *runtime) {
