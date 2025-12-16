@@ -383,3 +383,6 @@ if (argc > 2 && func->varargs_param) {
 - Aktuelle Implementierung: `src/eval.c:118-123` (Arity-Check)
 - Native varargs: `src/builtins.c` (native_*_variadic)
 - Validation: `src/validation.c` (validate_min_arity)
+
+
+

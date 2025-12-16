@@ -17,7 +17,7 @@ ID call_clojure_core_function(const char *cname, int argc, ID *argv);
 CljNamespace* get_clojure_core_namespace();
 void cleanup_clojure_core();
 
-// Convenience API für String-Evaluation
+// Convenience API for string evaluation
 /**
  * @brief Evaluate a Clojure expression from a string
  * @param expr_str The Clojure expression as a string

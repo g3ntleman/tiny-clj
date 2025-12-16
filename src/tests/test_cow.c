@@ -169,7 +169,7 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
 TEST(test_cow_original_map_unchanged) {
     
     WITH_AUTORELEASE_POOL({
-        // Test 3: Original Map unverändert nach COW
+        // Test 3: Original map unchanged after COW
         CljMap *map = (CljMap*)make_map(4);
         map = map_assoc(map, fixnum(1), fixnum(10));
         map = map_assoc(map, fixnum(2), fixnum(20));

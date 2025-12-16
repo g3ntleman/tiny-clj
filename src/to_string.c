@@ -381,8 +381,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
             // Special forms are printed as #<special-form name> (like in Clojure)
             if (g_print_special_forms_as_tags && is_special_symbol(sym)) {
-                memcpy(buffer + *offset, "#<special-form ", 16);
-                *offset += 16;
+                memcpy(buffer + *offset, "#<special-form ", 15);
+                *offset += 15;
                 size_t name_len = strlen(sym->cname);
                 memcpy(buffer + *offset, sym->cname, name_len);
                 *offset += name_len;

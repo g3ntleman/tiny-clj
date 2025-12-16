@@ -65,7 +65,7 @@ else()
 endif()
 
 # Include directories
-include_directories(${CMAKE_SOURCE_DIR} include src external subjective-c/public)
+include_directories(${CMAKE_SOURCE_DIR} include subjective-c/public src external)
 
 # Subjective-C subproject (static library + early tests)
 add_subdirectory(subjective-c)
@@ -91,6 +91,7 @@ list(APPEND SOURCES
     src/optimize.c
     src/environment.c
     src/equality.c
+    src/hash.c
     src/event_loop.c
     src/channel.c
     src/list.c
@@ -145,6 +146,7 @@ set(STM32_SOURCES
     src/optimize.c
     src/environment.c
     src/equality.c
+    src/hash.c
     src/event_loop.c
     src/channel.c
     src/list.c
@@ -328,6 +330,7 @@ add_executable(unit-tests
     src/tests/test_atom.c
     src/tests/test_timer.c
     src/tests/test_meta.c
+    src/tests/test_hashmap_highlevel.c
     external/unity/src/unity.c
     src/builtins.c
     src/object.c
@@ -343,6 +346,7 @@ add_executable(unit-tests
     src/function.c
     src/environment.c
     src/equality.c
+    src/hash.c
     src/event_loop.c
     src/channel.c
     src/list.c

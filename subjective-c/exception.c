@@ -15,7 +15,7 @@
 #include "strings.h"  // For to_cstring
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
-#include "to_string.h"  // For to_string
+#include "public/callbacks.h"  // For clj_to_string
 
 // Stacktrace support
 #ifdef __APPLE__
@@ -357,7 +357,7 @@ void print_exception(CLJException *ex) {
         // Zombie objects have rc == ZOMBIE_RC (-1)
         CljObject *obj = ex->object;
         if (obj->rc != ZOMBIE_RC) {
-            CljString *obj_str = to_string(ex->object);
+            CljString *obj_str = clj_to_string(ex->object);
             if (obj_str) {
                 fprintf(stderr, " object: %s @%p", string_data(obj_str), (void*)ex->object);
                 RELEASE((CljObject*)obj_str);

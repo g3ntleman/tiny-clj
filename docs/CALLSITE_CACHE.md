@@ -156,3 +156,6 @@ void ns_invalidate_resolve_cache(void) {
 - Plan: `.cursor/plans/callsite_optimization_strategy_8f2b169a.plan.md`
 - Baseline: `docs/PERFORMANCE_BASELINE.md`
 - Tests: `src/tests/test_namespace.c` (test_resolve_list_operator_uses_cache)
+
+
+

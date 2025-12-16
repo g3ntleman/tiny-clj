@@ -1633,6 +1633,7 @@ static inline bool is_builtin_function(CljSymbol *symbol) {
             symbol == SYM_LE ||
             symbol == SYM_GE ||
             symbol == SYM_PRINT ||
+            symbol == SYM_PRINTLN ||
             symbol == SYM_STR ||
             symbol == SYM_NTH ||
             symbol == SYM_FIRST ||

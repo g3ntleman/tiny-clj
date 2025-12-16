@@ -1,4 +1,3 @@
-Führe aus: clojure ./benchmarks/arithmetic_performance.clj
-WARNING: Implicit use of clojure.main with options is deprecated, use -M ./benchmarks/arithmetic_performance.clj
+Führe aus: clojure -M ./benchmarks/arithmetic_performance.clj
 Running arithmetic performance benchmark (10000x iterations)...
-"Elapsed time: 16.862792 msecs"
+"Elapsed time: 16.132416 msecs"

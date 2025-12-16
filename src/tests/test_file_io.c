@@ -1,10 +1,10 @@
-// Tests für History-Persistenz (Vector<String>) via to-string/Parser
+// Tests for history persistence (Vector<String>) via to-string/Parser
 #include "tests_common.h"
 #include "../to_string.h"
 #include "../vector.h"
 #include <unistd.h>
 
-// Vorwärtsdeklarationen aus repl.c
+// Forward declarations from repl.c
 extern bool history_save_to_file(CljVector *vec, const char *path);
 extern CljVector *history_load_from_file(const char *path);
 extern CljObject *history_trim_last_n(CljObject *vec, int limit);
@@ -48,8 +48,8 @@ TEST(test_history_roundtrip_basic) {
 TEST(test_history_trim_to_50) {
   TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-  // Baue Vector mit 75 Strings über String-Parsing
-  // Der Parser unterstützt jetzt Vektoren mit mehr als 64 Elementen
+  // Build vector with 75 strings via string parsing
+  // The parser now supports vectors with more than 64 elements
   CljObject *vec = eval_string(
       "[\"0\" \"1\" \"2\" \"3\" \"4\" \"5\" \"6\" \"7\" \"8\" \"9\" \"10\" "
       "\"11\" \"12\" \"13\" \"14\" \"15\" \"16\" \"17\" \"18\" \"19\" \"20\" "

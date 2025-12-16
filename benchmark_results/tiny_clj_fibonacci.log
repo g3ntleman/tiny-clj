@@ -1,6 +1,8 @@
-Führe aus: echo '(time (do (defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)))' | timeout 30 ./build/tiny-clj-repl
-[clojure.core] Evaluated 97 form(s), 97 succeeded.
-[clojure.repl] Evaluated 9 form(s), 9 succeeded.
+Führe aus: ./build/tiny-clj-repl -f ./benchmarks/fibonacci.clj
 nil
-Elapsed time: 378.64 msecs
+nil
+fib
+run-benchmark
+Elapsed time: 207.00 msecs
 6765
+nil

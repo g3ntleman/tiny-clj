@@ -26,7 +26,7 @@ mkdir -p "$RESULTS_DIR"
 echo -e "${BLUE}🚀 Benchmark Runner für tiny-clj vs Standard Clojure${NC}"
 echo "=================================================="
 
-# Funktion zum Messen der Execution-Zeit aus den Log-Dateien
+# Funktion zum Messen der Execution-Zeit
 measure_execution_time() {
     local command="$1"
     local description="$2"
@@ -38,47 +38,41 @@ measure_execution_time() {
     echo "Führe aus: $command" > "$output_file.log"
     timeout "$TIMEOUT_SECONDS" bash -c "$command" >> "$output_file.log" 2>&1
     
-    # Extrahiere die Execution-Zeit aus der Ausgabe
+    # Extrahiere die Execution-Zeit aus der Ausgabe (für Clojure mit time-Makro)
     local execution_time=$(grep -E "Elapsed time:|println.*Elapsed time:" "$output_file.log" | sed 's/.*Elapsed time: \([0-9.]*\) msecs.*/\1/' | head -1)
     
-    # Falls keine "Elapsed time:" gefunden wurde, messe die echte Ausführungszeit
+    # Falls keine "Elapsed time:" gefunden wurde, messe mit /usr/bin/time
     if [ -z "$execution_time" ]; then
-        # Messe Startup-Zeit (leerer Befehl)
-        local startup_start=$(date +%s.%3N)
-        timeout "$TIMEOUT_SECONDS" bash -c "$TINY_CLJ_PATH -e 'nil'" > /dev/null 2>&1
-        local startup_end=$(date +%s.%3N)
-        local startup_time=$(echo "scale=3; ($startup_end - $startup_start) * 1000" | bc)
+        # Verwende GNU time format oder BSD time (macOS)
+        local time_output=$(/usr/bin/time -p bash -c "$command" 2>&1 >/dev/null | grep real | awk '{print $2}')
         
-        # Messe Gesamtzeit
-        local total_start=$(date +%s.%3N)
-        timeout "$TIMEOUT_SECONDS" bash -c "$command" > /dev/null 2>&1
-        local total_end=$(date +%s.%3N)
-        local total_time=$(echo "scale=3; ($total_end - $total_start) * 1000" | bc)
-        
-        # Berechne reine Ausführungszeit (Gesamtzeit - Startup-Zeit)
-        execution_time=$(echo "scale=3; $total_time - $startup_time" | bc)
-        
-        # Stelle sicher, dass die Zeit nicht negativ ist
-        if (( $(echo "$execution_time < 0" | bc -l) )); then
-            execution_time="0.1"
+        if [ -n "$time_output" ]; then
+            # Konvertiere Sekunden zu Millisekunden
+            execution_time=$(echo "scale=3; $time_output * 1000" | bc)
+        else
+            # Fallback: Manuelle Zeitmessung mit date
+            local start_time=$(perl -MTime::HiRes=time -e 'print time')
+            timeout "$TIMEOUT_SECONDS" bash -c "$command" > /dev/null 2>&1
+            local end_time=$(perl -MTime::HiRes=time -e 'print time')
+            execution_time=$(echo "scale=3; ($end_time - $start_time) * 1000" | bc)
         fi
     fi
     
-    if [ -n "$execution_time" ]; then
+    if [ -n "$execution_time" ] && (( $(echo "$execution_time >= 0" | bc -l) )); then
         echo "$description,$execution_time,0,0,0" >> "$RESULTS_DIR/timing_results.csv"
-        echo -e "${GREEN}✅ $description: ${execution_time}ms (Execution time only)${NC}"
+        echo -e "${GREEN}✅ $description: ${execution_time}ms${NC}"
         
         # Logge tiny-clj Ergebnisse separat
         if [[ "$description" == *"tiny-clj"* ]]; then
             local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
             local unix_timestamp=$(date +%s)
             local commit_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-            local build_type="MinSizeRel"  # Standard Build-Type
+            local build_type="Release"  # Wir verwenden jetzt Release-Build
             local benchmark_name=$(echo "$description" | sed 's/tiny-clj-//')
             echo "$timestamp,$unix_timestamp,$benchmark_name,$execution_time,$commit_hash,$build_type" >> "$TINY_CLJ_LOG"
         fi
     else
-        echo -e "${RED}❌ Konnte Execution-Zeit für $description nicht extrahieren${NC}"
+        echo -e "${RED}❌ Konnte Execution-Zeit für $description nicht messen${NC}"
         echo "$description,0,0,0,0" >> "$RESULTS_DIR/timing_results.csv"
         
         # Logge auch fehlgeschlagene tiny-clj Benchmarks
@@ -86,7 +80,7 @@ measure_execution_time() {
             local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
             local unix_timestamp=$(date +%s)
             local commit_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-            local build_type="MinSizeRel"
+            local build_type="Release"
             local benchmark_name=$(echo "$description" | sed 's/tiny-clj-//')
             echo "$timestamp,$unix_timestamp,$benchmark_name,0,$commit_hash,$build_type" >> "$TINY_CLJ_LOG"
         fi
@@ -112,10 +106,19 @@ else
 fi
 
 # Prüfe ob tiny-clj verfügbar ist
-if [ -f "./build/tiny-clj-repl" ]; then
+# Umgebungsvariable TINY_CLJ_PATH hat Vorrang
+if [ -z "$TINY_CLJ_PATH" ]; then
+    # Bevorzuge Release-Build, dann Standard-Build
+    if [ -f "./build-release/tiny-clj-repl" ]; then
+        TINY_CLJ_PATH="./build-release/tiny-clj-repl"
+    elif [ -f "./build/tiny-clj-repl" ]; then
+        TINY_CLJ_PATH="./build/tiny-clj-repl"
+    fi
+fi
+
+if [ -f "$TINY_CLJ_PATH" ]; then
     TINY_CLJ_AVAILABLE=true
-    TINY_CLJ_PATH="./build/tiny-clj-repl"
-    echo -e "${GREEN}✅ tiny-clj gefunden${NC}"
+    echo -e "${GREEN}✅ tiny-clj gefunden: $TINY_CLJ_PATH${NC}"
 else
     TINY_CLJ_AVAILABLE=false
     echo -e "${RED}❌ tiny-clj nicht gefunden - kompiliere zuerst mit 'make'${NC}"
@@ -128,12 +131,12 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 1: Fibonacci (fib 20)${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure $BENCHMARK_DIR/fibonacci.clj" "Clojure-Fibonacci" "$RESULTS_DIR/clojure_fibonacci"
+    measure_execution_time "clojure -M $BENCHMARK_DIR/fibonacci.clj" "Clojure-Fibonacci" "$RESULTS_DIR/clojure_fibonacci"
 fi
 
 # tiny-clj Fibonacci benchmark
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_execution_time "echo '(time (do (defn fib [n] (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 20)))' | timeout 30 $TINY_CLJ_PATH" "tiny-clj-Fibonacci" "$RESULTS_DIR/tiny_clj_fibonacci"
+    measure_execution_time "$TINY_CLJ_PATH -f $BENCHMARK_DIR/fibonacci.clj" "tiny-clj-Fibonacci" "$RESULTS_DIR/tiny_clj_fibonacci"
 else
     echo -e "${YELLOW}⚠️  tiny-clj Fibonacci übersprungen (tiny-clj nicht verfügbar)${NC}"
 fi
@@ -144,7 +147,7 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 2: Sum Recursive (sum-rec 100)${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure $BENCHMARK_DIR/sum_rec.clj" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
+    measure_execution_time "clojure -M $BENCHMARK_DIR/sum_rec.clj" "Clojure-SumRec" "$RESULTS_DIR/clojure_sumrec"
 fi
 
 # tiny-clj SumRec benchmark
@@ -160,7 +163,7 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 3: Let Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure $BENCHMARK_DIR/let_performance.clj" "Clojure-Let" "$RESULTS_DIR/clojure_let"
+    measure_execution_time "clojure -M $BENCHMARK_DIR/let_performance.clj" "Clojure-Let" "$RESULTS_DIR/clojure_let"
 fi
 
 # tiny-clj Let benchmark
@@ -176,7 +179,7 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 4: Arithmetic Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure $BENCHMARK_DIR/arithmetic_performance.clj" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
+    measure_execution_time "clojure -M $BENCHMARK_DIR/arithmetic_performance.clj" "Clojure-Arithmetic" "$RESULTS_DIR/clojure_arithmetic"
 fi
 
 # tiny-clj Arithmetic benchmark
@@ -192,7 +195,7 @@ echo ""
 echo -e "${BLUE}📊 Benchmark 5: Function Call Performance${NC}"
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_execution_time "clojure $BENCHMARK_DIR/function_call_performance.clj" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
+    measure_execution_time "clojure -M $BENCHMARK_DIR/function_call_performance.clj" "Clojure-FunctionCalls" "$RESULTS_DIR/clojure_functioncalls"
 fi
 
 # tiny-clj FunctionCalls benchmark

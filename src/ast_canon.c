@@ -29,27 +29,6 @@
 
 static ID canonicalize_expr(ID expr, EvalState *st);
 
-#ifdef ENABLE_META
-static void canonicalize_metadata_for_object(CljObject *obj, EvalState *st) {
-    if (!obj || !st) {
-        return;
-    }
-    ID meta = meta_get(obj);
-    if (!meta) {
-        return;
-    }
-    ID canon_meta = canonicalize_expr(meta, st);
-    if (canon_meta != meta) {
-        meta_set(obj, (CljObject*)canon_meta);
-    }
-}
-#else
-static inline void canonicalize_metadata_for_object(CljObject *obj, EvalState *st) {
-    (void)obj;
-    (void)st;
-}
-#endif
-
 /**
  * @brief Canonicalize a symbol token to CljSymbol
  * @param token Symbol token containing name (may be qualified like "foo/bar")

@@ -2,5 +2,5 @@ Führe aus: echo '(time (do (defn test-arithmetic [] (let [a 1 b 2 c 3 d 4 e 5] 
 [clojure.core] Evaluated 97 form(s), 97 succeeded.
 [clojure.repl] Evaluated 9 form(s), 9 succeeded.
 nil
-Elapsed time: 26.88 msecs
+Elapsed time: 2.75 msecs
 nil

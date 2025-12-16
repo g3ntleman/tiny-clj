@@ -164,7 +164,7 @@ TEST(test_let_creation_time_baseline) {
 }
 
 // ============================================================================
-// TEST: Baseline - Symbol-Auflösungszeit in verschachtelten let-Blöcken
+// TEST: Baseline - Symbol resolution time in nested let blocks
 // ============================================================================
 TEST(test_nested_let_resolution_time_baseline) {
     WITH_AUTORELEASE_POOL({
