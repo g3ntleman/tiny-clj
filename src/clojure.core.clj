@@ -58,8 +58,26 @@ R"CLOJURE(
   (if coll
     (= (count coll) 0)
     true)))
-; update is implemented as native function (native_update in builtins.c)
-; Supports: (update m k f) (update m k f arg1) (update m k f arg1 arg2 ...)
+; ============================================================================
+; Map Functions (native implementations with docstrings)
+; ============================================================================
+^#^{:doc "Returns a map that consists of the rest of the maps conj-ed onto the first. If a key occurs in more than one map, the mapping from the latter (left-to-right) will be the mapping in the result."}
+(def merge merge)
+
+^#^{:doc "Returns true if key is present in the given collection, otherwise returns false. Note that for numerically indexed collections like vectors, this tests if the numeric key is within the range of indexes."}
+(def contains? contains?)
+
+^#^{:doc "Returns a new coll consisting of to-coll with all of the items of from-coll conjoined."}
+(def into into)
+
+^#^{:doc "Returns a map containing only those entries in map whose key is in keys."}
+(def select-keys select-keys)
+
+^#^{:doc "Returns the map entry for key, or nil if key not present."}
+(def find find)
+
+^#^{:doc "Updates a value in an associative structure, where k is a key and f is a function that will take the old value and any supplied args and return the new value. If the key does not exist, nil is passed as the old value."}
+(def update update)
 
 ; ============================================================================
 ; Utility Functions
