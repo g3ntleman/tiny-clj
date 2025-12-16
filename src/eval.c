@@ -1784,20 +1784,11 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
 
     // Check if symbol is a native function (via native_function_table lookup)
-    // This allows native functions like merge, contains?, etc. to be resolved
+    // Returns function object without registering - registration happens via stubs
     BuiltinFn native_func = native_function_lookup(symbol);
     if (native_func) {
-        // Found native function - create function object and register in clojure.core
         const char *cname = symbol->cname ? symbol->cname : "unknown";
-        CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, cname);
-        if (native_func_obj) {
-            // Cache native function in clojure.core to preserve invariants
-            CljNamespace *core_ns = ns_get_or_create("clojure.core", NULL);
-            if (core_ns) {
-                ns_define(core_ns, symbol, native_func_obj);
-            }
-            return native_func_obj;
-        }
+        return (CljObject*)make_named_func(native_func, NULL, cname);
     }
 
     // Symbol not found
