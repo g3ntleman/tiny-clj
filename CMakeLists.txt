@@ -331,6 +331,7 @@ add_executable(unit-tests
     src/tests/test_timer.c
     src/tests/test_meta.c
     src/tests/test_hashmap_highlevel.c
+    src/tests/test_map.c
     external/unity/src/unity.c
     src/builtins.c
     src/object.c
