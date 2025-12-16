@@ -1107,3 +1107,181 @@ TEST(test_map_for_each_with_null_keys_and_values) {
     TEST_ASSERT_TRUE(found_key2);  // NULL key should be found
     TEST_ASSERT_TRUE(found_key3);
 }
+
+// ============================================================================
+// Tests for new map functions (merge, contains?, into, select-keys, find)
+// High-level tests using eval_string with Clojure equality checks
+// ============================================================================
+
+// Helper macro for boolean assertions
+#define ASSERT_TRUE_RESULT(expr) do { \
+    CljObject *r = eval_string(expr, g_test_eval_state); \
+    TEST_ASSERT_NOT_NULL_MESSAGE(r, expr " should not be nil"); \
+    TEST_ASSERT_TRUE_MESSAGE(r == clj_true, expr " should be true"); \
+} while(0)
+
+#define ASSERT_FALSE_RESULT(expr) do { \
+    CljObject *r = eval_string(expr, g_test_eval_state); \
+    TEST_ASSERT_NOT_NULL_MESSAGE(r, expr " should not be nil"); \
+    TEST_ASSERT_TRUE_MESSAGE(r == clj_false, expr " should be false"); \
+} while(0)
+
+#define ASSERT_NIL_RESULT(expr) do { \
+    CljObject *r = eval_string(expr, g_test_eval_state); \
+    TEST_ASSERT_NULL_MESSAGE(r, expr " should be nil"); \
+} while(0)
+
+// ============================================================================
+// merge tests
+// ============================================================================
+
+TEST(test_merge_no_args) {
+    ASSERT_NIL_RESULT("(merge)");
+}
+
+TEST(test_merge_nil) {
+    ASSERT_NIL_RESULT("(merge nil)");
+}
+
+TEST(test_merge_single_map) {
+    ASSERT_TRUE_RESULT("(= (merge {:a 1}) {:a 1})");
+}
+
+TEST(test_merge_two_maps) {
+    ASSERT_TRUE_RESULT("(= (merge {:a 1} {:b 2}) {:a 1 :b 2})");
+}
+
+TEST(test_merge_override) {
+    ASSERT_TRUE_RESULT("(= (merge {:a 1} {:a 2}) {:a 2})");
+}
+
+TEST(test_merge_with_nil) {
+    ASSERT_TRUE_RESULT("(= (merge {:a 1} nil {:b 2}) {:a 1 :b 2})");
+}
+
+TEST(test_merge_multiple_maps) {
+    ASSERT_TRUE_RESULT("(= (count (merge {:a 1} {:b 2} {:c 3})) 3)");
+}
+
+// ============================================================================
+// contains? tests
+// ============================================================================
+
+TEST(test_contains_p_key_exists) {
+    ASSERT_TRUE_RESULT("(contains? {:a 1} :a)");
+}
+
+TEST(test_contains_p_key_not_exists) {
+    ASSERT_FALSE_RESULT("(contains? {:a 1} :b)");
+}
+
+TEST(test_contains_p_nil_coll) {
+    ASSERT_FALSE_RESULT("(contains? nil :a)");
+}
+
+TEST(test_contains_p_vector_valid_index) {
+    ASSERT_TRUE_RESULT("(contains? [1 2 3] 0)");
+    ASSERT_TRUE_RESULT("(contains? [1 2 3] 2)");
+}
+
+TEST(test_contains_p_vector_invalid_index) {
+    ASSERT_FALSE_RESULT("(contains? [1 2 3] 5)");
+    ASSERT_FALSE_RESULT("(contains? [1 2 3] -1)");
+}
+
+TEST(test_contains_p_nil_value) {
+    ASSERT_TRUE_RESULT("(contains? {:a nil} :a)");
+}
+
+// ============================================================================
+// find tests
+// ============================================================================
+
+TEST(test_find_key_exists) {
+    ASSERT_TRUE_RESULT("(= (find {:a 1 :b 2} :a) [:a 1])");
+}
+
+TEST(test_find_key_not_exists) {
+    ASSERT_NIL_RESULT("(find {:a 1 :b 2} :c)");
+}
+
+TEST(test_find_nil_map) {
+    ASSERT_NIL_RESULT("(find nil :a)");
+}
+
+// ============================================================================
+// select-keys tests
+// ============================================================================
+
+TEST(test_select_keys_basic) {
+    ASSERT_TRUE_RESULT("(= (select-keys {:a 1 :b 2 :c 3} [:a :c]) {:a 1 :c 3})");
+}
+
+TEST(test_select_keys_missing_keys) {
+    ASSERT_TRUE_RESULT("(= (select-keys {:a 1} [:b :c]) {})");
+}
+
+TEST(test_select_keys_nil_map) {
+    ASSERT_TRUE_RESULT("(= (select-keys nil [:a]) {})");
+}
+
+TEST(test_select_keys_nil_keys) {
+    ASSERT_TRUE_RESULT("(= (select-keys {:a 1} nil) {})");
+}
+
+// ============================================================================
+// into tests
+// ============================================================================
+
+TEST(test_into_vector_to_vector) {
+    ASSERT_TRUE_RESULT("(= (into [] [1 2 3]) [1 2 3])");
+}
+
+TEST(test_into_vector_append) {
+    ASSERT_TRUE_RESULT("(= (into [1 2] [3 4]) [1 2 3 4])");
+}
+
+TEST(test_into_pairs_to_map) {
+    ASSERT_TRUE_RESULT("(= (into {:a 1} [[:b 2] [:c 3]]) {:a 1 :b 2 :c 3})");
+}
+
+TEST(test_into_map_to_map) {
+    ASSERT_TRUE_RESULT("(= (into {:a 1} {:b 2}) {:a 1 :b 2})");
+}
+
+TEST(test_into_map_to_vector) {
+    ASSERT_TRUE_RESULT("(= (count (into [] {:a 1 :b 2})) 2)");
+    // Each element is a [k v] pair
+    ASSERT_TRUE_RESULT("(= (count (first (into [] {:a 1}))) 2)");
+}
+
+TEST(test_into_nil_source) {
+    ASSERT_TRUE_RESULT("(= (into [1 2] nil) [1 2])");
+}
+
+TEST(test_into_list_to_vector) {
+    ASSERT_TRUE_RESULT("(= (into [] '(1 2 3)) [1 2 3])");
+}
+
+// ============================================================================
+// update tests (native implementation)
+// ============================================================================
+
+TEST(test_update_native_basic) {
+    ASSERT_TRUE_RESULT("(= (update {:a 1} :a inc) {:a 2})");
+}
+
+TEST(test_update_native_with_function) {
+    ASSERT_TRUE_RESULT("(= (update {:count 5} :count (fn [x] (* x 2))) {:count 10})");
+}
+
+TEST(test_update_native_missing_key) {
+    // Missing key passes nil to function
+    ASSERT_TRUE_RESULT("(= (update {:a 1} :b (fn [x] (if x x 0))) {:a 1 :b 0})");
+}
+
+TEST(test_update_native_with_extra_args) {
+    // update with extra args: (update m k f arg1 arg2)
+    ASSERT_TRUE_RESULT("(= (update {:a 1} :a + 10) {:a 11})");
+    ASSERT_TRUE_RESULT("(= (update {:a 1} :a + 10 20) {:a 31})");
+}

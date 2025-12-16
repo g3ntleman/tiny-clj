@@ -58,9 +58,8 @@ R"CLOJURE(
   (if coll
     (= (count coll) 0)
     true)))
-^#^{:doc "Updates a value in a map, where the value is computed by calling f with the current value. If the key does not exist, nil is passed as the current value."}
-(def update (fn [map key f]
-  (assoc map key (f (get map key)))))
+; update is implemented as native function (native_update in builtins.c)
+; Supports: (update m k f) (update m k f arg1) (update m k f arg1 arg2 ...)
 
 ; ============================================================================
 ; Utility Functions

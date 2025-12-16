@@ -73,6 +73,12 @@ ID native_nilp(ID *args, unsigned int argc);
 ID native_reverse(ID *args, unsigned int argc);
 ID assoc3(ID *args, unsigned int argc);
 ID native_dissoc(ID *args, unsigned int argc);
+ID native_merge(ID *args, unsigned int argc);
+ID native_contains_p(ID *args, unsigned int argc);
+ID native_update(ID *args, unsigned int argc);
+ID native_into(ID *args, unsigned int argc);
+ID native_select_keys(ID *args, unsigned int argc);
+ID native_find(ID *args, unsigned int argc);
 ID native_transient(ID *args, unsigned int argc);
 ID native_persistent_bang(ID *args, unsigned int argc);
 ID native_conj_bang(ID *args, unsigned int argc);
@@ -122,6 +128,7 @@ ID native_string_reverse(ID *args, unsigned int argc);
 ID native_source(ID *args, unsigned int argc);
 ID native_repl_dir(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
+ID native_with_meta(ID *args, unsigned int argc);
 ID nth2(ID *args, unsigned int argc);
 
 static CljNamespace* namespace_from_value(ID value);
@@ -621,10 +628,7 @@ ID native_reduce(ID *args, unsigned int argc) {
     }
 
     EvalState *st = g_current_eval_state;
-    if (!st) {
-        throw_exception(EXCEPTION_RUNTIME, "reduce requires EvalState", __FILE__, __LINE__, 0);
-        return NULL;
-    }
+    CLJ_ASSERT(st && "reduce requires EvalState");
 
     ID fn = args[0];
     bool has_init = (argc == 3);
@@ -840,6 +844,333 @@ ID native_dissoc(ID *args, unsigned int argc) {
 
     // Return autoreleased result
     return AUTORELEASE(RETAIN((CljObject*)result));
+}
+
+// merge: Combines multiple maps (later maps override earlier ones)
+// Usage: (merge) (merge m1) (merge m1 m2) (merge m1 m2 m3 ...)
+ID native_merge(ID *args, unsigned int argc) {
+    // (merge) with no args returns nil
+    if (argc == 0) return NULL;
+    
+    // (merge nil) returns nil
+    if (argc == 1 && !args[0]) return NULL;
+    
+    // Start with first non-nil map
+    CljMap *result = NULL;
+    unsigned int start_idx = 0;
+    
+    for (unsigned int i = 0; i < argc; i++) {
+        if (args[i] && (TAG(args[i]) == CLJ_MAP || TAG(args[i]) == CLJ_MAP_TRANSIENT)) {
+            result = (CljMap*)args[i];
+            start_idx = i + 1;
+            break;
+        }
+    }
+    
+    // All arguments were nil
+    if (!result) return NULL;
+    
+    // Merge remaining maps
+    for (unsigned int i = start_idx; i < argc; i++) {
+        ID m = args[i];
+        if (!m) continue;  // Skip nil
+        
+        if (TAG(m) != CLJ_MAP && TAG(m) != CLJ_MAP_TRANSIENT) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                           "merge only works on maps",
+                           __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        
+        CljMap *new_result = map_merge(result, (CljMap*)m, true);  // overwrite=true
+        if (new_result != result && i > start_idx) {
+            // Don't release original arg
+        }
+        result = new_result;
+    }
+    
+    return AUTORELEASE(RETAIN((CljObject*)result));
+}
+
+// contains?: Check if collection contains key
+// Usage: (contains? coll key)
+ID native_contains_p(ID *args, unsigned int argc) {
+    if (argc != 2) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "contains? expects 2 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    ID coll = args[0];
+    ID key = args[1];
+    
+    // nil collection returns false
+    if (!coll) return clj_false;
+    
+    CljType tag = TAG(coll);
+    switch (tag) {
+        case CLJ_MAP:
+        case CLJ_MAP_TRANSIENT:
+            return map_contains((CljMap*)coll, key) ? clj_true : clj_false;
+        
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
+            // For vectors, key must be an integer index
+            if (!is_fixnum(key)) return clj_false;
+            long idx = as_fixnum(key);
+            unsigned int count = vector_count((CljVector*)coll);
+            return (idx >= 0 && (unsigned long)idx < count) ? clj_true : clj_false;
+        }
+        
+        default:
+            return clj_false;
+    }
+}
+
+// update: Apply function to value at key
+// Usage: (update m k f) (update m k f arg1) (update m k f arg1 arg2 ...)
+ID native_update(ID *args, unsigned int argc) {
+    if (argc < 3) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "update expects at least 3 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    EvalState *st = g_current_eval_state;
+    CLJ_ASSERT(st && "update requires EvalState");
+    
+    ID coll = args[0];
+    ID key = args[1];
+    ID func = args[2];
+    
+    // nil collection returns nil
+    if (!coll) return NULL;
+    
+    CljType tag = TAG(coll);
+    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "update only works on maps",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Get current value (nil if not found)
+    ID current_val = map_get((CljMap*)coll, key, NULL);
+    
+    // Build function call args: [current_val, extra_args...]
+    unsigned int fn_argc = 1 + (argc - 3);
+    ID fn_args[fn_argc];
+    fn_args[0] = current_val;
+    for (unsigned int i = 3; i < argc; i++) {
+        fn_args[i - 2] = args[i];
+    }
+    
+    // Call the function
+    ID new_val = eval_function_call(func, fn_args, fn_argc, NULL, st);
+    
+    // assoc the new value
+    CljMap *result = map_assoc((CljMap*)coll, key, new_val);
+    return AUTORELEASE(RETAIN((ID)result));
+}
+
+// into: Add all items from source into target collection
+// Usage: (into to from) (into to xform from)
+ID native_into(ID *args, unsigned int argc) {
+    if (argc < 2 || argc > 3) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "into expects 2 or 3 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    // TODO: Support transducers (3-arg version)
+    if (argc == 3) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "into with transducer not yet implemented",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    ID to = args[0];
+    ID from = args[1];
+    
+    // nil source returns target unchanged
+    if (!from) return to ? AUTORELEASE(RETAIN(to)) : NULL;
+    
+    // nil target - create appropriate empty collection based on source type
+    if (!to) {
+        // Default to vector if target is nil
+        to = (ID)make_vector(0, CLJ_VECTOR);
+    }
+    
+    CljType to_tag = TAG(to);
+    
+    // Handle vector target
+    if (to_tag == CLJ_VECTOR || to_tag == CLJ_VECTOR_TRANSIENT || to_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        CljVector *result = (CljVector*)to;
+        
+        // Iterate over source
+        CljType from_tag = TAG(from);
+        if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+            unsigned int count = vector_count((CljVector*)from);
+            for (unsigned int i = 0; i < count; i++) {
+                result = vector_conj(result, vector_nth((CljVector*)from, i));
+            }
+        } else if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
+            // Map entries become [k v] vectors
+            CljMap *m = (CljMap*)from;
+            for (int i = 0; i < m->capacity; i++) {
+                ID key = KV_KEY(m->data, i);
+                if (key) {
+                    ID val = KV_VALUE(m->data, i);
+                    CljVector *entry = make_vector(2, CLJ_VECTOR);
+                    entry = vector_conj(entry, key);
+                    entry = vector_conj(entry, val);
+                    result = vector_conj(result, (ID)entry);
+                }
+            }
+        } else if (from_tag == CLJ_LIST || from_tag == CLJ_AST_NODE) {
+            // Iterate over list (CLJ_LIST or CLJ_AST_NODE - both use same structure)
+            CljList *list = (CljList*)from;
+            while (list && !list_empty(list)) {
+                result = vector_conj(result, LIST_FIRST(list));
+                list = as_list(LIST_REST(list));
+            }
+        }
+        
+        return AUTORELEASE(RETAIN((ID)result));
+    }
+    
+    // Handle map target
+    if (to_tag == CLJ_MAP || to_tag == CLJ_MAP_TRANSIENT) {
+        CljMap *result = (CljMap*)to;
+        
+        CljType from_tag = TAG(from);
+        if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
+            // Merge maps
+            result = map_merge(result, (CljMap*)from, true);
+        } else if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT) {
+            // Vector of [k v] pairs
+            unsigned int count = vector_count((CljVector*)from);
+            for (unsigned int i = 0; i < count; i++) {
+                ID entry = vector_nth((CljVector*)from, i);
+                if (entry && (TAG(entry) == CLJ_VECTOR || TAG(entry) == CLJ_VECTOR_TRANSIENT)) {
+                    CljVector *pair = (CljVector*)entry;
+                    if (vector_count(pair) >= 2) {
+                        result = map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1));
+                    }
+                }
+            }
+        }
+        
+        return AUTORELEASE(RETAIN((ID)result));
+    }
+    
+    throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                   "into: unsupported target collection type",
+                   __FILE__, __LINE__, 0);
+    return NULL;
+}
+
+// select-keys: Return map with only specified keys
+// Usage: (select-keys map [key1 key2 ...])
+ID native_select_keys(ID *args, unsigned int argc) {
+    if (argc != 2) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "select-keys expects 2 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    ID m = args[0];
+    ID keys = args[1];
+    
+    // nil map returns empty map
+    if (!m) return (ID)map_empty();
+    
+    CljType tag = TAG(m);
+    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "select-keys first argument must be a map",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // nil keys returns empty map
+    if (!keys) return (ID)map_empty();
+    
+    CljType keys_tag = TAG(keys);
+    if (keys_tag != CLJ_VECTOR && keys_tag != CLJ_VECTOR_TRANSIENT && 
+        keys_tag != CLJ_VECTOR_TRANSIENT_WEAK && keys_tag != CLJ_LIST && keys_tag != CLJ_AST_NODE) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "select-keys second argument must be a sequence",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljMap *result = map_empty();
+    CljMap *source = (CljMap*)m;
+    
+    if (keys_tag == CLJ_VECTOR || keys_tag == CLJ_VECTOR_TRANSIENT || keys_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        unsigned int count = vector_count((CljVector*)keys);
+        for (unsigned int i = 0; i < count; i++) {
+            ID key = vector_nth((CljVector*)keys, i);
+            if (map_contains(source, key)) {
+                ID val = map_get(source, key, NULL);
+                result = map_assoc(result, key, val);
+            }
+        }
+    } else if (keys_tag == CLJ_LIST || keys_tag == CLJ_AST_NODE) {
+        CljList *list = (CljList*)keys;
+        while (list && !list_empty(list)) {
+            ID key = LIST_FIRST(list);
+            if (map_contains(source, key)) {
+                ID val = map_get(source, key, NULL);
+                result = map_assoc(result, key, val);
+            }
+            list = as_list(LIST_REST(list));
+        }
+    }
+    
+    return AUTORELEASE(RETAIN((ID)result));
+}
+
+// find: Return [key value] entry for key, or nil if not found
+// Usage: (find map key)
+ID native_find(ID *args, unsigned int argc) {
+    if (argc != 2) {
+        throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+                                  "find expects 2 arguments, got %u", argc);
+        return NULL;
+    }
+    
+    ID m = args[0];
+    ID key = args[1];
+    
+    // nil map returns nil
+    if (!m) return NULL;
+    
+    CljType tag = TAG(m);
+    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "find first argument must be a map",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljMap *map = (CljMap*)m;
+    
+    if (!map_contains(map, key)) {
+        return NULL;  // Key not found
+    }
+    
+    ID val = map_get(map, key, NULL);
+    
+    // Return [key value] vector
+    CljVector *entry = make_vector(2, CLJ_VECTOR);
+    entry = vector_conj(entry, key);
+    entry = vector_conj(entry, val);
+    
+    return AUTORELEASE(RETAIN((ID)entry));
 }
 
 // Transient functions
@@ -2148,6 +2479,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_rt_data.sym, native_rt},
     // clojure.core functions
     {&sym_meta_data.sym, native_meta},
+    {&sym_with_meta_data.sym, native_with_meta},
     {&sym_reduce_data.sym, native_reduce},
     {&sym_plus_data.sym, native_add_variadic},
     {&sym_minus_data.sym, native_sub_variadic},
@@ -2183,6 +2515,12 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_reverse_data.sym, native_reverse},
     {&sym_assoc_data.sym, assoc3},
     {&sym_dissoc_data.sym, native_dissoc},
+    {&sym_merge_data.sym, native_merge},
+    {&sym_contains_p_data.sym, native_contains_p},
+    {&sym_update_data.sym, native_update},
+    {&sym_into_data.sym, native_into},
+    {&sym_select_keys_data.sym, native_select_keys},
+    {&sym_find_data.sym, native_find},
     {&sym_transient_data.sym, native_transient},
     {&sym_persistent_bang_data.sym, native_persistent_bang},
     {&sym_conj_bang_data.sym, native_conj_bang},
@@ -2333,6 +2671,44 @@ ID native_meta(ID *args, unsigned int argc) {
 #endif // ENABLE_META
 
     return NULL; // No metadata -> nil
+}
+
+// With-meta function: (with-meta obj meta-map) - returns obj with new metadata
+ID native_with_meta(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 2, "with-meta");
+
+    ID obj = args[0];
+    ID meta_map = args[1];
+
+    // nil with any metadata returns nil
+    if (!obj) {
+        return NULL;
+    }
+
+    // Immediates (numbers, keywords, etc.) don't support metadata
+    if (IS_IMMEDIATE(obj)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+            "with-meta: immediates don't support metadata", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    // Strings don't support metadata in Clojure
+    if (TAG(obj) == CLJ_STRING) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+            "with-meta: strings don't support metadata", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+#ifdef ENABLE_META
+    // Set metadata on the object
+    // NOTE: This mutates the object. For true immutability, we'd need to copy.
+    // For now, this matches the common pattern in embedded Clojure implementations.
+    meta_set((CljObject*)obj, (CljObject*)meta_map);
+    return RETAIN(obj);
+#else
+    (void)meta_map;
+    return RETAIN(obj);
+#endif
 }
 
 // Create symbol from string (with optional namespace)
@@ -4581,4 +4957,8 @@ void register_builtins() {
     register_builtin_in_core("clojure.repl/source", native_source);
     register_builtin_in_core("clojure.repl/dir", native_repl_dir);
     register_builtin_in_core("clojure.repl/rt", native_rt);
+    
+    // Meta functions
+    register_builtin_in_core("meta", native_meta);
+    register_builtin_in_core("with-meta", native_with_meta);
 }
