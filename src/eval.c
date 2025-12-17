@@ -1006,29 +1006,16 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
 }
 
 static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    int total_count = list_count(list);
-    int argc = total_count - 1;
-    if (argc < 0) argc = 0;
-
-    CLJ_ASSERT(argc <= 16);
     ID args[16];
-
+    int argc = 0;
     unsigned char fn_tag = TAG(fn);
 
-    // Evaluate arguments with O(n) single-pass traversal
-    if (!env || TAG(env) != CLJ_MAP) {
-        for (int i = 0; i < argc; i++) {
-            args[i] = NULL;
-        }
-    } else {
-        CljList *current = list;
-        for (int i = 0; i < argc; i++) {
-            current = as_list(current->rest);
-            if (!current) {
-                args[i] = NULL;
-                continue;
-            }
-            args[i] = eval_arg_from_expr_with_context(current->first, env, st, ctx);
+    // Single-pass: traverse list once, evaluate args and count simultaneously
+    if (env && TAG(env) == CLJ_MAP) {
+        CljList *current = list ? as_list(list->rest) : NULL;
+        while (current && argc < 16) {
+            args[argc++] = eval_arg_from_expr_with_context(current->first, env, st, ctx);
+            current = current->rest ? as_list(current->rest) : NULL;
         }
     }
 
@@ -1073,96 +1060,48 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     // Cache context-derived values early for performance
     CljMap *closure_env = get_closure_env(ctx);
     EvalState *ctx_st = get_eval_state(ctx, st);
+    CljMap *effective_env = closure_env ? closure_env : env;  // Cached once
 
-    ID head = LIST_FIRST(list);
-
-    // First element is the operator
-    ID op = head;
-
-    // Cache TAG(op) for performance (used multiple times)
+    ID op = LIST_FIRST(list);
     unsigned char op_tag = op ? TAG(op) : 0;
 
-    // If first element is a list, evaluate it first (for nested calls like ((array-map)))
-    // CRITICAL: Use eval_list_with_context recursively to preserve RecurContext
-    if (op && op_tag == CLJ_LIST) {
+    // Nested list: evaluate first (for ((array-map)) etc.)
+    if (op_tag == CLJ_LIST) {
         op = eval_list_with_context(as_list(op), env, st, ctx);
-        if (!op) {
-            return NULL;
-        }
-        // Update op_tag after evaluation
+        if (!op) return NULL;
         op_tag = TAG(op);
-        // Now op is the result of evaluating the inner list - continue with it
     }
 
-    // Check if op is a symbol and resolve it
-    // BUT: Keep the original symbol for comparison before resolving
-    // CRITICAL: Check for special forms BEFORE resolving, because special forms
-    // like 'time' should not be resolved (they are not in namespaces)
     CljObject *original_op = op;
+    CljSymbol *op_sym = (op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
 
-    // Cache symbol pointer (computed once when needed)
-    CljSymbol *op_sym = NULL;
-
-    // Check for special forms first (before symbol resolution)
-    // This ensures that special forms like 'time', 'def', and 'ns' are recognized even if
-    // they're not in the namespace or environment
-    // CRITICAL: This must happen BEFORE symbol resolution, because special forms
-    // are not in namespaces and should not be resolved
-
-    // CRITICAL: Check for recur FIRST, before any other special form handling
-    // This ensures recur is handled correctly when RecurContext is available
-    if (op && op_tag == CLJ_SYMBOL) {
-        op_sym = as_symbol(op);
-        if (op_sym && op_sym == SYM_RECUR) {
-            return eval_handle_recur(list, ctx);
-        }
+    // Check recur first
+    if (op_sym == SYM_RECUR) {
+        return eval_handle_recur(list, ctx);
     }
 
-    // Continue with normal eval_list logic
-    // CRITICAL: We cannot simply call eval_list here because eval_list calls eval_body,
-    // which calls eval_list again without RecurContext. This breaks recur in nested calls.
-    // Instead, we need to duplicate the eval_list logic but use eval_body_with_params
-    // for nested evaluations to preserve RecurContext.
-
-    // Handle maps as functions (for key lookup) - must be first
-    // Use closure_env instead of env to ensure parameter resolution works correctly
-    if (op && op_tag == CLJ_MAP) {
-        return eval_map_lookup(list, closure_env ? closure_env : env, ctx_st, ctx, op);
+    // Map as function
+    if (op_tag == CLJ_MAP) {
+        return eval_map_lookup(list, effective_env, ctx_st, ctx, op);
     }
 
-    // CRITICAL: Check for comparison operators BEFORE symbol resolution
-    // This prevents infinite loops when operators like '=' are resolved
-    // Comparison operators should not be resolved - they are handled directly
-    CljObject *comparison_result = eval_comparison_dispatch(list, closure_env ? closure_env : env, ctx_st, ctx, original_op);
+    // Comparison operators (before symbol resolution)
+    CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, ctx_st, ctx, original_op);
     if (comparison_result) return comparison_result;
 
-    // CRITICAL: Check for special forms BEFORE symbol resolution
-    // This prevents infinite loops when special forms like 'if' are resolved
-    // Special forms should not be resolved - they are handled directly
-    CljSymbol *original_op_sym = NULL;
-    if (original_op && TAG(original_op) == CLJ_SYMBOL) {
-        original_op_sym = as_symbol(original_op);
-    }
-    if (original_op_sym && is_special_symbol(original_op_sym)) {
-        CljMap *special_form_env = closure_env ? closure_env : env;
-        ID special_result = eval_special_form_dispatch(list, special_form_env, ctx_st, ctx, original_op_sym);
-        return special_result; // NULL is valid (nil)
+    // Special forms (before symbol resolution)
+    if (op_sym && is_special_symbol(op_sym)) {
+        return eval_special_form_dispatch(list, effective_env, ctx_st, ctx, op_sym);
     }
 
-    // Continue with symbol resolution (same as eval_list)
-    // Use closure_env instead of env to ensure parameter resolution works correctly
-    CljMap *resolve_env = closure_env ? closure_env : env;
-    if (op && op_tag == CLJ_SYMBOL) {
-        // CRITICAL: Use resolve_list_operator to ensure parameter checking happens FIRST
-        // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-        op = resolve_list_operator(op, resolve_env, ctx_st, ctx, call_node);
-        op_tag = op ? TAG(op) : 0;  // Update tag after resolution
+    // Symbol resolution
+    if (op_tag == CLJ_SYMBOL) {
+        op = resolve_list_operator(op, effective_env, ctx_st, ctx, call_node);
+        op_tag = op ? TAG(op) : 0;
     }
 
-    // Dispatch to helper functions (same as eval_list)
-    // Use resolve_env to ensure parameter resolution works correctly
-    // CRITICAL: Dispatch only ONCE after symbol resolution (not before)
-    CljObject *result = eval_arithmetic_dispatch_with_context(list, resolve_env, ctx_st, original_op, ctx);
+    // Arithmetic dispatch
+    CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
     if (result) return result;
 
     // CRITICAL: For all other operations, delegate to eval_list

@@ -49,54 +49,67 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
                                                 ArithOp op,
                                                 EvalState *st,
                                                 const EvalContext *ctx) {
-    int argc = list ? list_count(list) - 1 : 0;
-    CljList *arg_nodes = (list && list->rest) ? as_list(list->rest) : NULL;
-
-    if (argc == 0) {
+    if (!list || !list->rest) {
+        // argc == 0
         switch (op) {
-            case ARITH_ADD:
-                return fixnum(0);
-            case ARITH_MUL:
-                return fixnum(1);
-            case ARITH_SUB:
-            case ARITH_DIV:
+            case ARITH_ADD: return fixnum(0);
+            case ARITH_MUL: return fixnum(1);
+            default:
                 return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
                     "Wrong number of args: 0");
         }
-    } else if (argc <= 2) {
-        ID fast_args[2];
-        int evaluated = 0;
-        CljList *current = arg_nodes;
-        while (evaluated < argc && current) {
-            ID expr = current->first;
-            ID value = eval_arg_from_expr_with_context(expr, env, st, ctx);
-            if (!value) {
-                for (int j = 0; j < evaluated; j++) {
-                    RELEASE((CljObject*)fast_args[j]);
-                }
-                return NULL;
-            }
-            if (!is_numeric_type(value)) {
-                for (int j = 0; j < evaluated; j++) {
-                    RELEASE((CljObject*)fast_args[j]);
-                }
-                return throw_non_numeric_argument(value);
-            }
-            fast_args[evaluated++] = value;
-            current = as_list(current ? current->rest : NULL);
+    }
+
+    CljList *arg1_node = as_list(list->rest);
+    ID arg1_expr = arg1_node->first;
+    CljList *arg2_node = arg1_node->rest ? as_list(arg1_node->rest) : NULL;
+
+    // Ultra-fast path: exactly 2 args (most common case: (+ a b), (- a b))
+    if (arg2_node && !arg2_node->rest) {
+        ID a = eval_arg_from_expr_with_context(arg1_expr, env, st, ctx);
+        if (!a) return NULL;
+        unsigned char tag_a = TAG(a);
+
+        ID b = eval_arg_from_expr_with_context(arg2_node->first, env, st, ctx);
+        if (!b) { RELEASE(a); return NULL; }
+        unsigned char tag_b = TAG(b);
+
+        // Fixnum fast-path: both are fixnums (immediates, no RELEASE needed)
+        // Use native helpers which handle overflow correctly
+        if (tag_a == TAG_FIXNUM && tag_b == TAG_FIXNUM) {
+            ID fast_args[2] = {a, b};
+            return AUTORELEASE(apply_arith_op(fast_args, 2, op));
         }
-        ID result = apply_arith_op(fast_args, argc, op);
-        for (int j = 0; j < evaluated; j++) {
-            RELEASE((CljObject*)fast_args[j]);
-        }
+
+        // Generic 2-arg path for mixed types
+        if (!is_numeric_type(a)) { RELEASE(b); return throw_non_numeric_argument(a); }
+        if (!is_numeric_type(b)) { RELEASE(a); return throw_non_numeric_argument(b); }
+        ID fast_args[2] = {a, b};
+        ID result = apply_arith_op(fast_args, 2, op);
+        RELEASE(a); RELEASE(b);
         return AUTORELEASE(result);
     }
+
+    // 1-arg path
+    if (!arg2_node) {
+        ID a = eval_arg_from_expr_with_context(arg1_expr, env, st, ctx);
+        if (!a) return NULL;
+        if (!is_numeric_type(a)) return throw_non_numeric_argument(a);
+        ID result = apply_arith_op(&a, 1, op);
+        RELEASE(a);
+        return AUTORELEASE(result);
+    }
+
+    // 3+ args: count while traversing
+    int argc = 2;
+    CljList *count_rest = arg2_node->rest ? as_list(arg2_node->rest) : NULL;
+    while (count_rest) { argc++; count_rest = count_rest->rest ? as_list(count_rest->rest) : NULL; }
 
     ID args_stack[16];
     ID *args = alloc_obj_array(argc, args_stack);
     if (!args) return NULL;
 
-    CljList *current = arg_nodes;
+    CljList *current = arg1_node;
     for (int i = 0; i < argc; i++) {
         ID expr = current ? current->first : NULL;
         args[i] = eval_arg_from_expr_with_context(expr, env, st, ctx);
@@ -117,7 +130,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
                 "String cannot be used as a Number");
         }
 
-        current = current ? as_list(current->rest) : NULL;
+        current = current->rest ? as_list(current->rest) : NULL;
     }
 
     ID result = NULL;
