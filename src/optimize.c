@@ -15,18 +15,18 @@
 #include <string.h>
 #include <stdio.h>
 
-// Helper: Find last element in list
-static CljList* list_last(CljList *list) {
-    while (list && list->rest) {
-        list = as_list(list->rest);
-    }
-    return list;
+// Check if expr is the last element in list (single traversal)
+static bool is_last_in_list(CljObject *expr, CljList *list) {
+    if (!list) return false;
+    while (list->rest) list = as_list(list->rest);
+    return list->first == expr;
 }
 
-// Helper: Check if expr is last in list
-static bool is_last_in_list(CljObject *expr, CljList *list) {
-    CljList *last = list_last(list);
-    return last && last->first == expr;
+// Get last element and check tail position (for let bodies)
+static bool last_is_tail_position(CljObject *expr, CljList *list) {
+    if (!list) return false;
+    while (list->rest) list = as_list(list->rest);
+    return is_tail_position(expr, list->first);
 }
 
 // Check if an expression is in tail position within a body
@@ -65,8 +65,7 @@ bool is_tail_position(CljObject *expr, CljObject *body) {
         CljList *body_exprs = as_list(rest->rest);
         if (body_exprs) {
             if (is_last_in_list(expr, body_exprs)) return true;
-            CljList *last = list_last(body_exprs);
-            if (last && is_tail_position(expr, last->first)) return true;
+            if (last_is_tail_position(expr, body_exprs)) return true;
         }
     } else if (head == SYM_COND) {
         // (cond test expr ...) - each expr is tail
