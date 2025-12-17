@@ -854,22 +854,13 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     }
     
     // LEGACY: Fallback to parameter array lookup (for compatibility)
-    // This path is only used if frame is not available
+    // Parameter lookup (symbols are interned, pointer comparison suffices)
     if (effective_ctx && effective_ctx->param_count > 0 &&
         effective_ctx->params && effective_ctx->param_values) {
         for (int i = 0; i < effective_ctx->param_count; i++) {
             if (effective_ctx->params[i] == op) {
-                ID return_value = effective_ctx->param_values[i];
                 RELEASE(owned_env_stack);
-                return return_value;
-            }
-            // Fallback: structural equality
-            if (effective_ctx->params[i] && op && 
-                TAG(effective_ctx->params[i]) == CLJ_SYMBOL && TAG(op) == CLJ_SYMBOL &&
-                clj_equal(effective_ctx->params[i], op)) {
-                ID return_value = effective_ctx->param_values[i];
-                RELEASE(owned_env_stack);
-                return return_value;
+                return effective_ctx->param_values[i];
             }
         }
     }
@@ -1174,22 +1165,12 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Check if op is a symbol and resolve it
-    // BUT: Keep the original symbol for comparison before resolving
-    // CRITICAL: Check for special forms BEFORE resolving, because special forms
-    // like 'time' should not be resolved (they are not in namespaces)
     CljObject *original_op = op;
+    CljSymbol *original_op_sym = (op && TAG(op) == CLJ_SYMBOL) ? as_symbol(op) : NULL;
 
-    // Check for special forms before symbol resolution (def, ns)
-    // Note: SYM_TIME and SYM_DOTIMES are handled by eval_special_form_dispatch
-    if (op && TAG(op) == CLJ_SYMBOL) {
-        CljSymbol *op_sym = (CljSymbol*)op;
-        if (op_sym == SYM_DEF) {
-            return eval_def(list, env, st);
-        }
-        if (op_sym == SYM_NS) {
-            return eval_ns(list, env, st);
-        }
-    }
+    // Handle def and ns before symbol resolution
+    if (original_op_sym == SYM_DEF) return eval_def(list, env, st);
+    if (original_op_sym == SYM_NS) return eval_ns(list, env, st);
 
     // CRITICAL: Check for comparison operators BEFORE symbol resolution
     // This prevents infinite loops when operators like '=' are resolved
@@ -1203,29 +1184,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     
     op = resolved_op;
 
-    // OPTIMIZED: Dispatch to helper functions for common patterns
-    // Tier 1: Arithmetic operations (most frequent)
-    // CRITICAL: Use original_op for comparison, not resolved op, because
-    // SYM_PLUS, SYM_MINUS, etc. are statically initialized symbols that should
-    // match the symbols from the AST (which are interned via intern_symbol_global)
-    // CRITICAL: Use env (which may be let_env) to ensure let bindings are found
+    // Arithmetic operations (comparison already checked above)
     CljObject *result = eval_arithmetic_dispatch_with_context(list, env, st, original_op, ctx);
     if (result) return result;
 
-    // Tier 2: Comparison operations
-    result = eval_comparison_dispatch(list, env, st, ctx, original_op);
-    if (result) return result;
-
-    // Try special form dispatch
-    CljSymbol *original_op_sym = NULL;
-    if (original_op && TAG(original_op) == CLJ_SYMBOL) {
-        original_op_sym = as_symbol(original_op);
-    }
+    // Special form dispatch
     if (original_op_sym && is_special_symbol(original_op_sym)) {
-        ID special_result = eval_special_form_dispatch(list, env, st, ctx, original_op_sym);
-        return special_result; // NULL is valid (nil)
+        return eval_special_form_dispatch(list, env, st, ctx, original_op_sym);
     }
-    // Not a special form - continue to function call handling
 
     // Tier 3: Sequence operations
     result = eval_sequence_dispatch_with_context(list, env, original_op, ctx);
