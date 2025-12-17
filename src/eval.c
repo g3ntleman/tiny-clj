@@ -2595,41 +2595,23 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         
         CljSymbol *sym_obj = as_symbol(expr);
         
-        // CRITICAL: Check function parameters FIRST (before environment/namespace lookup)
-        // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-        ID resolved_value = NULL;
-        bool param_found = false;  // Track if parameter was found (even if value is nil)
-
-        // Always check function parameters first, regardless of env_stack
-        if (ctx && ctx->params && ctx->param_values && ctx->param_count > 0) {
+        // Check function parameters FIRST (symbols are interned, pointer comparison suffices)
+        if (ctx && ctx->params && ctx->param_values) {
             for (int i = 0; i < ctx->param_count; i++) {
-                ID param_sym = ctx->params[i];
-                if (!param_sym) continue;
-                if (param_sym == expr ||
-                    (TAG(param_sym) == CLJ_SYMBOL && TAG(expr) == CLJ_SYMBOL &&
-                     clj_equal(param_sym, expr))) {
-                    resolved_value = ctx->param_values[i];
-                    param_found = true;  // Parameter found (value may be nil/NULL)
-                    break;
+                if (ctx->params[i] == expr) {
+                    ID value = ctx->param_values[i];
+                    if (!value) return NULL;
+                    if (IS_IMMEDIATE(value)) return value;
+                    return AUTORELEASE(RETAIN(value));
                 }
             }
         }
         
-        // If parameter was found, return its value (even if nil/NULL)
-        if (param_found) {
-            // nil is represented as NULL in C - this is a valid value
-            if (!resolved_value) {
-                return NULL;  // Return nil
-            }
-            if (IS_IMMEDIATE(resolved_value)) {
-                return resolved_value;
-            }
-            return AUTORELEASE(RETAIN(resolved_value));
-        }
+        ID resolved_value = NULL;
         
-        // CRITICAL: If context is provided with env_stack, use resolve_symbol_in_env
+        // If context is provided with env_stack, use resolve_symbol_in_env
         // to search through the entire environment stack (for nested let blocks)
-        if (!resolved_value && ctx) {
+        if (ctx) {
             EvalState *eval_st = get_eval_state(ctx, st);
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, env, ctx->frame, expr, eval_st);
             if (resolved_id) {
