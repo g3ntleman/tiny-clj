@@ -417,36 +417,54 @@ TEST(test_meta_contains_line_info) {
 
 #ifdef ENABLE_META
 // ============================================================================
-// TEST: metadata contains :line for various literal forms
+// TEST: Clojure metadata semantics
 // ============================================================================
-TEST(test_meta_list_literal_contains_line_info) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *meta_result = eval_string("(meta '(+ 1 2))", g_test_eval_state);
-    assert_meta_has_line_info(meta_result, "(meta '(+ 1 2)) should include :line metadata");
-}
 
-TEST(test_meta_vector_literal_contains_line_info) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *meta_result = eval_string("(meta '[1 2 3])", g_test_eval_state);
-    assert_meta_has_line_info(meta_result, "(meta '[1 2 3]) should include :line metadata");
-}
-
-TEST(test_meta_map_literal_contains_line_info) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *meta_result = eval_string("(meta '{:a 1 :b 2})", g_test_eval_state);
-    assert_meta_has_line_info(meta_result, "(meta '{:a 1 :b 2}) should include :line metadata");
-}
-
-TEST(test_meta_symbol_literal_contains_line_info) {
+// Symbols can have metadata
+TEST(test_meta_symbol_has_metadata) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     CljObject *meta_result = eval_string("(meta 'inc)", g_test_eval_state);
     assert_meta_has_line_info(meta_result, "(meta 'inc) should include :line metadata");
 }
 
-TEST(test_meta_string_literal_contains_line_info) {
+// Strings cannot have metadata in Clojure (not IMeta)
+TEST(test_meta_string_returns_nil) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    CljObject *meta_result = eval_string("(meta \"hello world\")", g_test_eval_state);
-    assert_meta_has_line_info(meta_result, "(meta \"hello world\") should include :line metadata");
+    CljObject *meta_result = eval_string("(meta \"hello\")", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(meta_result, "(meta \"hello\") should return nil - strings don't support metadata");
+}
+
+// Numbers cannot have metadata in Clojure (not IMeta)
+TEST(test_meta_number_returns_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta 42)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(meta_result, "(meta 42) should return nil - numbers don't support metadata");
+}
+
+// Keywords cannot have metadata in Clojure (not IMeta)
+TEST(test_meta_keyword_returns_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta :foo)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(meta_result, "(meta :foo) should return nil - keywords don't support metadata");
+}
+
+// Collections CAN have metadata in Clojure
+TEST(test_meta_vector_can_have_metadata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta (with-meta [1 2 3] {:custom true}))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, "Vector with-meta should have metadata");
+}
+
+TEST(test_meta_map_can_have_metadata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta (with-meta {:a 1} {:custom true}))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, "Map with-meta should have metadata");
+}
+
+TEST(test_meta_list_can_have_metadata) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    CljObject *meta_result = eval_string("(meta (with-meta '(1 2 3) {:custom true}))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(meta_result, "List with-meta should have metadata");
 }
 #endif
 
