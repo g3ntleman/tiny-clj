@@ -1123,17 +1123,17 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
     if (op_tag == CLJ_SYMBOL) {
         op = resolve_list_operator(op, effective_env, ctx_st, ctx, call_node);
         op_tag = op ? TAG(op) : 0;
+        // After resolution, check arithmetic again (for qualified symbols like clojure.core/+)
+        if (op_tag == CLJ_SYMBOL) {
+            CljSymbol *resolved_sym = as_symbol(op);
+            if (resolved_sym && (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
+                CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
+                if (result) return result;
+            }
+        }
     }
 
-    // Arithmetic dispatch (fallback for resolved symbols)
-    CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
-    if (result) return result;
-
-    // CRITICAL: For all other operations, delegate to eval_list
-    // eval_list handles function calls and other operations, while preserving RecurContext
-    // Use env (not closure_env) to match what eval_list uses for arithmetic operations
-    // closure_env is only used for parameter resolution in eval_body_with_params, not for symbol resolution in eval_list
-    // CRITICAL: NULL is always a valid result (nil). Errors throw exceptions, not return NULL.
+    // Delegate to eval_list for function calls and other operations
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
     ID fallback_result = eval_list(list, env, st, effective_ctx);
     RELEASE(owned_env_stack);
@@ -1266,13 +1266,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // and we should treat it as an error (not a function call)
     unsigned char op_tag = op ? TAG(op) : 0;
     if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
-        ID func_result = eval_function_call_from_list(list, env, st, op, ctx);
-        // CRITICAL: func_result can be NULL if function returns nil, which is valid
-        // If op was a symbol, eval_function_call_from_list tried to resolve and call it.
-        // If op was already a function, it was called directly.
-        // In both cases, if we get here (no exception), the function was called successfully.
-        // NULL is always a valid result (nil) - errors throw exceptions, not return NULL.
-        return func_result; // NULL is valid (nil return value)
+        return eval_function_call_from_list(list, env, st, op, ctx);
     }
 
     // Error: first element is not a function
@@ -1290,7 +1284,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Error: first element is not a function and not a symbol
     return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
             "Cannot call %s as a function", clj_type_name(op->type));
-    return NULL;
 }
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
