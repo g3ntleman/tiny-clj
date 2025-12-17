@@ -1,246 +1,142 @@
 #!/bin/bash
 
-# JIT-Warmup Benchmark für fairen Vergleich zwischen tiny-clj und Clojure
-# Läuft 20 Sekunden lang, damit JVM-Optimierungen greifen können
+# Fibonacci Benchmark: tiny-clj vs Python vs Clojure
+# Reference: Clojure with JIT-Warmup (best-case JVM performance)
 
 set -e
 
-# Wechsle ins Root-Verzeichnis des Projekts
+# Change to project root
 cd "$(dirname "$0")/.."
 
-# Farben für Output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
-# Konfiguration
-BENCHMARK_DIR="./benchmarks"
-RESULTS_DIR="./benchmark_results"
-DURATION_SECONDS=20
+# Configuration
+FIB_N=30
+WARMUP_ITERATIONS=5
 
-# Erstelle Results-Verzeichnis
-mkdir -p "$RESULTS_DIR"
+echo -e "${BLUE}${BOLD}════════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}${BOLD}  Fibonacci Benchmark: fib($FIB_N)${NC}"
+echo -e "${BLUE}${BOLD}  Reference: Clojure with JIT-Warmup${NC}"
+echo -e "${BLUE}${BOLD}════════════════════════════════════════════════════════════${NC}"
+echo ""
 
-echo -e "${BLUE}🔥 JIT-Warmup Benchmark (${DURATION_SECONDS}s) - tiny-clj vs Clojure${NC}"
-echo "=================================================================="
+# Check availability
+CLOJURE_AVAILABLE=false
+PYTHON_AVAILABLE=false
+TINY_CLJ_AVAILABLE=false
 
-# Funktion zum Messen der Performance mit JIT-Warmup
-measure_jit_performance() {
-    local command="$1"
-    local description="$2"
-    local output_file="$3"
-    
-    echo -e "${YELLOW}⏱️  Messe: $description (${DURATION_SECONDS}s mit JIT-Warmup)${NC}"
-    
-    # Starte den Benchmark-Prozess im Hintergrund
-    timeout "${DURATION_SECONDS}" bash -c "$command" > "$output_file.log" 2>&1 &
-    local pid=$!
-    
-    # Warte auf das Ende des Prozesses
-    wait $pid
-    local exit_code=$?
-    
-    if [ $exit_code -eq 124 ]; then
-        echo -e "${GREEN}✅ $description: ${DURATION_SECONDS}s erfolgreich abgeschlossen${NC}"
-        # Extrahiere die letzte gemessene Zeit aus der Ausgabe
-        local last_time=$(grep -E "Elapsed time:|Time:" "$output_file.log" | tail -1 | sed 's/.*Elapsed time: \([0-9.]*\) msecs.*/\1/' | sed 's/.*Time: \([0-9.]*\)ms.*/\1/')
-        if [ -n "$last_time" ]; then
-            echo -e "${GREEN}   Letzte gemessene Zeit: ${last_time}ms${NC}"
-            echo "$description,$last_time,$DURATION_SECONDS,JIT_WARMUP" >> "$RESULTS_DIR/jit_warmup_results.csv"
-        else
-            echo -e "${YELLOW}   Keine Zeitmessung gefunden${NC}"
-            echo "$description,0,$DURATION_SECONDS,JIT_WARMUP" >> "$RESULTS_DIR/jit_warmup_results.csv"
-        fi
-    else
-        echo -e "${RED}❌ $description: Fehler oder vorzeitiger Abbruch${NC}"
-        echo "$description,ERROR,$DURATION_SECONDS,JIT_WARMUP" >> "$RESULTS_DIR/jit_warmup_results.csv"
-    fi
-}
-
-# CSV-Header schreiben
-echo "Benchmark,Last_Time_ms,Duration_s,Type" > "$RESULTS_DIR/jit_warmup_results.csv"
-
-# Prüfe Verfügbarkeit
 if command -v clojure &> /dev/null; then
     CLOJURE_AVAILABLE=true
-    echo -e "${GREEN}✅ Standard Clojure gefunden${NC}"
+    echo -e "${GREEN}✓${NC} Clojure"
 else
-    CLOJURE_AVAILABLE=false
-    echo -e "${YELLOW}⚠️  Standard Clojure nicht gefunden - überspringe Clojure-Benchmarks${NC}"
-fi
-
-if [ -f "./build/tiny-clj-repl" ]; then
-    TINY_CLJ_AVAILABLE=true
-    TINY_CLJ_PATH="./build/tiny-clj-repl"
-    echo -e "${GREEN}✅ tiny-clj gefunden${NC}"
-else
-    TINY_CLJ_AVAILABLE=false
-    echo -e "${RED}❌ tiny-clj nicht gefunden - kompiliere zuerst mit 'make'${NC}"
+    echo -e "${RED}✗${NC} Clojure nicht gefunden"
+    echo -e "${RED}  Clojure ist als Referenz erforderlich!${NC}"
     exit 1
 fi
 
-echo ""
-
-# Benchmark 1: Fibonacci mit JIT-Warmup
-echo -e "${BLUE}📊 Benchmark 1: Fibonacci (fib 20) - ${DURATION_SECONDS}s${NC}"
-
-if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_jit_performance "
-        clojure -e \"
-        (defn fib [n] 
-          (if (< n 2) 
-            n 
-            (+ (fib (- n 1)) (fib (- n 2)))))
-        
-        (defn benchmark-fibonacci []
-          (let [start (System/currentTimeMillis)]
-            (dotimes [i 1000]
-              (fib 20))
-            (let [end (System/currentTimeMillis)]
-              (println (str \\\"Elapsed time: \\\" (- end start) \\\" msecs\\\")))))
-        
-        (loop []
-          (benchmark-fibonacci)
-          (Thread/sleep 100)
-          (recur))
-        \"
-    " "Clojure-Fibonacci-JIT" "$RESULTS_DIR/clojure_fibonacci_jit"
+if command -v python3 &> /dev/null; then
+    PYTHON_AVAILABLE=true
+    echo -e "${GREEN}✓${NC} Python3"
+else
+    echo -e "${YELLOW}○${NC} Python3 nicht gefunden"
 fi
 
+# Build tiny-clj Release
+echo -e "${YELLOW}○${NC} tiny-clj - baue Release..."
+mkdir -p build
+
+# Force clean Release build if needed
+if [ -f "./CMakeCache.txt" ] && ! grep -q 'CMAKE_BUILD_TYPE:STRING=Release' ./CMakeCache.txt 2>/dev/null; then
+    rm -rf ./CMakeCache.txt ./build/*
+fi
+
+BUILD_LOG=$(mktemp)
+if (cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)) > "$BUILD_LOG" 2>&1; then
+    if [ -f "./build/tiny-clj-repl" ]; then
+        TINY_CLJ_AVAILABLE=true
+        TINY_CLJ_PATH="./build/tiny-clj-repl"
+        echo -e "\033[1A\033[K${GREEN}✓${NC} tiny-clj (Release)"
+    else
+        echo -e "${RED}✗${NC} Build erfolgreich aber Executable nicht gefunden"
+        cat "$BUILD_LOG"
+        rm -f "$BUILD_LOG"
+        exit 1
+    fi
+else
+    echo -e "${RED}✗${NC} Build fehlgeschlagen:"
+    tail -20 "$BUILD_LOG"
+    rm -f "$BUILD_LOG"
+    exit 1
+fi
+rm -f "$BUILD_LOG"
+
+echo ""
+echo -e "${CYAN}Messe Referenzwert: Clojure mit JIT-Warmup (${WARMUP_ITERATIONS} Iterationen)...${NC}"
+
+# Measure Clojure with JIT-Warmup (Reference)
+CLOJURE_JIT_TIME=$(clojure -M -e "
+(defn fib [n] (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))
+(dotimes [_ $WARMUP_ITERATIONS] (fib $FIB_N))
+(let [start (System/nanoTime)
+      _ (fib $FIB_N)
+      end (System/nanoTime)]
+  (println (/ (- end start) 1000000.0)))
+" 2>/dev/null | tail -1)
+
+echo ""
+echo -e "${BLUE}${BOLD}════════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}${BOLD}  Ergebnisse für fib($FIB_N)${NC}"
+echo -e "${BLUE}${BOLD}════════════════════════════════════════════════════════════${NC}"
+echo ""
+
+printf "%-25s %12s %12s\n" "Runtime" "Zeit (ms)" "Faktor"
+echo "─────────────────────────────────────────────────────"
+
+# Reference: Clojure JIT
+printf "${GREEN}%-25s %12.2f %12s${NC}\n" "Clojure (JIT)" "$CLOJURE_JIT_TIME" "1.0x ★"
+
+# Python3
+if [ "$PYTHON_AVAILABLE" = true ]; then
+    PYTHON_TIME=$(python3 -c "
+import time
+def fib(n):
+    return n if n <= 1 else fib(n-1) + fib(n-2)
+# Warmup
+for _ in range($WARMUP_ITERATIONS):
+    fib($FIB_N)
+# Measure
+start = time.time()
+fib($FIB_N)
+print(f'{(time.time()-start)*1000:.2f}')
+" 2>/dev/null)
+    PYTHON_FACTOR=$(echo "scale=1; $PYTHON_TIME / $CLOJURE_JIT_TIME" | bc)
+    printf "%-25s %12.2f %12s\n" "Python3" "$PYTHON_TIME" "${PYTHON_FACTOR}x"
+fi
+
+# tiny-clj
 if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_jit_performance "
-        echo \"
-        (defn fib [n] 
-          (if (< n 2) 
-            n 
-            (+ (fib (- n 1)) (fib (- n 2)))))
-        
-        (defn benchmark-fibonacci []
-          (let [start (time-now)]
-            (dotimes [i 1000]
-              (fib 20))
-            (let [end (time-now)]
-              (println (str \\\"Elapsed time: \\\" (- end start) \\\" msecs\\\")))))
-        
-        (loop []
-          (benchmark-fibonacci)
-          (sleep 100)
-          (recur))
-        \" | $TINY_CLJ_PATH
-    " "tiny-clj-Fibonacci-JIT" "$RESULTS_DIR/tiny_clj_fibonacci_jit"
+    TINY_TIME=$($TINY_CLJ_PATH -e "
+(time (do (defn fib [n] (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2))))) (fib $FIB_N)))
+" 2>&1 | grep "Elapsed time" | sed 's/.*Elapsed time: \([0-9.]*\) msecs.*/\1/')
+    TINY_FACTOR=$(echo "scale=1; $TINY_TIME / $CLOJURE_JIT_TIME" | bc)
+    printf "${YELLOW}%-25s %12.2f %12s${NC}\n" "tiny-clj (Release)" "$TINY_TIME" "${TINY_FACTOR}x"
 fi
 
 echo ""
-
-# Benchmark 2: Arithmetik mit JIT-Warmup
-echo -e "${BLUE}📊 Benchmark 2: Arithmetik - ${DURATION_SECONDS}s${NC}"
-
-if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_jit_performance "
-        clojure -e \"
-        (defn arithmetic-test []
-          (let [start (System/currentTimeMillis)]
-            (dotimes [i 10000]
-              (+ (* 2 3) (- 10 5) (/ 20 4)))
-            (let [end (System/currentTimeMillis)]
-              (println (str \\\"Elapsed time: \\\" (- end start) \\\" msecs\\\")))))
-        
-        (loop []
-          (arithmetic-test)
-          (Thread/sleep 100)
-          (recur))
-        \"
-    " "Clojure-Arithmetic-JIT" "$RESULTS_DIR/clojure_arithmetic_jit"
-fi
-
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_jit_performance "
-        echo \"
-        (defn arithmetic-test []
-          (let [start (time-now)]
-            (dotimes [i 10000]
-              (+ (* 2 3) (- 10 5) (/ 20 4)))
-            (let [end (time-now)]
-              (println (str \\\"Elapsed time: \\\" (- end start) \\\" msecs\\\")))))
-        
-        (loop []
-          (arithmetic-test)
-          (sleep 100)
-          (recur))
-        \" | $TINY_CLJ_PATH
-    " "tiny-clj-Arithmetic-JIT" "$RESULTS_DIR/tiny_clj_arithmetic_jit"
-fi
-
+echo -e "${BLUE}${BOLD}════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}Legende:${NC}"
+echo "  ★  = Referenzwert (Clojure mit JIT-Warmup)"
+echo "  Faktor = Wie viel langsamer als Referenz"
 echo ""
-
-# Benchmark 3: Function Calls mit JIT-Warmup
-echo -e "${BLUE}📊 Benchmark 3: Function Calls - ${DURATION_SECONDS}s${NC}"
-
-if [ "$CLOJURE_AVAILABLE" = true ]; then
-    measure_jit_performance "
-        clojure -e \"
-        (defn add [a b] (+ a b))
-        (defn multiply [a b] (* a b))
-        (defn subtract [a b] (- a b))
-        
-        (defn function-call-test []
-          (let [start (System/currentTimeMillis)]
-            (dotimes [i 5000]
-              (add (multiply 2 3) (subtract 10 5)))
-            (let [end (System/currentTimeMillis)]
-              (println (str \\\"Elapsed time: \\\" (- end start) \\\" msecs\\\")))))
-        
-        (loop []
-          (function-call-test)
-          (Thread/sleep 100)
-          (recur))
-        \"
-    " "Clojure-FunctionCalls-JIT" "$RESULTS_DIR/clojure_functioncalls_jit"
-fi
-
-if [ "$TINY_CLJ_AVAILABLE" = true ]; then
-    measure_jit_performance "
-        echo \"
-        (defn add [a b] (+ a b))
-        (defn multiply [a b] (* a b))
-        (defn subtract [a b] (- a b))
-        
-        (defn function-call-test []
-          (let [start (time-now)]
-            (dotimes [i 5000]
-              (add (multiply 2 3) (subtract 10 5)))
-            (let [end (time-now)]
-              (println (str \\\"Elapsed time: \\\" (- end start) \\\" msecs\\\")))))
-        
-        (loop []
-          (function-call-test)
-          (sleep 100)
-          (recur))
-        \" | $TINY_CLJ_PATH
-    " "tiny-clj-FunctionCalls-JIT" "$RESULTS_DIR/tiny_clj_functioncalls_jit"
-fi
-
+echo -e "${CYAN}Interpreter-Typen:${NC}"
+echo "  Clojure JIT  = JVM mit Just-In-Time Compilation"
+echo "  Python3      = CPython Bytecode Interpreter"
+echo "  tiny-clj     = C AST-Walking Interpreter"
 echo ""
-
-# Zusammenfassung
-echo -e "${BLUE}📈 JIT-Warmup Benchmark-Zusammenfassung${NC}"
-echo "=============================================="
-
-if [ -f "$RESULTS_DIR/jit_warmup_results.csv" ]; then
-    echo -e "${GREEN}Ergebnisse gespeichert in: $RESULTS_DIR/jit_warmup_results.csv${NC}"
-    echo ""
-    echo "Detaillierte Ergebnisse:"
-    cat "$RESULTS_DIR/jit_warmup_results.csv" | column -t -s ','
-fi
-
-echo ""
-echo -e "${BLUE}🎯 Analyse der JIT-Optimierungen:${NC}"
-echo "1. Clojure profitiert von JVM JIT-Compilation"
-echo "2. tiny-clj läuft bereits optimiert (nativ kompiliert)"
-echo "3. Vergleich zeigt 'warm' vs 'cold' Performance"
-echo "4. JIT-Warmup dauert typischerweise 1-5 Sekunden"
-
-echo ""
-echo -e "${GREEN}✅ JIT-Warmup Benchmark abgeschlossen!${NC}"
