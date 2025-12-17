@@ -1104,6 +1104,12 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         return eval_map_lookup(list, effective_env, ctx_st, ctx, op);
     }
 
+    // Fast-path: Arithmetic operators (O(1) flag check)
+    if (op_sym && (op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
+        CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
+        if (result) return result;
+    }
+
     // Comparison operators (before symbol resolution)
     CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, ctx_st, ctx, original_op);
     if (comparison_result) return comparison_result;
@@ -1119,7 +1125,7 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
         op_tag = op ? TAG(op) : 0;
     }
 
-    // Arithmetic dispatch
+    // Arithmetic dispatch (fallback for resolved symbols)
     CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
     if (result) return result;
 

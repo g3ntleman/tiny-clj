@@ -355,12 +355,16 @@ void init_special_symbols() {
     SYM_GO->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_PLUS, sym_plus_data);
+    SYM_PLUS->base.flags |= CLJ_FLAG_ARITHMETIC;
 
     INIT_SYMBOL(SYM_MINUS, sym_minus_data);
+    SYM_MINUS->base.flags |= CLJ_FLAG_ARITHMETIC;
 
     INIT_SYMBOL(SYM_MULTIPLY, sym_multiply_data);
+    SYM_MULTIPLY->base.flags |= CLJ_FLAG_ARITHMETIC;
 
     INIT_SYMBOL(SYM_DIVIDE, sym_divide_data);
+    SYM_DIVIDE->base.flags |= CLJ_FLAG_ARITHMETIC;
 
     INIT_SYMBOL(SYM_EQUALS, sym_equals_data);
 
