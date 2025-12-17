@@ -2755,21 +2755,14 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             created_st = true;
         }
         
-        // Fast-Path: EvalState not created (99% of cases)
+        // Fast-Path: EvalState not created (99% of cases) - direct return
         if (!created_st) {
             return eval_list(as_list(expr), env, eval_st, ctx);
         }
         
-        // Slow-Path: EvalState must be freed
-        CljObject *result = NULL;
-        TRY {
-            result = eval_list(as_list(expr), env, eval_st, ctx);
-        } CATCH(ex) {
-            evalstate_free(eval_st);
-            throw_exception_object(ex);
-            return NULL;
-        } END_TRY
-
+        // Slow-Path: EvalState was created, must be freed
+        // No TRY/CATCH - outer handler will cleanup on exception
+        CljObject *result = eval_list(as_list(expr), env, eval_st, ctx);
         evalstate_free(eval_st);
         return result;
     }
