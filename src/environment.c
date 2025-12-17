@@ -74,16 +74,8 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
         // Search in current frame
         for (int i = current->param_count - 1; i >= 0; i--) {
             ID bound = *frame_param_slot(current, i);
-            bool matches = false;
+            // Symbols are always interned - pointer comparison is sufficient
             if (bound == symbol) {
-                matches = true;
-            } else if (bound && symbol &&
-                       TAG(bound) == CLJ_SYMBOL && TAG(symbol) == CLJ_SYMBOL &&
-                       clj_equal(bound, symbol)) {
-                matches = true;
-            }
-            
-            if (matches) {
                 ID encoded_value = *frame_value_slot(current, i);
                 if (out_value) {
                     if (encoded_value == FRAME_NIL_SENTINEL) {
