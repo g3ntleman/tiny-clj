@@ -146,6 +146,9 @@ bool eval_multiform_string(const char *code, EvalState *st) {
                 break;
             }
 
+            // Save current namespace in local variable before TRY - preserved by setjmp
+            CljNamespace *saved_ns = st ? st->current_ns : NULL;
+
             // Use TRY/CATCH to handle exceptions for each expression
             TRY {
                 // Parse one expression using the new parse_from_reader function
@@ -163,6 +166,10 @@ bool eval_multiform_string(const char *code, EvalState *st) {
                 }
 
             } CATCH(ex) {
+                // Restore namespace from local variable on exception
+                if (st && saved_ns) {
+                    st->current_ns = saved_ns;
+                }
                 // Print exception and continue with next expression
                 print_exception((CLJException*)ex);
                 result = false; // Mark as failed, but continue processing

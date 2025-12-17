@@ -21,23 +21,15 @@ extern CljString* string_empty_singleton;
 // Full equality implementation for all Clojure types
 // Registered as callback in runtime_init()
 bool clj_equal_full(ID a, ID b) {
-    if (a == b) return true;  // Pointer equality (for singletons and interned symbols)
+    // Pointer equality covers ALL immediates (fixnum, char, bool, fixed)
+    // because their value is encoded in the pointer itself
+    if (a == b) return true;
     if (!a || !b) return false;
 
-    // Handle tagged integers (fixnums) - most common case
-    if (is_fixnum(a) || is_fixnum(b)) {
-        if (is_fixnum(a) && is_fixnum(b)) {
-            return as_fixnum(a) == as_fixnum(b);
-        }
-        return false;  // Different types
-    }
-
-    // Handle other immediate types (bool, etc.)
+    // After a == b check, unequal immediates are automatically unequal
+    // (fixnum(5) == fixnum(5) is always true via pointer comparison)
     if (is_immediate(a) || is_immediate(b)) {
-        if (is_immediate(a) && is_immediate(b)) {
-            return a == b;  // For immediates, pointer equality is sufficient
-        }
-        return false;  // Different types
+        return false;  // One or both are immediates and a != b
     }
 
     // Handle CljObject* types

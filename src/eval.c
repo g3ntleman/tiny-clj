@@ -986,16 +986,10 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
                 return NULL;
             }
             g_eval_arg_depth++;
-            ID result = NULL;
-            TRY {
-                result = call_function_with_args_and_context(fn, list, env, st, ctx);
-            } CATCH(ex) {
-                g_eval_arg_depth--;
-                throw_exception_object(ex);
-                return NULL;
-            } END_TRY
+            ID result = call_function_with_args_and_context(fn, list, env, st, ctx);
             g_eval_arg_depth--;
             return result;
+            // Exception propagates automatically - no cleanup needed!
         }
 
         if (fn_tag == CLJ_LIST) {
@@ -1057,17 +1051,10 @@ static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env,
         switched_ns = true;
     }
 
-    ID result = NULL;
-    TRY {
-        result = eval_function_call(fn, args, argc, env, st);
-    } CATCH(ex) {
-        if (st && switched_ns) {
-            st->current_ns = saved_ns;
-        }
-        throw_exception_object(ex);
-        return NULL;
-    } END_TRY
+    // Call function - no TRY/CATCH needed, exception cleanup happens in outer handler
+    ID result = eval_function_call(fn, args, argc, env, st);
 
+    // Normal-Path: Restore namespace after successful call
     if (st && switched_ns) {
         st->current_ns = saved_ns;
     }
@@ -2767,20 +2754,23 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             eval_st = evalstate_new(false);
             created_st = true;
         }
+        
+        // Fast-Path: EvalState not created (99% of cases)
+        if (!created_st) {
+            return eval_list(as_list(expr), env, eval_st, ctx);
+        }
+        
+        // Slow-Path: EvalState must be freed
         CljObject *result = NULL;
         TRY {
             result = eval_list(as_list(expr), env, eval_st, ctx);
         } CATCH(ex) {
-            if (created_st) {
-                evalstate_free(eval_st);
-            }
+            evalstate_free(eval_st);
             throw_exception_object(ex);
             return NULL;
         } END_TRY
 
-        if (created_st) {
-            evalstate_free(eval_st);
-        }
+        evalstate_free(eval_st);
         return result;
     }
 
