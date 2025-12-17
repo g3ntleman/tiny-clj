@@ -15,12 +15,9 @@
 #include <string.h>
 #include <stdio.h>
 
-// Helper: Check if two symbols are equal
-static bool symbols_equal(CljSymbol *sym1, CljSymbol *sym2) {
-    if (!sym1 || !sym2) return false;
-    if (sym1 == sym2) return true;
-    CLJ_ASSERT(sym1->cname && sym2->cname);
-    return strcmp(sym1->cname, sym2->cname) == 0;
+// Symbols are interned, pointer comparison suffices
+static inline bool symbols_equal(CljSymbol *sym1, CljSymbol *sym2) {
+    return sym1 == sym2;
 }
 
 // Helper: Find last element in list
