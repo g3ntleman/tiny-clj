@@ -831,21 +831,15 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     CljMap *resolve_env = closure_env ? closure_env : env;
     CljList *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
     
-    // Treat env_stack as lexical only if it contains MORE than the current env map
-    // Frame lookup is separate - don't count frame existence as lexical stack
-    bool has_lexical_stack = false;
+    // Clear env_stack unless it has actual closure captures or different env
     if (resolve_stack) {
-        ID stack_head = LIST_FIRST(resolve_stack);
         ID stack_rest = LIST_REST(resolve_stack);
-        // Only set true if there's actual closure captures (stack_rest) or different env
-        if (stack_rest && list_type_matches(TAG(stack_rest))) {
-            has_lexical_stack = true;
-        } else if (stack_head && stack_head != (ID)resolve_env) {
-            has_lexical_stack = true;
+        ID stack_head = LIST_FIRST(resolve_stack);
+        bool has_captures = stack_rest && list_type_matches(TAG(stack_rest));
+        bool has_different_env = stack_head && stack_head != (ID)resolve_env;
+        if (!has_captures && !has_different_env) {
+            resolve_stack = NULL;
         }
-    }
-    if (!has_lexical_stack) {
-        resolve_stack = NULL;
     }
     
     // CRITICAL: Check call frame FIRST (before environment/namespace lookup)
@@ -2312,20 +2306,8 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
 
     // Check if body is :native marker (for native function stubs)
-    // This must be checked before TCO transformation
-    bool is_native_stub = false;
+    // Keywords are interned, so pointer comparison suffices
     if (body_expr_obj == (CljObject*)SYM_KW_NATIVE) {
-        is_native_stub = true;
-    } else if (IS_KEYWORD(body_expr_obj)) {
-        // Also check by pointer comparison for interned symbols
-        CljSymbol *body_kw = as_symbol(body_expr_obj);
-        if (body_kw == SYM_KW_NATIVE) {
-            is_native_stub = true;
-        }
-    }
-
-    // Handle native function stub
-    if (is_native_stub) {
         // Extract Clojure function name
         CljSymbol *name_symbol = as_symbol(name_sym);
         if (!name_symbol || !name_symbol->cname) {
