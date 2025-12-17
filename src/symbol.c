@@ -296,40 +296,63 @@ void init_special_symbols() {
     // Special forms - static structs with symbol table registration
     // Names are already set to string literals in static initialization (no strdup needed)
     INIT_SYMBOL(SYM_TRY, sym_try_data);
+    SYM_TRY->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_CATCH, sym_catch_data);
+    SYM_CATCH->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_IF, sym_if_data);
+    SYM_IF->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_COND, sym_cond_data);
+    SYM_COND->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_WHEN, sym_when_data);
+    SYM_WHEN->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_WHILE, sym_while_data);
+    SYM_WHILE->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_LET, sym_let_data);
+    SYM_LET->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_FN, sym_fn_data);
+    SYM_FN->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_QUOTE, sym_quote_data);
+    SYM_QUOTE->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_QUASIQUOTE, sym_quasiquote_data);
+    SYM_QUASIQUOTE->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_UNQUOTE, sym_unquote_data);
+    SYM_UNQUOTE->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_SPLICE_UNQUOTE, sym_splice_unquote_data);
+    SYM_SPLICE_UNQUOTE->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_DO, sym_do_data);
+    SYM_DO->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_LOOP, sym_loop_data);
+    SYM_LOOP->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_RECUR, sym_recur_data);
+    SYM_RECUR->base.flags |= CLJ_FLAG_SPECIAL;
     INIT_SYMBOL(SYM_THROW, sym_throw_data);
+    SYM_THROW->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_FINALLY, sym_finally_data);
+    SYM_FINALLY->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_DEFN, sym_defn_data);
+    SYM_DEFN->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_DEREF, sym_deref_data);
 
     INIT_SYMBOL(SYM_NIL, sym_nil_data);
 
     INIT_SYMBOL(SYM_VAR, sym_var_data);
+    SYM_VAR->base.flags |= CLJ_FLAG_SPECIAL;
 
     // Built-in functions - static structs with symbol table registration
     INIT_SYMBOL(SYM_DEF, sym_def_data);
+    SYM_DEF->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_NS, sym_ns_data);
+    SYM_NS->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_TIME, sym_time_data);
+    SYM_TIME->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_GO, sym_go_data);
+    SYM_GO->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_PLUS, sym_plus_data);
 
@@ -412,8 +435,10 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_LIST, sym_list_data);
 
     INIT_SYMBOL(SYM_AND, sym_and_data);
+    SYM_AND->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_OR, sym_or_data);
+    SYM_OR->base.flags |= CLJ_FLAG_SPECIAL;
 
     INIT_SYMBOL(SYM_FOR, sym_for_data);
 
