@@ -15,11 +15,6 @@
 #include <string.h>
 #include <stdio.h>
 
-// Symbols are interned, pointer comparison suffices
-static inline bool symbols_equal(CljSymbol *sym1, CljSymbol *sym2) {
-    return sym1 == sym2;
-}
-
 // Helper: Find last element in list
 static CljList* list_last(CljList *list) {
     while (list && list->rest) {
@@ -94,7 +89,7 @@ bool is_recursive_call(CljObject *call_expr, CljObject *func_name) {
     if (!called_name || TAG(called_name) != CLJ_SYMBOL) return false;
     CljSymbol *called_sym = as_symbol(called_name);
     CljSymbol *func_sym = as_symbol(func_name);
-    return symbols_equal(called_sym, func_sym);
+    return called_sym == func_sym;
 }
 
 // Validate that all recur calls are in tail position
