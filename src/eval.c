@@ -384,6 +384,7 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
         return NULL;
     }
 
+    // Fast-path: Check frame first (most common case for parameters)
     if (frame) {
         ID frame_value = FRAME_NIL_SENTINEL;
         if (frame_lookup(frame, sym, &frame_value)) {
@@ -391,6 +392,19 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
         }
     }
 
+    // OPTIMIZATION: If no env_stack and no fallback_env, go direct to namespace
+    // This is common for function calls like (fib ...) where fib is in namespace
+    if (!env_stack && !fallback_env) {
+        if (st) {
+            ID resolved_ns = eval_symbol(as_symbol(sym), st);
+            if (resolved_ns && resolved_ns != sym) {
+                return resolved_ns;
+            }
+        }
+        return NULL;
+    }
+
+    // Search env_stack (for let bindings, closure captures)
     CljList *current_stack = env_stack;
     while (current_stack && list_type_matches(TAG(current_stack))) {
         ID env_obj_id = LIST_FIRST(current_stack);
@@ -400,7 +414,6 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
             if (resolved != NOT_FOUND) {
                 return resolved;
             }
-
         }
 
         ID rest_obj_id = LIST_REST(current_stack);
@@ -418,6 +431,7 @@ static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_
         }
     }
 
+    // Fallback to namespace
     if (st) {
         ID resolved_ns = eval_symbol(as_symbol(sym), st);
         if (resolved_ns && resolved_ns != sym) {
@@ -817,14 +831,14 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     CljMap *resolve_env = closure_env ? closure_env : env;
     CljList *resolve_stack = effective_ctx ? effective_ctx->env_stack : NULL;
     
-    // Treat env_stack as lexical only if it contains more than the current env map
+    // Treat env_stack as lexical only if it contains MORE than the current env map
+    // Frame lookup is separate - don't count frame existence as lexical stack
     bool has_lexical_stack = false;
     if (resolve_stack) {
         ID stack_head = LIST_FIRST(resolve_stack);
         ID stack_rest = LIST_REST(resolve_stack);
-        if (effective_ctx && effective_ctx->frame) {
-            has_lexical_stack = true;
-        } else if (stack_rest && list_type_matches(TAG(stack_rest))) {
+        // Only set true if there's actual closure captures (stack_rest) or different env
+        if (stack_rest && list_type_matches(TAG(stack_rest))) {
             has_lexical_stack = true;
         } else if (stack_head && stack_head != (ID)resolve_env) {
             has_lexical_stack = true;
@@ -875,7 +889,7 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         return return_value;
     }
 
-    CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, st);
+    CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
     bool allow_callsite_cache = call_node && op_sym && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
     if (allow_callsite_cache) {
         ID cached_call = ast_node_get_cached_resolution(call_node, op_sym, g_runtime.resolve_cache_epoch);
@@ -896,37 +910,48 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
         }
     }
 
-    // Use central symbol resolution function (DRY: handles environment stack)
-    if (resolve_stack) {
-        CljMap *fallback_env = resolve_env;
-        ID resolved_id = resolve_symbol_in_env_with_frame(resolve_stack, fallback_env, effective_ctx ? effective_ctx->frame : NULL, op, ctx_st);
-        if (resolved_id) {
-            if (resolved_id == FRAME_NIL_SENTINEL) {
-                resolved = NULL;
-            } else {
-            resolved = resolved_id;
+    // OPTIMIZATION: Qualified symbols skip env_stack - go direct to namespace
+    bool is_qualified = op_sym && op_sym->ns_name;
+    
+    // Check frame first (parameters)
+    if (!is_qualified && effective_ctx && effective_ctx->frame) {
+        ID frame_value = NULL;
+        if (frame_lookup(effective_ctx->frame, op, &frame_value)) {
+            resolved = frame_value;
+        }
+    }
+    
+    // Check env_stack only if not found in frame and stack exists
+    if (!resolved && !is_qualified && resolve_stack) {
+        CljList *current = resolve_stack;
+        while (current && list_type_matches(TAG(current))) {
+            ID env_obj = LIST_FIRST(current);
+            if (env_obj && TAG(env_obj) == CLJ_MAP) {
+                ID found = map_get((CljMap*)env_obj, op, NOT_FOUND);
+                if (found != NOT_FOUND) {
+                    resolved = found;
+                    break;
+                }
             }
-            // CRITICAL: Don't cache Environment-lookups - they are context-specific
-            // Caching Environment-lookups can cause wrong values to be returned
-            // in different contexts (e.g., let blocks with same symbol names)
+            ID rest = LIST_REST(current);
+            current = (rest && list_type_matches(TAG(rest))) ? (CljList*)rest : NULL;
         }
     }
 
     if (resolved) {
-            RELEASE(owned_env_stack);
-            return resolved;
+        RELEASE(owned_env_stack);
+        return resolved;
     }
 
-    // Fallback to global namespace (will populate cache if found)
-    resolved = eval_symbol(op_sym, st);
+    // Namespace lookup - this result can be cached
+    resolved = eval_symbol(op_sym, ctx_st);
     
-    // OPTIMIZATION: If resolved from namespace, cache symbol for future lookups
-    // Symbols from namespace are stable (syntactic scope) and can be safely cached
-    if (resolved && st && st->current_ns && st->current_ns->name) {
+    // Cache namespace lookups for future calls
+    if (resolved && ctx_st && ctx_st->current_ns && TAG(resolved) != CLJ_SYMBOL) {
         if (!g_runtime.resolve_cache) {
             ASSIGN(g_runtime.resolve_cache, make_map(RESOLVE_CACHE_SIZE));
         }
-        if (g_runtime.resolve_cache && TAG(resolved) != CLJ_SYMBOL) {
+        if (g_runtime.resolve_cache) {
             resolve_cache_store_value(cache_ns_key, op, resolved);
             if (call_node && !resolve_stack) {
                 ast_node_update_callsite_cache(call_node, op_sym, resolved, g_runtime.resolve_cache_epoch);
