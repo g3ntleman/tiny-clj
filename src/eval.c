@@ -460,7 +460,6 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
 
 // Evaluate body with environment lookup (for loops)
 ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(body != NULL);
 
@@ -497,7 +496,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         return NULL;
     }
 
-    // Assertion: Parameters and values must not be NULL when param_count > 0
     if (ctx && ctx->param_count > 0) {
         assert(ctx->params != NULL);
         assert(ctx->param_values != NULL);
@@ -642,7 +640,6 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
 // Simplified body evaluation (basic implementation)
 /** @brief Evaluate function body expressions */
 ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(body != NULL);
 
@@ -1000,11 +997,8 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
         return AUTORELEASE(RETAIN(fn));
     }
 
-    // Check if op is a function
+    // Direct function call
     if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
-        // No TRY/CATCH needed here - exceptions automatically propagate via longjmp
-        // Unlike the symbol case (line 1316), we don't need to manage g_eval_arg_depth here
-        // because call_function_with_args handles its own exception propagation
         return call_function_with_args_and_context(op, list, env, st, ctx);
     }
 
@@ -1054,8 +1048,8 @@ static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env,
     // Call function - no TRY/CATCH needed, exception cleanup happens in outer handler
     ID result = eval_function_call(fn, args, argc, env, st);
 
-    // Normal-Path: Restore namespace after successful call
-    if (st && switched_ns) {
+    // Restore namespace after successful call (st guaranteed non-NULL if switched_ns)
+    if (switched_ns) {
         st->current_ns = saved_ns;
     }
 
@@ -1067,7 +1061,6 @@ static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env,
 
 // List evaluation with context (supports recur via RecurContext)
 ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    // Clojure-compatible: Accept NULL environment - falls back to namespace lookup
     if (!list) {
         return NULL;
     }
@@ -1185,7 +1178,6 @@ ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalC
 
 // Simplified list evaluation (optionally accepts EvalContext for recur support)
 ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    // Clojure-compatible: Accept NULL environment - falls back to namespace lookup
     if (!list) {
         return NULL;
     }
@@ -1338,7 +1330,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 }
 
 ID eval_def(CljList *list, CljMap *env, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(is_list(list));
 
@@ -1428,10 +1419,8 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
 }
 
 ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
-    (void)env;  // Not used
-    // Assertion: List and EvalState must not be NULL when expected
+    (void)env;
     CLJ_ASSERT(list != NULL);
     assert(st != NULL);
 
@@ -1538,7 +1527,6 @@ ID eval_fn(CljList *list, CljMap *env, EvalState *st) {
 }
 
 ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(is_list(list));
 
@@ -1785,7 +1773,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
 }
 
 ID eval_seq(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     CljObject *arg = eval_arg(list, 1, env, NULL);
     if (!arg) return NULL;
@@ -1849,7 +1836,6 @@ static CljMap* extend_env_with_binding(CljMap *env, CljObject *var, CljObject *e
 }
 
 ID eval_for(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     // (for [binding coll] expr)
     // Returns a lazy sequence of results
@@ -1921,7 +1907,6 @@ ID eval_for(CljList *list, CljMap *env) {
 }
 
 ID eval_doseq(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     // (doseq [binding coll] expr)
     // Executes expr for side effects, returns nil
@@ -1991,11 +1976,9 @@ ID eval_doseq(CljList *list, CljMap *env) {
 }
 
 ID eval_list_function(CljList *list, CljMap *env) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     (void)env; // Suppress unused parameter warning
-    // (list arg1 arg2 ...) - creates a list from the arguments
-    // Assertion: List must not be NULL when expected
+    // (list arg1 arg2 ...)
     CLJ_ASSERT(list != NULL);
     if (!list || !list_type_matches(TAG(list))) return NULL;
 
@@ -2020,7 +2003,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // (let [bindings*] body*)
     // bindings* => binding-form init-expr
 
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
 
     if (!list || !st) {
@@ -2195,7 +2177,6 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     // (defn name [params*] body*)
     // Expands to: (def name (fn [params*] body*))
 
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
 
     if (!list || !st) {
@@ -2748,22 +2729,14 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     }
 
     if (list_type_matches(expr_tag)) {
-        EvalState *eval_st = st;
-        bool created_st = false;
-        if (!eval_st) {
-            eval_st = evalstate_new(false);
-            created_st = true;
+        // Fast-path: use caller's EvalState (99% of cases)
+        if (st) {
+            return eval_list(as_list(expr), env, st, ctx);
         }
-        
-        // Fast-Path: EvalState not created (99% of cases) - direct return
-        if (!created_st) {
-            return eval_list(as_list(expr), env, eval_st, ctx);
-        }
-        
-        // Slow-Path: EvalState was created, must be freed
-        // No TRY/CATCH - outer handler will cleanup on exception
-        CljObject *result = eval_list(as_list(expr), env, eval_st, ctx);
-        evalstate_free(eval_st);
+        // Slow-path: create temporary EvalState
+        EvalState *temp_st = evalstate_new(false);
+        CljObject *result = eval_list(as_list(expr), env, temp_st, ctx);
+        evalstate_free(temp_st);
         return result;
     }
 
@@ -2772,17 +2745,8 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         CljMap *result = map_empty();
 
         MAP_FOR_EACH(map, key, value) {
-            unsigned char key_tag = key ? TAG(key) : 0;
-            unsigned char value_tag = value ? TAG(value) : 0;
-
-            ID eval_key = (key && key_tag == CLJ_SYMBOL && (CljObject*)key == (CljObject*)SYM_NIL)
-                ? NULL
-                : (key ? eval_body(key, env, st, NULL) : NULL);
-
-            ID eval_value = (value && value_tag == CLJ_SYMBOL && (CljObject*)value == (CljObject*)SYM_NIL)
-                ? NULL
-                : (value ? eval_body(value, env, st, NULL) : NULL);
-
+            ID eval_key = (key == (ID)SYM_NIL) ? NULL : eval_body(key, env, st, NULL);
+            ID eval_value = (value == (ID)SYM_NIL) ? NULL : eval_body(value, env, st, NULL);
             ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
 
@@ -2793,7 +2757,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 }
 
 ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
-    // Assertion: Environment must not be NULL when expected
     CLJ_ASSERT(env != NULL);
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
@@ -2929,7 +2892,6 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
 // ============================================================================
 ID eval_time(CljList *list, CljMap *env, EvalState *st) {
     // (time expr)
-    // Clojure-compatible: Accept NULL environment - falls back to namespace lookup
     if (!list || !st) {
         return NULL;
     }
