@@ -24,7 +24,7 @@ static CljMap map_empty_singleton_data = {
 CljMap *map_empty_singleton = &map_empty_singleton_data;
 
 // Global sentinels for special values
-CljObject g_not_found_sentinel = { .type = CLJ_NIL, .rc = SINGLETON_RC };
+CljObject g_not_found_sentinel = { .type = CLJ_NIL, .flags = 0, .rc = SINGLETON_RC };
 
 // Sentinel for encoding nil (NULL) in call frames
 static char frame_nil_sentinel_storage;

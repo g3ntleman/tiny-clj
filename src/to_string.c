@@ -52,30 +52,17 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings);
 static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings);
 
 // Check if symbol is a special form (matches Clojure behavior)
-// Static array of pointers to global SYM_* variables - dereference at runtime
-static CljSymbol **g_special_form_ptrs[] = {
-    &SYM_IF, &SYM_LET, &SYM_DEFN, &SYM_DEF, &SYM_FN, &SYM_DO,
-    &SYM_COND, &SYM_WHEN, &SYM_WHILE, &SYM_QUOTE, &SYM_RECUR,
-    &SYM_AND, &SYM_OR, &SYM_NS, &SYM_TRY, &SYM_CATCH,
-    &SYM_THROW, &SYM_FINALLY, &SYM_VAR, &SYM_LOOP, &SYM_GO, &SYM_TIME
-};
-static const size_t g_special_form_count = sizeof(g_special_form_ptrs)/sizeof(g_special_form_ptrs[0]);
+// O(1) check using flags field in CljObject
+bool is_special_symbol(CljSymbol *symbol) {
+    return symbol && (symbol->base.flags & CLJ_FLAG_SPECIAL);
+}
 
 void strings_clear_special_forms(void) {
-    // No-op: static array
+    // No-op: flags are set at symbol initialization
 }
 
 void strings_register_special_form(const char *name) {
-    (void)name; // No-op: static array
-}
-
-bool is_special_symbol(CljSymbol *symbol) {
-    if (!symbol) return false;
-    // Pointer comparison: dereference static array of SYM_* pointers
-    for (size_t i = 0; i < g_special_form_count; ++i) {
-        if (*g_special_form_ptrs[i] == symbol) return true;
-    }
-    return false;
+    (void)name; // No-op: flags are set at symbol initialization
 }
 
 // Recursive helper: Calculate string length without allocating

@@ -44,9 +44,12 @@ typedef void* CljValue;
 #define TYPE_OF(struct_type) TYPE_OF_##struct_type
 
 typedef struct CljObject {
-    uint16_t type;
+    uint8_t type;
+    uint8_t flags;
     int16_t rc;
 } CljObject;
+
+#define CLJ_FLAG_SPECIAL  0x01  // Special Form Symbol
 
 static inline CljType TAG(ID obj) {
     if ((uintptr_t)obj & 0x1) {

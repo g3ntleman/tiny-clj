@@ -96,6 +96,7 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
         if (!IS_SINGLETON_TYPE(obj_type)) {
             CljObject *obj = (CljObject*)result;
             obj->type = obj_type;  // Set type before tracking
+            obj->flags = 0;  // Initialize flags
             MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
         }
     }
