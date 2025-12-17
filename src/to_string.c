@@ -52,61 +52,28 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings);
 static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings);
 
 // Check if symbol is a special form (matches Clojure behavior)
-// Uses compact array-based lookup for smaller code size
-static const char *g_special_form_names[64];
-static size_t g_special_form_count = 0;
-static bool g_special_forms_initialized = false;
-
-static void strings_register_special_form_internal(const char *name) {
-    if (!name || !*name || g_special_form_count >= (sizeof(g_special_form_names) / sizeof(g_special_form_names[0]))) {
-        return;
-    }
-    // Avoid duplicates
-    for (size_t i = 0; i < g_special_form_count; ++i) {
-        if (strcmp(g_special_form_names[i], name) == 0) {
-            return;
-        }
-    }
-    char *copy = strdup(name);
-    if (!copy) {
-        return;
-    }
-    g_special_form_names[g_special_form_count++] = copy;
-}
+// Static array of pointers to global SYM_* variables - dereference at runtime
+static CljSymbol **g_special_form_ptrs[] = {
+    &SYM_IF, &SYM_LET, &SYM_DEFN, &SYM_DEF, &SYM_FN, &SYM_DO,
+    &SYM_COND, &SYM_WHEN, &SYM_WHILE, &SYM_QUOTE, &SYM_RECUR,
+    &SYM_AND, &SYM_OR, &SYM_NS, &SYM_TRY, &SYM_CATCH,
+    &SYM_THROW, &SYM_FINALLY, &SYM_VAR, &SYM_LOOP, &SYM_GO, &SYM_TIME
+};
+static const size_t g_special_form_count = sizeof(g_special_form_ptrs)/sizeof(g_special_form_ptrs[0]);
 
 void strings_clear_special_forms(void) {
-    for (size_t i = 0; i < g_special_form_count; ++i) {
-        free((void*)g_special_form_names[i]);
-        g_special_form_names[i] = NULL;
-    }
-    g_special_form_count = 0;
-    g_special_forms_initialized = false;
+    // No-op: static array
 }
 
 void strings_register_special_form(const char *name) {
-    strings_register_special_form_internal(name);
-}
-
-static void ensure_special_forms_initialized(void) {
-    if (g_special_forms_initialized) {
-        return;
-    }
-    const char *defaults[] = {
-        "if","let","defn","def","fn","do","cond","when","while","quote","recur","and","or","ns","try","catch","throw","finally","var","loop","go","time"
-    };
-    for (size_t i = 0; i < sizeof(defaults)/sizeof(defaults[0]); ++i) {
-        strings_register_special_form_internal(defaults[i]);
-    }
-    g_special_forms_initialized = true;
+    (void)name; // No-op: static array
 }
 
 bool is_special_symbol(CljSymbol *symbol) {
-    if (!symbol || !symbol->cname) return false;
-    ensure_special_forms_initialized();
+    if (!symbol) return false;
+    // Pointer comparison: dereference static array of SYM_* pointers
     for (size_t i = 0; i < g_special_form_count; ++i) {
-        if (strcmp(symbol->cname, g_special_form_names[i]) == 0) {
-            return true;
-        }
+        if (*g_special_form_ptrs[i] == symbol) return true;
     }
     return false;
 }
