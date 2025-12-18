@@ -126,16 +126,9 @@ int list_count(CljList *list) {
     }
     
     int count = 0;
-    CljObject *current = (CljObject*)list;
-    while (current) {
-        // Programmierfehler: current muss CLJ_LIST sein, wenn es nicht NULL ist
-        CLJ_ASSERT(list_type_matches(TAG(current)));
-        
-        CljList *current_list = as_list(current);
-        // Count the element (first) of this list node
-        // Even if LIST_FIRST is NULL (nil), it's still an element
+    LIST_FOR_EACH(list, elem) {
+        (void)elem;  // unused - we count all elements, even nil
         count++;
-        current = LIST_REST(current_list);
     }
     return count;
 }

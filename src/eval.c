@@ -1065,13 +1065,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     CljASTNode *call_node = is_ast_node(list) ? (CljASTNode*)list : NULL;
 
     // Use EvalState from context if provided
-    EvalState *effective_st = get_eval_state(ctx, st);
+    EvalState *effective_st = ctx ? get_eval_state(ctx, st) : st;
 
     // Prefer the current head of env_stack (closures/let frames), fall back to env parameter
-    CljMap *effective_env = get_closure_env(ctx);
-    if (!effective_env) {
-        effective_env = env;
-    }
+    CljMap *effective_env = ctx ? get_closure_env(ctx) : NULL;
+    if (!effective_env) effective_env = env;
 
     ID head = LIST_FIRST(list);
 
@@ -1144,11 +1142,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Tier 4: String and I/O operations
     if (original_op_sym == SYM_STR) {
         // Count arguments by traversing once
-        CljList *cur = as_list(LIST_REST(list));
         int argc = 0;
-        while (cur && argc < 16) {
-            argc++;
-            cur = as_list(LIST_REST(cur));
+        LIST_FOR_EACH(LIST_REST(list), elem) {
+            (void)elem;  // unused in count phase
+            if (argc < 16) argc++;
         }
 
         ID args_stack[16];
@@ -1156,14 +1153,15 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (!args) return NULL;
 
         // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
-        cur = as_list(LIST_REST(list));
-        for (int i = 0; i < argc && cur; i++) {
-            args[i] = eval_arg_from_expr_with_context(cur->first, effective_env, effective_st, ctx);
+        int i = 0;
+        LIST_FOR_EACH(LIST_REST(list), elem) {
+            if (i >= argc) break;
+            args[i] = eval_arg_from_expr_with_context(elem, effective_env, effective_st, ctx);
             if (!args[i]) {
                 free_obj_array(args, args_stack);
                 return NULL;
             }
-            cur = as_list(LIST_REST(cur));
+            i++;
         }
 
         ID str_result = native_str(args, argc);
@@ -2484,14 +2482,10 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     CLJ_ASSERT(expr_tag != CLJ_SYMBOL_TOKEN && "Symbol tokens must be canonicalized before evaluation");
 
     if (expr_tag == CLJ_SYMBOL) {
-        if (expr == SYM_NIL) {
-            return NULL;
-        }
+        // NOTE: SYM_NIL already checked at function entry
         if (IS_KEYWORD(expr)) {
             return expr;
         }
-        
-        CljSymbol *sym_obj = as_symbol(expr);
         
         // Use frame_lookup for O(1) parameter resolution (symbols are interned)
         if (ctx && ctx->frame) {
@@ -2507,6 +2501,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         }
         
         // Fallback: check legacy params array (for tests/contexts without frame)
+        // Cold path: only reached when frame_lookup didn't find the symbol
         if (ctx && ctx->params && ctx->param_values) {
             for (int i = 0; i < ctx->param_count; i++) {
                 if (ctx->params[i] == expr) {
@@ -2539,6 +2534,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                         resolves_to_self = clj_equal(resolved_id, expr);
                     }
                     if (resolves_to_self) {
+                        CljSymbol *sym_obj = as_symbol(expr);
                         const char *sym_name = sym_obj && sym_obj->cname ? sym_obj->cname : "unknown";
                         throw_unresolved_symbol_exception(sym_name);
                         return NULL;
@@ -2574,6 +2570,8 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             return AUTORELEASE(RETAIN(resolved_value));
         }
 
+        // Only call as_symbol when needed (error paths)
+        CljSymbol *sym_obj = as_symbol(expr);
         if (sym_obj && sym_obj->cname) {
             CljNamespace *ns_candidate = ns_find(sym_obj->cname);
             if (ns_candidate) {

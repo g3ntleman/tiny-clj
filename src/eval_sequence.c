@@ -25,15 +25,16 @@ static ID eval_and_call_native_with_context(CljList *list,
     if (!args) return NULL;
 
     // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
-    CljList *cur = as_list(LIST_REST(list));
-    for (int i = 0; i < argc && cur; i++) {
-        args[i] = eval_arg_from_expr_with_context(cur->first, env, NULL, ctx);
+    int i = 0;
+    LIST_FOR_EACH(LIST_REST(list), elem) {
+        if (i >= argc) break;
+        args[i] = eval_arg_from_expr_with_context(elem, env, NULL, ctx);
         if (!args[i]) {
             // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
             free_obj_array(args, args_stack);
             return NULL;
         }
-        cur = as_list(LIST_REST(cur));
+        i++;
     }
 
     ID result = native_func ? native_func(args, argc) : NULL;

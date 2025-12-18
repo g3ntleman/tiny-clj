@@ -98,6 +98,8 @@ static inline bool clj_is_truthy(CljObject *v) {
 }
 
 int reference_count(CljObject *obj);
+
+#ifdef DEBUG
 static inline void* assert_type(CljObject *obj, CljType expected_type) {
     if (obj && TAG(obj) == expected_type) {
         return obj;
@@ -110,5 +112,12 @@ static inline void* assert_type(CljObject *obj, CljType expected_type) {
     CLJ_ASSERT(0 && "Type assertion failed");
     return NULL;
 }
+#else
+// Release build: zero-overhead cast
+static inline void* assert_type(CljObject *obj, CljType expected_type) {
+    (void)expected_type;
+    return obj;
+}
+#endif
 
 #endif // SUBJECTIVE_C_OBJECT_H

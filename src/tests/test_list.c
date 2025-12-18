@@ -103,3 +103,87 @@ TEST(test_nth_list_nil_with_default_problem) {
     TEST_ASSERT_NULL(out_with_default);
 }
 
+// Tests for LIST_FOR_EACH macro
+
+TEST(test_list_for_each_basic) {
+    // Create list (1 2 3)
+    CljList *l3 = make_list(fixnum(3), NULL);
+    CljList *l2 = make_list(fixnum(2), l3);
+    CljList *list = make_list(fixnum(1), l2);
+    AUTORELEASE((CljObject*)list);
+    
+    int sum = 0;
+    int count = 0;
+    LIST_FOR_EACH(list, elem) {
+        sum += as_fixnum(elem);
+        count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(6, sum);
+    TEST_ASSERT_EQUAL_INT(3, count);
+}
+
+TEST(test_list_for_each_empty) {
+    CljList *list = NULL;
+    
+    int count = 0;
+    LIST_FOR_EACH(list, elem) {
+        (void)elem;
+        count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(0, count);
+}
+
+TEST(test_list_for_each_single) {
+    CljList *list = make_list(fixnum(42), NULL);
+    AUTORELEASE((CljObject*)list);
+    
+    int sum = 0;
+    int count = 0;
+    LIST_FOR_EACH(list, elem) {
+        sum += as_fixnum(elem);
+        count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(42, sum);
+    TEST_ASSERT_EQUAL_INT(1, count);
+}
+
+TEST(test_list_for_each_rest) {
+    // Create list (op 1 2 3) and iterate over REST (1 2 3)
+    CljList *l3 = make_list(fixnum(3), NULL);
+    CljList *l2 = make_list(fixnum(2), l3);
+    CljList *l1 = make_list(fixnum(1), l2);
+    CljList *list = make_list((ID)SYM_PLUS, l1);
+    AUTORELEASE((CljObject*)list);
+    
+    int sum = 0;
+    int count = 0;
+    LIST_FOR_EACH(LIST_REST(list), elem) {
+        sum += as_fixnum(elem);
+        count++;
+    }
+    
+    TEST_ASSERT_EQUAL_INT(6, sum);
+    TEST_ASSERT_EQUAL_INT(3, count);
+}
+
+TEST(test_list_for_each_find) {
+    // Test finding an element (like MAP_FOR_EACH usage)
+    CljList *l3 = make_list(fixnum(3), NULL);
+    CljList *l2 = make_list(fixnum(2), l3);
+    CljList *list = make_list(fixnum(1), l2);
+    AUTORELEASE((CljObject*)list);
+    
+    int found = -1;
+    LIST_FOR_EACH(list, elem) {
+        if (as_fixnum(elem) == 2) {
+            found = as_fixnum(elem);
+            break;  // Skip remaining comparisons (like MAP_FOR_EACH)
+        }
+    }
+    
+    TEST_ASSERT_EQUAL_INT(2, found);
+}
+
