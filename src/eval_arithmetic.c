@@ -71,33 +71,50 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
         unsigned char tag_a = TAG(a);
 
         ID b = eval_arg_from_expr_with_context(arg2_node->first, env, st, ctx);
-        if (!b) { RELEASE(a); return NULL; }
+        if (!b) return NULL;  // a is AUTORELEASE, no cleanup needed
         unsigned char tag_b = TAG(b);
 
         // Fixnum fast-path: both are fixnums (immediates, no RELEASE needed)
-        // Use native helpers which handle overflow correctly
+        // Direct inline arithmetic for small values (no overflow risk)
+        // For large values, fall through to native helpers which handle overflow
         if (tag_a == TAG_FIXNUM && tag_b == TAG_FIXNUM) {
+            int va = as_fixnum(a), vb = as_fixnum(b);
+            // Safe range: abs(value) < 2^20 guarantees no overflow for +,-,*
+            #define SAFE_RANGE (1 << 20)
+            if (va > -SAFE_RANGE && va < SAFE_RANGE && vb > -SAFE_RANGE && vb < SAFE_RANGE) {
+                switch (op) {
+                    case ARITH_ADD: return fixnum(va + vb);
+                    case ARITH_SUB: return fixnum(va - vb);
+                    case ARITH_MUL: return fixnum(va * vb);
+                    case ARITH_DIV:
+                        if (vb == 0) {
+                            throw_exception_formatted(EXCEPTION_DIVISION_BY_ZERO, __FILE__, __LINE__, 0,
+                                "Division by zero: %d / %d", va, vb);
+                            return NULL;
+                        }
+                        return fixnum(va / vb);
+                }
+            }
+            #undef SAFE_RANGE
+            // Large values: use native helpers for overflow handling
             ID fast_args[2] = {a, b};
             return AUTORELEASE(apply_arith_op(fast_args, 2, op));
         }
 
         // Generic 2-arg path for mixed types
-        if (!is_numeric_type(a)) { RELEASE(b); return throw_non_numeric_argument(a); }
-        if (!is_numeric_type(b)) { RELEASE(a); return throw_non_numeric_argument(b); }
+        // NOTE: a, b are AUTORELEASE values from eval_arg_from_expr_with_context
+        if (!is_numeric_type(a)) return throw_non_numeric_argument(a);
+        if (!is_numeric_type(b)) return throw_non_numeric_argument(b);
         ID fast_args[2] = {a, b};
-        ID result = apply_arith_op(fast_args, 2, op);
-        RELEASE(a); RELEASE(b);
-        return AUTORELEASE(result);
+        return AUTORELEASE(apply_arith_op(fast_args, 2, op));
     }
 
-    // 1-arg path
+    // 1-arg path (a is AUTORELEASE, no cleanup needed)
     if (!arg2_node) {
         ID a = eval_arg_from_expr_with_context(arg1_expr, env, st, ctx);
         if (!a) return NULL;
         if (!is_numeric_type(a)) return throw_non_numeric_argument(a);
-        ID result = apply_arith_op(&a, 1, op);
-        RELEASE(a);
-        return AUTORELEASE(result);
+        return AUTORELEASE(apply_arith_op(&a, 1, op));
     }
 
     // 3+ args: count while traversing
@@ -109,27 +126,20 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
     ID *args = alloc_obj_array(argc, args_stack);
     if (!args) return NULL;
 
+    // NOTE: All args are AUTORELEASE from eval_arg_from_expr_with_context
     CljList *current = arg1_node;
     for (int i = 0; i < argc; i++) {
         ID expr = current ? current->first : NULL;
         args[i] = eval_arg_from_expr_with_context(expr, env, st, ctx);
         if (!args[i]) {
-            for (int j = 0; j < i; j++) {
-                RELEASE(args[j]);
-            }
             free_obj_array(args, args_stack);
             return NULL;
         }
-
         if (!is_numeric_type(args[i])) {
-            for (int j = 0; j <= i; j++) {
-                RELEASE(args[j]);
-            }
             free_obj_array(args, args_stack);
             return throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
                 "String cannot be used as a Number");
         }
-
         current = current->rest ? as_list(current->rest) : NULL;
     }
 
@@ -149,11 +159,7 @@ CljObject* eval_arithmetic_generic_with_context(CljList *list,
             break;
     }
 
-    for (int i = 0; i < argc; i++) {
-        RELEASE(args[i]);
-    }
     free_obj_array(args, args_stack);
-
     return AUTORELEASE(result);
 }
 
