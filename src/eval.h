@@ -34,9 +34,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st);
 ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx);
 // Internal function - uses EvalContext for parameter substitution
 ID eval_body_with_params(ID body, const EvalContext *ctx);
-// List evaluation with context (supports recur via RecurContext)
-ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
-// Simplified list evaluation (optionally accepts EvalContext for recur support)
+// List evaluation (optionally accepts EvalContext for recur support)
 ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
 // Special form evaluators
