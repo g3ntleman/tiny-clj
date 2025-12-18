@@ -55,7 +55,8 @@ void frame_set_bindings(CallFrame *frame, CallFrame *parent, ID *params, ID *val
 bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
     if (!frame || !symbol) return false;
 
-    // Protection against circular references - track visited frames
+#ifdef DEBUG
+    // Protection against circular references - track visited frames (DEBUG only)
     CallFrame *visited[64];  // Max 64 frames deep (should be more than enough)
     int depth = 0;
     CallFrame *current = frame;
@@ -91,6 +92,36 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
         // Move to parent frame
         current = current->parent;
     }
+#else
+    // Release build: fast path without circular reference checking
+    // Simple iterative parent chain traversal
+    CallFrame *current = frame;
+    int depth = 0;
+    const int MAX_DEPTH = 64;  // Safety limit to prevent infinite loops
+    
+    while (current && depth < MAX_DEPTH) {
+        // Search in current frame (backwards scan for shadowing semantics)
+        for (int i = current->param_count - 1; i >= 0; i--) {
+            ID bound = *frame_param_slot(current, i);
+            // Symbols are always interned - pointer comparison is sufficient
+            if (bound == symbol) {
+                ID encoded_value = *frame_value_slot(current, i);
+                if (out_value) {
+                    if (encoded_value == FRAME_NIL_SENTINEL) {
+                        *out_value = FRAME_NIL_SENTINEL;
+                    } else {
+                        *out_value = frame_decode_value(encoded_value);
+                    }
+                }
+                return true;
+            }
+        }
+        
+        // Move to parent frame
+        current = current->parent;
+        depth++;
+    }
+#endif
     
     return false;
 }

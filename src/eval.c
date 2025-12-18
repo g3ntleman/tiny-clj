@@ -222,7 +222,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
     // Legacy: Keep env_stack for closure environment (func->env_stack)
     // This is only used for closure bindings, not function parameters
-    CljList *call_env_stack = RETAIN(func->env_stack);
+    // NOTE: func->env_stack is borrowed (not retained) - func lives during the entire call
+    CljList *call_env_stack = func->env_stack;
 
     // TCO Loop - iterate on recur
     ID result = NULL;
@@ -299,8 +300,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // Cleanup call frame (stack-allocated, but may contain retained values)
     frame_release(call_frame);
     
-    // Cleanup env_stack (closure environment)
-    RELEASE(call_env_stack);
+    // NOTE: call_env_stack is borrowed from func->env_stack, no release needed
 
     return result;
 }
@@ -633,16 +633,16 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
     switch (body_obj->type) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
-            // Evaluate list using eval_list_with_context to support recur
+            // Evaluate list with context (ctx preserves recur)
             CljMap *env_map = get_closure_env(ctx);
             EvalState *ctx_state = get_eval_state(ctx, NULL);
             if (!ctx_state) {
                 EvalState *temp_st = evalstate_new(false);
-                ID result = eval_list_with_context(as_list(body), env_map, temp_st, ctx);
+                ID result = eval_list(as_list(body), env_map, temp_st, ctx);
                 evalstate_free(temp_st);
                 return result;
             }
-            return eval_list_with_context(as_list(body), env_map, ctx_state, ctx);
+            return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
         default:
@@ -1056,82 +1056,7 @@ static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env,
     return AUTORELEASE(result);
 }
 
-// List evaluation with context (supports recur via RecurContext)
-ID eval_list_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    if (!list) {
-        return NULL;
-    }
-
-    EvalContext local_ctx;
-    CljList *owned_env_stack = NULL;
-
-    CljASTNode *call_node = is_ast_node(list) ? (CljASTNode*)list : NULL;
-
-    // Cache context-derived values early for performance
-    CljMap *closure_env = get_closure_env(ctx);
-    EvalState *ctx_st = get_eval_state(ctx, st);
-    CljMap *effective_env = closure_env ? closure_env : env;  // Cached once
-
-    ID op = LIST_FIRST(list);
-    unsigned char op_tag = op ? TAG(op) : 0;
-
-    // Nested list: evaluate first (for ((array-map)) etc.)
-    if (op_tag == CLJ_LIST) {
-        op = eval_list_with_context(as_list(op), env, st, ctx);
-        if (!op) return NULL;
-        op_tag = TAG(op);
-    }
-
-    CljObject *original_op = op;
-    CljSymbol *op_sym = (op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
-
-    // Check recur first
-    if (op_sym == SYM_RECUR) {
-        return eval_handle_recur(list, ctx);
-    }
-
-    // Map as function
-    if (op_tag == CLJ_MAP) {
-        return eval_map_lookup(list, effective_env, ctx_st, ctx, op);
-    }
-
-    // Fast-path: Arithmetic operators (O(1) flag check)
-    if (op_sym && (op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
-        CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
-        if (result) return result;
-    }
-
-    // Comparison operators (before symbol resolution)
-    CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, ctx_st, ctx, original_op);
-    if (comparison_result) return comparison_result;
-
-    // Special forms (before symbol resolution)
-    if (op_sym && is_special_symbol(op_sym)) {
-        return eval_special_form_dispatch(list, effective_env, ctx_st, ctx, op_sym);
-    }
-
-    // Symbol resolution
-    if (op_tag == CLJ_SYMBOL) {
-        op = resolve_list_operator(op, effective_env, ctx_st, ctx, call_node);
-        op_tag = op ? TAG(op) : 0;
-        // After resolution, check arithmetic again (for qualified symbols like clojure.core/+)
-        if (op_tag == CLJ_SYMBOL) {
-            CljSymbol *resolved_sym = as_symbol(op);
-            if (resolved_sym && (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
-                CljObject *result = eval_arithmetic_dispatch_with_context(list, effective_env, ctx_st, original_op, ctx);
-                if (result) return result;
-            }
-        }
-    }
-
-    // Delegate to eval_list for function calls and other operations
-    const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
-    ID fallback_result = eval_list(list, env, st, effective_ctx);
-    RELEASE(owned_env_stack);
-    return fallback_result;
-}
-
-// Simplified list evaluation (optionally accepts EvalContext for recur support)
+// List evaluation (optionally accepts EvalContext for recur support)
 ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     if (!list) {
         return NULL;
@@ -1139,10 +1064,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     CljASTNode *call_node = is_ast_node(list) ? (CljASTNode*)list : NULL;
 
-    // CRITICAL: If EvalContext is provided, check if this is a special form that
-    // needs context-aware handling (if, do, recur, etc.)
-    // We DON'T delegate to eval_list_with_context to avoid infinite recursion
-    // Instead, we handle special forms directly here
+    // Use EvalState from context if provided
+    EvalState *effective_st = get_eval_state(ctx, st);
+
+    // Prefer the current head of env_stack (closures/let frames), fall back to env parameter
+    CljMap *effective_env = get_closure_env(ctx);
+    if (!effective_env) {
+        effective_env = env;
+    }
 
     ID head = LIST_FIRST(list);
 
@@ -1152,7 +1081,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     // CRITICAL: Pass ctx to preserve RecurContext
     if (op && list_type_matches(TAG(op))) {
-        op = eval_list(as_list(op), env, st, ctx);
+        op = eval_list(as_list(op), effective_env, effective_st, ctx);
         if (!op) {
             return NULL;
         }
@@ -1161,40 +1090,55 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Handle maps as functions (for key lookup) - must be first
     if (op && TAG(op) == CLJ_MAP) {
-        return eval_map_lookup(list, env, st, ctx, op);
+        return eval_map_lookup(list, effective_env, effective_st, ctx, op);
     }
 
     // Check if op is a symbol and resolve it
     CljObject *original_op = op;
-    CljSymbol *original_op_sym = (op && TAG(op) == CLJ_SYMBOL) ? as_symbol(op) : NULL;
+    unsigned char original_op_tag = op ? TAG(op) : 0;
+    CljSymbol *original_op_sym = (original_op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
 
     // Handle def and ns before symbol resolution
-    if (original_op_sym == SYM_DEF) return eval_def(list, env, st);
-    if (original_op_sym == SYM_NS) return eval_ns(list, env, st);
+    if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
+    if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
 
     // CRITICAL: Check for comparison operators BEFORE symbol resolution
     // This prevents infinite loops when operators like '=' are resolved
     // Comparison operators should not be resolved - they are handled directly
-    CljObject *comparison_result = eval_comparison_dispatch(list, env, st, ctx, original_op);
+    CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, original_op);
     if (comparison_result) return comparison_result;
+
+    // Fast-path: Arithmetic operators (avoid symbol resolution for +, -, *, /)
+    if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
+        CljObject *arith_result = eval_arithmetic_dispatch_with_context(list, effective_env, effective_st, (ID)original_op, ctx);
+        if (arith_result) return arith_result;
+    }
+
+    // Special forms (avoid symbol resolution for if/let/do/recur/etc.)
+    if (original_op_sym && is_special_symbol(original_op_sym)) {
+        // NOTE: NULL is a valid result for many special forms (e.g., (when false ...))
+        return eval_special_form_dispatch(list, effective_env, effective_st, ctx, original_op_sym);
+    }
 
     // Resolve operator symbol
     // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
-    ID resolved_op = resolve_list_operator(op, env, st, ctx, call_node);
+    ID resolved_op = resolve_list_operator(op, effective_env, effective_st, ctx, call_node);
     
     op = resolved_op;
 
-    // Arithmetic operations (comparison already checked above)
-    CljObject *result = eval_arithmetic_dispatch_with_context(list, env, st, original_op, ctx);
-    if (result) return result;
-
-    // Special form dispatch
-    if (original_op_sym && is_special_symbol(original_op_sym)) {
-        return eval_special_form_dispatch(list, env, st, ctx, original_op_sym);
+    // After resolution, allow arithmetic dispatch if operator resolved to a core arithmetic symbol
+    // (e.g., qualified clojure.core/+ could resolve to SYM_PLUS in some contexts)
+    unsigned char op_tag_after_resolution = op ? TAG(op) : 0;
+    if (op_tag_after_resolution == CLJ_SYMBOL) {
+        CljSymbol *resolved_sym = as_symbol(op);
+        if (resolved_sym && (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
+            CljObject *arith_result = eval_arithmetic_dispatch_with_context(list, effective_env, effective_st, (ID)resolved_sym, ctx);
+            if (arith_result) return arith_result;
+        }
     }
 
     // Tier 3: Sequence operations
-    result = eval_sequence_dispatch_with_context(list, env, original_op, ctx);
+    CljObject *result = eval_sequence_dispatch_with_context(list, effective_env, original_op, ctx);
     if (result) return result;
 
     // Tier 4: String and I/O operations
@@ -1208,7 +1152,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (!args) return NULL;
 
         for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg_with_context(list, i + 1, env, st, ctx);
+            args[i] = eval_arg_with_context(list, i + 1, effective_env, effective_st, ctx);
             if (!args[i]) {
                 free_obj_array(args, args_stack);
                 return NULL;
@@ -1222,7 +1166,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Tier 6: Loop operations (for, doseq, dotimes)
     if (original_op_sym == SYM_FOR || original_op_sym == SYM_DOSEQ || original_op_sym == SYM_DOTIMES) {
-        CljObject *loop_result = eval_loop_dispatch(list, env, original_op, st);
+        CljObject *loop_result = eval_loop_dispatch(list, effective_env, original_op, effective_st);
         return loop_result; // Return even if NULL
     }
 
@@ -1232,7 +1176,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // and we should treat it as an error (not a function call)
     unsigned char op_tag = op ? TAG(op) : 0;
     if (op && (op_tag == CLJ_SYMBOL || op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE)) {
-        return eval_function_call_from_list(list, env, st, op, ctx);
+        return eval_function_call_from_list(list, effective_env, effective_st, op, ctx);
     }
 
     // Error: first element is not a function
