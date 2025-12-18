@@ -21,6 +21,17 @@ typedef struct CljList {
 #define LIST_SECOND(list) LIST_FIRST(as_list(LIST_REST(list)))
 #define LIST_THIRD(list)  LIST_FIRST(as_list(LIST_REST(as_list(LIST_REST(list)))))
 
+// Iterate over all elements in a list (O(n) traversal)
+// Safe with NULL lists, works with CljList and CljASTNode
+// Usage: LIST_FOR_EACH(list, elem) { process(elem); }
+// For REST: LIST_FOR_EACH(LIST_REST(list), elem) { ... }
+// Note: break and continue work correctly
+#define LIST_FOR_EACH(list, elem_var) \
+    for (struct { CljList *cur; ID elem; int once; } _lfe = { is_list_like(list) ? as_list(list) : NULL, NULL, 0 }; \
+         _lfe.cur && (_lfe.elem = LIST_FIRST(_lfe.cur), _lfe.once = 1); \
+         _lfe.cur = as_list(LIST_REST(_lfe.cur))) \
+        for (ID elem_var = _lfe.elem; _lfe.once; _lfe.once = 0)
+
 static inline bool list_type_matches(CljType type) {
     return type == CLJ_LIST || type == CLJ_AST_NODE;
 }

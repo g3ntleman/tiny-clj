@@ -146,16 +146,14 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
             size_t len = 2; // "( )"
-            ID current = (ID)v;
             int count = 0;
-            while (current && list_type_matches(TAG(current)) && count < 1000) {
-                CljList *current_list = as_list(current);
-                if (current_list && current_list->first) {
-                    len += to_string_calc_length(current_list->first, escape_strings);
+            LIST_FOR_EACH(v, elem) {
+                if (count >= 1000) break;
+                if (elem) {
+                    len += to_string_calc_length(elem, escape_strings);
                     if (count > 0) len += 1; // space
                     count++;
                 }
-                current = current_list ? current_list->rest : NULL;
             }
             return len;
         }
@@ -401,19 +399,17 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_AST_NODE: {
             buffer[*offset] = '(';
             *offset += 1;
-            ID current = (ID)v;
             int count = 0;
-            while (current && list_type_matches(TAG(current)) && count < 1000) {
-                CljList *current_list = as_list(current);
-                if (current_list && current_list->first) {
+            LIST_FOR_EACH(v, elem) {
+                if (count >= 1000) break;
+                if (elem) {
                     if (count > 0) {
                         buffer[*offset] = ' ';
                         *offset += 1;
                     }
-                    to_string_build_string(current_list->first, buffer, offset, escape_strings);
+                    to_string_build_string(elem, buffer, offset, escape_strings);
                     count++;
                 }
-                current = current_list ? current_list->rest : NULL;
             }
             buffer[*offset] = ')';
             *offset += 1;
