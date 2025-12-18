@@ -2542,7 +2542,20 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         
         CljSymbol *sym_obj = as_symbol(expr);
         
-        // Check function parameters FIRST (symbols are interned, pointer comparison suffices)
+        // Use frame_lookup for O(1) parameter resolution (symbols are interned)
+        if (ctx && ctx->frame) {
+            ID frame_value = NULL;
+            if (frame_lookup(ctx->frame, expr, &frame_value)) {
+                if (frame_value == FRAME_NIL_SENTINEL) {
+                    return NULL;  // Parameter bound to nil
+                }
+                if (!frame_value) return NULL;
+                if (IS_IMMEDIATE(frame_value)) return frame_value;
+                return AUTORELEASE(RETAIN(frame_value));
+            }
+        }
+        
+        // Fallback: check legacy params array (for tests/contexts without frame)
         if (ctx && ctx->params && ctx->param_values) {
             for (int i = 0; i < ctx->param_count; i++) {
                 if (ctx->params[i] == expr) {
