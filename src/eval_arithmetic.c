@@ -27,23 +27,6 @@ static inline ID apply_arith_op(ID *args, unsigned int argc, ArithOp op) {
     return NULL;
 }
 
-/*
- * Performance analysis (todo1):
- * - The current reducer evaluates every operand into a temporary array and
- *   then iterates a second time inside the native helpers, duplicating work.
- * - Hot arithmetic operators (+, -, *, /) are usually called with <= 2
- *   arguments, yet we still go through the full variadic machinery.
- * - Even when operands are simple immediates we retain/release them again
- *   because we lack a streaming path.
- *
- * Action plan:
- *   a) Introduce explicit fast-paths for arities 0, 1 and 2 that evaluate each
- *      operand once and pass them straight to the native helpers.
- *   b) Share numeric validation helpers between fast-path and generic paths so
- *      that WrongArgumentException behaviour stays identical.
- *   c) Afterwards, revisit the >=3 case to fold evaluation and accumulation
- *      into a single streaming pass.
- */
 CljObject* eval_arithmetic_generic_with_context(CljList *list,
                                                 CljMap *env,
                                                 ArithOp op,

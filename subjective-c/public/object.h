@@ -51,6 +51,7 @@ typedef struct CljObject {
 
 #define CLJ_FLAG_SPECIAL     0x01  // Special Form Symbol
 #define CLJ_FLAG_ARITHMETIC  0x02  // Arithmetic Operator (+ - * /)
+#define CLJ_FLAG_COMPARISON  0x04  // Comparison Operator (< > <= >= =)
 
 static inline CljType TAG(ID obj) {
     if ((uintptr_t)obj & 0x1) {
