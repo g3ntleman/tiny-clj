@@ -6,6 +6,6 @@ Test: fib(20) = 6765
 Warmup: fib(20) = 6765
 
 Running 5 iterations of fib(20)...
-"Elapsed time: 10.319583 msecs"
+"Elapsed time: 3.809208 msecs"
 
 Benchmark completed!
