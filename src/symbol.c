@@ -367,14 +367,19 @@ void init_special_symbols() {
     SYM_DIVIDE->base.flags |= CLJ_FLAG_ARITHMETIC;
 
     INIT_SYMBOL(SYM_EQUALS, sym_equals_data);
+    SYM_EQUALS->base.flags |= CLJ_FLAG_COMPARISON;
 
     INIT_SYMBOL(SYM_LT, sym_lt_data);
+    SYM_LT->base.flags |= CLJ_FLAG_COMPARISON;
 
     INIT_SYMBOL(SYM_GT, sym_gt_data);
+    SYM_GT->base.flags |= CLJ_FLAG_COMPARISON;
 
     INIT_SYMBOL(SYM_LE, sym_le_data);
+    SYM_LE->base.flags |= CLJ_FLAG_COMPARISON;
 
     INIT_SYMBOL(SYM_GE, sym_ge_data);
+    SYM_GE->base.flags |= CLJ_FLAG_COMPARISON;
 
     INIT_SYMBOL(SYM_PRINTLN, sym_println_data);
 

@@ -1102,11 +1102,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
     if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
 
-    // CRITICAL: Check for comparison operators BEFORE symbol resolution
-    // This prevents infinite loops when operators like '=' are resolved
-    // Comparison operators should not be resolved - they are handled directly
-    CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, original_op);
-    if (comparison_result) return comparison_result;
+    // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
+    if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_COMPARISON)) {
+        CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, original_op);
+        if (comparison_result) return comparison_result;
+    }
 
     // Fast-path: Arithmetic operators (avoid symbol resolution for +, -, *, /)
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
