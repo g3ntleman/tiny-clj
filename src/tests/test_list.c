@@ -187,3 +187,29 @@ TEST(test_list_for_each_find) {
     TEST_ASSERT_EQUAL_INT(2, found);
 }
 
+TEST(test_list_for_each_with_nil_in_middle) {
+    // Create list (1 nil 3) - nil in the middle
+    // NULL means nil in tiny-clj, so we use NULL as the element
+    CljList *l3 = make_list(fixnum(3), NULL);
+    CljList *l2 = make_list(NULL, l3);  // nil element in the middle
+    CljList *list = make_list(fixnum(1), l2);
+    AUTORELEASE((CljObject*)list);
+    
+    int count = 0;
+    int nil_count = 0;
+    int sum = 0;
+    LIST_FOR_EACH(list, elem) {
+        count++;
+        if (elem == NULL) {
+            nil_count++;
+        } else {
+            sum += as_fixnum(elem);
+        }
+    }
+    
+    // Should iterate over all 3 elements: 1, nil, 3
+    TEST_ASSERT_EQUAL_INT(3, count);
+    TEST_ASSERT_EQUAL_INT(1, nil_count);  // One nil element
+    TEST_ASSERT_EQUAL_INT(4, sum);  // 1 + 3 = 4
+}
+
