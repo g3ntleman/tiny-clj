@@ -113,3 +113,8 @@ Diese Funktionen benötigen:
 - `make_string_like` verwendet `alloc()` direkt (Memory-Policy-konform)
 
 
+
+
+
+
+

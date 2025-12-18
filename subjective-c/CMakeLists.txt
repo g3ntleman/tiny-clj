@@ -59,6 +59,7 @@ set(SUBJECTIVE_C_TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/error_messages.c
     ${CMAKE_SOURCE_DIR}/src/object.c
     ${CMAKE_SOURCE_DIR}/src/types.c
+    ${CMAKE_SOURCE_DIR}/src/list.c
 )
 
 add_executable(subjective-c-tests ${SUBJECTIVE_C_TEST_SOURCES})

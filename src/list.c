@@ -5,6 +5,14 @@
 #include "object.h"
 #include "exception.h"
 #include "types.h"  // For SINGLETON_RC
+#include <stdio.h>   // For snprintf
+#ifdef __GNUC__
+#include <execinfo.h> // For backtrace and backtrace_symbols
+#include <stdlib.h>  // For free
+#endif
+
+// Forward declaration
+extern const char* clj_type_name(CljType type);
 
 // Empty-list singleton: CLJ_LIST with rc=SINGLETON_RC, statically initialized
 static struct {
@@ -34,6 +42,40 @@ CljList* make_list(ID first, CljList *rest) {
     
     return list;
 }
+
+#ifdef DEBUG
+// Debug: Typ-Check mit Fehlerbehandlung
+CljList* as_list_checked(ID obj) {
+    // Happy path: obj is not NULL and has correct type
+    if (obj && list_type_matches(TAG(obj))) {
+        return (CljList*)obj;  // Direct return, no jumps
+    }
+    // NULL is valid (e.g., end of list) - return NULL
+    if (!obj) {
+        return NULL;
+    }
+    // Error case: wrong type
+    char error_msg[128];
+    const char *type_name = clj_type_name(((CljObject*)obj)->type);
+    snprintf(error_msg, sizeof(error_msg), 
+            "Type mismatch: expected List, got %s", 
+            type_name);
+    printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
+    // Print stacktrace
+    #ifdef __GNUC__
+    void *array[10];
+    size_t size = backtrace(array, 10);
+    char **strings = backtrace_symbols(array, size);
+    printf("[STACKTRACE] Backtrace:\n");
+    for (size_t i = 0; i < size; i++) {
+        printf("  %s\n", strings[i]);
+    }
+    free(strings);
+    #endif
+    throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
+    return NULL;
+}
+#endif
 
 // List operations for try/catch
 ID list_nth(CljList *list, int n) {
