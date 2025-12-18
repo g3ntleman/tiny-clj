@@ -17,27 +17,30 @@
 #include "subjective-c/public/callbacks.h"  // For clj_hash() wrapper
 #include <string.h>
 
-// FNV-1a Hash for strings
-static uint32_t fnv1a(const char *s) {
-    uint32_t h = 2166136261u;
+#define FNV1A_OFFSET 2166136261u
+#define FNV1A_PRIME  16777619u
+
+// FNV-1a Hash (continue from given state, or use FNV1A_OFFSET to start fresh)
+static uint32_t fnv1a_continue(uint32_t h, const char *s) {
     for (; *s; s++) { 
         h ^= (uint8_t)*s; 
-        h *= 16777619u; 
+        h *= FNV1A_PRIME; 
     }
     return h;
 }
+
+#define fnv1a(s) fnv1a_continue(FNV1A_OFFSET, (s))
 
 // Hash for Symbol: combines namespace and name
 static uint32_t hash_symbol(CljSymbol *sym) {
     if (!sym || !sym->cname) return 0;
     
-    // Create "ns/name" string for hash
+    // Hash "ns/name" without copying
     if (sym->ns_name && sym->ns_name->cname) {
-        size_t ns_len = strlen(sym->ns_name->cname);
-        size_t name_len = strlen(sym->cname);
-        char key[512];
-        snprintf(key, sizeof(key), "%s/%s", sym->ns_name->cname, sym->cname);
-        return fnv1a(key);
+        uint32_t h = fnv1a(sym->ns_name->cname);
+        h ^= '/';
+        h *= 16777619u;
+        return fnv1a_continue(h, sym->cname);
     } else {
         return fnv1a(sym->cname);
     }
@@ -116,7 +119,27 @@ uint32_t clj_hash_full(ID value) {
     switch (type) {
         case CLJ_STRING: {
             CljString *str = (CljString*)value;
-            return fnv1a(str->data);
+            uint16_t len = str->length;
+            // Short strings: hash fully
+            if (len <= 16) {
+                return fnv1a(str->data);
+            }
+            // Long strings: O(1) hash using length + first 8 + last 8 chars
+            uint32_t h = FNV1A_OFFSET;
+            h ^= len;
+            h *= FNV1A_PRIME;
+            h ^= (len >> 8);
+            h *= FNV1A_PRIME;
+            const char *data = str->data;
+            for (int i = 0; i < 8; i++) {
+                h ^= (uint8_t)data[i];
+                h *= FNV1A_PRIME;
+            }
+            for (int i = len - 8; i < len; i++) {
+                h ^= (uint8_t)data[i];
+                h *= FNV1A_PRIME;
+            }
+            return h;
         }
         
         case CLJ_SYMBOL: {

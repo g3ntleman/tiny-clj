@@ -55,8 +55,8 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
     if (tag == CLJ_AST_NODE) {
         CljASTNode *node = as_ast_node(expr);
         if (node) {
-            rewrite_recursive_calls_in_slot(&node->first, unqualified, qualified);
-            rewrite_recursive_calls_in_slot(&node->rest, unqualified, qualified);
+            rewrite_recursive_calls_in_slot((ID*)&node->first, unqualified, qualified);
+            rewrite_recursive_calls_in_slot((ID*)&node->rest, unqualified, qualified);
         }
         return;
     }

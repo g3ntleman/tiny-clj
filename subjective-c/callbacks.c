@@ -39,7 +39,7 @@ uint32_t clj_hash_default(ID value) {
     if (is_fixnum(value)) return (uint32_t)as_fixnum(value);
     
     // Immediate types (char, bool) - use value directly
-    if ((uintptr_t)value & 1) return (uint32_t)value;
+    if ((uintptr_t)value & 1) return (uint32_t)(uintptr_t)value;
     
     // Heap object - dispatch by type
     CljType type = TAG(value);
@@ -193,7 +193,7 @@ CljString* clj_to_string_default(ID value) {
     
     if (is_fixnum(value)) {
         char buf[32];
-        snprintf(buf, sizeof(buf), "%ld", as_fixnum(value));
+        snprintf(buf, sizeof(buf), "%d", as_fixnum(value));
         return make_string(buf);
     }
     

@@ -145,27 +145,6 @@ static ID parse_symbol(Reader *reader, EvalState *st);
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 
-#ifdef ENABLE_META
-/**
- * @brief Attach location metadata (:line, :column) to parsed object
- * @param reader Reader instance for location information
- * @param st Evaluation state
- * @param obj Object to attach metadata to
- * @return Object with location metadata attached
- */
-static inline ID attach_location_meta(Reader *reader, EvalState *st, ID obj) {
-  if (!obj) {
-    return obj;
-  }
-  return apply_metadata_to_object(reader, st, NULL, obj);
-}
-#else
-static inline ID attach_location_meta(Reader *reader, EvalState *st, ID obj) {
-  (void)reader;
-  (void)st;
-  return obj;
-}
-#endif
 
 // Ensure that every parse step advances the reader or hits EOF, otherwise throw
 static ID parse_expr_with_progress(Reader *reader, EvalState *st) {
