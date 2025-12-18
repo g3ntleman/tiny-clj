@@ -42,7 +42,7 @@ bool seq_iter_next(SeqIterator *iter) {
 // to_string stub no longer needed - exception.c now uses clj_to_string() from callbacks.c
 
 #define DECLARE_SPECIAL_SYMBOL(name, literal) \
-    static CljSymbol sym_##name = { .base = { CLJ_SYMBOL, SINGLETON_RC }, .ns_name = NULL, .cname = literal }; \
+    static CljSymbol sym_##name = { .base = { CLJ_SYMBOL, 0, SINGLETON_RC }, .ns_name = NULL, .cname = literal }; \
     CljSymbol *SYM_##name = &sym_##name
 
 DECLARE_SPECIAL_SYMBOL(IF, "if");
