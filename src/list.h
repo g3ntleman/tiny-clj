@@ -23,6 +23,9 @@ typedef struct CljList {
 // Safe accessor macros. They do not do memory-management. They return the object directly.
 #define LIST_FIRST(list) ((list) ? (ID)(list)->first : NULL)
 #define LIST_REST(list) ((list) ? (ID)(list)->rest : NULL)
+// Convenience macros for common list access patterns
+#define LIST_SECOND(list) LIST_FIRST(as_list(LIST_REST(list)))
+#define LIST_THIRD(list)  LIST_FIRST(as_list(LIST_REST(as_list(LIST_REST(list)))))
 
 static inline bool list_type_matches(CljType type) {
     return type == CLJ_LIST || type == CLJ_AST_NODE;
@@ -44,36 +47,17 @@ CljList* empty_list(void);
 // Type-safe casting
 // Returns NULL if obj is NULL (valid for list->rest)
 // Throws exception if obj is not NULL and not a CLJ_LIST
+#ifdef DEBUG
+// Debug: Typ-Check mit Fehlerbehandlung
+CljList* as_list_checked(ID obj);
+#define as_list(obj) as_list_checked(obj)
+#else
+// Release: Reiner Cast, vom Compiler eliminierbar
 static inline CljList* as_list(ID obj) {
-    // Happy path: obj is not NULL and has correct type
-    if (obj && list_type_matches(TAG(obj))) {
-        return (CljList*)obj;  // Direct return, no jumps
-    }
-    // NULL is valid (e.g., end of list) - return NULL
-    if (!obj) {
-        return NULL;
-    }
-    // Error case: wrong type
-    char error_msg[128];
-    const char *type_name = clj_type_name(((CljObject*)obj)->type);
-    snprintf(error_msg, sizeof(error_msg), 
-            "Type mismatch: expected List, got %s", 
-            type_name);
-    printf("[STACKTRACE] as_list failed at %s:%d - obj=%p, type=%d (%s)\n", __FILE__, __LINE__, obj, ((CljObject*)obj)->type, type_name);
-    // Print stacktrace
-    #ifdef __GNUC__
-    void *array[10];
-    size_t size = backtrace(array, 10);
-    char **strings = backtrace_symbols(array, size);
-    printf("[STACKTRACE] Backtrace:\n");
-    for (size_t i = 0; i < size; i++) {
-        printf("  %s\n", strings[i]);
-    }
-    free(strings);
-    #endif
-    throw_exception(EXCEPTION_TYPE, error_msg, __FILE__, __LINE__, 0);
-    return NULL;
+    return (CljList*)obj;  // NULL bleibt NULL
 }
+// No declaration needed in Release - as_list is inline
+#endif
 ID list_nth(CljList *list, int n);
 int list_count(CljList *list);
 static inline bool is_list(ID v) {

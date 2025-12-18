@@ -1143,20 +1143,27 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Tier 4: String and I/O operations
     if (original_op_sym == SYM_STR) {
-        int total_count = list_count(as_list(list));
-        int argc = total_count - 1;
-        if (argc < 0) argc = 0;
+        // Count arguments by traversing once
+        CljList *cur = as_list(LIST_REST(list));
+        int argc = 0;
+        while (cur && argc < 16) {
+            argc++;
+            cur = as_list(LIST_REST(cur));
+        }
 
         ID args_stack[16];
         ID *args = alloc_obj_array(argc, args_stack);
         if (!args) return NULL;
 
-        for (int i = 0; i < argc; i++) {
-            args[i] = eval_arg_with_context(list, i + 1, effective_env, effective_st, ctx);
+        // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
+        cur = as_list(LIST_REST(list));
+        for (int i = 0; i < argc && cur; i++) {
+            args[i] = eval_arg_from_expr_with_context(cur->first, effective_env, effective_st, ctx);
             if (!args[i]) {
                 free_obj_array(args, args_stack);
                 return NULL;
             }
+            cur = as_list(LIST_REST(cur));
         }
 
         ID str_result = native_str(args, argc);

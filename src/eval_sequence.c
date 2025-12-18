@@ -24,22 +24,20 @@ static ID eval_and_call_native_with_context(CljList *list,
     ID *args = alloc_obj_array(argc, args_stack);
     if (!args) return NULL;
 
-    for (int i = 0; i < argc; i++) {
-        args[i] = eval_arg_with_context(list, i + 1, env, NULL, ctx);
+    // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
+    CljList *cur = as_list(LIST_REST(list));
+    for (int i = 0; i < argc && cur; i++) {
+        args[i] = eval_arg_from_expr_with_context(cur->first, env, NULL, ctx);
         if (!args[i]) {
-            for (int j = 0; j < i; j++) {
-                RELEASE(args[j]);
-            }
+            // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
             free_obj_array(args, args_stack);
             return NULL;
         }
+        cur = as_list(LIST_REST(cur));
     }
 
     ID result = native_func ? native_func(args, argc) : NULL;
-
-    for (int i = 0; i < argc; i++) {
-        RELEASE(args[i]);
-    }
+    // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
     free_obj_array(args, args_stack);
     return result;
 }
@@ -96,6 +94,11 @@ ID eval_loop_dispatch(CljList *list, CljMap *env, ID op, EvalState *st) {
     }
     return NULL;
 }
+
+
+
+
+
 
 
 

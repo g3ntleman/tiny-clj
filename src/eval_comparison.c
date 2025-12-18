@@ -62,11 +62,18 @@ static CljObject* eval_numeric_comparison(CljList *list,
                                           const EvalContext *ctx,
                                           ComparisonOp op) {
     CLJ_ASSERT(env != NULL);
-    ID a = eval_arg_with_context(list, 1, env, st, ctx);
-    ID b = eval_arg_with_context(list, 2, env, st, ctx);
+    // Direct access to first and second arguments (O(1) instead of O(1) + O(2) = O(3))
+    CljList *rest = as_list(LIST_REST(list));
+    if (!rest) return NULL;
+    ID a = eval_arg_from_expr_with_context(rest->first, env, st, ctx);
+    CljList *rest2 = as_list(LIST_REST(rest));
+    if (!rest2) {
+        // NOTE: a is AUTORELEASE, no cleanup needed
+        return NULL;
+    }
+    ID b = eval_arg_from_expr_with_context(rest2->first, env, st, ctx);
     if (!a || !b) {
-        RELEASE(a);
-        RELEASE(b);
+        // NOTE: a, b are AUTORELEASE, no cleanup needed
         return NULL;
     }
 
@@ -75,14 +82,12 @@ static CljObject* eval_numeric_comparison(CljList *list,
     if (!result && op != COMP_EQ) {
         float val_a, val_b;
         if (!extract_numeric_values(a, b, &val_a, &val_b)) {
-            RELEASE(a);
-            RELEASE(b);
+            // NOTE: a, b are AUTORELEASE, no cleanup needed
             return throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
         }
     }
 
-    RELEASE(a);
-    RELEASE(b);
+    // NOTE: a, b are AUTORELEASE, no cleanup needed
     return result ? clj_true : clj_false;
 }
 
@@ -93,27 +98,34 @@ ID eval_comparison_dispatch(CljList *list,
                              ID op) {
     CljSymbol *op_sym = (CljSymbol*)op;
     if (op_sym == SYM_EQUALS) {
-        ID a = eval_arg_with_context(list, 1, env, st, ctx);
-        ID b = eval_arg_with_context(list, 2, env, st, ctx);
+        // Direct access to first and second arguments (O(1) instead of O(1) + O(2) = O(3))
+        CljList *rest = as_list(LIST_REST(list));
+        if (!rest) return NULL;
+        ID a = eval_arg_from_expr_with_context(rest->first, env, st, ctx);
+        CljList *rest2 = as_list(LIST_REST(rest));
+        if (!rest2) {
+            // NOTE: a is AUTORELEASE, no cleanup needed
+            return NULL;
+        }
+        ID b = eval_arg_from_expr_with_context(rest2->first, env, st, ctx);
         if (!a || !b) {
-            RELEASE(a);
-            RELEASE(b);
+            // NOTE: a, b are AUTORELEASE, no cleanup needed
             return NULL;
         }
 
         if (compare_numeric_values(a, b, COMP_EQ)) {
-            RELEASE_TWO_ARGS(a, b);
+            // NOTE: a, b are AUTORELEASE, no cleanup needed
             return clj_true;
         }
 
         float val_a, val_b;
         if (extract_numeric_values(a, b, &val_a, &val_b)) {
-            RELEASE_TWO_ARGS(a, b);
+            // NOTE: a, b are AUTORELEASE, no cleanup needed
             return clj_false;
         }
 
         bool equal = clj_equal(a, b);
-        RELEASE_TWO_ARGS(a, b);
+        // NOTE: a, b are AUTORELEASE, no cleanup needed
         return equal ? clj_true : clj_false;
     }
 
