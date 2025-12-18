@@ -1,6 +1,6 @@
 #!/bin/bash
-# Performance Comparison Script: tiny-clj vs Clojure/JVM
-# Compares fib(20) performance with proper JVM warmup (original benchmarks-game version without recur)
+# Performance Comparison Script: tiny-clj vs Clojure/JVM vs ClojureScript vs Python3
+# Compares fib(20) performance (original benchmarks-game version without recur)
 
 set -e
 
@@ -11,7 +11,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}=== Performance Comparison: tiny-clj vs Clojure/JVM ===${NC}"
+echo -e "${BLUE}=== Performance Comparison: tiny-clj vs Clojure/JVM vs ClojureScript vs Python3 ===${NC}"
 echo "Benchmark: fib(20) - original benchmarks-game version (without recur)"
 echo ""
 
@@ -34,6 +34,36 @@ if command -v clojure &> /dev/null; then
 else
     CLOJURE_AVAILABLE=false
     echo -e "${YELLOW}⚠️  Clojure/JVM not found - skipping Clojure benchmarks${NC}"
+fi
+
+# Check if ClojureScript is available (planck or lumo or node)
+CLJS_AVAILABLE=false
+CLJS_RUNTIME=""
+if command -v planck &> /dev/null; then
+    CLJS_AVAILABLE=true
+    CLJS_RUNTIME="planck"
+    echo -e "${GREEN}✅ ClojureScript (planck) found${NC}"
+elif command -v lumo &> /dev/null; then
+    CLJS_AVAILABLE=true
+    CLJS_RUNTIME="lumo"
+    echo -e "${GREEN}✅ ClojureScript (lumo) found${NC}"
+elif command -v node &> /dev/null; then
+    CLJS_AVAILABLE=true
+    CLJS_RUNTIME="node"
+    NODE_VERSION=$(node --version 2>&1)
+    echo -e "${GREEN}✅ ClojureScript (Node.js ${NODE_VERSION}) found${NC}"
+else
+    echo -e "${YELLOW}⚠️  ClojureScript not found (install planck, lumo, or node) - skipping${NC}"
+fi
+
+# Check if Python3 is available
+if command -v python3 &> /dev/null; then
+    PYTHON_AVAILABLE=true
+    PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
+    echo -e "${GREEN}✅ Python ${PYTHON_VERSION} found${NC}"
+else
+    PYTHON_AVAILABLE=false
+    echo -e "${YELLOW}⚠️  Python3 not found - skipping Python benchmarks${NC}"
 fi
 
 # ============================================================================
@@ -116,7 +146,135 @@ CLOJURE_EOF
 fi
 
 # ============================================================================
-# 3. tiny-clj Benchmark
+# 3. ClojureScript Benchmark (Node.js)
+# ============================================================================
+CLJS_TIME_MS=0
+TIME_PER_ITER_CLJS=0
+CLJS_ITERATIONS=0
+
+if [ "$CLJS_AVAILABLE" = true ]; then
+    echo -e "${BLUE}📜 Running ClojureScript benchmark...${NC}"
+    
+    if [ "$CLJS_RUNTIME" = "node" ]; then
+        # Use plain JavaScript (equivalent ClojureScript would compile to similar code)
+        TEMP_JS=$(mktemp /tmp/fib_benchmark_XXXXXX.js)
+        cat > "$TEMP_JS" << JS_EOF
+// ClojureScript-equivalent fibonacci (no TCO/recur)
+function fib(n) {
+    if (n < 2) return n;
+    return fib(n - 1) + fib(n - 2);
+}
+
+const iterations = ${ITERATIONS};
+const fibN = ${FIB_N};
+
+const start = process.hrtime.bigint();
+for (let i = 0; i < iterations; i++) {
+    fib(fibN);
+}
+const end = process.hrtime.bigint();
+
+const testTimeMs = Number(end - start) / 1000000;
+const timePerIter = testTimeMs / iterations;
+
+console.log("TEST_TIME_MS=" + testTimeMs.toFixed(2));
+console.log("ITERATIONS=" + iterations);
+console.log("TIME_PER_ITER_MS=" + timePerIter.toFixed(6));
+JS_EOF
+
+        CLJS_OUTPUT=$(node "$TEMP_JS" 2>&1)
+        rm -f "$TEMP_JS"
+    else
+        # Use planck or lumo
+        TEMP_CLJS=$(mktemp /tmp/fib_benchmark_XXXXXX.cljs)
+        cat > "$TEMP_CLJS" << CLJS_EOF
+(defn fib [n]
+  (if (< n 2)
+    n
+    (+ (fib (- n 1)) (fib (- n 2)))))
+
+(let [iterations ${ITERATIONS}
+      start (.getTime (js/Date.))]
+  (dotimes [i iterations] (fib ${FIB_N}))
+  (let [end (.getTime (js/Date.))
+        test-time (- end start)
+        time-per-iter (/ test-time iterations)]
+    (println (str "TEST_TIME_MS=" test-time))
+    (println (str "ITERATIONS=" iterations))
+    (println (str "TIME_PER_ITER_MS=" time-per-iter))))
+CLJS_EOF
+
+        CLJS_OUTPUT=$($CLJS_RUNTIME "$TEMP_CLJS" 2>&1)
+        rm -f "$TEMP_CLJS"
+    fi
+    
+    CLJS_TIME_MS=$(echo "$CLJS_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
+    CLJS_ITERATIONS=$(echo "$CLJS_OUTPUT" | grep "ITERATIONS=" | cut -d'=' -f2)
+    TIME_PER_ITER_CLJS=$(echo "$CLJS_OUTPUT" | grep "TIME_PER_ITER_MS=" | cut -d'=' -f2)
+    
+    if [ -n "$CLJS_TIME_MS" ]; then
+        TIME_PER_ITER_CLJS_FORMATTED=$(echo "$TIME_PER_ITER_CLJS" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
+        echo -e "${GREEN}✅ ClojureScript: ${CLJS_TIME_MS}ms (${TIME_PER_ITER_CLJS_FORMATTED}ms/iter, ${CLJS_ITERATIONS} iterations)${NC}"
+    else
+        echo -e "${RED}❌ Failed to extract ClojureScript results${NC}"
+        CLJS_AVAILABLE=false
+    fi
+    echo ""
+fi
+
+# ============================================================================
+# 4. Python3 Benchmark
+# ============================================================================
+PYTHON_TIME_MS=0
+TIME_PER_ITER_PYTHON=0
+
+if [ "$PYTHON_AVAILABLE" = true ]; then
+    echo -e "${BLUE}🐍 Running Python3 benchmark...${NC}"
+    
+    TEMP_PY=$(mktemp /tmp/fib_benchmark_XXXXXX.py)
+    cat > "$TEMP_PY" << PYTHON_EOF
+import time
+
+def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+iterations = ${ITERATIONS}
+fib_n = ${FIB_N}
+
+start = time.perf_counter()
+for _ in range(iterations):
+    fib(fib_n)
+end = time.perf_counter()
+
+test_time_ms = (end - start) * 1000
+time_per_iter = test_time_ms / iterations
+
+print(f"TEST_TIME_MS={test_time_ms:.2f}")
+print(f"ITERATIONS={iterations}")
+print(f"TIME_PER_ITER_MS={time_per_iter:.6f}")
+PYTHON_EOF
+
+    PY_OUTPUT=$(python3 "$TEMP_PY" 2>&1)
+    
+    PYTHON_TIME_MS=$(echo "$PY_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
+    PYTHON_ITERATIONS=$(echo "$PY_OUTPUT" | grep "ITERATIONS=" | cut -d'=' -f2)
+    TIME_PER_ITER_PYTHON=$(echo "$PY_OUTPUT" | grep "TIME_PER_ITER_MS=" | cut -d'=' -f2)
+    
+    rm -f "$TEMP_PY"
+    
+    if [ -n "$PYTHON_TIME_MS" ]; then
+        echo -e "${GREEN}✅ Python3: ${PYTHON_TIME_MS}ms (${TIME_PER_ITER_PYTHON}ms/iter, ${PYTHON_ITERATIONS} iterations)${NC}"
+    else
+        echo -e "${RED}❌ Failed to extract Python results${NC}"
+        PYTHON_AVAILABLE=false
+    fi
+    echo ""
+fi
+
+# ============================================================================
+# 5. tiny-clj Benchmark
 # ============================================================================
 echo -e "${BLUE}⚡ Running tiny-clj benchmark...${NC}"
 
@@ -203,7 +361,7 @@ fi
 echo ""
 
 # ============================================================================
-# 4. Comparison and CSV Export
+# 6. Comparison and CSV Export
 # ============================================================================
 echo -e "${BLUE}📊 Performance Comparison${NC}"
 echo "=========================================="
@@ -221,6 +379,14 @@ if [ "$CLOJURE_AVAILABLE" = true ] && [ -n "$CLOJURE_TIME_MS" ]; then
     echo "$TIMESTAMP,clojure-jvm,$CLOJURE_WARMUP_MS,$CLOJURE_TIME_MS,$ITERATIONS_CLJ,$TIME_PER_ITER_CLJ" >> "$HISTORY_FILE"
 fi
 
+if [ "$CLJS_AVAILABLE" = true ] && [ -n "$CLJS_TIME_MS" ] && [ "$CLJS_TIME_MS" != "0" ]; then
+    echo "$TIMESTAMP,clojurescript,0,$CLJS_TIME_MS,$CLJS_ITERATIONS,$TIME_PER_ITER_CLJS" >> "$HISTORY_FILE"
+fi
+
+if [ "$PYTHON_AVAILABLE" = true ] && [ -n "$PYTHON_TIME_MS" ] && [ "$PYTHON_TIME_MS" != "0" ]; then
+    echo "$TIMESTAMP,python3,0,$PYTHON_TIME_MS,$PYTHON_ITERATIONS,$TIME_PER_ITER_PYTHON" >> "$HISTORY_FILE"
+fi
+
 if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ -n "$TINYCLJ_ITERATIONS" ]; then
     echo "$TIMESTAMP,tiny-clj,0,$TINYCLJ_TIME_MS,$TINYCLJ_ITERATIONS,$TIME_PER_ITER_TINYCLJ" >> "$HISTORY_FILE"
 fi
@@ -230,33 +396,56 @@ printf "%-15s %12s %12s %12s %15s\n" "System" "Warmup (ms)" "Test (ms)" "Iterati
 echo "------------------------------------------------------------------------"
 
 if [ "$CLOJURE_AVAILABLE" = true ] && [ -n "$CLOJURE_TIME_MS" ]; then
-    # Format time per iteration - handle scientific notation
     TIME_PER_ITER_CLJ_FORMATTED=$(echo "$TIME_PER_ITER_CLJ" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
     printf "%-15s %12s %12s %12s %15s\n" "Clojure/JVM" "$CLOJURE_WARMUP_MS" "$CLOJURE_TIME_MS" "$ITERATIONS_CLJ" "$TIME_PER_ITER_CLJ_FORMATTED"
 fi
 
+if [ "$CLJS_AVAILABLE" = true ] && [ -n "$CLJS_TIME_MS" ] && [ "$CLJS_TIME_MS" != "0" ]; then
+    TIME_PER_ITER_CLJS_FORMATTED=$(echo "$TIME_PER_ITER_CLJS" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
+    printf "%-15s %12s %12s %12s %15s\n" "ClojureScript" "0" "$CLJS_TIME_MS" "$CLJS_ITERATIONS" "$TIME_PER_ITER_CLJS_FORMATTED"
+fi
+
+if [ "$PYTHON_AVAILABLE" = true ] && [ -n "$PYTHON_TIME_MS" ] && [ "$PYTHON_TIME_MS" != "0" ]; then
+    TIME_PER_ITER_PY_FORMATTED=$(echo "$TIME_PER_ITER_PYTHON" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
+    printf "%-15s %12s %12s %12s %15s\n" "Python3" "0" "$PYTHON_TIME_MS" "$PYTHON_ITERATIONS" "$TIME_PER_ITER_PY_FORMATTED"
+fi
+
 if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ -n "$TINYCLJ_ITERATIONS" ]; then
-    # Format time per iteration - handle very small values
     TIME_PER_ITER_FORMATTED=$(echo "$TIME_PER_ITER_TINYCLJ" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
     printf "%-15s %12s %12s %12s %15s\n" "tiny-clj" "0" "$TINYCLJ_TIME_MS" "$TINYCLJ_ITERATIONS" "$TIME_PER_ITER_FORMATTED"
 fi
 
 echo ""
 
-# Calculate performance ratio if both results available
-if [ "$CLOJURE_AVAILABLE" = true ] && [ -n "$CLOJURE_TIME_MS" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ "$TIME_PER_ITER_TINYCLJ" != "0" ] && [ -n "$TIME_PER_ITER_CLJ" ] && [ "$TIME_PER_ITER_CLJ" != "0" ]; then
-    # Convert scientific notation to decimal for bc
-    TIME_PER_ITER_CLJ_DECIMAL=$(echo "$TIME_PER_ITER_CLJ" | awk '{printf "%.10f", $1}')
-    # Compare time per iteration - Clojure time / tiny-clj time
-    # If ratio > 1, tiny-clj is faster (takes less time)
-    RATIO=$(echo "scale=2; $TIME_PER_ITER_CLJ_DECIMAL / $TIME_PER_ITER_TINYCLJ" | bc 2>/dev/null || echo "0")
-    if [ -n "$RATIO" ] && [ "$RATIO" != "0" ]; then
-        if (( $(echo "$RATIO > 1" | bc -l 2>/dev/null || echo "0") )); then
-            echo -e "${GREEN}🚀 tiny-clj is ${RATIO}x faster than Clojure/JVM (per iteration)${NC}"
-        else
-            INV_RATIO=$(echo "scale=2; 1 / $RATIO" | bc 2>/dev/null || echo "0")
-            if [ -n "$INV_RATIO" ] && [ "$INV_RATIO" != "0" ]; then
-                echo -e "${YELLOW}⚠️  Clojure/JVM is ${INV_RATIO}x faster than tiny-clj (per iteration)${NC}"
+# Performance ratios
+echo -e "${BLUE}📈 Performance Ratios (vs tiny-clj)${NC}"
+echo "------------------------------------------------------------------------"
+
+if [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ "$TIME_PER_ITER_TINYCLJ" != "0" ]; then
+    if [ "$CLOJURE_AVAILABLE" = true ] && [ -n "$TIME_PER_ITER_CLJ" ] && [ "$TIME_PER_ITER_CLJ" != "0" ]; then
+        TIME_PER_ITER_CLJ_DECIMAL=$(echo "$TIME_PER_ITER_CLJ" | awk '{printf "%.10f", $1}')
+        RATIO_CLJ=$(echo "scale=1; $TIME_PER_ITER_TINYCLJ / $TIME_PER_ITER_CLJ_DECIMAL" | bc 2>/dev/null || echo "0")
+        if [ -n "$RATIO_CLJ" ] && [ "$RATIO_CLJ" != "0" ]; then
+            echo -e "  Clojure/JVM:   ${RATIO_CLJ}x faster than tiny-clj"
+        fi
+    fi
+    
+    if [ "$CLJS_AVAILABLE" = true ] && [ -n "$TIME_PER_ITER_CLJS" ] && [ "$TIME_PER_ITER_CLJS" != "0" ]; then
+        TIME_PER_ITER_CLJS_DECIMAL=$(echo "$TIME_PER_ITER_CLJS" | awk '{printf "%.10f", $1}')
+        RATIO_CLJS=$(echo "scale=1; $TIME_PER_ITER_TINYCLJ / $TIME_PER_ITER_CLJS_DECIMAL" | bc 2>/dev/null || echo "0")
+        if [ -n "$RATIO_CLJS" ] && [ "$RATIO_CLJS" != "0" ]; then
+            echo -e "  ClojureScript: ${RATIO_CLJS}x faster than tiny-clj"
+        fi
+    fi
+    
+    if [ "$PYTHON_AVAILABLE" = true ] && [ -n "$TIME_PER_ITER_PYTHON" ] && [ "$TIME_PER_ITER_PYTHON" != "0" ]; then
+        RATIO_PY=$(echo "scale=1; $TIME_PER_ITER_TINYCLJ / $TIME_PER_ITER_PYTHON" | bc 2>/dev/null || echo "0")
+        if [ -n "$RATIO_PY" ] && [ "$RATIO_PY" != "0" ]; then
+            if (( $(echo "$RATIO_PY > 1" | bc -l 2>/dev/null || echo "0") )); then
+                echo -e "  Python3:       ${RATIO_PY}x faster than tiny-clj"
+            else
+                INV_RATIO_PY=$(echo "scale=1; 1 / $RATIO_PY" | bc 2>/dev/null || echo "0")
+                echo -e "  Python3:       tiny-clj is ${INV_RATIO_PY}x faster"
             fi
         fi
     fi
