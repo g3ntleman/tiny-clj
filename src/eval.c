@@ -9,6 +9,10 @@
 #include "parser.h"  // For eval_parsed
 #include "common.h"  // For INLINE macro
 
+// Branch prediction hints for hot paths
+#define LIKELY(x)   __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
+
 #include "error_messages.h"
 #include <limits.h>
 #include <stdint.h>
@@ -209,10 +213,11 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     int current_argc = argc;
     int recur_arg_count = -1;
 
-    // Create call frame with parameters (stack-allocated)
+    // Create call frame with parameters (fixed-size stack variable)
+    CLJ_ASSERT(param_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
     ID *params_array = vector_as_array(func->params);
-    size_t frame_bytes = frame_allocation_size(param_count);
-    CallFrame *call_frame = (CallFrame*)STACK_ALLOC(char, frame_bytes);
+    CallFrame call_frame_storage;  // Fixed size, no __chkstk_darwin
+    CallFrame *call_frame = &call_frame_storage;
     CallFrame *parent_frame = NULL;
     frame_init(call_frame, parent_frame);
     frame_set_bindings(call_frame, parent_frame, params_array, current_args, current_argc);
@@ -231,11 +236,11 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         // OPTIMIZATION: Only cleanup recur_args if recur was actually used in previous iteration
         // For functions without recur (like fib), this check is always false - zero overhead
         if (used_recur_slots > 0) {
-            for (int i = 0; i < used_recur_slots; i++) {
-                RELEASE(recur_args[i]);
-                recur_args[i] = NULL;
-            }
-            used_recur_slots = 0;
+        for (int i = 0; i < used_recur_slots; i++) {
+            RELEASE(recur_args[i]);
+            recur_args[i] = NULL;
+        }
+        used_recur_slots = 0;
         }
 
         // Evaluate function body with context (stack-only, no allocations)
@@ -292,8 +297,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
     // OPTIMIZATION: Only cleanup if recur args were actually set
     if (used_recur_slots > 0) {
-        for (int i = 0; i < used_recur_slots; i++) {
-            RELEASE(recur_args[i]);
+    for (int i = 0; i < used_recur_slots; i++) {
+        RELEASE(recur_args[i]);
         }
     }
 
@@ -454,13 +459,13 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
     CljMap *frame_map = make_map(initial_capacity);
 
     if (frame->params) {
-        for (int i = 0; i < frame->param_count; i++) {
+    for (int i = 0; i < frame->param_count; i++) {
             ID key = frame->params[i];
-            if (!key) continue;
+        if (!key) continue;
 
             ID value = frame_decode_value(frame->values[i]);
-            CljMap *new_map = map_assoc(frame_map, key, value);
-            ASSIGN(frame_map, new_map);
+        CljMap *new_map = map_assoc(frame_map, key, value);
+        ASSIGN(frame_map, new_map);
         }
     }
 
@@ -820,6 +825,40 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 
     CljSymbol *op_sym = as_symbol(op);
 
+    // === HOT PATH: ctx vorhanden (typisch für fib und andere rekursive Funktionen) ===
+    if (ctx) {
+        // 1) Frame-Lookup (Parameter wie n) - schnellster Pfad
+        if (ctx->frame) {
+            ID frame_value = NULL;
+            if (frame_lookup(ctx->frame, op, &frame_value)) {
+                return frame_value;
+            }
+        }
+        
+        // 2) Callsite-Cache (gecachte Funktionen wie fib selbst)
+        if (call_node && g_runtime.resolve_cache_epoch != 0) {
+            ID cached_call = ast_node_get_cached_resolution(call_node, op_sym, g_runtime.resolve_cache_epoch);
+            if (cached_call) {
+                return cached_call;
+            }
+        }
+        
+        // 3) Resolve-Cache (globaler Cache für Namespace-Symbole)
+        EvalState *ctx_st = get_eval_state(ctx, st);
+        if (g_runtime.resolve_cache && ctx_st) {
+            CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
+            ID cached = resolve_cache_lookup_value(cache_ns_key, op);
+            if (cached) {
+                // Populate callsite cache for future hits
+                if (call_node) {
+                    ast_node_update_callsite_cache(call_node, op_sym, cached, g_runtime.resolve_cache_epoch);
+                }
+                return cached;
+            }
+        }
+    }
+
+    // === COLD PATH: ctx fehlt oder Cache-Miss ===
     EvalContext local_ctx;
     CljList *owned_env_stack = NULL;
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
@@ -840,30 +879,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         }
     }
     
-    // CRITICAL: Check call frame FIRST (before environment/namespace lookup)
-    // This ensures Clojure shadowing semantics: parameters shadow environment/namespace bindings
-    // NEW: Use stack-based frames for zero-allocation parameter lookup
-    if (effective_ctx && effective_ctx->frame) {
-        ID frame_value = NULL;
-        if (frame_lookup(effective_ctx->frame, op, &frame_value)) {
-            RELEASE(owned_env_stack);
-            return frame_value;
-        }
-    }
-    
-    // LEGACY: Fallback to parameter array lookup (for compatibility)
-    // Parameter lookup (symbols are interned, pointer comparison suffices)
-    if (effective_ctx && effective_ctx->param_count > 0 &&
-        effective_ctx->params && effective_ctx->param_values) {
-        for (int i = 0; i < effective_ctx->param_count; i++) {
-            if (effective_ctx->params[i] == op) {
-                RELEASE(owned_env_stack);
-                return effective_ctx->param_values[i];
-            }
-        }
-    }
-    
-    // Parameter validation: Check st and ctx before accessing ctx->env
+    // Parameter validation: Check st and ctx before continuing
     if (!ctx_st || !effective_ctx) {
         // Fallback to namespace lookup if context not available
         resolved = eval_symbol(op_sym, ctx_st);
@@ -874,45 +890,12 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 
     CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
     bool allow_callsite_cache = call_node && op_sym && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
-    if (allow_callsite_cache) {
-        ID cached_call = ast_node_get_cached_resolution(call_node, op_sym, g_runtime.resolve_cache_epoch);
-        if (cached_call) {
-            RELEASE(owned_env_stack);
-            return cached_call;
-        }
-    }
-    
-    // OPTIMIZATION: Check resolve_cache FIRST for namespace symbols (before environment lookup)
-    // Symbols from namespace are stable (syntactic scope) and can be safely cached
-    // This allows recursive calls to benefit from cache hits even when symbol is in environment
-    if (g_runtime.resolve_cache) {
-        ID cached = resolve_cache_lookup_value(cache_ns_key, op);
-        if (cached) {
-            // Populate per-callsite cache even when global resolve_cache hits.
-            // This is important for hot recursive callsites (e.g. fib), where the resolve_cache
-            // is often warmed up by an earlier top-level call, and the first encounter of an
-            // inner callsite would otherwise return early and never initialize callsite_cache.
-            if (allow_callsite_cache) {
-                ast_node_update_callsite_cache(call_node, op_sym, cached, g_runtime.resolve_cache_epoch);
-            }
-            RELEASE(owned_env_stack);
-            return cached;
-        }
-    }
 
     // OPTIMIZATION: Qualified symbols skip env_stack - go direct to namespace
     bool is_qualified = op_sym && op_sym->ns_name;
     
-    // Check frame first (parameters)
-    if (!is_qualified && effective_ctx && effective_ctx->frame) {
-        ID frame_value = NULL;
-        if (frame_lookup(effective_ctx->frame, op, &frame_value)) {
-            resolved = frame_value;
-        }
-    }
-    
-    // Check env_stack only if not found in frame and stack exists
-    if (!resolved && !is_qualified && resolve_stack) {
+    // Check env_stack only if not qualified and stack exists
+    if (!is_qualified && resolve_stack) {
         CljList *current = resolve_stack;
         while (current && list_type_matches(TAG(current))) {
             ID env_obj = LIST_FIRST(current);
@@ -943,7 +926,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         }
         if (g_runtime.resolve_cache) {
             resolve_cache_store_value(cache_ns_key, op, resolved);
-            if (call_node && !resolve_stack) {
+            if (allow_callsite_cache) {
                 ast_node_update_callsite_cache(call_node, op_sym, resolved, g_runtime.resolve_cache_epoch);
             }
         }
@@ -1101,14 +1084,29 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     unsigned char original_op_tag = op ? TAG(op) : 0;
     CljSymbol *original_op_sym = (original_op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
 
+    // === HOT PATH: Callsite-Cache für gecachte Funktionen (fib, etc.) ===
+    // Prüfe Cache VOR allen anderen Checks - überspringt komplette Resolution
+    if (call_node && original_op_sym && g_runtime.resolve_cache_epoch != 0) {
+        ID cached_fn = ast_node_get_cached_resolution(call_node, original_op_sym, 
+                                                       g_runtime.resolve_cache_epoch);
+        if (cached_fn) {
+            unsigned char cached_tag = TAG(cached_fn);
+            if (cached_tag == CLJ_FUNC || cached_tag == CLJ_CLOSURE) {
+                // DIREKT zum Funktionsaufruf - komplette Resolution übersprungen!
+                return eval_function_call_from_list(list, effective_env, effective_st, 
+                                                    cached_fn, ctx);
+            }
+        }
+    }
+
     // Handle def and ns before symbol resolution
     if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
     if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
 
     // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_COMPARISON)) {
-        CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, original_op);
-        if (comparison_result) return comparison_result;
+    CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, original_op);
+    if (comparison_result) return comparison_result;
     }
 
     // Fast-path: Arithmetic operators - O(1) dispatch via flags
@@ -1122,7 +1120,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_SPECIAL)) {
         CljSpecialSymbol *special = (CljSpecialSymbol*)original_op_sym;
         if (special->eval_fn) {
-            // NOTE: NULL is a valid result for many special forms (e.g., (when false ...))
+        // NOTE: NULL is a valid result for many special forms (e.g., (when false ...))
             // Cast function pointer to correct type for call
             SpecialFormEvalFn fn = (SpecialFormEvalFn)special->eval_fn;
             return fn(list, effective_env, effective_st, ctx);
@@ -1943,12 +1941,12 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CallFrame *let_frame = NULL;
     ID *binding_params = NULL;
     ID *binding_values = NULL;
+    CallFrame let_frame_storage;  // Fixed size, no __chkstk_darwin
+    ID binding_slots[CALLFRAME_MAX_PARAMS * 2];  // Fixed size for params + values
     if (has_frame) {
-        size_t frame_bytes = frame_allocation_size(pair_count);
-        let_frame = (CallFrame*)STACK_ALLOC(char, frame_bytes);
+        CLJ_ASSERT(pair_count <= CALLFRAME_MAX_PARAMS && "Too many let bindings");
+        let_frame = &let_frame_storage;
         frame_init(let_frame, ctx ? ctx->frame : NULL);
-
-        ID *binding_slots = (ID*)STACK_ALLOC(ID, pair_count * 2);
         binding_params = binding_slots;
         binding_values = binding_slots + pair_count;
     }

@@ -221,7 +221,10 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
         return NULL;
     }
 
-    ID *evaluated_args = STACK_ALLOC(ID, expected > 0 ? expected : 1);
+    // OPTIMIZATION: Use fixed-size stack array to avoid STACK_ALLOC/alloca overhead
+    // This eliminates __chkstk_darwin calls in hot path
+    CLJ_ASSERT(expected <= CALLFRAME_MAX_PARAMS && "Too many recur arguments");
+    ID evaluated_args[CALLFRAME_MAX_PARAMS];
     for (int i = 0; i < expected; i++) {
         evaluated_args[i] = NULL;
     }
