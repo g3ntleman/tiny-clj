@@ -274,9 +274,9 @@ PYTHON_EOF
 fi
 
 # ============================================================================
-# 5. tiny-clj Benchmark
+# 5. tiny-clj Benchmark (3 runs, take median)
 # ============================================================================
-echo -e "${BLUE}⚡ Running tiny-clj benchmark...${NC}"
+echo -e "${BLUE}⚡ Running tiny-clj benchmark (3 runs)...${NC}"
 
 # Create modified version of benchmarks/fibonacci.clj with timing output
 # All code runs in a single execution (one runtime initialization)
@@ -308,34 +308,39 @@ else
     TINYCLJ_BIN=$(find . -name "tiny-clj-repl" -type f -executable 2>/dev/null | head -1)
 fi
 
-if [ -n "$TINYCLJ_BIN" ] && [ -f "$TINYCLJ_BIN" ]; then
-    # Run tiny-clj benchmark using -f option to execute file
-    TINYCLJ_OUTPUT=$("$TINYCLJ_BIN" -f "$TEMP_CLJ_TINY" 2>&1)
-else
-    echo -e "${YELLOW}⚠️  tiny-clj-repl not found. Skipping tiny-clj benchmark.${NC}"
-    echo -e "${YELLOW}   Please build tiny-clj-repl to enable comparison.${NC}"
-    TINYCLJ_OUTPUT=""
-    TINYCLJ_TIME_MS=0
-    TIME_PER_ITER_TINYCLJ=0
-    TINYCLJ_ITERATIONS=0
-fi
-
-# Extract results from time output
-# time prints "Elapsed time: X.XX msecs" or "Elapsed time: X.XX μsecs"
-if [ -n "$TINYCLJ_OUTPUT" ]; then
-    # Extract time from "Elapsed time: X.XX msecs" or "Elapsed time: X.XX μsecs"
-    ELAPSED_TIME=$(echo "$TINYCLJ_OUTPUT" | grep -E "Elapsed time:" | sed -E 's/.*Elapsed time: ([0-9.]+) (msecs|μsecs).*/\1 \2/')
-    TIME_VALUE=$(echo "$ELAPSED_TIME" | awk '{print $1}')
-    TIME_UNIT=$(echo "$ELAPSED_TIME" | awk '{print $2}')
+# Function to extract time from tiny-clj output
+extract_tinyclj_time() {
+    local output="$1"
+    local elapsed_time=$(echo "$output" | grep -E "Elapsed time:" | sed -E 's/.*Elapsed time: ([0-9.]+) (msecs|μsecs).*/\1 \2/')
+    local time_value=$(echo "$elapsed_time" | awk '{print $1}')
+    local time_unit=$(echo "$elapsed_time" | awk '{print $2}')
     
-    # Convert to milliseconds
-    if [ "$TIME_UNIT" = "μsecs" ]; then
-        TINYCLJ_TIME_MS=$(echo "scale=3; $TIME_VALUE / 1000" | bc)
-    elif [ "$TIME_UNIT" = "msecs" ]; then
-        TINYCLJ_TIME_MS="$TIME_VALUE"
+    if [ "$time_unit" = "μsecs" ]; then
+        echo "scale=3; $time_value / 1000" | bc
+    elif [ "$time_unit" = "msecs" ]; then
+        echo "$time_value"
     else
-        TINYCLJ_TIME_MS="0"
+        echo "0"
     fi
+}
+
+if [ -n "$TINYCLJ_BIN" ] && [ -f "$TINYCLJ_BIN" ]; then
+    # Run 3 measurements
+    TIMES=()
+    for run in 1 2 3; do
+        TINYCLJ_OUTPUT=$("$TINYCLJ_BIN" -f "$TEMP_CLJ_TINY" 2>&1)
+        RUN_TIME=$(extract_tinyclj_time "$TINYCLJ_OUTPUT")
+        TIMES+=("$RUN_TIME")
+        echo -e "  Run $run: ${RUN_TIME}ms"
+    done
+    
+    # Sort and take median (middle value of 3)
+    SORTED_TIMES=$(printf '%s\n' "${TIMES[@]}" | sort -n)
+    TINYCLJ_TIME_MS=$(echo "$SORTED_TIMES" | sed -n '2p')  # Median (2nd of 3)
+    
+    # Also show min/max for reference
+    MIN_TIME=$(echo "$SORTED_TIMES" | head -1)
+    MAX_TIME=$(echo "$SORTED_TIMES" | tail -1)
     
     TINYCLJ_ITERATIONS=${ITERATIONS}
     if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ]; then
@@ -343,17 +348,24 @@ if [ -n "$TINYCLJ_OUTPUT" ]; then
     else
         TIME_PER_ITER_TINYCLJ="0"
     fi
+else
+    echo -e "${YELLOW}⚠️  tiny-clj-repl not found. Skipping tiny-clj benchmark.${NC}"
+    echo -e "${YELLOW}   Please build tiny-clj-repl to enable comparison.${NC}"
+    TINYCLJ_TIME_MS=0
+    TIME_PER_ITER_TINYCLJ=0
+    TINYCLJ_ITERATIONS=0
+    MIN_TIME=0
+    MAX_TIME=0
 fi
 
 rm -f "$TEMP_CLJ_TINY"
 
-if [ -n "$TINYCLJ_OUTPUT" ] && [ -n "$TINYCLJ_TIME_MS" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ "$TINYCLJ_TIME_MS" != "0" ]; then
+if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ]; then
     # Format time per iteration for display
     TIME_PER_ITER_FORMATTED=$(echo "$TIME_PER_ITER_TINYCLJ" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-    echo -e "${GREEN}✅ tiny-clj: ${TINYCLJ_TIME_MS}ms (${TIME_PER_ITER_FORMATTED}ms/iter, ${TINYCLJ_ITERATIONS} iterations)${NC}"
+    echo -e "${GREEN}✅ tiny-clj: ${TINYCLJ_TIME_MS}ms median (${TIME_PER_ITER_FORMATTED}ms/iter, range: ${MIN_TIME}-${MAX_TIME}ms)${NC}"
 else
     echo -e "${RED}❌ Failed to extract tiny-clj results${NC}"
-    echo "Output was: $TINYCLJ_OUTPUT"
     TINYCLJ_TIME_MS=0
     TIME_PER_ITER_TINYCLJ=0
     TINYCLJ_ITERATIONS=0
