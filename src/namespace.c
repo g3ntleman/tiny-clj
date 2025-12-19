@@ -354,7 +354,16 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             target_ns = ns_find(interned_ns_name->cname);
         }
         if (target_ns && target_ns->mappings && sym->cname) {
-            // Intern the qualified symbol to get the same pointer as stored in mappings
+            // OPTIMIZATION: Fast path - try direct lookup with existing symbol pointer first
+            // The symbol from AST canonicalization is already interned, so pointer equality
+            // should work if the mapping was created with the same symbol pointer.
+            ID resolved = map_get(target_ns->mappings, sym, NOT_FOUND);
+            if (resolved != NOT_FOUND) {
+                return resolved;  // Found (can be NULL/nil, which is valid)
+            }
+
+            // Fallback: Intern the qualified symbol to get the same pointer as stored in mappings
+            // This handles cases where symbol pointers differ (e.g., from different parsing sessions)
             CljSymbol *interned_sym = intern_symbol(sym->ns_name, sym->cname);
             if (!interned_sym) {
                 return NULL; // Failed to intern
@@ -362,7 +371,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // CRITICAL: Namespace mappings now use fully qualified symbols as keys
             // Use the interned qualified symbol for lookup (ensures pointer equality)
             // Use sentinel to distinguish "key not found" from "value is nil"
-            ID resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
+            resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
             if (resolved != NOT_FOUND) {
                 return resolved;  // Found (can be NULL/nil, which is valid)
             }
@@ -384,6 +393,18 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // Unqualified symbol - check current namespace first (before cache)
     // This ensures that redefined symbols in current namespace take precedence over cached values
+    // OPTIMIZATION: Fast path - try direct lookup with existing symbol pointer first
+    // ns_define() stores unqualified aliases for non-core namespaces, so this should work
+    // for most cases without needing to qualify+intern.
+    if (current_ns && current_ns->mappings) {
+        ID v = map_get(current_ns->mappings, sym, NOT_FOUND);
+        if (v != NOT_FOUND) {
+            // Symbol found in current namespace - return it immediately
+            // No ambiguity check needed: current namespace always takes precedence
+            return v;
+        }
+    }
+    
     // CRITICAL: Namespace mappings now use fully qualified symbols as keys
     // For unqualified symbols, we need to qualify them with the current namespace
     // Use sentinel to distinguish "key not found" from "value is nil"
@@ -401,11 +422,13 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     
     // CRITICAL: For def, symbols are stored qualified (e.g., user/my-var)
     // For :refer :all, symbols are also stored qualified (clojure.core is handled separately)
-    ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
-    if (v != NOT_FOUND) {
-        // Symbol found in current namespace - return it immediately
-        // No ambiguity check needed: current namespace always takes precedence
-        return v;
+    if (current_ns && current_ns->mappings) {
+        ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
+        if (v != NOT_FOUND) {
+            // Symbol found in current namespace - return it immediately
+            // No ambiguity check needed: current namespace always takes precedence
+            return v;
+        }
     }
     
     // CRITICAL: In Clojure, unqualified symbols are only resolved in the current namespace
