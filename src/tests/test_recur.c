@@ -357,16 +357,15 @@ TEST(test_eval_body_with_params_fixnum_literal) {
     TEST_ASSERT_EQUAL_INT(1, AS_FIXNUM(fixnum_one));
 
     // Test eval_body_with_params with Fixnum literal
-    // No parameters, so param_count = 0
+    // No parameters, so no frame needed
     EvalContext ctx = {
         .env = NULL,
         .env_stack = NULL,
+        .frame = NULL,
         .st = g_test_eval_state,
-        .params = NULL,
-        .param_values = NULL,
-        .param_count = 0,
         .recur_args = NULL,
-        .recur_arg_count = NULL
+        .recur_arg_count = NULL,
+        .recur_param_count = 0
     };
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
@@ -385,34 +384,35 @@ TEST(test_eval_body_with_params_fixnum_with_params) {
     // Create a symbol parameter
     CljSymbol *param_sym_obj = intern_symbol_global("x");
     TEST_ASSERT_NOT_NULL(param_sym_obj);
-    CljSymbol *param_sym = as_symbol(param_sym_obj);
-    TEST_ASSERT_NOT_NULL(param_sym);
 
     // Create a Fixnum value for the parameter
     CljValue fixnum_value = fixnum(42);
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_value));
 
-    // Set up parameters and values
+    // Set up CallFrame with parameters (new API)
     ID params[] = {param_sym_obj};
     ID values[] = {fixnum_value};
-    int param_count = 1;
+    CallFrame call_frame;
+    frame_init(&call_frame, NULL);
+    frame_set_bindings(&call_frame, NULL, params, values, 1);
 
     // Test: When body is the parameter symbol, it should return the Fixnum value
     EvalContext ctx = {
         .env = NULL,
         .env_stack = NULL,
+        .frame = &call_frame,
         .st = g_test_eval_state,
-        .params = params,
-        .param_values = values,
-        .param_count = param_count,
         .recur_args = NULL,
-        .recur_arg_count = NULL
+        .recur_arg_count = NULL,
+        .recur_param_count = 1
     };
     ID result = eval_body_with_params(param_sym_obj, &ctx);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return Fixnum value, not NULL");
     TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_INT, TAG(result), "Result should be a Fixnum");
     TEST_ASSERT_EQUAL_INT_MESSAGE(42, AS_FIXNUM(result), "Result should be 42");
+    
+    frame_release(&call_frame);
 }
 
 // Test: Verify that eval_body_with_params handles Fixnum literal in arithmetic operation
@@ -422,8 +422,6 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     // Create a symbol parameter
     CljSymbol *param_sym_obj = intern_symbol_global("n");
     TEST_ASSERT_NOT_NULL(param_sym_obj);
-    CljSymbol *param_sym = as_symbol(param_sym_obj);
-    TEST_ASSERT_NOT_NULL(param_sym);
 
     // Create a Fixnum value for the parameter (e.g., n = 5)
     CljValue fixnum_n = fixnum(5);
@@ -433,21 +431,22 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     CljValue fixnum_one = fixnum(1);
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(fixnum_one));
 
-    // Set up parameters and values
+    // Set up CallFrame with parameters
     ID params[] = {param_sym_obj};
     ID values[] = {fixnum_n};
-    int param_count = 1;
+    CallFrame call_frame;
+    frame_init(&call_frame, NULL);
+    frame_set_bindings(&call_frame, NULL, params, values, 1);
 
     // Test: When body is a Fixnum literal (1), it should return the literal directly
     EvalContext ctx = {
         .env = NULL,
         .env_stack = NULL,
+        .frame = &call_frame,
         .st = g_test_eval_state,
-        .params = params,
-        .param_values = values,
-        .param_count = param_count,
         .recur_args = NULL,
-        .recur_arg_count = NULL
+        .recur_arg_count = NULL,
+        .recur_param_count = 1
     };
     ID result = eval_body_with_params(fixnum_one, &ctx);
 
@@ -456,6 +455,8 @@ TEST(test_eval_body_with_params_fixnum_in_arithmetic) {
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, AS_FIXNUM(result), "Result should be 1");
     TEST_ASSERT_EQUAL_PTR_MESSAGE((void*)fixnum_one, (void*)result,
                                   "Result should be the same Fixnum literal");
+    
+    frame_release(&call_frame);
 }
 
 // Test: Verify that eval_body_with_params handles Fixnum literal in list context
@@ -475,12 +476,11 @@ TEST(test_eval_body_with_params_fixnum_in_list_context) {
     EvalContext ctx = {
         .env = NULL,
         .env_stack = NULL,
+        .frame = NULL,
         .st = g_test_eval_state,
-        .params = NULL,
-        .param_values = NULL,
-        .param_count = 0,
         .recur_args = NULL,
-        .recur_arg_count = NULL
+        .recur_arg_count = NULL,
+        .recur_param_count = 0
     };
     ID result = eval_body_with_params(fixnum_one, &ctx);
 

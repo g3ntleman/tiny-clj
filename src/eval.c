@@ -244,14 +244,12 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         // Evaluate function body with context (stack-only, no allocations)
         EvalContext eval_ctx = {
             .env = NULL,
-            .env_stack = call_env_stack,  // Legacy: closure environment only
+            .env_stack = call_env_stack,  // Closure environment only
             .frame = call_frame,          // Stack-based frame for parameters
             .st = st,
-            .params = params_array,
-            .param_values = current_args,
-            .param_count = current_argc,
             .recur_args = recur_args,
-            .recur_arg_count = &recur_arg_count
+            .recur_arg_count = &recur_arg_count,
+            .recur_param_count = param_count  // Fixed for this function
         };
         // If an exception is thrown, longjmp will jump to the outer handler and this function
         // will never return, so the loop will not continue
@@ -348,13 +346,12 @@ static const EvalContext* ensure_eval_context(CljMap *env,
     if (!ctx) {
         *local_ctx = (EvalContext){
             .env = env,
-        .env_stack = env ? make_list(env, NULL) : NULL,
+            .env_stack = env ? make_list(env, NULL) : NULL,
+            .frame = NULL,
             .st = st,
-            .params = NULL,
-            .param_values = NULL,
-            .param_count = 0,
             .recur_args = NULL,
-            .recur_arg_count = NULL
+            .recur_arg_count = NULL,
+            .recur_param_count = 0
         };
         *owned_stack = local_ctx->env_stack;
         return local_ctx;
@@ -515,36 +512,15 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         return NULL;
     }
 
-    if (ctx && ctx->param_count > 0) {
-        assert(ctx->params != NULL);
-        assert(ctx->param_values != NULL);
-    }
-
     if (body && TAG(body) == CLJ_SYMBOL) {
-        // Resolve symbol
-        // This avoids expensive map copying in env_extend_stack for recursive calls
-        // Parameters are typically accessed most frequently, so checking them first is optimal
-        CljSymbol *body_sym = as_symbol(body);
-        CLJ_ASSERT(body_sym != NULL && "TAG(body)==CLJ_SYMBOL but as_symbol returned NULL");
-
-        // This avoids expensive closure_env map lookups for parameter access
-        if (ctx && ctx->param_count > 0 && ctx->params && ctx->param_values) {
-            // Iterate through parameter arrays to find matching symbol
-            for (int i = 0; i < ctx->param_count; i++) {
-                if (ctx->params[i] == body) {
-                    // Found matching parameter - return its value
-                    ID param_value = ctx->param_values[i];
-                    // param_value is already retained - object survives until pool-pop
-                    return param_value;
-                }
-            }
-        }
-
         // CRITICAL: Check if symbol is a keyword FIRST - keywords evaluate to themselves
         // This must come BEFORE symbol resolution attempts
         if (IS_KEYWORD(body)) {
             return body;
         }
+
+        CljSymbol *body_sym = as_symbol(body);
+        CLJ_ASSERT(body_sym != NULL && "TAG(body)==CLJ_SYMBOL but as_symbol returned NULL");
 
         // Use central symbol resolution function (DRY: handles environment stack and frames)
         if (ctx) {
@@ -2514,19 +2490,6 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                 if (!frame_value) return NULL;
                 if (IS_IMMEDIATE(frame_value)) return frame_value;
                 return AUTORELEASE(RETAIN(frame_value));
-            }
-        }
-        
-        // Fallback: check legacy params array (for tests/contexts without frame)
-        // Cold path: only reached when frame_lookup didn't find the symbol
-        if (ctx && ctx->params && ctx->param_values) {
-            for (int i = 0; i < ctx->param_count; i++) {
-                if (ctx->params[i] == expr) {
-                    ID value = ctx->param_values[i];
-                    if (!value) return NULL;
-                    if (IS_IMMEDIATE(value)) return value;
-                    return AUTORELEASE(RETAIN(value));
-                }
             }
         }
         

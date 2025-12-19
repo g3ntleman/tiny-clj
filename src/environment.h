@@ -9,11 +9,14 @@
 #include "list.h"
 #include "symbol.h"
 
+// Maximum parameters per function (eliminates __chkstk_darwin calls)
+#define CALLFRAME_MAX_PARAMS 16
+
 typedef struct CallFrame {
     struct CallFrame *parent;  // Parent frame (for nested calls)
     ID *params;                // Pointer to func->params_array (borrowed, no RETAIN)
     int param_count;           // Number of active bindings
-    ID values[];               // Only values: [value0, value1, ...]
+    ID values[CALLFRAME_MAX_PARAMS];  // Fixed size to avoid dynamic stack allocation
 } CallFrame;
 
 static inline ID frame_encode_value(ID value) {
@@ -24,9 +27,10 @@ static inline ID frame_decode_value(ID value) {
     return value == FRAME_NIL_SENTINEL ? NULL : value;
 }
 
+// Compatibility: Returns sizeof(CallFrame) since size is now fixed
 static inline size_t frame_allocation_size(int capacity) {
-    if (capacity < 0) capacity = 0;
-    return sizeof(CallFrame) + (size_t)capacity * sizeof(ID);
+    (void)capacity;  // No longer used, size is fixed
+    return sizeof(CallFrame);
 }
 
 // Frame management functions

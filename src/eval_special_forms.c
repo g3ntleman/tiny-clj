@@ -211,7 +211,8 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
         return NULL;
     }
 
-    int expected = ctx->param_count > 0 ? ctx->param_count : 0;
+    // Get expected param count from recur context (set by function call)
+    int expected = ctx->recur_param_count;
     int provided = list ? list_count(list) - 1 : 0;
     if (provided < 0) provided = 0;
     if (expected == 0) expected = provided;
@@ -229,13 +230,12 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
         evaluated_args[i] = NULL;
     }
 
+    // Create context for evaluating recur arguments (without recur state to prevent nested recur)
     EvalContext arg_ctx = {
         .env = ctx->env,
         .env_stack = ctx->env_stack,
+        .frame = ctx->frame,
         .st = ctx->st,
-        .params = ctx->params,
-        .param_values = ctx->param_values,
-        .param_count = ctx->param_count,
         .recur_args = NULL,
         .recur_arg_count = NULL
     };

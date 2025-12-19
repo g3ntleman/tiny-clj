@@ -65,18 +65,26 @@ TEST(test_symbol_equality_with_symbol_ns) {
 
 // Test: String representation works with Symbol->ns as CljSymbol*
 TEST(test_symbol_string_representation) {
-    // Create a namespace-qualified symbol
-    // intern_symbol expects CljSymbol* for ns_name, so we need to create the namespace name symbol first
-    CljSymbol *ns_name_sym = intern_symbol_global("my-ns");
-    CljSymbol *sym = intern_symbol(ns_name_sym, "my-var");
+    // Create a namespace-qualified symbol with unique names to avoid conflicts
+    CljSymbol *ns_name_sym = intern_symbol_global("test-repr-ns");
+    CljSymbol *sym = intern_symbol(ns_name_sym, "test-repr-var");
 
     TEST_ASSERT_NOT_NULL_MESSAGE(sym, "Symbol should be created");
+    TEST_ASSERT_NOT_NULL_MESSAGE(sym->ns_name, "Symbol should have ns_name");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_SYMBOL, TAG(sym->ns_name), "ns_name should be a symbol");
 
     // String representation should work
     CljString *str = to_string(sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(str, "String representation should work");
-    TEST_ASSERT_TRUE_MESSAGE(strstr(string_data(str), "my-ns") != NULL && strstr(string_data(str), "my-var") != NULL,
-                             "String representation should contain namespace and name");
+    
+    const char *str_data = clj_string_data(str);
+    TEST_ASSERT_NOT_NULL_MESSAGE(str_data, "String data should not be NULL");
+    
+    // Expected: "test-repr-ns/test-repr-var"
+    TEST_ASSERT_TRUE_MESSAGE(strstr(str_data, "test-repr-ns") != NULL,
+                             "String representation should contain namespace");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(str_data, "test-repr-var") != NULL,
+                             "String representation should contain name");
 
     RELEASE((CljObject*)sym);
     RELEASE((CljObject*)ns_name_sym);

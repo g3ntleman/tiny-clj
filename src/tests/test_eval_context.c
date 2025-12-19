@@ -66,35 +66,32 @@ TEST(test_simple_recursive_function_ctx_propagation) {
 
 // Test that ctx is not NULL when eval_body_with_params is called
 TEST(test_eval_body_with_params_ctx_not_null) {
-    // Create a simple function with parameters
-    CljList *params = AUTORELEASE(make_list(intern_symbol_global("x"), empty_list()));
-    CljList *body = AUTORELEASE(make_list(intern_symbol_global("x"), empty_list()));
+    // Create a symbol for parameter 'x'
+    CljSymbol *x_sym = intern_symbol_global("x");
+    TEST_ASSERT_NOT_NULL(x_sym);
     
-    // Create ParamContext
-    ID param_values[1] = {fixnum(42)};
-    ID param_names[1] = {intern_symbol_global("x")};
-    ParamContext param_ctx = {
-        .params = param_names,
-        .values = param_values,
-        .param_count = 1
-    };
+    // Set up CallFrame with parameters
+    ID params[] = {x_sym};
+    ID values[] = {fixnum(42)};
+    CallFrame call_frame;
+    frame_init(&call_frame, NULL);
+    frame_set_bindings(&call_frame, NULL, params, values, 1);
     
-    // Create EvalEnv
-    CljMap *env_map = AUTORELEASE(make_map(16));
-    CljList *env_stack = AUTORELEASE(make_list(env_map, empty_list()));
-    EvalEnv eval_env = {
-        .env_stack = env_stack,
-        .st = g_test_eval_state
-    };
-    
-    // Create EvalContext
+    // Create EvalContext with frame
     EvalContext ctx = {
-        .params = &param_ctx,
-        .env = &eval_env,
-        .recur = NULL
+        .env = NULL,
+        .env_stack = NULL,
+        .frame = &call_frame,
+        .st = g_test_eval_state,
+        .recur_args = NULL,
+        .recur_arg_count = NULL,
+        .recur_param_count = 1
     };
     
-    // Test: eval_body_with_params should not crash with valid ctx
-    ID result = eval_body_with_params(body, &ctx);
+    // Test: eval_body_with_params should resolve 'x' to 42
+    ID result = eval_body_with_params(x_sym, &ctx);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return result");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum(result), "x should resolve to 42");
+    
+    frame_release(&call_frame);
 }
