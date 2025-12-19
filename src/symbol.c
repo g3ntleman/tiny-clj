@@ -347,17 +347,18 @@ void init_special_symbols() {
     INIT_SPECIAL_SYMBOL(SYM_TIME, sym_time_data);
     INIT_SPECIAL_SYMBOL(SYM_GO, sym_go_data);
 
+    // Arithmetic symbols: store ArithOp index in upper bits (ARITH_ADD=0, SUB=1, MUL=2, DIV=3)
     INIT_SYMBOL(SYM_PLUS, sym_plus_data);
-    SYM_PLUS->base.flags |= CLJ_FLAG_ARITHMETIC;
+    SYM_PLUS->base.flags |= CLJ_FLAG_ARITHMETIC | (0 << CLJ_ARITH_OP_SHIFT);
 
     INIT_SYMBOL(SYM_MINUS, sym_minus_data);
-    SYM_MINUS->base.flags |= CLJ_FLAG_ARITHMETIC;
+    SYM_MINUS->base.flags |= CLJ_FLAG_ARITHMETIC | (1 << CLJ_ARITH_OP_SHIFT);
 
     INIT_SYMBOL(SYM_MULTIPLY, sym_multiply_data);
-    SYM_MULTIPLY->base.flags |= CLJ_FLAG_ARITHMETIC;
+    SYM_MULTIPLY->base.flags |= CLJ_FLAG_ARITHMETIC | (2 << CLJ_ARITH_OP_SHIFT);
 
     INIT_SYMBOL(SYM_DIVIDE, sym_divide_data);
-    SYM_DIVIDE->base.flags |= CLJ_FLAG_ARITHMETIC;
+    SYM_DIVIDE->base.flags |= CLJ_FLAG_ARITHMETIC | (3 << CLJ_ARITH_OP_SHIFT);
 
     INIT_SYMBOL(SYM_EQUALS, sym_equals_data);
     SYM_EQUALS->base.flags |= CLJ_FLAG_COMPARISON;

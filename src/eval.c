@@ -1105,12 +1105,10 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         if (comparison_result) return comparison_result;
     }
 
-    // Fast-path: Arithmetic operators (avoid symbol resolution for +, -, *, /)
+    // Fast-path: Arithmetic operators - O(1) dispatch via flags
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
-        if (original_op_sym == SYM_PLUS)     return eval_arithmetic_generic_with_context(list, effective_env, ARITH_ADD, effective_st, ctx);
-        if (original_op_sym == SYM_MINUS)    return eval_arithmetic_generic_with_context(list, effective_env, ARITH_SUB, effective_st, ctx);
-        if (original_op_sym == SYM_MULTIPLY) return eval_arithmetic_generic_with_context(list, effective_env, ARITH_MUL, effective_st, ctx);
-        if (original_op_sym == SYM_DIVIDE)   return eval_arithmetic_generic_with_context(list, effective_env, ARITH_DIV, effective_st, ctx);
+        ArithOp op = (original_op_sym->base.flags >> CLJ_ARITH_OP_SHIFT) & 0x03;
+        return eval_arithmetic_generic_with_context(list, effective_env, op, effective_st, ctx);
     }
 
     // Special forms (avoid symbol resolution for if/let/do/recur/etc.)
@@ -1132,14 +1130,11 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     op = resolved_op;
 
     // After resolution: check if resolved to arithmetic symbol (e.g., clojure.core/+ → SYM_PLUS)
-    // Direct cast since TAG already confirmed CLJ_SYMBOL
     if (op && TAG(op) == CLJ_SYMBOL) {
         CljSymbol *resolved_sym = (CljSymbol*)op;
         if (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC) {
-            if (resolved_sym == SYM_PLUS)     return eval_arithmetic_generic_with_context(list, effective_env, ARITH_ADD, effective_st, ctx);
-            if (resolved_sym == SYM_MINUS)    return eval_arithmetic_generic_with_context(list, effective_env, ARITH_SUB, effective_st, ctx);
-            if (resolved_sym == SYM_MULTIPLY) return eval_arithmetic_generic_with_context(list, effective_env, ARITH_MUL, effective_st, ctx);
-            if (resolved_sym == SYM_DIVIDE)   return eval_arithmetic_generic_with_context(list, effective_env, ARITH_DIV, effective_st, ctx);
+            ArithOp arith_op = (resolved_sym->base.flags >> CLJ_ARITH_OP_SHIFT) & 0x03;
+            return eval_arithmetic_generic_with_context(list, effective_env, arith_op, effective_st, ctx);
         }
     }
 
