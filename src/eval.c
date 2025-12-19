@@ -7,17 +7,15 @@
 #include "builtins.h"
 #include "optimize.h"
 #include "parser.h"  // For eval_parsed
-#include "common.h"  // For INLINE macro
+#include "common.h"
 
 // Branch prediction hints for hot paths
 #define LIKELY(x)   __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 
 #include "error_messages.h"
-#include <limits.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <inttypes.h>
 #include <string.h>
 #include "seq.h"
 #include "namespace.h"
@@ -384,7 +382,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
 }
 
 // Extended version that also searches in CallFrame
-static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+static inline ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NULL;
     }
@@ -818,7 +816,7 @@ void reset_eval_arg_depth(void) {
 // Handle recur special form
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
-static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
+static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
     if (!op || TAG(op) != CLJ_SYMBOL) {
         return op;
     }
@@ -937,7 +935,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 }
 
 // Handle function call from resolved operator
-static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
+static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
     if (!op) return NULL;
 
     // Handle keywords as functions (for map lookup)
@@ -1003,7 +1001,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     return NULL; // Not a function
 }
 
-static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+static inline ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     ID args[16];
     int argc = 0;
     unsigned char fn_tag = TAG(fn);

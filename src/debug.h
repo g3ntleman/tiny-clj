@@ -5,12 +5,14 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#ifdef DEBUG
 /**
  * @brief Print AST structure for debugging
  * @param v CljObject to print
  * @return Newly allocated C-string representation (caller must free)
  */
 const char* print_ast(CljObject *v);
+#endif // DEBUG
 
 /**
  * @brief Check if an object is a zombie (freed but not deallocated)

@@ -34,7 +34,6 @@
 #include "parser.h"
 #include "meta.h"
 #include "eval.h"
-#include "debug.h"  // For print_ast
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
