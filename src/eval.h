@@ -29,6 +29,9 @@ typedef struct {
     int *recur_arg_count;  // Pointer to recur argument count (can be NULL)
 } EvalContext;
 
+// Special Form evaluation function pointer type (defined here where types are known)
+typedef ID (*SpecialFormEvalFn)(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+
 // Extended function-call entry points
 ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st);
 ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx);

@@ -8,7 +8,6 @@
 #include "memory.h"
 #include "runtime.h"
 #include "object.h"
-#include "symbol.h"
 #include "vector.h"
 #include "value.h"  // For IS_IMMEDIATE macro used in memory.h
 #include "memory_profiler.h"
@@ -576,21 +575,7 @@ static void release_object_default(CljObject *v) {
              * extra to do here. */
             break;
             
-        case CLJ_SYMBOL:
-            {
-                if (g_debug_output_active) {
-                    printf("🔍 release_object_deep: Freeing SYMBOL object %p\n", v);
-                }
-                CljSymbol *sym = (CljSymbol*)v;
-                // Only free symbol name if it's heap-allocated (not in data segment)
-                if (sym && sym->cname && !is_pointer_in_data_segment(sym->cname)) {
-                    if (g_debug_output_active) {
-                        printf("🔍 release_object_deep: Freeing symbol name: '%s'\n", sym->cname);
-                    }
-                    free((void*)sym->cname);
-                }
-            }
-            break;
+        // CLJ_SYMBOL: Release handler registered by tiny-clj via subjective_c_register_release_fn()
             
         case CLJ_VECTOR:
             {

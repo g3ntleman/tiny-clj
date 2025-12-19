@@ -3,7 +3,7 @@
 
 #include "subjective-c/public/strings.h"
 #include "subjective-c/public/value.h"
-#include "subjective-c/public/symbol.h"
+#include "symbol.h"
 
 /**
  * @brief Convert a Clojure value to its string representation

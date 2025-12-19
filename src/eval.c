@@ -33,7 +33,6 @@
 
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
-#include "eval_dispatch.h"
 
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
@@ -1107,15 +1106,26 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Fast-path: Arithmetic operators (avoid symbol resolution for +, -, *, /)
+    // Inline dispatch to avoid function call overhead
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
-        CljObject *arith_result = eval_arithmetic_dispatch_with_context(list, effective_env, effective_st, (ID)original_op, ctx);
+        CljObject *arith_result = NULL;
+        if (original_op_sym == SYM_PLUS)     arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_ADD, effective_st, ctx);
+        else if (original_op_sym == SYM_MINUS)    arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_SUB, effective_st, ctx);
+        else if (original_op_sym == SYM_MULTIPLY) arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_MUL, effective_st, ctx);
+        else if (original_op_sym == SYM_DIVIDE)   arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_DIV, effective_st, ctx);
         if (arith_result) return arith_result;
     }
 
     // Special forms (avoid symbol resolution for if/let/do/recur/etc.)
-    if (original_op_sym && is_special_symbol(original_op_sym)) {
-        // NOTE: NULL is a valid result for many special forms (e.g., (when false ...))
-        return eval_special_form_dispatch(list, effective_env, effective_st, ctx, original_op_sym);
+    // O(1) dispatch via function pointer (replaces O(n) if-chain)
+    if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_SPECIAL)) {
+        CljSpecialSymbol *special = (CljSpecialSymbol*)original_op_sym;
+        if (special->eval_fn) {
+            // NOTE: NULL is a valid result for many special forms (e.g., (when false ...))
+            // Cast function pointer to correct type for call
+            SpecialFormEvalFn fn = (SpecialFormEvalFn)special->eval_fn;
+            return fn(list, effective_env, effective_st, ctx);
+        }
     }
 
     // Resolve operator symbol
@@ -1130,14 +1140,26 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (op_tag_after_resolution == CLJ_SYMBOL) {
         CljSymbol *resolved_sym = as_symbol(op);
         if (resolved_sym && (resolved_sym->base.flags & CLJ_FLAG_ARITHMETIC)) {
-            CljObject *arith_result = eval_arithmetic_dispatch_with_context(list, effective_env, effective_st, (ID)resolved_sym, ctx);
+            CljObject *arith_result = NULL;
+            if (resolved_sym == SYM_PLUS)     arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_ADD, effective_st, ctx);
+            else if (resolved_sym == SYM_MINUS)    arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_SUB, effective_st, ctx);
+            else if (resolved_sym == SYM_MULTIPLY) arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_MUL, effective_st, ctx);
+            else if (resolved_sym == SYM_DIVIDE)   arith_result = eval_arithmetic_generic_with_context(list, effective_env, ARITH_DIV, effective_st, ctx);
             if (arith_result) return arith_result;
         }
     }
 
-    // Tier 3: Sequence operations
-    CljObject *result = eval_sequence_dispatch_with_context(list, effective_env, original_op, ctx);
-    if (result) return result;
+    // Tier 3: Sequence operations (inline dispatch to avoid function call overhead)
+    if (original_op_sym) {
+        CljObject *result = NULL;
+        if (original_op_sym == SYM_FIRST) result = eval_and_call_native_with_context(list, effective_env, native_first, 1, ctx);
+        else if (original_op_sym == SYM_REST) result = eval_and_call_native_with_context(list, effective_env, native_rest, 1, ctx);
+        else if (original_op_sym == SYM_CONS) result = eval_and_call_native_with_context(list, effective_env, native_cons, 2, ctx);
+        else if (original_op_sym == SYM_SEQ) result = eval_seq(list, effective_env);
+        else if (original_op_sym == SYM_NEXT) result = eval_and_call_native_with_context(list, effective_env, native_next, 1, ctx);
+        else if (original_op_sym == SYM_COUNT) result = eval_and_call_native_with_context(list, effective_env, native_count, 1, ctx);
+        if (result) return result;
+    }
 
     // Tier 4: String and I/O operations
     if (original_op_sym == SYM_STR) {
@@ -1169,10 +1191,25 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         return str_result;
     }
 
-    // Tier 6: Loop operations (for, doseq, dotimes)
-    if (original_op_sym == SYM_FOR || original_op_sym == SYM_DOSEQ || original_op_sym == SYM_DOTIMES) {
-        CljObject *loop_result = eval_loop_dispatch(list, effective_env, original_op, effective_st);
-        return loop_result; // Return even if NULL
+    // Tier 6: Loop operations (for, doseq, dotimes) - inline dispatch
+    if (original_op_sym == SYM_FOR) {
+        return AUTORELEASE(eval_for(list, effective_env));
+    }
+    if (original_op_sym == SYM_DOSEQ) {
+        return AUTORELEASE(eval_doseq(list, effective_env));
+    }
+    if (original_op_sym == SYM_DOTIMES) {
+        EvalState *eval_st = effective_st;
+        bool created_st = false;
+        if (!eval_st) {
+            eval_st = evalstate_new(false);
+            created_st = true;
+        }
+        ID result = eval_dotimes(list, effective_env, eval_st);
+        if (created_st && eval_st) {
+            evalstate_free(eval_st);
+        }
+        return AUTORELEASE(result);
     }
 
     // Try function call
