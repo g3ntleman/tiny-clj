@@ -76,11 +76,12 @@ ID eval_comparison_dispatch(CljList *list,
                              ID op) {
     CljSymbol *op_sym = (CljSymbol*)op;
 
-    // Numeric comparisons: <, >, <=, >=
-    if (op_sym == SYM_LT) return eval_numeric_comparison(list, env, st, ctx, COMP_LT);
-    if (op_sym == SYM_GT) return eval_numeric_comparison(list, env, st, ctx, COMP_GT);
-    if (op_sym == SYM_LE) return eval_numeric_comparison(list, env, st, ctx, COMP_LE);
-    if (op_sym == SYM_GE) return eval_numeric_comparison(list, env, st, ctx, COMP_GE);
+    // Numeric comparisons: <, >, <=, >= - O(1) dispatch via flags
+    // ComparisonOp is stored in bits 6-7: LT=0, GT=1, LE=2, GE=3
+    if (op_sym != SYM_EQUALS) {
+        ComparisonOp comp_op = (op_sym->base.flags >> CLJ_COMP_OP_SHIFT) & 0x03;
+        return eval_numeric_comparison(list, env, st, ctx, comp_op);
+    }
 
     // Equality: = (handles both numeric and generic equality)
     CljList *rest = as_list(LIST_REST(list));

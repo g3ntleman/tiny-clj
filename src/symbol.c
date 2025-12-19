@@ -360,20 +360,22 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_DIVIDE, sym_divide_data);
     SYM_DIVIDE->base.flags |= CLJ_FLAG_ARITHMETIC | (3 << CLJ_ARITH_OP_SHIFT);
 
+    // Comparison symbols: store ComparisonOp index in bits 6-7 (LT=0, GT=1, LE=2, GE=3)
+    // Note: = (EQUALS) has special generic equality handling, not encoded here
     INIT_SYMBOL(SYM_EQUALS, sym_equals_data);
-    SYM_EQUALS->base.flags |= CLJ_FLAG_COMPARISON;
+    SYM_EQUALS->base.flags |= CLJ_FLAG_COMPARISON;  // No index - handled separately
 
     INIT_SYMBOL(SYM_LT, sym_lt_data);
-    SYM_LT->base.flags |= CLJ_FLAG_COMPARISON;
+    SYM_LT->base.flags |= CLJ_FLAG_COMPARISON | (0 << CLJ_COMP_OP_SHIFT);
 
     INIT_SYMBOL(SYM_GT, sym_gt_data);
-    SYM_GT->base.flags |= CLJ_FLAG_COMPARISON;
+    SYM_GT->base.flags |= CLJ_FLAG_COMPARISON | (1 << CLJ_COMP_OP_SHIFT);
 
     INIT_SYMBOL(SYM_LE, sym_le_data);
-    SYM_LE->base.flags |= CLJ_FLAG_COMPARISON;
+    SYM_LE->base.flags |= CLJ_FLAG_COMPARISON | (2 << CLJ_COMP_OP_SHIFT);
 
     INIT_SYMBOL(SYM_GE, sym_ge_data);
-    SYM_GE->base.flags |= CLJ_FLAG_COMPARISON;
+    SYM_GE->base.flags |= CLJ_FLAG_COMPARISON | (3 << CLJ_COMP_OP_SHIFT);
 
     INIT_SYMBOL(SYM_PRINTLN, sym_println_data);
 

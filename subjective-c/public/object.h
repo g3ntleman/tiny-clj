@@ -52,9 +52,11 @@ typedef struct CljObject {
 #define CLJ_FLAG_SPECIAL     0x01  // Special Form Symbol
 #define CLJ_FLAG_ARITHMETIC  0x02  // Arithmetic Operator (+ - * /)
 #define CLJ_FLAG_COMPARISON  0x04  // Comparison Operator (< > <= >= =)
-// Upper bits (4-5) store ArithOp index for arithmetic symbols
+// Upper bits store operation index: bits 4-5 for ArithOp, bits 6-7 for CompOp
 #define CLJ_ARITH_OP_SHIFT   4
 #define CLJ_ARITH_OP_MASK    0x30
+#define CLJ_COMP_OP_SHIFT    6
+#define CLJ_COMP_OP_MASK     0xC0
 
 static inline CljType TAG(ID obj) {
     if ((uintptr_t)obj & 0x1) {
