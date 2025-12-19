@@ -638,12 +638,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             // Evaluate list with context (ctx preserves recur)
             CljMap *env_map = get_closure_env(ctx);
             EvalState *ctx_state = get_eval_state(ctx, NULL);
-            if (!ctx_state) {
-                EvalState *temp_st = evalstate_new(false);
-                ID result = eval_list(as_list(body), env_map, temp_st, ctx);
-                evalstate_free(temp_st);
-                return result;
-            }
+            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+            if (!ctx_state) ctx_state = builtin_get_eval_state();
             return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
@@ -1195,17 +1191,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         return AUTORELEASE(eval_doseq(list, effective_env));
     }
     if (original_op_sym == SYM_DOTIMES) {
-        EvalState *eval_st = effective_st;
-        bool created_st = false;
-        if (!eval_st) {
-            eval_st = evalstate_new(false);
-            created_st = true;
-        }
-        ID result = eval_dotimes(list, effective_env, eval_st);
-        if (created_st && eval_st) {
-            evalstate_free(eval_st);
-        }
-        return AUTORELEASE(result);
+        // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+        EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
+        return AUTORELEASE(eval_dotimes(list, effective_env, eval_st));
     }
 
     // Try function call
@@ -2618,14 +2606,9 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
 
     if (list_type_matches(expr_tag)) {
         // Fast-path: use caller's EvalState (99% of cases)
-        if (st) {
-            return eval_list(as_list(expr), env, st, ctx);
-        }
-        // Slow-path: create temporary EvalState
-        EvalState *temp_st = evalstate_new(false);
-        CljObject *result = eval_list(as_list(expr), env, temp_st, ctx);
-        evalstate_free(temp_st);
-        return result;
+        // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+        EvalState *eval_st = st ? st : builtin_get_eval_state();
+        return eval_list(as_list(expr), env, eval_st, ctx);
     }
 
     if (expr_tag == CLJ_MAP) {
@@ -2733,13 +2716,8 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
         }
 
         if (new_env) {
-
-            EvalState *eval_st = st;
-            bool created_st = false;
-            if (!eval_st) {
-                eval_st = evalstate_new(false);
-                created_st = true;
-            }
+            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
+            EvalState *eval_st = st ? st : builtin_get_eval_state();
 
             // Evaluate body expressions
             CljObject *body_result = NULL;
@@ -2757,9 +2735,6 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
             }
             if (body_result) {
                 RELEASE(body_result);
-            }
-            if (created_st) {
-                evalstate_free(eval_st);
             }
 
             // Clean up environment

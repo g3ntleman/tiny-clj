@@ -139,6 +139,11 @@ static int compare_symbol_names(const void *a, const void *b);
 // Set/cleared in eval_function_call before/after calling builtins
 _Thread_local EvalState *g_current_eval_state = NULL;
 
+// Getter for g_current_eval_state - used by eval.c to avoid creating temporary EvalStates
+EvalState* builtin_get_eval_state(void) {
+    return g_current_eval_state;
+}
+
 // Helper function to validate builtin arguments (DRY principle)
 static bool validate_builtin_args(unsigned int argc, unsigned int expected, const char *func_name) {
     if (argc != expected) {
