@@ -49,10 +49,24 @@ typedef struct CljObject {
     int16_t rc;
 } CljObject;
 
-#define CLJ_FLAG_SPECIAL     0x01  // Special Form Symbol
-#define CLJ_FLAG_ARITHMETIC  0x02  // Arithmetic Operator (+ - * /)
-#define CLJ_FLAG_COMPARISON  0x04  // Comparison Operator (< > <= >= =)
-// Upper bits store operation index: bits 4-5 for ArithOp, bits 6-7 for CompOp
+/*
+ * CljObject.flags byte layout for symbols:
+ *
+ *   Bit:  7   6   5   4   3   2   1   0
+ *         └───┴───┘───┴───┘       │   │   │
+ *         CompOp   ArithOp        │   │   └─ CLJ_FLAG_SPECIAL (0x01)
+ *         (0-3)    (0-3)          │   └───── CLJ_FLAG_ARITHMETIC (0x02)
+ *                                 └───────── CLJ_FLAG_COMPARISON (0x04)
+ *
+ *   ArithOp: ADD=0, SUB=1, MUL=2, DIV=3
+ *   CompOp:  LT=0, GT=1, LE=2, GE=3 (= handled separately)
+ *
+ *   Example flags:  +  → 0x02,  -  → 0x12,  *  → 0x22,  /  → 0x32
+ *                   <  → 0x04,  >  → 0x44,  <= → 0x84,  >= → 0xC4
+ */
+#define CLJ_FLAG_SPECIAL     0x01
+#define CLJ_FLAG_ARITHMETIC  0x02
+#define CLJ_FLAG_COMPARISON  0x04
 #define CLJ_ARITH_OP_SHIFT   4
 #define CLJ_ARITH_OP_MASK    0x30
 #define CLJ_COMP_OP_SHIFT    6
