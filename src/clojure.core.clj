@@ -385,4 +385,242 @@ R"CLOJURE(
 (defn slurp [filename] :native)
 ^#^{:doc "Writes content (and optional more strings) to filename, overwriting existing data."}
 (defn spit [filename content & more] :native)
+
+; ============================================================================
+; Sequence Functions (Phase 1)
+; ============================================================================
+
+^#^{:doc "Returns a lazy seq representing the concatenation of the elements in x and y."}
+(defn concat [x y]
+  (if (empty? x)
+    (if (nil? y) (list) y)
+    (cons (first x) (concat (rest x) y))))
+
+^#^{:doc "Returns a lazy sequence of the first n items in coll."}
+(defn take [n coll]
+  (if (or (<= n 0) (empty? coll))
+    (list)
+    (cons (first coll) (take (dec n) (rest coll)))))
+
+^#^{:doc "Returns a lazy sequence of all but the first n items in coll."}
+(defn drop [n coll]
+  (if (or (<= n 0) (empty? coll))
+    coll
+    (drop (dec n) (rest coll))))
+
+^#^{:doc "Returns the last item in coll, in linear time."}
+(defn last [coll]
+  (if (empty? coll)
+    nil
+    (if (empty? (rest coll))
+      (first coll)
+      (last (rest coll)))))
+
+; ============================================================================
+; Predicate Functions (Phase 2)
+; ============================================================================
+
+^#^{:doc "Returns the first logical true value of (pred x) for any x in coll, else nil."}
+(defn some [pred coll]
+  (if (empty? coll)
+    nil
+    (let [result (pred (first coll))]
+      (if result
+        result
+        (some pred (rest coll))))))
+
+^#^{:doc "Returns true if (pred x) is logical true for every x in coll, else false."}
+(defn every? [pred coll]
+  (if (empty? coll)
+    true
+    (if (pred (first coll))
+      (every? pred (rest coll))
+      false)))
+
+^#^{:doc "Returns false if (pred x) is logical true for every x in coll, else true."}
+(defn not-every? [pred coll]
+  (not (every? pred coll)))
+
+^#^{:doc "Returns false if (pred x) is logical true for any x in coll, else true."}
+(defn not-any? [pred coll]
+  (not (some pred coll)))
+
+; ============================================================================
+; Higher-Order Sequence Functions (Phase 3)
+; ============================================================================
+
+^#^{:doc "Returns the result of applying concat to the result of applying map to f and colls."}
+(defn mapcat [f coll]
+  (if (empty? coll)
+    (list)
+    (concat (f (first coll)) (mapcat f (rest coll)))))
+
+^#^{:doc "Returns a lazy sequence of successive items from coll while (pred item) returns logical true."}
+(defn take-while [pred coll]
+  (if (empty? coll)
+    (list)
+    (if (pred (first coll))
+      (cons (first coll) (take-while pred (rest coll)))
+      (list))))
+
+^#^{:doc "Returns a lazy sequence of the items in coll starting from the first item for which (pred item) returns logical false."}
+(defn drop-while [pred coll]
+  (if (empty? coll)
+    coll
+    (if (pred (first coll))
+      (drop-while pred (rest coll))
+      coll)))
+
+^#^{:doc "Return a seq of all but the last item in coll, in linear time."}
+(defn butlast [coll]
+  (if (or (empty? coll) (empty? (rest coll)))
+    nil
+    (cons (first coll) (butlast (rest coll)))))
+
+^#^{:doc "Returns a lazy sequence of the non-nil results of (f item)."}
+(defn keep [f coll]
+  (if (empty? coll)
+    (list)
+    (let [result (f (first coll))]
+      (if (nil? result)
+        (keep f (rest coll))
+        (cons result (keep f (rest coll)))))))
+
+^#^{:doc "Returns a lazy seq of the first item in each coll, then the second etc."}
+(defn interleave [c1 c2]
+  (if (or (empty? c1) (empty? c2))
+    (list)
+    (cons (first c1)
+          (cons (first c2)
+                (interleave (rest c1) (rest c2))))))
+
+; ============================================================================
+; Aggregation Functions (Phase 4)
+; ============================================================================
+
+^#^{:doc "Returns a lazy seq of the intermediate values of the reduction."}
+(defn reductions [f init coll]
+  (cons init
+        (if (empty? coll)
+          (list)
+          (reductions f (f init (first coll)) (rest coll)))))
+
+^#^{:doc "Returns a map from distinct items in coll to the number of times they appear."}
+(defn frequencies [coll]
+  (reduce (fn [counts x]
+            (assoc counts x (inc (get counts x 0))))
+          {} coll))
+
+^#^{:doc "Returns a map of the elements of coll keyed by the result of f on each element."}
+(defn group-by [f coll]
+  (reduce (fn [ret x]
+            (let [k (f x)]
+              (assoc ret k (conj (get ret k []) x))))
+          {} coll))
+
+^#^{:doc "Returns a lazy sequence of the elements of coll with duplicates removed."}
+(defn distinct [coll]
+  (let [step (fn step [seen coll]
+               (if (empty? coll)
+                 (list)
+                 (let [x (first coll)]
+                   (if (get seen x)
+                     (step seen (rest coll))
+                     (cons x (step (assoc seen x true) (rest coll)))))))]
+    (step {} coll)))
+
+; ============================================================================
+; Partitioning Functions (Phase 5)
+; ============================================================================
+
+^#^{:doc "Returns a lazy sequence of lists of n items each."}
+(defn partition [n coll]
+  (if (empty? coll)
+    (list)
+    (let [p (take n coll)]
+      (if (< (count (vec p)) n)
+        (list)
+        (cons (vec p) (partition n (drop n coll)))))))
+
+^#^{:doc "Returns a lazy sequence of lists like partition, but may include partitions with fewer than n items at the end."}
+(defn partition-all [n coll]
+  (if (empty? coll)
+    (list)
+    (cons (vec (take n coll)) (partition-all n (drop n coll)))))
+
+^#^{:doc "Returns a vector of [(take n coll) (drop n coll)]."}
+(defn split-at [n coll]
+  [(vec (take n coll)) (vec (drop n coll))])
+
+^#^{:doc "Returns a vector of [(take-while pred coll) (drop-while pred coll)]."}
+(defn split-with [pred coll]
+  [(vec (take-while pred coll)) (vec (drop-while pred coll))])
+
+; ============================================================================
+; Map Construction Functions (Phase 6)
+; ============================================================================
+
+^#^{:doc "Returns a map with the keys mapped to the corresponding vals."}
+(defn zipmap [ks vs]
+  (let [step (fn step [m ks vs]
+               (if (or (empty? ks) (empty? vs))
+                 m
+                 (step (assoc m (first ks) (first vs))
+                       (rest ks) (rest vs))))]
+    (step {} ks vs)))
+
+^#^{:doc "Returns the value in a nested associative structure."}
+(defn get-in [m ks]
+  (reduce (fn [m k]
+            (if (nil? m)
+              nil
+              (get m k)))
+          m ks))
+
+; ============================================================================
+; Function Composition (Phase 7)
+; ============================================================================
+
+^#^{:doc "Takes a function f and fewer than the normal arguments to f, and returns a fn that takes a variable number of additional args."}
+(defn partial [f arg1]
+  (fn [x] (f arg1 x)))
+
+^#^{:doc "Takes a set of functions and returns a fn that is the composition of those fns."}
+(defn comp [f g]
+  (fn [x] (f (g x))))
+
+^#^{:doc "Takes a set of functions and returns a fn that is the juxtaposition of those fns."}
+(defn juxt [f g]
+  (fn [x] [(f x) (g x)]))
+
+^#^{:doc "Takes a fn f and returns a fn that takes the same arguments as f, has the same effects, if any, and returns the opposite truth value."}
+(defn complement [f]
+  (fn [x] (not (f x))))
+
+; ============================================================================
+; Iteration Functions (Phase 8)
+; ============================================================================
+
+^#^{:doc "Takes a function of no args, presumably with side effects, and returns an infinite lazy sequence of calls to it."}
+(defn repeatedly [n f]
+  (if (<= n 0)
+    (list)
+    (cons (f) (repeatedly (dec n) f))))
+
+^#^{:doc "Reduces an associative collection. f should be a function of 3 arguments."}
+(defn reduce-kv [f init m]
+  (if (nil? m)
+    init
+    (reduce (fn [acc k]
+              (f acc k (get m k)))
+            init (keys m))))
+
+^#^{:doc "Returns the absolute value of a."}
+(defn abs [x]
+  (if (< x 0) (- x) x))
+
+^#^{:doc "Remainder of dividing numerator by denominator."}
+(defn rem [num div]
+  (- num (* div (quot num div))))
+
 )CLOJURE"

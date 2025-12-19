@@ -149,3 +149,35 @@ TEST(test_special_form_dispatch_basic_performance) {
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
     }
 }
+
+// ============================================================================
+// TEST: Named fn (recursive anonymous functions)
+// ============================================================================
+
+TEST(test_named_fn_creates_function) {
+    // Named fn should create a function
+    ID result = eval_string("(fn? (fn fact [n] n))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+}
+
+TEST(test_named_fn_factorial) {
+    // Named fn should allow recursion
+    ID result = eval_string("((fn fact [n] (if (<= n 1) 1 (* n (fact (dec n))))) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(120, as_fixnum(result));
+}
+
+TEST(test_named_fn_countdown) {
+    // Named fn countdown to 0
+    ID result = eval_string("((fn countdown [n] (if (<= n 0) n (countdown (dec n)))) 10)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+}
+
+TEST(test_named_fn_with_two_params) {
+    // Named fn with two parameters
+    ID result = eval_string("((fn pow [base exp] (if (<= exp 0) 1 (* base (pow base (dec exp))))) 2 10)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(1024, as_fixnum(result)); // 2^10 = 1024
+}
