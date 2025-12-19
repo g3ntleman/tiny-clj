@@ -638,7 +638,7 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     }
 
     sym->base.type = CLJ_SYMBOL;
-    sym->base.rc = 1;  // Heap-allocated symbols start with rc=1
+    sym->base.rc = SINGLETON_RC;  // Interned symbols are singletons - never freed
 
     // Store strdup'd name for heap-allocated symbols
     sym->cname = strdup(cname);
