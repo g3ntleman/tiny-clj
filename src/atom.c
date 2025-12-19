@@ -106,7 +106,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     }
     
     // Call function with current value and additional args
-    EvalState *st = evalstate_new(false);
+    EvalState *st = get_global_eval_state();
     CljMap *env = st ? (CljMap*)st->current_ns->mappings : NULL;
     
     ID new_value = NULL;
@@ -119,7 +119,6 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         }
         free(fn_args);
         RELEASE(current_value);
-        evalstate_free(st);
         return NULL;
     } END_TRY
     
@@ -130,8 +129,6 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
     free(fn_args);
     
     RELEASE(current_value);
-    
-    evalstate_free(st);
     
     if (!new_value) {
         // Function returned nil or error

@@ -59,8 +59,10 @@ CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias);
 void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name);
 
 // EvalState functions
-EvalState* evalstate_new(bool load_core);
-void evalstate_free(EvalState *st);
+EvalState* get_global_eval_state(void);  // Get global thread-local EvalState
+void reset_eval_state(void);      // Reset global state for test isolation
+EvalState* evalstate_new(bool load_core);  // Returns global state (for compatibility)
+void evalstate_free(EvalState *st);  // No-op for global state (for compatibility)
 void evalstate_set_ns(EvalState *st, const char *ns_name);
 void evalstate_reset(EvalState **st_ptr, bool load_core);
 

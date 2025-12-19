@@ -1561,7 +1561,7 @@ ID make_named_func(BuiltinFn fn, void *env, const char *cname) {
 ID native_run_next_task(ID *args, unsigned int argc) {
     (void)args;
     if (argc != 0) return NULL;
-    EvalState *st = evalstate_new(false);
+    EvalState *st = get_global_eval_state();
     CljMap *env = NULL;
     bool ran = false;
     TRY {
@@ -1571,7 +1571,6 @@ ID native_run_next_task(ID *args, unsigned int argc) {
         // Don't propagate exception to caller
         ran = false;
     } END_TRY
-    evalstate_free(st);
     return ran ? clj_true : clj_false;
 }
 
@@ -2834,21 +2833,12 @@ ID native_load_file(ID *args, unsigned int argc) {
         return NULL; // file_slurp already threw exception
     }
 
-    // Get EvalState
-    EvalState *st = g_current_eval_state;
-    bool created_st = false;
-    if (!st) {
-        st = evalstate_new(false);
-        created_st = true;
-    }
+    // Get EvalState (use global state)
+    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
     // DRY: Use eval_source_in_current_state (same as require uses)
     const char *src = string_data(content);
     bool ok = eval_source_in_current_state(src, filename, st);
-
-    if (created_st) {
-        evalstate_free(st);
-    }
 
     // load-file returns nil (like Clojure)
     return ok ? NULL : NULL;
@@ -3425,20 +3415,12 @@ ID native_require(ID *args, unsigned int argc) {
     bool needs_release[argc];
     memset(needs_release, 0, sizeof(needs_release));
 
-    EvalState *st = g_current_eval_state;
-    bool created_st = false;
-    if (!st) {
-        st = evalstate_new(false);
-        created_st = true;
-    }
+    EvalState *st = g_current_eval_state ? g_current_eval_state : get_global_eval_state();
 
     for (unsigned int i = 0; i < argc; i++) {
         bool release_spec = false;
         ID spec = normalize_require_spec(args[i], &release_spec);
         if (!spec) {
-            if (created_st) {
-                evalstate_free(st);
-            }
             for (unsigned int j = 0; j < i; j++) {
                 if (needs_release[j]) {
                     RELEASE((CljObject*)normalized_specs[j]);
@@ -3451,9 +3433,6 @@ ID native_require(ID *args, unsigned int argc) {
 
         if (spec && TAG(spec) != CLJ_SYMBOL && TAG(spec) != CLJ_VECTOR) {
             throw_exception(EXCEPTION_TYPE, "require expects a symbol or vector", __FILE__, __LINE__, 0);
-            if (created_st) {
-                evalstate_free(st);
-            }
             for (unsigned int j = 0; j <= i; j++) {
                 if (needs_release[j]) {
                     RELEASE((CljObject*)normalized_specs[j]);
@@ -3465,9 +3444,6 @@ ID native_require(ID *args, unsigned int argc) {
 
     for (unsigned int i = 0; i < argc; i++) {
         if (!process_require_spec((CljObject*)normalized_specs[i], st)) {
-            if (created_st) {
-                evalstate_free(st);
-            }
             for (unsigned int j = 0; j < argc; j++) {
                 if (needs_release[j]) {
                     RELEASE((CljObject*)normalized_specs[j]);
@@ -3475,10 +3451,6 @@ ID native_require(ID *args, unsigned int argc) {
             }
             return NULL;
         }
-    }
-
-    if (created_st) {
-        evalstate_free(st);
     }
 
     for (unsigned int i = 0; i < argc; i++) {
@@ -4901,8 +4873,6 @@ ID native_do(ID *args, unsigned int argc) {
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
 // Also supports qualified symbols like "Math/sqrt" for other namespaces
 static void register_builtin_in_core(const char *cname, BuiltinFn func) {
-    EvalState *st = evalstate_new(false);
-
     // Check if name is a qualified symbol (e.g., "Math/sqrt")
     const char *slash = strchr(cname, '/');
     CljNamespace *target_ns;
@@ -4913,7 +4883,6 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
         size_t ns_len = slash - cname;
         char *ns_name = (char*)malloc(ns_len + 1);
         if (!ns_name) {
-            evalstate_free(st);
             return;
         }
         strncpy(ns_name, cname, ns_len);
@@ -4929,7 +4898,6 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
     }
 
     if (!target_ns) {
-        evalstate_free(st);
         return;
     }
 
@@ -4982,8 +4950,6 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
     } else {
         // Failed to register builtin
     }
-
-    evalstate_free(st);
 }
 
 void register_builtins() {

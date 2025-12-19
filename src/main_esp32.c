@@ -27,15 +27,14 @@ int main() {
     // Initialize interpreter
     register_builtins();
     
-    // Create evaluation state
-    EvalState *state = evalstate_new(false);
-    
+    // Get evaluation state
+    EvalState *state = get_global_eval_state();
+
     // Load and execute startup code
     DEBUG_PRINT("Loading startup code...");
     CljObject *result = eval_string(startup_code, state);
     if (!result) {
         DEBUG_PRINT("ERROR: Failed to load startup code");
-        evalstate_free(state);
         return 1;
     }
     RELEASE(result);
@@ -43,7 +42,6 @@ int main() {
     
     // Cleanup
     DEBUG_PRINT("Done");
-    evalstate_free(state);
     autorelease_pool_cleanup_all();
     
     return 0;
