@@ -13,20 +13,16 @@
 typedef struct {
     // Environment (direct pointers, no nested structs)
     CljMap *env;           // Current environment map (can be NULL)
-    CljList *env_stack;    // Environment stack for closures (can be NULL) - LEGACY
-    CallFrame *frame;      // Stack-based call frame (can be NULL) - NEW, preferred
+    CljList *env_stack;    // Environment stack for closures (can be NULL)
+    CallFrame *frame;      // Stack-based call frame for parameters (can be NULL)
 
     // Evaluation state
     EvalState *st;         // Evaluation state (can be NULL)
 
-    // Parameter substitution
-    ID *params;            // Parameter names (can be NULL)
-    ID *param_values;      // Parameter values (can be NULL)
-    int param_count;       // Number of parameters (0 if none)
-
     // Recur state
     ID *recur_args;        // Recur arguments (can be NULL)
     int *recur_arg_count;  // Pointer to recur argument count (can be NULL)
+    int recur_param_count; // Number of parameters for recur (0 = infer from provided)
 } EvalContext;
 
 // Special Form evaluation function pointer type (defined here where types are known)
