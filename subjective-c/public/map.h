@@ -22,6 +22,7 @@ typedef struct {
 } CljMap;
 
 // Type-safe casting
+#ifdef DEBUG
 static inline CljMap* as_map(ID obj) {
     if (obj) {
         int tag = TAG(obj);
@@ -32,6 +33,12 @@ static inline CljMap* as_map(ID obj) {
     CLJ_ASSERT(0 && "Expected Map type");
     return NULL;
 }
+#else
+// Release: zero-overhead cast
+static inline CljMap* as_map(ID obj) {
+    return (CljMap*)obj;
+}
+#endif
 
 // Map operations
 CljMap* make_map(int capacity);

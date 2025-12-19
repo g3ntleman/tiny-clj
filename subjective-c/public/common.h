@@ -75,4 +75,27 @@ void exception_print_native_backtrace(void);
 #endif
 #endif
 
+/**
+ * INLINE - Conditional inlining macro for profiling support
+ *
+ * Use this macro instead of 'inline' for functions that should be:
+ * - Inlined in Release builds for maximum performance
+ * - NOT inlined in Profiling builds so they appear in profiler output (e.g. sample)
+ *
+ * Usage:
+ *   static INLINE int hot_path_function(int x) { ... }
+ *
+ * Build modes:
+ *   - Release:   INLINE expands to 'inline'     -> function may be inlined
+ *   - Profiling: INLINE expands to 'noinline'   -> function appears in profiler
+ *
+ * Enable profiling mode by defining ENABLE_PROFILING:
+ *   cmake -DCMAKE_C_FLAGS="-DENABLE_PROFILING" ..
+ */
+#ifdef ENABLE_PROFILING
+#define INLINE __attribute__((noinline))
+#else
+#define INLINE inline
+#endif
+
 #endif // SUBJECTIVE_C_COMMON_H
