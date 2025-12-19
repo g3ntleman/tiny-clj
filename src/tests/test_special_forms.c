@@ -149,4 +149,3 @@ TEST(test_special_form_dispatch_basic_performance) {
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
     }
 }
-

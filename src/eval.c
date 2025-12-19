@@ -1149,17 +1149,14 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
     }
 
-    // Tier 3: Sequence operations (inline dispatch to avoid function call overhead)
-    if (original_op_sym) {
-        CljObject *result = NULL;
-        if (original_op_sym == SYM_FIRST) result = eval_and_call_native_with_context(list, effective_env, native_first, 1, ctx);
-        else if (original_op_sym == SYM_REST) result = eval_and_call_native_with_context(list, effective_env, native_rest, 1, ctx);
-        else if (original_op_sym == SYM_CONS) result = eval_and_call_native_with_context(list, effective_env, native_cons, 2, ctx);
-        else if (original_op_sym == SYM_SEQ) result = eval_seq(list, effective_env);
-        else if (original_op_sym == SYM_NEXT) result = eval_and_call_native_with_context(list, effective_env, native_next, 1, ctx);
-        else if (original_op_sym == SYM_COUNT) result = eval_and_call_native_with_context(list, effective_env, native_count, 1, ctx);
-        if (result) return result;
-    }
+    // Tier 3: Sequence operations (inline dispatch)
+    // Note: Only return if result is non-NULL, otherwise continue to try other operations
+    if (original_op_sym == SYM_FIRST) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_first, 1, ctx); if (r) return r; }
+    if (original_op_sym == SYM_REST)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_rest, 1, ctx); if (r) return r; }
+    if (original_op_sym == SYM_CONS)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_cons, 2, ctx); if (r) return r; }
+    if (original_op_sym == SYM_SEQ)   { CljObject *r = eval_seq(list, effective_env); if (r) return r; }
+    if (original_op_sym == SYM_NEXT)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_next, 1, ctx); if (r) return r; }
+    if (original_op_sym == SYM_COUNT) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_count, 1, ctx); if (r) return r; }
 
     // Tier 4: String and I/O operations
     if (original_op_sym == SYM_STR) {

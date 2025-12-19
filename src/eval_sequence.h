@@ -25,13 +25,11 @@ static inline ID eval_and_call_native_with_context(CljList *list,
     ID *args = alloc_obj_array(argc, args_stack);
     if (!args) return NULL;
 
-    // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
     int i = 0;
     LIST_FOR_EACH(LIST_REST(list), elem) {
         if (i >= argc) break;
         args[i] = eval_arg_from_expr_with_context(elem, env, NULL, ctx);
         if (!args[i]) {
-            // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
             free_obj_array(args, args_stack);
             return NULL;
         }
@@ -39,12 +37,9 @@ static inline ID eval_and_call_native_with_context(CljList *list,
     }
 
     ID result = native_func ? native_func(args, argc) : NULL;
-    // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
     free_obj_array(args, args_stack);
     return result;
 }
-
-// Note: eval_sequence_dispatch_with_context and eval_loop_dispatch have been inlined in eval.c for performance
 
 ID eval_map_lookup(CljList *list,
                    CljMap *env,
@@ -57,10 +52,3 @@ ID eval_map_lookup(CljList *list,
 #endif
 
 #endif // EVAL_SEQUENCE_H
-
-
-
-
-
-
-
