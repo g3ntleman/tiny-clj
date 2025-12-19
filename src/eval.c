@@ -91,11 +91,8 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
 
 #include "map.h"
 #include "runtime.h"
-#include "environment.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <time.h>
 #include <sys/time.h>
 
 // Global variable to suppress time output in tests
@@ -452,13 +449,15 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
     int initial_capacity = frame->param_count > 0 ? frame->param_count : 4;
     CljMap *frame_map = make_map(initial_capacity);
 
-    for (int i = 0; i < frame->param_count; i++) {
-        ID key = *frame_param_slot(frame, i);
-        if (!key) continue;
+    if (frame->params) {
+        for (int i = 0; i < frame->param_count; i++) {
+            ID key = frame->params[i];
+            if (!key) continue;
 
-        ID value = frame_decode_value(*frame_value_slot(frame, i));
-        CljMap *new_map = map_assoc(frame_map, key, value);
-        ASSIGN(frame_map, new_map);
+            ID value = frame_decode_value(frame->values[i]);
+            CljMap *new_map = map_assoc(frame_map, key, value);
+            ASSIGN(frame_map, new_map);
+        }
     }
 
     CljList *new_stack = make_list((ID)frame_map, parent_with_frames);
@@ -889,6 +888,13 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
     if (g_runtime.resolve_cache) {
         ID cached = resolve_cache_lookup_value(cache_ns_key, op);
         if (cached) {
+            // Populate per-callsite cache even when global resolve_cache hits.
+            // This is important for hot recursive callsites (e.g. fib), where the resolve_cache
+            // is often warmed up by an earlier top-level call, and the first encounter of an
+            // inner callsite would otherwise return early and never initialize callsite_cache.
+            if (allow_callsite_cache) {
+                ast_node_update_callsite_cache(call_node, op_sym, cached, g_runtime.resolve_cache_epoch);
+            }
             RELEASE(owned_env_stack);
             return cached;
         }

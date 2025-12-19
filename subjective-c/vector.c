@@ -108,10 +108,10 @@ bool vector_init_seq_iterator(SeqIterator *iter, CljVector *vec) {
 
 /** Get raw data array pointer (no copying, direct access).
  * @param vec Vector to access
- * @return Pointer to data array or NULL if vec is NULL or capacity is 0
+ * @return Pointer to data array (asserts vec != NULL)
  */
 ID* vector_as_array(CljVector *vec) {
-    if (!vec || vec->capacity == 0) return NULL;
+    CLJ_ASSERT(vec != NULL && "vector_as_array called with NULL");
     return vec->data;  // Flexible array member - points to end of struct
 }
 
