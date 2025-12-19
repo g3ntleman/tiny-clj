@@ -32,7 +32,7 @@
  * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL on error
  */
-ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env);
+ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env);
 
 // === CljValue API (Phase 1: Immediates) ===
 

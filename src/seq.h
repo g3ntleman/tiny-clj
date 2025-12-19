@@ -59,7 +59,7 @@ typedef struct {
  * @param obj Container to iterate over
  * @return true if successful, false if not seqable
  */
-bool seq_iter_init(SeqIterator *iter, CljObject *obj);
+bool seq_iter_init(SeqIterator *iter, ID obj);
 
 /**
  * @brief Get the first element of a sequence

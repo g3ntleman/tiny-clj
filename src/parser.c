@@ -24,6 +24,7 @@
 #include "symbol.h"
 #include "meta.h"
 #include "strings.h"
+#include "ast_canon.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -348,7 +349,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
  * @param env Optional environment (if NULL, uses eval_state->current_ns->mappings)
  * @return The evaluated result (autoreleased) or NULL only if result is nil
  */
-ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
+ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
     CLJ_ASSERT(eval_state != NULL);
 
     // NULL means nil (e.g., () parses to nil) - return NULL
@@ -363,7 +364,13 @@ ID eval_parsed(CljObject *parsed_expr, EvalState *eval_state, CljMap *env) {
     if (IS_IMMEDIATE(parsed_expr)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
         result = parsed_expr;
-    } else if (parsed_expr && list_type_matches(TAG(parsed_expr))) {
+    } else {
+        // Canonicalize the AST before evaluation
+        // This converts symbol tokens to symbols and handles quote forms properly
+        parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+    }
+    
+    if (parsed_expr && list_type_matches(TAG(parsed_expr))) {
         // Use provided env or fall back to current_ns->mappings
         CljMap *eval_env = env;
         if (!eval_env) {

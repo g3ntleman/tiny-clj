@@ -37,7 +37,7 @@ static ID make_map_entry_vector(CljMap *map, int index) {
 // FAST SEQ IMPLEMENTATION
 // ============================================================================
 
-bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
+bool seq_iter_init(SeqIterator *iter, ID obj) {
     if (!iter) return false;
     
     // Initialize to empty
@@ -50,8 +50,9 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
     }
     
     iter->container = obj;
+    CljObject *o = obj;
     
-    switch (obj->type) {
+    switch (o->type) {
         case CLJ_LIST:
         case CLJ_AST_NODE: {
             CljList *list_data = as_list(obj);
