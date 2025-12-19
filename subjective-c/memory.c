@@ -89,15 +89,13 @@ void* alloc(size_t type_size, size_t count, CljType obj_type) {
         throw_oom();  // Never returns
     }
     
-    // Track object creation if it's a CljObject subtype and NOT a singleton
+    // Track object creation if it's a CljObject subtype
+    // Note: Singletons (rc == SINGLETON_RC) are set up later and never released
     if (type_size >= sizeof(CljObject)) {
-        // Only track non-singleton types (singletons have rc==0)
-        if (!IS_SINGLETON_TYPE(obj_type)) {
-            CljObject *obj = (CljObject*)result;
-            obj->type = obj_type;  // Set type before tracking
-            obj->flags = 0;  // Initialize flags
-            MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
-        }
+        CljObject *obj = (CljObject*)result;
+        obj->type = obj_type;  // Set type before tracking
+        obj->flags = 0;  // Initialize flags
+        MEMORY_PROFILER_TRACK_OBJECT_CREATION(obj);
     }
     
     return result;
@@ -495,11 +493,6 @@ int get_retain_count(ID obj) {
     CljObject *obj_ptr = (CljObject*)obj;
     
     // Singletons don't use retain counting
-    if (IS_SINGLETON_TYPE(obj_ptr->type)) {
-        return 0;
-    }
-    
-    // Also check SINGLETON_RC for empty_list, empty_map, etc.
     if (obj_ptr->rc == SINGLETON_RC) {
         return 0;
     }

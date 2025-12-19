@@ -19,8 +19,6 @@ typedef void* CljValue;
 #include <execinfo.h>
 
 #define INDEX_NOT_FOUND (-1)
-#define LAST_SINGLETON_TYPE CLJ_SYMBOL
-#define IS_SINGLETON_TYPE(type) ((type) <= LAST_SINGLETON_TYPE)
 #define TRACKS_RETAINS(obj) ((obj) && !is_singleton(obj))
 #define IS_SINGLETON(obj) is_singleton(obj)
 
@@ -94,14 +92,7 @@ static inline bool is_singleton(CljObject *obj) {
         return false;
     }
 #endif
-    CljType obj_type = obj->type;
-    if (IS_SINGLETON_TYPE(obj_type)) {
-        return true;
-    }
-    if (obj->rc == SINGLETON_RC) {
-        return true;
-    }
-    return false;
+    return obj->rc == SINGLETON_RC;
 }
 
 bool clj_equal(ID a, ID b);
