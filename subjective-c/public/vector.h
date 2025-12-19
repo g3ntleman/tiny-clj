@@ -7,6 +7,7 @@
 
 typedef struct CljVector CljVector;
 
+#ifdef DEBUG
 static inline CljVector* as_vector(ID obj) {
     if (obj) {
         int tag = (int)TAG(obj);
@@ -17,6 +18,12 @@ static inline CljVector* as_vector(ID obj) {
     CLJ_ASSERT(0 && "Expected Vector type");
     return NULL;
 }
+#else
+// Release: zero-overhead cast
+static inline CljVector* as_vector(ID obj) {
+    return (CljVector*)obj;
+}
+#endif
 
 static inline bool is_vector(CljObject *obj) {
     if (!obj) return false;

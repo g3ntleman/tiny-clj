@@ -1225,10 +1225,9 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
         CljList *rest = as_list(list->rest);
         if (rest && rest->first && TAG(rest->first) == CLJ_SYMBOL) {
           // This is a defn form - set metadata on the function name symbol
-          CljSymbol *name_sym = as_symbol(rest->first);
           // RETAIN meta before setting (meta_set will handle it, but we need to ensure it's retained)
           RETAIN((CljObject*)meta);
-          meta_set((CljObject*)name_sym, (CljObject*)meta);
+          meta_set((CljObject*)rest->first, (CljObject*)meta);
           // Also set on the list for backward compatibility (but symbol takes precedence)
           meta_set(obj, meta);
           // Don't release meta here - it will be released at the end of the function
