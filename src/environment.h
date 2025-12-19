@@ -8,12 +8,12 @@
 #include "map.h"  // Includes FRAME_NIL_SENTINEL definition
 #include "list.h"
 #include "symbol.h"
-#include "kv_macros.h"  // For KV_KEY, KV_VALUE macros
 
 typedef struct CallFrame {
     struct CallFrame *parent;  // Parent frame (for nested calls)
+    ID *params;                // Pointer to func->params_array (borrowed, no RETAIN)
     int param_count;           // Number of active bindings
-    ID entries[];              // Layout: [param0, value0, param1, value1, ...]
+    ID values[];               // Only values: [value0, value1, ...]
 } CallFrame;
 
 static inline ID frame_encode_value(ID value) {
@@ -26,15 +26,7 @@ static inline ID frame_decode_value(ID value) {
 
 static inline size_t frame_allocation_size(int capacity) {
     if (capacity < 0) capacity = 0;
-    return sizeof(CallFrame) + (size_t)capacity * 2 * sizeof(ID);
-}
-
-static inline ID* frame_param_slot(CallFrame *frame, int index) {
-    return &KV_KEY(frame->entries, index);
-}
-
-static inline ID* frame_value_slot(CallFrame *frame, int index) {
-    return &KV_VALUE(frame->entries, index);
+    return sizeof(CallFrame) + (size_t)capacity * sizeof(ID);
 }
 
 // Frame management functions
@@ -49,9 +41,5 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value);
 
 /** Release all values in a frame (for cleanup) */
 void frame_release(CallFrame *frame);
-
-// Legacy environment helpers (still used for cases requiring persistent maps)
-/** Create new environment stack with param/value bindings (idiomatic CljList of maps). */
-CljList* env_extend_stack(CljList *parent_stack, ID *params, ID *values, int count);
 
 #endif
