@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+#ifdef DEBUG
 // Print AST as Clojure code for debugging
 static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_size, int *offset) {
     if (!v) {
@@ -128,6 +129,7 @@ const char* print_ast(CljObject *v) {
 
     return buf;
 }
+#endif // DEBUG
 
 /**
  * @brief Check if an object is a zombie (freed but not deallocated)
