@@ -48,6 +48,7 @@ ID native_eval(ID *args, unsigned int argc);
 ID native_read_string(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
 void builtin_set_eval_state(EvalState *st);
+EvalState* builtin_get_eval_state(void);
 
 // Transient functions
 ID native_transient(ID *args, unsigned int argc);
