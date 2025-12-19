@@ -12,7 +12,7 @@
  * @param val_b Output: promoted value of b
  * @return true if both objects are numeric, false otherwise
  */
-bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, float *val_b);
+bool extract_numeric_values(ID a, ID b, float *val_a, float *val_b);
 
 /**
  * @brief Comparison result enumeration for numeric comparisons.
@@ -34,6 +34,6 @@ typedef enum {
  * @param result Output: Comparison result (-1, 0, or 1).
  * @return true if both objects are numeric, false otherwise
  */
-bool compare_numeric_values(CljObject *a, CljObject *b, CompareResult *result);
+bool compare_numeric_values(ID a, ID b, CompareResult *result);
 
 #endif // NUMERIC_UTILS_H

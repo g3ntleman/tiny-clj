@@ -37,7 +37,7 @@ void meta_registry_cleanup() {
     g_runtime.meta_registry = NULL;
 }
 
-void meta_set(CljObject *v, CljObject *meta) {
+void meta_set(ID v, ID meta) {
     if (!v) return;
     
     meta_registry_init();
@@ -69,7 +69,7 @@ void meta_set(CljObject *v, CljObject *meta) {
 #endif
 }
 
-ID meta_get(CljObject *v) {
+ID meta_get(ID v) {
     if (!v || !g_runtime.meta_registry) return NULL;
     
     CljMap *registry = (CljMap*)g_runtime.meta_registry;

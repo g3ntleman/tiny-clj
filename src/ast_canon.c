@@ -27,7 +27,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-static ID canonicalize_expr(ID expr, EvalState *st);
+static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
 /**
  * @brief Canonicalize a symbol token to CljSymbol
@@ -146,9 +146,10 @@ static CljSymbol* canonicalize_symbol_token(CljSymbolToken *token, EvalState *st
  * @brief Canonicalize an AST node (recursive)
  * @param expr Expression to canonicalize (may be CljString, CljList, etc.)
  * @param st Evaluation state
+ * @param in_quote If true, lists stay as CljList (not converted to ASTNode)
  * @return Canonicalized expression (CljSymbol for strings, ASTNode for lists) or original if unchanged
  */
-static ID canonicalize_expr(ID expr, EvalState *st) {
+static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
     CLJ_ASSERT(st != NULL);
     
     if (!expr) {
@@ -164,7 +165,7 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
     
     unsigned char tag = TAG(expr);
     
-    // Convert symbol tokens (stored as special strings) to CljSymbol
+    // Convert symbol tokens (stored as special strings) to CljSymbol - always, even in quote
     if (tag == CLJ_SYMBOL_TOKEN) {
         CljSymbolToken *token = (CljSymbolToken*)expr;
         CljSymbol *sym = canonicalize_symbol_token(token, st);
@@ -179,19 +180,49 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
         return expr;  // Actual string literal, leave unchanged
     }
     
-    // Convert CljList to ASTNode (for function calls and variable access)
+    // Handle lists and ASTNodes: Convert to ASTNode unless in_quote
+    // NOTE: Parser produces ASTNodes, but we handle both for robustness
     if (list_type_matches(tag)) {
         CljList *list = as_list(expr);
         CLJ_ASSERT(list != NULL);
         
-        ID first = canonicalize_expr(list->first, st);
-        ID rest = NULL;
+        ID first = canonicalize_expr(list->first, st, in_quote);
         
+        // Check if we're entering a quote expression
+        // Compare against SYM_QUOTE to detect (quote ...) forms
+        bool is_quote_form = (first == SYM_QUOTE);
+        bool child_in_quote = in_quote || is_quote_form;
+        
+        ID rest = NULL;
         if (list->rest) {
-            rest = canonicalize_expr(list->rest, st);
+            rest = canonicalize_expr(list->rest, st, child_in_quote);
         }
         
-        // Create ASTNode instead of CljList
+        if (in_quote) {
+            // In quote context: keep/convert to CljList
+            CljList *new_list = make_list((CljObject*)first, (CljList*)rest);
+            if (!new_list) {
+                return expr;  // Out of memory - return original
+            }
+            
+#ifdef ENABLE_META
+            ID meta = meta_get((CljObject*)expr);
+            if (meta) {
+                ID canon_meta = canonicalize_expr(meta, st, in_quote);
+                meta_set((CljObject*)new_list, (CljObject*)canon_meta);
+            }
+#endif
+            
+            RELEASE(list);  // Free the original list/ASTNode
+            return new_list;
+        }
+        
+        // Normal context: Create/keep as ASTNode
+        // Check if anything changed - if not, return original ASTNode
+        if (tag == CLJ_AST_NODE && first == list->first && rest == (ID)list->rest) {
+            return expr;  // No changes needed
+        }
+        
         CljASTNode *node = make_ast_node(first, rest);
         if (!node) {
             return expr;  // Out of memory - return original
@@ -203,7 +234,7 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
 #ifdef ENABLE_META
         ID meta = meta_get((CljObject*)expr);
         if (meta) {
-            ID canon_meta = canonicalize_expr(meta, st);
+            ID canon_meta = canonicalize_expr(meta, st, in_quote);
             meta_set((CljObject*)node, (CljObject*)canon_meta);
         }
 #endif
@@ -223,7 +254,7 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
         
         for (int i = 0; i < count; i++) {
             ID elem = vector_nth(vec, i);
-            canon_elems[i] = canonicalize_expr(elem, st);
+            canon_elems[i] = canonicalize_expr(elem, st, in_quote);
             if (canon_elems[i] != elem) {
                 changed = true;
             }
@@ -238,7 +269,7 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
 #ifdef ENABLE_META
             ID meta = meta_get((CljObject*)vec);
             if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st);
+                ID canon_meta = canonicalize_expr(meta, st, in_quote);
                 meta_set((CljObject*)new_vec, (CljObject*)canon_meta);
             }
 #endif
@@ -259,8 +290,8 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
         
         // Canonicalize keys and values
         MAP_FOR_EACH(map, key, value) {
-            ID canon_key = canonicalize_expr(key, st);
-            ID canon_value = canonicalize_expr(value, st);
+            ID canon_key = canonicalize_expr(key, st, in_quote);
+            ID canon_value = canonicalize_expr(value, st, in_quote);
             if (canon_key != key || canon_value != value) {
                 if (!new_map) {
                     new_map = make_map(map_count(map));
@@ -276,7 +307,7 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
 #ifdef ENABLE_META
             ID meta = meta_get((CljObject*)map);
             if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st);
+                ID canon_meta = canonicalize_expr(meta, st, in_quote);
                 meta_set((CljObject*)new_map, (CljObject*)canon_meta);
             }
 #endif
@@ -299,7 +330,7 @@ static ID canonicalize_expr(ID expr, EvalState *st) {
  */
 ID canonicalize_ast(ID parsed_expr, EvalState *st) {
     CLJ_ASSERT(st != NULL);
-    return canonicalize_expr(parsed_expr, st);
+    return canonicalize_expr(parsed_expr, st, false);
 }
 
 

@@ -237,6 +237,50 @@ R"CLOJURE(
 (defn map? [x] :native)
 
 ; ============================================================================
+; Type Predicates (Native)
+; ============================================================================
+^#^{:doc "Returns true if x is a Number."}
+(defn number? [x] :native)
+^#^{:doc "Returns true if n is an integer (fixed precision)."}
+(defn integer? [x] :native)
+^#^{:doc "Returns true if n is a floating point number."}
+(defn float? [x] :native)
+^#^{:doc "Returns true if x is a String."}
+(defn string? [x] :native)
+^#^{:doc "Returns true if x is a Keyword."}
+(defn keyword? [x] :native)
+^#^{:doc "Returns true if x is a Symbol."}
+(defn symbol? [x] :native)
+^#^{:doc "Returns true if x implements IFn."}
+(defn fn? [x] :native)
+^#^{:doc "Returns true if x is a Character."}
+(defn char? [x] :native)
+
+; ============================================================================
+; Type Predicates (Clojure-based)
+; ============================================================================
+^#^{:doc "Returns true if x is not nil, false otherwise."}
+(defn some? [x] (not (nil? x)))
+^#^{:doc "Returns true if x is the value true, false otherwise."}
+(defn true? [x] (identical? x true))
+^#^{:doc "Returns true if x is the value false, false otherwise."}
+(defn false? [x] (identical? x false))
+^#^{:doc "Returns true if x is a Boolean."}
+(defn boolean? [x] (or (true? x) (false? x)))
+^#^{:doc "Returns true if x is a kind of persistent list."}
+(defn list? [x] :native)
+^#^{:doc "Returns true if x is a kind of persistent set."}
+(defn set? [x] false)
+^#^{:doc "Returns true if x is a persistent collection."}
+(defn coll? [x] (or (list? x) (vector? x) (map? x)))
+^#^{:doc "Returns true if x implements ISeq."}
+(defn seq? [x] (list? x))
+^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}
+(defn seqable? [x] (or (nil? x) (coll? x) (string? x)))
+^#^{:doc "Returns true if x implements IFn. Note that many data structures implement IFn."}
+(defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
+
+; ============================================================================
 ; Comparison Functions (Native)
 ; ============================================================================
 ^#^{:doc "Returns non-nil if nums are in monotonically increasing order, otherwise false."}

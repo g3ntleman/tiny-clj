@@ -8,21 +8,21 @@
  * @param val_b Output: promoted value of b
  * @return true if both objects are numeric, false otherwise
  */
-bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, float *val_b) {
+bool extract_numeric_values(ID a, ID b, float *val_a, float *val_b) {
     // Extract value from first object
-    if (is_fixnum((CljValue)a)) {
-        *val_a = (float)as_fixnum((CljValue)a);
-    } else if (is_fixed((CljValue)a)) {
-        *val_a = as_fixed((CljValue)a);
+    if (is_fixnum(a)) {
+        *val_a = (float)as_fixnum(a);
+    } else if (is_fixed(a)) {
+        *val_a = as_fixed(a);
     } else {
         return false; // Invalid type
     }
     
     // Extract value from second object
-    if (is_fixnum((CljValue)b)) {
-        *val_b = (float)as_fixnum((CljValue)b);
-    } else if (is_fixed((CljValue)b)) {
-        *val_b = as_fixed((CljValue)b);
+    if (is_fixnum(b)) {
+        *val_b = (float)as_fixnum(b);
+    } else if (is_fixed(b)) {
+        *val_b = as_fixed(b);
     } else {
         return false; // Invalid type
     }
@@ -41,7 +41,7 @@ bool extract_numeric_values(CljObject *a, CljObject *b, float *val_a, float *val
  * @param result Output: Comparison result (-1, 0, or 1).
  * @return true if both objects are numeric, false otherwise
  */
-bool compare_numeric_values(CljObject *a, CljObject *b, CompareResult *result) {
+bool compare_numeric_values(ID a, ID b, CompareResult *result) {
     float val_a, val_b;
     
     if (!extract_numeric_values(a, b, &val_a, &val_b)) {
