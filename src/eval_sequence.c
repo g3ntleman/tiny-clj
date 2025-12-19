@@ -8,7 +8,7 @@
 #include "seq.h"
 #include "strings.h"
 
-// eval_and_call_native_with_context is now defined as static inline in eval_sequence.h
+// eval_and_call_native_with_context is defined as static inline in eval_sequence.h
 
 ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx, ID map) {
     int total_count = list_count(list);
@@ -26,12 +26,3 @@ ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     RELEASE(key);
     return AUTORELEASE(RETAIN(result));
 }
-
-// Note: eval_sequence_dispatch_with_context and eval_loop_dispatch have been inlined in eval.c for performance
-
-
-
-
-
-
-

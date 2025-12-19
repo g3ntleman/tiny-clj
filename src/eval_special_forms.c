@@ -278,7 +278,3 @@ ID eval_special_form_dispatch(CljList *list,
     if (!special || !special->eval_fn) return NULL;
     return special->eval_fn(list, env, st, ctx);
 }
-
-
-
-
