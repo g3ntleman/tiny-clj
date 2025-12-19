@@ -3,7 +3,11 @@
 set -e
 
 BUILD_DIR="build"
-OUTPUT_FILE="sample_fib30_$(date +%Y%m%d_%H%M%S).txt"
+OUTPUT_DIR="benchmark_results"
+OUTPUT_FILE="$OUTPUT_DIR/sample_fib30_$(date +%Y%m%d_%H%M%S).txt"
+
+# Ensure output directory exists
+mkdir -p "$OUTPUT_DIR"
 
 echo "=== Building profiling build (ENABLE_PROFILING) ==="
 
