@@ -119,6 +119,7 @@ ID native_swap_bang(ID *args, unsigned int argc);
 #ifndef ESP32_BUILD
 ID native_slurp(ID *args, unsigned int argc);
 ID native_spit(ID *args, unsigned int argc);
+ID native_load_file(ID *args, unsigned int argc);
 #endif
 ID native_trim(ID *args, unsigned int argc);
 ID native_upper_case(ID *args, unsigned int argc);
@@ -2544,7 +2545,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_ns_map_data.sym, native_ns_map},
     {&sym_find_ns_data.sym, native_find_ns},
     {&sym_all_ns_data.sym, native_all_ns},
-    {&sym_do_data.sym, native_do},
+    {(CljSymbol*)&sym_do_data.sym, native_do},
     {&sym_byte_array_data.sym, native_byte_array},
     {&sym_aget_data.sym, native_aget},
     {&sym_aset_data.sym, native_aset},
@@ -2802,6 +2803,50 @@ ID native_slurp(ID *args, unsigned int argc) {
 
     // file_slurp throws exception on errors, so if we get here, result is valid
     return result ? AUTORELEASE(result) : NULL;
+}
+
+// Forward declaration for eval_source_in_current_state (defined below in require section)
+static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st);
+
+// load-file: read and evaluate all forms in a file (Clojure standard function)
+// DRY: Uses eval_source_in_current_state for the actual evaluation
+ID native_load_file(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "load-file")) return NULL;
+
+    // Get filename as string
+    CljString *filename_str_obj = to_string(args[0]);
+    if (!filename_str_obj) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "load-file requires a string argument",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    const char *filename = string_data(filename_str_obj);
+
+    // Read file content
+    CljString *content = file_slurp(filename);
+    if (!content) {
+        return NULL; // file_slurp already threw exception
+    }
+
+    // Get EvalState
+    EvalState *st = g_current_eval_state;
+    bool created_st = false;
+    if (!st) {
+        st = evalstate_new(false);
+        created_st = true;
+    }
+
+    // DRY: Use eval_source_in_current_state (same as require uses)
+    const char *src = string_data(content);
+    bool ok = eval_source_in_current_state(src, filename, st);
+
+    if (created_st) {
+        evalstate_free(st);
+    }
+
+    // load-file returns nil (like Clojure)
+    return ok ? NULL : NULL;
 }
 #endif // ESP32_BUILD
 
@@ -4946,8 +4991,9 @@ void register_builtins() {
     register_builtin_in_core("read-string", native_read_string);
 #ifndef ESP32_BUILD
     register_builtin_in_core("require", native_require);
+    register_builtin_in_core("load-file", native_load_file);
 #endif
-    
+
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
     // This allows metadata (docstrings) to be properly attached.

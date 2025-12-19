@@ -7,6 +7,7 @@
 #include "builtins.h"
 #include "optimize.h"
 #include "parser.h"  // For eval_parsed
+#include "common.h"  // For INLINE macro
 
 #include "error_messages.h"
 #include <limits.h>
@@ -375,7 +376,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
 }
 
 // Extended version that also searches in CallFrame
-static ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NULL;
     }
@@ -813,7 +814,7 @@ void reset_eval_arg_depth(void) {
 // Handle recur special form
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
-static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
+static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
     if (!op || TAG(op) != CLJ_SYMBOL) {
         return op;
     }
@@ -954,7 +955,7 @@ static ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalCon
 }
 
 // Handle function call from resolved operator
-static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
+static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
     if (!op) return NULL;
 
     // Handle keywords as functions (for map lookup)
@@ -1020,7 +1021,7 @@ static ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st
     return NULL; // Not a function
 }
 
-static ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     ID args[16];
     int argc = 0;
     unsigned char fn_tag = TAG(fn);
