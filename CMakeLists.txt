@@ -345,6 +345,7 @@ add_executable(unit-tests
     src/tests/test_hashmap_highlevel.c
     src/tests/test_map.c
     src/tests/test_special_forms.c
+    src/tests/test_core_functions.c
     external/unity/src/unity.c
     src/builtins.c
     src/object.c

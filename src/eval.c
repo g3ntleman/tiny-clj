@@ -1395,40 +1395,52 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     CLJ_ASSERT(env != NULL);
     CLJ_ASSERT(is_list(list));
 
-    // Get the parameter list (second argument) - don't evaluate it
-    CljObject *params_list = list_get_element(list, 1);
+    // Get potential function name (for named fn like (fn step [x] ...))
+    CljList *rest1 = as_list(LIST_REST(list));     // nach 'fn'
+    ID second = LIST_FIRST(rest1);        // name oder params
+    CljSymbol *fn_name = NULL;
+    ID params_list = NULL;
+    ID body = NULL;
+
+    // Check if second element is a symbol (named fn) but NOT a keyword
+    // Also check it's not a vector (anonymous fn case)
+    if (TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
+        // Named fn: (fn name [params] body)
+        fn_name = (CljSymbol*)second;
+        CljList *rest2 = as_list(LIST_REST(rest1));   // nach name
+        params_list = LIST_FIRST(rest2);
+        CljList *rest3 = as_list(LIST_REST(rest2));
+        body = LIST_FIRST(rest3);
+    } else {
+        // Anonymous fn: (fn [params] body)
+        params_list = second;
+        CljList *rest2 = as_list(LIST_REST(rest1));
+        body = LIST_FIRST(rest2);
+    }
+
     // Parameters can be a vector [a b] or a list (a b)
-    if (!params_list || (!list_type_matches(TAG(params_list)) && TAG(params_list) != CLJ_VECTOR)) {
+    bool is_vector_params = TAG(params_list) == CLJ_VECTOR;
+    if (!params_list || (!list_type_matches(TAG(params_list)) && !is_vector_params)) {
         return NULL;
     }
 
-    // Get the body (third argument) - don't evaluate it
-    CljObject *body = list_get_element(list, 2);
     if (!body) {
         return NULL;
     }
 
     // Convert parameter list/vector to array
-    int param_count = 0;
-    if (params_list && TAG(params_list) == CLJ_VECTOR) {
-        CljVector *vec = as_vector(params_list);
-        param_count = vec ? vector_count(vec) : 0;
-    } else {
-        param_count = list_count(as_list(params_list));
-    }
+    int param_count = is_vector_params 
+        ? vector_count(as_vector(params_list))
+        : list_count(as_list(params_list));
 
     ID params_stack[16];
     ID *params = alloc_obj_array(param_count, params_stack);
 
     for (int i = 0; i < param_count; i++) {
-        if (params_list && TAG(params_list) == CLJ_VECTOR) {
-            CljVector *vec = as_vector(params_list);
-            params[i] = vector_nth(vec, i);
-        } else {
-            params[i] = list_get_element(as_list(params_list), i);
-        }
-        if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
-            // Invalid parameter
+        params[i] = is_vector_params
+            ? vector_nth(as_vector(params_list), i)
+            : list_get_element(as_list(params_list), i);
+        if (TAG(params[i]) != CLJ_SYMBOL) {
             free_obj_array(params, params_stack);
             return NULL;
         }
@@ -1448,12 +1460,18 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Create function object
-    CljObject *fn = AUTORELEASE((CljObject*)make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL));
+    CljFunction *fn = make_function(params, param_count, body, fn_env_stack, NULL, st ? st->current_ns : NULL);
 
-    // Cleanup heap-allocated params if any
+    // If this is a named function, bind it to its own name in closure for recursion
+    if (fn_name) {
+        CljMap *self_binding = map_assoc(map_empty(), fn_name, fn);
+        RELEASE(fn);  // Balance map_assoc's RETAIN
+        fn->env_stack = make_list(self_binding, fn->env_stack);
+    }
+
     free_obj_array(params, params_stack);
 
-    return fn;
+    return AUTORELEASE(fn);
 }
 
 // is_special_symbol is now in symbol.c (uses dynamic registration)
