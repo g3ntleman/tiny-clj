@@ -40,7 +40,6 @@ set(SUBJECTIVE_C_TEST_SOURCES
     tests/test_registry.c
     tests/test_placeholder.c
     tests/test_strings.c
-    tests/test_symbol.c
     tests/test_vectors.c
     tests/test_map.c
     tests/test_memory.c

@@ -107,7 +107,6 @@ list(APPEND SOURCES
     src/args_utils.c
     src/meta.c
     src/eval_arithmetic.c
-    src/eval_dispatch.c
     src/eval_comparison.c
     src/eval_sequence.c
     src/eval_special_forms.c
@@ -161,7 +160,6 @@ set(STM32_SOURCES
     src/args_utils.c
     src/meta.c
     src/eval_arithmetic.c
-    src/eval_dispatch.c
     src/eval_comparison.c
     src/eval_sequence.c
     src/eval_special_forms.c
@@ -202,7 +200,6 @@ add_executable(tiny-clj-esp32
     src/args_utils.c
     src/meta.c
     src/eval_arithmetic.c
-    src/eval_dispatch.c
     src/eval_comparison.c
     src/eval_sequence.c
     src/eval_special_forms.c
@@ -332,6 +329,7 @@ add_executable(unit-tests
     src/tests/test_meta.c
     src/tests/test_hashmap_highlevel.c
     src/tests/test_map.c
+    src/tests/test_special_forms.c
     external/unity/src/unity.c
     src/builtins.c
     src/object.c

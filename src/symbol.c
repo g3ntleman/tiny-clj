@@ -11,11 +11,15 @@
 #include "symbol_token.h"  // For CljSymbolToken
 #include "common.h"  // For CLJ_ASSERT
 #include "strings.h"  // For string_data()
+#include "eval.h"  // For SpecialFormEvalFn type
+#include "eval_special_forms.h"  // For eval_special_* functions
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>  // For snprintf
 #include <assert.h>
+
+// Note: Symbols have SINGLETON_RC and are never released
 
 // Globale Symbol-Pointer Definitionen
 CljSymbol *SYM_TRY = NULL;
@@ -113,6 +117,18 @@ CljSymbol *SYM_NS_STAR = NULL;
         .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = symbol_name } \
     }
 
+// Macro for Special Symbols (with space for function pointer)
+#define DEFINE_STATIC_SPECIAL_SYMBOL(var_name, symbol_name) \
+    static struct { CljSpecialSymbol sym; } var_name = { \
+        .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_SPECIAL }, .ns_name = NULL, .cname = symbol_name }, .eval_fn = NULL } \
+    }
+
+// Macro for extern Special Symbols (used in other files)
+#define DEFINE_EXTERN_SPECIAL_SYMBOL(var_name, symbol_name) \
+    SpecialSymbolData var_name = { \
+        .sym = { .base = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_SPECIAL }, .ns_name = NULL, .cname = symbol_name }, .eval_fn = NULL } \
+    }
+
 // Macro for non-static (extern) symbols that are statically initialized (compile-time, not dynamically allocated)
 #define DEFINE_EXTERN_SYMBOL(var_name, symbol_name) \
     StaticSymbolData var_name = { \
@@ -121,22 +137,23 @@ CljSymbol *SYM_NS_STAR = NULL;
 
 // Static symbol structs for special forms (compile-time initialization)
 // These symbols have rc = SINGLETON_RC and use string literals (no strdup needed)
-DEFINE_STATIC_SYMBOL(sym_try_data, "try");
-DEFINE_STATIC_SYMBOL(sym_catch_data, "catch");
-DEFINE_STATIC_SYMBOL(sym_if_data, "if");
-DEFINE_STATIC_SYMBOL(sym_cond_data, "cond");
-DEFINE_STATIC_SYMBOL(sym_when_data, "when");
-DEFINE_STATIC_SYMBOL(sym_while_data, "while");
-DEFINE_STATIC_SYMBOL(sym_let_data, "let");
-DEFINE_STATIC_SYMBOL(sym_fn_data, "fn");
-DEFINE_STATIC_SYMBOL(sym_def_data, "def");
-DEFINE_STATIC_SYMBOL(sym_defn_data, "defn");
+// Special Forms use CljSpecialSymbol to store function pointer
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_try_data, "try");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_catch_data, "catch");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_if_data, "if");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_cond_data, "cond");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_when_data, "when");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_while_data, "while");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_let_data, "let");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_fn_data, "fn");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_def_data, "def");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_defn_data, "defn");
 DEFINE_EXTERN_SYMBOL(sym_deref_data, "deref");
 DEFINE_STATIC_SYMBOL(sym_nil_data, "nil");
-DEFINE_STATIC_SYMBOL(sym_quote_data, "quote");
-DEFINE_STATIC_SYMBOL(sym_quasiquote_data, "quasiquote");
-DEFINE_STATIC_SYMBOL(sym_unquote_data, "unquote");
-DEFINE_STATIC_SYMBOL(sym_splice_unquote_data, "splice-unquote");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_quote_data, "quote");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_quasiquote_data, "quasiquote");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_unquote_data, "unquote");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_splice_unquote_data, "splice-unquote");
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
 DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
@@ -145,16 +162,16 @@ DEFINE_EXTERN_SYMBOL(sym_dir_data, "dir");
 DEFINE_EXTERN_SYMBOL(sym_rt_data, "rt");
 DEFINE_EXTERN_SYMBOL(sym_meta_data, "meta");
 DEFINE_EXTERN_SYMBOL(sym_with_meta_data, "with-meta");
-DEFINE_EXTERN_SYMBOL(sym_do_data, "do");
+DEFINE_EXTERN_SPECIAL_SYMBOL(sym_do_data, "do");
 DEFINE_EXTERN_SYMBOL(sym_reduce_data, "reduce");
-DEFINE_STATIC_SYMBOL(sym_loop_data, "loop");
-DEFINE_STATIC_SYMBOL(sym_recur_data, "recur");
-DEFINE_STATIC_SYMBOL(sym_throw_data, "throw");
-DEFINE_STATIC_SYMBOL(sym_finally_data, "finally");
-DEFINE_STATIC_SYMBOL(sym_var_data, "var");
-DEFINE_STATIC_SYMBOL(sym_ns_data, "ns");
-DEFINE_STATIC_SYMBOL(sym_time_data, "time");
-DEFINE_STATIC_SYMBOL(sym_go_data, "go");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_loop_data, "loop");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_recur_data, "recur");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_throw_data, "throw");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_finally_data, "finally");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_var_data, "var");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_ns_data, "ns");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_time_data, "time");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_go_data, "go");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
@@ -182,8 +199,8 @@ DEFINE_EXTERN_SYMBOL(sym_cons_data, "cons");
 DEFINE_EXTERN_SYMBOL(sym_seq_data, "seq");
 DEFINE_EXTERN_SYMBOL(sym_next_data, "next");
 DEFINE_EXTERN_SYMBOL(sym_list_data, "list");
-DEFINE_STATIC_SYMBOL(sym_and_data, "and");
-DEFINE_STATIC_SYMBOL(sym_or_data, "or");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_and_data, "and");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_or_data, "or");
 DEFINE_STATIC_SYMBOL(sym_for_data, "for");
 DEFINE_STATIC_SYMBOL(sym_doseq_data, "doseq");
 DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
@@ -291,68 +308,44 @@ DEFINE_STATIC_SYMBOL(sym_ns_star_data, "*ns*");
         symbol_table_add(sym_var); \
     } while(0)
 
+// Macro for Special Symbols (CljSpecialSymbol)
+#define INIT_SPECIAL_SYMBOL(sym_var, data_var) \
+    do { \
+        sym_var = (CljSymbol*)&data_var.sym; \
+        symbol_table_add(sym_var); \
+    } while(0)
+
 // Initialisierung der globalen Symbole
 void init_special_symbols() {
     // Special forms - static structs with symbol table registration
     // Names are already set to string literals in static initialization (no strdup needed)
-    INIT_SYMBOL(SYM_TRY, sym_try_data);
-    SYM_TRY->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_CATCH, sym_catch_data);
-    SYM_CATCH->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_IF, sym_if_data);
-    SYM_IF->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_COND, sym_cond_data);
-    SYM_COND->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_WHEN, sym_when_data);
-    SYM_WHEN->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_WHILE, sym_while_data);
-    SYM_WHILE->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_LET, sym_let_data);
-    SYM_LET->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_FN, sym_fn_data);
-    SYM_FN->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_QUOTE, sym_quote_data);
-    SYM_QUOTE->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_QUASIQUOTE, sym_quasiquote_data);
-    SYM_QUASIQUOTE->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_UNQUOTE, sym_unquote_data);
-    SYM_UNQUOTE->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_SPLICE_UNQUOTE, sym_splice_unquote_data);
-    SYM_SPLICE_UNQUOTE->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_DO, sym_do_data);
-    SYM_DO->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_LOOP, sym_loop_data);
-    SYM_LOOP->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_RECUR, sym_recur_data);
-    SYM_RECUR->base.flags |= CLJ_FLAG_SPECIAL;
-    INIT_SYMBOL(SYM_THROW, sym_throw_data);
-    SYM_THROW->base.flags |= CLJ_FLAG_SPECIAL;
-
-    INIT_SYMBOL(SYM_FINALLY, sym_finally_data);
-    SYM_FINALLY->base.flags |= CLJ_FLAG_SPECIAL;
-
-    INIT_SYMBOL(SYM_DEFN, sym_defn_data);
-    SYM_DEFN->base.flags |= CLJ_FLAG_SPECIAL;
-
+    // Special Forms use CljSpecialSymbol (already has CLJ_FLAG_SPECIAL set in DEFINE_STATIC_SPECIAL_SYMBOL)
+    INIT_SPECIAL_SYMBOL(SYM_TRY, sym_try_data);
+    INIT_SPECIAL_SYMBOL(SYM_CATCH, sym_catch_data);
+    INIT_SPECIAL_SYMBOL(SYM_IF, sym_if_data);
+    INIT_SPECIAL_SYMBOL(SYM_COND, sym_cond_data);
+    INIT_SPECIAL_SYMBOL(SYM_WHEN, sym_when_data);
+    INIT_SPECIAL_SYMBOL(SYM_WHILE, sym_while_data);
+    INIT_SPECIAL_SYMBOL(SYM_LET, sym_let_data);
+    INIT_SPECIAL_SYMBOL(SYM_FN, sym_fn_data);
+    INIT_SPECIAL_SYMBOL(SYM_QUOTE, sym_quote_data);
+    INIT_SPECIAL_SYMBOL(SYM_QUASIQUOTE, sym_quasiquote_data);
+    INIT_SPECIAL_SYMBOL(SYM_UNQUOTE, sym_unquote_data);
+    INIT_SPECIAL_SYMBOL(SYM_SPLICE_UNQUOTE, sym_splice_unquote_data);
+    INIT_SPECIAL_SYMBOL(SYM_DO, sym_do_data);
+    INIT_SPECIAL_SYMBOL(SYM_LOOP, sym_loop_data);
+    INIT_SPECIAL_SYMBOL(SYM_RECUR, sym_recur_data);
+    INIT_SPECIAL_SYMBOL(SYM_THROW, sym_throw_data);
+    INIT_SPECIAL_SYMBOL(SYM_FINALLY, sym_finally_data);
+    INIT_SPECIAL_SYMBOL(SYM_DEFN, sym_defn_data);
     INIT_SYMBOL(SYM_DEREF, sym_deref_data);
-
     INIT_SYMBOL(SYM_NIL, sym_nil_data);
-
-    INIT_SYMBOL(SYM_VAR, sym_var_data);
-    SYM_VAR->base.flags |= CLJ_FLAG_SPECIAL;
-
+    INIT_SPECIAL_SYMBOL(SYM_VAR, sym_var_data);
     // Built-in functions - static structs with symbol table registration
-    INIT_SYMBOL(SYM_DEF, sym_def_data);
-    SYM_DEF->base.flags |= CLJ_FLAG_SPECIAL;
-
-    INIT_SYMBOL(SYM_NS, sym_ns_data);
-    SYM_NS->base.flags |= CLJ_FLAG_SPECIAL;
-
-    INIT_SYMBOL(SYM_TIME, sym_time_data);
-    SYM_TIME->base.flags |= CLJ_FLAG_SPECIAL;
-
-    INIT_SYMBOL(SYM_GO, sym_go_data);
-    SYM_GO->base.flags |= CLJ_FLAG_SPECIAL;
+    INIT_SPECIAL_SYMBOL(SYM_DEF, sym_def_data);
+    INIT_SPECIAL_SYMBOL(SYM_NS, sym_ns_data);
+    INIT_SPECIAL_SYMBOL(SYM_TIME, sym_time_data);
+    INIT_SPECIAL_SYMBOL(SYM_GO, sym_go_data);
 
     INIT_SYMBOL(SYM_PLUS, sym_plus_data);
     SYM_PLUS->base.flags |= CLJ_FLAG_ARITHMETIC;
@@ -443,11 +436,10 @@ void init_special_symbols() {
 
     INIT_SYMBOL(SYM_LIST, sym_list_data);
 
-    INIT_SYMBOL(SYM_AND, sym_and_data);
-    SYM_AND->base.flags |= CLJ_FLAG_SPECIAL;
-
-    INIT_SYMBOL(SYM_OR, sym_or_data);
-    SYM_OR->base.flags |= CLJ_FLAG_SPECIAL;
+    // Note: SYM_AND and SYM_OR are Special Forms but use regular CljSymbol
+    // They will be handled via eval_special_form_dispatch fallback
+    INIT_SPECIAL_SYMBOL(SYM_AND, sym_and_data);
+    INIT_SPECIAL_SYMBOL(SYM_OR, sym_or_data);
 
     INIT_SYMBOL(SYM_FOR, sym_for_data);
 
@@ -482,6 +474,57 @@ void init_special_symbols() {
     // Clean up macros to avoid namespace pollution
     #undef INIT_SYMBOL
     #undef INIT_SYMBOL_NS
+    #undef INIT_SPECIAL_SYMBOL
+
+    // Set function pointers for Special Forms (O(1) dispatch optimization)
+    // Cast to CljSpecialSymbol and set eval_fn pointer (with type cast for compatibility)
+    // Note: Using void* cast to bridge between placeholder type in symbol.h and real type in eval.h
+    if (SYM_IF && (SYM_IF->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_IF)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_if;
+    }
+    if (SYM_WHEN && (SYM_WHEN->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_WHEN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_when;
+    }
+    if (SYM_WHILE && (SYM_WHILE->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_WHILE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_while;
+    }
+    if (SYM_COND && (SYM_COND->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_COND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_cond;
+    }
+    if (SYM_DO && (SYM_DO->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_DO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_do;
+    }
+    if (SYM_AND && (SYM_AND->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_AND)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_and;
+    }
+    if (SYM_OR && (SYM_OR->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_OR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_or;
+    }
+    if (SYM_FN && (SYM_FN->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_FN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_fn;
+    }
+    if (SYM_DEFN && (SYM_DEFN->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_DEFN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defn;
+    }
+    if (SYM_LET && (SYM_LET->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_LET)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_let;
+    }
+    if (SYM_VAR && (SYM_VAR->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_VAR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_var;
+    }
+    if (SYM_QUOTE && (SYM_QUOTE->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_QUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quote;
+    }
+    if (SYM_RECUR && (SYM_RECUR->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
+    }
+    if (SYM_GO && (SYM_GO->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_GO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_go;
+    }
+    if (SYM_TIME && (SYM_TIME->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
+    }
+    // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
 }
 
 // Static CljString for temporary lookups (avoids allocations)

@@ -2,20 +2,49 @@
 #define EVAL_SEQUENCE_H
 
 #include "eval.h"
+#include "builtins.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-ID eval_sequence_dispatch_with_context(CljList *list,
-                                       CljMap *env,
-                                       ID op,
-                                       const EvalContext *ctx);
+// Helper function for calling native functions with context (inline for performance)
+static inline ID eval_and_call_native_with_context(CljList *list,
+                                                    CljMap *env,
+                                                    ID (*native_func)(ID*, unsigned int),
+                                                    int max_args,
+                                                    const EvalContext *ctx) {
+    int total_count = list_count(list);
+    int argc = total_count - 1;
+    if (argc > max_args) {
+        return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
+            "Wrong number of args (%d) passed to: %s", argc, native_func ? "sequence-op" : "unknown");
+    }
 
-ID eval_loop_dispatch(CljList *list,
-                      CljMap *env,
-                      ID op,
-                      EvalState *st);
+    ID args_stack[16];
+    ID *args = alloc_obj_array(argc, args_stack);
+    if (!args) return NULL;
+
+    // Traverse and evaluate arguments in one pass (O(n) instead of O(n²))
+    int i = 0;
+    LIST_FOR_EACH(LIST_REST(list), elem) {
+        if (i >= argc) break;
+        args[i] = eval_arg_from_expr_with_context(elem, env, NULL, ctx);
+        if (!args[i]) {
+            // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
+            free_obj_array(args, args_stack);
+            return NULL;
+        }
+        i++;
+    }
+
+    ID result = native_func ? native_func(args, argc) : NULL;
+    // NOTE: args are AUTORELEASE from eval_arg_from_expr_with_context
+    free_obj_array(args, args_stack);
+    return result;
+}
+
+// Note: eval_sequence_dispatch_with_context and eval_loop_dispatch have been inlined in eval.c for performance
 
 ID eval_map_lookup(CljList *list,
                    CljMap *env,
