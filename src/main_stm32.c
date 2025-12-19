@@ -26,15 +26,14 @@ int main() {
     init_special_symbols();
     register_builtins();
     
-    // Create evaluation state
-    EvalState *state = evalstate_new(false);
-    
+    // Get evaluation state
+    EvalState *state = get_global_eval_state();
+
     // Load and execute startup code
     platform_print("Loading startup code...");
     CljObject *result = eval_string(startup_code, state);
     if (!result) {
         platform_print("ERROR: Failed to load startup code");
-        evalstate_free(state);
         return 1;
     }
     RELEASE(result);
@@ -42,7 +41,6 @@ int main() {
     
     // Cleanup
     platform_print("Done");
-    evalstate_free(state);
     symbol_table_cleanup();
     meta_registry_cleanup();
     autorelease_pool_cleanup_all();

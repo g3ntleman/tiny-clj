@@ -326,7 +326,7 @@ bool history_save_to_file(CljVector *vec, const char *path) {
 CljVector* history_load_from_file(const char *path) {
     if (!path) return empty_vector();
 
-    EvalState *st = evalstate_new(false);
+    EvalState *st = get_global_eval_state();
     if (!st) return empty_vector();
 
     CljVector *string_history = NULL;
@@ -618,7 +618,7 @@ int main(int argc, char **argv) {
     runtime_init(&g_runtime);
     meta_registry_init();  // Initialize metadata registry
     init_special_symbols();  // Initialize special symbols like SYM_DEF
-    EvalState *st = evalstate_new(false);
+    EvalState *st = get_global_eval_state();
     // Note: set_global_eval_state() removed - Exception handling now independent
     evalstate_set_ns(st, "user");
     // Quiet mode for CLI eval (no banner)

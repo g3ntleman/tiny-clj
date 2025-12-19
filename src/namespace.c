@@ -619,23 +619,47 @@ void ns_cleanup() {
     // Cache will be automatically rebuilt when needed via ns_find_by_symbol
 }
 
+// Thread-local global EvalState (zero-initialized)
+_Thread_local EvalState g_eval_state = {0};
+_Thread_local bool g_eval_state_initialized = false;
+
+// Get the global EvalState (lazy init)
+EvalState* get_global_eval_state(void) {
+    if (!g_eval_state_initialized) {
+        g_eval_state.current_ns = ns_get_or_create("user", NULL);
+        if (!g_eval_state.current_ns) {
+            throw_exception(EXCEPTION_RUNTIME, "Failed to create user namespace", NULL, 0, 0);
+            return NULL;
+        }
+        g_eval_state_initialized = true;
+    }
+    return &g_eval_state;
+}
+
+// Reset for test isolation
+void reset_eval_state(void) {
+    if (g_eval_state.stack) {
+        free(g_eval_state.stack);
+        g_eval_state.stack = NULL;
+    }
+    if (g_eval_state.expr && !IS_IMMEDIATE(g_eval_state.expr)) {
+        RELEASE(g_eval_state.expr);
+        g_eval_state.expr = NULL;
+    }
+    if (g_eval_state.result && !IS_IMMEDIATE(g_eval_state.result)) {
+        RELEASE(g_eval_state.result);
+        g_eval_state.result = NULL;
+    }
+    memset(&g_eval_state, 0, sizeof(EvalState));
+    g_eval_state.current_ns = ns_get_or_create("user", NULL);
+    g_eval_state_initialized = true;
+}
+
 // EvalState functions
+// OPTIMIZATION: Now returns global thread-local state instead of heap allocation
 EvalState* evalstate_new(bool load_core) {
-    EvalState *st = (EvalState*)malloc(sizeof(EvalState));
-    if (!st) {
-        throw_exception(EXCEPTION_RUNTIME, "Failed to allocate EvalState", NULL, 0, 0);
-        return NULL; // Never reached, but compiler doesn't know
-    }
-    
-    memset(st, 0, sizeof(EvalState));
-    st->pool = NULL; // No longer needed - use global pools instead
-    
-    st->current_ns = ns_get_or_create("user", NULL); // Default namespace
-    if (!st->current_ns) {
-        free(st);
-        throw_exception(EXCEPTION_RUNTIME, "Failed to create user namespace", NULL, 0, 0);
-        return NULL; // Never reached, but compiler doesn't know
-    }
+    EvalState *st = get_global_eval_state();
+    if (!st) return NULL;
     
     // Load clojure.core automatically if requested (functions available via ns_resolve)
     if (load_core) {
@@ -650,23 +674,26 @@ EvalState* evalstate_new(bool load_core) {
     return st;
 }
 
+// OPTIMIZATION: Now a no-op since we use global state
+// Kept for compatibility with existing code
 void evalstate_free(EvalState *st) {
     if (!st) return;
     
-    // Release any objects stored in EvalState
-    // Note: expr and result are typically autoreleased, but we should clean them up
-    // to prevent objects from leaking between tests
-    if (st->expr && !IS_IMMEDIATE(st->expr)) {
-        RELEASE(st->expr);
-        st->expr = NULL;
+    // Only cleanup if this is the global state (pointer comparison)
+    if (st == &g_eval_state) {
+        // Cleanup objects to prevent leaks between tests
+        if (st->expr && !IS_IMMEDIATE(st->expr)) {
+            RELEASE(st->expr);
+            st->expr = NULL;
+        }
+        if (st->result && !IS_IMMEDIATE(st->result)) {
+            RELEASE(st->result);
+            st->result = NULL;
+        }
+        // Note: stack is cleaned up in reset_eval_state()
     }
-    if (st->result && !IS_IMMEDIATE(st->result)) {
-        RELEASE(st->result);
-        st->result = NULL;
-    }
-    
-    if (st->stack) free(st->stack);
-    free(st);
+    // For non-global states (legacy compatibility), do nothing
+    // They should not exist anymore, but this prevents crashes
 }
 
 void evalstate_set_ns(EvalState *st, const char *ns_name) {
@@ -686,16 +713,10 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
 void evalstate_reset(EvalState **st_ptr, bool load_core) {
     if (!st_ptr) return;
     
-    // Free existing eval state if present
-    if (*st_ptr) {
-        evalstate_free(*st_ptr);
-        *st_ptr = NULL;
-    }
-    
-    // Create new eval state
-    *st_ptr = evalstate_new(load_core);
-    
-    if (!*st_ptr) return;
+    // Reset global state
+    reset_eval_state();
+    EvalState *st = get_global_eval_state();
+    if (!st) return;
     
     // Ensure clojure.core is loaded if requested
     if (load_core) {
@@ -720,18 +741,21 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
         }
         
         if (needs_reload) {
-            evalstate_set_ns(*st_ptr, "clojure.core");
-            load_clojure_core(*st_ptr);
+            evalstate_set_ns(st, "clojure.core");
+            load_clojure_core(st);
         }
     }
     
     // Reset all fields
-    (*st_ptr)->expr = NULL;
-    (*st_ptr)->result = NULL;
-    (*st_ptr)->pc = 0;
-    (*st_ptr)->step_budget = 0;
-    (*st_ptr)->sp = 0;
-    (*st_ptr)->finished = 0;
+    st->expr = NULL;
+    st->result = NULL;
+    st->pc = 0;
+    st->step_budget = 0;
+    st->sp = 0;
+    st->finished = 0;
+    
+    // Set pointer to global state
+    *st_ptr = st;
     
     // Reset user namespace for isolation
     // evalstate_new already created a new user namespace, but we need to ensure it's clean
@@ -755,7 +779,7 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     
     // Ensure current_ns is set to "user" (with clean mappings)
     // The user_ns we reset above should be the same one that evalstate_set_ns will find
-    evalstate_set_ns(*st_ptr, "user");
+    evalstate_set_ns(st, "user");
 }
 
 // Exception handling

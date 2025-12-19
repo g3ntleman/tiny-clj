@@ -32,23 +32,17 @@ echo "=== Running sample on fib(30) ==="
 echo "Output: $OUTPUT_FILE"
 echo ""
 
-# Start the benchmark in background
-"$BUILD_DIR/tiny-clj-profile" -e '(load-file "benchmarks/fibonacci_30.clj")' &
-PID=$!
+# Start sampler FIRST to avoid race with short-lived benchmarks.
+# sample attaches by (partial) process name and waits until it exists.
+sample "tiny-clj-profile" 10 1 -wait -mayDie -file "$OUTPUT_FILE" >/dev/null 2>&1 &
+SAMPLE_PID=$!
 
-# Give it a moment to start
-sleep 0.2
+# Run the benchmark long enough to get stable samples.
+# NOTE: benchmarks/fibonacci_30.clj already runs fib(30) a few times; we add extra iterations here.
+"$BUILD_DIR/tiny-clj-profile" -e '(do (load-file "benchmarks/fibonacci_30.clj") (dotimes [_ 30] (fib 30)))'
 
-# Sample the running process (10 seconds, 1ms interval)
-# -mayDie: process may exit before sampling completes
-if sample "$PID" 10 -file "$OUTPUT_FILE" -mayDie 2>/dev/null; then
-    echo "✅ Sampling completed"
-else
-    echo "⚠️  Process finished before sampling completed (this is OK for fast benchmarks)"
-fi
-
-# Wait for the benchmark to finish
-wait "$PID" 2>/dev/null || true
+# Wait for sampling to complete (or finish early if the process exits)
+wait "$SAMPLE_PID" 2>/dev/null || true
 
 echo ""
 echo "=== Top functions in sample output ==="
