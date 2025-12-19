@@ -196,13 +196,13 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
     // This prevents stack overflow in deep recursion while still allowing proper cleanup
 
-    // Clojure functions with parameters are now supported
-
-    int max_slots = param_count > 0 ? param_count : 1;
-    ID *current_args = STACK_ALLOC(ID, max_slots);
-    ID *recur_args = STACK_ALLOC(ID, max_slots);
+    // OPTIMIZATION: Use static arrays instead of STACK_ALLOC to avoid alloca overhead
+    // Max 16 args supported, wastes some stack space but eliminates ___chkstk_darwin calls
+    ID current_args[16];
+    ID recur_args[16];
     int used_recur_slots = 0;
-    for (int i = 0; i < max_slots; i++) {
+    // Only initialize slots we actually need (param_count, not all 16)
+    for (int i = 0; i < param_count; i++) {
         current_args[i] = (i < argc) ? args[i] : NULL;
         recur_args[i] = NULL;
     }
@@ -228,13 +228,15 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
 
-        // This ensures that if an exception occurred in the previous iteration, recur_args are freed
-        // Check all 16 slots to ensure nothing is left over
-        for (int i = 0; i < used_recur_slots; i++) {
-            RELEASE(recur_args[i]);
-            recur_args[i] = NULL;
+        // OPTIMIZATION: Only cleanup recur_args if recur was actually used in previous iteration
+        // For functions without recur (like fib), this check is always false - zero overhead
+        if (used_recur_slots > 0) {
+            for (int i = 0; i < used_recur_slots; i++) {
+                RELEASE(recur_args[i]);
+                recur_args[i] = NULL;
+            }
+            used_recur_slots = 0;
         }
-        used_recur_slots = 0;
 
         // Evaluate function body with context (stack-only, no allocations)
         EvalContext eval_ctx = {
@@ -288,10 +290,11 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // be called on the already-freed object, causing a use-after-free error.
     // The call_env will be released below, which will properly release all stored values.
 
-    // Cleanup recur args (if any were set but not used)
-    // Check all 16 slots to ensure nothing is left over
-    for (int i = 0; i < used_recur_slots; i++) {
-        RELEASE(recur_args[i]);
+    // OPTIMIZATION: Only cleanup if recur args were actually set
+    if (used_recur_slots > 0) {
+        for (int i = 0; i < used_recur_slots; i++) {
+            RELEASE(recur_args[i]);
+        }
     }
 
     // Cleanup call frame (stack-allocated, but may contain retained values)
