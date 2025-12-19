@@ -213,7 +213,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
     // Create call frame with parameters (fixed-size stack variable)
     CLJ_ASSERT(param_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
-    ID *params_array = vector_as_array(func->params);
+    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
     CallFrame call_frame_storage;  // Fixed size, no __chkstk_darwin
     CallFrame *call_frame = &call_frame_storage;
     CallFrame *parent_frame = NULL;
