@@ -223,13 +223,13 @@ CLJS_EOF
 fi
 
 # ============================================================================
-# 4. Python3 Benchmark
+# 4. Python3 Benchmark (3 runs, take median)
 # ============================================================================
 PYTHON_TIME_MS=0
 TIME_PER_ITER_PYTHON=0
 
 if [ "$PYTHON_AVAILABLE" = true ]; then
-    echo -e "${BLUE}🐍 Running Python3 benchmark...${NC}"
+    echo -e "${BLUE}🐍 Running Python3 benchmark (3 runs)...${NC}"
     
     TEMP_PY=$(mktemp /tmp/fib_benchmark_XXXXXX.py)
     cat > "$TEMP_PY" << PYTHON_EOF
@@ -256,16 +256,35 @@ print(f"ITERATIONS={iterations}")
 print(f"TIME_PER_ITER_MS={time_per_iter:.6f}")
 PYTHON_EOF
 
-    PY_OUTPUT=$(python3 "$TEMP_PY" 2>&1)
+    # Run 3 measurements
+    PY_TIMES=()
+    for run in 1 2 3; do
+        PY_OUTPUT=$(python3 "$TEMP_PY" 2>&1)
+        RUN_TIME=$(echo "$PY_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
+        PY_TIMES+=("$RUN_TIME")
+        echo -e "  Run $run: ${RUN_TIME}ms"
+    done
     
-    PYTHON_TIME_MS=$(echo "$PY_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
-    PYTHON_ITERATIONS=$(echo "$PY_OUTPUT" | grep "ITERATIONS=" | cut -d'=' -f2)
-    TIME_PER_ITER_PYTHON=$(echo "$PY_OUTPUT" | grep "TIME_PER_ITER_MS=" | cut -d'=' -f2)
+    # Sort and take median (middle value of 3)
+    SORTED_PY_TIMES=$(printf '%s\n' "${PY_TIMES[@]}" | sort -n)
+    PYTHON_TIME_MS=$(echo "$SORTED_PY_TIMES" | sed -n '2p')  # Median (2nd of 3)
+    
+    # Also show min/max for reference
+    PY_MIN_TIME=$(echo "$SORTED_PY_TIMES" | head -1)
+    PY_MAX_TIME=$(echo "$SORTED_PY_TIMES" | tail -1)
+    
+    PYTHON_ITERATIONS=${ITERATIONS}
+    if [ -n "$PYTHON_TIME_MS" ] && [ "$PYTHON_TIME_MS" != "0" ]; then
+        TIME_PER_ITER_PYTHON=$(echo "scale=6; $PYTHON_TIME_MS / $PYTHON_ITERATIONS" | bc)
+    else
+        TIME_PER_ITER_PYTHON="0"
+    fi
     
     rm -f "$TEMP_PY"
     
     if [ -n "$PYTHON_TIME_MS" ]; then
-        echo -e "${GREEN}✅ Python3: ${PYTHON_TIME_MS}ms (${TIME_PER_ITER_PYTHON}ms/iter, ${PYTHON_ITERATIONS} iterations)${NC}"
+        TIME_PER_ITER_PY_DISPLAY=$(echo "$TIME_PER_ITER_PYTHON" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
+        echo -e "${GREEN}✅ Python3: ${PYTHON_TIME_MS}ms median (${TIME_PER_ITER_PY_DISPLAY}ms/iter, range: ${PY_MIN_TIME}-${PY_MAX_TIME}ms)${NC}"
     else
         echo -e "${RED}❌ Failed to extract Python results${NC}"
         PYTHON_AVAILABLE=false
@@ -403,64 +422,51 @@ if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ] && [ -n "$TIME_PER
     echo "$TIMESTAMP,tiny-clj,0,$TINYCLJ_TIME_MS,$TINYCLJ_ITERATIONS,$TIME_PER_ITER_TINYCLJ" >> "$HISTORY_FILE"
 fi
 
-# Display comparison table
-printf "%-15s %12s %12s %12s %15s\n" "System" "Warmup (ms)" "Test (ms)" "Iterations" "ms/iter"
-echo "------------------------------------------------------------------------"
+# Helper function to calculate and format factor vs tiny-clj
+calc_factor() {
+    local other_time="$1"
+    if [ -z "$TIME_PER_ITER_TINYCLJ" ] || [ "$TIME_PER_ITER_TINYCLJ" = "0" ] || [ -z "$other_time" ] || [ "$other_time" = "0" ]; then
+        echo "-"
+        return
+    fi
+    local ratio=$(echo "scale=2; $TIME_PER_ITER_TINYCLJ / $other_time" | bc 2>/dev/null || echo "0")
+    if [ "$ratio" = "0" ] || [ -z "$ratio" ]; then
+        echo "-"
+    elif (( $(echo "$ratio >= 1" | bc -l 2>/dev/null || echo "0") )); then
+        # Other system is faster
+        printf "%.1fx faster" "$ratio"
+    else
+        # tiny-clj is faster
+        local inv_ratio=$(echo "scale=1; 1 / $ratio" | bc 2>/dev/null || echo "0")
+        printf "%.1fx slower" "$inv_ratio"
+    fi
+}
+
+# Display comparison table with factor column
+printf "%-15s %10s %10s %10s %12s %18s\n" "System" "Warmup" "Test (ms)" "Iter" "ms/iter" "vs tiny-clj"
+echo "---------------------------------------------------------------------------------"
 
 if [ "$CLOJURE_AVAILABLE" = true ] && [ -n "$CLOJURE_TIME_MS" ]; then
     TIME_PER_ITER_CLJ_FORMATTED=$(echo "$TIME_PER_ITER_CLJ" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-    printf "%-15s %12s %12s %12s %15s\n" "Clojure/JVM" "$CLOJURE_WARMUP_MS" "$CLOJURE_TIME_MS" "$ITERATIONS_CLJ" "$TIME_PER_ITER_CLJ_FORMATTED"
+    FACTOR_CLJ=$(calc_factor "$TIME_PER_ITER_CLJ")
+    printf "%-15s %10s %10s %10s %12s %18s\n" "Clojure/JVM" "$CLOJURE_WARMUP_MS" "$CLOJURE_TIME_MS" "$ITERATIONS_CLJ" "$TIME_PER_ITER_CLJ_FORMATTED" "$FACTOR_CLJ"
 fi
 
 if [ "$CLJS_AVAILABLE" = true ] && [ -n "$CLJS_TIME_MS" ] && [ "$CLJS_TIME_MS" != "0" ]; then
     TIME_PER_ITER_CLJS_FORMATTED=$(echo "$TIME_PER_ITER_CLJS" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-    printf "%-15s %12s %12s %12s %15s\n" "ClojureScript" "0" "$CLJS_TIME_MS" "$CLJS_ITERATIONS" "$TIME_PER_ITER_CLJS_FORMATTED"
+    FACTOR_CLJS=$(calc_factor "$TIME_PER_ITER_CLJS")
+    printf "%-15s %10s %10s %10s %12s %18s\n" "ClojureScript" "0" "$CLJS_TIME_MS" "$CLJS_ITERATIONS" "$TIME_PER_ITER_CLJS_FORMATTED" "$FACTOR_CLJS"
 fi
 
 if [ "$PYTHON_AVAILABLE" = true ] && [ -n "$PYTHON_TIME_MS" ] && [ "$PYTHON_TIME_MS" != "0" ]; then
     TIME_PER_ITER_PY_FORMATTED=$(echo "$TIME_PER_ITER_PYTHON" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-    printf "%-15s %12s %12s %12s %15s\n" "Python3" "0" "$PYTHON_TIME_MS" "$PYTHON_ITERATIONS" "$TIME_PER_ITER_PY_FORMATTED"
+    FACTOR_PY=$(calc_factor "$TIME_PER_ITER_PYTHON")
+    printf "%-15s %10s %10s %10s %12s %18s\n" "Python3" "0" "$PYTHON_TIME_MS" "$PYTHON_ITERATIONS" "$TIME_PER_ITER_PY_FORMATTED" "$FACTOR_PY"
 fi
 
 if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ -n "$TINYCLJ_ITERATIONS" ]; then
     TIME_PER_ITER_FORMATTED=$(echo "$TIME_PER_ITER_TINYCLJ" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-    printf "%-15s %12s %12s %12s %15s\n" "tiny-clj" "0" "$TINYCLJ_TIME_MS" "$TINYCLJ_ITERATIONS" "$TIME_PER_ITER_FORMATTED"
-fi
-
-echo ""
-
-# Performance ratios
-echo -e "${BLUE}📈 Performance Ratios (vs tiny-clj)${NC}"
-echo "------------------------------------------------------------------------"
-
-if [ -n "$TIME_PER_ITER_TINYCLJ" ] && [ "$TIME_PER_ITER_TINYCLJ" != "0" ]; then
-    if [ "$CLOJURE_AVAILABLE" = true ] && [ -n "$TIME_PER_ITER_CLJ" ] && [ "$TIME_PER_ITER_CLJ" != "0" ]; then
-        TIME_PER_ITER_CLJ_DECIMAL=$(echo "$TIME_PER_ITER_CLJ" | awk '{printf "%.10f", $1}')
-        RATIO_CLJ=$(echo "scale=1; $TIME_PER_ITER_TINYCLJ / $TIME_PER_ITER_CLJ_DECIMAL" | bc 2>/dev/null || echo "0")
-        if [ -n "$RATIO_CLJ" ] && [ "$RATIO_CLJ" != "0" ]; then
-            echo -e "  Clojure/JVM:   ${RATIO_CLJ}x faster than tiny-clj"
-        fi
-    fi
-    
-    if [ "$CLJS_AVAILABLE" = true ] && [ -n "$TIME_PER_ITER_CLJS" ] && [ "$TIME_PER_ITER_CLJS" != "0" ]; then
-        TIME_PER_ITER_CLJS_DECIMAL=$(echo "$TIME_PER_ITER_CLJS" | awk '{printf "%.10f", $1}')
-        RATIO_CLJS=$(echo "scale=1; $TIME_PER_ITER_TINYCLJ / $TIME_PER_ITER_CLJS_DECIMAL" | bc 2>/dev/null || echo "0")
-        if [ -n "$RATIO_CLJS" ] && [ "$RATIO_CLJS" != "0" ]; then
-            echo -e "  ClojureScript: ${RATIO_CLJS}x faster than tiny-clj"
-        fi
-    fi
-    
-    if [ "$PYTHON_AVAILABLE" = true ] && [ -n "$TIME_PER_ITER_PYTHON" ] && [ "$TIME_PER_ITER_PYTHON" != "0" ]; then
-        RATIO_PY=$(echo "scale=1; $TIME_PER_ITER_TINYCLJ / $TIME_PER_ITER_PYTHON" | bc 2>/dev/null || echo "0")
-        if [ -n "$RATIO_PY" ] && [ "$RATIO_PY" != "0" ]; then
-            if (( $(echo "$RATIO_PY > 1" | bc -l 2>/dev/null || echo "0") )); then
-                echo -e "  Python3:       ${RATIO_PY}x faster than tiny-clj"
-            else
-                INV_RATIO_PY=$(echo "scale=1; 1 / $RATIO_PY" | bc 2>/dev/null || echo "0")
-                echo -e "  Python3:       tiny-clj is ${INV_RATIO_PY}x faster"
-            fi
-        fi
-    fi
+    printf "%-15s %10s %10s %10s %12s %18s\n" "tiny-clj" "0" "$TINYCLJ_TIME_MS" "$TINYCLJ_ITERATIONS" "$TIME_PER_ITER_FORMATTED" "(baseline)"
 fi
 
 echo ""
