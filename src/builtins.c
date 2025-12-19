@@ -4916,6 +4916,35 @@ ID native_swap_bang(ID *args, unsigned int argc) {
 // Note: def and ns are now special forms (not builtins) because they require non-evaluated arguments
 // They are handled directly in eval_list() via eval_def() and eval_ns()
 
+// epoch-minutes: Minutes since Unix epoch (1970-01-01)
+// Range: ~510 years (fits in 29-bit Fixnum)
+ID native_epoch_minutes(ID *args, unsigned int argc) {
+    (void)args;
+    if (argc != 0) {
+        throw_exception(EXCEPTION_ARITY, "epoch-minutes takes no arguments", NULL, 0, 0);
+        return NULL;
+    }
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int64_t total_seconds = tv.tv_sec;
+    int32_t minutes = (int32_t)(total_seconds / 60);
+    return fixnum(minutes);
+}
+
+// millis-in-minute: Milliseconds within current minute (0-59999)
+ID native_millis_in_minute(ID *args, unsigned int argc) {
+    (void)args;
+    if (argc != 0) {
+        throw_exception(EXCEPTION_ARITY, "millis-in-minute takes no arguments", NULL, 0, 0);
+        return NULL;
+    }
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    int32_t sec_in_min = tv.tv_sec % 60;
+    int32_t millis = sec_in_min * 1000 + tv.tv_usec / 1000;
+    return fixnum(millis);
+}
+
 // do: Evaluate expressions sequentially, return last value
 // Note: As a builtin, arguments are already evaluated, so we just return the last one
 ID native_do(ID *args, unsigned int argc) {
@@ -5045,4 +5074,8 @@ void register_builtins() {
     // Meta functions
     register_builtin_in_core("meta", native_meta);
     register_builtin_in_core("with-meta", native_with_meta);
+    
+    // Time functions
+    register_builtin_in_core("epoch-minutes", native_epoch_minutes);
+    register_builtin_in_core("millis-in-minute", native_millis_in_minute);
 }
