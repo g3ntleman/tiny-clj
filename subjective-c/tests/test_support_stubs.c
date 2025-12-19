@@ -14,7 +14,7 @@ bool seq_iter_empty(const SeqIterator *iter) {
 
 ID seq_iter_first(const SeqIterator *iter) {
     (void)iter;
-    return (ID)NULL;
+    return NULL;
 }
 
 bool seq_iter_next(SeqIterator *iter) {

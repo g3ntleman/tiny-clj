@@ -67,12 +67,12 @@ TEST(test_simple_recursive_function_ctx_propagation) {
 // Test that ctx is not NULL when eval_body_with_params is called
 TEST(test_eval_body_with_params_ctx_not_null) {
     // Create a simple function with parameters
-    CljList *params = AUTORELEASE(make_list((ID)intern_symbol_global("x"), empty_list()));
-    CljList *body = AUTORELEASE(make_list((ID)intern_symbol_global("x"), empty_list()));
+    CljList *params = AUTORELEASE(make_list(intern_symbol_global("x"), empty_list()));
+    CljList *body = AUTORELEASE(make_list(intern_symbol_global("x"), empty_list()));
     
     // Create ParamContext
     ID param_values[1] = {fixnum(42)};
-    ID param_names[1] = {(ID)intern_symbol_global("x")};
+    ID param_names[1] = {intern_symbol_global("x")};
     ParamContext param_ctx = {
         .params = param_names,
         .values = param_values,
@@ -81,7 +81,7 @@ TEST(test_eval_body_with_params_ctx_not_null) {
     
     // Create EvalEnv
     CljMap *env_map = AUTORELEASE(make_map(16));
-    CljList *env_stack = AUTORELEASE(make_list((ID)env_map, empty_list()));
+    CljList *env_stack = AUTORELEASE(make_list(env_map, empty_list()));
     EvalEnv eval_env = {
         .env_stack = env_stack,
         .st = g_test_eval_state
@@ -95,6 +95,6 @@ TEST(test_eval_body_with_params_ctx_not_null) {
     };
     
     // Test: eval_body_with_params should not crash with valid ctx
-    ID result = eval_body_with_params((ID)body, &ctx);
+    ID result = eval_body_with_params(body, &ctx);
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "eval_body_with_params should return result");
 }

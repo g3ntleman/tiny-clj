@@ -47,9 +47,9 @@ TEST(test_cljvalue_vector_api) {
         // Capacity is implementation detail, only test that vector was created
         
         // Test vector operations using vector_conj
-        vec_data = vector_conj(vec_data, (ID)fixnum(1));
-        vec_data = vector_conj(vec_data, (ID)fixnum(2));
-        vec_data = vector_conj(vec_data, (ID)fixnum(3));
+        vec_data = vector_conj(vec_data, fixnum(1));
+        vec_data = vector_conj(vec_data, fixnum(2));
+        vec_data = vector_conj(vec_data, fixnum(3));
         
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec_data));
         ID elem0 = vector_nth(vec_data, 0);
@@ -69,7 +69,7 @@ TEST(test_cljvalue_transient_vector) {
         // Test transient vector operations
         CljValue vec = AUTORELEASE(make_vector(5, CLJ_VECTOR));  // Create persistent vector first
         TEST_ASSERT_NOT_NULL(vec);
-        CljValue tvec = AUTORELEASE((ID)vector_transient((CljVector*)vec));  // Convert to transient
+        CljValue tvec = AUTORELEASE(vector_transient((CljVector*)vec));  // Convert to transient
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_EQUAL_INT(CLJ_VECTOR_TRANSIENT, ((CljObject*)tvec)->type);
         
@@ -79,10 +79,10 @@ TEST(test_cljvalue_transient_vector) {
         
         // Test transient operations using clj_conj
         // clj_conj returns the same transient vector (in-place mutation)
-        CljVector *tvec1 = clj_conj((CljVector*)tvec_data, (ID)fixnum(10));
+        CljVector *tvec1 = clj_conj((CljVector*)tvec_data, fixnum(10));
         TEST_ASSERT_NOT_NULL(tvec1);
         TEST_ASSERT_EQUAL_PTR((CljVector*)tvec_data, tvec1);  // Should be same pointer
-        CljVector *tvec2 = clj_conj(tvec1, (ID)fixnum(20));
+        CljVector *tvec2 = clj_conj(tvec1, fixnum(20));
         TEST_ASSERT_NOT_NULL(tvec2);
         TEST_ASSERT_EQUAL_PTR(tvec1, tvec2);  // Should be same pointer
         // tvec_data should still be valid since clj_conj does in-place mutation
@@ -103,8 +103,8 @@ TEST(test_cljvalue_clojure_semantics) {
         CljVector *vec_data = as_vector((CljObject*)vec);
         
         // Add elements using vector_conj
-        vec_data = vector_conj(vec_data, (ID)fixnum(1));
-        vec_data = vector_conj(vec_data, (ID)fixnum(2));
+        vec_data = vector_conj(vec_data, fixnum(1));
+        vec_data = vector_conj(vec_data, fixnum(2));
         
         // Test vector access
         ID elem0 = vector_nth(vec_data, 0);
@@ -286,9 +286,9 @@ TEST(test_cljvalue_vectors_high_level) {
         TEST_ASSERT_EQUAL_INT(0, vector_count(vec_data));
         
         // Test vector operations using vector_conj
-        vec_data = vector_conj(vec_data, (ID)fixnum(1));
-        vec_data = vector_conj(vec_data, (ID)fixnum(2));
-        vec_data = vector_conj(vec_data, (ID)fixnum(3));
+        vec_data = vector_conj(vec_data, fixnum(1));
+        vec_data = vector_conj(vec_data, fixnum(2));
+        vec_data = vector_conj(vec_data, fixnum(3));
         
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec_data));
     });
@@ -392,7 +392,7 @@ TEST(test_truthiness_comprehensive) {
         // Non-empty vector is truthy
         CljVector *non_empty_vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(1, CLJ_VECTOR));
         TEST_ASSERT_NOT_NULL(non_empty_vec);
-        non_empty_vec = vector_conj(non_empty_vec, (ID)fixnum(1));
+        non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_vec));
         
         // Empty map is truthy
@@ -404,7 +404,7 @@ TEST(test_truthiness_comprehensive) {
         CljMap *non_empty_map = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
         TEST_ASSERT_NOT_NULL(non_empty_map);
         // map_assoc always returns a new map (COW disabled)
-        CljMap *new_map = (CljMap*)AUTORELEASE((CljObject*)map_assoc((ID)non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
+        CljMap *new_map = (CljMap*)AUTORELEASE((CljObject*)map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
         TEST_ASSERT_NOT_NULL(new_map);
         TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)new_map));
         

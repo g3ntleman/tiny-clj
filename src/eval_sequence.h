@@ -10,7 +10,7 @@ extern "C" {
 
 // Helper function for calling native functions with context (inline for performance)
 static inline ID eval_and_call_native_with_context(CljList *list,
-                                                    CljMap *env,
+                                       CljMap *env,
                                                     ID (*native_func)(ID*, unsigned int),
                                                     int max_args,
                                                     const EvalContext *ctx) {

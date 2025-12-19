@@ -85,7 +85,7 @@ bool callsite_cache_is_valid(const CljCallsiteCache *cache, CljSymbol *symbol, u
 
 ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uint64_t epoch) {
     if (!node || !symbol) return NULL;
-    CljCallsiteCache *cache = as_callsite_cache((ID)node->callsite_cache);
+    CljCallsiteCache *cache = as_callsite_cache(node->callsite_cache);
     if (!cache) return NULL;
     if (!callsite_cache_is_valid(cache, symbol, epoch)) {
         return NULL;
@@ -95,7 +95,7 @@ ID ast_node_get_cached_resolution(const CljASTNode *node, CljSymbol *symbol, uin
 
 void ast_node_update_callsite_cache(CljASTNode *node, CljSymbol *symbol, ID resolved, uint64_t epoch) {
     if (!node || !symbol || !resolved) return;
-    CljCallsiteCache *cache = as_callsite_cache((ID)node->callsite_cache);
+    CljCallsiteCache *cache = as_callsite_cache(node->callsite_cache);
     if (!cache) {
         ast_node_set_callsite_cache(node, (CljObject*)make_callsite_cache(symbol, resolved, epoch));
         return;

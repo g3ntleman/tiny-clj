@@ -63,7 +63,7 @@ static unsigned int find_slot(CljHashMap *map, ID key) {
     // Linear Probing: on collision simply +1
     // IMPORTANT: Check for wraparound to avoid infinite loops
     do {
-        ID stored_key = (ID)KV_KEY(map->data, idx);
+        ID stored_key = KV_KEY(map->data, idx);
         
         if (stored_key == HASHMAP_EMPTY) {
             return idx;  // Empty slot found
@@ -88,7 +88,7 @@ ID hashmap_get(CljHashMap *map, ID key, ID not_found) {
     if (!map) return not_found;
     // key can be NULL (nil is a valid key)
     unsigned int idx = find_slot(map, key);
-    ID stored_key = (ID)KV_KEY(map->data, idx);
+    ID stored_key = KV_KEY(map->data, idx);
     if (stored_key != HASHMAP_EMPTY && stored_key != HASHMAP_TOMBSTONE) {
         return KV_VALUE(map->data, idx);
     }
@@ -99,7 +99,7 @@ int hashmap_contains(CljHashMap *map, ID key) {
     if (!map) return 0;
     // key can be NULL (nil is a valid key)
     unsigned int idx = find_slot(map, key);
-    ID stored_key = (ID)KV_KEY(map->data, idx);
+    ID stored_key = KV_KEY(map->data, idx);
     return (stored_key != HASHMAP_EMPTY && stored_key != HASHMAP_TOMBSTONE) ? 1 : 0;
 }
 
@@ -117,7 +117,7 @@ static void hashmap_insert_at(CljHashMap *map, unsigned int idx, CljString *key_
     }
     
     // key_str is already retained by caller
-    ASSIGN(KV_KEY(map->data, idx), (ID)key_str);
+    ASSIGN(KV_KEY(map->data, idx), key_str);
     ASSIGN(KV_VALUE(map->data, idx), value);
     map->count++;
 }
@@ -141,7 +141,7 @@ static CljHashMap* hashmap_rehash(CljHashMap *map, unsigned int new_capacity) {
     
     // Insert all entries directly (without rehashing check, without tombstones)
     for (unsigned int i = 0; i < map->capacity; i++) {
-        ID stored = (ID)KV_KEY(map->data, i);
+        ID stored = KV_KEY(map->data, i);
         if (stored != HASHMAP_EMPTY && stored != HASHMAP_TOMBSTONE) {
             ID k = stored;
             ID v = KV_VALUE(map->data, i);
@@ -155,7 +155,7 @@ static CljHashMap* hashmap_rehash(CljHashMap *map, unsigned int new_capacity) {
     // Free old map if RC=1
     if (map->base.rc == 1) {
         for (unsigned int i = 0; i < map->capacity; i++) {
-            ID slot = (ID)KV_KEY(map->data, i);
+            ID slot = KV_KEY(map->data, i);
             if (slot != HASHMAP_EMPTY && slot != HASHMAP_TOMBSTONE) {
                 RELEASE(KV_KEY(map->data, i));
                 RELEASE(KV_VALUE(map->data, i));
@@ -194,7 +194,7 @@ static CljHashMap* hashmap_copy(CljHashMap *map) {
     // Re-insert all entries (automatic rehashing)
     // Uses KV_KEY() and KV_VALUE() macros
     for (unsigned int i = 0; i < map->capacity; i++) {
-        ID stored = (ID)KV_KEY(map->data, i);
+        ID stored = KV_KEY(map->data, i);
         if (stored != HASHMAP_EMPTY && stored != HASHMAP_TOMBSTONE) {
             ID k = stored;
             ID v = KV_VALUE(map->data, i);
@@ -232,7 +232,7 @@ CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value) {
     unsigned int first_tombstone = UINT_MAX;
     
     do {
-        ID stored_key = (ID)KV_KEY(map->data, idx);
+        ID stored_key = KV_KEY(map->data, idx);
         
         if (stored_key == HASHMAP_EMPTY) {
             // Empty slot found
@@ -271,7 +271,7 @@ CljHashMap* hashmap_remove(CljHashMap *map, ID key) {
     
     // Linear Probing: Find slot
     unsigned int idx = find_slot(map, key);
-    ID stored = (ID)KV_KEY(map->data, idx);
+    ID stored = KV_KEY(map->data, idx);
     if (stored == HASHMAP_EMPTY || stored == HASHMAP_TOMBSTONE) {
         return map;  // Not found
     }
@@ -282,7 +282,7 @@ CljHashMap* hashmap_remove(CljHashMap *map, ID key) {
         // ADVANTAGE: New map without tombstones, optimal capacity
         CljHashMap *copy = make_hashmap(map->count > 1 ? map->count - 1 : 0);  // count-1 since one key is removed
         for (unsigned int i = 0; i < map->capacity; i++) {
-            ID stored_i = (ID)KV_KEY(map->data, i);
+            ID stored_i = KV_KEY(map->data, i);
             if (stored_i != HASHMAP_EMPTY && stored_i != HASHMAP_TOMBSTONE && i != idx) {
                 ID k = stored_i;
                 ID v = KV_VALUE(map->data, i);

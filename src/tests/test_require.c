@@ -259,7 +259,7 @@ TEST(test_require_reverse_conflict_clojure_core) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 3
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -294,7 +294,7 @@ TEST(test_require_reverse_in_let_after_require) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 3
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -314,7 +314,7 @@ TEST(test_require_reverse_in_recursive_function) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (1 2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));

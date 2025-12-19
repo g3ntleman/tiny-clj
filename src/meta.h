@@ -32,7 +32,7 @@ CljMap* meta_merge_with_precedence(CljMap *existing_meta, CljMap *form_meta);
 #else
 // Stubs when meta is disabled
 #define meta_set(v, meta) ((void)0)
-#define meta_get(v) ((ID)NULL)
+#define meta_get(v) (NULL)
 #define meta_clear(v) ((void)0)
 #define meta_registry_init() ((void)0)
 #define meta_registry_cleanup() ((void)0)

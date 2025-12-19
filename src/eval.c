@@ -47,7 +47,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
     unsigned char tag = TAG(expr);
     if (tag == CLJ_SYMBOL) {
         if ((CljSymbol*)expr == unqualified) {
-            *slot = (ID)qualified;
+            *slot = qualified;
         }
         return;
     }
@@ -464,7 +464,7 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
         }
     }
 
-    CljList *new_stack = make_list((ID)frame_map, parent_with_frames);
+    CljList *new_stack = make_list(frame_map, parent_with_frames);
     RELEASE(frame_map);
     if (parent_with_frames) {
         RELEASE(parent_with_frames);
@@ -834,7 +834,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         ID stack_rest = LIST_REST(resolve_stack);
         ID stack_head = LIST_FIRST(resolve_stack);
         bool has_captures = stack_rest && list_type_matches(TAG(stack_rest));
-        bool has_different_env = stack_head && stack_head != (ID)resolve_env;
+        bool has_different_env = stack_head && stack_head != resolve_env;
         if (!has_captures && !has_different_env) {
             resolve_stack = NULL;
         }
@@ -1991,7 +1991,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         if (has_frame) {
-            binding_params[binding_index] = (ID)sym_val;
+            binding_params[binding_index] = sym_val;
             binding_values[binding_index] = value;
             if (value && !IS_IMMEDIATE(value)) {
                 RETAIN((CljObject*)value);
@@ -2338,7 +2338,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     if (name_symbol && st && st->current_ns && st->current_ns->name && name_symbol->cname) {
         CljSymbol *qualified_name = intern_symbol(st->current_ns->name, name_symbol->cname);
         if (qualified_name && qualified_name != name_symbol) {
-            ID body_id = (ID)transformed_body;
+            ID body_id = transformed_body;
             rewrite_recursive_calls_in_slot(&body_id, name_symbol, qualified_name);
             transformed_body = (CljObject*)body_id;
         }
@@ -2460,7 +2460,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
         CljObject *func_in_env = map_get((CljValue)first_env, (CljValue)name_sym, NULL);
         if (func_in_env != (CljObject*)fn_obj) {
             CljMap *new_first_env = map_assoc(first_env, name_sym, fn_obj);
-            CljList *new_env_stack = make_list(new_first_env, LIST_REST(func->env_stack));
+            CljList *new_env_stack = make_list(new_first_env, as_list(LIST_REST(func->env_stack)));
             ASSIGN(func->env_stack, new_env_stack);
         }
     }
@@ -2616,8 +2616,10 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         CljMap *result = map_empty();
 
         MAP_FOR_EACH(map, key, value) {
-            ID eval_key = (key == (ID)SYM_NIL) ? NULL : eval_body(key, env, st, NULL);
-            ID eval_value = (value == (ID)SYM_NIL) ? NULL : eval_body(value, env, st, NULL);
+            ID key_id = key;
+            ID value_id = value;
+            ID eval_key = (key_id == SYM_NIL) ? NULL : eval_body(key_id, env, st, NULL);
+            ID eval_value = (value_id == SYM_NIL) ? NULL : eval_body(value_id, env, st, NULL);
             ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
 
@@ -2886,7 +2888,7 @@ ID* alloc_obj_array(int size, ID *stack_buffer) {
     if (size <= 16) {
         return stack_buffer;
     }
-    return malloc(sizeof(ID) * size);
+    return malloc((size_t)size * sizeof(*stack_buffer));
 }
 
 void free_obj_array(ID *array, ID *stack_buffer) {

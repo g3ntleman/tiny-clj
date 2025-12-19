@@ -66,10 +66,6 @@ void evalstate_free(EvalState *st);  // No-op for global state (for compatibilit
 void evalstate_set_ns(EvalState *st, const char *ns_name);
 void evalstate_reset(EvalState **st_ptr, bool load_core);
 
-// Optimized EvalState functions
-EvalState* evalstate_new_lazy();
-void evalstate_ensure_initialized(EvalState *st);
-
 // Exception handling
 void eval_error(const char *msg, EvalState *st);
 void parse_error(const char *msg, EvalState *st);

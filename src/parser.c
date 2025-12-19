@@ -573,7 +573,7 @@ static ID parse_list(Reader *reader, EvalState *st) {
       ID let_binding_vec = AUTORELEASE(binding_vec);
 
       // Build (let [binding test] (if binding then else?))
-      ID expanded = AUTORELEASE(make_ast_list(SYM_LET, make_ast_list(let_binding_vec, make_ast_list((ID)if_expr, NULL))));
+      ID expanded = AUTORELEASE(make_ast_list(SYM_LET, make_ast_list(let_binding_vec, make_ast_list(if_expr, NULL))));
 
       // Skip whitespace before checking for closing parenthesis
       reader_skip_all(reader);
@@ -1180,7 +1180,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
     if (existing_map && new_map) {
       CljMap *merged_meta = (CljMap*)meta_merge(existing_map, new_map);
       if (merged_meta) {
-        if ((ID)merged_meta != existing_meta) {
+        if (merged_meta != existing_meta) {
           // Apply merged metadata to object
           meta_set((CljObject*)obj, (CljObject*)merged_meta);
         }
@@ -1247,13 +1247,13 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
   CljMap *location_meta = (CljMap*)make_location_meta(reader, st);
   if (location_meta) {
     // Get current metadata (might be from meta parameter or existing)
-    ID current_meta = meta ? (ID)meta : meta_get((CljObject*)obj);
+    ID current_meta = meta ? meta : meta_get((CljObject*)obj);
     CljMap *current_map = current_meta ? as_map(current_meta) : NULL;
     if (current_map) {
       // Merge location metadata with existing metadata (doesn't overwrite)
       CljMap *merged_meta = (CljMap*)meta_merge(current_map, location_meta);
       if (merged_meta) {
-        if ((ID)merged_meta != current_meta) {
+        if (merged_meta != current_meta) {
           // Update meta if it was merged
           meta_set(obj, (CljObject*)merged_meta);
         }
@@ -1311,7 +1311,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
 
     // Associate keyword with true
     // map_assoc may return same map (COW in-place) or new map (COW copy)
-    CljMap *updated_map = map_assoc(meta_map, keyword_meta, (ID)clj_true);
+    CljMap *updated_map = map_assoc(meta_map, keyword_meta, clj_true);
     if (updated_map != meta_map) {
         RELEASE(meta_map);  // Release original map only if new map was created
     }
@@ -1327,7 +1327,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
 
     // Merge metadata with object (handles existing metadata)
-    ID result = merge_metadata_with_object(obj, (ID)meta_map);
+    ID result = merge_metadata_with_object(obj, meta_map);
     if (!result) {
       return NULL;
     }
@@ -1390,7 +1390,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
     CljSymbol *fn_sym = intern_symbol_global("fn");
     CljValue empty_vec = make_vector(0, CLJ_VECTOR);
     ID empty_list_val = NULL; // () is nil in Clojure
-    return AUTORELEASE(make_ast_list((ID)fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
+    return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(empty_vec, make_ast_list(empty_list_val, NULL))));
   }
 
   // Collect all % and %N references in the body to determine parameters
@@ -1410,7 +1410,7 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   vector_conj((CljVector*)param_vec, percent_sym);
 
   // Create (fn [%] body)
-  return AUTORELEASE(make_ast_list((ID)fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
+  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
 }
 
 /**

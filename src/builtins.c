@@ -977,7 +977,7 @@ ID native_update(ID *args, unsigned int argc) {
     
     // assoc the new value
     CljMap *result = map_assoc((CljMap*)coll, key, new_val);
-    return AUTORELEASE(RETAIN((ID)result));
+    return AUTORELEASE(RETAIN(result));
 }
 
 // into: Add all items from source into target collection
@@ -1006,7 +1006,7 @@ ID native_into(ID *args, unsigned int argc) {
     // nil target - create appropriate empty collection based on source type
     if (!to) {
         // Default to vector if target is nil
-        to = (ID)make_vector(0, CLJ_VECTOR);
+        to = make_vector(0, CLJ_VECTOR);
     }
     
     CljType to_tag = TAG(to);
@@ -1032,7 +1032,7 @@ ID native_into(ID *args, unsigned int argc) {
                     CljVector *entry = make_vector(2, CLJ_VECTOR);
                     entry = vector_conj(entry, key);
                     entry = vector_conj(entry, val);
-                    result = vector_conj(result, (ID)entry);
+                    result = vector_conj(result, entry);
                 }
             }
         } else if (from_tag == CLJ_LIST || from_tag == CLJ_AST_NODE) {
@@ -1044,7 +1044,7 @@ ID native_into(ID *args, unsigned int argc) {
             }
         }
         
-        return AUTORELEASE(RETAIN((ID)result));
+        return AUTORELEASE(RETAIN(result));
     }
     
     // Handle map target
@@ -1069,7 +1069,7 @@ ID native_into(ID *args, unsigned int argc) {
             }
         }
         
-        return AUTORELEASE(RETAIN((ID)result));
+        return AUTORELEASE(RETAIN(result));
     }
     
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1091,7 +1091,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
     ID keys = args[1];
     
     // nil map returns empty map
-    if (!m) return (ID)map_empty();
+    if (!m) return map_empty();
     
     CljType tag = TAG(m);
     if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT) {
@@ -1102,7 +1102,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
     }
     
     // nil keys returns empty map
-    if (!keys) return (ID)map_empty();
+    if (!keys) return map_empty();
     
     CljType keys_tag = TAG(keys);
     if (keys_tag != CLJ_VECTOR && keys_tag != CLJ_VECTOR_TRANSIENT && 
@@ -1137,7 +1137,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
         }
     }
     
-    return AUTORELEASE(RETAIN((ID)result));
+    return AUTORELEASE(RETAIN(result));
 }
 
 // find: Return [key value] entry for key, or nil if not found
@@ -1176,7 +1176,7 @@ ID native_find(ID *args, unsigned int argc) {
     entry = vector_conj(entry, key);
     entry = vector_conj(entry, val);
     
-    return AUTORELEASE(RETAIN((ID)entry));
+    return AUTORELEASE(RETAIN(entry));
 }
 
 // Transient functions

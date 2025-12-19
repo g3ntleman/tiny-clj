@@ -112,7 +112,7 @@ TEST(test_meta_returns_nil_for_no_metadata) {
     TEST_ASSERT_NOT_NULL(test_obj);
     
     // Call meta function
-    ID args[1] = { (ID)test_obj };
+    ID args[1] = { test_obj };
     ID result = native_meta(args, 1);
     
     // Should return nil (NULL)
@@ -157,7 +157,7 @@ TEST(test_meta_returns_metadata) {
     meta_set((CljObject*)test_obj, (CljObject*)meta_map);
     
     // Call meta function
-    ID args[1] = { (ID)test_obj };
+    ID args[1] = { test_obj };
     ID result = native_meta(args, 1);
     
     // Should return metadata map
@@ -210,13 +210,13 @@ TEST(test_meta_resolves_symbols) {
     // Define the variable in namespace
     CljSymbol *var_sym = intern_symbol_global("test-var");
     TEST_ASSERT_NOT_NULL(var_sym);
-    ns_define(g_test_eval_state->current_ns, var_sym, (ID)test_value);
+    ns_define(g_test_eval_state->current_ns, var_sym, test_value);
     
     // Set eval state for builtin
     builtin_set_eval_state(g_test_eval_state);
     
     // Call meta function with symbol
-    ID args[1] = { (ID)var_sym };
+    ID args[1] = { var_sym };
     ID result = native_meta(args, 1);
     
     // Should return metadata map (after resolving symbol)

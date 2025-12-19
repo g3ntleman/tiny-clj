@@ -98,7 +98,7 @@ ID list_nth(CljList *list, int n) {
         if (i == n) {
             CljList *current_list = as_list(current);
             // Element found - return it (may be NULL if element is nil)
-            return (ID)LIST_FIRST(current_list);  // Return directly - no additional memory management
+            return LIST_FIRST(current_list);  // Return directly - no additional memory management
         }
         CljList *current_list = as_list(current);
         current = LIST_REST(current_list);

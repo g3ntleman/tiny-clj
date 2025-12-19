@@ -167,14 +167,14 @@ TEST(test_filter_basic) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 2
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
     
     // Verify second element is 4
-    CljList *rest = as_list((ID)list->rest);
+    CljList *rest = as_list(list->rest);
     TEST_ASSERT_NOT_NULL(rest);
     TEST_ASSERT_NOT_NULL(rest->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)rest->first));
@@ -750,7 +750,7 @@ TEST(test_rest_with_parameter) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -776,7 +776,7 @@ TEST(test_rest_with_parameter_nested) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -802,7 +802,7 @@ TEST(test_rest_with_parameter_recursive) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -834,7 +834,7 @@ TEST(test_rest_with_parameter_closure) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -860,7 +860,7 @@ TEST(test_rest_with_parameter_reduce_like) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -888,7 +888,7 @@ TEST(test_rest_with_parameter_step_function) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -914,7 +914,7 @@ TEST(test_next_with_parameter) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -940,7 +940,7 @@ TEST(test_rest_with_parameter_let) {
     TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
     
     // Verify result is (2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));

@@ -15,15 +15,15 @@ static inline bool compare_fixnums(int va, int vb, ComparisonOp op) {
         case COMP_GE: return va >= vb;
         case COMP_EQ: return va == vb;
     }
-    return false;
-}
+            return false;
+    }
 
 static inline bool extract_numeric_value(ID obj, float *val) {
     unsigned char tag = TAG(obj);
     if (tag == CLJ_INT) {
         *val = (float)as_fixnum((CljValue)obj);
-        return true;
-    }
+    return true;
+}
     if (tag == CLJ_FLOAT) {
         *val = as_fixed((CljValue)obj);
         return true;
@@ -53,10 +53,10 @@ static CljObject* eval_numeric_comparison(CljList *list,
     }
 
     // Generic numeric comparison
-    float val_a, val_b;
+        float val_a, val_b;
     if (!extract_numeric_value(a, &val_a) || !extract_numeric_value(b, &val_b)) {
-        return throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
-    }
+            return throw_exception_formatted(EXCEPTION_TYPE, __FILE__, __LINE__, 0, ERR_EXPECTED_NUMBER);
+        }
 
     bool result;
     switch (op) {
@@ -84,23 +84,23 @@ ID eval_comparison_dispatch(CljList *list,
     }
 
     // Equality: = (handles both numeric and generic equality)
-    CljList *rest = as_list(LIST_REST(list));
-    if (!rest) return NULL;
+        CljList *rest = as_list(LIST_REST(list));
+        if (!rest) return NULL;
 
-    ID a = eval_arg_from_expr_with_context(rest->first, env, st, ctx);
-    CljList *rest2 = as_list(LIST_REST(rest));
+        ID a = eval_arg_from_expr_with_context(rest->first, env, st, ctx);
+        CljList *rest2 = as_list(LIST_REST(rest));
     if (!rest2) return NULL;
 
-    ID b = eval_arg_from_expr_with_context(rest2->first, env, st, ctx);
+        ID b = eval_arg_from_expr_with_context(rest2->first, env, st, ctx);
     if (!a || !b) return NULL;
 
     // Fixnum fast-path (most common case)
     if (TAG(a) == TAG_FIXNUM && TAG(b) == TAG_FIXNUM) {
         return (as_fixnum(a) == as_fixnum(b)) ? clj_true : clj_false;
-    }
+        }
 
     // Numeric comparison for floats
-    float val_a, val_b;
+        float val_a, val_b;
     if (extract_numeric_value(a, &val_a) && extract_numeric_value(b, &val_b)) {
         return (val_a == val_b) ? clj_true : clj_false;
     }

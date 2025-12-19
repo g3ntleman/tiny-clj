@@ -218,7 +218,7 @@ TEST(test_go_nil_value_in_channel) {
     // Clojure-compatibility: nil is a valid value that can be sent through channels
     CljValue val_after = map_get(chan, kw_value, NULL);
     // Note: map_get returns NULL for nil values, but map_contains confirms the key exists
-    TEST_ASSERT_TRUE(map_contains(chan, (ID)kw_value));  // Key should exist
+    TEST_ASSERT_TRUE(map_contains(chan, kw_value));  // Key should exist
     TEST_ASSERT_NULL(val_after);  // Value should be nil (NULL)
     
     CljValue closed_val = map_get(chan, kw_closed, NULL);

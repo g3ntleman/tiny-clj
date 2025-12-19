@@ -155,7 +155,7 @@ TEST(test_list_for_each_rest) {
     CljList *l3 = make_list(fixnum(3), NULL);
     CljList *l2 = make_list(fixnum(2), l3);
     CljList *l1 = make_list(fixnum(1), l2);
-    CljList *list = make_list((ID)SYM_PLUS, l1);
+    CljList *list = make_list(SYM_PLUS, l1);
     AUTORELEASE((CljObject*)list);
     
     int sum = 0;

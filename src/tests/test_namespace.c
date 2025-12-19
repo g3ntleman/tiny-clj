@@ -52,7 +52,7 @@ TEST(test_namespace_lookup_user_namespace) {
     CljObject *value = fixnum(42);
 
     // Store variable directly in namespace (ns_define will automatically qualify it)
-    ns_define(g_test_eval_state->current_ns, (ID)test_sym, value);
+    ns_define(g_test_eval_state->current_ns, test_sym, value);
 
     // Now resolve test-var in user namespace
     CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
@@ -405,7 +405,7 @@ TEST(test_namespace_variable_storage) {
     CljObject *value = fixnum(123);
 
     // Store variable in namespace (ns_define now automatically qualifies)
-    ns_define(g_test_eval_state->current_ns, (ID)var_sym, value);
+    ns_define(g_test_eval_state->current_ns, var_sym, value);
 
     // Retrieve variable from namespace
     CljObject *retrieved = ns_resolve(g_test_eval_state, var_sym);
@@ -436,8 +436,8 @@ TEST(test_namespace_multiple_variables) {
     CljSymbol *var2_sym_qualified = intern_symbol(ns_name_sym, "var2");
     TEST_ASSERT_NOT_NULL(var1_sym_qualified);
     TEST_ASSERT_NOT_NULL(var2_sym_qualified);
-    ns_define(g_test_eval_state->current_ns, (ID)var1_sym_qualified, value1);
-    ns_define(g_test_eval_state->current_ns, (ID)var2_sym_qualified, value2);
+    ns_define(g_test_eval_state->current_ns, var1_sym_qualified, value1);
+    ns_define(g_test_eval_state->current_ns, var2_sym_qualified, value2);
 
     // Retrieve and verify (unqualified symbols for lookup)
     CljObject *retrieved1 = ns_resolve(g_test_eval_state, var1_sym);
@@ -486,7 +486,7 @@ TEST(test_namespace_special_characters) {
         ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
     CljSymbol *special_sym_qualified = intern_symbol(ns_name_sym, "test-var?");
     TEST_ASSERT_NOT_NULL(special_sym_qualified);
-    ns_define(g_test_eval_state->current_ns, (ID)special_sym_qualified, value);
+    ns_define(g_test_eval_state->current_ns, special_sym_qualified, value);
     CljObject *retrieved = ns_resolve(g_test_eval_state, special_sym);
 
     TEST_ASSERT_NOT_NULL(retrieved);
@@ -561,7 +561,7 @@ TEST(test_ns_resolve_symbol_cache) {
     CljSymbol *test_sym_qualified = intern_symbol(SYM_CLOJURE_CORE, "test-cached-symbol");
     TEST_ASSERT_NOT_NULL(test_sym_qualified);
     CljObject *test_value = fixnum(42);
-    ns_define(clojure_core, (ID)test_sym_qualified, test_value);
+    ns_define(clojure_core, test_sym_qualified, test_value);
 
     // Switch to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
@@ -1014,7 +1014,7 @@ TEST(test_require_invalid_syntax_non_vector) {
 // Test: Verify that ns_registry is a Map
 TEST(test_ns_registry_is_map) {
     TEST_ASSERT_NOT_NULL(g_runtime.ns_registry);
-    TEST_ASSERT_TRUE(TAG((ID)g_runtime.ns_registry) == CLJ_MAP_TRANSIENT);
+    TEST_ASSERT_TRUE(TAG(g_runtime.ns_registry) == CLJ_MAP_TRANSIENT);
 
     // Verify it's a transient map
     CljMap *registry = g_runtime.ns_registry;
@@ -1158,8 +1158,8 @@ TEST(test_ns_map_returns_mappings) {
     CljObject *val1 = fixnum(100);
     CljObject *val2 = fixnum(200);
 
-    ns_define(test_ns, (ID)sym1, val1);
-    ns_define(test_ns, (ID)sym2, val2);
+    ns_define(test_ns, sym1, val1);
+    ns_define(test_ns, sym2, val2);
 
     // Test ns-map with namespace symbol
     CljSymbol *ns_sym = intern_symbol_global("test-ns-map");
@@ -1220,7 +1220,7 @@ TEST(test_ns_map_current_namespace) {
     // Add a mapping to current namespace
     CljSymbol *test_sym = intern_symbol_global("current-ns-var");
     CljObject *test_val = fixnum(42);
-    ns_define(g_test_eval_state->current_ns, (ID)test_sym, test_val);
+    ns_define(g_test_eval_state->current_ns, test_sym, test_val);
 
     // Get current namespace name
     const char *current_ns_name = g_test_eval_state->current_ns->name->cname;

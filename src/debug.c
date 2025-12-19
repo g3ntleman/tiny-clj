@@ -35,7 +35,7 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
 
     switch (v->type) {
         case CLJ_SYMBOL: {
-            CljSymbol *sym = as_symbol((ID)v);
+            CljSymbol *sym = as_symbol(v);
             if (sym && sym->cname) {
                 // Output symbol name as Clojure code (no "SYM:" prefix)
                 // If symbol has namespace, output as "namespace/name"
@@ -52,7 +52,7 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
         }
 
         case CLJ_LIST: {
-            CljList *list = as_list((ID)v);
+            CljList *list = as_list(v);
             // Output list as Clojure code: (element1 element2 ...)
             *offset += snprintf(buf + *offset, buf_size - *offset, "(");
             if (list) {
@@ -69,8 +69,8 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
                         break;
                     }
                     print_ast_recursive(current, depth + 1, buf, buf_size, offset);
-                    current = list->rest ? as_list((ID)list->rest)->first : NULL;
-                    list = list->rest ? as_list((ID)list->rest) : NULL;
+                    current = list->rest ? as_list(list->rest)->first : NULL;
+                    list = list->rest ? as_list(list->rest) : NULL;
                     count++;
                 }
                 if (current) {

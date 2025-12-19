@@ -48,7 +48,7 @@ static uint32_t hash_map(CljMap *map) {
     if (!map) return 0;
     uint32_t h = 0;
     MAP_FOR_EACH(map, key, value) {
-        h = FNV_MIX(h, clj_hash_full((ID)key));
+        h = FNV_MIX(h, clj_hash_full(key));
         h = FNV_MIX(h, clj_hash_full(value));
     }
     return h;
@@ -57,7 +57,7 @@ static uint32_t hash_map(CljMap *map) {
 static uint32_t hash_list(CljList *list) {
     uint32_t h = 0;
     for (CljList *c = list; c; ) {
-        h = FNV_MIX(h, clj_hash_full((ID)c->first));
+        h = FNV_MIX(h, clj_hash_full(c->first));
         CljObject *rest = c->rest;
         c = (rest && list_type_matches(TAG(rest))) ? as_list(rest) : NULL;
     }

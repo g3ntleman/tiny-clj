@@ -306,7 +306,7 @@ CljObject *autorelease(CljObject *v) {
     CljVector *updated_pool = vector_conj(pool, v);
     if (updated_pool != pool) {
         // Pool was replaced (COW), update stack (vector_assoc supports transient vectors)
-        ASSIGN(g_runtime.pool_stack, vector_assoc(g_runtime.pool_stack, stack_depth - 1, (ID)updated_pool));
+        ASSIGN(g_runtime.pool_stack, vector_assoc(g_runtime.pool_stack, stack_depth - 1, updated_pool));
     }
     
     // Track for memory profiling
@@ -362,7 +362,7 @@ CljVector *autorelease_pool_push() {
 
     
     // Push pool to stack using transient vector operations
-    ASSIGN(g_runtime.pool_stack, vector_conj(g_runtime.pool_stack, (ID)pool));
+    ASSIGN(g_runtime.pool_stack, vector_conj(g_runtime.pool_stack, pool));
     
     if (g_debug_output_active) {
         printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%u)\n", 
@@ -407,7 +407,7 @@ void autorelease_pool_pop(CljVector *pool) {
 #else
         // In Release builds, always release (no zombie tracking)
         autorelease_pool_clear(pool);
-        RELEASE((ID)pool);
+        RELEASE(pool);
 #endif
     }
     
@@ -651,7 +651,7 @@ static void release_object_default(CljObject *v) {
 
         case CLJ_AST_NODE:
             {
-                CljASTNode *node = as_ast_node((ID)v);
+                CljASTNode *node = as_ast_node(v);
                 if (!node) {
                     break;
                 }
@@ -669,7 +669,7 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_CALLSITE_CACHE:
             {
-                CljCallsiteCache *cache = as_callsite_cache((ID)v);
+                CljCallsiteCache *cache = as_callsite_cache(v);
                 if (!cache) {
                     break;
                 }

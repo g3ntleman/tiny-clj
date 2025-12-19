@@ -68,8 +68,8 @@ TEST(test_pr_str_with_containers) {
         CljVector vec = make_vector(2, CLJ_VECTOR);
         CljObject *str1 = make_string("hello");
         CljObject *str2 = make_string("world");
-        vec = vector_conj(vec, (ID)str1);
-        vec = vector_conj(vec, (ID)str2);
+        vec = vector_conj(vec, str1);
+        vec = vector_conj(vec, str2);
         
         CljString *result = pr_str((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(result);
@@ -86,7 +86,7 @@ TEST(test_pr_str_with_containers) {
         CljMap *map = (CljMap*)make_map(2);
         CljObject *key_str = make_string("a");
         CljObject *val_str = make_string("hello");
-        map_assoc((CljValue)map, (CljValue)(ID)key_str, (CljValue)(ID)val_str);
+        map_assoc((CljValue)map, (CljValue)key_str, (CljValue)val_str);
         
         result = pr_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);
@@ -100,8 +100,8 @@ TEST(test_pr_str_with_containers) {
         CljVector outer_vec = make_vector(1, CLJ_VECTOR);
         CljVector inner_vec = make_vector(1, CLJ_VECTOR);
         CljObject *nested_str = make_string("nested");
-        inner_vec = vector_conj(inner_vec, (ID)nested_str);
-        outer_vec = vector_conj(outer_vec, (ID)inner_vec);
+        inner_vec = vector_conj(inner_vec, nested_str);
+        outer_vec = vector_conj(outer_vec, inner_vec);
         
         result = pr_str((CljObject*)outer_vec);
         TEST_ASSERT_NOT_NULL(result);
@@ -132,8 +132,8 @@ TEST(test_print_str_different_types) {
         
         // Test with map (simplified - just test basic functionality)
         CljMap *map = (CljMap*)make_map(2);
-        map_assoc((CljValue)map, (CljValue)(ID)make_string("a"), fixnum(1));
-        map_assoc((CljValue)map, (CljValue)(ID)make_string("b"), fixnum(2));
+        map_assoc((CljValue)map, (CljValue)make_string("a"), fixnum(1));
+        map_assoc((CljValue)map, (CljValue)make_string("b"), fixnum(2));
         
         result = print_str((CljObject*)map);
         TEST_ASSERT_NOT_NULL(result);

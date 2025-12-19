@@ -41,14 +41,14 @@ TEST(test_for_basic) {
 TEST(test_dotimes_missing_body) {
     // Test eval_dotimes with missing body - unique test not in test_loops.c
     // Create dotimes call: (dotimes [i 3]) - missing body
-    CljObject *binding_vector = AUTORELEASE((CljObject*)make_list((ID)intern_symbol_global("i"), (CljList*)make_list((ID)fixnum(3), NULL)));
-    CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list((ID)SYM_DOTIMES, (CljList*)make_list((ID)binding_vector, NULL)));
+    CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(3), NULL)));
+    CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, NULL)));
     
     // Create environment
     CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list((ID)dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for missing body
 }
 
@@ -68,12 +68,12 @@ TEST(test_doseq_with_environment) {
         vec_data->data[2] = fixnum(3);
         vec_data->count = 3;
         
-        CljObject *binding_list = make_list((ID)intern_symbol_global("x"), make_list((ID)vec, NULL));
+        CljObject *binding_list = make_list(intern_symbol_global("x"), make_list(vec, NULL));
         CljSymbol *body = intern_symbol_global("x");
-        CljObject *doseq_call = make_list((ID)SYM_DOSEQ, make_list((ID)binding_list, make_list((ID)body, NULL)));
+        CljObject *doseq_call = make_list(SYM_DOSEQ, make_list(binding_list, make_list(body, NULL)));
         CljMap *env = make_map(4);
         
-        CljObject *result = eval_doseq(as_list((ID)doseq_call), env);
+        CljObject *result = eval_doseq(as_list(doseq_call), env);
         TEST_ASSERT_NULL(result);
         
         RELEASE(env);

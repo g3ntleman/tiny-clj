@@ -380,19 +380,19 @@ TEST(test_vector_conj_cow_rc_one_inplace) {
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // First conj should be in-place (RC=1, capacity allows)
-        CljValue new_vec1 = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(10));
+        CljValue new_vec1 = (CljValue)vector_conj((CljVector*)vec, fixnum(10));
         TEST_ASSERT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec1); // Same pointer! (in-place)
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         TEST_ASSERT_EQUAL_INT(1, vector_count(vec));
         
         // Second conj should also be in-place
-        CljValue new_vec2 = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(20));
+        CljValue new_vec2 = (CljValue)vector_conj((CljVector*)vec, fixnum(20));
         TEST_ASSERT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec2); // Same pointer! (in-place)
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // Third conj should also be in-place
-        CljValue new_vec3 = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
+        CljValue new_vec3 = (CljValue)vector_conj((CljVector*)vec, fixnum(30));
         TEST_ASSERT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec3); // Same pointer! (in-place)
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
@@ -411,14 +411,14 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add some entries
-        vector_conj((CljVector*)vec, (ID)fixnum(10));
+        vector_conj((CljVector*)vec, fixnum(10));
         
         // RETAIN to increase RC
         RETAIN(vec);
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc);
         
         // Now COW should trigger
-        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(20));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, fixnum(20));
         TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc); // Original RC unchanged
         
@@ -445,15 +445,15 @@ TEST(test_vector_conj_cow_capacity_growth) {
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Fill capacity
-        vector_conj((CljVector*)vec, (ID)fixnum(10));
-        vector_conj((CljVector*)vec, (ID)fixnum(20));
+        vector_conj((CljVector*)vec, fixnum(10));
+        vector_conj((CljVector*)vec, fixnum(20));
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // RETAIN to trigger COW
         RETAIN(vec);
         
         // Add more - should trigger COW with growth
-        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, fixnum(30));
         TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, new_vec); // NEW pointer!
         
         CljVector *new_vec_data = as_vector(new_vec);
@@ -480,13 +480,13 @@ TEST(test_vector_conj_cow_original_unchanged) {
         CljVector* vec = make_vector(4, CLJ_VECTOR);
         
         // Add entries
-        vector_conj((CljVector*)vec, (ID)fixnum(10));
-        vector_conj((CljVector*)vec, (ID)fixnum(20));
+        vector_conj((CljVector*)vec, fixnum(10));
+        vector_conj((CljVector*)vec, fixnum(20));
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
         
         // RETAIN to trigger COW
         RETAIN(vec);
-        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(30));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, fixnum(30));
         
         // Original should be unchanged
         TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
@@ -512,13 +512,13 @@ TEST(test_vector_conj_cow_memory_leak) {
         CljVector* vec = make_vector(4, CLJ_VECTOR);
         
         // Add entries
-        vector_conj((CljVector*)vec, (ID)fixnum(10));
-        vector_conj((CljVector*)vec, (ID)fixnum(20));
-        vector_conj((CljVector*)vec, (ID)fixnum(30));
+        vector_conj((CljVector*)vec, fixnum(10));
+        vector_conj((CljVector*)vec, fixnum(20));
+        vector_conj((CljVector*)vec, fixnum(30));
         
         // RETAIN to trigger COW
         RETAIN(vec);
-        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, (ID)fixnum(40));
+        CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, fixnum(40));
         
         // Cleanup
         RELEASE(vec);
@@ -539,9 +539,9 @@ TEST(test_vector_assoc_cow_rc_one_inplace) {
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add initial entries
-        vec = vector_conj(vec, (ID)fixnum(10));
-        vec = vector_conj(vec, (ID)fixnum(20));
-        vec = vector_conj(vec, (ID)fixnum(30));
+        vec = vector_conj(vec, fixnum(10));
+        vec = vector_conj(vec, fixnum(20));
+        vec = vector_conj(vec, fixnum(30));
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc); // Still RC=1
         
@@ -568,9 +568,9 @@ TEST(test_vector_assoc_cow_rc_greater_one) {
         TEST_ASSERT_EQUAL(1, ((CljObject*)vec)->rc);
         
         // Add entries
-        vec = vector_conj(vec, (ID)fixnum(10));
-        vec = vector_conj(vec, (ID)fixnum(20));
-        vec = vector_conj(vec, (ID)fixnum(30));
+        vec = vector_conj(vec, fixnum(10));
+        vec = vector_conj(vec, fixnum(20));
+        vec = vector_conj(vec, fixnum(30));
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
         
         // RETAIN to increase RC
@@ -604,9 +604,9 @@ TEST(test_vector_assoc_cow_original_unchanged) {
         CljVector* vec = make_vector(4, CLJ_VECTOR);
         
         // Add entries
-        vec = vector_conj(vec, (ID)fixnum(10));
-        vec = vector_conj(vec, (ID)fixnum(20));
-        vec = vector_conj(vec, (ID)fixnum(30));
+        vec = vector_conj(vec, fixnum(10));
+        vec = vector_conj(vec, fixnum(20));
+        vec = vector_conj(vec, fixnum(30));
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
         
         // RETAIN to trigger COW

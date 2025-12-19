@@ -85,8 +85,8 @@ bool clj_equal_full(ID a, ID b) {
             if (!map_a || !map_b) return false;
             if (map_a->count != map_b->count) return false;
             MAP_FOR_EACH(map_a, key_a, val_a) {
-                ID val_b = map_get((CljMap*)b, (ID)key_a, NULL);
-                if (!clj_equal((ID)val_a, val_b)) return false;
+                ID val_b = map_get((CljMap*)b, key_a, NULL);
+                if (!clj_equal(val_a, val_b)) return false;
             }
             return true;
         }
@@ -102,7 +102,7 @@ bool clj_equal_full(ID a, ID b) {
             CljList *curr_b = list_b;
             while (curr_a && curr_b) {
                 // Compare first elements
-                if (!clj_equal((ID)curr_a->first, (ID)curr_b->first)) {
+                if (!clj_equal(curr_a->first, curr_b->first)) {
                     return false;
                 }
                 // Move to next elements
@@ -114,7 +114,7 @@ bool clj_equal_full(ID a, ID b) {
                 // Check if rest is a list
                 if (!list_type_matches(TAG(rest_a)) || !list_type_matches(TAG(rest_b))) {
                     // Rest is not a list - compare directly
-                    if (!clj_equal((ID)rest_a, (ID)rest_b)) {
+                    if (!clj_equal(rest_a, rest_b)) {
                         return false;
                     }
                     return true; // Both have same non-list rest

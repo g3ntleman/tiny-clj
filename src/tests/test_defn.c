@@ -92,11 +92,11 @@ TEST(test_defn_with_native_marker_recognized) {
         // rest: (trim [s] :native)
         // rest->rest: ([s] :native)
         // rest->rest->rest: (:native)
-        CljList *rest1 = as_list((ID)list->rest);
+        CljList *rest1 = as_list(list->rest);
         TEST_ASSERT_NOT_NULL(rest1);
-        CljList *rest2 = as_list((ID)rest1->rest);
+        CljList *rest2 = as_list(rest1->rest);
         TEST_ASSERT_NOT_NULL(rest2);
-        CljList *rest3 = as_list((ID)rest2->rest);
+        CljList *rest3 = as_list(rest2->rest);
         TEST_ASSERT_NOT_NULL(rest3);
 
         CljObject *body = LIST_FIRST(rest3);
@@ -473,7 +473,7 @@ TEST(test_defn_test_fn_parsed) {
                                 "first element should be a symbol");
 
         // Verify second element is 'test-fn'
-        CljList *rest = as_list((ID)list->rest);
+        CljList *rest = as_list(list->rest);
         CljObject *test_fn_sym = rest ? LIST_FIRST(rest) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_sym, "second element should be 'test-fn' symbol");
         TEST_ASSERT_TRUE_MESSAGE(test_fn_sym && TAG(test_fn_sym) == CLJ_SYMBOL,
