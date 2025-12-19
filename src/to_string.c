@@ -600,7 +600,7 @@ CljString* to_string(ID v) {
 
 CljString* to_string_with_escape(ID v, bool escape_strings) {
     size_t len = to_string_calc_length((CljObject*)v, escape_strings);
-    CljString *result = (CljString*)AUTORELEASE((ID)make_string_buffer(len));
+    CljString *result = (CljString*)AUTORELEASE(make_string_buffer(len));
 
     size_t offset = 0;
     to_string_build_string((CljObject*)v, result->data, &offset, escape_strings);

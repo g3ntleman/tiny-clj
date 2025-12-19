@@ -634,7 +634,7 @@ CljVector* clj_conj(CljVector *tvec, ID item) {
 ID vector_persistent(CljVector *tvec) {
     
     if (!tvec || tvec->base.type == CLJ_VECTOR) {
-        return (ID)tvec;
+        return tvec;
     }
 
     // Clojure-Semantik: Erstelle NEUE persistent collection
@@ -645,5 +645,5 @@ ID vector_persistent(CljVector *tvec) {
     // Set type to CLJ_VECTOR (persistent, not transient)
     new_vec->base.type = CLJ_VECTOR;
     
-    return (ID)new_vec;
+    return new_vec;
 }

@@ -94,7 +94,7 @@ TEST(test_vector_memory) {
         // Add elements using vector_conj
         for (int i = 0; i < 5; i++) {
             CljValue elem = fixnum(i);
-            vec_data = vector_conj(vec_data, (ID)elem);
+            vec_data = vector_conj(vec_data, elem);
         }
         
         // Test vector operations
@@ -117,7 +117,7 @@ TEST(test_autorelease_pool_basic) {
         // Create some objects that should be autoreleased
         struct CljString *str1 = make_string("test1");
         struct CljString *str2 = make_string("test2");
-        CljObject *list = (CljObject*)make_list((ID)str1, (CljList*)str2);
+        CljObject *list = (CljObject*)make_list(str1, (CljList*)str2);
         
         TEST_ASSERT_NOT_NULL(str1);
         TEST_ASSERT_NOT_NULL(str2);
@@ -210,7 +210,7 @@ TEST(test_autorelease_pool_memory_cleanup) {
             char buffer[32];
             snprintf(buffer, sizeof(buffer), "list_item_%d", i);
             struct CljString *str = make_string(buffer);
-            list = (CljObject*)make_list((ID)str, (CljList*)list);
+            list = (CljObject*)make_list(str, (CljList*)list);
             AUTORELEASE(str);
         }
         AUTORELEASE(list);

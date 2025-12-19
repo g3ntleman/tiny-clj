@@ -274,7 +274,7 @@ ID eval_special_form_dispatch(CljList *list,
                               EvalState *st,
                               const EvalContext *ctx,
                               CljSymbol *op_sym) {
-    CljSpecialSymbol *special = as_special_symbol((ID)op_sym);
+    CljSpecialSymbol *special = as_special_symbol(op_sym);
     if (!special || !special->eval_fn) return NULL;
     return special->eval_fn(list, env, st, ctx);
 }

@@ -67,35 +67,35 @@ TEST(test_special_or_dispatch) {
 
 TEST(test_all_special_symbols_have_eval_fn) {
     // Test that all Special Forms have valid function pointers
-    CljSpecialSymbol *sym_if = as_special_symbol((ID)SYM_IF);
+    CljSpecialSymbol *sym_if = as_special_symbol(SYM_IF);
     TEST_ASSERT_NOT_NULL(sym_if);
     TEST_ASSERT_NOT_NULL(sym_if->eval_fn);
     
-    CljSpecialSymbol *sym_let = as_special_symbol((ID)SYM_LET);
+    CljSpecialSymbol *sym_let = as_special_symbol(SYM_LET);
     TEST_ASSERT_NOT_NULL(sym_let);
     TEST_ASSERT_NOT_NULL(sym_let->eval_fn);
     
-    CljSpecialSymbol *sym_do = as_special_symbol((ID)SYM_DO);
+    CljSpecialSymbol *sym_do = as_special_symbol(SYM_DO);
     TEST_ASSERT_NOT_NULL(sym_do);
     TEST_ASSERT_NOT_NULL(sym_do->eval_fn);
     
-    CljSpecialSymbol *sym_when = as_special_symbol((ID)SYM_WHEN);
+    CljSpecialSymbol *sym_when = as_special_symbol(SYM_WHEN);
     TEST_ASSERT_NOT_NULL(sym_when);
     TEST_ASSERT_NOT_NULL(sym_when->eval_fn);
     
-    CljSpecialSymbol *sym_and = as_special_symbol((ID)SYM_AND);
+    CljSpecialSymbol *sym_and = as_special_symbol(SYM_AND);
     TEST_ASSERT_NOT_NULL(sym_and);
     TEST_ASSERT_NOT_NULL(sym_and->eval_fn);
     
-    CljSpecialSymbol *sym_or = as_special_symbol((ID)SYM_OR);
+    CljSpecialSymbol *sym_or = as_special_symbol(SYM_OR);
     TEST_ASSERT_NOT_NULL(sym_or);
     TEST_ASSERT_NOT_NULL(sym_or->eval_fn);
     
-    CljSpecialSymbol *sym_fn = as_special_symbol((ID)SYM_FN);
+    CljSpecialSymbol *sym_fn = as_special_symbol(SYM_FN);
     TEST_ASSERT_NOT_NULL(sym_fn);
     TEST_ASSERT_NOT_NULL(sym_fn->eval_fn);
     
-    CljSpecialSymbol *sym_quote = as_special_symbol((ID)SYM_QUOTE);
+    CljSpecialSymbol *sym_quote = as_special_symbol(SYM_QUOTE);
     TEST_ASSERT_NOT_NULL(sym_quote);
     TEST_ASSERT_NOT_NULL(sym_quote->eval_fn);
 }

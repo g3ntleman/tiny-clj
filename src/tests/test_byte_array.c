@@ -199,7 +199,7 @@ TEST(test_byte_array_id_operations) {
     ID id1 = fixnum(42);
     ID id2 = fixnum(999);
     
-    // Write IDs at different positions (use sizeof(ID) for offset)
+    // Write IDs at different positions (use sizeoffor offset)
     byte_array_set_id(arr, 0, id1);
     byte_array_set_id(arr, sizeof(ID), id2);
     

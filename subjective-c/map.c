@@ -27,7 +27,7 @@ CljObject g_not_found_sentinel = { .type = CLJ_NIL, .flags = 0, .rc = SINGLETON_
 
 // Sentinel for encoding nil (NULL) in call frames
 static char frame_nil_sentinel_storage;
-ID g_frame_nil_sentinel_value = (ID)&frame_nil_sentinel_storage;
+ID g_frame_nil_sentinel_value = &frame_nil_sentinel_storage;
 
 // === CljValue API (Phase 1: Parallel) ===
 
@@ -68,13 +68,13 @@ ID map_get(CljMap *map, ID key, ID not_found) {
     MAP_FOR_EACH(map, stored_key, value) {
       // Happy path: pointer comparison first (for interned symbols and nil keys)
       if (stored_key == key_obj) {
-        return (ID)value;  // Direct return, no jumps
+        return value;  // Direct return, no jumps
       }
       // Fallback: structural comparison for non-interned objects
       // OPTIMIZATION: Allow structural equality for symbols to avoid intern_symbol_global in hot path
       // This is acceptable because clj_equal is fast for symbols (string comparison)
       if (stored_key && key_obj && clj_equal(stored_key, key_obj)) {
-        return (ID)value;
+        return value;
       }
     }
   }

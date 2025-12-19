@@ -317,7 +317,7 @@ TEST(test_let_with_local_function_using_reverse) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 3
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -443,7 +443,7 @@ TEST(test_let_filter_function_call) {
     TEST_ASSERT_TRUE(result2 && list_type_matches(TAG(result2)));
     
     // Verify first element is 2
-    CljList *list = as_list((ID)result2);
+    CljList *list = as_list(result2);
     TEST_ASSERT_NOT_NULL(list);
     if (!list->first) {
         TEST_FAIL_MESSAGE("filter result list is empty (first is NULL)");
@@ -493,19 +493,19 @@ TEST(test_let_recursive_function_with_namespace_function) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (1 2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum((CljValue)list->first));
     
-    CljList *rest1 = as_list((ID)list->rest);
+    CljList *rest1 = as_list(list->rest);
     TEST_ASSERT_NOT_NULL(rest1);
     TEST_ASSERT_NOT_NULL(rest1->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)rest1->first));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)rest1->first));
     
-    CljList *rest2 = as_list((ID)rest1->rest);
+    CljList *rest2 = as_list(rest1->rest);
     TEST_ASSERT_NOT_NULL(rest2);
     TEST_ASSERT_NOT_NULL(rest2->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)rest2->first));
@@ -530,7 +530,7 @@ TEST(test_let_filter_step_pattern) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (2)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
@@ -574,7 +574,7 @@ TEST(test_let_recursive_function_namespace_access) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify result is (1 2 3)
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));

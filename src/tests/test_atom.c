@@ -50,7 +50,7 @@ TEST(test_atom_create_with_nil) {
 
 TEST(test_atom_create_with_string) {
     CljObject *str = (CljObject*)make_string("hello");
-    CljAtom *atom = make_atom((ID)str);
+    CljAtom *atom = make_atom(str);
     TEST_ASSERT_NOT_NULL(atom);
     TEST_ASSERT_NOT_NULL(atom->value);
     RELEASE((CljObject*)atom);
@@ -212,7 +212,7 @@ TEST(test_atom_builtin_creates_atom) {
 
 TEST(test_atom_builtin_deref) {
     CljAtom *atom = make_atom(fixnum(42));
-    ID args[] = {(ID)atom};
+    ID args[] = {atom};
     ID result = native_deref(args, 1);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)result));
@@ -222,7 +222,7 @@ TEST(test_atom_builtin_deref) {
 
 TEST(test_atom_builtin_reset_bang) {
     CljAtom *atom = make_atom(fixnum(42));
-    ID args[] = {(ID)atom, fixnum(100)};
+    ID args[] = {atom, fixnum(100)};
     ID result = native_reset_bang(args, 2);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)result));
@@ -240,7 +240,7 @@ TEST(test_atom_builtin_swap_bang) {
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
     if (inc_func) {
-        ID args[] = {(ID)atom, inc_func};
+        ID args[] = {atom, inc_func};
         ID result = native_swap_bang(args, 2);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL(43, as_fixnum((CljValue)result));
@@ -257,7 +257,7 @@ TEST(test_atom_builtin_swap_bang) {
 
 TEST(test_atom_memory_management) {
     CljObject *str = (CljObject*)make_string("test");
-    CljAtom *atom = make_atom((ID)str);
+    CljAtom *atom = make_atom(str);
     
     // Atom should retain the string (rc=1 from make_string, +1 from make_atom)
     TEST_ASSERT_EQUAL(2, ((CljObject*)str)->rc);
@@ -294,7 +294,7 @@ TEST(test_atom_reference_sharing) {
 
 TEST(test_atom_print_representation) {
     CljAtom *atom = make_atom(fixnum(42));
-    CljString *str = pr_str((ID)atom);
+    CljString *str = pr_str(atom);
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_NOT_NULL(strstr(string_data(str), "Atom"));
     RELEASE((CljObject*)atom);

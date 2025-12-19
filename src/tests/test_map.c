@@ -491,11 +491,11 @@ TEST(test_map_conj_with_interned_symbols_across_contexts) {
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     
     // Use map_conj for in-place mutation (like make_result_channel does)
-    CljMap *result1 = map_conj(tmap, (ID)kw_value, NULL);  // :value = nil
+    CljMap *result1 = map_conj(tmap, kw_value, NULL);  // :value = nil
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_PTR(tmap, result1);  // Should return same pointer
     
-    CljMap *result2 = map_conj(tmap, (ID)kw_closed, (ID)clj_false);  // :closed = false
+    CljMap *result2 = map_conj(tmap, kw_closed, clj_false);  // :closed = false
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_PTR(tmap, result2);  // Should return same pointer
     
@@ -514,7 +514,7 @@ TEST(test_map_conj_with_interned_symbols_across_contexts) {
                                   ":closed keyword should be interned (same pointer)");
     
     // Update :closed using the new keyword pointer
-    CljMap *result3 = map_conj(tmap, (ID)kw_closed_new, (ID)clj_true);
+    CljMap *result3 = map_conj(tmap, kw_closed_new, clj_true);
     TEST_ASSERT_NOT_NULL(result3);
     TEST_ASSERT_EQUAL_PTR(tmap, result3);  // Should return same pointer
     
@@ -538,7 +538,7 @@ TEST(test_map_conj_finds_existing_key_by_pointer) {
     CljObject *kw = (CljObject*)intern_symbol(NULL, ":test-key");
     
     // Add key-value pair
-    CljMap *result1 = map_conj(tmap, (ID)kw, fixnum(42));
+    CljMap *result1 = map_conj(tmap, kw, fixnum(42));
     TEST_ASSERT_NOT_NULL(result1);
     TEST_ASSERT_EQUAL_PTR(tmap, result1);
     TEST_ASSERT_EQUAL_INT(1, tmap->count);
@@ -549,7 +549,7 @@ TEST(test_map_conj_finds_existing_key_by_pointer) {
                                   "Keyword should be interned (same pointer)");
     
     // Update using second keyword pointer
-    CljMap *result2 = map_conj(tmap, (ID)kw2, fixnum(100));
+    CljMap *result2 = map_conj(tmap, kw2, fixnum(100));
     TEST_ASSERT_NOT_NULL(result2);
     TEST_ASSERT_EQUAL_PTR(tmap, result2);
     
@@ -573,8 +573,8 @@ TEST(test_map_conj_channel_pattern) {
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     
-    map_conj(chan, (ID)kw_value, NULL);  // :value = nil
-    map_conj(chan, (ID)kw_closed, (ID)clj_false);  // :closed = false
+    map_conj(chan, kw_value, NULL);  // :value = nil
+    map_conj(chan, kw_closed, clj_false);  // :closed = false
     
     // Verify initial state
     CljValue closed_before = map_get((CljMap*)chan, (CljValue)kw_closed, NULL);
@@ -590,7 +590,7 @@ TEST(test_map_conj_channel_pattern) {
     TEST_ASSERT_EQUAL_PTR_MESSAGE(kw_closed, kw_closed_close, 
                                   ":closed keyword should be interned (same pointer)");
     
-    CljMap *result = map_conj(chan, (ID)kw_closed_close, (ID)clj_true);
+    CljMap *result = map_conj(chan, kw_closed_close, clj_true);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(chan, result);  // Should return same pointer
     
@@ -617,9 +617,9 @@ TEST(test_dissoc_single_key) {
         CljObject *key_b = (CljObject*)intern_symbol(NULL, ":b");
         CljObject *key_c = (CljObject*)intern_symbol(NULL, ":c");
         
-        map = map_assoc(map, (ID)key_a, fixnum(1));
-        map = map_assoc(map, (ID)key_b, fixnum(2));
-        map = map_assoc(map, (ID)key_c, fixnum(3));
+        map = map_assoc(map, key_a, fixnum(1));
+        map = map_assoc(map, key_b, fixnum(2));
+        map = map_assoc(map, key_c, fixnum(3));
         
         TEST_ASSERT_EQUAL_INT(3, map->count);
         
@@ -717,7 +717,7 @@ TEST(test_map_assoc_nil_key) {
         // assoc nil key with value
         CljObject *value = AUTORELEASE((CljObject*)intern_symbol(NULL, "nil-value"));
         RETAIN(value);
-        map = map_assoc(map, NULL, (ID)value);
+        map = map_assoc(map, NULL, value);
         TEST_ASSERT_NOT_NULL(map);
         TEST_ASSERT_EQUAL_INT(1, map->count);
         
@@ -791,7 +791,7 @@ TEST(test_map_contains_nil_key) {
         CljMap *map = map_empty();
         CljObject *value = (CljObject*)intern_symbol(NULL, "nil-value");
         RETAIN(value);
-        map = map_assoc(map, NULL, (ID)value);
+        map = map_assoc(map, NULL, value);
         TEST_ASSERT_NOT_NULL(map);
         
         // map_contains should return true for nil key
@@ -812,7 +812,7 @@ TEST(test_map_contains_nil_key_not_exists) {
         CljObject *value = AUTORELEASE((CljObject*)intern_symbol(NULL, "value"));
         RETAIN(key);
         RETAIN(value);
-        map = map_assoc(map, (ID)key, (ID)value);
+        map = map_assoc(map, key, value);
         TEST_ASSERT_NOT_NULL(map);
         
         // map_contains should return false for nil key
@@ -933,45 +933,45 @@ TEST(test_map_get_not_found_sentinel_edge_cases) {
         
         // Add key1 with non-nil value
         CljObject *value1 = (CljObject*)fixnum(42);
-        map = map_assoc(map, (ID)key1, (ID)value1);
+        map = map_assoc(map, key1, value1);
         
         // Add key2 with nil value (NULL)
-        map = map_assoc(map, (ID)key2, NULL);
+        map = map_assoc(map, key2, NULL);
         
         // Add key3 with another non-nil value
         CljObject *value3 = (CljObject*)fixnum(100);
-        map = map_assoc(map, (ID)key3, (ID)value3);
+        map = map_assoc(map, key3, value3);
         
         TEST_ASSERT_EQUAL_INT(3, map->count);
         
         // Test 1: Key exists with non-nil value -> should return value, not NOT_FOUND
-        ID result1 = map_get(map, (ID)key1, NOT_FOUND);
+        ID result1 = map_get(map, key1, NOT_FOUND);
         TEST_ASSERT_NOT_NULL_MESSAGE(result1, "key1 should return value, not NOT_FOUND");
         TEST_ASSERT_TRUE_MESSAGE(result1 != NOT_FOUND, "key1 should not return NOT_FOUND");
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result1), "key1 value should be fixnum");
         TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum(result1), "key1 value should be 42");
         
         // Test 2: Key exists with nil value -> should return NULL, not NOT_FOUND
-        ID result2 = map_get(map, (ID)key2, NOT_FOUND);
+        ID result2 = map_get(map, key2, NOT_FOUND);
         TEST_ASSERT_NULL_MESSAGE(result2, "key2 should return NULL (nil value), not NOT_FOUND");
         TEST_ASSERT_TRUE_MESSAGE(result2 != NOT_FOUND, "key2 should not return NOT_FOUND (key exists)");
         
         // Test 3: Key exists with non-nil value -> should return value, not NOT_FOUND
-        ID result3 = map_get(map, (ID)key3, NOT_FOUND);
+        ID result3 = map_get(map, key3, NOT_FOUND);
         TEST_ASSERT_NOT_NULL_MESSAGE(result3, "key3 should return value, not NOT_FOUND");
         TEST_ASSERT_TRUE_MESSAGE(result3 != NOT_FOUND, "key3 should not return NOT_FOUND");
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result3), "key3 value should be fixnum");
         TEST_ASSERT_EQUAL_INT_MESSAGE(100, as_fixnum(result3), "key3 value should be 100");
         
         // Test 4: Key does not exist -> should return NOT_FOUND, not NULL
-        ID result4 = map_get(map, (ID)missing_key, NOT_FOUND);
+        ID result4 = map_get(map, missing_key, NOT_FOUND);
         TEST_ASSERT_TRUE_MESSAGE(result4 == NOT_FOUND, "missing_key should return NOT_FOUND, not NULL");
         
         // Test 5: Verify map_contains correctly identifies all cases
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, (ID)key1), "key1 should exist");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, (ID)key2), "key2 should exist (even with nil value)");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, (ID)key3), "key3 should exist");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(0, map_contains(map, (ID)missing_key), "missing_key should not exist");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, key1), "key1 should exist");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, key2), "key2 should exist (even with nil value)");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, map_contains(map, key3), "key3 should exist");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, map_contains(map, missing_key), "missing_key should not exist");
     });
 }
 
@@ -989,9 +989,9 @@ TEST(test_map_for_each_macro) {
     CljValue val3 = fixnum(3);
     
     // Add key-value pairs to map
-    map = map_assoc(map, (ID)key1, val1);
-    map = map_assoc(map, (ID)key2, val2);
-    map = map_assoc(map, (ID)key3, val3);
+    map = map_assoc(map, key1, val1);
+    map = map_assoc(map, key2, val2);
+    map = map_assoc(map, key3, val3);
     
     TEST_ASSERT_EQUAL_INT(3, map_count(map));
     
@@ -1068,9 +1068,9 @@ TEST(test_map_for_each_with_null_keys_and_values) {
     CljValue val3 = fixnum(3);
     
     // Add key-value pairs to map
-    map = map_assoc(map, (ID)key1, val1);
-    map = map_assoc(map, (ID)key2, val2);  // NULL key, NULL value
-    map = map_assoc(map, (ID)key3, val3);
+    map = map_assoc(map, key1, val1);
+    map = map_assoc(map, key2, val2);  // NULL key, NULL value
+    map = map_assoc(map, key3, val3);
     
     TEST_ASSERT_EQUAL_INT(3, map_count(map));
     

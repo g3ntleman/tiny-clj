@@ -100,7 +100,7 @@ TEST(test_time_arity_validation) {
     // Test that time function validates arity correctly
     // Create (time) with no arguments
     CljObject *time_symbol = (CljObject *)SYM_TIME;
-    CljList *time_list = make_list((ID)time_symbol, NULL);
+    CljList *time_list = make_list(time_symbol, NULL);
     
     CljMap *env = make_map(16);
     
@@ -124,9 +124,9 @@ TEST(test_time_with_too_many_arguments) {
     
     // Create (time 1 2) with too many arguments
     CljObject *time_symbol = (CljObject *)SYM_TIME;
-    CljList *time_list = make_list((ID)time_symbol, 
-        make_list((ID)expr1, 
-        make_list((ID)expr2, NULL)));
+    CljList *time_list = make_list(time_symbol, 
+        make_list(expr1, 
+        make_list(expr2, NULL)));
     
     CljMap *env = make_map(16);
     
@@ -153,11 +153,11 @@ TEST(test_time_with_sleep) {
     CljObject *one_second = fixnum(1);
     
     // Create the expression: (sleep 1)
-    CljObject *expr = (CljObject *)make_list((ID)sleep_symbol, make_list((ID)one_second, NULL));
+    CljObject *expr = (CljObject *)make_list(sleep_symbol, make_list(one_second, NULL));
     
     // Create (time (sleep 1))
     CljObject *time_symbol = (CljObject *)SYM_TIME;
-    CljList *time_list = make_list((ID)time_symbol, make_list((ID)expr, NULL));
+    CljList *time_list = make_list(time_symbol, make_list(expr, NULL));
     
     CljMap *env = make_map(16);
     
@@ -207,31 +207,31 @@ TEST(test_time_with_dotimes) {
     CljObject *binding_vector = (CljObject *)make_vector(2, CLJ_VECTOR);
     CljVector *vec_data = as_vector(binding_vector);
     // Add elements using vector_conj
-    vec_data = vector_conj(vec_data, (ID)i_symbol);
-    vec_data = vector_conj(vec_data, (ID)thousand);
+    vec_data = vector_conj(vec_data, i_symbol);
+    vec_data = vector_conj(vec_data, thousand);
     
     // Create arithmetic expression: (+ 1 2 3 4 5)
-    CljObject *arithmetic_expr = (CljObject *)make_list((ID)plus_symbol, 
-        make_list((ID)one, 
-        make_list((ID)two, 
-        make_list((ID)three, 
-        make_list((ID)four, 
-        make_list((ID)five, NULL))))));
+    CljObject *arithmetic_expr = (CljObject *)make_list(plus_symbol, 
+        make_list(one, 
+        make_list(two, 
+        make_list(three, 
+        make_list(four, 
+        make_list(five, NULL))))));
     
     // Create dotimes call: (dotimes [i 1000] (+ 1 2 3 4 5))
-    CljObject *dotimes_call = (CljObject *)make_list((ID)dotimes_symbol, 
-        make_list((ID)binding_vector, 
-        make_list((ID)arithmetic_expr, NULL)));
+    CljObject *dotimes_call = (CljObject *)make_list(dotimes_symbol, 
+        make_list(binding_vector, 
+        make_list(arithmetic_expr, NULL)));
     
     // Create time call: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
-    CljObject *time_call = (CljObject *)make_list((ID)time_symbol, 
-        make_list((ID)dotimes_call, NULL));
+    CljObject *time_call = (CljObject *)make_list(time_symbol, 
+        make_list(dotimes_call, NULL));
     
     // Create environment
     CljMap *env = make_map(4);
     
     // Test time evaluation with dotimes
-    CljObject *result = eval_time(as_list((ID)time_call), env, g_test_eval_state);
+    CljObject *result = eval_time(as_list(time_call), env, g_test_eval_state);
     
     // time should return the result of the evaluated expression
     // Since dotimes returns nil, time should also return nil

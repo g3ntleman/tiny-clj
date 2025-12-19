@@ -30,7 +30,7 @@ TEST(test_list_count) {
     TEST_ASSERT_EQUAL_INT(0, list_count(empty));
     
     // Test list with elements
-    CljList *list = make_list((ID)make_string("a"), make_list((ID)make_string("b"), NULL));
+    CljList *list = make_list(make_string("a"), make_list(make_string("b"), NULL));
     TEST_ASSERT_EQUAL_INT(2, list_count(list));
     RELEASE(list);
 }

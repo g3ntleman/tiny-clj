@@ -560,7 +560,7 @@ static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
     if (!cname || !g_runtime.symbol_table) return NULL;
     
     CljString *key = make_symbol_key(ns_name, cname);
-    return (CljSymbol*)hashmap_get(g_runtime.symbol_table, (ID)key, NULL);
+    return (CljSymbol*)hashmap_get(g_runtime.symbol_table, key, NULL);
 }
 
 // Add symbol to the table - O(1) HashMap insert
@@ -577,7 +577,7 @@ void symbol_table_add(CljSymbol *symbol) {
 
     // Use static lookup string to check if already exists
     CljString *lookup_key = make_symbol_key(ns_name, cname);
-    if (hashmap_contains(g_runtime.symbol_table, (ID)lookup_key)) {
+    if (hashmap_contains(g_runtime.symbol_table, lookup_key)) {
         return;  // Already exists
     }
 
@@ -591,8 +591,8 @@ void symbol_table_add(CljSymbol *symbol) {
     
     // Insert symbol into HashMap with CljString key
     // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference
-    g_runtime.symbol_table = hashmap_assoc(g_runtime.symbol_table, (ID)key, (ID)symbol);
-    RELEASE((ID)key);
+    g_runtime.symbol_table = hashmap_assoc(g_runtime.symbol_table, key, symbol);
+    RELEASE(key);
 }
 
 /**

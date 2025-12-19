@@ -674,26 +674,13 @@ EvalState* evalstate_new(bool load_core) {
     return st;
 }
 
-// OPTIMIZATION: Now a no-op since we use global state
-// Kept for compatibility with existing code
+// OPTIMIZATION: Now a complete no-op since we use global thread-local state
+// Kept for compatibility with existing code (tests, REPL cleanup)
+// The global state is never freed - it's thread-local and lives for the thread lifetime
+// Cleanup between tests is handled by reset_eval_state() in test setup
 void evalstate_free(EvalState *st) {
-    if (!st) return;
-    
-    // Only cleanup if this is the global state (pointer comparison)
-    if (st == &g_eval_state) {
-        // Cleanup objects to prevent leaks between tests
-        if (st->expr && !IS_IMMEDIATE(st->expr)) {
-            RELEASE(st->expr);
-            st->expr = NULL;
-        }
-        if (st->result && !IS_IMMEDIATE(st->result)) {
-            RELEASE(st->result);
-            st->result = NULL;
-        }
-        // Note: stack is cleaned up in reset_eval_state()
-    }
-    // For non-global states (legacy compatibility), do nothing
-    // They should not exist anymore, but this prevents crashes
+    // No-op: global state is never freed
+    (void)st; // Suppress unused parameter warning
 }
 
 void evalstate_set_ns(EvalState *st, const char *ns_name) {
@@ -813,7 +800,8 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
         // Search for catch clauses
         for (int i = 2; i < list_count(as_list(form)); i++) {
             CljObject *clause = list_nth(as_list(form), i);
-            if (is_list(clause) && LIST_FIRST(as_list(clause)) == SYM_CATCH) {
+            ID first_elem = LIST_FIRST(as_list(clause));
+            if (is_list(clause) && first_elem == SYM_CATCH) {
                 CljObject *sym = list_nth(as_list(clause), 1);
                 CljObject *body = list_nth(as_list(clause), 2);
                 

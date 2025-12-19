@@ -27,7 +27,7 @@ static inline CljVector* as_vector(ID obj) {
 
 static inline bool is_vector(CljObject *obj) {
     if (!obj) return false;
-    int tag = (int)TAG((ID)obj);
+    int tag = (int)TAG(obj);
     return (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT);
 }
 

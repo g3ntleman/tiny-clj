@@ -58,9 +58,9 @@ TEST(test_lowlevel_alias_sym_extraction) {
     
     // Create vector
     CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)ns_sym));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)as_kw));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)str_alias));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
     
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
@@ -122,13 +122,13 @@ TEST(test_lowlevel_native_require_sets_alias_preloaded) {
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
     CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)ns_sym));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)as_kw));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)str_alias));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
     
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { (ID)vec };
+    ID args[1] = { vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
     
@@ -193,9 +193,9 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
     CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)ns_sym));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)as_kw));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)str_alias));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
     
     // Verify vector is correct before calling native_require
     TEST_ASSERT_NOT_NULL(vec);
@@ -210,7 +210,7 @@ TEST(test_lowlevel_alias_sym_not_null_when_preloaded) {
     
     // Call native_require - this should extract alias_sym and set it
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { (ID)vec };
+    ID args[1] = { vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
     
@@ -244,13 +244,13 @@ TEST(test_lowlevel_current_ns_correct_when_alias_set) {
     CljSymbol *str_alias = AUTORELEASE(intern_symbol_global("str"));
     
     CljVector *vec = AUTORELEASE(make_vector(3, CLJ_VECTOR));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)ns_sym));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)as_kw));
-    vec = AUTORELEASE(vector_conj((ID)vec, (ID)str_alias));
+    vec = AUTORELEASE(vector_conj(vec, ns_sym));
+    vec = AUTORELEASE(vector_conj(vec, as_kw));
+    vec = AUTORELEASE(vector_conj(vec, str_alias));
     
     // Call native_require
     builtin_set_eval_state(g_test_eval_state);
-    ID args[1] = { (ID)vec };
+    ID args[1] = { vec };
     ID result = native_require(args, 1);
     builtin_set_eval_state(NULL);
     

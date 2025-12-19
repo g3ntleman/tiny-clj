@@ -34,8 +34,8 @@ CljMap* make_result_channel(void) {
     CljObject *kw_value = (CljObject*)intern_symbol_global(":value");
     CljObject *kw_closed = (CljObject*)intern_symbol_global(":closed");
     
-    map_conj(tmap, (ID)kw_value, NULL);  // :value = nil
-    map_conj(tmap, (ID)kw_closed, (ID)clj_false);  // :closed = false
+    map_conj(tmap, kw_value, NULL);  // :value = nil
+    map_conj(tmap, kw_closed, clj_false);  // :closed = false
     
     return tmap;
 }
@@ -62,11 +62,11 @@ void result_channel_put(CljMap *chan, ID value) {
     
 #if defined(DEBUG)
     void *chan_ptr_before = (void*)chan;
-    CljMap *result = map_conj(chan, (ID)kw_value, value);
+    CljMap *result = map_conj(chan, kw_value, value);
     CLJ_ASSERT(result != NULL);
     CLJ_ASSERT((void*)result == chan_ptr_before);  // Should return same pointer
 #else
-    map_conj(chan, (ID)kw_value, value);
+    map_conj(chan, kw_value, value);
 #endif
 }
 
@@ -91,7 +91,7 @@ void result_channel_close(CljMap *chan) {
     
 #if defined(DEBUG)
     void *chan_ptr_before = (void*)chan;
-    CljMap *result = map_conj(chan, (ID)kw_closed, (ID)clj_true);
+    CljMap *result = map_conj(chan, kw_closed, clj_true);
     CLJ_ASSERT(result != NULL);
     CLJ_ASSERT((void*)result == chan_ptr_before);  // Should return same pointer
     
@@ -101,7 +101,7 @@ void result_channel_close(CljMap *chan) {
     CLJ_ASSERT(is_special(closed_val));
     CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);
 #else
-    map_conj(chan, (ID)kw_closed, (ID)clj_true);
+    map_conj(chan, kw_closed, clj_true);
 #endif
 }
 

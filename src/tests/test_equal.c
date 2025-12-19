@@ -94,13 +94,13 @@ TEST(test_vector_equal_same_vectors) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val2);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val3);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val1);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val2);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val3);
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val1);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val2);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val3);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val1);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val2);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -129,12 +129,12 @@ TEST(test_vector_equal_different_lengths) {
     CljValue val2 = fixnum(2);
     CljValue val3 = fixnum(3);
     
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val2);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val1);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val2);
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val1);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val2);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val3);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val1);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val2);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val3);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -162,10 +162,10 @@ TEST(test_vector_equal_different_values) {
     CljValue int4 = fixnum(4);
     
     // Build vectors with different values using conj
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)int1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)int2);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)int3);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)int4);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, int1);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, int2);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, int3);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, int4);
     
     // Verify vectors were created successfully
     TEST_ASSERT_NOT_NULL((CljObject*)vec1_val);
@@ -188,9 +188,9 @@ TEST(test_clj_equal_id_function) {
     CljValue fix3 = fixnum(43);
     
     // Test same immediate values
-    TEST_ASSERT_TRUE(clj_equal((ID)fix1, (ID)fix2));
+    TEST_ASSERT_TRUE(clj_equal(fix1, fix2));
     // Test different immediate values
-    TEST_ASSERT_FALSE(clj_equal((ID)fix1, (ID)fix3));
+    TEST_ASSERT_FALSE(clj_equal(fix1, fix3));
     
     // Test heap objects (CljObject*)
     CljObject *str1 = (CljObject *)make_string("hello");
@@ -198,19 +198,19 @@ TEST(test_clj_equal_id_function) {
     CljObject *str3 = (CljObject *)make_string("world");
     
     // Test same heap objects (pointer equality)
-    TEST_ASSERT_TRUE(clj_equal((ID)str1, (ID)str1));
+    TEST_ASSERT_TRUE(clj_equal(str1, str1));
     // Test different heap objects with same content
-    TEST_ASSERT_TRUE(clj_equal((ID)str1, (ID)str2));
+    TEST_ASSERT_TRUE(clj_equal(str1, str2));
     // Test different heap objects with different content
-    TEST_ASSERT_FALSE(clj_equal((ID)str1, (ID)str3));
+    TEST_ASSERT_FALSE(clj_equal(str1, str3));
     
     // Test mixed types (immediate vs heap)
-    TEST_ASSERT_FALSE(clj_equal((ID)fix1, (ID)str1));
+    TEST_ASSERT_FALSE(clj_equal(fix1, str1));
     
     // Test NULL values
-    TEST_ASSERT_TRUE(clj_equal((ID)NULL, (ID)NULL));
-    TEST_ASSERT_FALSE(clj_equal((ID)fix1, (ID)NULL));
-    TEST_ASSERT_FALSE(clj_equal((ID)NULL, (ID)str1));
+    TEST_ASSERT_TRUE(clj_equal(NULL, NULL));
+    TEST_ASSERT_FALSE(clj_equal(fix1, NULL));
+    TEST_ASSERT_FALSE(clj_equal(NULL, str1));
     
     // Objects will be automatically cleaned up by WITH_MEMORY_PROFILING
     
@@ -234,11 +234,11 @@ TEST(test_vector_equal_with_strings) {
     CljObject *str4 = (CljObject *)make_string("world");
     
     // Fill vectors with strings
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)str1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)str2);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, str1);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, str2);
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)str3);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)str4);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, str3);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, str4);
     
     vec1 = (CljObject*)vec1_val;
     vec2 = (CljObject*)vec2_val;
@@ -407,11 +407,11 @@ TEST(test_map_equal_with_nested_vectors) {
     CljValue val1 = fixnum(1);
     CljValue val2 = fixnum(2);
     
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val1);
-    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, (ID)val2);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val1);
+    vec1_val = (CljValue)vector_conj((CljVector*)vec1_val, val2);
     
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val1);
-    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, (ID)val2);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val1);
+    vec2_val = (CljValue)vector_conj((CljVector*)vec2_val, val2);
     
     CljObject *vec1 = (CljObject*)vec1_val;
     CljObject *vec2 = (CljObject*)vec2_val;

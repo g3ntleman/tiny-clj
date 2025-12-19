@@ -80,7 +80,7 @@ uint32_t clj_hash_default(ID value) {
             uint32_t key_hash = 0;
             if (count > 0) {
                 for (unsigned int i = 0; i < hm->capacity; i++) {
-                    ID key = (ID)KV_KEY(hm->data, i);
+                    ID key = KV_KEY(hm->data, i);
                     if (key != HASHMAP_EMPTY && key != HASHMAP_TOMBSTONE) {
                         key_hash = clj_hash_default(key);
                         break;
@@ -167,7 +167,7 @@ bool clj_equal_default(ID a, ID b) {
             CljHashMap *hm_b = (CljHashMap*)b;
             if (hashmap_count(hm_a) != hashmap_count(hm_b)) return false;
             for (unsigned int i = 0; i < hm_a->capacity; i++) {
-                ID key = (ID)KV_KEY(hm_a->data, i);
+                ID key = KV_KEY(hm_a->data, i);
                 if (key != HASHMAP_EMPTY && key != HASHMAP_TOMBSTONE) {
                     ID val_a = KV_VALUE(hm_a->data, i);
                     ID val_b = hashmap_get(hm_b, key, NULL);

@@ -73,7 +73,7 @@ TEST(test_symbol_string_representation) {
     TEST_ASSERT_NOT_NULL_MESSAGE(sym, "Symbol should be created");
 
     // String representation should work
-    CljString *str = to_string((ID)sym);
+    CljString *str = to_string(sym);
     TEST_ASSERT_NOT_NULL_MESSAGE(str, "String representation should work");
     TEST_ASSERT_TRUE_MESSAGE(strstr(string_data(str), "my-ns") != NULL && strstr(string_data(str), "my-var") != NULL,
                              "String representation should contain namespace and name");

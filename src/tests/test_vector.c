@@ -700,7 +700,7 @@ TEST(test_weak_vector_does_not_retain_elements) {
         // Add to weak vector - should NOT increase RC
         // vector_assoc handles count increment and capacity growth automatically
         unsigned int count = vector_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         
         // RC should still be 1 (not retained)
@@ -743,7 +743,7 @@ TEST(test_weak_vector_does_not_release_elements) {
             }
         }
         vector_increment_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         
@@ -791,7 +791,7 @@ TEST(test_weak_vector_nth_does_not_retain) {
             }
         }
         vector_increment_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         TEST_ASSERT_EQUAL(1, vector_count(new_vec));  // Count should be 1
@@ -845,7 +845,7 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
             }
         }
             vector_increment_count(weak_vec);
-            CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+            CljVector *new_vec = vector_assoc(weak_vec, count, map);
             TEST_ASSERT_NOT_NULL(new_vec);
             // For CLJ_VECTOR_TRANSIENT_WEAK with rc=1, vector_assoc mutates in-place
             if (new_vec != weak_vec) {
@@ -896,7 +896,7 @@ TEST(test_weak_vector_clear_does_not_release_elements) {
             }
         }
         vector_increment_count(weak_vec);
-        CljVector *new_vec = vector_assoc(weak_vec, count, (ID)map);
+        CljVector *new_vec = vector_assoc(weak_vec, count, map);
         TEST_ASSERT_NOT_NULL(new_vec);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // Still 1
         
@@ -938,7 +938,7 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        CljVector *result = clj_conj(tvec, (ID)test_map);
+        CljVector *result = clj_conj(tvec, test_map);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be same pointer (in-place)
         
@@ -951,7 +951,7 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
         CljMap *test_map2 = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map2);
         
-        CljVector *result2 = clj_conj(tvec, (ID)test_map2);
+        CljVector *result2 = clj_conj(tvec, test_map2);
         TEST_ASSERT_NOT_NULL(result2);
         TEST_ASSERT_EQUAL_PTR(tvec, result2);
         
@@ -963,8 +963,8 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
         // 7. Verify elements are accessible
         ID elem0 = vector_nth(tvec, 0);
         ID elem1 = vector_nth(tvec, 1);
-        TEST_ASSERT_EQUAL_PTR((ID)test_map, elem0);
-        TEST_ASSERT_EQUAL_PTR((ID)test_map2, elem1);
+        TEST_ASSERT_EQUAL_PTR(test_map, elem0);
+        TEST_ASSERT_EQUAL_PTR(test_map2, elem1);
         
         // Cleanup - release retained elements
         RELEASE(elem0);
@@ -994,9 +994,9 @@ TEST(test_clj_conj_with_empty_transient_vector) {
         CljMap *test_map = make_map(2);
         TEST_ASSERT_NOT_NULL(test_map);
         
-        ID result = clj_conj(tvec, (ID)test_map);
+        ID result = clj_conj(tvec, test_map);
         TEST_ASSERT_NOT_NULL(result);
-        TEST_ASSERT_EQUAL_PTR((ID)tvec, result);
+        TEST_ASSERT_EQUAL_PTR(tvec, result);
         
         // Count should be 1
         unsigned int count_after = vector_count(tvec);
@@ -1005,7 +1005,7 @@ TEST(test_clj_conj_with_empty_transient_vector) {
         
         // Verify element is accessible
         ID elem0 = vector_nth(tvec, 0);
-        TEST_ASSERT_EQUAL_PTR((ID)test_map, elem0);
+        TEST_ASSERT_EQUAL_PTR(test_map, elem0);
         
         // Cleanup - release retained element
         RELEASE(elem0);
@@ -1075,14 +1075,14 @@ TEST(test_transient_on_transient_returns_same_object) {
         CljVector *tvec = vector_transient(vec);
         RELEASE((CljObject*)vec);
         TEST_ASSERT_NOT_NULL(tvec);
-        TEST_ASSERT_TRUE(TAG((ID)tvec) == CLJ_VECTOR_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);
         
         // Call transient on the transient vector - should return same object
-        ID args[] = {(ID)tvec};
+        ID args[] = {tvec};
         CljObject *result = (CljObject*)native_transient(args, 1);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG((ID)result) == CLJ_VECTOR_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
         
         RELEASE((CljObject*)tvec);
         
@@ -1090,19 +1090,19 @@ TEST(test_transient_on_transient_returns_same_object) {
         CljMap *map = make_map(4);
         CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
-        map = map_assoc(map, (ID)key1, fixnum(1));
-        map = map_assoc(map, (ID)key2, fixnum(2));
+        map = map_assoc(map, key1, fixnum(1));
+        map = map_assoc(map, key2, fixnum(2));
         CljMap *tmap = map_transient(map);
         RELEASE(map);
         TEST_ASSERT_NOT_NULL(tmap);
-        TEST_ASSERT_TRUE(TAG((ID)tmap) == CLJ_MAP_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(tmap) == CLJ_MAP_TRANSIENT);
         
         // Call transient on the transient map - should return same object
-        ID map_args[] = {(ID)tmap};
+        ID map_args[] = {tmap};
         CljObject *map_result = (CljObject*)native_transient(map_args, 1);
         TEST_ASSERT_NOT_NULL(map_result);
         TEST_ASSERT_EQUAL_PTR(tmap, map_result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_MAP_TRANSIENT);
+        TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP_TRANSIENT);
         
         RELEASE((CljObject*)tmap);
     });
@@ -1133,14 +1133,14 @@ TEST(test_persistent_on_persistent_returns_same_object) {
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));
         TEST_ASSERT_NOT_NULL(vec);
-        TEST_ASSERT_TRUE(TAG((ID)vec) == CLJ_VECTOR);
+        TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR);
         
         // Call persistent! on the persistent vector - should return same object
-        ID args[] = {(ID)vec};
+        ID args[] = {vec};
         CljObject *result = (CljObject*)native_persistent_bang(args, 1);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(vec, result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG((ID)result) == CLJ_VECTOR);
+        TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
         
         RELEASE((CljObject*)vec);
         
@@ -1148,17 +1148,17 @@ TEST(test_persistent_on_persistent_returns_same_object) {
         CljMap *map = make_map(4);
         CljObject *key1 = (CljObject*)intern_symbol(NULL, ":a");
         CljObject *key2 = (CljObject*)intern_symbol(NULL, ":b");
-        map = map_assoc(map, (ID)key1, fixnum(1));
-        map = map_assoc(map, (ID)key2, fixnum(2));
+        map = map_assoc(map, key1, fixnum(1));
+        map = map_assoc(map, key2, fixnum(2));
         TEST_ASSERT_NOT_NULL(map);
-        TEST_ASSERT_TRUE(TAG((ID)map) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(map) == CLJ_MAP);
         
         // Call persistent! on the persistent map - should return same object
-        ID map_args[] = {(ID)map};
+        ID map_args[] = {map};
         CljObject *map_result = (CljObject*)native_persistent_bang(map_args, 1);
         TEST_ASSERT_NOT_NULL(map_result);
         TEST_ASSERT_EQUAL_PTR(map, map_result);  // Should be the same pointer
-        TEST_ASSERT_TRUE(TAG((ID)map_result) == CLJ_MAP);
+        TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP);
         
         RELEASE(map);
     });

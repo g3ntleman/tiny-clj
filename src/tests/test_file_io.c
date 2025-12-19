@@ -235,7 +235,7 @@ TEST(test_history_save_escapes_quotes) {
   TEST_ASSERT_NOT_NULL(str);
 
   CljVector *vec = make_vector(1, CLJ_VECTOR);
-  vec = vector_conj(vec, (ID)str);
+  vec = vector_conj(vec, str);
 
   // Save to file
   bool ok = history_save_to_file(vec, tmp_hist_path);

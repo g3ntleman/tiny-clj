@@ -27,10 +27,10 @@ static ID make_map_entry_vector(CljMap *map, int index) {
         return NULL;
     }
 
-    entry = vector_conj(entry, (ID)key);
-    entry = vector_conj(entry, (ID)value);
+    entry = vector_conj(entry, key);
+    entry = vector_conj(entry, value);
 
-    return (ID)AUTORELEASE(entry);
+    return AUTORELEASE(entry);
 }
 
 // ============================================================================
@@ -77,7 +77,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         
         case CLJ_SEQ: {
             // Already a sequence - copy the embedded iterator state
-            CljSeqIterator *seq = as_seq((ID)obj);
+            CljSeqIterator *seq = as_seq(obj);
             if (!seq) {
                 // Empty seq - don't set seq_type, leave it as 0
                 return true;  // Empty seq
@@ -121,7 +121,7 @@ bool seq_iter_init(SeqIterator *iter, CljObject *obj) {
         }
         
         case CLJ_MAP: {
-            CljMap *map = as_map((ID)obj);
+            CljMap *map = as_map(obj);
             if (!map || map->count == 0) {
                 return true;  // Empty map
             }
@@ -150,7 +150,7 @@ ID seq_iter_first(const SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                return (ID)LIST_FIRST(node);
+                return LIST_FIRST(node);
             }
             return NULL;
         }
@@ -170,7 +170,7 @@ ID seq_iter_first(const SeqIterator *iter) {
             if (iter->state.str.index < iter->state.str.length) {
                 // Return character as integer
                 char c = iter->state.str.data[iter->state.str.index];
-                return (ID)fixnum((int)c);
+                return fixnum((int)c);
             }
             return NULL;
         }
@@ -336,7 +336,7 @@ CljSeqIterator* make_seq(ID obj) {
         CljList *list = as_list((CljObject*)obj);
         if (!LIST_FIRST(list)) return NULL;
     } else if (obj && (TAG(obj) == CLJ_MAP || TAG(obj) == CLJ_MAP_TRANSIENT)) {
-        CljMap *map = as_map((ID)obj);
+        CljMap *map = as_map(obj);
         if (!map || map->count == 0) return NULL;
     }
     
@@ -365,7 +365,7 @@ CljSeqIterator* make_seq(ID obj) {
 
 void seq_release(ID seq_obj) {
     if (!seq_obj) return;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return;
     
     // Stack iterator doesn't need cleanup
@@ -374,7 +374,7 @@ void seq_release(ID seq_obj) {
 
 ID seq_first(ID seq_obj) {
     if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
     return seq_iter_first(&seq->iter);
@@ -382,7 +382,7 @@ ID seq_first(ID seq_obj) {
 
 ID seq_rest(ID seq_obj) {
     if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
     // Create new heap wrapper with advanced iterator
@@ -397,7 +397,7 @@ ID seq_rest(ID seq_obj) {
     rest_seq->iter = seq->iter;  // Struct copy
     seq_iter_next(&rest_seq->iter);
     
-    return (ID)(CljObject*)rest_seq;
+    return (CljObject*)rest_seq;
 }
 
 ID seq_next(ID seq_obj) {
@@ -405,7 +405,7 @@ ID seq_next(ID seq_obj) {
     
     // CRITICAL: If the original sequence was a CLJ_LIST, return CLJ_LIST directly
     // This matches the behavior of native_next in builtins.c
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (seq && seq->iter.seq_type == CLJ_LIST) {
         // Original was a CLJ_LIST - return CLJ_LIST directly (not CLJ_SEQ)
         if (seq->iter.state.list.current) {
@@ -441,7 +441,7 @@ ID seq_next(ID seq_obj) {
 ID seq_next_inplace(ID seq_obj) {
     if (!seq_obj) return NULL;
     
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
     if (seq->iter.seq_type == CLJ_LIST) {
@@ -457,7 +457,7 @@ ID seq_next_inplace(ID seq_obj) {
 
 bool seq_empty(ID seq_obj) {
     if (!seq_obj) return true;
-    CljSeqIterator *seq = as_seq((ID)seq_obj);
+    CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return true;
     
     return seq_iter_empty(&seq->iter);
@@ -468,7 +468,7 @@ int seq_count(ID obj) {
     
     // If it's already a seq wrapper, count from iterator state
     if (obj && TAG(obj) == CLJ_SEQ) {
-        CljSeqIterator *seq = as_seq((ID)obj);
+        CljSeqIterator *seq = as_seq(obj);
         if (!seq) return 0;
         
         // Get count from embedded iterator state

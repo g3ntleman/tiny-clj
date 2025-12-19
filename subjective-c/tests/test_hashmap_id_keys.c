@@ -37,14 +37,14 @@ TEST(test_hashmap_string_key) {
     CljString *key = make_test_string("my-key");
     CljString *value = make_test_string("my-value");
     
-    map = adopt_hashmap(map, hashmap_assoc(map, (ID)key, (ID)value));
+    map = adopt_hashmap(map, hashmap_assoc(map, key, value));
     TEST_ASSERT_NOT_NULL(map);
     
-    ID result = hashmap_get(map, (ID)key, NULL);
+    ID result = hashmap_get(map, key, NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
-    int contains = hashmap_contains(map, (ID)key);
+    int contains = hashmap_contains(map, key);
     TEST_ASSERT_EQUAL_INT(1, contains);
     
     RELEASE((CljObject*)key);
@@ -58,7 +58,7 @@ TEST(test_hashmap_fixnum_key) {
     ID key = fixnum(42);
     CljString *value = make_test_string("value-for-42");
     
-    map = adopt_hashmap(map, hashmap_assoc(map, key, (ID)value));
+    map = adopt_hashmap(map, hashmap_assoc(map, key, value));
     TEST_ASSERT_NOT_NULL(map);
     
     ID result = hashmap_get(map, key, NULL);
@@ -74,7 +74,7 @@ TEST(test_hashmap_nil_key) {
     CljHashMap *map = make_hashmap_or_fail(8);
     CljString *value = make_test_string("value-for-nil");
     
-    map = adopt_hashmap(map, hashmap_assoc(map, NULL, (ID)value));
+    map = adopt_hashmap(map, hashmap_assoc(map, NULL, value));
     TEST_ASSERT_NOT_NULL(map);
     
     ID result = hashmap_get(map, NULL, NULL);
@@ -100,14 +100,14 @@ TEST(test_hashmap_mixed_keys) {
     // nil key
     CljString *nil_val = make_test_string("nil-value");
     
-    map = adopt_hashmap(map, hashmap_assoc(map, (ID)str_key, (ID)str_val));
-    map = adopt_hashmap(map, hashmap_assoc(map, int_key, (ID)int_val));
-    map = adopt_hashmap(map, hashmap_assoc(map, NULL, (ID)nil_val));
+    map = adopt_hashmap(map, hashmap_assoc(map, str_key, str_val));
+    map = adopt_hashmap(map, hashmap_assoc(map, int_key, int_val));
+    map = adopt_hashmap(map, hashmap_assoc(map, NULL, nil_val));
     
     TEST_ASSERT_EQUAL_UINT(3, hashmap_count(map));
     
     // Prüfe alle Keys
-    ID result1 = hashmap_get(map, (ID)str_key, NULL);
+    ID result1 = hashmap_get(map, str_key, NULL);
     TEST_ASSERT_EQUAL_PTR(str_val, result1);
     
     ID result2 = hashmap_get(map, int_key, NULL);

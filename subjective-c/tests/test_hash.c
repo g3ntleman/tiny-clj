@@ -37,9 +37,9 @@ TEST(test_clj_hash_string) {
     CljString *str2 = make_test_string("foo");
     CljString *str3 = make_test_string("bar");
     
-    uint32_t hash1 = clj_hash((ID)str1);
-    uint32_t hash2 = clj_hash((ID)str2);
-    uint32_t hash3 = clj_hash((ID)str3);
+    uint32_t hash1 = clj_hash(str1);
+    uint32_t hash2 = clj_hash(str2);
+    uint32_t hash3 = clj_hash(str3);
     
     TEST_ASSERT_EQUAL_UINT(hash1, hash2);  // Gleiche Strings = gleicher Hash
     TEST_ASSERT_NOT_EQUAL(hash1, hash3);   // Verschiedene Strings = verschiedene Hashes
@@ -52,9 +52,9 @@ TEST(test_clj_hash_string) {
 TEST(test_clj_hash_string_consistency) {
     // Test dass FNV-1a konsistent ist
     CljString *str = make_test_string("test");
-    uint32_t hash1 = clj_hash((ID)str);
-    uint32_t hash2 = clj_hash((ID)str);
-    uint32_t hash3 = clj_hash((ID)str);
+    uint32_t hash1 = clj_hash(str);
+    uint32_t hash2 = clj_hash(str);
+    uint32_t hash3 = clj_hash(str);
     
     TEST_ASSERT_EQUAL_UINT(hash1, hash2);
     TEST_ASSERT_EQUAL_UINT(hash2, hash3);
@@ -67,8 +67,8 @@ TEST(test_clj_hash_equal_values) {
     CljString *str1 = make_test_string("hello");
     CljString *str2 = make_test_string("hello");
     
-    uint32_t hash1 = clj_hash((ID)str1);
-    uint32_t hash2 = clj_hash((ID)str2);
+    uint32_t hash1 = clj_hash(str1);
+    uint32_t hash2 = clj_hash(str2);
     
     // Gleiche String-Inhalte sollten gleichen Hash haben
     TEST_ASSERT_EQUAL_UINT(hash1, hash2);

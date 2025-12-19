@@ -15,8 +15,8 @@ typedef struct CljList {
 } CljList;
 
 // Safe accessor macros. They do not do memory-management. They return the object directly.
-#define LIST_FIRST(list) ((list) ? (ID)(list)->first : NULL)
-#define LIST_REST(list) ((list) ? (ID)(list)->rest : NULL)
+#define LIST_FIRST(list) ((list) ? (list)->first : NULL)
+#define LIST_REST(list) ((list) ? (list)->rest : NULL)
 // Convenience macros for common list access patterns
 #define LIST_SECOND(list) LIST_FIRST(as_list(LIST_REST(list)))
 #define LIST_THIRD(list)  LIST_FIRST(as_list(LIST_REST(as_list(LIST_REST(list)))))

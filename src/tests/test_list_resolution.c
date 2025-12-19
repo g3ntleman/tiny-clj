@@ -40,7 +40,7 @@ TEST(test_list_with_args) {
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
     // Verify first element is 1
-    CljList *list = as_list((ID)result);
+    CljList *list = as_list(result);
     TEST_ASSERT_NOT_NULL(list);
     TEST_ASSERT_NOT_NULL(list->first);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
