@@ -1,21 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Sample profiling for fib(30) using the profiling build
-set -e
+#
+# Goals:
+# - Profile steady-state (avoid startup + load-file noise)
+# - Use PID-based sampling (no name-based attach ambiguity)
+# - Keep defaults safe (no sudo/admin rights needed)
+set -euo pipefail
 
 BUILD_DIR="build"
 OUTPUT_DIR="benchmark_results"
 OUTPUT_FILE="$OUTPUT_DIR/sample_fib30_$(date +%Y%m%d_%H%M%S).txt"
+
+# Tuning knobs (override via env vars)
+SAMPLE_DURATION_SECONDS="${SAMPLE_DURATION_SECONDS:-30}"   # sample runtime
+SAMPLE_INTERVAL_MS="${SAMPLE_INTERVAL_MS:-1}"             # sampling interval
+WARMUP_SECONDS="${WARMUP_SECONDS:-2}"                     # delay before sampling
+FIB_N="${FIB_N:-30}"                                      # fib argument
 
 # Ensure output directory exists
 mkdir -p "$OUTPUT_DIR"
 
 echo "=== Building profiling build (ENABLE_PROFILING) ==="
 
-# Clean rebuild of tiny-clj-profile to ensure ENABLE_PROFILING is active
-rm -f "$BUILD_DIR/tiny-clj-profile"
-rm -f "$BUILD_DIR/CMakeFiles/tiny-clj-profile.dir/src/"*.o 2>/dev/null || true
-
-# Configure and build
+# Configure and build (tiny-clj-profile has its own compile flags in CMakeLists.txt)
 cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD_DIR" -j --target tiny-clj-profile
 
@@ -28,25 +35,41 @@ fi
 echo "✅ Profiling build ready: $BUILD_DIR/tiny-clj-profile"
 
 echo ""
-echo "=== Running sample on fib(30) ==="
+echo "=== Running steady-state sample on fib($FIB_N) ==="
 echo "Output: $OUTPUT_FILE"
 echo ""
 
-# Start sampler FIRST to avoid race with short-lived benchmarks.
-# sample attaches by (partial) process name and waits until it exists.
-sample "tiny-clj-profile" 10 1 -wait -mayDie -file "$OUTPUT_FILE" >/dev/null 2>&1 &
-SAMPLE_PID=$!
+# Run a tight steady-state workload in the background, then attach sample by PID.
+# Avoid load-file (benchmarks/fibonacci_30.clj runs side-effects on load).
+WORKLOAD_EXPR="(do
+  (defn fib [n]
+    (if (< n 2)
+      n
+      (+ (fib (- n 1)) (fib (- n 2)))))
+  (while true
+    (fib ${FIB_N})))"
 
-# Run the benchmark long enough to get stable samples.
-# NOTE: benchmarks/fibonacci_30.clj already runs fib(30) a few times; we add extra iterations here.
-"$BUILD_DIR/tiny-clj-profile" -e '(do (load-file "benchmarks/fibonacci_30.clj") (dotimes [_ 30] (fib 30)))'
+TINYCLJ_PID=""
+cleanup() {
+  if [ -n "${TINYCLJ_PID}" ] && kill -0 "${TINYCLJ_PID}" 2>/dev/null; then
+    kill "${TINYCLJ_PID}" 2>/dev/null || true
+    # If it's still alive, force-kill (no admin rights required for own processes)
+    sleep 0.2 || true
+    kill -9 "${TINYCLJ_PID}" 2>/dev/null || true
+    wait "${TINYCLJ_PID}" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 
-# Wait for sampling to complete (or finish early if the process exits)
-wait "$SAMPLE_PID" 2>/dev/null || true
+"$BUILD_DIR/tiny-clj-profile" -e "${WORKLOAD_EXPR}" >/dev/null 2>&1 &
+TINYCLJ_PID=$!
+
+echo "tiny-clj-profile PID: ${TINYCLJ_PID}"
+echo "Warmup delay: ${WARMUP_SECONDS}s"
+sleep "${WARMUP_SECONDS}"
+
+echo "Sampling: ${SAMPLE_DURATION_SECONDS}s @ ${SAMPLE_INTERVAL_MS}ms interval"
+sample "${TINYCLJ_PID}" "${SAMPLE_DURATION_SECONDS}" "${SAMPLE_INTERVAL_MS}" -mayDie -file "${OUTPUT_FILE}" >/dev/null 2>&1 || true
 
 echo ""
-echo "=== Top functions in sample output ==="
-grep -E "^\s+[0-9]+ " "$OUTPUT_FILE" | head -30 || echo "(no matching lines)"
-
-echo ""
-echo "Full output saved to: $OUTPUT_FILE"
+echo "Full output saved to: ${OUTPUT_FILE}"

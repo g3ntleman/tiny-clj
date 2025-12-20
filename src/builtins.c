@@ -143,9 +143,11 @@ ID nth2(ID *args, unsigned int argc);
 static CljNamespace* namespace_from_value(ID value);
 static int compare_symbol_names(const void *a, const void *b);
 
-// Thread-local EvalState for builtins that need it (eval, read-string, meta, require)
-// Set/cleared in eval_function_call before/after calling builtins
-_Thread_local EvalState *g_current_eval_state = NULL;
+// EvalState for builtins that need it (eval, read-string, meta, require)
+// NOTE: tiny-clj is currently single-threaded (macOS + ESP32), so we keep this
+// as a plain global pointer (avoids TLS overhead on hot paths).
+// Set/cleared in eval_function_call before/after calling builtins.
+static EvalState *g_current_eval_state = NULL;
 
 // Getter for g_current_eval_state - used by eval.c to avoid creating temporary EvalStates
 EvalState* builtin_get_eval_state(void) {
