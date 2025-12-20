@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include "object.h"
 #include "value.h"
-#include "map.h"  // Includes FRAME_NIL_SENTINEL definition
+#include "map.h"
 #include "list.h"
 #include "symbol.h"
 
@@ -20,11 +20,11 @@ typedef struct CallFrame {
 } CallFrame;
 
 static inline ID frame_encode_value(ID value) {
-    return value ? value : FRAME_NIL_SENTINEL;
+    return value ? value : NOT_FOUND;
 }
 
 static inline ID frame_decode_value(ID value) {
-    return value == FRAME_NIL_SENTINEL ? NULL : value;
+    return value == NOT_FOUND ? NULL : value;
 }
 
 // Compatibility: Returns sizeof(CallFrame) since size is now fixed

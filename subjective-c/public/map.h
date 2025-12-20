@@ -5,14 +5,6 @@
 #include "object.h"
 #include "common.h"
 
-// Shared sentinels for distinguishing special values from NULL
-extern CljObject g_not_found_sentinel;
-#define NOT_FOUND (&g_not_found_sentinel)
-
-// Sentinel for encoding nil (NULL) in call frames (since NULL cannot be stored as a value)
-extern ID g_frame_nil_sentinel_value;
-#define FRAME_NIL_SENTINEL g_frame_nil_sentinel_value
-
 // CljMap struct definition
 typedef struct {
     CljObject base;

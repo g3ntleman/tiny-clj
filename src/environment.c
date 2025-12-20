@@ -77,8 +77,8 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
                 if (bound == symbol) {
                     ID encoded_value = current->values[i];
                     if (out_value) {
-                        if (encoded_value == FRAME_NIL_SENTINEL) {
-                            *out_value = FRAME_NIL_SENTINEL;
+                        if (encoded_value == NOT_FOUND) {
+                            *out_value = NOT_FOUND;
                         } else {
                             *out_value = frame_decode_value(encoded_value);
                         }
@@ -107,8 +107,8 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
                 if (bound == symbol) {
                     ID encoded_value = current->values[i];
                     if (out_value) {
-                        if (encoded_value == FRAME_NIL_SENTINEL) {
-                            *out_value = FRAME_NIL_SENTINEL;
+                        if (encoded_value == NOT_FOUND) {
+                            *out_value = NOT_FOUND;
                         } else {
                             *out_value = frame_decode_value(encoded_value);
                         }
