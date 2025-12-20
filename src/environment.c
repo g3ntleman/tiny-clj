@@ -41,10 +41,7 @@ void frame_set_bindings(CallFrame *frame, CallFrame *parent, ID *params, ID *val
     
     for (int i = 0; i < count; i++) {
         ID value = values ? values[i] : NULL;
-        // Only retain values (not params - they are singletons with SINGLETON_RC)
-        if (value && !IS_IMMEDIATE(value)) {
-            RETAIN((CljObject*)value);
-        }
+        RETAIN(value);
         frame->values[i] = frame_encode_value(value);
     }
 }
