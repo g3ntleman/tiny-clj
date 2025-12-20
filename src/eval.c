@@ -1,6 +1,7 @@
 #include "object.h"
 #include "eval.h"
 #include "symbol.h"
+#include <stdio.h>
 #include "exception.h"
 #include "function.h"
 #include "validation.h"
@@ -1534,6 +1535,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     }
 
     // Convert parameter list/vector to array
+    // NOTE: Destructuring is handled at AST canonicalization time, so params are always symbols here
     int param_count = is_vector_params 
         ? vector_count(as_vector(params_list))
         : list_count(as_list(params_list));
@@ -1986,6 +1988,9 @@ ID eval_list_function(CljList *list, CljMap *env) {
 
 // ============================================================================
 // EVAL_LET - Let bindings implementation
+// NOTE: Destructuring is handled at AST canonicalization time (ast_canon.c)
+// using Clojure's (destructure ...) function. By the time we get here,
+// all bindings are simple symbol-value pairs.
 // ============================================================================
 ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // (let [bindings*] body*)
@@ -2038,8 +2043,8 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CallFrame *let_frame = NULL;
     ID *binding_params = NULL;
     ID *binding_values = NULL;
-    CallFrame let_frame_storage;  // Fixed size, no __chkstk_darwin
-    ID binding_slots[CALLFRAME_MAX_PARAMS * 2];  // Fixed size for params + values
+    CallFrame let_frame_storage;
+    ID binding_slots[CALLFRAME_MAX_PARAMS * 2];
     if (has_frame) {
         CLJ_ASSERT(pair_count <= CALLFRAME_MAX_PARAMS && "Too many let bindings");
         let_frame = &let_frame_storage;
@@ -2049,8 +2054,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
 
     EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
-    // Don't set frame yet - we'll set it after bindings are evaluated
-    // This prevents issues when evaluating init expressions
     let_ctx.frame = ctx ? ctx->frame : NULL;
     let_ctx.env_stack = parent_stack;
     if (!let_ctx.env) {
@@ -2229,6 +2232,7 @@ ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
     }
 
     // Extract parameters from vector
+    // NOTE: Destructuring is handled at AST canonicalization time, so params are symbols here
     CljVector *params_vec_data = as_vector((CljValue)params_vec);
     if (!params_vec_data) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -2705,6 +2709,21 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             ASSIGN(result, map_assoc(result, eval_key, eval_value));
         }
 
+        return AUTORELEASE(result);
+    }
+
+    if (expr_tag == CLJ_VECTOR || expr_tag == CLJ_VECTOR_TRANSIENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+        CljVector *vec = (CljVector*)expr;
+        unsigned int count = vector_count(vec);
+        if (count == 0) return AUTORELEASE(RETAIN(expr));
+        
+        CljVector *result = make_vector(count, CLJ_VECTOR);
+        RETAIN(result);
+        for (unsigned int i = 0; i < count; i++) {
+            ID elem = vector_nth(vec, i);
+            ID eval_elem = (elem && elem != (ID)SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
+            ASSIGN(result, vector_conj(result, eval_elem));
+        }
         return AUTORELEASE(result);
     }
 

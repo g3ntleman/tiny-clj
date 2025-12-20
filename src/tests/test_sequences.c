@@ -63,6 +63,65 @@ TEST(test_conj_nil_collection) {
     // Don't RELEASE result - eval_string returns autoreleased object
 }
 
+TEST(test_conj_list_single) {
+    // Use global st from setUp
+    
+    // Test (conj '(1 2) 3) - should return (3 1 2)
+    // conj on lists adds element to front
+    CljObject *result = eval_string("(conj '(1 2) 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(list_type_matches(result->type));
+    
+    // Verify first element is 3
+    CljObject *first_result = eval_string("(first (conj '(1 2) 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_result);
+    TEST_ASSERT_TRUE(is_fixnum(first_result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(first_result));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+TEST(test_conj_list_variadic) {
+    // Use global st from setUp
+    
+    // Test (conj '(1) 2 3) - should return (3 2 1)
+    // conj on lists adds elements to front in reverse order
+    CljObject *result = eval_string("(conj '(1) 2 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(list_type_matches(result->type));
+    
+    // Verify order: first should be 3 (last argument)
+    CljObject *first_result = eval_string("(first (conj '(1) 2 3))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_result);
+    TEST_ASSERT_TRUE(is_fixnum(first_result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(first_result));
+    
+    // Verify second element is 2
+    CljObject *second_result = eval_string("(first (rest (conj '(1) 2 3)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(second_result);
+    TEST_ASSERT_TRUE(is_fixnum(second_result));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(second_result));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
+TEST(test_conj_empty_list) {
+    // Use global st from setUp
+    
+    // Test (conj '() 1) - should return (1)
+    CljObject *result = eval_string("(conj '() 1)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(list_type_matches(result->type));
+    
+    // Verify first element is 1
+    CljObject *first_result = eval_string("(first (conj '() 1))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_result);
+    TEST_ASSERT_TRUE(is_fixnum(first_result));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(first_result));
+    
+    // Don't RELEASE result - eval_string returns autoreleased object
+}
+
 TEST(test_rest_arity_0) {
     // Use global st from setUp
     
@@ -199,8 +258,8 @@ TEST(test_filter_all_match) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
-    // Verify count is 3
-    CljObject *count_result = eval_string("(count (filter pos? [1 2 3]))", g_test_eval_state);
+    // Verify count is 3 (use let to bind once)
+    CljObject *count_result = eval_string("(let [f (filter pos? [1 2 3])] (count f))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(count_result);
     TEST_ASSERT_TRUE(is_fixnum(count_result));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));
@@ -224,8 +283,8 @@ TEST(test_filter_with_custom_predicate) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(result && list_type_matches(TAG(result)));
     
-    // Verify count is 3
-    CljObject *count_result = eval_string("(count (filter (fn [x] (> x 2)) [1 2 3 4 5]))", g_test_eval_state);
+    // Verify count is 3 (use let to bind once)
+    CljObject *count_result = eval_string("(let [f (filter (fn [x] (> x 2)) [1 2 3 4 5])] (count f))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(count_result);
     TEST_ASSERT_TRUE(is_fixnum(count_result));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(count_result));

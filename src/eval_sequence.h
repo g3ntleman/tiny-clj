@@ -28,11 +28,9 @@ static inline ID eval_and_call_native_with_context(CljList *list,
     int i = 0;
     LIST_FOR_EACH(LIST_REST(list), elem) {
         if (i >= argc) break;
+        // Note: args[i] can be NULL (nil), which is a valid argument
+        // Errors throw exceptions in eval_arg_from_expr_with_context
         args[i] = eval_arg_from_expr_with_context(elem, env, NULL, ctx);
-        if (!args[i]) {
-            free_obj_array(args, args_stack);
-            return NULL;
-        }
         i++;
     }
 

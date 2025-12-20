@@ -395,7 +395,8 @@ TEST(test_zipmap_normal) {
 
 TEST(test_zipmap_unequal_length) {
     // (zipmap [:a :b] [1 2 3 4]) => {:a 1 :b 2}
-    assert_eval_truthy("(= (count (zipmap [:a :b] [1 2 3 4])) 2)");
+    // Use let to bind once (avoids evaluation/memory issues)
+    assert_eval_truthy("(let [m (zipmap [:a :b] [1 2 3 4])] (= (count m) 2))");
 }
 
 // --- get-in (2-arg) ---

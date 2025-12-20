@@ -11,6 +11,7 @@
 #include "vector.h"
 #include "strings.h"
 #include "map.h"
+#include "symbol.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -151,7 +152,9 @@ ID seq_iter_first(const SeqIterator *iter) {
         case CLJ_LIST: {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
-                return LIST_FIRST(node);
+                ID elem = LIST_FIRST(node);
+                // Convert SYM_NIL to NULL (nil representation)
+                return (elem == SYM_NIL) ? NULL : elem;
             }
             return NULL;
         }
@@ -162,7 +165,9 @@ ID seq_iter_first(const SeqIterator *iter) {
             if (iter->state.vec.index < iter->state.vec.count) {
                 // vector_nth returns element with lifetime tied to vector - no retain needed
                 CljVector *vec = (CljVector*)iter->container;
-                return vector_nth(vec, iter->state.vec.index);
+                ID elem = vector_nth(vec, iter->state.vec.index);
+                // Convert SYM_NIL to NULL (nil representation)
+                return (elem == SYM_NIL) ? NULL : elem;
             }
             return NULL;
         }
