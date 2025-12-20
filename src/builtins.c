@@ -64,6 +64,10 @@ ID native_conj(ID *args, unsigned int argc);
 ID native_first(ID *args, unsigned int argc);
 ID native_rest(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);
+ID native_nnext(ID *args, unsigned int argc);
+ID native_gensym(ID *args, unsigned int argc);
+ID native_partition(ID *args, unsigned int argc);
+ID native_some(ID *args, unsigned int argc);
 ID native_cons(ID *args, unsigned int argc);
 ID native_list(ID *args, unsigned int argc);
 ID native_reduce(ID *args, unsigned int argc);
@@ -169,6 +173,7 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
 
 ID nth2(ID *args, unsigned int argc) {
     // nth accepts 2 or 3 arguments: (nth coll index) or (nth coll index not-found)
+    // With not-found: returns not-found instead of throwing exception for out-of-bounds
     // Clojure-compatible: supports vectors (O(1)), lists (O(n)), and sequences (O(n))
     if (argc != 2 && argc != 3) {
         char error_msg[256];
@@ -180,8 +185,8 @@ ID nth2(ID *args, unsigned int argc) {
     }
     ID coll = args[0];
     ID idx = args[1];
-    ID not_found = argc == 3 ? args[2] : NULL;
-    (void)not_found;  // Unused - nth ignores default value (Clojure behavior)
+    bool has_not_found = (argc == 3);
+    ID not_found = has_not_found ? args[2] : NULL;
 
     // Validate index
     if (!idx || TAG(idx) != CLJ_INT) {
@@ -190,12 +195,14 @@ ID nth2(ID *args, unsigned int argc) {
     }
     int i = AS_FIXNUM(idx);
     if (i < 0) {
+        if (has_not_found) return not_found;
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is negative", i);
     }
 
-    // Handle nil collection
+    // Handle nil collection - return not-found if provided
     if (!coll) {
+        if (has_not_found) return not_found;
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for nil collection", i);
     }
@@ -206,13 +213,10 @@ ID nth2(ID *args, unsigned int argc) {
         CljVector *v = as_vector(coll);
         int count = vector_count(v);
         if (!v || i >= count) {
-            // Out of bounds: throw exception
+            if (has_not_found) return not_found;
             return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for collection with %d elements", i, count);
         }
-        // Index is valid - check if element is nil
-        // vector_nth throws exception if out of bounds
-        // vector_nth returns element with lifetime tied to vector - no retain needed
         return vector_nth(v, i);
     }
 
@@ -220,11 +224,17 @@ ID nth2(ID *args, unsigned int argc) {
     if (list_type_matches(TAG(coll))) {
         CljList *list = as_list(coll);
         if (!list) {
+            if (has_not_found) return not_found;
             return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for nil collection", i);
         }
-        // list_nth throws exception if index is out-of-bounds
-        // list_nth returns element with lifetime tied to list - no retain needed
+        // Check bounds before calling list_nth (which throws)
+        int count = list_count(list);
+        if (i >= count) {
+            if (has_not_found) return not_found;
+            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
+                    "nth index %d is out of bounds for list with %d elements", i, count);
+        }
         return list_nth(list, i);
     }
 
@@ -236,6 +246,7 @@ ID nth2(ID *args, unsigned int argc) {
 
     SeqIterator iter;
     if (!seq_iter_init(&iter, coll)) {
+        if (has_not_found) return not_found;
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for empty sequence", i);
     }
@@ -243,6 +254,7 @@ ID nth2(ID *args, unsigned int argc) {
     // Iterate to index i
     for (int j = 0; j < i; j++) {
         if (seq_iter_empty(&iter)) {
+            if (has_not_found) return not_found;
             return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for sequence (reached end at index %d)", i, j);
         }
@@ -250,6 +262,7 @@ ID nth2(ID *args, unsigned int argc) {
     }
 
     if (seq_iter_empty(&iter)) {
+        if (has_not_found) return not_found;
         return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                 "nth index %d is out of bounds for sequence", i);
     }
@@ -423,14 +436,24 @@ ID native_conj(ID *args, unsigned int argc) {
         return result;
     }
 
-    if (coll && TAG(coll) == CLJ_VECTOR) {
+    unsigned char tag = TAG(coll);
+    
+    if (tag == CLJ_VECTOR) {
         CljObject *result = coll;
         for (unsigned int i = 1; i < argc; i++) {
-            CljObject *val = args[i];
-            result = conj2(result, val);
+            result = conj2(result, args[i]);
             if (!result) return NULL;
         }
-        return (result);
+        return result;
+    }
+    
+    // Lists: conj adds to front
+    if (list_type_matches(tag)) {
+        CljList *result = as_list(coll);
+        for (unsigned int i = 1; i < argc; i++) {
+            result = make_list(args[i], result);
+        }
+        return (ID)result;
     }
 
     // Throw exception for unsupported collection type
@@ -576,6 +599,145 @@ ID native_rest(ID *args, unsigned int argc) {
     // If it returns nil, convert to empty_list()
     ID next_result = native_next(args, argc);
     return next_result ? next_result : empty_list();
+}
+
+// nnext: (next (next coll)) - returns the next of the next
+ID native_nnext(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "nnext")) return NULL;
+
+    ID first_next = native_next(args, 1);
+    if (!first_next) return NULL;
+
+    return native_next(&first_next, 1);
+}
+
+// nthnext: (nthnext coll n) - returns nth next of coll
+ID native_nthnext(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "nthnext")) return NULL;
+
+    ID coll = args[0];
+    if (!coll || IS_IMMEDIATE(coll)) return NULL;
+    
+    if (!is_fixnum(args[1])) return NULL;
+    int n = as_fixnum(args[1]);
+    
+    if (n <= 0) {
+        // Return seq of coll for n <= 0
+        SeqIterator iter;
+        if (!seq_iter_init(&iter, coll) || seq_iter_empty(&iter)) {
+            return NULL;
+        }
+        return coll;  // Return as-is for non-empty
+    }
+    
+    // Apply next n times
+    ID current = coll;
+    for (int i = 0; i < n && current; i++) {
+        ID next_args[1] = {current};
+        current = native_next(next_args, 1);
+    }
+    
+    return current;
+}
+
+// gensym: Generate unique symbol names
+ID native_gensym(ID *args, unsigned int argc) {
+    static unsigned long counter = 0;
+    
+    const char *prefix = (argc >= 1 && args[0] && TAG(args[0]) == CLJ_STRING)
+                       ? clj_string_data(as_clj_string(args[0]))
+                       : "G__";
+    
+    char name[256];
+    snprintf(name, sizeof(name), "%s%lu", prefix, ++counter);
+    return intern_symbol_global(name);
+}
+
+// partition: Partition collection into n-tuples (returns list of lists)
+ID native_partition(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "partition")) return NULL;
+
+    if (!is_fixnum(args[0]) || as_fixnum(args[0]) <= 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "partition requires positive integer size",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    int n = as_fixnum(args[0]);
+
+    ID coll = args[1];
+    if (!coll || IS_IMMEDIATE(coll)) return empty_list();
+
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, coll) || seq_iter_empty(&iter)) {
+        return empty_list();
+    }
+
+    // Use vectors for building (efficient), convert to list at end
+    CljVector *partitions = make_vector(0, CLJ_VECTOR);
+    RETAIN(partitions);
+
+    while (!seq_iter_empty(&iter)) {
+        CljVector *part = make_vector(n, CLJ_VECTOR);
+        RETAIN(part);
+        int count = 0;
+        
+        for (int i = 0; i < n && !seq_iter_empty(&iter); i++, count++) {
+            CljVector *new_part = vector_conj(part, seq_iter_first(&iter));
+            RELEASE(part);
+            part = RETAIN(new_part);
+            seq_iter_next(&iter);
+        }
+        
+        if (count == n) {
+            CljVector *new_partitions = vector_conj(partitions, part);
+            RELEASE(partitions);
+            partitions = RETAIN(new_partitions);
+        }
+        RELEASE(part);
+    }
+
+    // Convert vector to list for proper iteration
+    unsigned int pcount = vector_count(partitions);
+    CljList *result = NULL;
+    for (int i = pcount - 1; i >= 0; i--) {
+        ID elem = vector_nth(partitions, i);
+        result = make_list(elem, result);
+    }
+    RELEASE(partitions);
+    
+    return result ? AUTORELEASE(RETAIN(result)) : empty_list();
+}
+
+// some: Returns first truthy value from predicate applied to collection
+ID native_some(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "some")) return NULL;
+
+    ID pred = args[0];
+    ID coll = args[1];
+    
+    if (!coll || IS_IMMEDIATE(coll)) return NULL;
+
+    EvalState *st = g_current_eval_state;
+    if (!st) {
+        throw_exception(EXCEPTION_RUNTIME, "some requires EvalState",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, coll)) return NULL;
+    
+    while (!seq_iter_empty(&iter)) {
+        ID elem = seq_iter_first(&iter);
+        ID result = eval_function_call(pred, &elem, 1, NULL, st);
+        
+        if (result && result != clj_false) return result;
+        
+        seq_iter_next(&iter);
+    }
+    
+    return NULL;
 }
 
 // Cons function that works with BuiltinFn signature
@@ -2534,6 +2696,11 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_first_data.sym, native_first},
     {&sym_rest_data.sym, native_rest},
     {&sym_next_data.sym, native_next},
+    {&sym_nnext_data.sym, native_nnext},
+    {&sym_nthnext_data.sym, native_nthnext},
+    {&sym_gensym_data.sym, native_gensym},
+    {&sym_partition_data.sym, native_partition},
+    {&sym_some_data.sym, native_some},
     {&sym_cons_data.sym, native_cons},
     {&sym_list_data.sym, native_list},
     {&sym_count_data.sym, native_count},

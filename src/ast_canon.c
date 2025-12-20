@@ -24,10 +24,85 @@
 #include "parser.h"  // For resolve_alias_in_namespace
 #include "meta.h"    // For meta_get and meta_set
 #include "symbol_token.h"
+#include "eval.h"    // For eval_function_call
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
+
+// ============================================================================
+// DESTRUCTURING SUPPORT (compile-time transformation)
+// Uses Clojure's destructure function when available
+// ============================================================================
+
+// Check if bindings vector needs destructuring (any binding is not a symbol)
+static bool bindings_need_destructuring(CljVector *bindings) {
+    unsigned int count = vector_count(bindings);
+    for (unsigned int i = 0; i < count; i += 2) {
+        ID binding_form = vector_nth(bindings, i);
+        if (TAG(binding_form) != CLJ_SYMBOL) return true;
+    }
+    return false;
+}
+
+// Check if fn/defn params need destructuring
+static bool params_need_destructuring(CljVector *params) {
+    VECTOR_FOR_EACH(params, param) {
+        unsigned char tag = TAG(param);
+        if (tag == CLJ_VECTOR || tag == CLJ_MAP) return true;
+    }
+    return false;
+}
+
+// Cached destructure function (resolved once after bootstrap)
+static ID destructure_fn = NULL;
+
+// Call Clojure (destructure bindings), returns NULL if not available (bootstrap)
+static CljVector* destructure(EvalState *st, CljVector *bindings) {
+    if (!destructure_fn) {
+        destructure_fn = ns_resolve(st, SYM_DESTRUCTURE);
+        if (!destructure_fn) return NULL;  // Bootstrap: not loaded yet
+    }
+    
+    ID args[] = { (ID)bindings };
+    ID result = eval_function_call(destructure_fn, args, 1, NULL, st);
+    return (TAG(result) == CLJ_VECTOR) ? as_vector(result) : NULL;
+}
+
+// Gensym counter for fn/defn/loop param destructuring
+static unsigned long param_gensym_counter = 0;
+
+// Transform params with destructuring, returns new_params and let_bindings
+// Returns NULL for let_bindings if no destructuring needed
+static CljVector* transform_params(EvalState *st, CljVector *params, CljVector **out_let_bindings) {
+    unsigned int count = vector_count(params);
+    CljVector *new_params = make_vector(count, CLJ_VECTOR);
+    CljVector *let_bindings = make_vector(count * 2, CLJ_VECTOR);
+    bool has_destructuring = false;
+    
+    VECTOR_FOR_EACH(params, param) {
+        unsigned char tag = TAG(param);
+        if (tag == CLJ_VECTOR || tag == CLJ_MAP) {
+            char name[64];
+            snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
+            CljSymbol *gsym = intern_symbol_global(name);
+            new_params = vector_conj(new_params, gsym);
+            let_bindings = vector_conj(let_bindings, param);
+            let_bindings = vector_conj(let_bindings, gsym);
+            has_destructuring = true;
+        } else {
+            new_params = vector_conj(new_params, param);
+        }
+    }
+    
+    if (has_destructuring && vector_count(let_bindings) > 0) {
+        *out_let_bindings = destructure(st, let_bindings);
+    } else {
+        *out_let_bindings = NULL;
+    }
+    return new_params;
+}
 
 /**
  * @brief Canonicalize a symbol token to CljSymbol
@@ -192,6 +267,171 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         // Compare against SYM_QUOTE to detect (quote ...) forms
         bool is_quote_form = (first == SYM_QUOTE);
         bool child_in_quote = in_quote || is_quote_form;
+        
+        // ========== DESTRUCTURING TRANSFORMATION (compile-time) ==========
+        // Transform let/loop bindings and fn/defn params
+        if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
+            CljSymbol *head_sym = as_symbol(first);
+
+            // (let [bindings] body...) - expand bindings using Clojure destructure
+            if (head_sym == SYM_LET) {
+                CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                    CljVector *bindings = as_vector(rest1->first);
+                    if (bindings_need_destructuring(bindings)) {
+                        CljVector *expanded = destructure(st, bindings);
+                        if (expanded) {
+                            // Rebuild: (let expanded-bindings body...)
+                            CljList *new_rest = make_list(expanded, rest1->rest ? as_list(rest1->rest) : NULL);
+                            CljList *new_list = make_list(first, new_rest);
+                            RELEASE(list);
+                            return canonicalize_expr(new_list, st, in_quote);
+                        }
+                        // destructure not available (bootstrap) - skip transformation
+                    }
+                }
+            }
+            
+            // (loop [bindings] body...) - special handling for recur compatibility
+            // Transform: (loop [[a b] init, sum 0] body)
+            //       To: (loop [loop__1 init, sum 0] (let [expanded-bindings] body))
+            if (head_sym == SYM_LOOP) {
+                CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_VECTOR) {
+                    CljVector *bindings = as_vector(rest1->first);
+                    if (bindings_need_destructuring(bindings)) {
+                        static unsigned long gensym_counter = 0;
+                        unsigned int count = vector_count(bindings);
+                        CljVector *loop_bindings = make_vector(count, CLJ_VECTOR);
+                        CljVector *let_bindings = make_vector(count, CLJ_VECTOR);
+                        
+                        // Process each binding pair
+                        for (unsigned int i = 0; i < count; i += 2) {
+                            ID binding_form = vector_nth(bindings, i);
+                            ID init_expr = vector_nth(bindings, i + 1);
+                            
+                            if (TAG(binding_form) != CLJ_SYMBOL) {
+                                // Destructuring binding - create gensym
+                                char name[64];
+                                snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
+                                CljSymbol *gsym = intern_symbol_global(name);
+                                loop_bindings = vector_conj(loop_bindings, gsym);
+                                loop_bindings = vector_conj(loop_bindings, init_expr);
+                                let_bindings = vector_conj(let_bindings, binding_form);
+                                let_bindings = vector_conj(let_bindings, gsym);
+                            } else {
+                                // Simple symbol binding - keep as-is
+                                loop_bindings = vector_conj(loop_bindings, binding_form);
+                                loop_bindings = vector_conj(loop_bindings, init_expr);
+                            }
+                        }
+                        
+                        // Expand let_bindings using Clojure destructure
+                        CljVector *expanded_let_bindings = NULL;
+                        if (vector_count(let_bindings) > 0) {
+                            expanded_let_bindings = destructure(st, let_bindings);
+                            if (!expanded_let_bindings) {
+                                // Bootstrap - skip transformation
+                                // (expanded_let_bindings stays NULL, will be checked below)
+                            }
+                        }
+                        
+                        // Get body expressions
+                        CljList *body_list = rest1->rest ? as_list(rest1->rest) : NULL;
+                        ID body = body_list ? body_list->first : NULL;
+                        
+                        // Wrap body in let if there are destructuring bindings
+                        ID new_body = body;
+                        if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
+                            new_body = make_list(SYM_LET,
+                                                 make_list(expanded_let_bindings,
+                                                           make_list(body, NULL)));
+                        }
+                        
+                        // Rebuild: (loop loop-bindings new-body)
+                        CljList *new_list = make_list(first,
+                                                      make_list(loop_bindings,
+                                                                make_list(new_body, NULL)));
+                        RELEASE(list);
+                        return canonicalize_expr(new_list, st, in_quote);
+                    }
+                }
+            }
+            
+            // (fn [params] body) or (fn name [params] body)
+            if (head_sym == SYM_FN) {
+                CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+                if (rest1) {
+                    ID second = rest1->first;
+                    CljVector *params = NULL;
+                    CljList *body_rest = NULL;
+                    bool named = false;
+                    
+                    if (second && TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
+                        // Named fn: (fn name [params] body)
+                        named = true;
+                        CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
+                        if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
+                            params = as_vector(rest2->first);
+                            body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
+                        }
+                    } else if (second && TAG(second) == CLJ_VECTOR) {
+                        // Anonymous fn: (fn [params] body)
+                        params = as_vector(second);
+                        body_rest = rest1->rest ? as_list(rest1->rest) : NULL;
+                    }
+                    
+                    if (params && params_need_destructuring(params)) {
+                        CljVector *expanded_let_bindings = NULL;
+                        CljVector *new_params = transform_params(st, params, &expanded_let_bindings);
+                        
+                        if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
+                            ID body = body_rest ? body_rest->first : NULL;
+                            CljList *let_form = make_list(SYM_LET,
+                                                          make_list(expanded_let_bindings,
+                                                                    make_list(body, NULL)));
+                            CljList *new_list = named
+                                ? make_list(first, make_list(second, make_list(new_params, make_list(let_form, NULL))))
+                                : make_list(first, make_list(new_params, make_list(let_form, NULL)));
+                            RELEASE(list);
+                            return canonicalize_expr(new_list, st, in_quote);
+                        }
+                    }
+                }
+            }
+            
+            // (defn name [params] body...)
+            if (head_sym == SYM_DEFN) {
+                CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
+                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_SYMBOL) {
+                    ID name_sym = rest1->first;
+                    CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
+                    if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
+                        CljVector *params = as_vector(rest2->first);
+                        CljList *body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
+                        
+                        if (params_need_destructuring(params)) {
+                            CljVector *expanded_let_bindings = NULL;
+                            CljVector *new_params = transform_params(st, params, &expanded_let_bindings);
+                            
+                            if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
+                                ID body = body_rest ? body_rest->first : NULL;
+                                CljList *let_form = make_list(SYM_LET,
+                                                              make_list(expanded_let_bindings,
+                                                                        make_list(body, NULL)));
+                                CljList *new_list = make_list(first,
+                                                    make_list(name_sym,
+                                                        make_list(new_params,
+                                                            make_list(let_form, NULL))));
+                                RELEASE(list);
+                                return canonicalize_expr(new_list, st, in_quote);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // ========== END DESTRUCTURING TRANSFORMATION ==========
         
         ID rest = NULL;
         if (list->rest) {

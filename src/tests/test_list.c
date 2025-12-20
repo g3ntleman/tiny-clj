@@ -79,7 +79,7 @@ TEST(test_nth_list_nil_with_default_problem) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // (nth '(1 nil 3) 1 :default) should return nil (nil element exists, default is NOT returned)
-    // This is Clojure behavior: when element is nil, default is NOT returned
+    // Clojure behavior: when element exists (even if nil), default is NOT returned
     CljObject *nil_with_default = NULL;
     TRY {
         nil_with_default = eval_string("(nth '(1 nil 3) 1 :default)", g_test_eval_state);
@@ -90,17 +90,18 @@ TEST(test_nth_list_nil_with_default_problem) {
     TEST_ASSERT_NULL_MESSAGE(nil_with_default,
         "nth should return NULL for nil element, not return default");
 
-    // Out-of-bounds with default should throw exception (not return default)
-    // (nth '(1 2 3) 5 :default) should throw exception (out-of-bounds)
-    // Clojure behavior: out-of-bounds throws exception, even with default
+    // Out-of-bounds with default should return default (not throw exception)
+    // (nth '(1 2 3) 5 :default) should return :default
+    // Clojure behavior: out-of-bounds returns not-found value when provided
     CljObject *out_with_default = NULL;
     TRY {
         out_with_default = eval_string("(nth '(1 2 3) 5 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
-        // This is correct - out-of-bounds should throw exception, even with default
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds");
     } END_TRY
-    TEST_ASSERT_NULL(out_with_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(out_with_default, "nth should return :default for out-of-bounds");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(out_with_default) == CLJ_SYMBOL && IS_KEYWORD(out_with_default),
+        "nth should return :default keyword for out-of-bounds");
 }
 
 // Tests for LIST_FOR_EACH macro

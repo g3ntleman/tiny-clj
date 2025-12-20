@@ -44,6 +44,7 @@ static CljSymbol *SYM_SQRT_NATIVE = NULL;
 CljSymbol *SYM_DO = NULL;
 CljSymbol *SYM_LOOP = NULL;
 CljSymbol *SYM_RECUR = NULL;
+CljSymbol *SYM_DESTRUCTURE = NULL;
 CljSymbol *SYM_THROW = NULL;
 CljSymbol *SYM_FINALLY = NULL;
 CljSymbol *SYM_VAR = NULL;
@@ -198,6 +199,11 @@ DEFINE_EXTERN_SYMBOL(sym_count_data, "count");
 DEFINE_EXTERN_SYMBOL(sym_cons_data, "cons");
 DEFINE_EXTERN_SYMBOL(sym_seq_data, "seq");
 DEFINE_EXTERN_SYMBOL(sym_next_data, "next");
+DEFINE_EXTERN_SYMBOL(sym_nnext_data, "nnext");
+DEFINE_EXTERN_SYMBOL(sym_nthnext_data, "nthnext");
+DEFINE_EXTERN_SYMBOL(sym_gensym_data, "gensym");
+DEFINE_EXTERN_SYMBOL(sym_partition_data, "partition");
+DEFINE_EXTERN_SYMBOL(sym_some_data, "some");
 DEFINE_EXTERN_SYMBOL(sym_list_data, "list");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_and_data, "and");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_or_data, "or");
@@ -537,6 +543,9 @@ void init_special_symbols() {
         ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
     }
     // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
+    
+    // destructure is a Clojure function, not a special form
+    SYM_DESTRUCTURE = intern_symbol_global("destructure");
 }
 
 // Static CljString for temporary lookups (avoids allocations)
