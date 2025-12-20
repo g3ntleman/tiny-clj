@@ -393,8 +393,18 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
         }
         result = eval_body(parsed_expr, eval_env, eval_state, NULL);
         // eval_body returns AUTORELEASE objects
+    } else if (parsed_expr && TAG(parsed_expr) == CLJ_VECTOR) {
+        // Vector literals need to have their elements evaluated
+        // Use provided env or fall back to current_ns->mappings
+        CljMap *eval_env = env;
+        if (!eval_env) {
+            CLJ_ASSERT(eval_state->current_ns != NULL);
+            eval_env = (CljMap*)eval_state->current_ns->mappings;
+        }
+        result = eval_body(parsed_expr, eval_env, eval_state, NULL);
+        // eval_body returns AUTORELEASE objects
     } else {
-        // Literal value (vector, etc.) - return as-is
+        // Literal value (string, keyword, etc.) - return as-is
         // parsed_expr is already AUTORELEASEd by parse()
         result = parsed_expr;
     }

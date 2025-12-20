@@ -622,6 +622,59 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             return eval_list(as_list(body), env_map, ctx_state, ctx);
         }
 
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
+            // Vector literals need to have their elements evaluated
+            CljVector *vec = (CljVector*)body;
+            unsigned int count = vector_count(vec);
+            
+            // Empty vector - return as-is
+            if (count == 0) {
+                return RETAIN(body);
+            }
+            
+            // Create new vector with evaluated elements
+            CljVector *result = make_vector(count, CLJ_VECTOR);
+            RETAIN(result);
+            
+            for (unsigned int i = 0; i < count; i++) {
+                ID elem = vector_nth(vec, i);
+                ID eval_elem = NULL;
+                
+                // Evaluate element recursively
+                if (elem) {
+                    eval_elem = eval_body_with_params(elem, ctx);
+                }
+                
+                // Add evaluated element to result vector
+                ASSIGN(result, vector_conj(result, eval_elem));
+            }
+            
+            return AUTORELEASE(result);
+        }
+
+        case CLJ_MAP: {
+            // Map literals need to have their keys and values evaluated
+            CljMap *map = (CljMap*)body;
+            CljMap *result = map_empty();
+            RETAIN(result);
+            
+            MAP_FOR_EACH(map, key, value) {
+                ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
+                ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
+                
+                CljMap *new_result = map_assoc(result, eval_key, eval_value);
+                if (new_result != result) {
+                    RELEASE(result);
+                    result = new_result;
+                    RETAIN(result);
+                }
+            }
+            
+            return AUTORELEASE(result);
+        }
+
         default:
             // Literal value
             return RETAIN(body);
@@ -720,6 +773,41 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             throw_exception(EXCEPTION_RUNTIME, "Unable to resolve symbol in this context",
                            __FILE__, __LINE__, 0);
             return NULL;
+        }
+
+        case CLJ_VECTOR:
+        case CLJ_VECTOR_TRANSIENT:
+        case CLJ_VECTOR_TRANSIENT_WEAK: {
+            // Vector literals need to have their elements evaluated
+            // This is necessary for cases like [(f x) (g x)] where f and g should be called
+            CljVector *vec = (CljVector*)body;
+            unsigned int count = vector_count(vec);
+            
+            // Empty vector - return as-is
+            if (count == 0) {
+                return AUTORELEASE(RETAIN(body));
+            }
+            
+            // Create new vector with evaluated elements
+            CljVector *result = make_vector(count, CLJ_VECTOR);
+            RETAIN(result);
+            
+            for (unsigned int i = 0; i < count; i++) {
+                ID elem = vector_nth(vec, i);
+                ID eval_elem = NULL;
+                
+                // Check for SYM_NIL before calling eval_body
+                if (elem && TAG(elem) == CLJ_SYMBOL && (CljObject*)elem == (CljObject*)SYM_NIL) {
+                    eval_elem = NULL;  // nil evaluates to NULL
+                } else if (elem) {
+                    eval_elem = eval_body(elem, env, st, ctx);
+                }
+                
+                // Add evaluated element to result vector
+                ASSIGN(result, vector_conj(result, eval_elem));
+            }
+            
+            return AUTORELEASE(result);
         }
 
         case CLJ_MAP: {
