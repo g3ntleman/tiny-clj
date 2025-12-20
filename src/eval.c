@@ -1070,12 +1070,28 @@ static inline ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
     int argc = 0;
     unsigned char fn_tag = TAG(fn);
 
-    // Single-pass: traverse list once, evaluate args and count simultaneously
-    if (env && TAG(env) == CLJ_MAP) {
-        CljList *current = list ? as_list(list->rest) : NULL;
+    // Hot path: Most calls have <= 2 args (fib, +, -, <, etc.)
+    // Avoid a loop in the common case: unroll traversal for 0..2 args.
+    CljList *arg0 = list ? as_list(LIST_REST(list)) : NULL;
+    CljList *arg1 = arg0 ? as_list(LIST_REST(arg0)) : NULL;
+    CljList *arg2 = arg1 ? as_list(LIST_REST(arg1)) : NULL;
+
+    // 1 branch into slowpath: anything unusual (non-map env or >2 args)
+    if (LIKELY(env && TAG(env) == CLJ_MAP && !arg2)) {
+        if (arg0) {
+            args[0] = eval_arg_from_expr_with_context(LIST_FIRST(arg0), env, st, ctx);
+            argc = 1;
+            if (arg1) {
+                args[1] = eval_arg_from_expr_with_context(LIST_FIRST(arg1), env, st, ctx);
+                argc = 2;
+            }
+        }
+    } else if (env && TAG(env) == CLJ_MAP) {
+        // Slow path: 3+ args (rare) - keep the generic loop
+        CljList *current = arg0;
         while (current && argc < 16) {
-            args[argc++] = eval_arg_from_expr_with_context(current->first, env, st, ctx);
-            current = current->rest ? as_list(current->rest) : NULL;
+            args[argc++] = eval_arg_from_expr_with_context(LIST_FIRST(current), env, st, ctx);
+            current = as_list(LIST_REST(current));
         }
     }
 

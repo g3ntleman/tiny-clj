@@ -23,9 +23,53 @@ BENCHMARK_FILE="benchmarks/fibonacci.clj"
 WARMUP_SECONDS=4
 ITERATIONS=100
 FIB_N=20
+# Number of measurement runs per system (median is reported)
+RUNS=${RUNS:-5}
 
 # Create results directory
 mkdir -p "$RESULTS_DIR"
+
+# ============================================================================
+# Helpers: median/min/max for numeric lists
+# ============================================================================
+median_value() {
+    local values=("$@")
+    local n=${#values[@]}
+    if [ "$n" -eq 0 ]; then
+        echo ""
+        return 1
+    fi
+    local sorted
+    sorted=$(printf '%s\n' "${values[@]}" | sort -n)
+    if [ $((n % 2)) -eq 1 ]; then
+        # Odd: middle element (1-based line number)
+        echo "$sorted" | sed -n "$((n / 2 + 1))p"
+    else
+        # Even: average the two middle values
+        local a b
+        a=$(echo "$sorted" | sed -n "$((n / 2))p")
+        b=$(echo "$sorted" | sed -n "$((n / 2 + 1))p")
+        echo "scale=6; ($a + $b) / 2" | bc
+    fi
+}
+
+min_value() {
+    local values=("$@")
+    if [ "${#values[@]}" -eq 0 ]; then
+        echo ""
+        return 1
+    fi
+    printf '%s\n' "${values[@]}" | sort -n | head -1
+}
+
+max_value() {
+    local values=("$@")
+    if [ "${#values[@]}" -eq 0 ]; then
+        echo ""
+        return 1
+    fi
+    printf '%s\n' "${values[@]}" | sort -n | tail -1
+}
 
 # Check if Clojure is available
 if command -v clojure &> /dev/null; then
@@ -91,7 +135,7 @@ CLOJURE_TIME_MS=0
 CLOJURE_WARMUP_MS=0
 
 if [ "$CLOJURE_AVAILABLE" = true ]; then
-    echo -e "${BLUE}🔥 Running Clojure/JVM benchmark with ${WARMUP_SECONDS}s warmup...${NC}"
+    echo -e "${BLUE}🔥 Running Clojure/JVM benchmark (${RUNS} runs, ${WARMUP_SECONDS}s warmup)...${NC}"
     
     # Create temporary Clojure script with warmup and measurement
     # Uses the same code from benchmarks/fibonacci.clj
@@ -113,16 +157,20 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
         warmup-time (- warmup-end warmup-start)]
     (println (str "WARMUP_TIME_MS=" warmup-time))))
 
-;; Actual measurement with ${ITERATIONS} iterations
+;; Actual measurement with ${ITERATIONS} iterations, repeated ${RUNS} times (median reported by shell)
 (let [iterations ${ITERATIONS}
-      start (System/currentTimeMillis)]
-  (dotimes [i iterations] (fib ${FIB_N}))
-  (let [end (System/currentTimeMillis)
-        test-time (- end start)
-        time-per-iter (double (/ test-time iterations))]
-    (println (str "TEST_TIME_MS=" test-time))
-    (println (str "ITERATIONS=" iterations))
-    (println (str "TIME_PER_ITER_MS=" time-per-iter))))
+      runs ${RUNS}]
+  (dotimes [run runs]
+    (let [start (System/nanoTime)]
+      (dotimes [i iterations] (fib ${FIB_N}))
+      (let [end (System/nanoTime)
+            test-time-ms (/ (- end start) 1000000.0)
+            time-per-iter (/ test-time-ms iterations)]
+        ;; IMPORTANT: Avoid locale-dependent formatting (decimal comma) -> print raw doubles (dot)
+        (println (str "RUN_" (inc run) "_TEST_TIME_MS=" test-time-ms))
+        (println (str "RUN_" (inc run) "_TIME_PER_ITER_MS=" time-per-iter))))))
+  (println (str "ITERATIONS=" iterations))
+  (println (str "RUNS=" runs)))
 CLOJURE_EOF
 
     # Run Clojure benchmark
@@ -130,14 +178,18 @@ CLOJURE_EOF
     
     # Extract results
     CLOJURE_WARMUP_MS=$(echo "$CLJ_OUTPUT" | grep "WARMUP_TIME_MS=" | cut -d'=' -f2)
-    CLOJURE_TIME_MS=$(echo "$CLJ_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
-    ITERATIONS_CLJ=$(echo "$CLJ_OUTPUT" | grep "ITERATIONS=" | cut -d'=' -f2)
-    TIME_PER_ITER_CLJ=$(echo "$CLJ_OUTPUT" | grep "TIME_PER_ITER_MS=" | cut -d'=' -f2)
+    ITERATIONS_CLJ=$(echo "$CLJ_OUTPUT" | grep "^ITERATIONS=" | cut -d'=' -f2)
+    CLJ_RUN_TIMES=($(echo "$CLJ_OUTPUT" | grep -E "^RUN_[0-9]+_TEST_TIME_MS=" | cut -d'=' -f2))
+    CLJ_RUN_PER_ITER=($(echo "$CLJ_OUTPUT" | grep -E "^RUN_[0-9]+_TIME_PER_ITER_MS=" | cut -d'=' -f2))
+    CLOJURE_TIME_MS=$(median_value "${CLJ_RUN_TIMES[@]}")
+    TIME_PER_ITER_CLJ=$(median_value "${CLJ_RUN_PER_ITER[@]}")
+    CLJ_MIN_TIME=$(min_value "${CLJ_RUN_TIMES[@]}")
+    CLJ_MAX_TIME=$(max_value "${CLJ_RUN_TIMES[@]}")
     
     rm -f "$TEMP_CLJ"
     
     if [ -n "$CLOJURE_TIME_MS" ] && [ -n "$CLOJURE_WARMUP_MS" ]; then
-        echo -e "${GREEN}✅ Clojure/JVM: ${CLOJURE_TIME_MS}ms (${TIME_PER_ITER_CLJ}ms/iter, warmup: ${CLOJURE_WARMUP_MS}ms)${NC}"
+        echo -e "${GREEN}✅ Clojure/JVM: ${CLOJURE_TIME_MS}ms median (${TIME_PER_ITER_CLJ}ms/iter, warmup: ${CLOJURE_WARMUP_MS}ms, runs: ${RUNS}, range: ${CLJ_MIN_TIME}-${CLJ_MAX_TIME}ms)${NC}"
     else
         echo -e "${RED}❌ Failed to extract Clojure results${NC}"
         CLOJURE_AVAILABLE=false
@@ -167,19 +219,23 @@ function fib(n) {
 
 const iterations = ${ITERATIONS};
 const fibN = ${FIB_N};
+const runs = ${RUNS};
 
-const start = process.hrtime.bigint();
-for (let i = 0; i < iterations; i++) {
-    fib(fibN);
+for (let r = 0; r < runs; r++) {
+    const start = process.hrtime.bigint();
+    for (let i = 0; i < iterations; i++) {
+        fib(fibN);
+    }
+    const end = process.hrtime.bigint();
+    const testTimeMs = Number(end - start) / 1000000;
+    const timePerIter = testTimeMs / iterations;
+    // Avoid JS template strings here because bash expands ${...} in heredocs.
+    console.log("RUN_" + (r + 1) + "_TEST_TIME_MS=" + testTimeMs.toFixed(2));
+    console.log("RUN_" + (r + 1) + "_TIME_PER_ITER_MS=" + timePerIter.toFixed(6));
 }
-const end = process.hrtime.bigint();
 
-const testTimeMs = Number(end - start) / 1000000;
-const timePerIter = testTimeMs / iterations;
-
-console.log("TEST_TIME_MS=" + testTimeMs.toFixed(2));
 console.log("ITERATIONS=" + iterations);
-console.log("TIME_PER_ITER_MS=" + timePerIter.toFixed(6));
+console.log("RUNS=" + runs);
 JS_EOF
 
         CLJS_OUTPUT=$(node "$TEMP_JS" 2>&1)
@@ -194,27 +250,34 @@ JS_EOF
     (+ (fib (- n 1)) (fib (- n 2)))))
 
 (let [iterations ${ITERATIONS}
-      start (.getTime (js/Date.))]
-  (dotimes [i iterations] (fib ${FIB_N}))
-  (let [end (.getTime (js/Date.))
-        test-time (- end start)
-        time-per-iter (/ test-time iterations)]
-    (println (str "TEST_TIME_MS=" test-time))
-    (println (str "ITERATIONS=" iterations))
-    (println (str "TIME_PER_ITER_MS=" time-per-iter))))
+      runs ${RUNS}]
+  (dotimes [run runs]
+    (let [start (.getTime (js/Date.))]
+      (dotimes [i iterations] (fib ${FIB_N}))
+      (let [end (.getTime (js/Date.))
+            test-time (- end start)
+            time-per-iter (/ test-time iterations)]
+        (println (str "RUN_" (inc run) "_TEST_TIME_MS=" test-time))
+        (println (str "RUN_" (inc run) "_TIME_PER_ITER_MS=" time-per-iter)))))
+  (println (str "ITERATIONS=" iterations))
+  (println (str "RUNS=" runs)))
 CLJS_EOF
 
         CLJS_OUTPUT=$($CLJS_RUNTIME "$TEMP_CLJS" 2>&1)
         rm -f "$TEMP_CLJS"
     fi
     
-    CLJS_TIME_MS=$(echo "$CLJS_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
-    CLJS_ITERATIONS=$(echo "$CLJS_OUTPUT" | grep "ITERATIONS=" | cut -d'=' -f2)
-    TIME_PER_ITER_CLJS=$(echo "$CLJS_OUTPUT" | grep "TIME_PER_ITER_MS=" | cut -d'=' -f2)
+    CLJS_ITERATIONS=$(echo "$CLJS_OUTPUT" | grep "^ITERATIONS=" | cut -d'=' -f2)
+    CLJS_RUN_TIMES=($(echo "$CLJS_OUTPUT" | grep -E "^RUN_[0-9]+_TEST_TIME_MS=" | cut -d'=' -f2))
+    CLJS_RUN_PER_ITER=($(echo "$CLJS_OUTPUT" | grep -E "^RUN_[0-9]+_TIME_PER_ITER_MS=" | cut -d'=' -f2))
+    CLJS_TIME_MS=$(median_value "${CLJS_RUN_TIMES[@]}")
+    TIME_PER_ITER_CLJS=$(median_value "${CLJS_RUN_PER_ITER[@]}")
+    CLJS_MIN_TIME=$(min_value "${CLJS_RUN_TIMES[@]}")
+    CLJS_MAX_TIME=$(max_value "${CLJS_RUN_TIMES[@]}")
     
     if [ -n "$CLJS_TIME_MS" ]; then
         TIME_PER_ITER_CLJS_FORMATTED=$(echo "$TIME_PER_ITER_CLJS" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-        echo -e "${GREEN}✅ ClojureScript: ${CLJS_TIME_MS}ms (${TIME_PER_ITER_CLJS_FORMATTED}ms/iter, ${CLJS_ITERATIONS} iterations)${NC}"
+        echo -e "${GREEN}✅ ClojureScript: ${CLJS_TIME_MS}ms median (${TIME_PER_ITER_CLJS_FORMATTED}ms/iter, ${CLJS_ITERATIONS} iterations, runs: ${RUNS}, range: ${CLJS_MIN_TIME}-${CLJS_MAX_TIME}ms)${NC}"
     else
         echo -e "${RED}❌ Failed to extract ClojureScript results${NC}"
         CLJS_AVAILABLE=false
@@ -223,13 +286,13 @@ CLJS_EOF
 fi
 
 # ============================================================================
-# 4. Python3 Benchmark (3 runs, take median)
+# 4. Python3 Benchmark (${RUNS} runs, take median)
 # ============================================================================
 PYTHON_TIME_MS=0
 TIME_PER_ITER_PYTHON=0
 
 if [ "$PYTHON_AVAILABLE" = true ]; then
-    echo -e "${BLUE}🐍 Running Python3 benchmark (3 runs)...${NC}"
+    echo -e "${BLUE}🐍 Running Python3 benchmark (${RUNS} runs)...${NC}"
     
     TEMP_PY=$(mktemp /tmp/fib_benchmark_XXXXXX.py)
     cat > "$TEMP_PY" << PYTHON_EOF
@@ -242,49 +305,37 @@ def fib(n):
 
 iterations = ${ITERATIONS}
 fib_n = ${FIB_N}
+runs = ${RUNS}
 
-start = time.perf_counter()
-for _ in range(iterations):
-    fib(fib_n)
-end = time.perf_counter()
+for r in range(runs):
+    start = time.perf_counter()
+    for _ in range(iterations):
+        fib(fib_n)
+    end = time.perf_counter()
+    test_time_ms = (end - start) * 1000
+    time_per_iter = test_time_ms / iterations
+    print(f"RUN_{r+1}_TEST_TIME_MS={test_time_ms:.2f}")
+    print(f"RUN_{r+1}_TIME_PER_ITER_MS={time_per_iter:.6f}")
 
-test_time_ms = (end - start) * 1000
-time_per_iter = test_time_ms / iterations
-
-print(f"TEST_TIME_MS={test_time_ms:.2f}")
 print(f"ITERATIONS={iterations}")
-print(f"TIME_PER_ITER_MS={time_per_iter:.6f}")
+print(f"RUNS={runs}")
 PYTHON_EOF
 
-    # Run 3 measurements
-    PY_TIMES=()
-    for run in 1 2 3; do
-        PY_OUTPUT=$(python3 "$TEMP_PY" 2>&1)
-        RUN_TIME=$(echo "$PY_OUTPUT" | grep "TEST_TIME_MS=" | cut -d'=' -f2)
-        PY_TIMES+=("$RUN_TIME")
-        echo -e "  Run $run: ${RUN_TIME}ms"
-    done
-    
-    # Sort and take median (middle value of 3)
-    SORTED_PY_TIMES=$(printf '%s\n' "${PY_TIMES[@]}" | sort -n)
-    PYTHON_TIME_MS=$(echo "$SORTED_PY_TIMES" | sed -n '2p')  # Median (2nd of 3)
-    
-    # Also show min/max for reference
-    PY_MIN_TIME=$(echo "$SORTED_PY_TIMES" | head -1)
-    PY_MAX_TIME=$(echo "$SORTED_PY_TIMES" | tail -1)
-    
-    PYTHON_ITERATIONS=${ITERATIONS}
-    if [ -n "$PYTHON_TIME_MS" ] && [ "$PYTHON_TIME_MS" != "0" ]; then
-        TIME_PER_ITER_PYTHON=$(echo "scale=6; $PYTHON_TIME_MS / $PYTHON_ITERATIONS" | bc)
-    else
-        TIME_PER_ITER_PYTHON="0"
-    fi
+    PY_OUTPUT=$(python3 "$TEMP_PY" 2>&1)
+
+    PYTHON_ITERATIONS=$(echo "$PY_OUTPUT" | grep "^ITERATIONS=" | cut -d'=' -f2)
+    PY_RUN_TIMES=($(echo "$PY_OUTPUT" | grep -E "^RUN_[0-9]+_TEST_TIME_MS=" | cut -d'=' -f2))
+    PY_RUN_PER_ITER=($(echo "$PY_OUTPUT" | grep -E "^RUN_[0-9]+_TIME_PER_ITER_MS=" | cut -d'=' -f2))
+    PYTHON_TIME_MS=$(median_value "${PY_RUN_TIMES[@]}")
+    TIME_PER_ITER_PYTHON=$(median_value "${PY_RUN_PER_ITER[@]}")
+    PY_MIN_TIME=$(min_value "${PY_RUN_TIMES[@]}")
+    PY_MAX_TIME=$(max_value "${PY_RUN_TIMES[@]}")
     
     rm -f "$TEMP_PY"
     
     if [ -n "$PYTHON_TIME_MS" ]; then
         TIME_PER_ITER_PY_DISPLAY=$(echo "$TIME_PER_ITER_PYTHON" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-        echo -e "${GREEN}✅ Python3: ${PYTHON_TIME_MS}ms median (${TIME_PER_ITER_PY_DISPLAY}ms/iter, range: ${PY_MIN_TIME}-${PY_MAX_TIME}ms)${NC}"
+        echo -e "${GREEN}✅ Python3: ${PYTHON_TIME_MS}ms median (${TIME_PER_ITER_PY_DISPLAY}ms/iter, runs: ${RUNS}, range: ${PY_MIN_TIME}-${PY_MAX_TIME}ms)${NC}"
     else
         echo -e "${RED}❌ Failed to extract Python results${NC}"
         PYTHON_AVAILABLE=false
@@ -293,9 +344,9 @@ PYTHON_EOF
 fi
 
 # ============================================================================
-# 5. tiny-clj Benchmark (3 runs, take median)
+# 5. tiny-clj Benchmark (${RUNS} runs, take median)
 # ============================================================================
-echo -e "${BLUE}⚡ Running tiny-clj benchmark (3 runs)...${NC}"
+echo -e "${BLUE}⚡ Running tiny-clj benchmark (${RUNS} runs)...${NC}"
 
 # Create modified version of benchmarks/fibonacci.clj with timing output
 # All code runs in a single execution (one runtime initialization)
@@ -309,13 +360,15 @@ cat > "$TEMP_CLJ_TINY" << TINYCLJ_EOF
     (+ (fib (- n 1)) (fib (- n 2)))))
 
 ;; Measurement with ${ITERATIONS} iterations (same as Clojure/JVM)
-;; All iterations run in one execution - runtime initialized only once
-;; Use time macro to measure execution time - inline the code to ensure it's executed
-(time
-  (let [iterations ${ITERATIONS}]
-    (dotimes [i iterations] (fib ${FIB_N}))))
+;; Repeat ${RUNS} times in a single execution (median computed by shell)
+(let [iterations ${ITERATIONS}
+      runs ${RUNS}]
+  (dotimes [run runs]
+    (time
+      (dotimes [i iterations] (fib ${FIB_N})))))
 
 (println (str "ITERATIONS=${ITERATIONS}"))
+(println (str "RUNS=${RUNS}"))
 (println (str "BENCHMARK_COMPLETE=true"))
 TINYCLJ_EOF
 
@@ -327,39 +380,42 @@ else
     TINYCLJ_BIN=$(find . -name "tiny-clj-repl" -type f -executable 2>/dev/null | head -1)
 fi
 
-# Function to extract time from tiny-clj output
-extract_tinyclj_time() {
+# Extract all "Elapsed time" values (ms) from tiny-clj output.
+# Handles both "msecs" and "µsecs/μsecs".
+extract_tinyclj_times_ms() {
     local output="$1"
-    local elapsed_time=$(echo "$output" | grep -E "Elapsed time:" | sed -E 's/.*Elapsed time: ([0-9.]+) (msecs|μsecs).*/\1 \2/')
-    local time_value=$(echo "$elapsed_time" | awk '{print $1}')
-    local time_unit=$(echo "$elapsed_time" | awk '{print $2}')
-    
-    if [ "$time_unit" = "μsecs" ]; then
-        echo "scale=3; $time_value / 1000" | bc
-    elif [ "$time_unit" = "msecs" ]; then
-        echo "$time_value"
-    else
-        echo "0"
-    fi
+    echo "$output" | awk '
+        /Elapsed time:/ {
+            # tokens: Elapsed time: <value> <unit>
+            val = $3; unit = $4;
+            if (unit == "msecs") {
+                print val;
+            } else if (unit == "µsecs" || unit == "μsecs") {
+                printf "%.3f\n", (val / 1000.0);
+            }
+        }
+    '
 }
 
 if [ -n "$TINYCLJ_BIN" ] && [ -f "$TINYCLJ_BIN" ]; then
-    # Run 3 measurements
-    TIMES=()
-    for run in 1 2 3; do
-        TINYCLJ_OUTPUT=$("$TINYCLJ_BIN" -f "$TEMP_CLJ_TINY" 2>&1)
-        RUN_TIME=$(extract_tinyclj_time "$TINYCLJ_OUTPUT")
-        TIMES+=("$RUN_TIME")
-        echo -e "  Run $run: ${RUN_TIME}ms"
+    TINYCLJ_OUTPUT=$("$TINYCLJ_BIN" -f "$TEMP_CLJ_TINY" 2>&1)
+    TIMES=($(extract_tinyclj_times_ms "$TINYCLJ_OUTPUT"))
+
+    # If more timings are present for any reason, take the last ${RUNS}
+    if [ "${#TIMES[@]}" -gt "$RUNS" ]; then
+        TIMES=("${TIMES[@]: -$RUNS}")
+    fi
+
+    # Print individual runs for visibility
+    i=1
+    for t in "${TIMES[@]}"; do
+        echo -e "  Run $i: ${t}ms"
+        i=$((i + 1))
     done
-    
-    # Sort and take median (middle value of 3)
-    SORTED_TIMES=$(printf '%s\n' "${TIMES[@]}" | sort -n)
-    TINYCLJ_TIME_MS=$(echo "$SORTED_TIMES" | sed -n '2p')  # Median (2nd of 3)
-    
-    # Also show min/max for reference
-    MIN_TIME=$(echo "$SORTED_TIMES" | head -1)
-    MAX_TIME=$(echo "$SORTED_TIMES" | tail -1)
+
+    TINYCLJ_TIME_MS=$(median_value "${TIMES[@]}")
+    MIN_TIME=$(min_value "${TIMES[@]}")
+    MAX_TIME=$(max_value "${TIMES[@]}")
     
     TINYCLJ_ITERATIONS=${ITERATIONS}
     if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ]; then
@@ -382,7 +438,7 @@ rm -f "$TEMP_CLJ_TINY"
 if [ -n "$TINYCLJ_TIME_MS" ] && [ "$TINYCLJ_TIME_MS" != "0" ] && [ -n "$TIME_PER_ITER_TINYCLJ" ]; then
     # Format time per iteration for display
     TIME_PER_ITER_FORMATTED=$(echo "$TIME_PER_ITER_TINYCLJ" | awk '{if ($1 < 0.001) printf "%.6f", $1; else printf "%.3f", $1}')
-    echo -e "${GREEN}✅ tiny-clj: ${TINYCLJ_TIME_MS}ms median (${TIME_PER_ITER_FORMATTED}ms/iter, range: ${MIN_TIME}-${MAX_TIME}ms)${NC}"
+    echo -e "${GREEN}✅ tiny-clj: ${TINYCLJ_TIME_MS}ms median (${TIME_PER_ITER_FORMATTED}ms/iter, runs: ${RUNS}, range: ${MIN_TIME}-${MAX_TIME}ms)${NC}"
 else
     echo -e "${RED}❌ Failed to extract tiny-clj results${NC}"
     TINYCLJ_TIME_MS=0
