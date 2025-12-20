@@ -168,7 +168,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
-    CLJ_ASSERT(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
+    unsigned char fn_tag = TAG(fn);
+    CLJ_ASSERT(fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE);
 
     // Check if it's a native function (CljCFunc) or Clojure function (CljFunction)
     if (is_native_fn(fn)) {
@@ -1288,7 +1289,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     }
 
     // Error: op is a list (should have been evaluated earlier)
-    if (op && list_type_matches(TAG(op))) {
+    if (op && list_type_matches(op_tag)) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call list as a function");
     }

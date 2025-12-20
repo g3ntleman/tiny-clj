@@ -792,8 +792,10 @@ ID assoc3(ID *args, unsigned int argc) {
 
     if (!coll) return NULL;
 
+    unsigned char coll_tag = TAG(coll);
+
     // Handle vectors
-    if (coll && TAG(coll) == CLJ_VECTOR) {
+    if (coll_tag == CLJ_VECTOR) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljVector *v = as_vector(coll);
@@ -805,7 +807,7 @@ ID assoc3(ID *args, unsigned int argc) {
     }
 
     // Handle maps
-    if (coll && TAG(coll) == CLJ_MAP) {
+    if (coll_tag == CLJ_MAP) {
         // Note: key can be NULL (nil) - that's a valid key in Clojure!
         CljMap *result = map_assoc((CljMap*)coll, key, val);
         return RETAIN(result);
@@ -828,8 +830,9 @@ ID native_dissoc(ID *args, unsigned int argc) {
     CljObject *map = args[0];
     if (!map) return NULL;
 
+    unsigned char map_tag = TAG(map);
     // Only support maps
-    if (TAG(map) != CLJ_MAP && TAG(map) != CLJ_MAP_TRANSIENT) {
+    if (map_tag != CLJ_MAP && map_tag != CLJ_MAP_TRANSIENT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "dissoc only works on maps",
                        __FILE__, __LINE__, 0);
@@ -876,10 +879,13 @@ ID native_merge(ID *args, unsigned int argc) {
     unsigned int start_idx = 0;
     
     for (unsigned int i = 0; i < argc; i++) {
-        if (args[i] && (TAG(args[i]) == CLJ_MAP || TAG(args[i]) == CLJ_MAP_TRANSIENT)) {
-            result = (CljMap*)args[i];
-            start_idx = i + 1;
-            break;
+        if (args[i]) {
+            unsigned char tag = TAG(args[i]);
+            if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
+                result = (CljMap*)args[i];
+                start_idx = i + 1;
+                break;
+            }
         }
     }
     
@@ -891,7 +897,8 @@ ID native_merge(ID *args, unsigned int argc) {
         ID m = args[i];
         if (!m) continue;  // Skip nil
         
-        if (TAG(m) != CLJ_MAP && TAG(m) != CLJ_MAP_TRANSIENT) {
+        unsigned char m_tag = TAG(m);
+        if (m_tag != CLJ_MAP && m_tag != CLJ_MAP_TRANSIENT) {
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                            "merge only works on maps",
                            __FILE__, __LINE__, 0);
@@ -1070,7 +1077,8 @@ ID native_into(ID *args, unsigned int argc) {
             unsigned int count = vector_count((CljVector*)from);
             for (unsigned int i = 0; i < count; i++) {
                 ID entry = vector_nth((CljVector*)from, i);
-                if (entry && (TAG(entry) == CLJ_VECTOR || TAG(entry) == CLJ_VECTOR_TRANSIENT)) {
+                unsigned char entry_tag = entry ? TAG(entry) : 0;
+                if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT) {
                     CljVector *pair = (CljVector*)entry;
                     if (vector_count(pair) >= 2) {
                         result = map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1));
@@ -1307,13 +1315,14 @@ ID native_count(ID *args, unsigned int argc) {
         return fixnum(0);
     }
 
+    int tag = TAG(coll);
+
     // Handle CLJ_SEQ (sequences from rest, etc.)
-    if (coll && TAG(coll) == CLJ_SEQ) {
+    if (tag == CLJ_SEQ) {
         return fixnum(seq_count(coll));
     }
 
     if (coll) {
-        int tag = TAG(coll);
         if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
             return (fixnum(map_count((CljMap*)coll)));
         } else if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
@@ -1607,7 +1616,8 @@ ID native_schedule(ID *args, unsigned int argc) {
 
     // Second argument: function to execute (must be a function)
     CljObject *fn_obj = args[1];
-    if (!fn_obj || (TAG(fn_obj) != CLJ_FUNC && TAG(fn_obj) != CLJ_CLOSURE)) {
+    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
+    if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule requires a function as second argument",
                        __FILE__, __LINE__, 0);
@@ -1679,7 +1689,8 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
 
     // Third argument: function to execute (must be a function)
     CljObject *fn_obj = args[2];
-    if (!fn_obj || (TAG(fn_obj) != CLJ_FUNC && TAG(fn_obj) != CLJ_CLOSURE)) {
+    unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
+    if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic requires a function as third argument",
                        __FILE__, __LINE__, 0);
@@ -3383,7 +3394,8 @@ static ID normalize_require_spec(ID spec, bool *needs_release) {
             if (first_sym == SYM_QUOTE) {
                 // (quote x) => x
                 ID quoted = LIST_REST(list) ? LIST_FIRST(as_list(LIST_REST(list))) : NULL;
-                if (quoted && (TAG(quoted) == CLJ_SYMBOL || TAG(quoted) == CLJ_VECTOR)) {
+                unsigned char quoted_tag = quoted ? TAG(quoted) : 0;
+                if (quoted_tag == CLJ_SYMBOL || quoted_tag == CLJ_VECTOR) {
                     return quoted;
                 }
             }
@@ -3450,7 +3462,8 @@ ID native_require(ID *args, unsigned int argc) {
         normalized_specs[i] = spec;
         needs_release[i] = release_spec;
 
-        if (spec && TAG(spec) != CLJ_SYMBOL && TAG(spec) != CLJ_VECTOR) {
+        unsigned char spec_tag = spec ? TAG(spec) : 0;
+        if (spec && spec_tag != CLJ_SYMBOL && spec_tag != CLJ_VECTOR) {
             throw_exception(EXCEPTION_TYPE, "require expects a symbol or vector", __FILE__, __LINE__, 0);
             for (unsigned int j = 0; j <= i; j++) {
                 if (needs_release[j]) {
@@ -4775,7 +4788,9 @@ ID native_symbol_p(ID *args, unsigned int argc) {
 
 ID native_fn_p(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "fn?");
-    return (args[0] && (TAG(args[0]) == CLJ_FUNC || TAG(args[0]) == CLJ_CLOSURE)) ? clj_true : clj_false;
+    if (!args[0]) return clj_false;
+    unsigned char tag = TAG(args[0]);
+    return (tag == CLJ_FUNC || tag == CLJ_CLOSURE) ? clj_true : clj_false;
 }
 
 ID native_char_p(ID *args, unsigned int argc) {

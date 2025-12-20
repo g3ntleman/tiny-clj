@@ -329,20 +329,22 @@ CljSeqIterator* make_seq(ID obj) {
     // Handle nil and empty collections - return nil singleton
     if (!obj) return NULL;
     
+    unsigned char obj_tag = TAG(obj);
+    
     // If already a CLJ_SEQ, return it directly (no need to wrap again)
-    if (obj && TAG(obj) == CLJ_SEQ) {
+    if (obj_tag == CLJ_SEQ) {
         CljSeqIterator *seq = as_seq(obj);
         return seq;  // Already a seq, return as-is
     }
     
     // Check if collection is empty
-    if (obj && TAG(obj) == CLJ_VECTOR) {
+    if (obj_tag == CLJ_VECTOR) {
         CljVector *vec = as_vector((CljObject*)obj);
         if (vec && vector_count(vec) == 0) return NULL;
-    } else if (obj && list_type_matches(TAG(obj))) {
+    } else if (list_type_matches(obj_tag)) {
         CljList *list = as_list((CljObject*)obj);
         if (!LIST_FIRST(list)) return NULL;
-    } else if (obj && (TAG(obj) == CLJ_MAP || TAG(obj) == CLJ_MAP_TRANSIENT)) {
+    } else if (obj_tag == CLJ_MAP || obj_tag == CLJ_MAP_TRANSIENT) {
         CljMap *map = as_map(obj);
         if (!map || map->count == 0) return NULL;
     }
