@@ -139,7 +139,8 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
     
     # Create temporary Clojure script with warmup and measurement
     # Uses the same code from benchmarks/fibonacci.clj
-    TEMP_CLJ=$(mktemp /tmp/fib_benchmark_XXXXXX.clj)
+    # macOS/BSD mktemp requires the XXXXXX at the end of the template (no suffix)
+    TEMP_CLJ=$(mktemp /tmp/fib_benchmark_clj_XXXXXX)
     cat > "$TEMP_CLJ" << CLOJURE_EOF
 ;; Fibonacci function from benchmarks/fibonacci.clj (original benchmarks-game version)
 (defn fib [n]
@@ -168,7 +169,7 @@ if [ "$CLOJURE_AVAILABLE" = true ]; then
             time-per-iter (/ test-time-ms iterations)]
         ;; IMPORTANT: Avoid locale-dependent formatting (decimal comma) -> print raw doubles (dot)
         (println (str "RUN_" (inc run) "_TEST_TIME_MS=" test-time-ms))
-        (println (str "RUN_" (inc run) "_TIME_PER_ITER_MS=" time-per-iter))))))
+        (println (str "RUN_" (inc run) "_TIME_PER_ITER_MS=" time-per-iter)))))
   (println (str "ITERATIONS=" iterations))
   (println (str "RUNS=" runs)))
 CLOJURE_EOF
@@ -209,7 +210,8 @@ if [ "$CLJS_AVAILABLE" = true ]; then
     
     if [ "$CLJS_RUNTIME" = "node" ]; then
         # Use plain JavaScript (equivalent ClojureScript would compile to similar code)
-        TEMP_JS=$(mktemp /tmp/fib_benchmark_XXXXXX.js)
+        # macOS/BSD mktemp requires the XXXXXX at the end of the template (no suffix)
+        TEMP_JS=$(mktemp /tmp/fib_benchmark_js_XXXXXX)
         cat > "$TEMP_JS" << JS_EOF
 // ClojureScript-equivalent fibonacci (no TCO/recur)
 function fib(n) {
@@ -229,7 +231,7 @@ for (let r = 0; r < runs; r++) {
     const end = process.hrtime.bigint();
     const testTimeMs = Number(end - start) / 1000000;
     const timePerIter = testTimeMs / iterations;
-    // Avoid JS template strings here because bash expands ${...} in heredocs.
+    // Avoid JS template strings here to keep heredoc expansion simple.
     console.log("RUN_" + (r + 1) + "_TEST_TIME_MS=" + testTimeMs.toFixed(2));
     console.log("RUN_" + (r + 1) + "_TIME_PER_ITER_MS=" + timePerIter.toFixed(6));
 }
@@ -242,7 +244,8 @@ JS_EOF
         rm -f "$TEMP_JS"
     else
         # Use planck or lumo
-        TEMP_CLJS=$(mktemp /tmp/fib_benchmark_XXXXXX.cljs)
+        # macOS/BSD mktemp requires the XXXXXX at the end of the template (no suffix)
+        TEMP_CLJS=$(mktemp /tmp/fib_benchmark_cljs_XXXXXX)
         cat > "$TEMP_CLJS" << CLJS_EOF
 (defn fib [n]
   (if (< n 2)
@@ -294,7 +297,8 @@ TIME_PER_ITER_PYTHON=0
 if [ "$PYTHON_AVAILABLE" = true ]; then
     echo -e "${BLUE}🐍 Running Python3 benchmark (${RUNS} runs)...${NC}"
     
-    TEMP_PY=$(mktemp /tmp/fib_benchmark_XXXXXX.py)
+    # macOS/BSD mktemp requires the XXXXXX at the end of the template (no suffix)
+    TEMP_PY=$(mktemp /tmp/fib_benchmark_py_XXXXXX)
     cat > "$TEMP_PY" << PYTHON_EOF
 import time
 
@@ -350,7 +354,7 @@ echo -e "${BLUE}⚡ Running tiny-clj benchmark (${RUNS} runs)...${NC}"
 
 # Create modified version of benchmarks/fibonacci.clj with timing output
 # All code runs in a single execution (one runtime initialization)
-TEMP_CLJ_TINY=$(mktemp /tmp/fib_benchmark_tiny_XXXXXX.clj 2>/dev/null || echo "/tmp/fib_benchmark_tiny_$$.clj")
+TEMP_CLJ_TINY=$(mktemp /tmp/fib_benchmark_tiny_XXXXXX 2>/dev/null || echo "/tmp/fib_benchmark_tiny_$$")
 rm -f "$TEMP_CLJ_TINY"
 cat > "$TEMP_CLJ_TINY" << TINYCLJ_EOF
 ;; Fibonacci function from benchmarks/fibonacci.clj (original benchmarks-game version)
