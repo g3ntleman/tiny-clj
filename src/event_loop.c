@@ -204,7 +204,7 @@ void event_loop_enqueue(CljObject *fn_zero_arity, CljMap *result_channel) {
     CljVector *task_vec = task_queue_get();
     if (!task_vec) return;
     
-    CljMap *task_map = task_to_map(RETAIN(fn_zero_arity), result_channel ? RETAIN(result_channel) : NULL);
+    CljMap *task_map = task_to_map(RETAIN(fn_zero_arity), RETAIN(result_channel));
     if (!task_map) {
         RELEASE(fn_zero_arity);
         RELEASE(result_channel);

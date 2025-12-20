@@ -3003,7 +3003,7 @@ ID native_slurp(ID *args, unsigned int argc) {
     CljString *result = file_slurp(filename_str);
 
     // file_slurp throws exception on errors, so if we get here, result is valid
-    return result ? AUTORELEASE(result) : NULL;
+    return AUTORELEASE(result);
 }
 
 // Forward declaration for eval_source_in_current_state (defined below in require section)
@@ -4240,7 +4240,7 @@ ID native_repeat(ID *args, unsigned int argc) {
 
     // Fill vector with repeated value
     for (int i = 0; i < count; i++) {
-        ID val = value ? RETAIN(value) : NULL;
+        ID val = RETAIN(value);
         v = vector_conj(v, val);
         RELEASE(val); // vector_conj retains, so release our copy - RELEASE handles NULL
     }
