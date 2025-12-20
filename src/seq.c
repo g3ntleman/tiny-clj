@@ -198,10 +198,16 @@ bool seq_iter_next(SeqIterator *iter) {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
                 CljObject *rest = LIST_REST(node);
+                // Check if rest is a non-empty list (not NULL, is a list type, and has elements)
+                // The empty list singleton has LIST_FIRST == NULL
                 if (rest && list_type_matches(TAG(rest))) {
-                    iter->state.list.current = rest;
-                    iter->state.list.index++;
-                    return true;
+                    CljList *rest_list = as_list(rest);
+                    // Only continue if rest has at least one element
+                    if (LIST_FIRST(rest_list) != NULL || LIST_REST(rest_list) != NULL) {
+                        iter->state.list.current = rest;
+                        iter->state.list.index++;
+                        return true;
+                    }
                 }
             }
             // Mark as exhausted

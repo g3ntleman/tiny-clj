@@ -550,11 +550,11 @@ R"CLOJURE(
 
 ^#^{:doc "Returns a vector of [(take n coll) (drop n coll)]."}
 (defn split-at [n coll]
-  (vector (vec (take n coll)) (vec (drop n coll))))
+  [(vec (take n coll)) (vec (drop n coll))])
 
 ^#^{:doc "Returns a vector of [(take-while pred coll) (drop-while pred coll)]."}
 (defn split-with [pred coll]
-  (vector (vec (take-while pred coll)) (vec (drop-while pred coll))))
+  [(vec (take-while pred coll)) (vec (drop-while pred coll))])
 
 ; ============================================================================
 ; Map Construction Functions (Phase 6)
@@ -591,7 +591,7 @@ R"CLOJURE(
 
 ^#^{:doc "Takes a set of functions and returns a fn that is the juxtaposition of those fns."}
 (defn juxt [f g]
-  (fn [x] (vector (f x) (g x))))
+  (fn [x] [(f x) (g x)]))
 
 ^#^{:doc "Takes a fn f and returns a fn that takes the same arguments as f, has the same effects, if any, and returns the opposite truth value."}
 (defn complement [f]

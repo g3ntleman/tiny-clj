@@ -469,11 +469,8 @@ TEST(test_complement_pos) {
 // --- repeatedly ---
 
 TEST(test_repeatedly_count) {
-    // Test that repeatedly produces correct number of elements
-    // Note: Avoiding count/vec due to iterator bug - test via nth instead
-    assert_eval_truthy("(= (nth (repeatedly 5 (fn [] :x)) 4) :x)");
-    // Test that 5th index throws or returns nil (out of bounds)
-    assert_eval_nil("(nth (repeatedly 5 (fn [] :x)) 5 nil)");
+    // (count (vec (repeatedly 5 (fn [] 1)))) => 5
+    assert_eval_truthy("(= (count (vec (repeatedly 5 (fn [] 1)))) 5)");
 }
 
 TEST(test_repeatedly_values) {
