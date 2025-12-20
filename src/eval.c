@@ -388,7 +388,7 @@ static inline ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
 
     // Fast-path: Check frame first (most common case for parameters)
     if (frame) {
-        ID frame_value = FRAME_NIL_SENTINEL;
+        ID frame_value = NOT_FOUND;
         if (frame_lookup(frame, sym, &frame_value)) {
             return frame_value;
         }
@@ -530,7 +530,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, ctx->frame, body, get_eval_state(ctx, NULL));
             const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
             if (resolved_id) {
-                if (resolved_id == FRAME_NIL_SENTINEL) {
+                if (resolved_id == NOT_FOUND) {
                     return NULL;
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
@@ -727,7 +727,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 CljMap *fallback_env = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
                 ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, fallback_env, ctx->frame, body, eval_st);
                 if (resolved_id) {
-                    if (resolved_id == FRAME_NIL_SENTINEL) {
+                    if (resolved_id == NOT_FOUND) {
                         return NULL;
                     }
                     // resolve_symbol_in_env returns values from map_get (retained) or eval_symbol (AUTORELEASE)
@@ -2611,7 +2611,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         if (ctx && ctx->frame) {
             ID frame_value = NULL;
             if (frame_lookup(ctx->frame, expr, &frame_value)) {
-                if (frame_value == FRAME_NIL_SENTINEL) {
+                if (frame_value == NOT_FOUND) {
                     return NULL;  // Parameter bound to nil
                 }
                 if (!frame_value) return NULL;
@@ -2628,7 +2628,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             EvalState *eval_st = get_eval_state(ctx, st);
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, env, ctx->frame, expr, eval_st);
             if (resolved_id) {
-                if (resolved_id == FRAME_NIL_SENTINEL) {
+                if (resolved_id == NOT_FOUND) {
                     return NULL;
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception

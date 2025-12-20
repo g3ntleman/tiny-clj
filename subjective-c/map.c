@@ -22,12 +22,8 @@ static CljMap map_empty_singleton_data = {
 };
 CljMap *map_empty_singleton = &map_empty_singleton_data;
 
-// Global sentinels for special values
+// Global sentinel for special values (NOT_FOUND)
 CljObject g_not_found_sentinel = { .type = CLJ_NIL, .flags = 0, .rc = SINGLETON_RC };
-
-// Sentinel for encoding nil (NULL) in call frames
-static char frame_nil_sentinel_storage;
-ID g_frame_nil_sentinel_value = &frame_nil_sentinel_storage;
 
 // === CljValue API (Phase 1: Parallel) ===
 

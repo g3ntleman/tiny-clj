@@ -47,6 +47,10 @@ typedef struct CljObject {
     int16_t rc;
 } CljObject;
 
+// Sentinel for distinguishing "not found" or "nil" from NULL pointer
+extern CljObject g_not_found_sentinel;
+#define NOT_FOUND (&g_not_found_sentinel)
+
 /*
  * CljObject.flags byte layout for symbols:
  *
