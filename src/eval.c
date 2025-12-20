@@ -447,7 +447,7 @@ static inline ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
 // Convert a CallFrame chain into a heap-based env_stack for closures
 static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack) {
     if (!frame) {
-        return parent_stack ? RETAIN(parent_stack) : NULL;
+        return RETAIN(parent_stack);
     }
 
     CljList *parent_with_frames = frame_chain_to_env_stack(frame->parent, parent_stack);
@@ -2893,14 +2893,12 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
         // For symbols, look up in environment (if provided) or namespace
         if (eval_env && TAG(eval_env) == CLJ_MAP) {
             CljObject *resolved = map_get((CljValue)eval_env, (CljValue)expr, NULL);
-            // map_get returns retained values - use AUTORELEASE for eval_time
-            result = resolved ? AUTORELEASE(resolved) : NULL;
+            result = AUTORELEASE(resolved);
         }
         // If not found in environment, try namespace lookup
         if (!result && st) {
             CljObject *resolved = ns_resolve(st, as_symbol(expr));
-            // ns_resolve returns retained values - use AUTORELEASE for eval_time
-            result = resolved ? AUTORELEASE(resolved) : NULL;
+            result = AUTORELEASE(resolved);
         }
     } else {
         // Literal value - return as-is (no memory management needed for immediates)
