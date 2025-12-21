@@ -63,6 +63,7 @@ extern CljSymbol *SYM_GO;
 extern CljSymbol *SYM_TIME;
 extern CljSymbol *SYM_DEREF;
 extern CljSymbol *SYM_NIL;
+extern CljSymbol *SYM_AMP;  // & for variadic parameters
 
 // Global Symbol pointers for builtins
 extern CljSymbol *SYM_PLUS;

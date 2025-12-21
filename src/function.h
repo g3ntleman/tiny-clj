@@ -22,6 +22,7 @@ typedef struct {
     CljList *env_stack;  // Environment stack (list of maps) - idiomatic Clojure-style
     const char *name;
     struct CljNamespace *ns;
+    int8_t variadic_index;  // -1 = not variadic, >= 0 = index of & in params
 } CljFunction;
 
 CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns);
