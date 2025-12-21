@@ -357,13 +357,15 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     // Skip docstring if present (string as second element)
     int params_index = 2;
     ID params_obj = list_get_element(list, params_index);
-    if (params_obj && TAG(params_obj) == CLJ_STRING) {
+    unsigned char params_tag = params_obj ? TAG(params_obj) : 0;
+    if (params_tag == CLJ_STRING) {
         params_index = 3;
         params_obj = list_get_element(list, params_index);
+        params_tag = params_obj ? TAG(params_obj) : 0;
     }
     
     // Get params vector
-    if (!params_obj || TAG(params_obj) != CLJ_VECTOR) {
+    if (params_tag != CLJ_VECTOR) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
             "defmacro params must be a vector",
             __FILE__, __LINE__, 0);
