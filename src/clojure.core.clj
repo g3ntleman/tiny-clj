@@ -9,20 +9,10 @@ R"CLOJURE(
 ; ============================================================================
 ; Arithmetic Functions
 ; ============================================================================
-^#^{:doc "Returns the sum of a and b."}
-(def add (fn [a b] (+ a b)))
-^#^{:doc "Returns the difference of a and b."}
-(def sub (fn [a b] (- a b)))
-^#^{:doc "Returns the product of a and b."}
-(def mul (fn [a b] (* a b)))
-^#^{:doc "Returns the quotient of a and b."}
-(def div (fn [a b] (/ a b)))
 ^#^{:doc "Increments a number by 1. Returns the number plus one."}
 (def inc (fn [x] (+ x 1)))
 ^#^{:doc "Decrements a number by 1. Returns the number minus one."}
 (def dec (fn [x] (- x 1)))
-^#^{:doc "Returns the square of x (x * x)."}
-(def square (fn [x] (* x x)))
 
 ; ============================================================================
 ; Numeric Predicates
@@ -36,7 +26,7 @@ R"CLOJURE(
 ^#^{:doc "Returns true if x is even, false otherwise."}
 (def even? (fn [x] (= (mod x 2) 0)))
 ^#^{:doc "Returns true if x is odd, false otherwise."}
-(def odd? (fn [x] (not (= (mod x 2) 0))))
+(def odd? (fn [x] (= (mod x 2) 1)))
 
 ; ============================================================================
 ; Comparison & Logic
@@ -84,6 +74,8 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns its argument."}
 (def identity (fn [x] x))
+^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
+(def constantly (fn [x] (fn [arg] x)))
 
 ; ============================================================================
 ; Higher-Order Functions
@@ -96,21 +88,11 @@ R"CLOJURE(
 
 ^#^{:doc "Returns a lazy sequence of the items in coll for which (pred item) returns true. pred must be free of side-effects. Returns a transducer when no collection is provided."}
 (def filter (fn [pred coll]
-  (let [step (fn [pred coll acc]
-                (if (empty? coll)
-                  (if (empty? acc)
-                    nil
-                    (reverse acc))
-                  (if (pred (first coll))
-                    (step pred (rest coll) (cons (first coll) acc))
-                    (step pred (rest coll) acc))))]
-    (step pred coll (list)))))
-
-; ============================================================================
-; Utility Functions
-; ============================================================================
-^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
-(def constantly (fn [x] (fn [arg] x)))
+  (if (empty? coll)
+    (list)
+    (if (pred (first coll))
+      (cons (first coll) (filter pred (rest coll)))
+      (filter pred (rest coll))))))
 
 ; ============================================================================
 ; Metadata Functions

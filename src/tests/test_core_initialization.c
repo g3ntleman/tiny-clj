@@ -75,11 +75,12 @@ TEST(test_core_initialization_arithmetic_functions) {
     CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     TEST_ASSERT_NOT_NULL(clojure_core);
     
-    const char *functions[] = {"add", "sub", "mul", "div", "inc", "dec", "square"};
+    const char *functions[] = {"inc", "dec"};
+    int num_functions = sizeof(functions) / sizeof(functions[0]);
     int missing_count = 0;
     char missing_names[256] = "";
     
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < num_functions; i++) {
         CljSymbol *sym = intern_symbol_global(functions[i]);
         CljObject *value = map_get(clojure_core->mappings, sym, NULL);
         
@@ -194,12 +195,13 @@ TEST(test_clojure_core_loads_all_functions) {
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core cache should be set");
     
     if (clojure_core && clojure_core->mappings) {
-        // Check for add, sub, mul, div, inc, dec, square
-        const char *functions[] = {"add", "sub", "mul", "div", "inc", "dec", "square"};
+        // Check for inc, dec
+        const char *functions[] = {"inc", "dec"};
+        int num_functions = sizeof(functions) / sizeof(functions[0]);
         int missing_count = 0;
         char missing_names[256] = "";
         
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < num_functions; i++) {
             CljSymbol *sym = intern_symbol_global(functions[i]);
             CljObject *value = map_get(clojure_core->mappings, sym, NULL);
             
