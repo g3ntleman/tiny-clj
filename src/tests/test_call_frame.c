@@ -8,6 +8,15 @@
 #include "../tiny_clj.h"
 #include "../environment.h"
 
+// Helper to create a vector from an array of IDs
+static CljVector *make_params_vec(ID *params, int count) {
+    CljVector *vec = make_vector(count, CLJ_VECTOR);
+    for (int i = 0; i < count; i++) {
+        vec = vector_conj(vec, params[i]);
+    }
+    return vec;
+}
+
 // ============================================================================
 // TEST: Basic frame initialization and lookup
 // ============================================================================
@@ -61,11 +70,14 @@ TEST(test_frame_nested_lookup) {
         
         ID parent_params[1];
         ID parent_values[1];
-        parent_params[0] = parent_sym;
+        ID parent_params_arr[1];
+        ID parent_values[1];
+        parent_params_arr[0] = parent_sym;
         parent_values[0] = parent_val;
+        CljVector *parent_params_vec = make_params_vec(parent_params_arr, 1);
         
         frame_init(parent_frame, NULL);
-        frame_set_bindings(parent_frame, NULL, parent_params, parent_values, 1);
+        frame_set_bindings(parent_frame, NULL, parent_params_vec, parent_values);
         
         // Create child frame
         CallFrame *child_frame = (CallFrame*)STACK_ALLOC(char, frame_allocation_size(capacity));
@@ -75,13 +87,14 @@ TEST(test_frame_nested_lookup) {
         RETAIN(child_sym);
         // Fixnums are immediate values, no need to retain
         
-        ID child_params[1];
+        ID child_params_arr[1];
         ID child_values[1];
-        child_params[0] = child_sym;
+        child_params_arr[0] = child_sym;
         child_values[0] = child_val;
+        CljVector *child_params_vec = make_params_vec(child_params_arr, 1);
         
         frame_init(child_frame, parent_frame);
-        frame_set_bindings(child_frame, parent_frame, child_params, child_values, 1);
+        frame_set_bindings(child_frame, parent_frame, child_params_vec, child_values);
         
         // Child should find its own parameter
         ID found_child = NULL;
@@ -98,8 +111,8 @@ TEST(test_frame_nested_lookup) {
         // Cleanup
         frame_release(child_frame);
         frame_release(parent_frame);
-        RELEASE(parent_sym);
-        RELEASE(child_sym);
+        RELEASE(parent_params_vec);
+        RELEASE(child_params_vec);
     });
 }
 
@@ -122,15 +135,18 @@ TEST(test_frame_multiple_params) {
         
         ID params[2];
         ID values[2];
-        params[0] = sym1;
-        params[1] = sym2;
+        ID params_arr[2];
+        ID values[2];
+        params_arr[0] = sym1;
+        params_arr[1] = sym2;
         values[0] = val1;
         values[1] = val2;
+        CljVector *params_vec = make_params_vec(params_arr, 2);
         
         frame_init(frame, NULL);
-        frame_set_bindings(frame, NULL, params, values, 2);
+        frame_set_bindings(frame, NULL, params_vec, values);
 
-        TEST_ASSERT_EQUAL_INT(2, frame->param_count);
+        TEST_ASSERT_EQUAL_INT(2, vector_count(frame->params));
 
         ID found1 = NULL;
         TEST_ASSERT_TRUE(frame_lookup(frame, sym1, &found1));
@@ -144,8 +160,7 @@ TEST(test_frame_multiple_params) {
         
         // Cleanup
         frame_release(frame);
-        RELEASE(sym1);
-        RELEASE(sym2);
+        RELEASE(params_vec);
     });
 }
 
@@ -167,11 +182,14 @@ TEST(test_frame_lookup_not_found) {
         
         ID params[1];
         ID values[1];
-        params[0] = param_sym;
+        ID params_arr[1];
+        ID values[1];
+        params_arr[0] = param_sym;
         values[0] = param_val;
+        CljVector *params_vec = make_params_vec(params_arr, 1);
         
         frame_init(frame, NULL);
-        frame_set_bindings(frame, NULL, params, values, 1);
+        frame_set_bindings(frame, NULL, params_vec, values);
         
         // Lookup of unknown symbol should return NULL
         ID found = NULL;
@@ -180,8 +198,7 @@ TEST(test_frame_lookup_not_found) {
         
         // Cleanup
         frame_release(frame);
-        RELEASE(param_sym);
-        RELEASE(unknown_sym);
+        RELEASE(params_vec);
     });
 }
 
@@ -201,20 +218,22 @@ TEST(test_frame_release_cleanup) {
         
         ID params[1];
         ID values[1];
-        params[0] = param_sym;
+        ID params_arr[1];
+        ID values[1];
+        params_arr[0] = param_sym;
         values[0] = param_val;
+        CljVector *params_vec = make_params_vec(params_arr, 1);
         
         frame_init(frame, NULL);
-        frame_set_bindings(frame, NULL, params, values, 1);
+        frame_set_bindings(frame, NULL, params_vec, values);
         
         // Release should clean up
         frame_release(frame);
 
-        TEST_ASSERT_EQUAL_INT(0, frame->param_count);
+        TEST_ASSERT_NULL(frame->params);  // params should be NULL after release
         
         // Cleanup
-        RELEASE(param_sym);
-    });
+        RELEASE(params_vec);
 }
 
 // ============================================================================
@@ -241,11 +260,15 @@ TEST(test_frame_lookup_circular_reference) {
         
         ID params1[1] = {sym1};
         ID values1[1] = {val1};
-        frame_set_bindings(frame1, frame2, params1, values1, 1);
+        ID params1_arr[1] = {sym1};
+        ID values1[1] = {val1};
+        CljVector *params1_vec = make_params_vec(params1_arr, 1);
+        frame_set_bindings(frame1, frame2, params1_vec, values1);
         
-        ID params2[1] = {sym2};
+        ID params2_arr[1] = {sym2};
         ID values2[1] = {val2};
-        frame_set_bindings(frame2, frame1, params2, values2, 1);
+        CljVector *params2_vec = make_params_vec(params2_arr, 1);
+        frame_set_bindings(frame2, frame1, params2_vec, values2);
         
         // Lookup should detect circular reference and return false
         ID found = NULL;
@@ -257,8 +280,8 @@ TEST(test_frame_lookup_circular_reference) {
         // Cleanup
         frame_release(frame2);
         frame_release(frame1);
-        RELEASE(sym1);
-        RELEASE(sym2);
+        RELEASE(params1_vec);
+        RELEASE(params2_vec);
     });
 }
 
@@ -279,11 +302,14 @@ TEST(test_frame_lookup_repeated_calls) {
         
         ID params[1];
         ID values[1];
-        params[0] = param_sym;
+        ID params_arr[1];
+        ID values[1];
+        params_arr[0] = param_sym;
         values[0] = param_val;
+        CljVector *params_vec = make_params_vec(params_arr, 1);
         
         frame_init(frame, NULL);
-        frame_set_bindings(frame, NULL, params, values, 1);
+        frame_set_bindings(frame, NULL, params_vec, values);
         
         // Call lookup multiple times with same symbol - should not cause infinite loop
         ID found = NULL;
@@ -295,8 +321,7 @@ TEST(test_frame_lookup_repeated_calls) {
         
         // Cleanup
         frame_release(frame);
-        RELEASE(param_sym);
-        RELEASE(unknown_sym);
+        RELEASE(params_vec);
     });
 }
 
@@ -319,11 +344,14 @@ TEST(test_resolve_symbol_in_env_with_frame) {
         
         ID params[1];
         ID values[1];
-        params[0] = param_sym;
+        ID params_arr[1];
+        ID values[1];
+        params_arr[0] = param_sym;
         values[0] = param_val;
+        CljVector *params_vec = make_params_vec(params_arr, 1);
         
         frame_init(frame, NULL);
-        frame_set_bindings(frame, NULL, params, values, 1);
+        frame_set_bindings(frame, NULL, params_vec, values);
         
         // Test that frame_lookup works correctly
         ID found = NULL;
@@ -334,8 +362,7 @@ TEST(test_resolve_symbol_in_env_with_frame) {
         
         // Cleanup
         frame_release(frame);
-        RELEASE(param_sym);
-    });
+        RELEASE(params_vec);
 }
 
 // ============================================================================
@@ -464,19 +491,22 @@ TEST(test_frame_lookup_problematic_scenario) {
         frame_init(frame3, NULL);
         ID params3[1] = {sym3};
         ID values3[1] = {val3};
-        frame_set_bindings(frame3, NULL, params3, values3, 1);
+        ID params3_arr[1] = {sym3};
+        ID values3[1] = {val3};
+        CljVector *params3_vec = make_params_vec(params3_arr, 1);
+        frame_set_bindings(frame3, NULL, params3_vec, values3);
         
         frame_init(frame2, frame3);
-        ID params2[1] = {sym2};
+        ID params2_arr[1] = {sym2};
         ID values2[1] = {val2};
-        frame_set_bindings(frame2, frame3, params2, values2, 1);
+        CljVector *params2_vec = make_params_vec(params2_arr, 1);
+        frame_set_bindings(frame2, frame3, params2_vec, values2);
         
         frame_init(frame1, frame2);
-        ID params1[1] = {sym1};
+        ID params1_arr[1] = {sym1};
         ID values1[1] = {val1};
-        frame_set_bindings(frame1, frame2, params1, values1, 1);
-        
-        // Lookup a1 in frame1 should find it
+        CljVector *params1_vec = make_params_vec(params1_arr, 1);
+        frame_set_bindings(frame1, frame2, params1_vec, values1);
         ID found1 = NULL;
         TEST_ASSERT_TRUE(frame_lookup(frame1, sym1, &found1));
         TEST_ASSERT_NOT_NULL(found1);
@@ -500,6 +530,9 @@ TEST(test_frame_lookup_problematic_scenario) {
         frame_release(frame3);
         RELEASE(sym1);
         RELEASE(sym2);
+        RELEASE(params1_vec);
+        RELEASE(params2_vec);
+        RELEASE(params3_vec);
         RELEASE(sym3);
     });
 }

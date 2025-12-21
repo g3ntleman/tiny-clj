@@ -8,14 +8,14 @@
 #include "map.h"
 #include "list.h"
 #include "symbol.h"
+#include "vector.h"
 
 // Maximum parameters per function (eliminates __chkstk_darwin calls)
 #define CALLFRAME_MAX_PARAMS 16
 
 typedef struct CallFrame {
     struct CallFrame *parent;  // Parent frame (for nested calls)
-    ID *params;                // Pointer to func->params_array (borrowed, no RETAIN)
-    int param_count;           // Number of active bindings
+    CljVector *params;         // Direct Vector (borrowed, no RETAIN) or NULL for let bindings
     ID values[CALLFRAME_MAX_PARAMS];  // Fixed size to avoid dynamic stack allocation
 } CallFrame;
 
@@ -37,8 +37,8 @@ static inline size_t frame_allocation_size(int capacity) {
 /** Initialize an empty frame (caller allocates memory via alloca) */
 void frame_init(CallFrame *frame, CallFrame *parent);
 
-/** Replace frame contents with provided bindings (copies pointers, retains values) */
-void frame_set_bindings(CallFrame *frame, CallFrame *parent, ID *params, ID *values, int count);
+/** Replace frame contents with provided bindings (params_vec provides both symbols and count) */
+void frame_set_bindings(CallFrame *frame, CallFrame *parent, CljVector *params_vec, ID *values);
 
 /** Look up a symbol in the frame chain (returns true if binding exists, even if value is nil) */
 bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value);
