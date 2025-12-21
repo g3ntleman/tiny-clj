@@ -19,10 +19,6 @@ struct CljVector {
     ID data[];  // Flexible array member - elements stored at end of malloc block
 };
 
-// Offsets for inline accessors (defined via offsetof, declared extern in vector.h)
-const unsigned int cljvector_count_offset = offsetof(struct CljVector, count);
-const unsigned int cljvector_data_offset = offsetof(struct CljVector, data);
-
 // Empty-vector singleton: CLJ_VECTOR with rc=SINGLETON_RC, statically initialized
 // Note: Flexible array member cannot be initialized, so we use a struct with no data array
 static struct {
@@ -44,7 +40,11 @@ CljVector* empty_vector(void) {
     return clj_empty_vector_singleton;
 }
 
-// vector_count is now inline in vector.h
+/** Get vector count. Returns 0 if vec is NULL. */
+unsigned int vector_count(CljVector *vec) {
+    if (!vec) return 0;
+    return vec->count;
+}
 
 /** Get element at index. Returns element or NULL if index out of bounds or nil.
  * Element lifetime is tied to the vector - caller must not release.
