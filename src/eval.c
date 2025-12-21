@@ -23,6 +23,7 @@
 #include "memory.h"
 #include "meta.h"
 #include "list.h"
+#include "macro.h"
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
@@ -1182,6 +1183,32 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Handle def and ns before symbol resolution
     if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
     if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
+
+    // === MACRO EXPANSION ===
+    // Check if the operator is a macro and expand it before evaluation
+    if (original_op_sym) {
+        CljFunction *macro = lookup_macro_resolve(effective_st, original_op_sym);
+        if (macro) {
+            // Macro found - call it with unevaluated arguments
+            int argc = list_count(list) - 1;  // Exclude the operator
+            ID *args = NULL;
+            if (argc > 0) {
+                args = alloca(sizeof(ID) * argc);
+                for (int i = 0; i < argc; i++) {
+                    args[i] = list_get_element(list, i + 1);  // Unevaluated args
+                }
+            }
+            // Call macro function with unevaluated arguments
+            ID expanded = eval_function_call((CljObject*)macro, args, argc, effective_env, effective_st);
+            if (!expanded) return NULL;
+            
+            // Evaluate the expanded form - recursively call eval_list for lists
+            if (list_type_matches(TAG(expanded))) {
+                return eval_list(as_list(expanded), effective_env, effective_st, ctx);
+            }
+            return eval_body(expanded, effective_env, effective_st, ctx);
+        }
+    }
 
     // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_COMPARISON)) {

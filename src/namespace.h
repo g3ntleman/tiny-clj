@@ -18,6 +18,7 @@ typedef struct CljNamespace {
     CljObject base;           // type + rc (4 bytes) - must be first field
     CljSymbol *name;          // z.B. 'user', 'math' (Symbol instead of CljObject* for type safety)
     CljMap *mappings;         // Map: Symbol → CljObject (def, defn, vars)
+    CljMap *macro_mappings;   // Map: Symbol → CljFunction (Macro-Registry)
     CljMap *aliases;          // Map: Symbol → Symbol (Alias → full namespace name)
     const char *filename;    // optional: associated file
 } CljNamespace;

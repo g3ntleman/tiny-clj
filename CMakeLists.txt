@@ -111,6 +111,7 @@ list(APPEND SOURCES
     src/eval_sequence.c
     src/eval_special_forms.c
     src/to_string.c
+    src/macro.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -164,6 +165,7 @@ set(STM32_SOURCES
     src/eval_sequence.c
     src/eval_special_forms.c
     src/to_string.c
+    src/macro.c
 )
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -204,6 +206,7 @@ add_executable(tiny-clj-esp32
     src/eval_sequence.c
     src/eval_special_forms.c
     src/to_string.c
+    src/macro.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 
