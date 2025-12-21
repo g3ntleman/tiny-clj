@@ -296,6 +296,53 @@ ID parse_expr(Reader *reader, EvalState *st) {
       // Create (deref <expr>) list: (deref expr)
       return AUTORELEASE(make_ast_list(SYM_DEREF, make_ast_list(atom_expr, NULL)));
 
+    case '`':
+      // Handle quasiquote `x => (quasiquote x)
+      reader_consume(reader); // consume `
+      reader_skip_all(reader);
+      size_t qq_before = reader_offset(reader);
+      ID qq_expr = parse_expr(reader, st);
+      size_t qq_after = reader_offset(reader);
+      if (qq_after <= qq_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after quasiquote", reader);
+        return NULL;
+      }
+      if (!qq_expr) return NULL;
+      // Create (quasiquote <expr>) list
+      return AUTORELEASE(make_ast_list(SYM_QUASIQUOTE, make_ast_list(qq_expr, NULL)));
+
+    case '~':
+      // Handle unquote ~x => (unquote x) or splice-unquote ~@x => (splice-unquote x)
+      reader_consume(reader); // consume ~
+      if (reader_peek_char(reader) == '@') {
+        // splice-unquote ~@x
+        reader_consume(reader); // consume @
+        reader_skip_all(reader);
+        size_t sq_before = reader_offset(reader);
+        ID sq_expr = parse_expr(reader, st);
+        size_t sq_after = reader_offset(reader);
+        if (sq_after <= sq_before && !reader_eof(reader)) {
+          throw_parser_exception("Parser made no progress after splice-unquote", reader);
+          return NULL;
+        }
+        if (!sq_expr) return NULL;
+        // Create (splice-unquote <expr>) list
+        return AUTORELEASE(make_ast_list(SYM_SPLICE_UNQUOTE, make_ast_list(sq_expr, NULL)));
+      } else {
+        // unquote ~x
+        reader_skip_all(reader);
+        size_t uq_before = reader_offset(reader);
+        ID uq_expr = parse_expr(reader, st);
+        size_t uq_after = reader_offset(reader);
+        if (uq_after <= uq_before && !reader_eof(reader)) {
+          throw_parser_exception("Parser made no progress after unquote", reader);
+          return NULL;
+        }
+        if (!uq_expr) return NULL;
+        // Create (unquote <expr>) list
+        return AUTORELEASE(make_ast_list(SYM_UNQUOTE, make_ast_list(uq_expr, NULL)));
+      }
+
     case '\\':
       // Handle character literals: \a, \space, \tab, \newline, \return, etc.
       return parse_character(reader, st);

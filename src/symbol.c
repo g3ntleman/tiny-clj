@@ -32,6 +32,7 @@ CljSymbol *SYM_LET = NULL;
 CljSymbol *SYM_FN = NULL;
 CljSymbol *SYM_DEF = NULL;
 CljSymbol *SYM_DEFN = NULL;
+CljSymbol *SYM_DEFMACRO = NULL;
 CljSymbol *SYM_QUOTE = NULL;
 CljSymbol *SYM_QUASIQUOTE = NULL;
 CljSymbol *SYM_UNQUOTE = NULL;
@@ -149,6 +150,7 @@ DEFINE_STATIC_SPECIAL_SYMBOL(sym_let_data, "let");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_fn_data, "fn");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_def_data, "def");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_defn_data, "defn");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_defmacro_data, "defmacro");
 DEFINE_EXTERN_SYMBOL(sym_deref_data, "deref");
 DEFINE_STATIC_SYMBOL(sym_nil_data, "nil");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quote_data, "quote");
@@ -355,6 +357,7 @@ void init_special_symbols() {
     INIT_SPECIAL_SYMBOL(SYM_THROW, sym_throw_data);
     INIT_SPECIAL_SYMBOL(SYM_FINALLY, sym_finally_data);
     INIT_SPECIAL_SYMBOL(SYM_DEFN, sym_defn_data);
+    INIT_SPECIAL_SYMBOL(SYM_DEFMACRO, sym_defmacro_data);
     INIT_SYMBOL(SYM_DEREF, sym_deref_data);
     INIT_SYMBOL(SYM_NIL, sym_nil_data);
     INIT_SPECIAL_SYMBOL(SYM_VAR, sym_var_data);
@@ -545,6 +548,16 @@ void init_special_symbols() {
         ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
     }
     // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
+    
+    // Quasiquote Special Form - delegates to Clojure quasiquote-fn after bootstrap
+    if (SYM_QUASIQUOTE && (SYM_QUASIQUOTE->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_QUASIQUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quasiquote;
+    }
+    
+    // defmacro Special Form - defines macros in the current namespace
+    if (SYM_DEFMACRO && (SYM_DEFMACRO->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
+    }
     
     // destructure is a Clojure function, not a special form
     SYM_DESTRUCTURE = intern_symbol_global("destructure");

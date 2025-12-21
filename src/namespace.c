@@ -237,6 +237,8 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
         return NULL;
     }
     
+    ns->macro_mappings = NULL;  // Lazy initialization in register_macro
+    
     ns->aliases = make_map(16);
     if (!ns->aliases) {
         RELEASE(ns->mappings);
