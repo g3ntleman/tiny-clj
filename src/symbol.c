@@ -54,6 +54,7 @@ CljSymbol *SYM_TIME = NULL;
 CljSymbol *SYM_GO = NULL;
 CljSymbol *SYM_DEREF = NULL;
 CljSymbol *SYM_NIL = NULL;
+CljSymbol *SYM_AMP = NULL;  // & for variadic parameters
 
 // Builtin-Funktionen
 CljSymbol *SYM_PLUS = NULL;
@@ -153,6 +154,7 @@ DEFINE_STATIC_SPECIAL_SYMBOL(sym_defn_data, "defn");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_defmacro_data, "defmacro");
 DEFINE_EXTERN_SYMBOL(sym_deref_data, "deref");
 DEFINE_STATIC_SYMBOL(sym_nil_data, "nil");
+DEFINE_STATIC_SYMBOL(sym_amp_data, "&");  // variadic parameter marker
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quote_data, "quote");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quasiquote_data, "quasiquote");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_unquote_data, "unquote");
@@ -360,6 +362,7 @@ void init_special_symbols() {
     INIT_SPECIAL_SYMBOL(SYM_DEFMACRO, sym_defmacro_data);
     INIT_SYMBOL(SYM_DEREF, sym_deref_data);
     INIT_SYMBOL(SYM_NIL, sym_nil_data);
+    INIT_SYMBOL(SYM_AMP, sym_amp_data);
     INIT_SPECIAL_SYMBOL(SYM_VAR, sym_var_data);
     // Built-in functions - static structs with symbol table registration
     INIT_SPECIAL_SYMBOL(SYM_DEF, sym_def_data);

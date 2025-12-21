@@ -64,19 +64,30 @@ TEST(test_macro_nested_expansion) {
 // ============================================================================
 
 TEST(test_variadic_fn_basic) {
-    // BUG: Variadic parameters (& rest) don't work correctly
-    // ((fn [a & rest] rest) 1 2 3) returns 3 instead of (2 3)
-    TEST_IGNORE_MESSAGE("KNOWN BUG: & rest returns single value instead of list");
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // ((fn [a & rest] rest) 1 2 3) should return (2 3)
+    CljObject *result = eval_string("((fn [a & rest] rest) 1 2 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_EQUAL_INT(2, list_count(as_list(result)));
 }
 
 TEST(test_variadic_fn_empty_rest) {
-    // BUG: Variadic parameters cause ArityException with exact param count
-    TEST_IGNORE_MESSAGE("KNOWN BUG: & rest causes ArityException");
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // ((fn [a & rest] rest) 1) should return nil (no rest args)
+    CljObject *result = eval_string("((fn [a & rest] rest) 1)", g_test_eval_state);
+    TEST_ASSERT_NULL(result);  // nil
 }
 
 TEST(test_variadic_fn_many_args) {
-    // BUG: Variadic parameters cause ArityException with >3 args
-    TEST_IGNORE_MESSAGE("KNOWN BUG: & rest causes ArityException with many args");
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // ((fn [a & rest] (count rest)) 1 2 3 4 5) should return 4
+    CljObject *result = eval_string("((fn [a & rest] (count rest)) 1 2 3 4 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)result));
 }
 
 // ============================================================================
@@ -84,8 +95,16 @@ TEST(test_variadic_fn_many_args) {
 // ============================================================================
 
 TEST(test_variadic_macro_basic) {
-    // BUG: Variadic macros don't work due to & rest bug
-    TEST_IGNORE_MESSAGE("KNOWN BUG: Variadic macros fail - depends on & rest fix");
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a variadic macro that collects all args into a list
+    eval_string("(defmacro collect-all [& items] (cons 'list items))", g_test_eval_state);
+    
+    // Use the macro
+    CljObject *result = eval_string("(collect-all 1 2 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(list_type_matches(TAG(result)));
+    TEST_ASSERT_EQUAL_INT(3, list_count(as_list(result)));
 }
 
 TEST(test_variadic_macro_defn_style) {
@@ -112,9 +131,21 @@ TEST(test_variadic_macro_defn_style) {
 }
 
 TEST(test_variadic_macro_with_body) {
-    // BUG: This is the defn pattern - requires variadic macros to work
-    // (defmacro my-defn [name params & body] ...)
-    TEST_IGNORE_MESSAGE("KNOWN BUG: defn-style variadic macro - depends on & rest fix");
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a defn-style macro with variadic body
+    eval_string(
+        "(defmacro my-defn2 [name params & body] "
+        "  (list 'def name (list 'fn name params (cons 'do body))))",
+        g_test_eval_state);
+    
+    // Use the macro with multiple body expressions
+    eval_string("(my-defn2 add-and-double [x y] (+ x y) (* 2 (+ x y)))", g_test_eval_state);
+    
+    // Test the defined function - should return result of last body expr
+    CljObject *result = eval_string("(add-and-double 3 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(14, as_fixnum((CljValue)result));  // 2 * (3 + 4) = 14
 }
 
 // ============================================================================

@@ -12,6 +12,7 @@
 #include "runtime.h"
 #include "object.h"
 #include "vector.h"
+#include "symbol.h"  // For SYM_AMP
 
 /**
  * @brief Allocate and initialize parameter vector for function
@@ -56,6 +57,15 @@ static int allocate_function_params(CljFunction *func, ID *params, int param_cou
 CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_stack, const char *cname, struct CljNamespace *ns) {
     if (param_count < 0 || param_count > MAX_FUNCTION_PARAMS) return NULL;
     
+    // Find variadic index (position of & in params), -1 if not variadic
+    int8_t variadic_index = -1;
+    for (int i = 0; i < param_count; i++) {
+        if (params[i] == (ID)SYM_AMP) {
+            variadic_index = (int8_t)i;
+            break;
+        }
+    }
+    
     CljFunction *func = (CljFunction*)alloc(sizeof(CljFunction), 1, CLJ_CLOSURE);
     if (!func) throw_oom();
     
@@ -65,6 +75,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     func->env_stack = RETAIN(env_stack);
     func->name = cname ? strdup(cname) : NULL;
     func->ns = ns ? (struct CljNamespace*)RETAIN((CljObject*)ns) : NULL;
+    func->variadic_index = variadic_index;
     
     // Allocate and initialize parameter array
     if (allocate_function_params(func, params, param_count) != 0) {

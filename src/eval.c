@@ -191,11 +191,21 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
     }
 
-    // Arity check
+    // Arity check - variadic functions accept >= required params
     int param_count = func->params ? vector_count(func->params) : 0;
-    if (argc != param_count) {
-        throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
-        return NULL;
+    int8_t vi = func->variadic_index;
+    if (vi < 0) {
+        // Not variadic: exact match required
+        if (argc != param_count) {
+            throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+            return NULL;
+        }
+    } else {
+        // Variadic: at least vi required params (before &)
+        if (argc < vi) {
+            throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+            return NULL;
+        }
     }
 
     // This prevents stack overflow in deep recursion while still allowing proper cleanup
@@ -205,22 +215,56 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     ID current_args[16];
     ID recur_args[16];
     int used_recur_slots = 0;
-    // Only initialize slots we actually need (param_count, not all 16)
-    for (int i = 0; i < param_count; i++) {
-        current_args[i] = (i < argc) ? args[i] : NULL;
+    
+    // For variadic functions: build effective params/values (without & symbol)
+    ID effective_params[16];
+    ID effective_values[16];
+    int effective_count;
+    ID rest_list = NULL;  // Holds the rest args list (needs cleanup)
+    
+    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
+    
+    if (vi < 0) {
+        // Not variadic: use params/args directly
+        effective_count = param_count;
+        for (int i = 0; i < param_count; i++) {
+            effective_params[i] = params_array ? params_array[i] : NULL;
+            effective_values[i] = (i < argc) ? args[i] : NULL;
+        }
+    } else {
+        // Variadic: params before &, then rest param bound to list
+        effective_count = vi + 1;  // params before & + rest param
+        // Copy params before &
+        for (int i = 0; i < vi; i++) {
+            effective_params[i] = params_array[i];
+            effective_values[i] = args[i];
+        }
+        // Rest param is at params_array[vi + 1] (after &)
+        effective_params[vi] = params_array[vi + 1];
+        // Collect remaining args into a list (nil if none)
+        if (argc > vi) {
+            for (int i = argc - 1; i >= vi; i--) {
+                rest_list = (ID)make_list(args[i], (CljList*)rest_list);
+            }
+        }
+        effective_values[vi] = rest_list;
+    }
+    
+    // Copy to current_args for recur support
+    for (int i = 0; i < effective_count; i++) {
+        current_args[i] = effective_values[i];
         recur_args[i] = NULL;
     }
-    int current_argc = argc;
+    int current_argc = effective_count;
     int recur_arg_count = -1;
 
     // Create call frame with parameters (fixed-size stack variable)
-    CLJ_ASSERT(param_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
-    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
+    CLJ_ASSERT(effective_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
     CallFrame call_frame_storage;  // Fixed size, no __chkstk_darwin
     CallFrame *call_frame = &call_frame_storage;
     CallFrame *parent_frame = NULL;
     frame_init(call_frame, parent_frame);
-    frame_set_bindings(call_frame, parent_frame, params_array, current_args, current_argc);
+    frame_set_bindings(call_frame, parent_frame, effective_params, current_args, current_argc);
 
     // Legacy: Keep env_stack for closure environment (func->env_stack)
     // This is only used for closure bindings, not function parameters
