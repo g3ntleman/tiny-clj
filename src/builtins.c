@@ -2928,87 +2928,52 @@ ID native_with_meta(ID *args, unsigned int argc) {
 // Get macro function by symbol: (get-macro 'name) -> macro-fn or nil
 ID native_get_macro(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "get-macro");
-    
-    ID sym_arg = args[0];
-    if (!sym_arg || TAG(sym_arg) != CLJ_SYMBOL) {
-        return NULL;  // Not a symbol -> nil
-    }
-    
-    CljSymbol *sym = as_symbol(sym_arg);
-    
-    // Use lookup_macro_resolve to check current ns, clojure.core, and user
-    if (g_current_eval_state) {
-        CljFunction *macro = lookup_macro_resolve(g_current_eval_state, sym);
-        if (macro) {
-            return RETAIN((CljObject*)macro);
-        }
-    }
-    
-    return NULL;  // Not a macro -> nil
+    if (!args[0] || TAG(args[0]) != CLJ_SYMBOL || !g_current_eval_state) return NULL;
+    CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
+    return macro ? RETAIN((CljObject*)macro) : NULL;
 }
 
 // Apply function to arguments: (apply f args) or (apply f a b c args)
 ID native_apply(ID *args, unsigned int argc) {
     if (argc < 2) {
-        throw_exception(EXCEPTION_ARITY, "apply requires at least 2 arguments: (apply f args)", 
-                        __FILE__, __LINE__, 0);
+        throw_exception(EXCEPTION_ARITY, "apply requires at least 2 arguments", __FILE__, __LINE__, 0);
         return NULL;
     }
     
     ID fn = args[0];
-    if (!fn || (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE)) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "apply first argument must be a function",
-                        __FILE__, __LINE__, 0);
+    unsigned char fn_tag = fn ? TAG(fn) : 0;
+    if (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "apply: first argument must be a function", __FILE__, __LINE__, 0);
         return NULL;
     }
     
-    // Last argument must be a sequence
-    ID last_arg = args[argc - 1];
+    // Build args array: fixed args + sequence args
+    ID call_args[64];
+    int n = 0;
     
-    // Collect all arguments: fixed args (args[1] to args[argc-2]) + seq args
-    // Count fixed args
-    int fixed_count = argc - 2;  // Exclude fn and last_arg
-    
-    // Count seq args - handle different collection types
-    int seq_count = 0;
-    if (last_arg) {
-        unsigned char tag = TAG(last_arg);
-        if (list_type_matches(tag)) {
-            seq_count = list_count(as_list(last_arg));
-        } else if (tag == CLJ_VECTOR) {
-            seq_count = vector_count(as_vector(last_arg));
-        }
+    // Copy fixed args (args[1] to args[argc-2])
+    for (unsigned int i = 1; i < argc - 1 && n < 64; i++) {
+        call_args[n++] = args[i];
     }
     
-    int total_count = fixed_count + seq_count;
-    
-    // Build args array
-    ID *call_args = NULL;
-    if (total_count > 0) {
-        call_args = alloca(sizeof(ID) * total_count);
-        
-        // Copy fixed args
-        for (int i = 0; i < fixed_count; i++) {
-            call_args[i] = args[i + 1];
-        }
-        
-        // Copy seq args using appropriate accessor
-        if (last_arg && seq_count > 0) {
-            unsigned char tag = TAG(last_arg);
-            if (list_type_matches(tag)) {
-                for (int i = 0; i < seq_count; i++) {
-                    call_args[fixed_count + i] = list_get_element(as_list(last_arg), i);
-                }
-            } else if (tag == CLJ_VECTOR) {
-                for (int i = 0; i < seq_count; i++) {
-                    call_args[fixed_count + i] = vector_nth(as_vector(last_arg), i);
-                }
+    // Append sequence args from last argument
+    ID last = args[argc - 1];
+    if (last) {
+        unsigned char tag = TAG(last);
+        if (list_type_matches(tag)) {
+            for (CljList *l = as_list(last); l && n < 64; l = l->rest ? as_list(l->rest) : NULL) {
+                call_args[n++] = l->first;
+            }
+        } else if (tag == CLJ_VECTOR) {
+            CljVector *v = as_vector(last);
+            int cnt = vector_count(v);
+            for (int i = 0; i < cnt && n < 64; i++) {
+                call_args[n++] = vector_nth(v, i);
             }
         }
     }
     
-    // Call the function
-    return eval_function_call(fn, call_args, total_count, NULL, g_current_eval_state);
+    return eval_function_call(fn, call_args, n, NULL, g_current_eval_state);
 }
 
 // Create symbol from string (with optional namespace)

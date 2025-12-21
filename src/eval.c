@@ -170,8 +170,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
-    unsigned char fn_tag = TAG(fn);
-    CLJ_ASSERT(fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE);
+    CLJ_ASSERT(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
     // Check if it's a native function (CljCFunc) or Clojure function (CljFunction)
     if (is_native_fn(fn)) {
@@ -1189,24 +1188,20 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym) {
         CljFunction *macro = lookup_macro_resolve(effective_st, original_op_sym);
         if (macro) {
-            // Macro found - call it with unevaluated arguments
-            int argc = list_count(list) - 1;  // Exclude the operator
-            ID *args = NULL;
-            if (argc > 0) {
-                args = alloca(sizeof(ID) * argc);
-                for (int i = 0; i < argc; i++) {
-                    args[i] = list_get_element(list, i + 1);  // Unevaluated args
-                }
+            // Collect unevaluated arguments (single list traversal)
+            ID args[16];
+            int argc = 0;
+            for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
+                 cur && argc < 16;
+                 cur = cur->rest ? as_list(cur->rest) : NULL) {
+                args[argc++] = cur->first;
             }
-            // Call macro function with unevaluated arguments
+            // Call macro and evaluate expanded form
             ID expanded = eval_function_call((CljObject*)macro, args, argc, effective_env, effective_st);
             if (!expanded) return NULL;
-            
-            // Evaluate the expanded form - recursively call eval_list for lists
-            if (list_type_matches(TAG(expanded))) {
-                return eval_list(as_list(expanded), effective_env, effective_st, ctx);
-            }
-            return eval_body(expanded, effective_env, effective_st, ctx);
+            return list_type_matches(TAG(expanded))
+                ? eval_list(as_list(expanded), effective_env, effective_st, ctx)
+                : eval_body(expanded, effective_env, effective_st, ctx);
         }
     }
 
