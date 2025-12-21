@@ -764,9 +764,16 @@ ID native_cons(ID *args, unsigned int argc) {
     // Typ-basierte Behandlung
     switch (coll->type) {
         case CLJ_LIST:
-        case CLJ_SEQ:
-            result = (CljObject*)make_list(elem, (CljList*)coll);
+        case CLJ_SEQ: {
+            // Treat empty list like nil
+            CljList *list = (CljList*)coll;
+            if (list_count(list) == 0) {
+                result = (CljObject*)make_list(elem, NULL);
+            } else {
+                result = (CljObject*)make_list(elem, list);
+            }
             return AUTORELEASE(result);
+        }
 
         default: {
             // Vektor oder andere → zu Seq konvertieren

@@ -246,8 +246,9 @@ TEST(test_filter_empty) {
     
     // Test: (filter even? []) => ()
     CljObject *result = eval_string("(filter even? [])", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // Empty list is nil
-    
+    TEST_ASSERT_NOT_NULL(result);  // Returns empty list, not nil (Clojure semantics)
+    CljObject *count_result = eval_string("(count (filter even? []))", g_test_eval_state);
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(count_result));
 }
 
 TEST(test_filter_all_match) {
@@ -271,8 +272,9 @@ TEST(test_filter_none_match) {
     
     // Test: (filter neg? [1 2 3]) => ()
     CljObject *result = eval_string("(filter neg? [1 2 3])", g_test_eval_state);
-    TEST_ASSERT_NULL(result);  // Empty list is nil
-    
+    TEST_ASSERT_NOT_NULL(result);  // Returns empty list, not nil (Clojure semantics)
+    CljObject *count_result = eval_string("(count (filter neg? [1 2 3]))", g_test_eval_state);
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(count_result));
 }
 
 TEST(test_filter_with_custom_predicate) {
@@ -1086,4 +1088,45 @@ TEST(test_repeat) {
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec3));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 0)));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 1)));
+}
+
+// ============================================================================
+// CONS WITH EMPTY LIST TESTS
+// ============================================================================
+
+TEST(test_cons_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (cons 1 nil) => (1), count should be 1
+    CljObject *result = eval_string("(count (cons 1 nil))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+}
+
+TEST(test_cons_with_empty_list) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (cons 1 (list)) => (1), count should be 1
+    // This tests that (list) behaves like nil for cons
+    CljObject *result = eval_string("(count (cons 1 (list)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(result));
+}
+
+TEST(test_cons_chain_with_empty_list) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (cons 1 (cons 2 (list))) => (1 2), count should be 2
+    CljObject *result = eval_string("(count (cons 1 (cons 2 (list))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
+TEST(test_cons_chain_with_nil) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (cons 1 (cons 2 nil)) => (1 2), count should be 2
+    CljObject *result = eval_string("(count (cons 1 (cons 2 nil)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
 }
