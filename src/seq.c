@@ -203,12 +203,12 @@ bool seq_iter_next(SeqIterator *iter) {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
                 CljObject *rest = LIST_REST(node);
-                // Check if rest is a non-empty list (not NULL, is a list type, and has elements)
-                // The empty list singleton has LIST_FIRST == NULL
+                // Check if rest is a non-empty list
+                // Use list_empty to properly handle list with nil element
                 if (rest && list_type_matches(TAG(rest))) {
                     CljList *rest_list = as_list(rest);
-                    // Only continue if rest has at least one element
-                    if (LIST_FIRST(rest_list) != NULL || LIST_REST(rest_list) != NULL) {
+                    // Only continue if rest is not empty
+                    if (!list_empty(rest_list)) {
                         iter->state.list.current = rest;
                         iter->state.list.index++;
                         return true;
@@ -274,7 +274,8 @@ bool seq_iter_empty(const SeqIterator *iter) {
             }
             case CLJ_LIST: {
                 CljList *list = (CljList*)iter->container;
-                return LIST_FIRST(list) == NULL;
+                // Use list_empty to properly handle list with nil element
+                return list_empty(list);
             }
             case CLJ_STRING: {
                 CljString *str = (CljString*)iter->container;
@@ -485,19 +486,22 @@ int seq_count(ID obj) {
         CljSeqIterator *seq = as_seq(obj);
         if (!seq) return 0;
         
-        // Get count from embedded iterator state
+        // Get count from embedded iterator state (remaining elements)
         switch (seq->iter.seq_type) {
             case CLJ_VECTOR:
             case CLJ_VECTOR_TRANSIENT_WEAK:
             case CLJ_VECTOR_TRANSIENT:
-                return seq->iter.state.vec.count;
+                // Return remaining elements, not total count
+                return seq->iter.state.vec.count - seq->iter.state.vec.index;
             case CLJ_LIST:
                 // List doesn't have direct count in state, fall through to iterate
                 break;
             case CLJ_STRING:
-                return seq->iter.state.str.length;
+                // Return remaining characters, not total length
+                return seq->iter.state.str.length - seq->iter.state.str.index;
             case CLJ_MAP:
-                return seq->iter.state.map.count;
+                // Return remaining entries, not total count
+                return seq->iter.state.map.count - seq->iter.state.map.index;
             default:
                 return 0;
         }

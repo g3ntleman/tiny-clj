@@ -40,9 +40,14 @@ static inline bool is_list_like(ID obj) {
     return obj && list_type_matches(TAG(obj));
 }
 
-// Check if a list is empty (both first and rest are NULL)
+// Check if a list is empty (only the empty list singleton is truly empty)
+// A list with (nil . nil) is NOT empty - it has one nil element
+// Use is_singleton() to distinguish between empty list singleton and list with nil element
 static inline bool list_empty(CljList *list) {
-    return list == NULL || (LIST_FIRST(list) == NULL && LIST_REST(list) == NULL);
+    if (list == NULL) return true;
+    // Only the empty list singleton is empty (has SINGLETON_RC)
+    // A newly created list with (nil . NULL) is NOT empty - it has one nil element
+    return LIST_FIRST(list) == NULL && LIST_REST(list) == NULL && is_singleton((CljObject*)list);
 }
 
 // List creation and operations

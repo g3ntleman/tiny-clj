@@ -1130,3 +1130,40 @@ TEST(test_cons_chain_with_nil) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
 }
+
+// ============================================================================
+// SEQUENCE NIL ELEMENT TESTS
+// ============================================================================
+
+TEST(test_next_vector_with_nil_element) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (next [1 nil]) should return sequence with 1 element (nil)
+    // count should be 1, not 2
+    CljObject *count_result = eval_string("(count (next [1 nil]))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(count_result);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(count_result));
+    
+    // first element should be nil
+    CljObject *first_result = eval_string("(nil? (first (next [1 nil])))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_result);
+    TEST_ASSERT_TRUE(first_result == clj_true);
+}
+
+TEST(test_rest_vector_with_nil_element) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (rest [1 nil]) should return sequence with 1 element (nil)
+    CljObject *count_result = eval_string("(count (rest [1 nil]))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(count_result);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(count_result));
+}
+
+TEST(test_take_with_nil_element) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (take 2 [1 nil]) should return (1 nil), count 2
+    CljObject *count_result = eval_string("(count (take 2 [1 nil]))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(count_result);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(count_result));
+}
