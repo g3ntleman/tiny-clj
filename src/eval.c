@@ -215,11 +215,12 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
 
     // Create call frame with parameters (fixed-size stack variable)
     CLJ_ASSERT(param_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
+    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
     CallFrame call_frame_storage;  // Fixed size, no __chkstk_darwin
     CallFrame *call_frame = &call_frame_storage;
     CallFrame *parent_frame = NULL;
     frame_init(call_frame, parent_frame);
-    frame_set_bindings(call_frame, parent_frame, func->params, current_args);
+    frame_set_bindings(call_frame, parent_frame, params_array, current_args, current_argc);
 
     // Legacy: Keep env_stack for closure environment (func->env_stack)
     // This is only used for closure bindings, not function parameters
@@ -274,7 +275,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             used_recur_slots = current_argc;
 
             // Recreate call frame with new parameters (stack-allocated)
-            frame_set_bindings(call_frame, parent_frame, func->params, current_args);
+            frame_set_bindings(call_frame, parent_frame, params_array, current_args, current_argc);
 
             // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
@@ -451,18 +452,17 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
 
     CljList *parent_with_frames = frame_chain_to_env_stack(frame->parent, parent_stack);
 
-    int param_count = frame->params ? vector_count(frame->params) : 0;
-    int initial_capacity = param_count > 0 ? param_count : 4;
+    int initial_capacity = frame->param_count > 0 ? frame->param_count : 4;
     CljMap *frame_map = make_map(initial_capacity);
 
     if (frame->params) {
-        for (int i = 0; i < param_count; i++) {
-            ID key = vector_nth(frame->params, i);
-            if (!key) continue;
+    for (int i = 0; i < frame->param_count; i++) {
+            ID key = frame->params[i];
+        if (!key) continue;
 
             ID value = frame_decode_value(frame->values[i]);
-            CljMap *new_map = map_assoc(frame_map, key, value);
-            ASSIGN(frame_map, new_map);
+        CljMap *new_map = map_assoc(frame_map, key, value);
+        ASSIGN(frame_map, new_map);
         }
     }
 
@@ -2041,14 +2041,16 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     bool has_frame = pair_count > 0;
     CallFrame *let_frame = NULL;
-    CljVector *params_vec = NULL;  // Transient vector for symbols
-    ID binding_values[CALLFRAME_MAX_PARAMS];  // Stack array for values
+    ID *binding_params = NULL;
+    ID *binding_values = NULL;
     CallFrame let_frame_storage;
+    ID binding_slots[CALLFRAME_MAX_PARAMS * 2];
     if (has_frame) {
         CLJ_ASSERT(pair_count <= CALLFRAME_MAX_PARAMS && "Too many let bindings");
         let_frame = &let_frame_storage;
         frame_init(let_frame, ctx ? ctx->frame : NULL);
-        params_vec = make_vector(pair_count, CLJ_VECTOR_TRANSIENT);
+        binding_params = binding_slots;
+        binding_values = binding_slots + pair_count;
     }
 
     EvalContext let_ctx = ctx ? *ctx : (EvalContext){0};
@@ -2068,7 +2070,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
         if (!sym_val || TAG(sym_val) != CLJ_SYMBOL) {
             if (has_frame) frame_release(let_frame);
-            if (params_vec) RELEASE(params_vec);
             if (parent_stack_owned && parent_stack) {
                 RELEASE(parent_stack);
             }
@@ -2088,12 +2089,13 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         if (has_frame) {
-            params_vec = clj_conj(params_vec, sym_val);  // Add symbol to transient vector
+            binding_params[binding_index] = sym_val;
             binding_values[binding_index] = value;
             if (value && !IS_IMMEDIATE(value)) {
                 RETAIN((CljObject*)value);
             }
-            frame_set_bindings(let_frame, ctx ? ctx->frame : NULL, params_vec, binding_values);
+            frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
+                               binding_params, binding_values, binding_index + 1);
 
             // Make newly created bindings visible to subsequent initializers
             let_ctx.frame = let_frame;
@@ -2151,7 +2153,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     if (has_frame) {
         frame_release(let_frame);
-        if (params_vec) RELEASE(params_vec);
         RELEASE(frame_env_stack);
     }
     if (parent_stack_owned && parent_stack) {

@@ -27,16 +27,18 @@ void frame_init(CallFrame *frame, CallFrame *parent) {
 
     frame->parent = parent;
     frame->params = NULL;
+    frame->param_count = 0;
 }
 
-void frame_set_bindings(CallFrame *frame, CallFrame *parent, CljVector *params_vec, ID *values) {
+void frame_set_bindings(CallFrame *frame, CallFrame *parent, ID *params, ID *values, int count) {
     if (!frame) return;
+    if (count < 0) count = 0;
 
     frame_release(frame);
     frame->parent = parent;
-    frame->params = params_vec;  // Direct Vector (borrowed, no RETAIN)
+    frame->params = params;  // Only copy pointer (symbols are singletons)
+    frame->param_count = count;
     
-    int count = params_vec ? vector_count(params_vec) : 0;
     for (int i = 0; i < count; i++) {
         ID value = values ? values[i] : NULL;
         RETAIN(value);
@@ -66,10 +68,8 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
 
         // Search in current frame
         if (current->params) {
-            int param_count = vector_count(current->params);
-            ID *params_array = vector_as_array(current->params);
-            for (int i = param_count - 1; i >= 0; i--) {
-                ID bound = params_array[i];
+            for (int i = current->param_count - 1; i >= 0; i--) {
+                ID bound = current->params[i];
                 // Symbols are always interned - pointer comparison is sufficient
                 if (bound == symbol) {
                     ID encoded_value = current->values[i];
@@ -98,10 +98,8 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
     while (current && depth < MAX_DEPTH) {
         // Search in current frame (backwards scan for shadowing semantics)
         if (current->params) {
-            int param_count = vector_count(current->params);
-            ID *params_array = vector_as_array(current->params);
-            for (int i = param_count - 1; i >= 0; i--) {
-                ID bound = params_array[i];
+            for (int i = current->param_count - 1; i >= 0; i--) {
+                ID bound = current->params[i];
                 // Symbols are always interned - pointer comparison is sufficient
                 if (bound == symbol) {
                     ID encoded_value = current->values[i];
@@ -129,14 +127,14 @@ bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value) {
 void frame_release(CallFrame *frame) {
     if (!frame) return;
 
-    int param_count = frame->params ? vector_count(frame->params) : 0;
-    for (int i = 0; i < param_count; i++) {
+    for (int i = 0; i < frame->param_count; i++) {
         ID value = frame_decode_value(frame->values[i]);
         if (value && !IS_IMMEDIATE(value)) {
             RELEASE((CljObject*)value);
         }
         frame->values[i] = NULL;
     }
+    frame->param_count = 0;
     frame->params = NULL;
 }
 

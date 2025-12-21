@@ -2,16 +2,6 @@
 #include "eval.h"
 #include "value.h"
 #include "symbol.h"
-#include "vector.h"
-
-// Helper to create a vector from an array of IDs
-static CljVector *make_params_vec(ID *params, int count) {
-    CljVector *vec = make_vector(count, CLJ_VECTOR);
-    for (int i = 0; i < count; i++) {
-        vec = vector_conj(vec, params[i]);
-    }
-    return vec;
-}
 
 // Test factorial with recur
 TEST(test_recur_factorial) {
