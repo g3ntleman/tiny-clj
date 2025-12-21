@@ -300,14 +300,12 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
     ID expr = list_get_element(list, 1);
     if (!expr) return NULL;
     
-    // Try to resolve quasiquote-fn from clojure.core (lazy initialization)
+    // Resolve quasiquote-fn from clojure.core (lazy initialization)
     if (!g_quasiquote_fn) {
-        CljSymbol *quasiquote_fn_sym = intern_symbol_global("quasiquote-fn");
-        if (quasiquote_fn_sym) {
-            CljObject *resolved = ns_resolve(st, quasiquote_fn_sym);
-            if (resolved && TAG(resolved) == CLJ_FUNC) {
-                g_quasiquote_fn = as_function(resolved);
-            }
+        CljSymbol *sym = intern_symbol_global("quasiquote-fn");
+        CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
+        if (resolved && TAG(resolved) == CLJ_CLOSURE) {
+            g_quasiquote_fn = as_function(resolved);
         }
     }
     
