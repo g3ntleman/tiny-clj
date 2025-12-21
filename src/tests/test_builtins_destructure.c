@@ -509,3 +509,102 @@ TEST(test_destructure_loop_transformation) {
     // The function itself won't work correctly due to loop/recur bug
     TEST_ASSERT_NOT_NULL_MESSAGE(result, "loop with destructuring should parse without error");
 }
+
+// ============================================================================
+// TEST: Map (Associative) Destructuring
+// ============================================================================
+
+TEST(test_destructure_map_keys) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: {:keys [a b]} destructuring
+    CljObject *a = eval_string("(let [{:keys [a b]} {:a 1 :b 2}] a)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_TRUE(is_fixnum(a));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(a));
+    
+    CljObject *b = eval_string("(let [{:keys [a b]} {:a 1 :b 2}] b)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(b);
+    TEST_ASSERT_TRUE(is_fixnum(b));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(b));
+}
+
+TEST(test_destructure_map_keys_with_defaults) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: {:keys [x y] :or {y 0}} with missing key
+    CljObject *x = eval_string("(let [{:keys [x y] :or {y 0}} {:x 5}] x)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(x);
+    TEST_ASSERT_TRUE(is_fixnum(x));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(x));
+    
+    CljObject *y = eval_string("(let [{:keys [x y] :or {y 0}} {:x 5}] y)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(y);
+    TEST_ASSERT_TRUE(is_fixnum(y));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(y));  // default value
+}
+
+TEST(test_destructure_map_with_as) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: {:keys [a] :as m} binds the whole map
+    CljObject *a = eval_string("(let [{:keys [a] :as m} {:a 1 :b 2}] a)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_TRUE(is_fixnum(a));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(a));
+    
+    // m should be the whole map
+    CljObject *m_count = eval_string("(let [{:keys [a] :as m} {:a 1 :b 2}] (count m))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(m_count);
+    TEST_ASSERT_TRUE(is_fixnum(m_count));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(m_count));
+}
+
+// ============================================================================
+// TEST: keyword and name functions
+// ============================================================================
+
+TEST(test_keyword_function) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (keyword "foo") => :foo
+    CljObject *kw1 = eval_string("(keyword \"foo\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(kw1);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(kw1));
+    CljSymbol *sym1 = as_symbol((CljValue)kw1);
+    TEST_ASSERT_NOT_NULL(sym1);
+    TEST_ASSERT_TRUE(sym1->cname[0] == ':');
+    
+    // Test: (keyword 'bar) => :bar
+    CljObject *kw2 = eval_string("(keyword 'bar)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(kw2);
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(kw2));
+    
+    // Test: keyword on keyword returns same
+    CljObject *kw3 = eval_string("(keyword :baz)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(kw3);
+    CljSymbol *sym3 = as_symbol((CljValue)kw3);
+    TEST_ASSERT_TRUE(strcmp(sym3->cname, ":baz") == 0);
+}
+
+TEST(test_name_function) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: (name :foo) => "foo"
+    CljObject *name1 = eval_string("(name :foo)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(name1);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(name1));
+    TEST_ASSERT_EQUAL_STRING("foo", string_data(name1));
+    
+    // Test: (name 'bar) => "bar"
+    CljObject *name2 = eval_string("(name 'bar)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(name2);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(name2));
+    TEST_ASSERT_EQUAL_STRING("bar", string_data(name2));
+    
+    // Test: (name "string") => "string"
+    CljObject *name3 = eval_string("(name \"string\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(name3);
+    TEST_ASSERT_EQUAL_INT(CLJ_STRING, TAG(name3));
+    TEST_ASSERT_EQUAL_STRING("string", string_data(name3));
+}

@@ -106,6 +106,8 @@ ID native_integer_p(ID *args, unsigned int argc);
 ID native_float_p(ID *args, unsigned int argc);
 ID native_string_p(ID *args, unsigned int argc);
 ID native_keyword_p(ID *args, unsigned int argc);
+ID native_keyword(ID *args, unsigned int argc);
+ID native_name(ID *args, unsigned int argc);
 ID native_symbol_p(ID *args, unsigned int argc);
 ID native_fn_p(ID *args, unsigned int argc);
 ID native_char_p(ID *args, unsigned int argc);
@@ -2738,6 +2740,8 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_float_p_data.sym, native_float_p},
     {&sym_string_p_data.sym, native_string_p},
     {&sym_keyword_p_data.sym, native_keyword_p},
+    {&sym_keyword_data.sym, native_keyword},
+    {&sym_name_data.sym, native_name},
     {&sym_symbol_p_data.sym, native_symbol_p},
     {&sym_fn_p_data.sym, native_fn_p},
     {&sym_char_p_data.sym, native_char_p},
@@ -4946,6 +4950,62 @@ ID native_string_p(ID *args, unsigned int argc) {
 ID native_keyword_p(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "keyword?");
     return IS_KEYWORD(args[0]) ? clj_true : clj_false;
+}
+
+// (keyword name) - creates a keyword from a string or symbol
+// (keyword "foo") => :foo
+// (keyword 'foo) => :foo
+ID native_keyword(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "keyword");
+    ID arg = args[0];
+    
+    if (!arg) return NULL;  // nil -> nil
+    
+    // Already a keyword? Return as-is
+    if (IS_KEYWORD(arg)) return arg;
+    
+    const char *name = NULL;
+    
+    if (TAG(arg) == CLJ_STRING) {
+        name = string_data(arg);
+    } else if (TAG(arg) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(arg);
+        name = sym ? sym->cname : NULL;
+    }
+    
+    if (!name || !*name) return NULL;
+    
+    // Create keyword by prepending ":"
+    char kw_name[256];
+    snprintf(kw_name, sizeof(kw_name), ":%s", name);
+    
+    return (ID)intern_symbol_global(kw_name);
+}
+
+// (name x) - returns the name string of a symbol or keyword (without namespace or colon)
+// (name :foo) => "foo"
+// (name 'bar) => "bar"
+ID native_name(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "name");
+    ID arg = args[0];
+    
+    if (!arg) return NULL;
+    
+    // String? Return as-is
+    if (TAG(arg) == CLJ_STRING) return arg;
+    
+    if (TAG(arg) == CLJ_SYMBOL) {
+        CljSymbol *sym = as_symbol(arg);
+        if (!sym || !sym->cname) return NULL;
+        
+        const char *name = sym->cname;
+        // Skip leading colon for keywords
+        if (name[0] == ':') name++;
+        
+        return (ID)make_string(name);
+    }
+    
+    return NULL;
 }
 
 ID native_symbol_p(ID *args, unsigned int argc) {

@@ -263,6 +263,8 @@ DEFINE_EXTERN_SYMBOL(sym_integer_p_data, "integer?");
 DEFINE_EXTERN_SYMBOL(sym_float_p_data, "float?");
 DEFINE_EXTERN_SYMBOL(sym_string_p_data, "string?");
 DEFINE_EXTERN_SYMBOL(sym_keyword_p_data, "keyword?");
+DEFINE_EXTERN_SYMBOL(sym_keyword_data, "keyword");
+DEFINE_EXTERN_SYMBOL(sym_name_data, "name");
 DEFINE_EXTERN_SYMBOL(sym_symbol_p_data, "symbol?");
 DEFINE_EXTERN_SYMBOL(sym_fn_p_data, "fn?");
 DEFINE_EXTERN_SYMBOL(sym_char_p_data, "char?");
