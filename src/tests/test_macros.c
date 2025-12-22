@@ -178,4 +178,61 @@ TEST(test_macroexpand_shows_expansion) {
     TEST_ASSERT_NOT_NULL(sym);
 }
 
+// ============================================================================
+// TEST: Macros in anonymous functions (regression tests)
+// ============================================================================
+
+TEST(test_macro_in_anonymous_fn) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro
+    eval_string("(defmacro inc2 [x] (list '+ x 2))", g_test_eval_state);
+    
+    // Use macro inside anonymous function: ((fn [y] (inc2 y)) 5) => 7
+    CljObject *result = eval_string("((fn [y] (inc2 y)) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(7, as_fixnum((CljValue)result));
+}
+
+TEST(test_macro_in_reader_fn) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro
+    eval_string("(defmacro triple [x] (list '* x 3))", g_test_eval_state);
+    
+    // Use macro inside #() reader macro: (#(triple %) 4) => 12
+    CljObject *result = eval_string("(#(triple %) 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(12, as_fixnum((CljValue)result));
+}
+
+TEST(test_macro_generating_fn) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro that generates an anonymous function
+    eval_string("(defmacro make-doubler [] '(fn [x] (* x 2)))", g_test_eval_state);
+    
+    // Use macro that returns a function: ((make-doubler) 5) => 10
+    CljObject *result = eval_string("((make-doubler) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum((CljValue)result));
+}
+
+TEST(test_nested_macro_in_fn) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Define a macro
+    eval_string("(defmacro add [a b] (list '+ a b))", g_test_eval_state);
+    
+    // Use macro in nested anonymous functions: ((fn [x] ((fn [y] (add x y)) 3)) 5) => 8
+    CljObject *result = eval_string(
+        "((fn [x] ((fn [y] (add x y)) 3)) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(result));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)result));
+}
+
 
