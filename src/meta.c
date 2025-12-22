@@ -24,9 +24,8 @@
 // clj_equal is available via map.h -> equality.h
 
 void meta_registry_init() {
-    // Only initialize once – keep existing registry to preserve all metadata entries
     if (!g_runtime.meta_registry) {
-        g_runtime.meta_registry = (CljObject*)make_map(32); // Initial capacity for metadata entries
+        g_runtime.meta_registry = make_hashmap(32);
     }
 }
 
@@ -39,95 +38,43 @@ void meta_registry_cleanup() {
 
 void meta_set(ID v, ID meta) {
     if (!v) return;
-    
+
     meta_registry_init();
     if (!g_runtime.meta_registry) return;
     
-    // Use the pointer as key (simple implementation)
-    // A real implementation would use a hash of the pointer
-    CljMap *registry = (CljMap*)g_runtime.meta_registry;
-    CljMap *new_registry = map_assoc(registry, v, meta);
-    
-    // If map_assoc returned a new map (Copy-on-Write), update registry
-    // When RC=1, map_assoc mutates in-place and returns the same map
-    // When RC>1 or capacity full, map_assoc creates a new map
-    if (new_registry != registry) {
-        // New map was created (Copy-on-Write), update registry
-        // Use ASSIGN to properly handle reference counting
-        ASSIGN(g_runtime.meta_registry, (CljObject*)new_registry);
+    // Adopt semantics: build the updated registry first, then release the old one.
+    // This keeps key/value references valid during the transition.
+    CljHashMap *old_registry = g_runtime.meta_registry;
+    CljHashMap *new_registry = hashmap_assoc(old_registry, v, meta);
+    if (new_registry != old_registry) {
+        g_runtime.meta_registry = new_registry;
+        RELEASE(old_registry);
     }
     
 #if defined(DEBUG)
-    // Assertion: Verify that the metadata can be retrieved after setting
-    // This ensures that meta_set and meta_get work correctly together
     ID retrieved_meta = meta_get(v);
     if (meta != NULL) {
-        CLJ_ASSERT(retrieved_meta != NULL && "meta_set: metadata should be retrievable after setting");
-        CLJ_ASSERT(retrieved_meta == meta && "meta_set: retrieved metadata should match the set metadata");
+        CLJ_ASSERT(retrieved_meta != NULL && "meta_set: metadata should be retrievable");
+        CLJ_ASSERT(retrieved_meta == meta && "meta_set: retrieved metadata should match");
     }
-    // Note: If meta is NULL, retrieved_meta may also be NULL, which is acceptable
 #endif
 }
 
 ID meta_get(ID v) {
     if (!v || !g_runtime.meta_registry) return NULL;
-    
-    CljMap *registry = (CljMap*)g_runtime.meta_registry;
-    
-    // First try pointer comparison (fast path)
-    // CRITICAL: Use sentinel to distinguish "key not found" from "value is NULL"
-    // In Clojure, nil is a valid metadata value, so we need to distinguish these cases
-    ID result = map_get(registry, v, NOT_FOUND);
-    if (result != NOT_FOUND) {
-        // Key found (value can be NULL, which is valid - means metadata is explicitly nil)
-        return result;  // Can be NULL if metadata was explicitly set to nil
-    }
-    
-    if (!registry) return NULL;
-    
-    // For lists, we need to handle the case where symbols might have different namespaces
-    // but are structurally equivalent (e.g., unqualified symbols in different contexts)
-    if (list_type_matches(TAG(v))) {
-        MAP_FOR_EACH(registry, stored_key, value) {
-            if (stored_key == v) {
-                // Already checked above, but check again for safety
-                return value;
-            }
-            // For lists, try structural equality with namespace-agnostic symbol comparison
-            if (stored_key && list_type_matches(TAG(stored_key))) {
-                if (clj_equal(stored_key, v)) {
-                    return value;
-                }
-            }
-        }
-    } else {
-        // For non-lists, use standard structural equality
-        MAP_FOR_EACH(registry, stored_key, value) {
-            if (stored_key == v) {
-                // Already checked above, but check again for safety
-                return value;
-            }
-            // Try structural equality for non-interned objects (like lists)
-            if (stored_key && clj_equal(stored_key, v)) {
-                return value;
-            }
-        }
-    }
-    
-    return NULL;
+    return hashmap_get(g_runtime.meta_registry, v, NULL);
 }
 
 void meta_clear(ID v) {
     if (!v || !g_runtime.meta_registry) return;
     
-    // Use map_remove which always returns a new map (COW disabled)
-    CljMap *new_registry = map_remove((CljMap*)g_runtime.meta_registry, v);
-    if (new_registry != g_runtime.meta_registry) {
-        // New map was created, update registry
-        // Use ASSIGN to properly handle reference counting
-        ASSIGN(g_runtime.meta_registry, new_registry);
+    // Adopt semantics: build the updated registry first, then release the old one.
+    CljHashMap *old_registry = g_runtime.meta_registry;
+    CljHashMap *new_registry = hashmap_remove(old_registry, v);
+    if (new_registry != old_registry) {
+        g_runtime.meta_registry = new_registry;
+        RELEASE(old_registry);
     }
-    // If key was not found, map_remove returns original map (no change needed)
 }
 
 /**

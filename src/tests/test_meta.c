@@ -51,9 +51,9 @@ TEST(test_meta_registry_init) {
     TEST_ASSERT_NOT_NULL_MESSAGE(g_runtime.meta_registry, 
                                  "meta_registry should be initialized");
     
-    // Check that it's a map
-    TEST_ASSERT_EQUAL_MESSAGE(CLJ_MAP, TAG(g_runtime.meta_registry),
-                              "meta_registry should be a map");
+    // meta_registry is implemented as HashMap (O(1) lookup)
+    TEST_ASSERT_EQUAL_MESSAGE(CLJ_HASHMAP, TAG(g_runtime.meta_registry),
+                              "meta_registry should be a HashMap");
 }
 
 // ============================================================================

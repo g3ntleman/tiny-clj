@@ -5,11 +5,11 @@
 #include "kv_macros.h"  // For KV_KEY, KV_VALUE, KV_ASSIGN_PAIR
 #include <stdbool.h>
 
-// Sentinel for empty slots (NULL is a valid key: nil)
-#define HASHMAP_EMPTY ((CljObject*)(uintptr_t)2)
-
-// Sentinel for deleted entries (Linear Probing)
-#define HASHMAP_TOMBSTONE ((CljObject*)(uintptr_t)1)
+// Sentinel singletons (SINGLETON_RC makes RETAIN/RELEASE safe no-ops)
+extern CljObject g_hashmap_empty_sentinel;
+extern CljObject g_hashmap_tombstone_sentinel;
+#define HASHMAP_EMPTY (&g_hashmap_empty_sentinel)
+#define HASHMAP_TOMBSTONE (&g_hashmap_tombstone_sentinel)
 
 typedef struct {
     CljObject base;
@@ -37,6 +37,12 @@ unsigned int hashmap_count(CljHashMap *map);  // Returns unsigned int (never neg
 
 // Memory management registration
 void hashmap_register_release_fn(void);
+
+// Iteration (skips EMPTY and TOMBSTONE)
+#define HASHMAP_FOR_EACH(map, key_var, value_var) \
+    for (unsigned int _hm_i = 0; (map) && _hm_i < (map)->capacity; _hm_i++) \
+        if ((key_var = KV_KEY((map)->data, _hm_i)) != HASHMAP_EMPTY && key_var != HASHMAP_TOMBSTONE) \
+            if ((value_var = KV_VALUE((map)->data, _hm_i)), 1)
 
 #endif // SUBJECTIVE_C_HASHMAP_H
 

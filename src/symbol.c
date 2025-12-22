@@ -625,7 +625,14 @@ void symbol_table_add(CljSymbol *symbol) {
     
     // Insert symbol into HashMap with CljString key
     // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference
-    g_runtime.symbol_table = hashmap_assoc(g_runtime.symbol_table, key, symbol);
+    // Adopt semantics: build the updated table first, then release the old one.
+    // This keeps key/value references valid during rehash/copy transitions.
+    CljHashMap *old_table = g_runtime.symbol_table;
+    CljHashMap *new_table = hashmap_assoc(old_table, key, symbol);
+    if (new_table != old_table) {
+        g_runtime.symbol_table = new_table;
+        RELEASE(old_table);
+    }
     RELEASE(key);
 }
 
