@@ -1646,6 +1646,15 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
     }
 
+    // TCO: Transform recursive tail calls to recur for named functions
+    if (fn_name && body) {
+        CljObject *transformed = transform_recursive_tail_calls(body, (CljObject*)fn_name,
+                                                                 params, param_count, body);
+        if (transformed) {
+            body = transformed;
+        }
+    }
+
     // CRITICAL: Use env_stack from context if available (for closures)
     // This ensures that nested functions can access outer function parameters
     // OPTIMIZATION: Only create env_stack if we have a frame (lazy evaluation)

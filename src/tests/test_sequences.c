@@ -401,6 +401,38 @@ TEST(test_reverse_multiple_elements) {
     
 }
 
+TEST(test_reverse_list_with_nil_elements) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reverse '(1 nil 3)) => (3 nil 1)
+    // Store result once, then verify elements via vector conversion
+    CljObject *check = eval_string(
+        "(let [r (reverse '(1 nil 3))] "
+        "  (and (= 3 (count r)) "
+        "       (= 3 (first r)) "
+        "       (nil? (nth r 1)) "
+        "       (= 1 (nth r 2))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(check);
+    TEST_ASSERT_TRUE(clj_is_truthy(check));
+}
+
+TEST(test_reverse_vector_with_nil_elements) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reverse [1 nil 3]) => (3 nil 1)
+    // Store result once, then verify elements via single expression
+    CljObject *check = eval_string(
+        "(let [r (reverse [1 nil 3])] "
+        "  (and (= 3 (count r)) "
+        "       (= 3 (first r)) "
+        "       (nil? (nth r 1)) "
+        "       (= 1 (nth r 2))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(check);
+    TEST_ASSERT_TRUE(clj_is_truthy(check));
+}
+
 // ============================================================================
 // REDUCE TESTS
 // ============================================================================

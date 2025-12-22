@@ -709,7 +709,7 @@ ID native_partition(ID *args, unsigned int argc) {
     }
     RELEASE(partitions);
     
-    return result ? AUTORELEASE(RETAIN(result)) : empty_list();
+    return result ? AUTORELEASE(RETAIN((ID)result)) : (ID)empty_list();
 }
 
 // some: Returns first truthy value from predicate applied to collection
@@ -873,7 +873,7 @@ ID native_nilp(ID *args, unsigned int argc) {
     return clj_false;
 }
 
-// Reverse function that reverses a list
+// Reverse function that reverses any seqable collection
 ID native_reverse(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
 
@@ -886,74 +886,22 @@ ID native_reverse(ID *args, unsigned int argc) {
         return empty_list();
     }
 
-    // Handle lists
-    if (coll && list_type_matches(TAG(coll))) {
-        // Safe cast - we already checked is_type
-        CljList *list = (CljList*)coll;
-        // Use list_count to check if list is empty (handles nil elements correctly)
-        if (!list || list_count(list) == 0) {
-            return empty_list();
-        }
-
-        // Build reversed list by traversing and consing
-        CljList *result = NULL;
-        CljObject *current = coll;
-
-        while (current && list_type_matches(TAG(current))) {
-            // Safe cast - we already checked is_type
-            CljList *list = (CljList*)current;
-            if (!list) break;
-
-            CljObject *first = list->first;
-            if (first) {
-                CljList *new_result = make_list(first, result);
-                RELEASE(result);
-                result = new_result;
-            }
-
-            current = list->rest;
-        }
-
-        // If result is NULL, return empty list
-        if (!result) {
-            return empty_list();
-        }
-
-        return result;
-    }
-
-    // Handle vectors and other seqable collections
-    // Convert to seq and build reversed list
-    CljSeqIterator *seq = make_seq(coll);
-    if (!seq) {
-        // Empty or not seqable - return empty list
+    // Use SeqIterator for all seqable types (lists, vectors, strings, etc.)
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, coll)) {
         return empty_list();
     }
 
-    // Build reversed list by iterating through sequence
+    // Build reversed list by consing elements to front
     CljList *result = NULL;
-    while (!seq_empty(seq)) {
-        CljObject *first = seq_first(seq);
-        if (first) {
-            CljList *new_result = make_list(first, result);
-            RELEASE(result);
-            result = new_result;
-        }
-        // Advance iterator to next position
-        if (!seq_iter_next(&seq->iter)) {
-            break; // End of sequence
-        }
+    while (!seq_iter_empty(&iter)) {
+        ID elem = seq_iter_first(&iter);
+        // nil elements are preserved (no if check)
+        result = make_list(elem, result);
+        seq_iter_next(&iter);
     }
 
-    // Release seq object
-    RELEASE(seq);
-
-    // If result is NULL, return empty list
-    if (!result) {
-        return empty_list();
-    }
-
-    return result;
+    return result ? AUTORELEASE((ID)result) : (ID)empty_list();
 }
 
 ID assoc3(ID *args, unsigned int argc) {
