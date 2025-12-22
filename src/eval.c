@@ -221,7 +221,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         CljList *rest = NULL;
         for (int i = argc - 1; i >= vi; i--)
             rest = make_list(args[i], rest);
-        current_args[vi] = (ID)rest;
+        current_args[vi] = rest;
         effective_params = variadic_params;
     } else {
         // Not variadic: direct copy
@@ -818,7 +818,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 ID eval_elem = NULL;
                 
                 // Check for SYM_NIL before calling eval_body
-                if (elem && TAG(elem) == CLJ_SYMBOL && (CljObject*)elem == (CljObject*)SYM_NIL) {
+                if (elem && TAG(elem) == CLJ_SYMBOL && elem == SYM_NIL) {
                     eval_elem = NULL;  // nil evaluates to NULL
                 } else if (elem) {
                     eval_elem = eval_body(elem, env, st, ctx);
@@ -846,14 +846,14 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Evaluate key and value (nil should evaluate to NULL)
                 // Check for SYM_NIL before calling eval_body to avoid symbol resolution
                 ID eval_key = NULL;
-                if (key && key_tag == CLJ_SYMBOL && (CljObject*)key == (CljObject*)SYM_NIL) {
+                if (key && key_tag == CLJ_SYMBOL && key == (ID)SYM_NIL) {
                     eval_key = NULL;  // nil evaluates to NULL
                 } else if (key) {
                     eval_key = eval_body(key, env, st, ctx);
                 }
 
                 ID eval_value = NULL;
-                if (value && value_tag == CLJ_SYMBOL && (CljObject*)value == (CljObject*)SYM_NIL) {
+                if (value && value_tag == CLJ_SYMBOL && value == (ID)SYM_NIL) {
                     eval_value = NULL;  // nil evaluates to NULL
                 } else if (value) {
                     eval_value = eval_body(value, env, st, ctx);
@@ -1354,13 +1354,11 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Use current namespace mappings as environment for evaluation
     // This ensures that builtin functions like + are available during evaluation
     CljMap *eval_env = (st && st->current_ns) ? st->current_ns->mappings : env;
-    CljObject *value = NULL;
+    ID value = NULL;
     if (value_expr) {
-        if (value_expr && list_type_matches(TAG(value_expr))) {
-            value = eval_list(as_list(value_expr), eval_env, st, NULL);
-        } else {
-            value = eval_parsed(value_expr, st, eval_env);
-        }
+        value = list_type_matches(TAG(value_expr))
+            ? eval_list(as_list(value_expr), eval_env, st, NULL)
+            : eval_parsed(value_expr, st, eval_env);
     }
     // If value_expr is NULL, value remains NULL (nil case)
     // value can be NULL if nil was evaluated (legitimate case)
@@ -1410,7 +1408,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
 #ifdef ENABLE_META
     if (value) {
         unsigned char value_tag = TAG(value);
-        ID form_meta = meta_get((CljObject*)list);
+        ID form_meta = meta_get(list);
         
         // Optimized: Only process metadata for functions (most common case)
         // For non-functions, just copy form metadata if present
@@ -1428,10 +1426,10 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
                 if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
                     meta_map = map_assoc(meta_map, SYM_KW_NS, st->current_ns->name);
                 }
-                meta_set((CljObject*)value, (CljObject*)meta_map);
+                meta_set(value, meta_map);
             }
         } else if (form_meta) {
-            meta_set((CljObject*)value, form_meta);
+            meta_set(value, form_meta);
         }
     }
 #endif // ENABLE_META
@@ -1580,7 +1578,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     // (fn [x] expr1 expr2) → body becomes (do expr1 expr2)
     if (body_rest && body_rest->rest) {
         // Multiple body expressions - wrap in do block
-        body = (ID)make_list(SYM_DO, body_rest);
+        body = make_list(SYM_DO, body_rest);
     }
 
     // Parameters can be a vector [a b] or a list (a b)
@@ -1649,7 +1647,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     // TCO: Transform recursive tail calls to recur for named functions
     if (fn_name && body) {
         CljObject *transformed = transform_recursive_tail_calls(body, (CljObject*)fn_name,
-                                                                 params, param_count, body);
+                                                                 (CljObject**)params, param_count, body);
         if (transformed) {
             body = transformed;
         }
@@ -2209,7 +2207,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             binding_params[binding_index] = sym_val;
             binding_values[binding_index] = value;
             if (value && !IS_IMMEDIATE(value)) {
-                RETAIN((CljObject*)value);
+                RETAIN(value);
             }
             frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
                                binding_params, binding_values, binding_index + 1);
@@ -2231,7 +2229,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         if (value && !IS_IMMEDIATE(value)) {
-            RELEASE((CljObject*)value);
+            RELEASE(value);
         }
 
         binding_index++;
@@ -2261,7 +2259,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             RELEASE(result);
                 if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
                     result = body_expr;
-                RETAIN((CljObject*)result);
+                RETAIN(result);
                 } else {
                 result = eval_body(body_expr, body_env, st, &let_ctx);
             }
@@ -2430,7 +2428,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         RETAIN(result);
         for (unsigned int i = 0; i < count; i++) {
             ID elem = vector_nth(vec, i);
-            ID eval_elem = (elem && elem != (ID)SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
+            ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
             ASSIGN(result, vector_conj(result, eval_elem));
         }
         return AUTORELEASE(result);
