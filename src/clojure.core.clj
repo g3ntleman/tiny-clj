@@ -95,6 +95,13 @@ R"CLOJURE(
       (filter pred (rest coll))))))
 
 ; ============================================================================
+; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
+; ============================================================================
+^#^{:doc "Defines a function. Same as (def name (fn name [params] body...))."}
+(defmacro defn [name params & body]
+  (list 'def name (cons 'fn (cons name (cons params body)))))
+
+; ============================================================================
 ; Metadata Functions
 ; ============================================================================
 ^#^{:doc "Returns the metadata of obj, returns nil if there is no metadata."}

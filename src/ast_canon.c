@@ -400,36 +400,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 }
             }
             
-            // (defn name [params] body...)
-            if (head_sym == SYM_DEFN) {
-                CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_SYMBOL) {
-                    ID name_sym = rest1->first;
-                    CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
-                    if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
-                        CljVector *params = as_vector(rest2->first);
-                        CljList *body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
-                        
-                        if (params_need_destructuring(params)) {
-                            CljVector *expanded_let_bindings = NULL;
-                            CljVector *new_params = transform_params(st, params, &expanded_let_bindings);
-                            
-                            if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
-                                ID body = body_rest ? body_rest->first : NULL;
-                                CljList *let_form = make_list(SYM_LET,
-                                                              make_list(expanded_let_bindings,
-                                                                        make_list(body, NULL)));
-                                CljList *new_list = make_list(first,
-                                                    make_list(name_sym,
-                                                        make_list(new_params,
-                                                            make_list(let_form, NULL))));
-                                RELEASE(list);
-                                return canonicalize_expr(new_list, st, in_quote);
-                            }
-                        }
-                    }
-                }
-            }
+            // defn is now a macro, so destructuring is handled by the fn special form
+            // in the expanded form (def name (fn name params body))
         }
         // ========== END DESTRUCTURING TRANSFORMATION ==========
         
