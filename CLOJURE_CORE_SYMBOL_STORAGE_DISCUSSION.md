@@ -248,3 +248,4 @@ user=> (resolve 'clojure.core/inc)
 - Oder: Lookup unterstützt beide Varianten (qualifiziert und unqualifiziert)
 
 
+

@@ -201,3 +201,4 @@ map_get(clojure_core->mappings, unqualified, ...);  // → func
 - **Vorteil**: Pointer-Konsistenz wird verbessert
 
 
+

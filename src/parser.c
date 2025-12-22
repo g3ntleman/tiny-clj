@@ -1277,31 +1277,8 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     return NULL;
   }
 
-  // Special handling for defn forms: set metadata on the function name symbol instead of the list
-  // This ensures metadata persists even if the list object changes during evaluation
-  if (meta && list_type_matches(TAG(obj))) {
-    CljList *list = as_list(obj);
-    if (list && list->first && TAG(list->first) == CLJ_SYMBOL) {
-      CljSymbol *first_sym = as_symbol(list->first);
-      // Check if this is a defn form: (defn name ...)
-      CljSymbol *defn_sym = intern_symbol_global("defn");
-      if (defn_sym && first_sym == defn_sym && list->rest) {
-        CljList *rest = as_list(list->rest);
-        if (rest && rest->first && TAG(rest->first) == CLJ_SYMBOL) {
-          // This is a defn form - set metadata on the function name symbol
-          // RETAIN meta before setting (meta_set will handle it, but we need to ensure it's retained)
-          RETAIN((CljObject*)meta);
-          meta_set((CljObject*)rest->first, (CljObject*)meta);
-          // Also set on the list for backward compatibility (but symbol takes precedence)
-          meta_set(obj, meta);
-          // Don't release meta here - it will be released at the end of the function
-          // Continue with location metadata below
-        }
-      }
-    }
-  }
-
-  // Apply metadata if provided (if not already handled above)
+  // Apply metadata if provided
+  // Note: defn is now a macro, so metadata is handled by eval_def after expansion
   if (meta) {
     meta_set(obj, meta);
   }
