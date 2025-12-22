@@ -5,7 +5,7 @@
 #include "../value.h"
 
 // Test empty do returns nil
-TEST(test_do_empty) {
+TEST_SHARED(test_do_empty) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do)";
@@ -17,7 +17,7 @@ TEST(test_do_empty) {
 }
 
 // Test do with single expression
-TEST(test_do_single_expr) {
+TEST_SHARED(test_do_single_expr) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 42)";
@@ -31,7 +31,7 @@ TEST(test_do_single_expr) {
 }
 
 // Test do with multiple expressions returns last
-TEST(test_do_multiple_exprs) {
+TEST_SHARED(test_do_multiple_exprs) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 1 2 3)";
@@ -45,7 +45,7 @@ TEST(test_do_multiple_exprs) {
 }
 
 // Test do with arithmetic expressions
-TEST(test_do_with_arithmetic) {
+TEST_SHARED(test_do_with_arithmetic) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do (+ 1 1) (+ 2 2) (+ 3 3))";
@@ -59,7 +59,7 @@ TEST(test_do_with_arithmetic) {
 }
 
 // Test nested do forms
-TEST(test_do_nested) {
+TEST_SHARED(test_do_nested) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do (do 1 2) (do 3 4))";
@@ -73,7 +73,7 @@ TEST(test_do_nested) {
 }
 
 // Test do in if statement
-TEST(test_do_in_if) {
+TEST_SHARED(test_do_in_if) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(if true (do (+ 1 1) 10) 20)";
@@ -87,7 +87,7 @@ TEST(test_do_in_if) {
 }
 
 // Test do in if else branch
-TEST(test_do_in_if_else) {
+TEST_SHARED(test_do_in_if_else) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(if false 1 (do (+ 2 2) 20))";
@@ -101,7 +101,7 @@ TEST(test_do_in_if_else) {
 }
 
 // Test do with mixed types
-TEST(test_do_mixed_types) {
+TEST_SHARED(test_do_mixed_types) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 42 true nil 99)";
@@ -115,7 +115,7 @@ TEST(test_do_mixed_types) {
 }
 
 // Test do returns nil as last expression
-TEST(test_do_last_nil) {
+TEST_SHARED(test_do_last_nil) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(do 42 nil)";
@@ -127,7 +127,7 @@ TEST(test_do_last_nil) {
 }
 
 // Test do with let binding
-TEST(test_do_with_let) {
+TEST_SHARED(test_do_with_let) {
     WITH_AUTORELEASE_POOL({
         
         const char *code = "(let [x 5] (do (+ x 1) (+ x 2)))";

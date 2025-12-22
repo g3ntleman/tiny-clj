@@ -29,4 +29,9 @@ void register_macro(CljNamespace *ns, CljSymbol *name, CljFunction *macro_fn);
  */
 CljFunction* lookup_macro_resolve(EvalState *st, CljSymbol *name);
 
+/**
+ * @brief Reset cached namespace pointers (called by runtime_reset)
+ */
+void macro_cache_reset(void);
+
 #endif // TINY_CLJ_MACRO_H

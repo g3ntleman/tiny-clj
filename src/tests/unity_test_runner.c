@@ -24,6 +24,9 @@ int load_clojure_core(EvalState *st);
 // Static flags to ensure initialization happens only once
 static bool g_special_symbols_initialized = false;
 
+// Batch mode: skip heavy setUp between tests in same batch (for TEST_SHARED)
+static bool g_batch_mode = false;
+
 // Global test EvalState (available in all tests via tests_common.h)
 EvalState *g_test_eval_state = NULL;
 
@@ -33,8 +36,13 @@ EvalState *g_test_eval_state = NULL;
 
 
 void setUp(void) {
-    // Reset memory profiler statistics BEFORE each test
+    // Always reset memory profiler statistics BEFORE each test
     memory_profiler_reset();
+    
+    // In batch mode, skip heavy initialization (clojure.core already loaded)
+    if (g_batch_mode) {
+        return;
+    }
     
     // Suppress time output in tests
     set_suppress_time_output(true);
@@ -89,6 +97,11 @@ EvalState* test_get_eval_state(void) {
 }
 
 void tearDown(void) {
+    // In batch mode, skip heavy teardown
+    if (g_batch_mode) {
+        return;
+    }
+    
     // Reset time output suppression (for consistency)
     set_suppress_time_output(false);
     
@@ -179,13 +192,66 @@ static void run_test_with_exception_handling(const Test *test) {
     } END_TRY
 }
 
+// Run shared tests in batches (one setUp/tearDown per batch)
+static void run_shared_tests_batched(void) {
+    size_t test_count;
+    Test *all_tests = test_registry_get_all(&test_count);
+    
+    // Collect unique shared groups
+    const char *shared_groups[64];
+    size_t group_count = 0;
+    
+    for (size_t i = 0; i < test_count; i++) {
+        if (strncmp(all_tests[i].group, "shared_", 7) == 0) {
+            // Check if group already collected
+            bool found = false;
+            for (size_t j = 0; j < group_count; j++) {
+                if (strcmp(shared_groups[j], all_tests[i].group) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found && group_count < 64) {
+                shared_groups[group_count++] = all_tests[i].group;
+            }
+        }
+    }
+    
+    // Run each shared group as a batch
+    for (size_t g = 0; g < group_count; g++) {
+        // One setUp for the batch
+        g_batch_mode = false;
+        setUp();
+        g_batch_mode = true;
+        
+        // Run all tests in this group
+        for (size_t i = 0; i < test_count; i++) {
+            if (strcmp(all_tests[i].group, shared_groups[g]) == 0) {
+                set_unity_test_file_info(&all_tests[i]);
+                run_test_with_exception_handling(&all_tests[i]);
+            }
+        }
+        
+        // One tearDown for the batch
+        g_batch_mode = false;
+        tearDown();
+    }
+}
+
 // One-line test runner: Unity already prints one line per test
 static void run_tests_by_registry(void) {
     size_t test_count;
     Test *all_tests = test_registry_get_all(&test_count);
+    
+    // First: Run shared tests batched (one setUp/tearDown per group)
+    run_shared_tests_batched();
+    
+    // Then: Run non-shared tests normally (one setUp/tearDown per test)
     for (size_t i = 0; i < test_count; i++) {
-        set_unity_test_file_info(&all_tests[i]);
-        run_test_with_exception_handling(&all_tests[i]);
+        if (strncmp(all_tests[i].group, "shared_", 7) != 0) {
+            set_unity_test_file_info(&all_tests[i]);
+            run_test_with_exception_handling(&all_tests[i]);
+        }
     }
 }
 

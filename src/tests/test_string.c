@@ -32,7 +32,7 @@ static void load_clojure_string_namespace(void) {
 // BLANK? TESTS
 // ============================================================================
 
-TEST(test_string_blank) {
+TEST_SHARED(test_string_blank) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
@@ -63,7 +63,7 @@ TEST(test_string_blank) {
 // CAPITALIZE TESTS
 // ============================================================================
 
-TEST(test_string_capitalize) {
+TEST_SHARED(test_string_capitalize) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
@@ -88,7 +88,7 @@ TEST(test_string_capitalize) {
 // ENDS-WITH? TESTS
 // ============================================================================
 
-TEST(test_string_ends_with) {
+TEST_SHARED(test_string_ends_with) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
@@ -109,7 +109,7 @@ TEST(test_string_ends_with) {
 // ESCAPE TESTS
 // ============================================================================
 
-TEST(test_string_escape) {
+TEST_SHARED(test_string_escape) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
@@ -127,7 +127,7 @@ TEST(test_string_escape) {
 // INCLUDES? TESTS
 // ============================================================================
 
-TEST(test_string_includes) {
+TEST_SHARED(test_string_includes) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
@@ -148,7 +148,7 @@ TEST(test_string_includes) {
 // INDEX-OF TESTS
 // ============================================================================
 
-TEST(test_string_index_of) {
+TEST_SHARED(test_string_index_of) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first
@@ -165,7 +165,7 @@ TEST(test_string_index_of) {
 // REVERSE TESTS (clojure.string/reverse for strings)
 // ============================================================================
 
-TEST(test_string_reverse) {
+TEST_SHARED(test_string_reverse) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Load clojure.string namespace first

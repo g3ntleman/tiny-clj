@@ -51,11 +51,7 @@ bool strings_get_special_form_rendering(void) {
 static size_t to_string_calc_length(CljObject *v, bool escape_strings);
 static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings);
 
-// Check if symbol is a special form (matches Clojure behavior)
-// O(1) check using flags field in CljObject
-bool is_special_symbol(CljSymbol *symbol) {
-    return symbol && (symbol->base.flags & CLJ_FLAG_SPECIAL);
-}
+// is_special_symbol() moved to symbol.h (inline function)
 
 void strings_clear_special_forms(void) {
     // No-op: flags are set at symbol initialization
