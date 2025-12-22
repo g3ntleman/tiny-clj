@@ -39,19 +39,12 @@
 // metadata is typically {:doc "..." :arglists ...} which contains no symbol tokens)
 #ifdef ENABLE_META
 #define COPY_META(src, dst) do { \
-    ID _m = meta_get((CljObject*)(src)); \
-    if (_m) meta_set((CljObject*)(dst), _m); \
+    ID _m = meta_get(src); \
+    if (_m) meta_set(dst, _m); \
 } while(0)
 #else
 #define COPY_META(src, dst) ((void)0)
 #endif
-
-// Check if a type can have metadata (based on Clojure's IMeta/IObj interfaces)
-static inline bool can_have_metadata(uint8_t tag) {
-    return tag == CLJ_SYMBOL || tag == CLJ_LIST || tag == CLJ_AST_NODE ||
-           tag == CLJ_VECTOR || tag == CLJ_MAP || tag == CLJ_SEQ ||
-           tag == CLJ_FUNC || tag == CLJ_CLOSURE;
-}
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
@@ -60,24 +53,18 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 // Uses Clojure's destructure function when available
 // ============================================================================
 
-// Check if bindings vector needs destructuring (any binding is not a symbol)
-static bool bindings_need_destructuring(CljVector *bindings) {
-    unsigned int count = vector_count(bindings);
-    for (unsigned int i = 0; i < count; i += 2) {
-        ID binding_form = vector_nth(bindings, i);
-        if (TAG(binding_form) != CLJ_SYMBOL) return true;
+// Check if vector elements need destructuring (any element is not a simple symbol)
+// pairs_only: for bindings [name1 val1 name2 val2 ...] check only names (even indices)
+static bool vector_needs_destructuring(CljVector *vec, bool pairs_only) {
+    int i = 0;
+    VECTOR_FOR_EACH(vec, elem) {
+        if ((!pairs_only || (i++ & 1) == 0) && TAG(elem) != CLJ_SYMBOL) return true;
     }
     return false;
 }
 
-// Check if fn/defn params need destructuring
-static bool params_need_destructuring(CljVector *params) {
-    VECTOR_FOR_EACH(params, param) {
-        unsigned char tag = TAG(param);
-        if (tag == CLJ_VECTOR || tag == CLJ_MAP) return true;
-    }
-    return false;
-}
+#define bindings_need_destructuring(v) vector_needs_destructuring(v, true)
+#define params_need_destructuring(v)   vector_needs_destructuring(v, false)
 
 // Cached destructure function (resolved once after bootstrap)
 static ID destructure_fn = NULL;
