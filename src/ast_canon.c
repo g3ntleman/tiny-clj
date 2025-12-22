@@ -31,6 +31,28 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// ============================================================================
+// HELPER MACROS FOR METADATA AND LIST ACCESS
+// ============================================================================
+
+// Copy metadata from source to destination (no recursive canonicalization needed -
+// metadata is typically {:doc "..." :arglists ...} which contains no symbol tokens)
+#ifdef ENABLE_META
+#define COPY_META(src, dst) do { \
+    ID _m = meta_get((CljObject*)(src)); \
+    if (_m) meta_set((CljObject*)(dst), _m); \
+} while(0)
+#else
+#define COPY_META(src, dst) ((void)0)
+#endif
+
+// Check if a type can have metadata (based on Clojure's IMeta/IObj interfaces)
+static inline bool can_have_metadata(uint8_t tag) {
+    return tag == CLJ_SYMBOL || tag == CLJ_LIST || tag == CLJ_AST_NODE ||
+           tag == CLJ_VECTOR || tag == CLJ_MAP || tag == CLJ_SEQ ||
+           tag == CLJ_FUNC || tag == CLJ_CLOSURE;
+}
+
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
 // ============================================================================
@@ -294,12 +316,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 if (!expanded) return NULL;
                 
                 // Transfer metadata from original form to expanded form
-#ifdef ENABLE_META
-                ID original_meta = meta_get((CljObject*)list);
-                if (original_meta && expanded) {
-                    meta_set((CljObject*)expanded, (CljObject*)original_meta);
-                }
-#endif
+                COPY_META(list, expanded);
                 
                 // Recursively canonicalize the expanded form
                 return canonicalize_expr(expanded, st, in_quote);
@@ -442,54 +459,31 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         }
         // ========== END DESTRUCTURING TRANSFORMATION ==========
         
-        ID rest = NULL;
-        if (list->rest) {
-            rest = canonicalize_expr(list->rest, st, child_in_quote);
+        // Canonicalize rest of list
+        ID rest = list->rest ? canonicalize_expr((ID)list->rest, st, child_in_quote) : NULL;
+        
+        // Early exit if nothing changed AND no type conversion needed
+        // - in_quote needs CLJ_LIST (convert ASTNode to List)
+        // - normal context needs CLJ_AST_NODE (convert List to ASTNode)
+        bool correct_type = in_quote ? (tag == CLJ_LIST) : (tag == CLJ_AST_NODE);
+        if (correct_type && first == list->first && rest == (ID)list->rest) {
+            return expr;
         }
         
-        if (in_quote) {
-            // In quote context: keep/convert to CljList
-            CljList *new_list = make_list((CljObject*)first, (CljList*)rest);
-            if (!new_list) {
-                return expr;  // Out of memory - return original
-            }
-            
-#ifdef ENABLE_META
-            ID meta = meta_get((CljObject*)expr);
-            if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st, in_quote);
-                meta_set((CljObject*)new_list, (CljObject*)canon_meta);
-            }
-#endif
-            
-            RELEASE(list);  // Free the original list/ASTNode
-            return new_list;
-        }
+        // Create appropriate container based on context
+        ID result = in_quote 
+            ? (ID)make_list((CljObject*)first, (CljList*)rest)
+            : (ID)make_ast_node(first, rest);
         
-        // Normal context: Create/keep as ASTNode
-        // Check if anything changed - if not, return original ASTNode
-        if (tag == CLJ_AST_NODE && first == list->first && rest == (ID)list->rest) {
-            return expr;  // No changes needed
-        }
-        
-        CljASTNode *node = make_ast_node(first, rest);
-        if (!node) {
+        if (!result) {
             return expr;  // Out of memory - return original
         }
         
-        // Copy metadata if present (from CljList or ASTNode)
-        // Metadata is stored in global registry using object pointers as keys
-        // We need to copy metadata from the old list pointer to the new ASTNode pointer
-#ifdef ENABLE_META
-        ID meta = meta_get((CljObject*)expr);
-        if (meta) {
-            ID canon_meta = canonicalize_expr(meta, st, in_quote);
-            meta_set((CljObject*)node, (CljObject*)canon_meta);
-        }
-#endif
+        // Copy metadata (no recursive canonicalization - metadata has no symbol tokens)
+        COPY_META(expr, result);
         
-        RELEASE(list);  // Free the original list
-        return node;
+        RELEASE(list);
+        return result;
     }
     
     // For other types (vectors, maps), recursively canonicalize elements
@@ -497,10 +491,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         CljVector *vec = (CljVector*)expr;
         CLJ_ASSERT(vec != NULL);
         int count = vector_count(vec);
-        bool changed = false;
-        ID *canon_elems = (ID*)malloc(count * sizeof(ID));
+        
+        // Stack buffer for small vectors (avoid malloc)
+        ID stack_buf[16];
+        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)malloc(count * sizeof(ID));
         CLJ_ASSERT(canon_elems != NULL && "Out of memory");
         
+        bool changed = false;
         for (int i = 0; i < count; i++) {
             ID elem = vector_nth(vec, i);
             canon_elems[i] = canonicalize_expr(elem, st, in_quote);
@@ -509,26 +506,21 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
             }
         }
         
-        if (changed) {
-            // Create new vector with canonicalized elements
-            CljVector *new_vec = make_vector(count, CLJ_VECTOR);
-            for (int i = 0; i < count; i++) {
-                new_vec = vector_conj(new_vec, canon_elems[i]);
-            }
-#ifdef ENABLE_META
-            ID meta = meta_get((CljObject*)vec);
-            if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st, in_quote);
-                meta_set((CljObject*)new_vec, (CljObject*)canon_meta);
-            }
-#endif
-            free(canon_elems);
-            RELEASE(vec);  // Free original vector
-            return new_vec;
+        if (!changed) {
+            if (count > 16) free(canon_elems);
+            return expr;  // No changes needed
         }
         
-        free(canon_elems);
-        return expr;  // No changes needed
+        // Create new vector with canonicalized elements
+        CljVector *new_vec = make_vector(count, CLJ_VECTOR);
+        for (int i = 0; i < count; i++) {
+            new_vec = vector_conj(new_vec, canon_elems[i]);
+        }
+        COPY_META(vec, new_vec);
+        
+        if (count > 16) free(canon_elems);
+        RELEASE(vec);
+        return new_vec;
     }
     
     if (tag == CLJ_MAP) {
@@ -553,14 +545,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         }
         
         if (changed && new_map) {
-#ifdef ENABLE_META
-            ID meta = meta_get((CljObject*)map);
-            if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st, in_quote);
-                meta_set((CljObject*)new_map, (CljObject*)canon_meta);
-            }
-#endif
-            RELEASE(map);  // Free original map
+            COPY_META(map, new_map);
+            RELEASE(map);
             return new_map;
         }
         
