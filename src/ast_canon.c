@@ -26,6 +26,7 @@
 #include "symbol_token.h"
 #include "eval.h"    // For eval_function_call
 #include "macro.h"   // For lookup_macro_resolve
+// is_special_symbol is in symbol.h (already included)
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -271,9 +272,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         
         // ========== MACRO EXPANSION (compile-time) ==========
         // Expand macros before destructuring and other transformations
+        // Skip macro lookup for special forms and native functions (they can't be macros)
         if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
             CljSymbol *head_sym = as_symbol(first);
-            CljFunction *macro = lookup_macro_resolve(st, head_sym);
+            CljFunction *macro = NULL;
+            if (!is_special_symbol(head_sym) && !is_native_symbol(head_sym)) {
+                macro = lookup_macro_resolve(st, head_sym);
+            }
             if (macro) {
                 // Collect unevaluated arguments for macro call
                 ID args[16];

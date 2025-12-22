@@ -62,12 +62,7 @@ void strings_register_special_form(const char *name);
  */
 void strings_clear_special_forms(void);
 
-/**
- * @brief Check if a symbol is a special form
- * @param symbol Symbol to check
- * @return true if the symbol is a special form
- */
-bool is_special_symbol(CljSymbol *symbol);
+// is_special_symbol() moved to symbol.h (inline function)
 
 #endif // TINY_CLJ_TO_STRING_H
 

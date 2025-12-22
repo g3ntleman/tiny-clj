@@ -14,7 +14,7 @@
 // DOTIMES EDGE CASE TESTS - EVAL_DOTIMES FUNCTION
 // ============================================================================
 
-TEST(test_dotimes_zero_iterations) {
+TEST_SHARED(test_dotimes_zero_iterations) {
     // Test eval_dotimes with 0 iterations - should not execute body
     // Create dotimes call: (dotimes [i 0] (println "Should not print"))
     CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(0), NULL)));
@@ -29,7 +29,7 @@ TEST(test_dotimes_zero_iterations) {
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
-TEST(test_dotimes_negative_iterations) {
+TEST_SHARED(test_dotimes_negative_iterations) {
     // Test eval_dotimes with negative iterations - should not execute body
     // Create dotimes call: (dotimes [i -5] (println "Should not print"))
     CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(-5), NULL)));
@@ -44,7 +44,7 @@ TEST(test_dotimes_negative_iterations) {
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
-TEST(test_dotimes_large_iterations) {
+TEST_SHARED(test_dotimes_large_iterations) {
     // Test eval_dotimes with large number of iterations
     // Create dotimes call: (dotimes [i 1000] i)
     CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(1000), NULL)));
@@ -59,7 +59,7 @@ TEST(test_dotimes_large_iterations) {
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
-TEST(test_dotimes_invalid_binding_format) {
+TEST_SHARED(test_dotimes_invalid_binding_format) {
     // Test eval_dotimes with invalid binding format
     // Create dotimes call: (dotimes [i] i) - missing count
     CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), NULL));
@@ -74,7 +74,7 @@ TEST(test_dotimes_invalid_binding_format) {
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for invalid format
 }
 
-TEST(test_dotimes_non_numeric_count) {
+TEST_SHARED(test_dotimes_non_numeric_count) {
     // Test eval_dotimes with non-numeric count
     // Create dotimes call: (dotimes [i "not-a-number"] i)
     CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), (CljList*)make_list(make_string("not-a-number"), NULL)));
@@ -89,7 +89,7 @@ TEST(test_dotimes_non_numeric_count) {
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
 }
 
-TEST(test_dotimes_null_input) {
+TEST_SHARED(test_dotimes_null_input) {
     // Test eval_dotimes with NULL input
     CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
     
@@ -98,7 +98,7 @@ TEST(test_dotimes_null_input) {
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for NULL input
 }
 
-TEST(test_dotimes_simple_iteration_count) {
+TEST_SHARED(test_dotimes_simple_iteration_count) {
     // Test that eval_dotimes executes the body exactly n times
     // This is a simpler test that just verifies the loop runs n times
     
@@ -128,7 +128,7 @@ TEST(test_dotimes_simple_iteration_count) {
 // WHILE LOOP TESTS
 // ============================================================================
 
-TEST(test_while_basic_true) {
+TEST_SHARED(test_while_basic_true) {
     // Test while with true condition that becomes false
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -141,7 +141,7 @@ TEST(test_while_basic_true) {
     
 }
 
-TEST(test_while_loop_multiple) {
+TEST_SHARED(test_while_loop_multiple) {
     // Test while with loop that executes multiple times
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -154,7 +154,7 @@ TEST(test_while_loop_multiple) {
     
 }
 
-TEST(test_while_false_condition) {
+TEST_SHARED(test_while_false_condition) {
     // Test while with false condition - should not execute
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -164,7 +164,7 @@ TEST(test_while_false_condition) {
     
 }
 
-TEST(test_while_nil_condition) {
+TEST_SHARED(test_while_nil_condition) {
     // Test while with nil condition - should not execute
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -174,7 +174,7 @@ TEST(test_while_nil_condition) {
     
 }
 
-TEST(test_while_with_atom) {
+TEST_SHARED(test_while_with_atom) {
     // Test while with atom (like in mandelbrot.clj)
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -186,7 +186,7 @@ TEST(test_while_with_atom) {
     
 }
 
-TEST(test_while_multiple_body_exprs) {
+TEST_SHARED(test_while_multiple_body_exprs) {
     // Test while with multiple body expressions
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     

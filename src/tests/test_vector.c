@@ -3,7 +3,7 @@
 #include "../vector.h"
 #include "../types.h"
 
-TEST(test_vector_builtin_basic) {
+TEST_SHARED(test_vector_builtin_basic) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // (vector) => []
@@ -30,7 +30,7 @@ TEST(test_vector_builtin_basic) {
 
 }
 
-TEST(test_nth_with_default_and_bounds) {
+TEST_SHARED(test_nth_with_default_and_bounds) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // In-bounds ohne Default
@@ -50,7 +50,7 @@ TEST(test_nth_with_default_and_bounds) {
 
 }
 
-TEST(test_nth_with_lists) {
+TEST_SHARED(test_nth_with_lists) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Basic list access
@@ -133,7 +133,7 @@ TEST(test_nth_with_lists) {
 
 }
 
-TEST(test_nth_with_sequences) {
+TEST_SHARED(test_nth_with_sequences) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // nth with rest (creates a sequence)
@@ -183,7 +183,7 @@ TEST(test_nth_with_sequences) {
 
 }
 
-TEST(test_nth_edge_cases) {
+TEST_SHARED(test_nth_edge_cases) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Negative index => exception
@@ -284,7 +284,7 @@ TEST(test_nth_edge_cases) {
 
 }
 
-TEST(test_nth_nil_elements) {
+TEST_SHARED(test_nth_nil_elements) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Vector with nil elements
@@ -367,7 +367,7 @@ TEST(test_nth_nil_elements) {
 
 }
 
-TEST(test_peek_and_pop_vector) {
+TEST_SHARED(test_peek_and_pop_vector) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // peek
@@ -388,7 +388,7 @@ TEST(test_peek_and_pop_vector) {
 
 }
 
-TEST(test_subvec_bounds_and_slices) {
+TEST_SHARED(test_subvec_bounds_and_slices) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     CljObject *s1 = eval_string("(subvec [1 2 3 4] 1 3)", g_test_eval_state);
@@ -405,7 +405,7 @@ TEST(test_subvec_bounds_and_slices) {
 
 }
 
-TEST(test_subvec_edge_cases) {
+TEST_SHARED(test_subvec_edge_cases) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Normal cases
@@ -488,7 +488,7 @@ TEST(test_subvec_edge_cases) {
 
 }
 
-TEST(test_subvec_error_cases) {
+TEST_SHARED(test_subvec_error_cases) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Index out of bounds: start < 0
@@ -575,7 +575,7 @@ TEST(test_subvec_error_cases) {
 
 }
 
-TEST(test_vec_from_list_and_vector_id) {
+TEST_SHARED(test_vec_from_list_and_vector_id) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Test: vec converts list to vector
@@ -611,7 +611,7 @@ TEST(test_vec_from_list_and_vector_id) {
 
 }
 
-TEST(test_vec_with_nil_elements) {
+TEST_SHARED(test_vec_with_nil_elements) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     // Test: vec converts list with nil element to vector
@@ -686,7 +686,7 @@ TEST(test_vec_with_nil_elements) {
 // WEAK VECTOR TESTS
 // ============================================================================
 
-TEST(test_weak_vector_does_not_retain_elements) {
+TEST_SHARED(test_weak_vector_does_not_retain_elements) {
     // Test that adding elements to CLJ_VECTOR_TRANSIENT_WEAK does NOT increase their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector (like autorelease pool)
@@ -719,7 +719,7 @@ TEST(test_weak_vector_does_not_retain_elements) {
     });
 }
 
-TEST(test_weak_vector_does_not_release_elements) {
+TEST_SHARED(test_weak_vector_does_not_release_elements) {
     // Test that removing elements from CLJ_VECTOR_TRANSIENT_WEAK does NOT decrease their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
@@ -766,7 +766,7 @@ TEST(test_weak_vector_does_not_release_elements) {
     });
 }
 
-TEST(test_weak_vector_nth_does_not_retain) {
+TEST_SHARED(test_weak_vector_nth_does_not_retain) {
     // Test that vector_nth does NOT retain elements for CLJ_VECTOR_TRANSIENT_WEAK
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
@@ -813,7 +813,7 @@ TEST(test_weak_vector_nth_does_not_retain) {
     });
 }
 
-TEST(test_weak_vector_multiple_elements_rc_unchanged) {
+TEST_SHARED(test_weak_vector_multiple_elements_rc_unchanged) {
     // Test that multiple elements in CLJ_VECTOR_TRANSIENT_WEAK maintain their RC
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
@@ -872,7 +872,7 @@ TEST(test_weak_vector_multiple_elements_rc_unchanged) {
     });
 }
 
-TEST(test_weak_vector_clear_does_not_release_elements) {
+TEST_SHARED(test_weak_vector_clear_does_not_release_elements) {
     // Test that vector_clear does NOT release elements for CLJ_VECTOR_TRANSIENT_WEAK
     WITH_AUTORELEASE_POOL({
         // Create a weak vector
@@ -919,7 +919,7 @@ TEST(test_weak_vector_clear_does_not_release_elements) {
 }
 
 // Test that clj_conj correctly updates count for transient vectors (event loop scenario)
-TEST(test_clj_conj_updates_count_for_event_loop) {
+TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
     WITH_AUTORELEASE_POOL({
         // Simulate event_loop_enqueue scenario:
         // 1. Create persistent vector with capacity
@@ -976,7 +976,7 @@ TEST(test_clj_conj_updates_count_for_event_loop) {
 }
 
 // Test that clj_conj works with empty transient vector (capacity 0 scenario)
-TEST(test_clj_conj_with_empty_transient_vector) {
+TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
     WITH_AUTORELEASE_POOL({
         // Create empty persistent vector (capacity 0)
         CljVector *task_vec = make_vector(0, CLJ_VECTOR);
@@ -1014,7 +1014,7 @@ TEST(test_clj_conj_with_empty_transient_vector) {
     });
 }
 
-TEST(test_equal_persistent_and_transient_vector) {
+TEST_SHARED(test_equal_persistent_and_transient_vector) {
     // Test that (= persistent-vector transient-vector) returns false
     // This matches Clojure/JVM behavior where transient and persistent vectors
     // are considered different types, even if they have the same elements
@@ -1048,7 +1048,7 @@ TEST(test_equal_persistent_and_transient_vector) {
 }
 
 // Clojure-compatibility test: (transient) on transient collection returns the same object
-TEST(test_transient_on_transient_returns_same_object) {
+TEST_SHARED(test_transient_on_transient_returns_same_object) {
     WITH_AUTORELEASE_POOL({
         // Test 1: (transient) on transient vector returns the same object
         CljObject *tvec1 = eval_string("(transient (vector 1 2 3))", g_test_eval_state);
@@ -1109,7 +1109,7 @@ TEST(test_transient_on_transient_returns_same_object) {
 }
 
 // Clojure-compatibility test: (persistent!) on persistent collection returns the same object
-TEST(test_persistent_on_persistent_returns_same_object) {
+TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
     WITH_AUTORELEASE_POOL({
         // Test 1: (persistent!) on persistent vector returns the same object
         CljObject *vec1 = eval_string("(vector 1 2 3)", g_test_eval_state);
@@ -1165,7 +1165,7 @@ TEST(test_persistent_on_persistent_returns_same_object) {
 }
 
 // Test VECTOR_FOR_EACH macro - iterate over all vector elements
-TEST(test_vector_for_each_macro) {
+TEST_SHARED(test_vector_for_each_macro) {
     CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(4, CLJ_VECTOR));
     
     // Add elements to vector
@@ -1203,7 +1203,7 @@ TEST(test_vector_for_each_macro) {
 }
 
 // Test VECTOR_FOR_EACH with empty vector
-TEST(test_vector_for_each_empty_vector) {
+TEST_SHARED(test_vector_for_each_empty_vector) {
     CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(0, CLJ_VECTOR));
     
     int iteration_count = 0;
@@ -1216,7 +1216,7 @@ TEST(test_vector_for_each_empty_vector) {
 }
 
 // Test VECTOR_FOR_EACH with NULL vector (should not crash)
-TEST(test_vector_for_each_null_vector) {
+TEST_SHARED(test_vector_for_each_null_vector) {
     CljVector *vec = NULL;
     
     int iteration_count = 0;
@@ -1229,7 +1229,7 @@ TEST(test_vector_for_each_null_vector) {
 }
 
 // Test VECTOR_FOR_EACH with NULL elements
-TEST(test_vector_for_each_with_null_elements) {
+TEST_SHARED(test_vector_for_each_with_null_elements) {
     CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(4, CLJ_VECTOR));
     
     // Add elements including NULL (nil)
@@ -1257,7 +1257,7 @@ TEST(test_vector_for_each_with_null_elements) {
 }
 
 // Test vector_set_nth with reference count checks (transient vector)
-TEST(test_vector_set_nth_with_reference_counts) {
+TEST_SHARED(test_vector_set_nth_with_reference_counts) {
     CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
@@ -1298,7 +1298,7 @@ TEST(test_vector_set_nth_with_reference_counts) {
 }
 
 // Test vector_set_nth with transient vector and multiple references
-TEST(test_vector_set_nth_copy_on_write) {
+TEST_SHARED(test_vector_set_nth_copy_on_write) {
     CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     
@@ -1340,7 +1340,7 @@ TEST(test_vector_set_nth_copy_on_write) {
 }
 
 // Test vector_set_nth with transient vector
-TEST(test_vector_set_nth_transient) {
+TEST_SHARED(test_vector_set_nth_transient) {
     CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
     TEST_ASSERT_TRUE(TAG(vec) == CLJ_VECTOR_TRANSIENT);
@@ -1379,7 +1379,7 @@ TEST(test_vector_set_nth_transient) {
 }
 
 // Test vector_set_nth edge cases (NULL vector, out-of-bounds, NULL value)
-TEST(test_vector_set_nth_edge_cases) {
+TEST_SHARED(test_vector_set_nth_edge_cases) {
     // Test 1: NULL vector should return NULL
     CljVector *result1 = vector_set_nth(NULL, 0, fixnum(42));
     TEST_ASSERT_NULL(result1);
@@ -1408,7 +1408,7 @@ TEST(test_vector_set_nth_edge_cases) {
 }
 
 // Test that vector_set_nth throws exception for persistent vectors
-TEST(test_vector_set_nth_persistent_throws_exception) {
+TEST_SHARED(test_vector_set_nth_persistent_throws_exception) {
     CljVector *vec = make_vector(4, CLJ_VECTOR);
     TEST_ASSERT_NOT_NULL(vec);
     vec = vector_conj(vec, fixnum(10));

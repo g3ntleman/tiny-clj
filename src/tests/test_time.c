@@ -24,7 +24,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st);
 // TIME FUNCTION TESTS
 // ============================================================================
 
-TEST(test_time_basic_functionality) {
+TEST_SHARED(test_time_basic_functionality) {
     // Test that time function executes and returns the result
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
@@ -96,7 +96,7 @@ TEST(test_time_basic_functionality) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
-TEST(test_time_arity_validation) {
+TEST_SHARED(test_time_arity_validation) {
     // Test that time function validates arity correctly
     // Create (time) with no arguments
     CljObject *time_symbol = (CljObject *)SYM_TIME;
@@ -117,7 +117,7 @@ TEST(test_time_arity_validation) {
     RELEASE(env);
 }
 
-TEST(test_time_with_too_many_arguments) {
+TEST_SHARED(test_time_with_too_many_arguments) {
     // Test time with too many arguments
     CljObject *expr1 = fixnum(1);
     CljObject *expr2 = fixnum(2);
@@ -149,7 +149,7 @@ TEST(test_time_with_too_many_arguments) {
 // test_time_with_sleep removed: was 1 second wait, sleep is trivial Unix wrapper
 // time functionality is already tested by test_time_basic_functionality
 
-TEST(test_time_no_double_evaluation) {
+TEST_SHARED(test_time_no_double_evaluation) {
     // Test that time does NOT evaluate its argument twice
     // Use a simple arithmetic expression that we can verify
     CljValue result = eval_string("(time (+ 1 2))", g_test_eval_state);
@@ -160,7 +160,7 @@ TEST(test_time_no_double_evaluation) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
 }
 
-TEST(test_time_with_dotimes) {
+TEST_SHARED(test_time_with_dotimes) {
     // Test that time works correctly with dotimes
     // Create: (time (dotimes [i 1000] (+ 1 2 3 4 5)))
     
@@ -221,7 +221,7 @@ TEST(test_time_with_dotimes) {
     RELEASE(env);
 }
 
-TEST(test_time_returns_expression_result) {
+TEST_SHARED(test_time_returns_expression_result) {
     // Test that time returns the result of the expression, not the timing
     // This demonstrates Clojure-compatible behavior
     CljValue result = eval_string("(time (+ 1 2 3))", g_test_eval_state);
@@ -236,14 +236,14 @@ TEST(test_time_returns_expression_result) {
 // EPOCH-MINUTES AND MILLIS-IN-MINUTE TESTS
 // ============================================================================
 
-TEST(test_epoch_minutes_returns_fixnum) {
+TEST_SHARED(test_epoch_minutes_returns_fixnum) {
     ID result = eval_string("(epoch-minutes)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_TRUE(as_fixnum(result) > 28000000); // After 2023
 }
 
-TEST(test_millis_in_minute_range) {
+TEST_SHARED(test_millis_in_minute_range) {
     ID result = eval_string("(millis-in-minute)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     int ms = as_fixnum(result);

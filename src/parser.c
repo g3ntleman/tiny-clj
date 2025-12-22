@@ -16,6 +16,9 @@
 #include "ast.h"
 #include "vector.h"
 #include <string.h>
+#ifdef PROFILE_STARTUP
+#include <time.h>
+#endif
 #include "map.h"
 #include <stdbool.h>
 #include "memory.h"
@@ -414,7 +417,14 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
     } else {
         // Canonicalize the AST before evaluation
         // This converts symbol tokens to symbols and handles quote forms properly
+#ifdef PROFILE_STARTUP
+        extern double g_canon_time_ms;
+        clock_t canon_start = clock();
         parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+        g_canon_time_ms += (double)(clock() - canon_start) * 1000.0 / CLOCKS_PER_SEC;
+#else
+        parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+#endif
     }
     
     if (parsed_expr && list_type_matches(TAG(parsed_expr))) {
