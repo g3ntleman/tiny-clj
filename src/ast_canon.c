@@ -25,6 +25,7 @@
 #include "meta.h"    // For meta_get and meta_set
 #include "symbol_token.h"
 #include "eval.h"    // For eval_function_call
+#include "macro.h"   // For lookup_macro_resolve
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -267,6 +268,38 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         // Compare against SYM_QUOTE to detect (quote ...) forms
         bool is_quote_form = (first == SYM_QUOTE);
         bool child_in_quote = in_quote || is_quote_form;
+        
+        // ========== MACRO EXPANSION (compile-time) ==========
+        // Expand macros before destructuring and other transformations
+        if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
+            CljSymbol *head_sym = as_symbol(first);
+            CljFunction *macro = lookup_macro_resolve(st, head_sym);
+            if (macro) {
+                // Collect unevaluated arguments for macro call
+                ID args[16];
+                int argc = 0;
+                for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
+                     cur && argc < 16;
+                     cur = cur->rest ? as_list(cur->rest) : NULL) {
+                    args[argc++] = cur->first;
+                }
+                
+                // Call macro function to expand the form
+                ID expanded = eval_function_call((CljObject*)macro, args, argc, NULL, st);
+                if (!expanded) return NULL;
+                
+                // Transfer metadata from original form to expanded form
+#ifdef ENABLE_META
+                ID original_meta = meta_get((CljObject*)list);
+                if (original_meta && expanded) {
+                    meta_set((CljObject*)expanded, (CljObject*)original_meta);
+                }
+#endif
+                
+                // Recursively canonicalize the expanded form
+                return canonicalize_expr(expanded, st, in_quote);
+            }
+        }
         
         // ========== DESTRUCTURING TRANSFORMATION (compile-time) ==========
         // Transform let/loop bindings and fn/defn params
