@@ -24,7 +24,6 @@ ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
-// eval_special_defn removed - defn is now a macro
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_var(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_quote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
@@ -40,10 +39,6 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
 #endif
 
 #endif // EVAL_SPECIAL_FORMS_H
-
-
-
-
 
 
 

@@ -432,9 +432,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                     }
                 }
             }
-            
-            // defn is now a macro, so destructuring is handled by the fn special form
-            // in the expanded form (def name (fn name params body))
+            // Note: defn is a macro that expands to (def name (fn ...)),
+            // so fn's destructuring handler above covers defn as well
         }
         // ========== END DESTRUCTURING TRANSFORMATION ==========
         

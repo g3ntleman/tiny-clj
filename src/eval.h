@@ -57,8 +57,6 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st);
 // Let bindings
 ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 
-// eval_defn removed - defn is now a macro defined in clojure.core.clj
-
 // Helper functions
 ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st);
 ID eval_arg_with_context(CljList *list, int index, CljMap *env, EvalState *st, const EvalContext *ctx);

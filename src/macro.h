@@ -3,7 +3,7 @@
  * @brief Macro registry and lookup
  *
  * Provides functions for registering and looking up macros in namespaces.
- * Macro expansion is done inline in eval.c using Clojure's macroexpand-1.
+ * Macro expansion is done at compile-time in ast_canon.c.
  */
 
 #ifndef TINY_CLJ_MACRO_H
