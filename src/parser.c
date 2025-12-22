@@ -1277,8 +1277,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     return NULL;
   }
 
-  // Apply metadata if provided
-  // Note: defn is now a macro, so metadata is handled by eval_def after expansion
+  // Apply metadata if provided (propagates to eval_def for functions)
   if (meta) {
     meta_set(obj, meta);
   }

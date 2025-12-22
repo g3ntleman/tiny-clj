@@ -3,7 +3,7 @@
  * @brief Macro registry and lookup
  *
  * Minimal C implementation for macro storage/lookup in namespaces.
- * Macro expansion is done inline in eval.c, delegating to Clojure functions.
+ * Macro expansion is done at compile-time in ast_canon.c.
  */
 
 #include "macro.h"

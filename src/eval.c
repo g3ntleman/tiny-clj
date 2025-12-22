@@ -1205,9 +1205,6 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
     if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
 
-    // NOTE: Macro expansion is done at canonicalization time (ast_canon.c),
-    // not during evaluation. This ensures macros are expanded once at compile-time.
-
     // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_COMPARISON)) {
     CljObject *comparison_result = eval_comparison_dispatch(list, effective_env, effective_st, ctx, original_op);
@@ -2271,12 +2268,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     }
     return result;
 }
-
-// ============================================================================
-// EVAL_DEFN removed - defn is now a macro defined in clojure.core.clj
-// The macro expands to: (def name (fn name [params] body...))
-// Native function handling (:native) is now done in eval_fn_with_context
-// ============================================================================
 
 // Helper function for evaluating arguments
 ID eval_arg(CljList *list, int index, CljMap *env, EvalState *st) {

@@ -175,8 +175,6 @@ ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     return AUTORELEASE(eval_fn_with_context(list, fn_env, st, ctx));
 }
 
-// eval_special_defn removed - defn is now a macro defined in clojure.core.clj
-
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     return eval_let(list, env, st, ctx);
 }
