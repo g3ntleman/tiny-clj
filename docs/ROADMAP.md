@@ -114,32 +114,43 @@ Next Priority
   - Full test coverage with namespace introspection (ns-map, find-ns)
   - Metadata support for all functions
   - Works without TRE (regex support planned for Phase 2)
+- Macro System: ✅ COMPLETED
+  - defmacro special form for macro definitions
+  - Compile-time macro expansion in ast_canon.c (not eval-time)
+  - macroexpand-1 and macroexpand functions in Clojure
+  - defn implemented as macro (expands to def + fn)
+  - Automatic TCO transformation for named recursive functions
+  - Quasiquote support with unquote and splice-unquote
+- Weak Hashmap for Symbol Table: ✅ COMPLETED
+  - Linear probing hashmap with COW semantics
+  - Optimized symbol interning and lookup
+  - Native function flag for fast macro-skip path
+- Test Organization: ✅ COMPLETED
+  - Tests organized in groups/categories (separate files)
+  - TEST_SHARED macro for tests that can share EvalState
+  - Reduced redundant debug/thesis tests
+  - 850+ tests across categorized test suites
 
 Planned
 -------
+- Dynamic Vars: 🔜 NEXT
+  - Dynamic variable detection via earmuffs convention (*name*)
+  - Thread-local binding stack for dynamic variables
+  - binding macro implementation for temporary rebinding
+  - *ns*, *out*, *err* as first dynamic vars
+  - Symbol resolution: check dynamic stack first, fallback to Root-Binding
+  - Note: Metadata handling (^:dynamic) optional in Release builds
 - Large-Map:
   - Small→Large promotion; open addressing; pointer-key fastpath for interned symbols
   - Benchmarks vs small maps (N≥16)
 - Test Framework Enhancements:
-  - Additional test suites: namespace_tests.c, function_tests.c, ui_tests.c
-  - Test categories: core, data, control, api, memory, error, ui
-  - Parallel test execution for multiple suites
   - JUnit XML output for CI/CD integration
+  - Parallel test execution for multiple suites
 - Optional: Chunked vector seqs for performance (semantics unchanged)
-- Symbol lookup:
-  - Interning + pointer-key env maps; cache resolution per AST node (optional)
 - Symbol Resolution Optimization:
   - Cache resolved values directly in CljSymbol struct (cached_value pointer)
-  - Fully qualified symbols (user/x) can be safely cached (always resolve to same value)
-  - Targeted cache invalidation on redefinition (only affected symbol, not entire cache)
-  - Cache stores Root-Binding for namespace variables
-- Dynamic Bindings (after Macros):
-  - Dynamic variable detection via earmuffs convention (*name*)
-  - Cache pointer can serve as marker for dynamic binding state
-  - Thread-local binding stack for dynamic variables
-  - binding macro implementation for temporary rebinding
-  - Symbol resolution: check dynamic stack first, fallback to Root-Binding
-  - Note: Metadata handling (^:dynamic) will be optional and ignored in Release builds
+  - Fully qualified symbols (user/x) can be safely cached
+  - Targeted cache invalidation on redefinition
 
 Build & Benchmarks
 ------------------
