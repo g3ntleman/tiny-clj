@@ -117,7 +117,7 @@ ID meta_get(ID v) {
     return NULL;
 }
 
-void meta_clear(CljObject *v) {
+void meta_clear(ID v) {
     if (!v || !g_runtime.meta_registry) return;
     
     // Use map_remove which always returns a new map (COW disabled)

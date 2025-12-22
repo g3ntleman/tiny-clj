@@ -32,19 +32,22 @@
 #include <stdio.h>
 
 // ============================================================================
-// HELPER MACROS FOR METADATA AND LIST ACCESS
+// ============================================================================
+// HELPER FUNCTIONS
 // ============================================================================
 
-// Copy metadata from source to destination (no recursive canonicalization needed -
-// metadata is typically {:doc "..." :arglists ...} which contains no symbol tokens)
+// Move metadata from source to destination (clears source entry to prevent leaks)
+static INLINE void move_meta(ID src, ID dst) {
 #ifdef ENABLE_META
-#define COPY_META(src, dst) do { \
-    ID _m = meta_get(src); \
-    if (_m) meta_set(dst, _m); \
-} while(0)
+    ID meta = meta_get(src);
+    if (meta) {
+        meta_set(dst, meta);
+        meta_clear(src);
+    }
 #else
-#define COPY_META(src, dst) ((void)0)
+    (void)src; (void)dst;
 #endif
+}
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
@@ -303,7 +306,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 if (!expanded) return NULL;
                 
                 // Transfer metadata from original form to expanded form
-                COPY_META(list, expanded);
+                move_meta(list, expanded);
                 
                 // Recursively canonicalize the expanded form
                 return canonicalize_expr(expanded, st, in_quote);
@@ -467,7 +470,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         }
         
         // Copy metadata (no recursive canonicalization - metadata has no symbol tokens)
-        COPY_META(expr, result);
+        move_meta(expr, result);
         
         RELEASE(list);
         return result;
@@ -503,7 +506,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         for (int i = 0; i < count; i++) {
             new_vec = vector_conj(new_vec, canon_elems[i]);
         }
-        COPY_META(vec, new_vec);
+        move_meta(vec, new_vec);
         
         if (count > 16) free(canon_elems);
         RELEASE(vec);
@@ -532,7 +535,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         }
         
         if (changed && new_map) {
-            COPY_META(map, new_map);
+            move_meta(map, new_map);
             RELEASE(map);
             return new_map;
         }
