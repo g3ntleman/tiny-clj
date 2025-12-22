@@ -162,49 +162,9 @@ TEST(test_update_missing_key_simple) {
     }
 }
 
-// Test if (if nil 0 0) returns 0 correctly
-// This tests the fix for the bug where if returned NULL when cond_val was nil,
-// instead of evaluating the else branch
-TEST(test_if_nil_zero) {
-    
-    // Test: (if nil 0 0) => 0
-    // nil is falsy, so the else branch (0) should be evaluated
-    CljObject *result = NULL;
-    TRY {
-        result = eval_string("(if nil 0 0)", g_test_eval_state);
-    } CATCH(ex) {
-        char msg[256];
-        TEST_FAIL_MESSAGE(msg);
-        return;
-    } END_TRY
-    
-    TEST_ASSERT_NOT_NULL_MESSAGE(result, "(if nil 0 0) should return 0, not NULL");
-    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "(if nil 0 0) should return a fixnum");
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
-    
-}
-
-// Test if (fn [x] (if x 0 0)) works correctly with nil
-// This tests the fix for the bug where if inside a function returned NULL when cond_val was nil,
-// instead of evaluating the else branch. This is the critical test that caught the bug.
-TEST(test_fn_if_nil_zero) {
-    
-    // Test: ((fn [x] (if x 0 0)) nil) => 0
-    // When x is nil, (if x 0 0) should evaluate the else branch (0)
-    CljObject *result = NULL;
-    TRY {
-        result = eval_string("((fn [x] (if x 0 0)) nil)", g_test_eval_state);
-    } CATCH(ex) {
-        char msg[256];
-        TEST_FAIL_MESSAGE(msg);
-        return;
-    } END_TRY
-    
-    TEST_ASSERT_NOT_NULL_MESSAGE(result, "((fn [x] (if x 0 0)) nil) should return 0, not NULL");
-    TEST_ASSERT_TRUE_MESSAGE(is_fixnum(result), "((fn [x] (if x 0 0)) nil) should return a fixnum");
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
-    
-}
+// test_if_nil_zero removed: misplaced in map tests, not map-specific
+// test_fn_if_nil_zero removed: misplaced in map tests, not map-specific  
+// if-with-nil behavior is tested by test_update_missing_key which uses this pattern
 
 // High-level test: Using eval_string to test the full update function
 // This tests: (update {:a 1} :b (fn [x] (if x 0 0))) => {:a 1 :b 0}

@@ -146,33 +146,8 @@ TEST(test_time_with_too_many_arguments) {
     RELEASE(env);
 }
 
-TEST(test_time_with_sleep) {
-    // Test time function with sleep to get measurable timing
-    // Create a sleep expression: (sleep 1) - sleep for 1 second
-    CljSymbol *sleep_symbol = intern_symbol_global("sleep");
-    CljObject *one_second = fixnum(1);
-    
-    // Create the expression: (sleep 1)
-    CljObject *expr = (CljObject *)make_list(sleep_symbol, make_list(one_second, NULL));
-    
-    // Create (time (sleep 1))
-    CljObject *time_symbol = (CljObject *)SYM_TIME;
-    CljList *time_list = make_list(time_symbol, make_list(expr, NULL));
-    
-    CljMap *env = make_map(16);
-    
-    // Call eval_time - this should take approximately 1000ms
-    CljObject *result = eval_time(time_list, env, g_test_eval_state);
-    
-    // The result should be nil (sleep returns nil)
-    TEST_ASSERT_TRUE(result == NULL); // nil is NULL in our system
-    
-    // Clean up
-    RELEASE(expr);
-    RELEASE(time_list);
-    RELEASE(env);
-    // Don't release result since it's NULL (nil)
-}
+// test_time_with_sleep removed: was 1 second wait, sleep is trivial Unix wrapper
+// time functionality is already tested by test_time_basic_functionality
 
 TEST(test_time_no_double_evaluation) {
     // Test that time does NOT evaluate its argument twice

@@ -324,8 +324,8 @@ R"CLOJURE(
 ; ============================================================================
 ; Sleep Functions (Native)
 ; ============================================================================
-^#^{:doc "Causes the current thread to sleep for ms milliseconds."}
-(defn sleep [ms] :native)
+^#^{:doc "Blocks the current thread for the specified number of seconds. For non-blocking delays in go blocks, use (schedule ms fn) instead."}
+(defn sleep [secs] :native)
 
 ; ============================================================================
 ; Byte Array Functions (Native)
