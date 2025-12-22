@@ -23,7 +23,6 @@
 #include "memory.h"
 #include "meta.h"
 #include "list.h"
-#include "macro.h"
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
@@ -1206,37 +1205,8 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym == SYM_DEF) return eval_def(list, effective_env, effective_st);
     if (original_op_sym == SYM_NS) return eval_ns(list, effective_env, effective_st);
 
-    // === MACRO EXPANSION ===
-    // Check if the operator is a macro and expand it before evaluation
-    if (original_op_sym) {
-        CljFunction *macro = lookup_macro_resolve(effective_st, original_op_sym);
-        if (macro) {
-            // Collect unevaluated arguments (single list traversal)
-            ID args[16];
-            int argc = 0;
-            for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
-                 cur && argc < 16;
-                 cur = cur->rest ? as_list(cur->rest) : NULL) {
-                args[argc++] = cur->first;
-            }
-            // Call macro and evaluate expanded form
-            ID expanded = eval_function_call((CljObject*)macro, args, argc, effective_env, effective_st);
-            if (!expanded) return NULL;
-            
-            // Transfer metadata from original form to expanded form
-            // This ensures ^#^{:doc ...} (defn ...) metadata reaches the def form
-#ifdef ENABLE_META
-            ID original_meta = meta_get((CljObject*)list);
-            if (original_meta && expanded) {
-                meta_set((CljObject*)expanded, (CljObject*)original_meta);
-            }
-#endif
-            
-            return list_type_matches(TAG(expanded))
-                ? eval_list(as_list(expanded), effective_env, effective_st, ctx)
-                : eval_body(expanded, effective_env, effective_st, ctx);
-        }
-    }
+    // NOTE: Macro expansion is done at canonicalization time (ast_canon.c),
+    // not during evaluation. This ensures macros are expanded once at compile-time.
 
     // Fast-path: Comparison operators (avoid symbol resolution for <, >, <=, >=, =)
     if (original_op_sym && (original_op_sym->base.flags & CLJ_FLAG_COMPARISON)) {
