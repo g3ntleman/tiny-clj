@@ -7,6 +7,60 @@
 #include "tests_common.h"
 
 // ============================================================================
+// AUTORELEASE HYPOTHESIS TEST (must run first!)
+// ============================================================================
+
+// H1/H2/H3: Test map_assoc with AUTORELEASE returns correct value
+TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
+    // This test must run FIRST to verify AUTORELEASE behavior
+    CljMap *map = make_map(4);
+    TEST_ASSERT_NOT_NULL(map);
+    
+    CljSymbol *key = intern_symbol_global("debug-key");
+    CljObject *value = fixnum(42);
+    
+    // Use ASSIGN pattern like ns_define does
+    ASSIGN(map, map_assoc(map, key, value));
+    
+    // Retrieve value - this is what fails in namespace tests
+    ID retrieved = map_get(map, key, NOT_FOUND);
+    
+    // Critical assertions
+    TEST_ASSERT_TRUE_MESSAGE(retrieved != NOT_FOUND, "Value should be found");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)retrieved), "Retrieved value should be fixnum");
+    TEST_ASSERT_EQUAL_MESSAGE(42, as_fixnum((CljValue)retrieved), "Value should be 42");
+    
+    RELEASE(map);
+}
+
+// H6: Test ns_define and ns_resolve pattern
+TEST_SHARED(test_aab_ns_define_resolve_pattern) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
+    
+    // Create symbol and value
+    CljSymbol *test_sym = intern_symbol_global("aab-test-var");
+    TEST_ASSERT_NOT_NULL(test_sym);
+    CljObject *value = fixnum(99);
+    
+    // Store using ns_define
+    ns_define(g_test_eval_state->current_ns, test_sym, value);
+    
+    // Check ns->mappings directly
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state->current_ns->mappings, "mappings should not be NULL");
+    
+    // Retrieve using ns_resolve
+    CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
+    
+    // Critical assertions
+    TEST_ASSERT_NOT_NULL_MESSAGE(resolved, "resolved should not be NULL");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "resolved should be fixnum");
+    TEST_ASSERT_EQUAL_MESSAGE(99, as_fixnum((CljValue)resolved), "Value should be 99");
+    
+    RELEASE(test_sym);
+}
+
+// ============================================================================
 // BASIC EQUALITY TESTS
 // ============================================================================
 

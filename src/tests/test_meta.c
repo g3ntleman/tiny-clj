@@ -78,12 +78,8 @@ TEST(test_meta_function_set_and_get) {
     CljString *value = make_string("value");
     TEST_ASSERT_NOT_NULL(value);
     
-    CljMap *new_meta = map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value);
-    TEST_ASSERT_NOT_NULL(new_meta);
-    if (new_meta != meta_map) {
-        RELEASE(meta_map);  // Only release if new map was created (COW)
-    }
-    meta_map = new_meta;
+    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata
     meta_set((CljObject*)test_obj, (CljObject*)meta_map);
@@ -146,12 +142,8 @@ TEST(test_meta_returns_metadata) {
     CljString *value = make_string("value");
     TEST_ASSERT_NOT_NULL(value);
     
-    CljMap *new_meta = map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value);
-    TEST_ASSERT_NOT_NULL(new_meta);
-    if (new_meta != meta_map) {
-        RELEASE(meta_map);  // Only release if new map was created (COW)
-    }
-    meta_map = new_meta;
+    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata
     meta_set((CljObject*)test_obj, (CljObject*)meta_map);
@@ -197,12 +189,8 @@ TEST(test_meta_resolves_symbols) {
     CljString *value = make_string("Test variable");
     TEST_ASSERT_NOT_NULL(value);
     
-    CljMap *new_meta = map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value);
-    TEST_ASSERT_NOT_NULL(new_meta);
-    if (new_meta != meta_map) {
-        RELEASE(meta_map);  // Only release if new map was created (COW)
-    }
-    meta_map = new_meta;
+    ASSIGN(meta_map, map_assoc((CljValue)meta_map, (CljValue)key, (CljValue)value));
+    TEST_ASSERT_NOT_NULL(meta_map);
     
     // Set metadata on the value
     meta_set((CljObject*)test_value, (CljObject*)meta_map);

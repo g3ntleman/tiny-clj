@@ -77,8 +77,8 @@ TEST_SHARED(test_pr_str_with_containers) {
         // The strings inside should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"world\"") != NULL || strstr(string_data(result), "world") != NULL);
-        RELEASE((CljObject*)result);
-        RELEASE((CljObject*)vec);
+        RELEASE(result);
+        RELEASE(vec);
         RELEASE(str1);
         RELEASE(str2);
         
@@ -92,7 +92,7 @@ TEST_SHARED(test_pr_str_with_containers) {
         TEST_ASSERT_NOT_NULL(result);
         // The string values should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
-        RELEASE((CljObject*)map);
+        RELEASE(map);
         RELEASE(key_str);
         RELEASE(val_str);
         
@@ -107,8 +107,8 @@ TEST_SHARED(test_pr_str_with_containers) {
         TEST_ASSERT_NOT_NULL(result);
         // Nested string should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"nested\"") != NULL || strstr(string_data(result), "nested") != NULL);
-        RELEASE((CljObject*)outer_vec);
-        RELEASE((CljObject*)inner_vec);
+        RELEASE(outer_vec);
+        RELEASE(inner_vec);
         RELEASE(nested_str);
     });
 }
@@ -139,7 +139,7 @@ TEST_SHARED(test_print_str_different_types) {
         TEST_ASSERT_NOT_NULL(result);
         // Map format may vary, just check it's not empty
         TEST_ASSERT_TRUE(string_length(result) > 0);
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 

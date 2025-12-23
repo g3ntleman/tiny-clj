@@ -409,7 +409,7 @@ ID conj2(ID vec, ID val) {
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
     CljVector* result = vector_conj((CljVector*)vec, val);
     if (!result) return NULL;
-    return RETAIN(result);
+    return result;
 }
 
 // Generic conj function that works with BuiltinFn signature
@@ -923,14 +923,13 @@ ID assoc3(ID *args, unsigned int argc) {
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
         CljVector* result = vector_assoc((CljVector*)coll, i, val);
         if (!result) return NULL;
-        return RETAIN(result);
+        return result;
     }
 
     // Handle maps
     if (coll_tag == CLJ_MAP) {
         // Note: key can be NULL (nil) - that's a valid key in Clojure!
-        CljMap *result = map_assoc((CljMap*)coll, key, val);
-        return RETAIN(result);
+        return map_assoc((CljMap*)coll, key, val);
     }
 
     // Unsupported collection type
@@ -1113,8 +1112,7 @@ ID native_update(ID *args, unsigned int argc) {
     ID new_val = eval_function_call(func, fn_args, fn_argc, NULL, st);
     
     // assoc the new value
-    CljMap *result = map_assoc((CljMap*)coll, key, new_val);
-    return AUTORELEASE(RETAIN(result));
+    return map_assoc((CljMap*)coll, key, new_val);
 }
 
 // into: Add all items from source into target collection
@@ -1201,13 +1199,13 @@ ID native_into(ID *args, unsigned int argc) {
                 if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT) {
                     CljVector *pair = (CljVector*)entry;
                     if (vector_count(pair) >= 2) {
-                        result = map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1));
+                        ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
                     }
                 }
             }
         }
         
-        return AUTORELEASE(RETAIN(result));
+        return result;
     }
     
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1260,7 +1258,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
             ID key = vector_nth((CljVector*)keys, i);
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
-                result = map_assoc(result, key, val);
+                ASSIGN(result, map_assoc(result, key, val));
             }
         }
     } else if (keys_tag == CLJ_LIST || keys_tag == CLJ_AST_NODE) {
@@ -1269,13 +1267,13 @@ ID native_select_keys(ID *args, unsigned int argc) {
             ID key = LIST_FIRST(list);
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
-                result = map_assoc(result, key, val);
+                ASSIGN(result, map_assoc(result, key, val));
             }
             list = as_list(LIST_REST(list));
         }
     }
     
-    return AUTORELEASE(RETAIN(result));
+    return result;
 }
 
 // find: Return [key value] entry for key, or nil if not found
@@ -2878,7 +2876,7 @@ ID native_get_macro(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "get-macro");
     if (!args[0] || TAG(args[0]) != CLJ_SYMBOL || !g_current_eval_state) return NULL;
     CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
-    return macro ? RETAIN((CljObject*)macro) : NULL;
+    return macro ? RETAIN(macro) : NULL;
 }
 
 // Apply function to arguments: (apply f args) or (apply f a b c args)
@@ -5269,22 +5267,14 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
             if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0') {
                 CljString *name_str = make_string(symbol_name);
                 if (name_str) {
-                    CljMap *updated = map_assoc(meta_map, SYM_KW_NAME, name_str);
-                    if (updated != meta_map) {
-                        RELEASE(meta_map);
-                        meta_map = updated;
-                    }
+                    ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_str));
                     RELEASE(name_str);
                 }
             }
 
             // Add :ns (namespace name as symbol)
             if (SYM_KW_NS && target_ns && target_ns->name) {
-                CljMap *updated = map_assoc(meta_map, SYM_KW_NS, target_ns->name);
-                if (updated != meta_map) {
-                    RELEASE(meta_map);
-                    meta_map = updated;
-                }
+                ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, target_ns->name));
             }
 
             // Set metadata on function object

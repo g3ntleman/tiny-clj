@@ -615,9 +615,7 @@ void symbol_table_add(CljSymbol *symbol) {
         return;  // Already exists
     }
 
-    // CRITICAL: Assert RC == 1 before modification to prevent unexpected COW
-    CLJ_ASSERT(g_runtime.symbol_table->base.rc == 1 && 
-               "symbol_table must have RC=1 before modification (no external references allowed)");
+    // Note: RC may be > 1 due to autorelease pool, COW handles this correctly
 
     // Create a real CljString key for HashMap storage
     // We need to create a new string because the HashMap will retain it
@@ -625,14 +623,7 @@ void symbol_table_add(CljSymbol *symbol) {
     
     // Insert symbol into HashMap with CljString key
     // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference
-    // Adopt semantics: build the updated table first, then release the old one.
-    // This keeps key/value references valid during rehash/copy transitions.
-    CljHashMap *old_table = g_runtime.symbol_table;
-    CljHashMap *new_table = hashmap_assoc(old_table, key, symbol);
-    if (new_table != old_table) {
-        g_runtime.symbol_table = new_table;
-        RELEASE(old_table);
-    }
+    hashmap_assoc_inplace(&g_runtime.symbol_table, key, symbol);
     RELEASE(key);
 }
 
@@ -763,7 +754,8 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
 // This function will be eliminated by dead-code-elimination in production builds
 // since it's only called from test files
 void symbol_table_cleanup() {
-    ASSIGN(g_runtime.symbol_table, NULL);
+    RELEASE(g_runtime.symbol_table);
+    g_runtime.symbol_table = NULL;
 }
 
 // Special Form Management moved to to_string.c

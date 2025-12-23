@@ -4,7 +4,7 @@ static CljMap* adopt_map(CljMap *current, CljMap *updated) {
         return current;
     }
     if (current && current != updated) {
-        RELEASE((CljObject*)current);
+        RELEASE(current);
     }
     return updated;
 }
@@ -199,9 +199,9 @@ TEST(test_map_assoc_with_structural_equality) {
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val));
     TEST_ASSERT_EQUAL_INT(1, map->count);
 
-    RELEASE((CljObject*)str1);
-    RELEASE((CljObject*)str2);
-    RELEASE((CljObject*)map);
+    RELEASE(str1);
+    RELEASE(str2);
+    RELEASE(map);
 }
 
 TEST(test_map_assoc_performance_unchanged) {
@@ -348,7 +348,7 @@ TEST(test_map_contains_structural_match) {
     int contains_different = map_contains(map, str3);
     TEST_ASSERT_EQUAL_INT(0, contains_different);
 
-    RELEASE((CljObject*)map);
+    RELEASE(map);
     });
 }
 

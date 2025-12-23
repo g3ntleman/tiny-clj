@@ -969,9 +969,9 @@ TEST_SHARED(test_clj_conj_updates_count_for_event_loop) {
         // Cleanup - release retained elements
         RELEASE(elem0);
         RELEASE(elem1);
-        RELEASE((CljObject*)tvec);
-        RELEASE((CljObject*)test_map);
-        RELEASE((CljObject*)test_map2);
+        RELEASE(tvec);
+        RELEASE(test_map);
+        RELEASE(test_map2);
     });
 }
 
@@ -1009,8 +1009,8 @@ TEST_SHARED(test_clj_conj_with_empty_transient_vector) {
         
         // Cleanup - release retained element
         RELEASE(elem0);
-        RELEASE((CljObject*)tvec);
-        RELEASE((CljObject*)test_map);
+        RELEASE(tvec);
+        RELEASE(test_map);
     });
 }
 
@@ -1073,7 +1073,7 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         vec = vector_conj(vec, fixnum(2));
         vec = vector_conj(vec, fixnum(3));
         CljVector *tvec = vector_transient(vec);
-        RELEASE((CljObject*)vec);
+        RELEASE(vec);
         TEST_ASSERT_NOT_NULL(tvec);
         TEST_ASSERT_TRUE(TAG(tvec) == CLJ_VECTOR_TRANSIENT);
         
@@ -1084,7 +1084,7 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         TEST_ASSERT_EQUAL_PTR(tvec, result);  // Should be the same pointer
         TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR_TRANSIENT);
         
-        RELEASE((CljObject*)tvec);
+        RELEASE(tvec);
         
         // Test 3: (transient) on transient map returns the same object
         CljMap *map = make_map(4);
@@ -1104,7 +1104,7 @@ TEST_SHARED(test_transient_on_transient_returns_same_object) {
         TEST_ASSERT_EQUAL_PTR(tmap, map_result);  // Should be the same pointer
         TEST_ASSERT_TRUE(TAG(map_result) == CLJ_MAP_TRANSIENT);
         
-        RELEASE((CljObject*)tmap);
+        RELEASE(tmap);
     });
 }
 
@@ -1142,7 +1142,7 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
         TEST_ASSERT_EQUAL_PTR(vec, result);  // Should be the same pointer
         TEST_ASSERT_TRUE(TAG(result) == CLJ_VECTOR);
         
-        RELEASE((CljObject*)vec);
+        RELEASE(vec);
         
         // Test 3: (persistent!) on persistent map returns the same object
         CljMap *map = make_map(4);
@@ -1166,7 +1166,7 @@ TEST_SHARED(test_persistent_on_persistent_returns_same_object) {
 
 // Test VECTOR_FOR_EACH macro - iterate over all vector elements
 TEST_SHARED(test_vector_for_each_macro) {
-    CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(4, CLJ_VECTOR));
+    CljVector *vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     
     // Add elements to vector
     vec = vector_conj(vec, fixnum(1));
@@ -1204,7 +1204,7 @@ TEST_SHARED(test_vector_for_each_macro) {
 
 // Test VECTOR_FOR_EACH with empty vector
 TEST_SHARED(test_vector_for_each_empty_vector) {
-    CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(0, CLJ_VECTOR));
+    CljVector *vec = AUTORELEASE(make_vector(0, CLJ_VECTOR));
     
     int iteration_count = 0;
     VECTOR_FOR_EACH(vec, elem) {
@@ -1230,7 +1230,7 @@ TEST_SHARED(test_vector_for_each_null_vector) {
 
 // Test VECTOR_FOR_EACH with NULL elements
 TEST_SHARED(test_vector_for_each_with_null_elements) {
-    CljVector *vec = (CljVector*)AUTORELEASE((CljObject*)make_vector(4, CLJ_VECTOR));
+    CljVector *vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     
     // Add elements including NULL (nil)
     vec = vector_conj(vec, fixnum(1));

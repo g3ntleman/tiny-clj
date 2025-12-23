@@ -120,7 +120,7 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                         editor->cursor_pos = editor->length;
                         editor->put_string(editor->buffer);
                         // Release the retained CljString
-                        RELEASE((CljObject*)history_line);
+                        RELEASE(history_line);
                     } else {
                         // History line not found - reset to new line
                         editor->history_index = UINT_MAX;
@@ -160,7 +160,7 @@ static int handle_ansi_escape_sequence(LineEditor *editor, const char *input, in
                         editor->cursor_pos = editor->length;
                         editor->put_string(editor->buffer);
                         // Release the retained CljString
-                        RELEASE((CljObject*)history_line);
+                        RELEASE(history_line);
                     }
                 }
             } else {
@@ -452,11 +452,11 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
                     const char *str_data = clj_string_data(last_line);
                     if (strcmp(line, str_data) == 0) {
                         // Duplicate of last entry - skip adding
-                        RELEASE((CljObject*)last_line);
+                        RELEASE(last_line);
                         RELEASE(temp_persistent);
                         return;
                     }
-                    RELEASE((CljObject*)last_line);
+                    RELEASE(last_line);
                 }
             }
             RELEASE(temp_persistent);
@@ -469,10 +469,10 @@ void line_editor_add_to_history(LineEditor *editor, const char *line) {
                 const char *str_data = clj_string_data(last_line);
                 if (strcmp(line, str_data) == 0) {
                     // Duplicate of last entry - skip adding
-                    RELEASE((CljObject*)last_line);
+                    RELEASE(last_line);
                     return;
                 }
-                RELEASE((CljObject*)last_line);
+                RELEASE(last_line);
             }
         }
     }

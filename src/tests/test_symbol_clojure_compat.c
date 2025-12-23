@@ -16,8 +16,8 @@ TEST(test_symbol_creation_without_namespace) {
     TEST_ASSERT_NOT_NULL_MESSAGE(sym->ns_name, "Symbol should have namespace name symbol");
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(sym->ns_name));
 
-    RELEASE((CljObject*)sym);
-    RELEASE((CljObject*)ns_name_sym);
+    RELEASE(sym);
+    RELEASE(ns_name_sym);
 }
 
 // Test: Symbol->ns is CljSymbol* (namespace name), not CljNamespace*
@@ -34,8 +34,8 @@ TEST(test_symbol_ns_is_symbol_not_namespace) {
     TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(sym->ns_name));
     TEST_ASSERT_EQUAL_STRING("my-ns", sym->ns_name->cname);
 
-    RELEASE((CljObject*)sym);
-    RELEASE((CljObject*)ns_name_sym);
+    RELEASE(sym);
+    RELEASE(ns_name_sym);
 }
 
 // Test: Equality comparison works with Symbol->ns as CljSymbol*
@@ -58,9 +58,9 @@ TEST(test_symbol_equality_with_symbol_ns) {
     TEST_ASSERT_TRUE_MESSAGE(clj_equal((CljObject*)sym1, (CljObject*)sym2),
                              "Interned symbols with same name and namespace should be equal (pointer comparison)");
 
-    RELEASE((CljObject*)sym1);
-    RELEASE((CljObject*)sym2);
-    RELEASE((CljObject*)ns_name_sym);
+    RELEASE(sym1);
+    RELEASE(sym2);
+    RELEASE(ns_name_sym);
 }
 
 // Test: String representation works with Symbol->ns as CljSymbol*
@@ -86,8 +86,8 @@ TEST(test_symbol_string_representation) {
     TEST_ASSERT_TRUE_MESSAGE(strstr(str_data, "test-repr-var") != NULL,
                              "String representation should contain name");
 
-    RELEASE((CljObject*)sym);
-    RELEASE((CljObject*)ns_name_sym);
+    RELEASE(sym);
+    RELEASE(ns_name_sym);
 }
 
 // Test: Namespace lookup over Symbol->ns->cname
@@ -106,8 +106,8 @@ TEST(test_namespace_lookup_from_symbol) {
     CljNamespace *found_ns = symbol_get_namespace(sym);
     TEST_ASSERT_EQUAL_PTR_MESSAGE(ns, found_ns, "Should find namespace via symbol's namespace name");
 
-    RELEASE((CljObject*)sym);
-    RELEASE((CljObject*)ns_name_sym);
+    RELEASE(sym);
+    RELEASE(ns_name_sym);
 }
 
 // Test: Symbol without namespace (ns = NULL)
@@ -118,6 +118,6 @@ TEST(test_symbol_without_namespace) {
     TEST_ASSERT_NULL_MESSAGE(sym->ns_name, "Symbol without namespace should have ns = NULL");
     TEST_ASSERT_EQUAL_STRING("unqualified", sym->cname);
 
-    RELEASE((CljObject*)sym);
+    RELEASE(sym);
 }
 

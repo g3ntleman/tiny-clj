@@ -41,11 +41,11 @@ TEST(test_for_basic) {
 TEST(test_dotimes_missing_body) {
     // Test eval_dotimes with missing body - unique test not in test_loops.c
     // Create dotimes call: (dotimes [i 3]) - missing body
-    CljObject *binding_vector = AUTORELEASE((CljObject*)make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(3), NULL)));
-    CljObject *dotimes_call = AUTORELEASE((CljObject*)make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, NULL)));
+    CljObject *binding_vector = AUTORELEASE(make_list(intern_symbol_global("i"), (CljList*)make_list(fixnum(3), NULL)));
+    CljObject *dotimes_call = AUTORELEASE(make_list(SYM_DOTIMES, (CljList*)make_list(binding_vector, NULL)));
     
     // Create environment
-    CljMap *env = (CljMap*)AUTORELEASE((CljObject*)make_map(4));
+    CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
     CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);

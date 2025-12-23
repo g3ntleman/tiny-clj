@@ -393,7 +393,7 @@ ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalCo
     // Set :macro true in metadata
     CljMap *meta = make_map(4);
     CljSymbol *kw_macro = intern_symbol_global(":macro");
-    meta = map_assoc(meta, (ID)kw_macro, clj_true);
+    ASSIGN(meta, map_assoc(meta, (ID)kw_macro, clj_true));
     meta_set((CljObject*)macro_fn, (CljObject*)meta);
     RELEASE(meta);
     

@@ -674,13 +674,13 @@ static void release_object_default(CljObject *v) {
                 CljFunction *func = (CljFunction*)v;
                 if (func) {
                     // Release parameter vector (vector will release all elements) - RELEASE handles NULL
-                    RELEASE((CljObject*)func->params);
+                    RELEASE(func->params);
                     // Release body - RELEASE handles NULL
                     RELEASE(func->body);
                     // Release closure environment - RELEASE handles NULL
-                    RELEASE((CljObject*)func->env_stack);
+                    RELEASE(func->env_stack);
                     // Release captured namespace reference
-                    RELEASE((CljObject*)func->ns);
+                    RELEASE(func->ns);
                     // Free function name (strdup'd in make_function)
                     if (func->name) {
                         free((void*)func->name);

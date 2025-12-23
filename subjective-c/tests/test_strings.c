@@ -9,7 +9,7 @@ TEST(test_make_clj_string_basic) {
     CljString *s = make_clj_string("abc");
     expect_string_equals(s, "abc");
     TEST_ASSERT_EQUAL_UINT16(3, s->length);
-    RELEASE((CljObject*)s);
+    RELEASE(s);
 }
 
 TEST(test_make_string_returns_singleton_for_empty) {
@@ -24,7 +24,7 @@ TEST(test_make_string_buffer_zero_filled) {
     for (size_t i = 0; i < 5; ++i) {
         TEST_ASSERT_EQUAL_CHAR(0, buf->data[i]);
     }
-    RELEASE((CljObject*)buf);
+    RELEASE(buf);
 }
 
 // Tests for to_string, pr_str, strings_register_special_form, etc. 

@@ -74,7 +74,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     func->body = RETAIN(body);
     func->env_stack = RETAIN(env_stack);
     func->name = cname ? strdup(cname) : NULL;
-    func->ns = ns ? (struct CljNamespace*)RETAIN((CljObject*)ns) : NULL;
+    func->ns = ns ? (struct CljNamespace*)RETAIN(ns) : NULL;
     func->variadic_index = variadic_index;
     
     // Allocate and initialize parameter array

@@ -575,7 +575,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                     CljVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
                         // RETAIN before passing to save function (it may convert transient to persistent)
-                        RETAIN((CljObject*)vec);
+                        RETAIN(vec);
                         line_editor_history_save_default((CljObject*)vec);
                         RELEASE(vec);
                     }
@@ -600,7 +600,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             CljVector *vec = line_editor_get_history_vector(ed);
             if (vec) {
                 // RETAIN before passing to save function (it may convert transient to persistent)
-                RETAIN((CljObject*)vec);
+                RETAIN(vec);
                 line_editor_history_save_default((CljObject*)vec);
                 RELEASE(vec);
             }

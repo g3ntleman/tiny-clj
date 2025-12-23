@@ -25,7 +25,7 @@ TEST(test_byte_array_creation) {
         TEST_ASSERT_EQUAL_UINT8(0, ba->data[i]);
     }
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 TEST(test_byte_array_from_bytes) {
@@ -41,7 +41,7 @@ TEST(test_byte_array_from_bytes) {
         TEST_ASSERT_EQUAL_UINT8(data[i], ba->data[i]);
     }
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 TEST(test_byte_array_get_set) {
@@ -63,22 +63,22 @@ TEST(test_byte_array_get_set) {
     TEST_ASSERT_EQUAL_UINT8(128, byte_array_get(arr, 3));
     TEST_ASSERT_EQUAL_UINT8(200, byte_array_get(arr, 4));
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 TEST(test_byte_array_length) {
     // Test length function
     CljValue arr1 = make_byte_array(0);
     TEST_ASSERT_EQUAL_INT(0, byte_array_length(arr1));
-    RELEASE((CljObject*)arr1);
+    RELEASE(arr1);
     
     CljValue arr2 = make_byte_array(10);
     TEST_ASSERT_EQUAL_INT(10, byte_array_length(arr2));
-    RELEASE((CljObject*)arr2);
+    RELEASE(arr2);
     
     CljValue arr3 = make_byte_array(1000);
     TEST_ASSERT_EQUAL_INT(1000, byte_array_length(arr3));
-    RELEASE((CljObject*)arr3);
+    RELEASE(arr3);
 }
 
 TEST(test_byte_array_clone) {
@@ -105,8 +105,8 @@ TEST(test_byte_array_clone) {
     TEST_ASSERT_EQUAL_UINT8(10, byte_array_get(arr1, 0));
     TEST_ASSERT_EQUAL_UINT8(99, byte_array_get(arr2, 0));
     
-    RELEASE((CljObject*)arr1);
-    RELEASE((CljObject*)arr2);
+    RELEASE(arr1);
+    RELEASE(arr2);
 }
 
 TEST(test_byte_array_copy_from) {
@@ -125,7 +125,7 @@ TEST(test_byte_array_copy_from) {
     TEST_ASSERT_EQUAL_UINT8(5, byte_array_get(arr, 6));
     TEST_ASSERT_EQUAL_UINT8(0, byte_array_get(arr, 7));
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 TEST(test_byte_array_copy_to) {
@@ -142,7 +142,7 @@ TEST(test_byte_array_copy_to) {
         TEST_ASSERT_EQUAL_UINT8(i * 10, dest[i]);
     }
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 TEST(test_byte_array_copy_between) {
@@ -166,8 +166,8 @@ TEST(test_byte_array_copy_between) {
     TEST_ASSERT_EQUAL_UINT8(106, byte_array_get(dest, 7));
     TEST_ASSERT_EQUAL_UINT8(0, byte_array_get(dest, 8));
     
-    RELEASE((CljObject*)src);
-    RELEASE((CljObject*)dest);
+    RELEASE(src);
+    RELEASE(dest);
 }
 
 TEST(test_byte_array_slice) {
@@ -186,8 +186,8 @@ TEST(test_byte_array_slice) {
     TEST_ASSERT_EQUAL_UINT8(25, byte_array_get(slice, 2));
     TEST_ASSERT_EQUAL_UINT8(30, byte_array_get(slice, 3));
     
-    RELEASE((CljObject*)arr);
-    RELEASE((CljObject*)slice);
+    RELEASE(arr);
+    RELEASE(slice);
 }
 
 TEST(test_byte_array_id_operations) {
@@ -217,7 +217,7 @@ TEST(test_byte_array_id_operations) {
     TEST_ASSERT_EQUAL_INT(CLJ_INT, TAG(read2));
     TEST_ASSERT_EQUAL_INT(999, AS_FIXNUM(read2));
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 TEST(test_byte_array_memory_management) {
@@ -246,7 +246,7 @@ TEST(test_byte_array_empty) {
     TEST_ASSERT_EQUAL_INT(0, ba->length);
     TEST_ASSERT_NULL(ba->data);
     
-    RELEASE((CljObject*)arr);
+    RELEASE(arr);
 }
 
 // ============================================================================

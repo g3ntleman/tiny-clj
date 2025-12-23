@@ -105,7 +105,7 @@ TEST(test_vector_memory) {
         RELEASE(elem0);
         
         // Clean up
-        RELEASE((CljObject*)vec);
+        RELEASE(vec);
     }
 }
 
@@ -173,7 +173,7 @@ TEST(test_cow_assumptions_rc_behavior) {
         CljMap *map = (CljMap*)make_map(4);
         TEST_ASSERT_EQUAL(1, map->base.rc);
         
-        CljMap *same = (CljMap*)AUTORELEASE((CljValue)map);
+        CljMap *same = AUTORELEASE((CljValue)map);
         TEST_ASSERT_EQUAL(1, map->base.rc);  // RC bleibt 1!
         TEST_ASSERT_EQUAL_PTR(map, same);
         

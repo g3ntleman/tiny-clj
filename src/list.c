@@ -37,8 +37,8 @@ CljList* make_list(ID first, CljList *rest) {
     
     list->base.type = CLJ_LIST;
     list->base.rc = 1;
-    list->first = RETAIN((CljObject*)first);
-    list->rest = RETAIN((CljObject*)rest);
+    list->first = RETAIN(first);
+    list->rest = RETAIN(rest);
     
     return list;
 }

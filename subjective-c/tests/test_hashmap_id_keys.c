@@ -10,7 +10,7 @@ static CljHashMap* adopt_hashmap(CljHashMap *current, CljHashMap *updated) {
         return current;
     }
     if (current && current != updated) {
-        RELEASE((CljObject*)current);
+        RELEASE(current);
     }
     return updated;
 }
@@ -47,9 +47,9 @@ TEST(test_hashmap_string_key) {
     int contains = hashmap_contains(map, key);
     TEST_ASSERT_EQUAL_INT(1, contains);
     
-    RELEASE((CljObject*)key);
-    RELEASE((CljObject*)value);
-    RELEASE((CljObject*)map);
+    RELEASE(key);
+    RELEASE(value);
+    RELEASE(map);
 }
 
 TEST(test_hashmap_fixnum_key) {
@@ -65,8 +65,8 @@ TEST(test_hashmap_fixnum_key) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
-    RELEASE((CljObject*)value);
-    RELEASE((CljObject*)map);
+    RELEASE(value);
+    RELEASE(map);
 }
 
 TEST(test_hashmap_nil_key) {
@@ -81,8 +81,8 @@ TEST(test_hashmap_nil_key) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
-    RELEASE((CljObject*)value);
-    RELEASE((CljObject*)map);
+    RELEASE(value);
+    RELEASE(map);
 }
 
 TEST(test_hashmap_mixed_keys) {
@@ -116,10 +116,10 @@ TEST(test_hashmap_mixed_keys) {
     ID result3 = hashmap_get(map, NULL, NULL);
     TEST_ASSERT_EQUAL_PTR(nil_val, result3);
     
-    RELEASE((CljObject*)str_key);
-    RELEASE((CljObject*)str_val);
-    RELEASE((CljObject*)int_val);
-    RELEASE((CljObject*)nil_val);
-    RELEASE((CljObject*)map);
+    RELEASE(str_key);
+    RELEASE(str_val);
+    RELEASE(int_val);
+    RELEASE(nil_val);
+    RELEASE(map);
 }
 
