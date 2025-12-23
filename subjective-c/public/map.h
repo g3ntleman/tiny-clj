@@ -49,6 +49,7 @@ void map_foreach(CljMap *map, void (*func)(ID, ID));
 int map_contains(CljMap *map, ID key);
 CljMap* map_remove(CljMap *map, ID key);
 CljMap* make_transient_map_from_kv(unsigned int count, ...);
+CljMap* make_map_kv(ID first_key, ...);  // NOT_FOUND terminated
 CljMap* make_map_from_stack(CljObject **pairs, int pair_count);
 CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int addition_count);
 

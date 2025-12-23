@@ -519,3 +519,30 @@ TEST(test_rem_negative_dividend) {
     // (rem -10 3) => -1
     assert_eval_truthy("(= (rem -10 3) -1)");
 }
+
+// --- clojure.string/pad-left ---
+
+TEST(test_string_pad_left_basic) {
+    // First, require clojure.string
+    eval_string("(require 'clojure.string)", g_test_eval_state);
+    
+    // (clojure.string/pad-left "5" 3 "0") => "005"
+    assert_eval_truthy("(= (clojure.string/pad-left \"5\" 3 \"0\") \"005\")");
+}
+
+TEST(test_string_pad_left_no_padding_needed) {
+    eval_string("(require 'clojure.string)", g_test_eval_state);
+    
+    // String already at width - no padding
+    assert_eval_truthy("(= (clojure.string/pad-left \"abc\" 3 \"0\") \"abc\")");
+    
+    // String longer than width - unchanged
+    assert_eval_truthy("(= (clojure.string/pad-left \"abcdef\" 3 \"0\") \"abcdef\")");
+}
+
+TEST(test_string_pad_left_empty_string) {
+    eval_string("(require 'clojure.string)", g_test_eval_state);
+    
+    // Padding empty string
+    assert_eval_truthy("(= (clojure.string/pad-left \"\" 3 \"x\") \"xxx\")");
+}

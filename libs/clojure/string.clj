@@ -141,6 +141,10 @@
 ^#^{:doc "Converts string to all lower-case."}
 (defn lower-case [s] :native)
 
+;; pad-left - Pads string on the left to given width
+^#^{:doc "Returns s padded on the left with pad-char to width characters. If s is already >= width, returns s unchanged. pad-char should be a single-character string."}
+(defn pad-left [s width pad-char] :native)
+
 ;; reverse - Reverses string
 ^#^{:doc "Returns s with its characters reversed."}
 (defn reverse [s] :native)

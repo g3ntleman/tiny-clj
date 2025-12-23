@@ -72,6 +72,7 @@ CljSymbol *SYM_NTH = NULL;
 CljSymbol *SYM_TRIM = NULL;
 CljSymbol *SYM_UPPER_CASE = NULL;
 CljSymbol *SYM_LOWER_CASE = NULL;
+CljSymbol *SYM_PAD_LEFT = NULL;
 CljSymbol *SYM_LAST_INDEX_OF = NULL;
 CljSymbol *SYM_STRING_REVERSE = NULL;
 CljSymbol *SYM_FIRST = NULL;
@@ -216,6 +217,7 @@ DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
 DEFINE_EXTERN_SYMBOL(sym_trim_data, "trim");
 DEFINE_EXTERN_SYMBOL(sym_upper_case_data, "upper-case");
 DEFINE_EXTERN_SYMBOL(sym_lower_case_data, "lower-case");
+DEFINE_EXTERN_SYMBOL(sym_pad_left_data, "pad-left");
 DEFINE_EXTERN_SYMBOL(sym_last_index_of_data, "last-index-of");
 DEFINE_EXTERN_SYMBOL(sym_string_reverse_data, "reverse");
 
@@ -429,6 +431,8 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_UPPER_CASE, sym_upper_case_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_LOWER_CASE, sym_lower_case_data, SYM_CLOJURE_STRING);
+
+    INIT_SYMBOL_NS(SYM_PAD_LEFT, sym_pad_left_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_LAST_INDEX_OF, sym_last_index_of_data, SYM_CLOJURE_STRING);
 

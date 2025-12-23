@@ -138,6 +138,7 @@ ID native_load_file(ID *args, unsigned int argc);
 ID native_trim(ID *args, unsigned int argc);
 ID native_upper_case(ID *args, unsigned int argc);
 ID native_lower_case(ID *args, unsigned int argc);
+ID native_pad_left(ID *args, unsigned int argc);
 ID native_last_index_of(ID *args, unsigned int argc);
 ID native_string_reverse(ID *args, unsigned int argc);
 ID native_source(ID *args, unsigned int argc);
@@ -2266,6 +2267,72 @@ ID native_lower_case(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+// String pad-left: (pad-left s width pad-char)
+// Returns s padded on the left with pad-char to width characters.
+// If s is already >= width, returns s unchanged.
+ID native_pad_left(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 3, "pad-left");
+    
+    ID str_arg = args[0];
+    ID width_arg = args[1];
+    ID pad_char_arg = args[2];
+    
+    // Validate string argument
+    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "pad-left requires a string as first argument");
+        return NULL;
+    }
+    
+    // Validate width argument
+    if (!is_fixnum(width_arg)) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "pad-left requires an integer width as second argument");
+        return NULL;
+    }
+    
+    // Validate pad-char argument
+    if (!pad_char_arg || TAG(pad_char_arg) != CLJ_STRING) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "pad-left requires a string as third argument (pad-char)");
+        return NULL;
+    }
+    
+    CljString *str = as_clj_string(str_arg);
+    int width = as_fixnum(width_arg);
+    CljString *pad_str = as_clj_string(pad_char_arg);
+    
+    const char *str_data = string_data(str);
+    uint16_t str_len = string_length(str);
+    
+    // No padding needed
+    if (str_len >= (uint16_t)width) {
+        return str_arg;  // Return unchanged
+    }
+    
+    // Get pad character (first char of pad-char string)
+    const char *pad_data = string_data(pad_str);
+    uint16_t pad_len = string_length(pad_str);
+    char pad_char = (pad_len > 0) ? pad_data[0] : ' ';
+    
+    // Calculate padding needed
+    int padding = width - str_len;
+    
+    // Create result string
+    CljString *result = make_string_buffer(width);
+    
+    // Fill padding
+    for (int i = 0; i < padding; i++) {
+        result->data[i] = pad_char;
+    }
+    
+    // Copy original string
+    memcpy(result->data + padding, str_data, str_len);
+    result->data[width] = '\0';
+    
+    return AUTORELEASE(result);
+}
+
 // String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
 ID native_last_index_of(ID *args, unsigned int argc) {
     CHECK_ARITY_RANGE(argc, 2, 3, "last-index-of");
@@ -2668,6 +2735,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_trim_data.sym, native_trim},
     {&sym_upper_case_data.sym, native_upper_case},
     {&sym_lower_case_data.sym, native_lower_case},
+    {&sym_pad_left_data.sym, native_pad_left},
     {&sym_last_index_of_data.sym, native_last_index_of},
     {&sym_string_reverse_data.sym, native_string_reverse},
     // clojure.repl functions
@@ -5167,34 +5235,32 @@ ID native_swap_bang(ID *args, unsigned int argc) {
 // Note: def and ns are now special forms (not builtins) because they require non-evaluated arguments
 // They are handled directly in eval_list() via eval_def() and eval_ns()
 
-// epoch-minutes: Minutes since Unix epoch (1970-01-01)
-// Range: ~510 years (fits in 29-bit Fixnum)
-ID native_epoch_minutes(ID *args, unsigned int argc) {
+// now: Atomic timestamp as map {:days epoch-days :ms millis-in-day}
+// Single gettimeofday() call ensures consistency (no race condition at midnight)
+ID native_now(ID *args, unsigned int argc) {
     (void)args;
     if (argc != 0) {
-        throw_exception(EXCEPTION_ARITY, "epoch-minutes takes no arguments", NULL, 0, 0);
+        throw_exception(EXCEPTION_ARITY, "now takes no arguments", NULL, 0, 0);
         return NULL;
     }
+    
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    int64_t total_seconds = tv.tv_sec;
-    int32_t minutes = (int32_t)(total_seconds / 60);
-    return fixnum(minutes);
+    
+    // Calculate both values from same timestamp
+    int32_t days = (int32_t)(tv.tv_sec / 86400);
+    int32_t sec_in_day = tv.tv_sec % 86400;
+    int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
+    
+    // Build result map {:days N :ms M}
+    return AUTORELEASE((ID)make_map_kv(
+        (ID)intern_symbol_global(":days"), fixnum(days),
+        (ID)intern_symbol_global(":ms"), fixnum(millis),
+        NOT_FOUND));
 }
 
-// millis-in-minute: Milliseconds within current minute (0-59999)
-ID native_millis_in_minute(ID *args, unsigned int argc) {
-    (void)args;
-    if (argc != 0) {
-        throw_exception(EXCEPTION_ARITY, "millis-in-minute takes no arguments", NULL, 0, 0);
-        return NULL;
-    }
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    int32_t sec_in_min = tv.tv_sec % 60;
-    int32_t millis = sec_in_min * 1000 + tv.tv_usec / 1000;
-    return fixnum(millis);
-}
+// NOTE: epoch-minutes and millis-in-minute removed in favor of (now) which returns
+// an atomic map {:days epoch-days :ms millis-in-day}
 
 // do: Evaluate expressions sequentially, return last value
 // Note: As a builtin, arguments are already evaluated, so we just return the last one
@@ -5327,6 +5393,5 @@ void register_builtins() {
     register_builtin_in_core("with-meta", native_with_meta);
     
     // Time functions
-    register_builtin_in_core("epoch-minutes", native_epoch_minutes);
-    register_builtin_in_core("millis-in-minute", native_millis_in_minute);
+    register_builtin_in_core("now", native_now);
 }
