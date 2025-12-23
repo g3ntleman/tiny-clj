@@ -1691,23 +1691,9 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             // If direct lookup failed, rely on namespace mappings to contain canonical keys.
         }
 
-        // Qualified symbol not found in mappings - try native function lookup
-        // This handles cases where native functions (like trim) are not yet registered in mappings
-        // NOTE: Alias resolution is now done in the parser, so symbol->ns_name is already resolved
-        // OPTIMIZATION: Use symbol directly (already qualified) instead of re-interning
-        if (symbol->cname) {
-            BuiltinFn native_func = native_function_lookup(symbol);
-            if (native_func) {
-                // Found native function - create function object and return it
-                CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, symbol->cname);
-                if (native_func_obj) {
-                    // Cache native function in namespace mappings to preserve invariants
-                    // Use symbol directly (already qualified) - no need to re-intern
-                    ns_define(target_ns, symbol, native_func_obj);
-                    return native_func_obj;
-                }
-            }
-        }
+        // CLOJURE COMPATIBILITY: Qualified symbols require explicit (require 'namespace)
+        // Native functions are only accessible via defn :native stubs in the Clojure source.
+        // This ensures clojure.string/pad-left only works after (require 'clojure.string).
 
         // Qualified symbol not found in target namespace
         const char *cname = symbol->cname ? symbol->cname : "unknown";
@@ -1748,13 +1734,9 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return symbol;
     }
 
-    // Check if symbol is a native function (via native_function_table lookup)
-    // Returns function object without registering - registration happens via stubs
-    BuiltinFn native_func = native_function_lookup(symbol);
-    if (native_func) {
-        const char *cname = symbol->cname ? symbol->cname : "unknown";
-        return (CljObject*)make_named_func(native_func, NULL, cname);
-    }
+    // CLOJURE COMPATIBILITY: Native functions (e.g. clojure.string/trim) are only
+    // accessible after explicit (require 'clojure.string). The native_function_table
+    // is only used by (defn ... :native) stubs, not by symbol resolution.
 
     // Symbol not found
     const char *cname = symbol->cname ? symbol->cname : "unknown";
