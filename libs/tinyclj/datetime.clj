@@ -1,4 +1,5 @@
-(ns tinyclj.datetime)
+(ns tinyclj.datetime
+  (:require [clojure.string]))
 
 ;; =============================================================================
 ;; Date/Time conversion library for tiny-clj
