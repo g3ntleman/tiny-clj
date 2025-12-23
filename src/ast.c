@@ -11,7 +11,7 @@ CljASTNode* make_ast_node(ID first, CljObject *rest) {
 
     node->base.type = CLJ_AST_NODE;
     node->base.rc = 1;
-    node->first = RETAIN((CljObject*)first);
+    node->first = RETAIN(first);
     node->rest = RETAIN(rest);
     node->metadata = NULL;
     node->callsite_cache = NULL;

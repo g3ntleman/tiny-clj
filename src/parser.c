@@ -1258,7 +1258,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
           // Apply merged metadata to object
           meta_set((CljObject*)obj, (CljObject*)merged_meta);
         }
-        RELEASE((CljObject*)merged_meta);
+        RELEASE(merged_meta);
       }
     }
     RELEASE(new_meta);
@@ -1307,13 +1307,13 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
           // Update meta if it was merged
           meta_set(obj, (CljObject*)merged_meta);
         }
-        RELEASE((CljObject*)merged_meta);
+        RELEASE(merged_meta);
       }
     } else {
       // No existing metadata, just set location metadata
       meta_set(obj, (CljObject*)location_meta);
     }
-    RELEASE((CljObject*)location_meta);
+    RELEASE(location_meta);
   }
 #endif // ENABLE_META
 
@@ -1360,12 +1360,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
 
     // Associate keyword with true
-    // map_assoc may return same map (COW in-place) or new map (COW copy)
-    CljMap *updated_map = map_assoc(meta_map, keyword_meta, clj_true);
-    if (updated_map != meta_map) {
-        RELEASE(meta_map);  // Release original map only if new map was created
-    }
-    meta_map = updated_map;
+    ASSIGN(meta_map, map_assoc(meta_map, keyword_meta, clj_true));
     RELEASE(keyword_meta);
 
     // Parse the object (which might have more metadata)

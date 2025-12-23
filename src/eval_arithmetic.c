@@ -12,7 +12,7 @@ static inline bool is_numeric_type(ID value) {
 }
 
 static inline CljObject* throw_non_numeric_argument(ID value) {
-    RELEASE((CljObject*)value);
+    RELEASE(value);
     return throw_exception_formatted("WrongArgumentException", __FILE__, __LINE__, 0,
         "String cannot be used as a Number");
 }

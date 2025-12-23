@@ -101,12 +101,12 @@ static CljVector* transform_params(EvalState *st, CljVector *params, CljVector *
             char name[64];
             snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
-            new_params = vector_conj(new_params, gsym);
-            let_bindings = vector_conj(let_bindings, param);
-            let_bindings = vector_conj(let_bindings, gsym);
+            ASSIGN(new_params, vector_conj(new_params, gsym));
+            ASSIGN(let_bindings, vector_conj(let_bindings, param));
+            ASSIGN(let_bindings, vector_conj(let_bindings, gsym));
             has_destructuring = true;
         } else {
-            new_params = vector_conj(new_params, param);
+            ASSIGN(new_params, vector_conj(new_params, param));
         }
     }
     
@@ -360,14 +360,14 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                                 char name[64];
                                 snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
                                 CljSymbol *gsym = intern_symbol_global(name);
-                                loop_bindings = vector_conj(loop_bindings, gsym);
-                                loop_bindings = vector_conj(loop_bindings, init_expr);
-                                let_bindings = vector_conj(let_bindings, binding_form);
-                                let_bindings = vector_conj(let_bindings, gsym);
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
+                                ASSIGN(let_bindings, vector_conj(let_bindings, binding_form));
+                                ASSIGN(let_bindings, vector_conj(let_bindings, gsym));
                             } else {
                                 // Simple symbol binding - keep as-is
-                                loop_bindings = vector_conj(loop_bindings, binding_form);
-                                loop_bindings = vector_conj(loop_bindings, init_expr);
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, binding_form));
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
                             }
                         }
                         
@@ -504,7 +504,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         // Create new vector with canonicalized elements
         CljVector *new_vec = make_vector(count, CLJ_VECTOR);
         for (int i = 0; i < count; i++) {
-            new_vec = vector_conj(new_vec, canon_elems[i]);
+            ASSIGN(new_vec, vector_conj(new_vec, canon_elems[i]));
         }
         move_meta(vec, new_vec);
         
@@ -527,10 +527,10 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 if (!new_map) {
                     new_map = make_map(map_count(map));
                 }
-                new_map = map_assoc(new_map, canon_key, canon_value);
+                ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
                 changed = true;
             } else if (new_map) {
-                new_map = map_assoc(new_map, key, value);
+                ASSIGN(new_map, map_assoc(new_map, key, value));
             }
         }
         

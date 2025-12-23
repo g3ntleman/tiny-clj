@@ -38,18 +38,13 @@ void meta_registry_cleanup() {
 
 void meta_set(ID v, ID meta) {
     if (!v) return;
-
+    
+    CLJ_ASSERT(!IS_IMMEDIATE(v) && "meta_set: immediates cannot have metadata");
+    
     meta_registry_init();
     if (!g_runtime.meta_registry) return;
     
-    // Adopt semantics: build the updated registry first, then release the old one.
-    // This keeps key/value references valid during the transition.
-    CljHashMap *old_registry = g_runtime.meta_registry;
-    CljHashMap *new_registry = hashmap_assoc(old_registry, v, meta);
-    if (new_registry != old_registry) {
-        g_runtime.meta_registry = new_registry;
-        RELEASE(old_registry);
-    }
+    hashmap_assoc_inplace(&g_runtime.meta_registry, v, meta);
     
 #if defined(DEBUG)
     ID retrieved_meta = meta_get(v);
@@ -68,13 +63,7 @@ ID meta_get(ID v) {
 void meta_clear(ID v) {
     if (!v || !g_runtime.meta_registry) return;
     
-    // Adopt semantics: build the updated registry first, then release the old one.
-    CljHashMap *old_registry = g_runtime.meta_registry;
-    CljHashMap *new_registry = hashmap_remove(old_registry, v);
-    if (new_registry != old_registry) {
-        g_runtime.meta_registry = new_registry;
-        RELEASE(old_registry);
-    }
+    hashmap_remove_inplace(&g_runtime.meta_registry, v);
 }
 
 /**
@@ -160,11 +149,7 @@ CljMap* meta_merge(CljMap *existing_meta, CljMap *location_meta) {
         ID existing_value = map_get(existing_meta, key, NOT_FOUND);
         if (existing_value == NOT_FOUND) {
             CljMap *base = missing_entries ? missing_entries : map_empty();
-            CljMap *updated_missing = map_assoc(base, key, value);
-            if (missing_entries && updated_missing != missing_entries) {
-                RELEASE(missing_entries);
-            }
-            missing_entries = updated_missing;
+            ASSIGN(missing_entries, map_assoc(base, key, value));
             has_missing = 1;
         }
     }

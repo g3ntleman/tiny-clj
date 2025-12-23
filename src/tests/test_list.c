@@ -111,7 +111,7 @@ TEST(test_list_for_each_basic) {
     CljList *l3 = make_list(fixnum(3), NULL);
     CljList *l2 = make_list(fixnum(2), l3);
     CljList *list = make_list(fixnum(1), l2);
-    AUTORELEASE((CljObject*)list);
+    AUTORELEASE(list);
     
     int sum = 0;
     int count = 0;
@@ -138,7 +138,7 @@ TEST(test_list_for_each_empty) {
 
 TEST(test_list_for_each_single) {
     CljList *list = make_list(fixnum(42), NULL);
-    AUTORELEASE((CljObject*)list);
+    AUTORELEASE(list);
     
     int sum = 0;
     int count = 0;
@@ -157,7 +157,7 @@ TEST(test_list_for_each_rest) {
     CljList *l2 = make_list(fixnum(2), l3);
     CljList *l1 = make_list(fixnum(1), l2);
     CljList *list = make_list(SYM_PLUS, l1);
-    AUTORELEASE((CljObject*)list);
+    AUTORELEASE(list);
     
     int sum = 0;
     int count = 0;
@@ -175,7 +175,7 @@ TEST(test_list_for_each_find) {
     CljList *l3 = make_list(fixnum(3), NULL);
     CljList *l2 = make_list(fixnum(2), l3);
     CljList *list = make_list(fixnum(1), l2);
-    AUTORELEASE((CljObject*)list);
+    AUTORELEASE(list);
     
     int found = -1;
     LIST_FOR_EACH(list, elem) {
@@ -194,7 +194,7 @@ TEST(test_list_for_each_with_nil_in_middle) {
     CljList *l3 = make_list(fixnum(3), NULL);
     CljList *l2 = make_list(NULL, l3);  // nil element in the middle
     CljList *list = make_list(fixnum(1), l2);
-    AUTORELEASE((CljObject*)list);
+    AUTORELEASE(list);
     
     int count = 0;
     int nil_count = 0;

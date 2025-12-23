@@ -139,8 +139,7 @@ static CljHashMap* hashmap_rehash(CljHashMap *map, unsigned int new_capacity) {
         hashmap_put_direct(new_map, key, val);
     }
 
-    // IMPORTANT: Do not tear down/free the old map here.
-    // Callers may still own a reference and will release it after adopting the new map.
+    // Return owned (rc=1). Caller is responsible for adopting and releasing the old map.
     return new_map;
 }
 
@@ -247,6 +246,26 @@ CljHashMap* hashmap_remove(CljHashMap *map, ID key) {
     map->tombstones++;
     
     return map;
+}
+
+void hashmap_assoc_inplace(CljHashMap **map_slot, ID key, ID value) {
+    if (!map_slot || !*map_slot) return;
+    CljHashMap *current = *map_slot;
+    CljHashMap *updated = hashmap_assoc(current, key, value);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *map_slot = updated;
+    }
+}
+
+void hashmap_remove_inplace(CljHashMap **map_slot, ID key) {
+    if (!map_slot || !*map_slot) return;
+    CljHashMap *current = *map_slot;
+    CljHashMap *updated = hashmap_remove(current, key);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *map_slot = updated;
+    }
 }
 
 // Memory management registration (no-op - destructor is in memory.c release_object_default)

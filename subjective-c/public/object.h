@@ -10,8 +10,8 @@
 #ifndef SUBJECTIVE_C_OBJECT_H
 #define SUBJECTIVE_C_OBJECT_H
 
-#define ID void*
-typedef void* CljValue;
+typedef void* ID;
+typedef ID CljValue;
 
 #include "types.h"
 #include "common.h"

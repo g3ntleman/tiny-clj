@@ -521,7 +521,7 @@ TEST(test_embedded_array_performance) {
         
         // Simulate loop pattern with embedded arrays
         for (int i = 0; i < 50; i++) {
-            env = (CljMap*)AUTORELEASE(map_assoc(env, fixnum(i), fixnum(i * 10)));
+            env = AUTORELEASE(map_assoc(env, fixnum(i), fixnum(i * 10)));
             
             // RC should stay 1 (in-place optimization)
             TEST_ASSERT_EQUAL(1, env->base.rc);

@@ -54,8 +54,7 @@ int get_retain_count(ID obj);
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
-            CljObject* _tmp = (CljObject*)_id; \
-            retain(_tmp); \
+            retain((CljObject*)_id); \
         } \
         _id; \
     })
@@ -63,19 +62,17 @@ int get_retain_count(ID obj);
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
-            CljObject* _tmp = (CljObject*)_id; \
-            release(_tmp); \
+            release((CljObject*)_id); \
         } \
-        (CljObject*)_id; \
+        _id; \
     })
 
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
-            CljObject* _tmp = (CljObject*)_id; \
-            autorelease(_tmp); \
+            autorelease((CljObject*)_id); \
         } \
-        (CljObject*)_id; \
+        _id; \
     })
 
     #define WITH_AUTORELEASE_POOL(code) do { \
@@ -109,8 +106,7 @@ int get_retain_count(ID obj);
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
-            CljObject* _tmp = (CljObject*)_id; \
-            retain(_tmp); \
+            retain((CljObject*)_id); \
         } \
         _id; \
     })
@@ -118,19 +114,17 @@ int get_retain_count(ID obj);
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
-            CljObject* _tmp = (CljObject*)_id; \
-            release(_tmp); \
+            release((CljObject*)_id); \
         } \
-        (CljObject*)_id; \
+        _id; \
     })
 
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
         if (!IS_IMMEDIATE(_id)) { \
-            CljObject* _tmp = (CljObject*)_id; \
-            autorelease(_tmp); \
+            autorelease((CljObject*)_id); \
         } \
-        (CljObject*)_id; \
+        _id; \
     })
 
     #define WITH_AUTORELEASE_POOL(code) do { \
@@ -167,12 +161,8 @@ int get_retain_count(ID obj);
     ID _new_val = (new_obj); \
     ID _old_val = (var); \
     if (_new_val != _old_val) { \
-        if (!IS_IMMEDIATE(_new_val) && (CljObject*)_new_val) { \
-            RETAIN((CljObject*)_new_val); \
-        } \
-        if (!IS_IMMEDIATE(_old_val) && (CljObject*)_old_val) { \
-            RELEASE((CljObject*)_old_val); \
-        } \
+        RETAIN(_new_val); \
+        RELEASE(_old_val); \
         (var) = _new_val; \
     } \
 } while(0)

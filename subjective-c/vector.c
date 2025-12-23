@@ -227,7 +227,7 @@ CljVector* vector_pop(CljVector* vec) {
                     // Release last element (element lifetime is tied to vector)
                     ID last_elem = vector_nth(v, v->count - 1);
                     if (last_elem && !is_immediate(last_elem)) {
-                        RELEASE((CljObject*)last_elem);
+                        RELEASE(last_elem);
                     }
                 }
                 // Set last element to NULL and decrement count
@@ -279,7 +279,7 @@ CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
             if (is_transient) {
                 new_vec->base.type = CLJ_VECTOR_TRANSIENT;
             }
-            RELEASE((CljObject*)v);
+            RELEASE(v);
             v = new_vec;
             vec = new_vec;
         }
@@ -445,7 +445,7 @@ CljVector* vector_conj(CljVector* vec, ID item) {
             CljVector *new_v = make_vector_copy(v, newcap);
             // Preserve vector type
             new_v->base.type = vec_type;
-            RELEASE((CljObject*)v);
+            RELEASE(v);
             v = new_v;  // Use new vector for adding item
             vec = new_v;  // Update return value
         }
@@ -473,7 +473,7 @@ CljVector* vector_conj(CljVector* vec, ID item) {
             return vec;
         new_vec->data[0] = item ? RETAIN(item) : NULL;
         new_vec->count = 1;
-        return new_vec;
+        return AUTORELEASE(new_vec);
     }
 
     // COW path: RC>1 or capacity insufficient (even with RC=1, use COW for safety)
@@ -496,7 +496,7 @@ CljVector* vector_conj(CljVector* vec, ID item) {
     // Append new item (NULL/nil is a valid value)
     new_vec->data[new_vec->count++] = item ? RETAIN(item) : NULL;
     
-    return new_vec;  // Return new vector (COW)
+    return AUTORELEASE(new_vec);  // Return autoreleased - caller uses ASSIGN
 }
 
 /** Update element at index with COW: RC=1 → in-place, RC>1 → COW. */
@@ -546,7 +546,7 @@ CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
                 // Ensure new capacity is at least index + 1, minimum 4
                 int newcap = MAX(MAX(old_vec->capacity * 2, (int)index + 1), 4);
                 CljVector *new_vec = make_vector_copy(old_vec, newcap);
-                RELEASE((CljObject*)old_vec);
+                RELEASE(old_vec);
                 old_vec = new_vec;
                 vec = new_vec;  // Update vec to point to new vector
             }
@@ -592,7 +592,7 @@ CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
     // For CLJ_VECTOR_TRANSIENT_WEAK, don't RETAIN (weak reference)
     new_vec->data[index] = old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK ? value : RETAIN(value);
 
-    return new_vec;  // Return new vector (COW)
+    return AUTORELEASE(new_vec);  // Return autoreleased - caller uses ASSIGN
 }
 
 // === Transient API (Phase 2) ===

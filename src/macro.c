@@ -29,10 +29,7 @@ void register_macro(CljNamespace *ns, CljSymbol *name, CljFunction *macro_fn) {
     }
 
     // Store macro in namespace's macro registry
-    CljMap *new_mappings = map_assoc(ns->macro_mappings, (CljObject*)name, (CljObject*)macro_fn);
-    if (new_mappings != ns->macro_mappings) {
-        ASSIGN(ns->macro_mappings, new_mappings);
-    }
+    ASSIGN(ns->macro_mappings, map_assoc(ns->macro_mappings, (CljObject*)name, (CljObject*)macro_fn));
 }
 
 // Cached namespace pointers for faster lookup

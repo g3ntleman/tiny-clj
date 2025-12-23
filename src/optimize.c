@@ -124,7 +124,7 @@ static CljObject* transform_to_recur(CljList *call_list, CljSymbol *func_sym) {
         RETAIN(rest_obj);
         new_list->rest = rest_obj;
     }
-    RETAIN((CljObject*)new_list);
+    RETAIN(new_list);
     return (CljObject*)new_list;
 }
 
@@ -151,14 +151,14 @@ static CljList* transform_list(CljList *list, CljObject *func_name,
 
         CljObject *transformed = transform_recursive_tail_calls(expr, func_name, params, param_count, parent_body);
         if (!transformed) {
-            RELEASE((CljObject*)new_rest);
+            RELEASE(new_rest);
             return NULL;
         }
 
         CljList *new_node = (CljList*)make_list(transformed, NULL);
         if (!new_node) {
             RELEASE(transformed);
-            RELEASE((CljObject*)new_rest);
+            RELEASE(new_rest);
             return NULL;
         }
 
@@ -182,7 +182,7 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
     if (second) {
         CljList *second_node = (CljList*)make_list(second, NULL);
         if (!second_node) {
-            RELEASE((CljObject*)list);
+            RELEASE(list);
             return NULL;
         }
         list->rest = (CljObject*)second_node;
@@ -190,7 +190,7 @@ static CljList* build_list(CljObject *first, CljObject *second, CljObject *third
         if (third) {
             CljList *third_node = (CljList*)make_list(third, NULL);
             if (!third_node) {
-                RELEASE((CljObject*)list);
+                RELEASE(list);
                 return NULL;
             }
             second_node->rest = (CljObject*)third_node;
@@ -275,7 +275,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
                     if (else_node) {
                         then_node->rest = (CljObject*)else_node;
                     } else {
-                        RELEASE((CljObject*)new_if);
+                        RELEASE(new_if);
                         if (t_cond && t_cond != cond) RELEASE(t_cond);
                         RELEASE(t_then);
                         RELEASE(t_else);
@@ -285,7 +285,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
             }
         }
 
-        RETAIN((CljObject*)new_if);
+        RETAIN(new_if);
         return (CljObject*)new_if;
     }
 
@@ -326,7 +326,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
             return NULL;
         }
 
-        RETAIN((CljObject*)new_let);
+        RETAIN(new_let);
         return (CljObject*)new_let;
     }
 
@@ -337,7 +337,7 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
 
         CljList *new_cond = (CljList*)make_list((CljObject*)SYM_COND, NULL);
         if (!new_cond) {
-            RELEASE((CljObject*)t_rest);
+            RELEASE(t_rest);
             return NULL;
         }
 
@@ -347,14 +347,14 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         } else {
             CljList *new_rest_list = (CljList*)make_list((CljObject*)t_rest, NULL);
             if (!new_rest_list) {
-                RELEASE((CljObject*)new_cond);
-                RELEASE((CljObject*)t_rest);
+                RELEASE(new_cond);
+                RELEASE(t_rest);
                 return NULL;
             }
             new_cond->rest = (CljObject*)new_rest_list;
         }
 
-        RETAIN((CljObject*)new_cond);
+        RETAIN(new_cond);
         return (CljObject*)new_cond;
     }
 

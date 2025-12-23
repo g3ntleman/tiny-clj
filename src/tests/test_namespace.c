@@ -11,8 +11,7 @@
 #include <errno.h>
 #include <stdio.h>
 
-// Forward declaration for load_clojure_core
-int load_clojure_core(EvalState *st);
+
 // Forward declaration for value_by_parsing_expr
 extern CljValue value_by_parsing_expr(Reader *reader, EvalState *st);
 
@@ -36,8 +35,8 @@ TEST(test_namespace_lookup_core_functions) {
     }
 
     // Cleanup
-    RELEASE((CljObject*)resolved);
-    RELEASE((CljObject*)map_sym);
+    RELEASE(resolved);
+    RELEASE(map_sym);
 }
 
 // Test namespace lookup for user namespace
@@ -61,9 +60,9 @@ TEST(test_namespace_lookup_user_namespace) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)resolved));
 
     // Cleanup
-    RELEASE((CljObject*)resolved);
-    RELEASE((CljObject*)test_sym);
-    RELEASE((CljObject*)value);
+    RELEASE(resolved);
+    RELEASE(test_sym);
+    RELEASE(value);
 }
 
 // ============================================================================
@@ -103,9 +102,9 @@ TEST(test_symbol_interning_consistency) {
     TEST_ASSERT_TRUE(sym1 != sym3);
 
     // Cleanup
-    RELEASE((CljObject*)sym1);
-    RELEASE((CljObject*)sym2);
-    RELEASE((CljObject*)sym3);
+    RELEASE(sym1);
+    RELEASE(sym2);
+    RELEASE(sym3);
 }
 
 // Test symbol interning with namespace
@@ -124,9 +123,9 @@ TEST(test_symbol_interning_with_namespace) {
     TEST_ASSERT_TRUE(sym1 != sym3);
 
     // Cleanup
-    RELEASE((CljObject*)sym1);
-    RELEASE((CljObject*)sym2);
-    RELEASE((CljObject*)sym3);
+    RELEASE(sym1);
+    RELEASE(sym2);
+    RELEASE(sym3);
 }
 
 // Test symbol interning with NULL namespace (global)
@@ -140,8 +139,8 @@ TEST(test_symbol_interning_global) {
     TEST_ASSERT_EQUAL_PTR(sym1, sym2); // Should be the same pointer
 
     // Cleanup
-    RELEASE((CljObject*)sym1);
-    RELEASE((CljObject*)sym2);
+    RELEASE(sym1);
+    RELEASE(sym2);
 }
 
 // Test: Verify that inc symbol is interned correctly when loading clojure.core
@@ -370,8 +369,8 @@ TEST(test_symbol_table_operations) {
     TEST_ASSERT_EQUAL_PTR(sym1, sym2);
 
     // Cleanup
-    RELEASE((CljObject*)sym1);
-    RELEASE((CljObject*)sym2);
+    RELEASE(sym1);
+    RELEASE(sym2);
 }
 
 // Test namespace creation and switching
@@ -414,9 +413,9 @@ TEST(test_namespace_variable_storage) {
     TEST_ASSERT_EQUAL(123, as_fixnum((CljValue)retrieved));
 
     // Cleanup
-    RELEASE((CljObject*)retrieved);
-    RELEASE((CljObject*)var_sym);
-    RELEASE((CljObject*)value);
+    RELEASE(retrieved);
+    RELEASE(var_sym);
+    RELEASE(value);
 }
 
 // Test namespace with multiple variables
@@ -449,12 +448,12 @@ TEST(test_namespace_multiple_variables) {
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)retrieved2));
 
     // Cleanup
-    RELEASE((CljObject*)retrieved1);
-    RELEASE((CljObject*)retrieved2);
-    RELEASE((CljObject*)var1_sym);
-    RELEASE((CljObject*)var2_sym);
-    RELEASE((CljObject*)value1);
-    RELEASE((CljObject*)value2);
+    RELEASE(retrieved1);
+    RELEASE(retrieved2);
+    RELEASE(var1_sym);
+    RELEASE(var2_sym);
+    RELEASE(value1);
+    RELEASE(value2);
 }
 
 // Test symbol resolution with fallback to global namespace
@@ -469,8 +468,8 @@ TEST(test_symbol_resolution_fallback) {
     TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_FUNC); // Should be a native function
 
     // Cleanup
-    RELEASE((CljObject*)resolved);
-    RELEASE((CljObject*)plus_sym);
+    RELEASE(resolved);
+    RELEASE(plus_sym);
 }
 
 // Test namespace with special characters in names
@@ -493,9 +492,9 @@ TEST(test_namespace_special_characters) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
 
     // Cleanup
-    RELEASE((CljObject*)retrieved);
-    RELEASE((CljObject*)special_sym);
-    RELEASE((CljObject*)value);
+    RELEASE(retrieved);
+    RELEASE(special_sym);
+    RELEASE(value);
 }
 
 // Test namespace error handling
@@ -513,7 +512,7 @@ TEST(test_namespace_error_handling) {
     TEST_ASSERT_NULL(result1); // Non-existent symbol should return NULL even with NULL st
 
     // Cleanup
-    RELEASE((CljObject*)non_existent);
+    RELEASE(non_existent);
 }
 
 // Test clojure.core cache initialization
@@ -545,7 +544,7 @@ TEST(test_ns_resolve_clojure_core_cache_initialization) {
     TEST_ASSERT_NOT_NULL(found_core2);
 
     // Cleanup
-    RELEASE((CljObject*)plus_sym);
+    RELEASE(plus_sym);
 }
 
 // Test symbol resolution cache
@@ -594,9 +593,9 @@ TEST(test_ns_resolve_symbol_cache) {
     // This test establishes baseline - cache implementation will improve it further
 
     // Cleanup
-    RELEASE((CljObject*)test_sym);
-    RELEASE((CljObject*)test_value);
-    RELEASE((CljObject*)resolved1);
+    RELEASE(test_sym);
+    RELEASE(test_value);
+    RELEASE(resolved1);
 }
 
 // Test that resolve_list_operator uses resolve_cache for function calls
@@ -613,7 +612,7 @@ TEST(test_resolve_list_operator_uses_cache) {
 
     // Clear resolve_cache to start fresh
     if (g_runtime.resolve_cache) {
-        RELEASE((CljObject*)g_runtime.resolve_cache);
+        RELEASE(g_runtime.resolve_cache);
         g_runtime.resolve_cache = make_map(16);
     }
 
@@ -654,9 +653,9 @@ TEST(test_resolve_list_operator_uses_cache) {
     }
 
     // Cleanup
-    RELEASE((CljObject*)inc_sym);
-    RELEASE((CljObject*)result1);
-    RELEASE((CljObject*)result2);
+    RELEASE(inc_sym);
+    RELEASE(result1);
+    RELEASE(result2);
 }
 
 // Test that cache invalidation works correctly when symbols are redefined
@@ -673,7 +672,7 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
 
     // Clear resolve_cache to start fresh
     if (g_runtime.resolve_cache) {
-        RELEASE((CljObject*)g_runtime.resolve_cache);
+        RELEASE(g_runtime.resolve_cache);
         g_runtime.resolve_cache = make_map(16);
     }
 
@@ -717,8 +716,8 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     TEST_ASSERT_EQUAL(999, as_fixnum(resolved_after_redef));
 
     // Cleanup
-    RELEASE((CljObject*)inc_sym);
-    RELEASE((CljObject*)result1);
+    RELEASE(inc_sym);
+    RELEASE(result1);
     // resolved_after_redef is an ID (can be immediate), so no RELEASE needed
     // new_inc_value is an immediate fixnum, so no RELEASE needed
 }
@@ -1184,12 +1183,12 @@ TEST(test_ns_map_returns_mappings) {
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)found_val2));
 
     // Cleanup
-    RELEASE((CljObject*)sym1);
-    RELEASE((CljObject*)sym2);
-    RELEASE((CljObject*)val1);
-    RELEASE((CljObject*)val2);
-    RELEASE((CljObject*)ns_sym);
-    RELEASE((CljObject*)result);
+    RELEASE(sym1);
+    RELEASE(sym2);
+    RELEASE(val1);
+    RELEASE(val2);
+    RELEASE(ns_sym);
+    RELEASE(result);
 }
 
 // Test: Verify ns-map with empty namespace returns empty map
@@ -1210,7 +1209,7 @@ TEST(test_ns_map_empty_namespace) {
     TEST_ASSERT_EQUAL(0, map_count(mappings));
 
     // Cleanup
-    RELEASE((CljObject*)result);
+    RELEASE(result);
 }
 
 // Test: Verify ns-map with current namespace (using namespace name)
@@ -1241,9 +1240,9 @@ TEST(test_ns_map_current_namespace) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
 
     // Cleanup
-    RELEASE((CljObject*)test_sym);
-    RELEASE((CljObject*)test_val);
-    RELEASE((CljObject*)result);
+    RELEASE(test_sym);
+    RELEASE(test_val);
+    RELEASE(result);
 }
 
 // Test: Verify find-ns returns namespace object
@@ -1261,7 +1260,7 @@ TEST(test_find_ns_returns_namespace) {
     TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
 
     // Cleanup
-    RELEASE((CljObject*)result);
+    RELEASE(result);
 }
 
 // Test: Verify find-ns returns nil for non-existent namespace
@@ -1288,7 +1287,7 @@ TEST(test_find_ns_with_string) {
     TEST_ASSERT_EQUAL_PTR(test_ns, (CljNamespace*)result);
 
     // Cleanup
-    RELEASE((CljObject*)result);
+    RELEASE(result);
 }
 
 // Test: Verify find-ns with nil argument returns nil

@@ -137,9 +137,8 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
     if (!ns_cache) {
         ns_cache = make_map(RESOLVE_CACHE_SIZE);
     }
-    ns_cache = map_assoc(ns_cache, op, resolved);
-    CljMap *updated_cache = map_assoc(g_runtime.resolve_cache, ns_key, ns_cache);
-    ASSIGN(g_runtime.resolve_cache, updated_cache);
+    ASSIGN(ns_cache, map_assoc(ns_cache, op, resolved));
+    ASSIGN(g_runtime.resolve_cache, map_assoc(g_runtime.resolve_cache, ns_key, ns_cache));
 }
 
 // Forward declarations
@@ -685,12 +684,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
                 
-                CljMap *new_result = map_assoc(result, eval_key, eval_value);
-                if (new_result != result) {
-                    RELEASE(result);
-                    result = new_result;
-                    RETAIN(result);
-                }
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
             }
             
             return AUTORELEASE(result);
@@ -860,12 +854,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 }
 
                 // Add evaluated key-value pair to result map
-                CljMap *new_result = map_assoc(result, eval_key, eval_value);
-                if (new_result != result) {
-                    RELEASE(result);
-                    result = new_result;
-                    RETAIN(result);
-                }
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
 
                 // Release evaluated key and value if they were retained
                 if (eval_key && eval_key != key) RELEASE(eval_key);
@@ -1414,19 +1403,20 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
         // For non-functions, just copy form metadata if present
         if (value_tag == CLJ_CLOSURE || value_tag == CLJ_FUNC) {
             if (form_meta && TAG(form_meta) == CLJ_MAP) {
-                CljMap *meta_map = (CljMap*)form_meta;
+                CljMap *meta_map = (CljMap*)RETAIN(form_meta);
                 // Add :name and :ns directly (map_assoc overwrites if present, :name/:ns are rare)
                 if (SYM_KW_NAME && sym && sym->cname && sym->cname[0] != '\0') {
                     CljString *name_str = make_string(sym->cname);
                     if (name_str) {
-                        meta_map = map_assoc(meta_map, SYM_KW_NAME, name_str);
+                        ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_str));
                         RELEASE(name_str);
                     }
                 }
                 if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
-                    meta_map = map_assoc(meta_map, SYM_KW_NS, st->current_ns->name);
+                    ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, st->current_ns->name));
                 }
                 meta_set(value, meta_map);
+                RELEASE(meta_map);
             }
         } else if (form_meta) {
             meta_set(value, form_meta);
@@ -1901,7 +1891,7 @@ ID eval_seq(CljList *list, CljMap *env) {
 
         default: {
             // For other seqable types, return SeqIterator directly
-            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE((CljObject*)make_seq(arg));
+            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
             if (!seq) return NULL;
 
             return (CljObject*)seq;
@@ -2514,14 +2504,12 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
         CljMap *new_env = NULL;
         if (base_env && TAG(base_env) == CLJ_MAP) {
             CljValue i_value = fixnum((int32_t)i);
-            new_env = map_assoc(base_env, var, i_value);
-            RETAIN(new_env);
+            new_env = RETAIN(map_assoc(base_env, var, i_value));
         } else {
             new_env = (CljMap*)make_map(4);
             if (new_env) {
                 CljValue i_value = fixnum((int32_t)i);
-                CljMap *updated_env = map_assoc(new_env, var, i_value);
-                ASSIGN(new_env, updated_env);
+                ASSIGN(new_env, map_assoc(new_env, var, i_value));
             }
         }
 

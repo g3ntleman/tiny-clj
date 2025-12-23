@@ -360,7 +360,7 @@ void print_exception(CLJException *ex) {
             CljString *obj_str = clj_to_string(ex->object);
             if (obj_str) {
                 fprintf(stderr, " object: %s @%p", string_data(obj_str), (void*)ex->object);
-                RELEASE((CljObject*)obj_str);
+                RELEASE(obj_str);
             }
         } else {
             // Zombie object - print address and type name

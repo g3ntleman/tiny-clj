@@ -37,7 +37,7 @@ TEST(test_atom_create_with_value) {
     TEST_ASSERT_NOT_NULL(atom);
     TEST_ASSERT_EQUAL(CLJ_ATOM, TAG((CljObject*)atom));
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)atom->value));
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 TEST(test_atom_create_with_nil) {
@@ -45,7 +45,7 @@ TEST(test_atom_create_with_nil) {
     TEST_ASSERT_NOT_NULL(atom);
     TEST_ASSERT_EQUAL(CLJ_ATOM, TAG((CljObject*)atom));
     TEST_ASSERT_NULL(atom->value);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 TEST(test_atom_create_with_string) {
@@ -53,7 +53,7 @@ TEST(test_atom_create_with_string) {
     CljAtom *atom = make_atom(str);
     TEST_ASSERT_NOT_NULL(atom);
     TEST_ASSERT_NOT_NULL(atom->value);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     RELEASE(str);
 }
 
@@ -67,14 +67,14 @@ TEST(test_atom_deref_returns_value) {
     TEST_ASSERT_NOT_NULL(value);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)value));
     RELEASE(value);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 TEST(test_atom_deref_nil) {
     CljAtom *atom = make_atom(NULL);
     ID value = atom_deref(atom);
     TEST_ASSERT_NULL(value);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 // ============================================================================
@@ -88,7 +88,7 @@ TEST(test_atom_reset_changes_value) {
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)new_value));
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)atom->value));
     RELEASE(new_value);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 TEST(test_atom_reset_to_nil) {
@@ -96,7 +96,7 @@ TEST(test_atom_reset_to_nil) {
     ID new_value = atom_reset(atom, NULL);
     TEST_ASSERT_NULL(new_value);
     TEST_ASSERT_NULL(atom->value);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 // ============================================================================
@@ -123,7 +123,7 @@ TEST(test_atom_swap_simple) {
         TEST_FAIL_MESSAGE("Could not resolve 'inc' function from clojure.core");
     }
     
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     // Don't free st - it's the global test evalState
 }
 
@@ -146,7 +146,7 @@ TEST(test_atom_swap_with_args) {
         TEST_FAIL_MESSAGE("Could not resolve '+' function from clojure.core");
     }
     
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     // Don't free st - it's the global test evalState
 }
 
@@ -169,7 +169,7 @@ TEST(test_atom_swap_persists) {
         RELEASE(value);
     }
     
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     // Don't free st - it's the global test evalState
 }
 
@@ -194,7 +194,7 @@ TEST(test_atom_swap_multiple_times) {
         RELEASE(value);
     }
     
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     // Don't free st - it's the global test evalState
 }
 
@@ -217,7 +217,7 @@ TEST(test_atom_builtin_deref) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)result));
     RELEASE(result);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 TEST(test_atom_builtin_reset_bang) {
@@ -228,7 +228,7 @@ TEST(test_atom_builtin_reset_bang) {
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)result));
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)atom->value));
     RELEASE(result);
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 TEST(test_atom_builtin_swap_bang) {
@@ -247,7 +247,7 @@ TEST(test_atom_builtin_swap_bang) {
         RELEASE(result);
     }
     
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     // Don't free st - it's the global test evalState
 }
 
@@ -262,7 +262,7 @@ TEST(test_atom_memory_management) {
     // Atom should retain the string (rc=1 from make_string, +1 from make_atom)
     TEST_ASSERT_EQUAL(2, ((CljObject*)str)->rc);
     
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
     // After releasing atom, atom's value should be released, so str->rc should be 1
     // (only the original reference from make_string remains)
     TEST_ASSERT_EQUAL(1, ((CljObject*)str)->rc);
@@ -284,8 +284,8 @@ TEST(test_atom_reference_sharing) {
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)value2));
     RELEASE(value2);
     
-    RELEASE((CljObject*)atom1);
-    RELEASE((CljObject*)atom2);
+    RELEASE(atom1);
+    RELEASE(atom2);
 }
 
 // ============================================================================
@@ -297,7 +297,7 @@ TEST(test_atom_print_representation) {
     CljString *str = pr_str(atom);
     TEST_ASSERT_NOT_NULL(str);
     TEST_ASSERT_NOT_NULL(strstr(string_data(str), "Atom"));
-    RELEASE((CljObject*)atom);
+    RELEASE(atom);
 }
 
 // ============================================================================
@@ -382,7 +382,7 @@ TEST(test_atom_real_world_usage) {
         RELEASE(value);
     }
     
-    RELEASE((CljObject*)counter);
+    RELEASE(counter);
     // Don't free st - it's the global test evalState
 }
 

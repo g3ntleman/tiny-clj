@@ -32,6 +32,12 @@ int hashmap_contains(CljHashMap *map, ID key);  // Returns int (like map_contain
 CljHashMap* hashmap_assoc(CljHashMap *map, ID key, ID value);  // COW (like map_assoc)
 CljHashMap* hashmap_remove(CljHashMap *map, ID key);
 
+// In-place modification helpers (no AUTORELEASE, safe for long-lived slots)
+// These functions update the pointer stored in *map_slot and RELEASE the old map
+// if a new map instance is produced (rehash/COW).
+void hashmap_assoc_inplace(CljHashMap **map_slot, ID key, ID value);
+void hashmap_remove_inplace(CljHashMap **map_slot, ID key);
+
 // Utility
 unsigned int hashmap_count(CljHashMap *map);  // Returns unsigned int (never negative)
 
