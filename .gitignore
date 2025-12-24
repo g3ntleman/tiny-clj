@@ -51,6 +51,8 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+venv/
+.venv/
 
 # System files
 .DS_Store
