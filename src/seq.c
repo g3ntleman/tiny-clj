@@ -425,10 +425,8 @@ ID seq_next(ID seq_obj) {
             if (current_list) {
                 CljObject *rest = LIST_REST(current_list);
                 // next returns nil if rest is empty, otherwise rest
-                // CRITICAL: RETAIN and AUTORELEASE the rest list because it's part of the original list structure
-                // and may be freed when the original list is freed
-                // RETAIN and AUTORELEASE handle NULL safely
-                return AUTORELEASE(RETAIN(rest));
+                // rest is part of the original list structure, which is already safe (caller has strong reference)
+                return rest;
             }
         }
         // Empty list - return nil

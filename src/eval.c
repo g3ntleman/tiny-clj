@@ -521,7 +521,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
 
         default:
             // Literal value
-            return AUTORELEASE(RETAIN(body));
+            return body;
     }
 }
 
@@ -743,9 +743,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     if (resolved_id == NOT_FOUND) {
                         return NULL;
                     }
-                    // resolve_symbol_in_env returns values from map_get (retained) or eval_symbol (AUTORELEASE)
+                    // resolve_symbol_in_env returns values from map_get (pointer) or eval_symbol (AUTORELEASE)
                     // eval_body should return AUTORELEASE objects
-                    // RETAIN and AUTORELEASE macros handle immediate values safely
+                    // For map_get: RETAIN needed. For eval_symbol: already AUTORELEASE.
+                    // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
                     return AUTORELEASE(RETAIN(resolved_id));
                 }
             }
@@ -800,7 +801,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             
             // Empty vector - return as-is
             if (count == 0) {
-                return AUTORELEASE(RETAIN(body));
+                return body;
             }
             
             // Create new vector with evaluated elements
@@ -866,7 +867,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
         default:
             // Literal value
-            return AUTORELEASE(RETAIN(body));
+            return body;
     }
 }
 
@@ -1067,7 +1068,7 @@ static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                     "Cannot call list as a function");
         }
 
-        return AUTORELEASE(RETAIN(fn));
+        return fn;
     }
 
     // Direct function call
@@ -1274,15 +1275,15 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Tier 6: Loop operations (for, doseq, dotimes) - inline dispatch
     if (original_op_sym == SYM_FOR) {
-        return AUTORELEASE(eval_for(list, effective_env));
+        return eval_for(list, effective_env);
     }
     if (original_op_sym == SYM_DOSEQ) {
-        return AUTORELEASE(eval_doseq(list, effective_env));
+        return eval_doseq(list, effective_env);
     }
     if (original_op_sym == SYM_DOTIMES) {
         // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
         EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
-        return AUTORELEASE(eval_dotimes(list, effective_env, eval_st));
+        return eval_dotimes(list, effective_env, eval_st);
     }
 
     // Try function call
@@ -1868,7 +1869,7 @@ ID eval_seq(CljList *list, CljMap *env) {
         case CLJ_AST_NODE: {
             CljList *list_data = as_list(arg);
             if (!LIST_FIRST(list_data)) return NULL;  // Empty list -> nil
-            return AUTORELEASE(RETAIN(arg));
+            return arg;
         }
 
         default: {
@@ -2069,8 +2070,8 @@ ID eval_list_function(CljList *list, CljMap *env) {
     }
 
     // Simply return the arguments as a list (they're already evaluated by eval_list)
-    // ✅ FIX: LIST_REST does NOT return autoreleased object - need to autorelease it
-    return AUTORELEASE(RETAIN(args_list));
+    // args_list is part of the list_data structure, which is already safe (caller has strong reference)
+    return args_list;
 }
 
 // ============================================================================
@@ -2273,7 +2274,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     }
 
     if (env == NULL) {
-        return AUTORELEASE(RETAIN(expr));
+        return expr;
     }
 
     unsigned char expr_tag = TAG(expr);
@@ -2353,6 +2354,9 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             if (IS_IMMEDIATE(resolved_value)) {
                 return resolved_value;
             }
+            // resolved_value can come from map_get (pointer) or ns_resolve (safe)
+            // map_get returns only pointer, ns_resolve returns safe value
+            // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
             return AUTORELEASE(RETAIN(resolved_value));
         }
 
@@ -2394,7 +2398,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     if (expr_tag == CLJ_VECTOR || expr_tag == CLJ_VECTOR_TRANSIENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
         CljVector *vec = (CljVector*)expr;
         unsigned int count = vector_count(vec);
-        if (count == 0) return AUTORELEASE(RETAIN(expr));
+        if (count == 0) return expr;
         
         CljVector *result = make_vector(count, CLJ_VECTOR);
         RETAIN(result);
