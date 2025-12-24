@@ -658,8 +658,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             CljVector *result = make_vector(count, CLJ_VECTOR);
             RETAIN(result);
             
-            for (unsigned int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
                 
                 // Evaluate element recursively
@@ -808,8 +807,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             CljVector *result = make_vector(count, CLJ_VECTOR);
             RETAIN(result);
             
-            for (unsigned int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
                 
                 // Check for SYM_NIL before calling eval_body
@@ -2402,8 +2400,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         
         CljVector *result = make_vector(count, CLJ_VECTOR);
         RETAIN(result);
-        for (unsigned int i = 0; i < count; i++) {
-            ID elem = vector_nth(vec, i);
+        VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
             ASSIGN(result, vector_conj(result, eval_elem));
         }
@@ -2507,12 +2504,11 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
             CljObject *body_result = NULL;
             if (body_list && list_type_matches(TAG(body_list))) {
                 CljList *body_items = as_list(body_list);
-                while (body_items && body_items->first) {
+                LIST_FOR_EACH(body_items, body_expr) {
                     if (body_result) {
                         RELEASE(body_result);
                     }
-                    body_result = eval_body(body_items->first, new_env, eval_st, NULL);
-                    body_items = body_items->rest ? as_list(body_items->rest) : NULL;
+                    body_result = eval_body(body_expr, new_env, eval_st, NULL);
                 }
             } else {
                 body_result = eval_body(body_list, new_env, eval_st, NULL);
