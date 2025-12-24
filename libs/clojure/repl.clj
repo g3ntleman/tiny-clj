@@ -96,7 +96,7 @@
         (search-ns ns-obj))
       nil)))
 
-;; rt - Return retain count of an object
+;; rt - Return retain count of an object (alias for tinyclj/retain-count)
 ^#^{:doc "Returns the reference count of an object as an integer. Usage: (rt obj)"}
-(defn rt [x] :native)
+(def rt tinyclj/retain-count)
 
