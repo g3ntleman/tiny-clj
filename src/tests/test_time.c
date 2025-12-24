@@ -232,9 +232,6 @@ TEST_SHARED(test_time_returns_expression_result) {
     TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
 }
 
-// NOTE: epoch-minutes and millis-in-minute tests removed - these functions
-// have been replaced by (now) which returns an atomic {:days :ms} map
-
 // ============================================================================
 // NOW TESTS (atomic timestamp as map)
 // ============================================================================
