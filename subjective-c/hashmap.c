@@ -1,5 +1,5 @@
 #include "hashmap.h"
-#include "public/callbacks.h"   // For clj_hash() and clj_equal() - must be early
+#include <subjective-c/callbacks.h>   // For clj_hash() and clj_equal() - must be early
 #include "kv_macros.h"
 #include "object.h"
 #include "strings.h"

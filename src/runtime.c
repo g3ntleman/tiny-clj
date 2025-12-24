@@ -14,7 +14,7 @@
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string()
-#include "subjective-c/public/callbacks.h"  // For clj_set_callbacks
+#include "subjective-c/callbacks.h"  // For clj_set_callbacks
 
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {

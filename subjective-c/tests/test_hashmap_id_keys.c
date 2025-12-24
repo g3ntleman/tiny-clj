@@ -2,7 +2,7 @@
 #include "hashmap.h"
 #include "strings.h"
 #include "value.h"
-#include "public/callbacks.h"  // For clj_hash, clj_equal_default
+#include <subjective-c/callbacks.h>  // For clj_hash, clj_equal_default
 
 // Helper: Adopt updated map (handles RELEASE of old map)
 static CljHashMap* adopt_hashmap(CljHashMap *current, CljHashMap *updated) {
