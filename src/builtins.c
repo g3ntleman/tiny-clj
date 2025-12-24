@@ -2658,8 +2658,8 @@ ID native_rt(ID *args, unsigned int argc) {
         return fixnum(0);
     }
     
-    // Get retain count using get_retain_count from memory.h
-    int rc = get_retain_count(obj);
+    // Get retain count using retain_count from memory.h
+    int rc = retain_count(obj);
     return fixnum(rc);
 }
 

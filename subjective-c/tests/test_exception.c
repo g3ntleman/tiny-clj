@@ -24,14 +24,14 @@ TEST(test_throw_exception_formatted) {
 TEST(test_try_catch_flow) {
     CljString *test_obj = make_string("test");
     TEST_ASSERT_NOT_NULL(test_obj);
-    int initial_rc = get_retain_count(test_obj);
+    int initial_rc = retain_count(test_obj);
     
     CLJException *caught_ex = NULL;
     
     TRY {
         // Retain object to test RELEASE in CATCH
         RETAIN(test_obj);
-        TEST_ASSERT_EQUAL_INT(initial_rc + 1, get_retain_count(test_obj));
+        TEST_ASSERT_EQUAL_INT(initial_rc + 1, retain_count(test_obj));
         
         throw_exception(EXCEPTION_RUNTIME, "Test exception", __FILE__, __LINE__, 0);
         TEST_ASSERT_TRUE_MESSAGE(false, "Should not reach here after throw");
@@ -41,9 +41,9 @@ TEST(test_try_catch_flow) {
         TEST_ASSERT_EQUAL_STRING(EXCEPTION_RUNTIME, caught_ex->type);
         
         // Verify object is still valid and can be released
-        TEST_ASSERT_EQUAL_INT(initial_rc + 1, get_retain_count(test_obj));
+        TEST_ASSERT_EQUAL_INT(initial_rc + 1, retain_count(test_obj));
         RELEASE(test_obj);
-        TEST_ASSERT_EQUAL_INT(initial_rc, get_retain_count(test_obj));
+        TEST_ASSERT_EQUAL_INT(initial_rc, retain_count(test_obj));
     } END_TRY
     
     TEST_ASSERT_NOT_NULL(caught_ex);
