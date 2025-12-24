@@ -183,8 +183,49 @@ TEST(test_string_reverse) {
 // TESTS FOR REVERSE CONFLICTS
 // ============================================================================
 
+// ============================================================================
+// PAD-LEFT TESTS
+// ============================================================================
 
+TEST(test_string_pad_left_basic) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    load_clojure_string_namespace();
+    
+    // Test: (clojure.string/pad-left "5" 3 "0") => "005"
+    CljObject *result1 = eval_string("(clojure.string/pad-left \"5\" 3 \"0\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_STRING);
+    CljString *str1 = as_clj_string(result1);
+    TEST_ASSERT_EQUAL_STRING("005", clj_string_data(str1));
+}
 
+TEST(test_string_pad_left_no_padding_needed) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    load_clojure_string_namespace();
+    
+    // Test: String already at width - no padding
+    CljObject *result1 = eval_string("(clojure.string/pad-left \"abc\" 3 \"0\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(TAG(result1) == CLJ_STRING);
+    CljString *str1 = as_clj_string(result1);
+    TEST_ASSERT_EQUAL_STRING("abc", clj_string_data(str1));
+    
+    // Test: String longer than width - unchanged
+    CljObject *result2 = eval_string("(clojure.string/pad-left \"abcdef\" 3 \"0\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    CljString *str2 = as_clj_string(result2);
+    TEST_ASSERT_EQUAL_STRING("abcdef", clj_string_data(str2));
+}
 
+TEST(test_string_pad_left_empty_string) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    load_clojure_string_namespace();
+    
+    // Test: Padding empty string
+    CljObject *result1 = eval_string("(clojure.string/pad-left \"\" 3 \"x\")", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    CljString *str1 = as_clj_string(result1);
+    TEST_ASSERT_EQUAL_STRING("xxx", clj_string_data(str1));
+}
 
 

@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_SYMBOL_TOKEN_H
 #define TINY_CLJ_SYMBOL_TOKEN_H
 
-#include "subjective-c/public/object.h"
+#include "subjective-c/object.h"
 #include <stdint.h>
 
 typedef struct CljSymbolToken {
