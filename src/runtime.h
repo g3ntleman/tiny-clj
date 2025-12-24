@@ -53,8 +53,8 @@ typedef struct TinyClJRuntime {
     // Symbol Table (HashMap for O(1) lookup)
     CljHashMap *symbol_table;       // HashMap: "ns/name" or "name" → CljSymbol*
     
-    // Meta Registry
-    void *meta_registry;            // CljObject*
+    // Meta Registry (HashMap for O(1) lookup)
+    CljHashMap *meta_registry;
     
     // Autorelease Pool Stack
     CljVector *pool_stack;  // transient vector for autorelease pools

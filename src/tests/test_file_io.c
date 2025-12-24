@@ -107,7 +107,7 @@ TEST(test_history_load_current_format) {
   CljVector *loaded = history_load_from_file(tmp_hist_path);
   TEST_ASSERT_NOT_NULL(loaded);
   // RETAIN loaded to keep it alive outside of autorelease pool
-  RETAIN((CljObject*)loaded);
+  RETAIN(loaded);
   TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)loaded)->type);
 
   // Verify vector structure
@@ -158,7 +158,7 @@ static void test_history_load_from_file_crash_reproduction_body(void) {
   // If we get here, the crash didn't happen (or was caught)
   // But the memory management is still wrong
   if (loaded) {
-    RETAIN((CljObject*)loaded);
+    RETAIN(loaded);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)loaded)->type);
 
     CljVector *v = as_vector(loaded);
@@ -264,7 +264,7 @@ TEST(test_history_save_escapes_quotes) {
 
   free(buf);
   // Don't release str separately - it's owned by vec and will be released with vec
-  RELEASE((CljObject*)vec);
+  RELEASE(vec);
   unlink(tmp_hist_path);
 }
 

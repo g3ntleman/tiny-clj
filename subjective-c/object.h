@@ -10,8 +10,8 @@
 #ifndef SUBJECTIVE_C_OBJECT_H
 #define SUBJECTIVE_C_OBJECT_H
 
-#define ID void*
-typedef void* CljValue;
+typedef void* ID;
+typedef ID CljValue;
 
 #include "types.h"
 #include "common.h"
@@ -69,6 +69,7 @@ extern CljObject g_not_found_sentinel;
 #define CLJ_FLAG_SPECIAL     0x01
 #define CLJ_FLAG_ARITHMETIC  0x02
 #define CLJ_FLAG_COMPARISON  0x04
+#define CLJ_FLAG_NATIVE      0x08  // Native/builtin function (no macro lookup needed)
 #define CLJ_ARITH_OP_SHIFT   4
 #define CLJ_ARITH_OP_MASK    0x30
 #define CLJ_COMP_OP_SHIFT    6

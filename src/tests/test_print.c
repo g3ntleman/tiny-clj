@@ -16,7 +16,7 @@
 // ============================================================================
 // TEST: print_str() basic functionality
 // ============================================================================
-TEST(test_print_str_basic_functionality) {
+TEST_SHARED(test_print_str_basic_functionality) {
     WITH_AUTORELEASE_POOL({
         // Test: print_str() with nil should return "nil"
         CljString *result = print_str(NULL);
@@ -41,7 +41,7 @@ TEST(test_print_str_basic_functionality) {
 // ============================================================================
 // TEST: print_str() vs pr_str() difference
 // ============================================================================
-TEST(test_print_str_vs_pr_str_difference) {
+TEST_SHARED(test_print_str_vs_pr_str_difference) {
     WITH_AUTORELEASE_POOL({
         CljObject *str = make_string("Hello");
         
@@ -62,7 +62,7 @@ TEST(test_print_str_vs_pr_str_difference) {
 // ============================================================================
 // TEST: pr_str() with containers containing strings
 // ============================================================================
-TEST(test_pr_str_with_containers) {
+TEST_SHARED(test_pr_str_with_containers) {
     WITH_AUTORELEASE_POOL({
         // Test: pr_str with vector containing strings
         CljVector vec = make_vector(2, CLJ_VECTOR);
@@ -77,8 +77,8 @@ TEST(test_pr_str_with_containers) {
         // The strings inside should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"world\"") != NULL || strstr(string_data(result), "world") != NULL);
-        RELEASE((CljObject*)result);
-        RELEASE((CljObject*)vec);
+        RELEASE(result);
+        RELEASE(vec);
         RELEASE(str1);
         RELEASE(str2);
         
@@ -92,7 +92,7 @@ TEST(test_pr_str_with_containers) {
         TEST_ASSERT_NOT_NULL(result);
         // The string values should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"hello\"") != NULL || strstr(string_data(result), "hello") != NULL);
-        RELEASE((CljObject*)map);
+        RELEASE(map);
         RELEASE(key_str);
         RELEASE(val_str);
         
@@ -107,8 +107,8 @@ TEST(test_pr_str_with_containers) {
         TEST_ASSERT_NOT_NULL(result);
         // Nested string should have quotes
         TEST_ASSERT_TRUE(strstr(string_data(result), "\"nested\"") != NULL || strstr(string_data(result), "nested") != NULL);
-        RELEASE((CljObject*)outer_vec);
-        RELEASE((CljObject*)inner_vec);
+        RELEASE(outer_vec);
+        RELEASE(inner_vec);
         RELEASE(nested_str);
     });
 }
@@ -116,7 +116,7 @@ TEST(test_pr_str_with_containers) {
 // ============================================================================
 // TEST: print_str() with different types
 // ============================================================================
-TEST(test_print_str_different_types) {
+TEST_SHARED(test_print_str_different_types) {
     WITH_AUTORELEASE_POOL({
         // Test with vector
         CljObject *vec = make_vector(2, CLJ_VECTOR);
@@ -139,14 +139,14 @@ TEST(test_print_str_different_types) {
         TEST_ASSERT_NOT_NULL(result);
         // Map format may vary, just check it's not empty
         TEST_ASSERT_TRUE(string_length(result) > 0);
-        RELEASE((CljObject*)map);
+        RELEASE(map);
     });
 }
 
 // ============================================================================
 // TEST: print_str() with special values
 // ============================================================================
-TEST(test_print_str_special_values) {
+TEST_SHARED(test_print_str_special_values) {
     WITH_AUTORELEASE_POOL({
         // Test with boolean true
         CljValue true_val = make_special(SPECIAL_TRUE);
@@ -171,7 +171,7 @@ TEST(test_print_str_special_values) {
 // ============================================================================
 // TEST: Native print functions (print, println, pr, prn)
 // ============================================================================
-TEST(test_native_print_functions) {
+TEST_SHARED(test_native_print_functions) {
     WITH_AUTORELEASE_POOL({
         // Test: (print "Hello") should print without quotes, without newline
         // Note: This test captures stdout, but for now we just test that it doesn't crash
@@ -200,7 +200,7 @@ TEST(test_native_print_functions) {
 // ============================================================================
 // TEST: Native print functions with multiple arguments
 // ============================================================================
-TEST(test_native_print_multiple_args) {
+TEST_SHARED(test_native_print_multiple_args) {
     WITH_AUTORELEASE_POOL({
         // Test: (println "a" "b" "c") should print "a b c" with newline
         // Use global st from setUp

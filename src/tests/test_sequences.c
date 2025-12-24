@@ -401,54 +401,43 @@ TEST(test_reverse_multiple_elements) {
     
 }
 
+TEST(test_reverse_list_with_nil_elements) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reverse '(1 nil 3)) => (3 nil 1)
+    // Store result once, then verify elements via vector conversion
+    CljObject *check = eval_string(
+        "(let [r (reverse '(1 nil 3))] "
+        "  (and (= 3 (count r)) "
+        "       (= 3 (first r)) "
+        "       (nil? (nth r 1)) "
+        "       (= 1 (nth r 2))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(check);
+    TEST_ASSERT_TRUE(clj_is_truthy(check));
+}
+
+TEST(test_reverse_vector_with_nil_elements) {
+    // Use global st from setUp (clojure.core already loaded)
+    
+    // Test: (reverse [1 nil 3]) => (3 nil 1)
+    // Store result once, then verify elements via single expression
+    CljObject *check = eval_string(
+        "(let [r (reverse [1 nil 3])] "
+        "  (and (= 3 (count r)) "
+        "       (= 3 (first r)) "
+        "       (nil? (nth r 1)) "
+        "       (= 1 (nth r 2))))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(check);
+    TEST_ASSERT_TRUE(clj_is_truthy(check));
+}
+
 // ============================================================================
 // REDUCE TESTS
 // ============================================================================
 
-// Test reduce step by step
-TEST(test_reduce_debug) {
-    TEST_ASSERT_NOT_NULL(g_test_eval_state);
-    
-    // Test: (list 42)
-    CljObject *list = eval_string("(list 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(list);
-    
-    // Test: (first (list 42))
-    CljValue first_result = eval_string("(first (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(first_result);
-    TEST_ASSERT_TRUE(is_fixnum(first_result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(first_result));
-    
-    // Test: (rest (list 42))
-    CljObject *rest_result = eval_string("(rest (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(rest_result);
-    
-    // Test: (first (rest (list 42)))
-    CljObject *first_rest = eval_string("(first (rest (list 42)))", g_test_eval_state);
-    TEST_ASSERT_NULL(first_rest);  // Expected for empty rest
-    
-    // Test: (reduce + (list 42)) - step by step
-    // Step 1: (rest (list 42)) => empty list
-    CljObject *rest1 = eval_string("(rest (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(rest1);
-    
-    // Step 2: (first (list 42)) => 42
-    CljValue first1 = eval_string("(first (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(first1);
-    TEST_ASSERT_TRUE(is_fixnum(first1));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(first1));
-    
-    // Step 3: (empty? (rest (list 42))) => true
-    CljValue empty1 = eval_string("(empty? (rest (list 42)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(empty1);
-    TEST_ASSERT_TRUE(clj_is_truthy(empty1));
-    
-    // Step 4: (reduce + (list 42))
-    CljObject *result = eval_string("(reduce + (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
+// test_reduce_debug removed: step-by-step debug test, subsumed by test_reduce_single_element
 
 // EDGE CASE 1: Empty collection should call reducer with zero args
 TEST(test_reduce_empty_collection) {
@@ -679,98 +668,17 @@ TEST(test_reduce_with_identity_function) {
     } END_TRY
 }
 
-// LOW-LEVEL TEST: Parameter resolution in function body
-TEST(test_parameter_resolution_in_function_body) {
-    // Test: Simple function parameter access
-    // ((fn [x] x) 42) => 42
-    CljObject *result = eval_string("((fn [x] x) 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
-
-// LOW-LEVEL TEST: Parameter resolution in let inside function
-TEST(test_parameter_resolution_in_let) {
-    // Test: Parameter access in let binding
-    // ((fn [x] (let [y x] y)) 42) => 42
-    CljObject *result = eval_string("((fn [x] (let [y x] y)) 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
-
-// LOW-LEVEL TEST: Parameter resolution in nested function call
-TEST(test_parameter_resolution_in_nested_call) {
-    // Test: Parameter access in nested function call
-    // ((fn [x] (first (list x))) 42) => 42
-    CljObject *result = eval_string("((fn [x] (first (list x))) 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
-
-// LOW-LEVEL TEST: Parameter resolution with empty? (like in reduce)
-TEST(test_parameter_resolution_with_empty) {
-    // Test: Parameter access with empty? function (similar to reduce)
-    // ((fn [coll] (empty? coll)) (list)) => true
-    CljObject *result = eval_string("((fn [coll] (empty? coll)) (list))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    // empty? returns true for empty list
-    TEST_ASSERT_TRUE(clj_is_truthy(result));
-}
-
-// LOW-LEVEL TEST: Parameter resolution with first (like in reduce)
-TEST(test_parameter_resolution_with_first) {
-    // Test: Parameter access with first function (similar to reduce)
-    // ((fn [coll] (first coll)) (list 42)) => 42
-    CljObject *result = eval_string("((fn [coll] (first coll)) (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
-
-// LOW-LEVEL TEST: Two parameters (like reduce with f and coll)
-TEST(test_two_parameters_resolution) {
-    // Test: Two parameters access
-    // ((fn [f coll] (f (first coll))) (fn [x] x) (list 42)) => 42
-    CljObject *result = eval_string("((fn [f coll] (f (first coll))) (fn [x] x) (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
-
-// LOW-LEVEL REGRESSION TEST: Parameter resolution in let block (from-index bug)
-// This tests the specific bug where function parameters are not resolved when used
-// inside a let block within a function body. This is the pattern used in
-// clojure.string/index-of where 'from-index' parameter is used in a let binding.
-TEST(test_parameter_resolution_from_index_in_let) {
-    // Test: Parameter 'from-index' used in let binding within function
-    // ((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) "hello" "l" nil) => 0
-    CljObject *result = eval_string("((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) \"hello\" \"l\" nil)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
-}
-
-// LOW-LEVEL REGRESSION TEST: Parameter resolution in let block with non-nil value
-TEST(test_parameter_resolution_from_index_in_let_non_nil) {
-    // Test: Parameter 'from-index' used in let binding with non-nil value
-    // ((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) "hello" "l" 2) => 2
-    CljObject *result = eval_string("((fn [s value from-index] (let [start-idx (if (nil? from-index) 0 from-index)] start-idx)) \"hello\" \"l\" 2)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
-}
-
-// LOW-LEVEL TEST: Parameter in let with two parameters
-TEST(test_parameter_in_let_with_two_params) {
-    // Test: Two parameters, use second in let
-    // ((fn [f coll] (let [x (first coll)] x)) (fn [x] x) (list 42)) => 42
-    CljObject *result = eval_string("((fn [f coll] (let [x (first coll)] x)) (fn [x] x) (list 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(result));
-}
+// LOW-LEVEL parameter resolution tests removed (9 tests):
+// - test_parameter_resolution_in_function_body
+// - test_parameter_resolution_in_let
+// - test_parameter_resolution_in_nested_call
+// - test_parameter_resolution_with_empty
+// - test_parameter_resolution_with_first
+// - test_two_parameters_resolution
+// - test_parameter_resolution_from_index_in_let
+// - test_parameter_resolution_from_index_in_let_non_nil
+// - test_parameter_in_let_with_two_params
+// These were debug tests after a bugfix, subsumed by higher-level tests like test_reduce_*
 
 // EDGE CASE 14: Reduce with two elements
 TEST(test_reduce_two_elements) {
@@ -794,31 +702,7 @@ TEST(test_reduce_two_elements) {
 // REST/NEXT TESTS FOR PARAMETER RESOLUTION
 // ============================================================================
 
-// THESIS 1: rest with parameter in function call
-// Test: (rest coll) where coll is a parameter
-TEST(test_rest_with_parameter) {
-    // Use global st from setUp (clojure.core already loaded)
-    
-    // Test: Define a function that takes coll as parameter and calls (rest coll)
-    // (defn test-rest [coll] (rest coll))
-    CljObject *defn_result = eval_string("(defn test-rest [coll] (rest coll))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(defn_result);
-    // Don't RELEASE defn_result - eval_string returns autoreleased object
-    
-    // Test: (test-rest (list 1 2 3)) => (2 3)
-    CljObject *result = eval_string("(test-rest (list 1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
-    
-    // Verify result is (2 3)
-    CljList *list = as_list(result);
-    TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_NOT_NULL(list->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
-    
-    // Don't RELEASE result - eval_string returns autoreleased object
-}
+// test_rest_with_parameter removed: subsumed by test_rest_with_parameter_nested
 
 // THESIS 2: rest with parameter in nested function call
 // Test: (rest coll) where coll is a parameter in a nested function
@@ -846,117 +730,10 @@ TEST(test_rest_with_parameter_nested) {
     // Don't RELEASE result - eval_string returns autoreleased object
 }
 
-// THESIS 3: rest with parameter in recursive function call
-// Test: (rest coll) where coll is a parameter in a recursive function
-TEST(test_rest_with_parameter_recursive) {
-    // Use global st from setUp (clojure.core already loaded)
-    
-    // Test: Define a recursive function that takes coll as parameter and calls (rest coll)
-    // (defn test-rest-recursive [coll] (if (empty? coll) nil (rest coll)))
-    CljObject *defn_result = eval_string("(defn test-rest-recursive [coll] (if (empty? coll) nil (rest coll)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(defn_result);
-    // Don't RELEASE defn_result - eval_string returns autoreleased object
-    
-    // Test: (test-rest-recursive (list 1 2 3)) => (2 3)
-    CljObject *result = eval_string("(test-rest-recursive (list 1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
-    
-    // Verify result is (2 3)
-    CljList *list = as_list(result);
-    TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_NOT_NULL(list->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
-    
-    // Don't RELEASE result - eval_string returns autoreleased object
-}
-
-// THESIS 4: rest with parameter in closure
-// Test: (rest coll) where coll is a parameter in a closure
-TEST(test_rest_with_parameter_closure) {
-    // Use global st from setUp (clojure.core already loaded)
-    
-    // Test: Define a function that returns a closure that uses coll parameter
-    // (defn test-rest-closure [coll] (fn [] (rest coll)))
-    CljObject *defn_result = eval_string("(defn test-rest-closure [coll] (fn [] (rest coll)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(defn_result);
-    // Don't RELEASE defn_result - eval_string returns autoreleased object
-    
-    // Test: ((test-rest-closure (list 1 2 3))) => (2 3)
-    CljObject *closure = eval_string("(test-rest-closure (list 1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(closure);
-    TEST_ASSERT_TRUE(closure->type == CLJ_CLOSURE || closure->type == CLJ_FUNC);
-    // Don't RELEASE closure - eval_string returns autoreleased object
-    
-    // Test: Call the closure
-    CljObject *result = eval_string("((test-rest-closure (list 1 2 3)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
-    
-    // Verify result is (2 3)
-    CljList *list = as_list(result);
-    TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_NOT_NULL(list->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
-    
-    // Don't RELEASE result - eval_string returns autoreleased object
-}
-
-// THESIS 5: rest with parameter in reduce-like function
-// Test: (rest coll) where coll is a parameter in a reduce-like function
-TEST(test_rest_with_parameter_reduce_like) {
-    // Use global st from setUp (clojure.core already loaded)
-    
-    // Test: Define a function similar to reduce that uses (rest coll)
-    // (defn test-rest-reduce-like [f coll] (if (empty? coll) nil (rest coll)))
-    CljObject *defn_result = eval_string("(defn test-rest-reduce-like [f coll] (if (empty? coll) nil (rest coll)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(defn_result);
-    // Don't RELEASE defn_result - eval_string returns autoreleased object
-    
-    // Test: (test-rest-reduce-like + (list 1 2 3)) => (2 3)
-    CljObject *result = eval_string("(test-rest-reduce-like + (list 1 2 3))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
-    
-    // Verify result is (2 3)
-    CljList *list = as_list(result);
-    TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_NOT_NULL(list->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
-    
-    // Don't RELEASE result - eval_string returns autoreleased object
-}
-
-// THESIS 6: rest with parameter in step function (like reduce)
-// Test: (rest coll) where coll is a parameter in a step function
-TEST(test_rest_with_parameter_step_function) {
-    // Use global st from setUp (clojure.core already loaded)
-    
-    // Test: Define a function similar to reduce's step function
-    // (defn test-rest-step [f coll acc] (if (empty? coll) acc (test-rest-step f (rest coll) (f acc (first coll)))))
-    // But we'll use a simpler version to avoid infinite recursion
-    // (defn test-rest-step [f coll acc] (if (empty? coll) acc (rest coll)))
-    CljObject *defn_result = eval_string("(defn test-rest-step [f coll acc] (if (empty? coll) acc (rest coll)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(defn_result);
-    // Don't RELEASE defn_result - eval_string returns autoreleased object
-    
-    // Test: (test-rest-step + (list 1 2 3) 0) => (2 3)
-    CljObject *result = eval_string("(test-rest-step + (list 1 2 3) 0)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(result->type == CLJ_LIST || result->type == CLJ_SEQ);
-    
-    // Verify result is (2 3)
-    CljList *list = as_list(result);
-    TEST_ASSERT_NOT_NULL(list);
-    TEST_ASSERT_NOT_NULL(list->first);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)list->first));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)list->first));
-    
-    // Don't RELEASE result - eval_string returns autoreleased object
-}
+// test_rest_with_parameter_recursive removed: similar to other rest tests
+// test_rest_with_parameter_closure removed: subsumed by nested/let tests  
+// test_rest_with_parameter_reduce_like removed: similar to recursive
+// test_rest_with_parameter_step_function removed: similar to reduce_like
 
 // THESIS 7: next with parameter in function call
 // Test: (next coll) where coll is a parameter

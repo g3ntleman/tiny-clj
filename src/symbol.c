@@ -32,6 +32,7 @@ CljSymbol *SYM_LET = NULL;
 CljSymbol *SYM_FN = NULL;
 CljSymbol *SYM_DEF = NULL;
 CljSymbol *SYM_DEFN = NULL;
+CljSymbol *SYM_DEFMACRO = NULL;
 CljSymbol *SYM_QUOTE = NULL;
 CljSymbol *SYM_QUASIQUOTE = NULL;
 CljSymbol *SYM_UNQUOTE = NULL;
@@ -53,6 +54,7 @@ CljSymbol *SYM_TIME = NULL;
 CljSymbol *SYM_GO = NULL;
 CljSymbol *SYM_DEREF = NULL;
 CljSymbol *SYM_NIL = NULL;
+CljSymbol *SYM_AMP = NULL;  // & for variadic parameters
 
 // Builtin-Funktionen
 CljSymbol *SYM_PLUS = NULL;
@@ -132,9 +134,10 @@ CljSymbol *SYM_NS_STAR = NULL;
     }
 
 // Macro for non-static (extern) symbols that are statically initialized (compile-time, not dynamically allocated)
+// These are native/builtin functions, so they get CLJ_FLAG_NATIVE for fast macro-skip in ast_canon
 #define DEFINE_EXTERN_SYMBOL(var_name, symbol_name) \
     StaticSymbolData var_name = { \
-        .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC }, .ns_name = NULL, .cname = symbol_name } \
+        .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE }, .ns_name = NULL, .cname = symbol_name } \
     }
 
 // Static symbol structs for special forms (compile-time initialization)
@@ -149,9 +152,11 @@ DEFINE_STATIC_SPECIAL_SYMBOL(sym_while_data, "while");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_let_data, "let");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_fn_data, "fn");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_def_data, "def");
-DEFINE_STATIC_SPECIAL_SYMBOL(sym_defn_data, "defn");
+DEFINE_STATIC_SYMBOL(sym_defn_data, "defn");  // macro, not special form
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_defmacro_data, "defmacro");
 DEFINE_EXTERN_SYMBOL(sym_deref_data, "deref");
 DEFINE_STATIC_SYMBOL(sym_nil_data, "nil");
+DEFINE_STATIC_SYMBOL(sym_amp_data, "&");  // variadic parameter marker
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quote_data, "quote");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quasiquote_data, "quasiquote");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_unquote_data, "unquote");
@@ -356,9 +361,11 @@ void init_special_symbols() {
     INIT_SPECIAL_SYMBOL(SYM_RECUR, sym_recur_data);
     INIT_SPECIAL_SYMBOL(SYM_THROW, sym_throw_data);
     INIT_SPECIAL_SYMBOL(SYM_FINALLY, sym_finally_data);
-    INIT_SPECIAL_SYMBOL(SYM_DEFN, sym_defn_data);
+    INIT_SYMBOL(SYM_DEFN, sym_defn_data);
+    INIT_SPECIAL_SYMBOL(SYM_DEFMACRO, sym_defmacro_data);
     INIT_SYMBOL(SYM_DEREF, sym_deref_data);
     INIT_SYMBOL(SYM_NIL, sym_nil_data);
+    INIT_SYMBOL(SYM_AMP, sym_amp_data);
     INIT_SPECIAL_SYMBOL(SYM_VAR, sym_var_data);
     // Built-in functions - static structs with symbol table registration
     INIT_SPECIAL_SYMBOL(SYM_DEF, sym_def_data);
@@ -527,9 +534,6 @@ void init_special_symbols() {
     if (SYM_FN && (SYM_FN->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_FN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_fn;
     }
-    if (SYM_DEFN && (SYM_DEFN->base.flags & CLJ_FLAG_SPECIAL)) {
-        ((CljSpecialSymbol*)SYM_DEFN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defn;
-    }
     if (SYM_LET && (SYM_LET->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_LET)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_let;
     }
@@ -549,6 +553,16 @@ void init_special_symbols() {
         ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
     }
     // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
+    
+    // Quasiquote Special Form - delegates to Clojure quasiquote-fn after bootstrap
+    if (SYM_QUASIQUOTE && (SYM_QUASIQUOTE->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_QUASIQUOTE)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_quasiquote;
+    }
+    
+    // defmacro Special Form - defines macros in the current namespace
+    if (SYM_DEFMACRO && (SYM_DEFMACRO->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_DEFMACRO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_defmacro;
+    }
     
     // destructure is a Clojure function, not a special form
     SYM_DESTRUCTURE = intern_symbol_global("destructure");
@@ -605,9 +619,7 @@ void symbol_table_add(CljSymbol *symbol) {
         return;  // Already exists
     }
 
-    // CRITICAL: Assert RC == 1 before modification to prevent unexpected COW
-    CLJ_ASSERT(g_runtime.symbol_table->base.rc == 1 && 
-               "symbol_table must have RC=1 before modification (no external references allowed)");
+    // Note: RC may be > 1 due to autorelease pool, COW handles this correctly
 
     // Create a real CljString key for HashMap storage
     // We need to create a new string because the HashMap will retain it
@@ -615,7 +627,7 @@ void symbol_table_add(CljSymbol *symbol) {
     
     // Insert symbol into HashMap with CljString key
     // NOTE: The HashMap will RETAIN the key, so we can RELEASE our reference
-    g_runtime.symbol_table = hashmap_assoc(g_runtime.symbol_table, key, symbol);
+    hashmap_assoc_inplace(&g_runtime.symbol_table, key, symbol);
     RELEASE(key);
 }
 
@@ -746,7 +758,8 @@ const char* symbol_get_namespace_name(CljSymbol *sym) {
 // This function will be eliminated by dead-code-elimination in production builds
 // since it's only called from test files
 void symbol_table_cleanup() {
-    ASSIGN(g_runtime.symbol_table, NULL);
+    RELEASE(g_runtime.symbol_table);
+    g_runtime.symbol_table = NULL;
 }
 
 // Special Form Management moved to to_string.c

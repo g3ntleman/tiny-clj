@@ -111,6 +111,7 @@ list(APPEND SOURCES
     src/eval_sequence.c
     src/eval_special_forms.c
     src/to_string.c
+    src/macro.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -164,6 +165,7 @@ set(STM32_SOURCES
     src/eval_sequence.c
     src/eval_special_forms.c
     src/to_string.c
+    src/macro.c
 )
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -204,6 +206,7 @@ add_executable(tiny-clj-esp32
     src/eval_sequence.c
     src/eval_special_forms.c
     src/to_string.c
+    src/macro.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 
@@ -334,6 +337,7 @@ add_executable(unit-tests
     src/tests/test_keyword_evaluation.c
     src/tests/test_core.c
     src/tests/test_builtins_destructure.c
+    src/tests/test_macros.c
     src/tests/test_predicates.c
     src/tests/test_require.c
     src/tests/test_require_perf.c
@@ -345,6 +349,7 @@ add_executable(unit-tests
     src/tests/test_meta.c
     src/tests/test_hashmap_highlevel.c
     src/tests/test_map.c
+    src/tests/test_cow.c
     src/tests/test_special_forms.c
     src/tests/test_core_functions.c
     external/unity/src/unity.c

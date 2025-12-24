@@ -125,13 +125,13 @@ static void memory_profiler_hook(MemoryHookType type, void *ptr, size_t size) {
             MEMORY_PROFILER_TRACK_DEALLOCATION(size);
             break;
         case MEMORY_HOOK_RETAIN:
-            MEMORY_PROFILER_TRACK_RETAIN((CljObject*)ptr);
+            MEMORY_PROFILER_TRACK_RETAIN(ptr);
             break;
         case MEMORY_HOOK_RELEASE:
-            MEMORY_PROFILER_TRACK_RELEASE((CljObject*)ptr);
+            MEMORY_PROFILER_TRACK_RELEASE(ptr);
             break;
         case MEMORY_HOOK_AUTORELEASE:
-            MEMORY_PROFILER_TRACK_AUTORELEASE((CljObject*)ptr);
+            MEMORY_PROFILER_TRACK_AUTORELEASE(ptr);
             break;
     }
 }

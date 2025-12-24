@@ -96,11 +96,10 @@ TEST(test_parse_comments) {
 TEST(test_parse_metadata) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test metadata parsing with keywords
-    CljObject *result = parse("^{:key :value} 42", eval_state);
+    // Test metadata parsing with keywords - use string (not fixnum, immediates can't have metadata)
+    CljObject *result = parse("^{:key :value} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #ifdef ENABLE_META
     // Test that metadata is stored
@@ -125,11 +124,10 @@ TEST(test_parse_metadata) {
 TEST(test_parse_metadata_keyword_shorthand) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test ^:private syntax (shorthand for ^{:private true})
-    CljObject *result = parse("^:private 42", eval_state);
+    // Test ^:private syntax (shorthand for ^{:private true}) - use string (not fixnum)
+    CljObject *result = parse("^:private \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #ifdef ENABLE_META
     // Test that metadata is stored
@@ -153,11 +151,10 @@ TEST(test_parse_metadata_keyword_shorthand) {
 TEST(test_parse_metadata_hash_caret) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test #^{:key :value} syntax
-    CljObject *result = parse("#^{:key :value} 42", eval_state);
+    // Test #^{:key :value} syntax - use string (not fixnum, immediates can't have metadata)
+    CljObject *result = parse("#^{:key :value} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #ifdef ENABLE_META
     // Test that metadata is stored
@@ -182,11 +179,10 @@ TEST(test_parse_metadata_hash_caret) {
 TEST(test_parse_metadata_combined) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test ^#^{:key :value} syntax (combination of ^ and #^)
-    CljObject *result = parse("^#^{:key :value} 42", eval_state);
+    // Test ^#^{:key :value} syntax (combination of ^ and #^) - use string
+    CljObject *result = parse("^#^{:key :value} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #ifdef ENABLE_META
     // Test that metadata is stored
@@ -211,11 +207,10 @@ TEST(test_parse_metadata_combined) {
 TEST(test_parse_metadata_multiple_keywords) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test multiple keyword metadata (should merge)
-    CljObject *result = parse("^:private ^:dynamic 42", eval_state);
+    // Test multiple keyword metadata (should merge) - use string
+    CljObject *result = parse("^:private ^:dynamic \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #ifdef ENABLE_META
     // Test that metadata is stored
@@ -243,11 +238,10 @@ TEST(test_parse_metadata_multiple_keywords) {
 TEST(test_parse_metadata_mixed) {
     EvalState *eval_state = evalstate_new(false);
 
-    // Test mixed keyword and map metadata
-    CljObject *result = parse("^:private ^{:doc \"test\"} 42", eval_state);
+    // Test mixed keyword and map metadata - use string
+    CljObject *result = parse("^:private ^{:doc \"test\"} \"test\"", eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
 #ifdef ENABLE_META
     // Test that metadata is stored
@@ -590,13 +584,13 @@ TEST(test_meta_set_and_get) {
     CljSymbol *kw_doc = intern_symbol_global(":doc");
     ID doc_str = make_string("Test documentation");
     if (kw_doc && doc_str) {
-        meta_map = map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str);
+        ASSIGN(meta_map, map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str));
         RELEASE(doc_str);
     }
 
     // Set metadata
     meta_set(obj, (CljObject*)meta_map);
-    RELEASE((CljObject*)meta_map);
+    RELEASE(meta_map);
 
     // Get metadata
     ID retrieved_meta = meta_get(obj);
@@ -621,11 +615,12 @@ TEST(test_meta_automatic_sourcecode_references) {
     eval_state->current_ns = ns_get_or_create("test", "test.clj");
 
     // Parse metadata - should automatically add :line, :column, :file, :ns
+    // Use string (not fixnum, immediates can't have metadata)
     Reader reader;
-    reader_init(&reader, "^{:key :value} 42");
+    reader_init(&reader, "^{:key :value} \"test\"");
     CljObject *result = (CljObject*)parse_from_reader(&reader, eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum((CljValue)result));
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
     // Get metadata
     ID meta = meta_get(result);
@@ -671,7 +666,7 @@ TEST(test_meta_merge_does_not_overwrite) {
     TEST_ASSERT_NOT_NULL(existing_meta);
 
     if (SYM_KW_LINE) {
-        existing_meta = map_assoc(existing_meta, (CljValue)SYM_KW_LINE, fixnum(100));
+        ASSIGN(existing_meta, map_assoc(existing_meta, (CljValue)SYM_KW_LINE, fixnum(100)));
     }
 
     // Create location metadata with :line
@@ -692,9 +687,9 @@ TEST(test_meta_merge_does_not_overwrite) {
         TEST_ASSERT_EQUAL_INT(100, as_fixnum(line_value)); // Should be original value, not location value
     }
 
-    RELEASE((CljObject*)existing_meta);
-    RELEASE((CljObject*)location_meta);
-    RELEASE((CljObject*)merged);
+    RELEASE(existing_meta);
+    RELEASE(location_meta);
+    RELEASE(merged);
     evalstate_free(eval_state);
 }
 
@@ -733,7 +728,7 @@ TEST(test_meta_clojure_compatible_keys) {
         TEST_ASSERT_TRUE(is_fixnum(column_value));
     }
 
-    RELEASE((CljObject*)location_meta);
+    RELEASE(location_meta);
     evalstate_free(eval_state);
 }
 
@@ -749,12 +744,12 @@ TEST(test_meta_clear) {
     CljSymbol *kw_doc = intern_symbol_global(":doc");
     ID doc_str = make_string("Test");
     if (kw_doc && doc_str) {
-        meta_map = map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str);
+        ASSIGN(meta_map, map_assoc(meta_map, (CljValue)kw_doc, (CljValue)doc_str));
         RELEASE(doc_str);
     }
 
     meta_set(obj, (CljObject*)meta_map);
-    RELEASE((CljObject*)meta_map);
+    RELEASE(meta_map);
 
     // Verify metadata exists
     ID meta = meta_get(obj);

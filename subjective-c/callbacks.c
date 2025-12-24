@@ -166,13 +166,11 @@ bool clj_equal_default(ID a, ID b) {
             CljHashMap *hm_a = (CljHashMap*)a;
             CljHashMap *hm_b = (CljHashMap*)b;
             if (hashmap_count(hm_a) != hashmap_count(hm_b)) return false;
-            for (unsigned int i = 0; i < hm_a->capacity; i++) {
-                ID key = KV_KEY(hm_a->data, i);
-                if (key != HASHMAP_EMPTY && key != HASHMAP_TOMBSTONE) {
-                    ID val_a = KV_VALUE(hm_a->data, i);
-                    ID val_b = hashmap_get(hm_b, key, NULL);
-                    if (!clj_equal_default(val_a, val_b)) return false;
-                }
+            ID key;
+            ID val_a;
+            HASHMAP_FOR_EACH(hm_a, key, val_a) {
+                ID val_b = hashmap_get(hm_b, key, NULL);
+                if (!clj_equal(val_a, val_b)) return false;
             }
             return true;
         }
@@ -181,8 +179,7 @@ bool clj_equal_default(ID a, ID b) {
             return false;  // Identity only
         
         default:
-            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "clj_equal_default: unsupported type %d", tag);
+            CLJ_ASSERT(false && "clj_equal_default: unknown type");
             return false;
     }
 }

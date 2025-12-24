@@ -2,6 +2,27 @@
 
 ## Latest Updates (Recent Commits)
 
+### Clojure-Compatible Macroexpander & Destructuring (Latest)
+- **Macro System**: Vollständiger clojure-kompatibler Makroexpander implementiert
+  - `defmacro` Special Form für Makro-Definitionen
+  - `macroexpand-1` und `macroexpand` Funktionen in Clojure implementiert
+  - Quasiquote (`), Unquote (~), und Splice-Unquote (~@) Reader-Macros
+  - Makro-Registry in Namespaces für Makro-Speicherung
+  - Automatische Makro-Expansion vor der Evaluation
+  - Hybrid-Ansatz: Komplexe Logik in Clojure, minimale C-Glue-Layer
+- **Destructuring**: Clojure-kompatible Destructuring-Transformation
+  - `destructure` Funktion in Clojure implementiert
+  - Unterstützung für Vektoren, Maps, und verschachtelte Patterns
+  - Integration in `let`, `loop`, und `defn` Special Forms
+  - AST-Canonicalisierung delegiert komplexe Logik an Clojure-Funktion
+  - Reduziert C-Code durch Clojure-Implementierung
+- **defn als Makro**: `defn` ist jetzt ein Clojure-Makro statt C Special Form
+  - Syntaktischer Zucker für `def` und `fn`
+  - Metadata-Transfer von `def`-Form zu definiertem Wert
+  - TCO-Rewriting für rekursive Aufrufe (qualified names)
+  - `:native` Funktionen werden in `fn` Special Form behandelt
+  - Unterstützung für mehrere Body-Ausdrücke in `fn`
+
 ### Sequence Support for Maps (Latest)
 - **Map Sequencing**: `seq` now works with maps, returning a sequence of `[key value]` vectors
   - `(seq {:a 1 :b 2 :c 3})` returns `([:a 1] [:b 2] [:c 3])`

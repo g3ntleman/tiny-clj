@@ -130,7 +130,7 @@ void frame_release(CallFrame *frame) {
     for (int i = 0; i < frame->param_count; i++) {
         ID value = frame_decode_value(frame->values[i]);
         if (value && !IS_IMMEDIATE(value)) {
-            RELEASE((CljObject*)value);
+            RELEASE(value);
         }
         frame->values[i] = NULL;
     }

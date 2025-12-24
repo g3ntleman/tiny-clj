@@ -81,6 +81,28 @@ extern EvalState* test_get_eval_state(void);
     } \
     static void name##_body(void)
 
+// TEST_SHARED macro for tests that can share clojure.core state (read-only tests)
+// These tests are batched together with only one setUp/tearDown per batch
+// Use for tests that don't define new functions/vars via defn/def
+#define TEST_SHARED(name) \
+    static void name##_body(void); \
+    void name(void) { \
+        WITH_AUTORELEASE_POOL({ \
+            name##_body(); \
+        }); \
+    } \
+    static void register_##name(void) __attribute__((constructor, used)); \
+    static void register_##name(void) { \
+        char *filename = test_extract_filename_from_path(__FILE__); \
+        if (filename) { \
+            char group[128]; \
+            snprintf(group, sizeof(group), "shared_%s", filename); \
+            test_registry_add_with_file_info(#name, name, group, __FILE__, __LINE__); \
+            free(filename); \
+        } \
+    } \
+    static void name##_body(void)
+
 // ============================================================================
 // HELPER FUNCTIONS FOR COMMON TEST PATTERNS
 // ============================================================================

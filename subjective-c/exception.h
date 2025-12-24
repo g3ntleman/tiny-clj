@@ -142,7 +142,7 @@ extern GlobalExceptionStack global_exception_stack;
         } \
         /* Exception manually released */ \
         if (ex) { \
-            RELEASE((CljObject*)ex); \
+            RELEASE(ex); \
         } \
     } \
 }

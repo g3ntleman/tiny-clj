@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
+#include "macro.h"          // For macro_cache_reset()
 #include "map.h"            // For make_map()
 #include "hashmap.h"        // For hashmap_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
@@ -101,6 +102,7 @@ void runtime_reset(TinyClJRuntime *runtime) {
     // The symbol table will persist across tests, which is fine since symbols are interned.
     meta_registry_cleanup();
     ns_cleanup();
+    macro_cache_reset();  // Reset cached namespace pointers for macro lookup
     
     // Reset static variables
     reset_eval_arg_depth();

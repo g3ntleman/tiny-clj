@@ -44,9 +44,9 @@ TEST(test_clj_hash_string) {
     TEST_ASSERT_EQUAL_UINT(hash1, hash2);  // Gleiche Strings = gleicher Hash
     TEST_ASSERT_NOT_EQUAL(hash1, hash3);   // Verschiedene Strings = verschiedene Hashes
     
-    RELEASE((CljObject*)str1);
-    RELEASE((CljObject*)str2);
-    RELEASE((CljObject*)str3);
+    RELEASE(str1);
+    RELEASE(str2);
+    RELEASE(str3);
 }
 
 TEST(test_clj_hash_string_consistency) {
@@ -59,7 +59,7 @@ TEST(test_clj_hash_string_consistency) {
     TEST_ASSERT_EQUAL_UINT(hash1, hash2);
     TEST_ASSERT_EQUAL_UINT(hash2, hash3);
     
-    RELEASE((CljObject*)str);
+    RELEASE(str);
 }
 
 TEST(test_clj_hash_equal_values) {
@@ -73,7 +73,7 @@ TEST(test_clj_hash_equal_values) {
     // Gleiche String-Inhalte sollten gleichen Hash haben
     TEST_ASSERT_EQUAL_UINT(hash1, hash2);
     
-    RELEASE((CljObject*)str1);
-    RELEASE((CljObject*)str2);
+    RELEASE(str1);
+    RELEASE(str2);
 }
 

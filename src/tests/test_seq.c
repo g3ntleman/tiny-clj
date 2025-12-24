@@ -27,19 +27,19 @@ static ID make_sample_map_with_entries(void) {
 // SEQ CREATION TESTS
 // ============================================================================
 
-TEST(test_make_seq_list) {
+TEST_SHARED(test_make_seq_list) {
     TEST_ASSERT_EQUAL_PTR(NULL, make_seq(NULL));
 }
 
-TEST(test_make_seq_vector) {
+TEST_SHARED(test_make_seq_vector) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(seq [1 2 3])", g_test_eval_state)));
 }
 
-TEST(test_make_seq_string) {
+TEST_SHARED(test_make_seq_string) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(seq \"hello\")", g_test_eval_state)));
 }
 
-TEST(test_make_seq_map) {
+TEST_SHARED(test_make_seq_map) {
     TEST_ASSERT_NOT_NULL(eval_string("(seq {:k1 10 :k2 20})", g_test_eval_state));
 }
 
@@ -47,39 +47,39 @@ TEST(test_make_seq_map) {
 // SEQ ITERATION TESTS
 // ============================================================================
 
-TEST(test_seq_first) {
+TEST_SHARED(test_seq_first) {
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(eval_string("(first (seq [42 43 44]))", g_test_eval_state)));
 }
 
-TEST(test_seq_rest) {
+TEST_SHARED(test_seq_rest) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(rest (seq [42 43 44]))", g_test_eval_state)));
 }
 
-TEST(test_seq_map_entry_vector) {
+TEST_SHARED(test_seq_map_entry_vector) {
     ID entry = eval_string("(first (seq {:k1 10 :k2 20}))", g_test_eval_state);
     CljVector *vec = as_vector(entry);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(vector_nth(vec, 1)));
 }
 
-TEST(test_seq_rest_map_returns_sequence) {
+TEST_SHARED(test_seq_rest_map_returns_sequence) {
     ID rest = eval_string("(rest (seq {:k1 10 :k2 20}))", g_test_eval_state);
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(rest));
     TEST_ASSERT_FALSE(seq_empty(rest));
 }
 
-TEST(test_seq_next_inplace_reuses_iterator) {
+TEST_SHARED(test_seq_next_inplace_reuses_iterator) {
     ID map = make_sample_map_with_entries();
     ID seq = AUTORELEASE(make_seq(map));
     TEST_ASSERT_EQUAL_PTR(seq, seq_next_inplace(seq));
     TEST_ASSERT_NULL(seq_next_inplace(seq));
 }
 
-TEST(test_seq_next) {
+TEST_SHARED(test_seq_next) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(next (seq [42 43 44]))", g_test_eval_state)));
 }
 
-TEST(test_seq_rest_vs_next_difference) {
+TEST_SHARED(test_seq_rest_vs_next_difference) {
     TEST_ASSERT_TRUE(is_seqable(eval_string("(rest (seq [1 2]))", g_test_eval_state)));
     TEST_ASSERT_TRUE(is_seqable(eval_string("(next (seq [1 2]))", g_test_eval_state)));
     ID rest = eval_string("(rest (seq [42]))", g_test_eval_state);
@@ -92,7 +92,7 @@ TEST(test_seq_rest_vs_next_difference) {
 // SEQ EQUALITY TESTS
 // ============================================================================
 
-TEST(test_seq_equality) {
+TEST_SHARED(test_seq_equality) {
     ID vec1 = AUTORELEASE(make_vector(2, CLJ_VECTOR));
     ID vec2 = AUTORELEASE(make_vector(2, CLJ_VECTOR));
     CljVector *v1 = as_vector(vec1), *v2 = as_vector(vec2);
@@ -107,7 +107,7 @@ TEST(test_seq_equality) {
 // SEQ_NEXT WITH CLJ_LIST TESTS
 // ============================================================================
 
-TEST(test_seq_next_with_list_returns_list) {
+TEST_SHARED(test_seq_next_with_list_returns_list) {
     CljList *list = make_list(fixnum(1), NULL);
     CljList *list2 = make_list(fixnum(2), NULL);
     CljList *list3 = make_list(fixnum(3), NULL);
@@ -122,7 +122,7 @@ TEST(test_seq_next_with_list_returns_list) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(as_list(l->rest)->first));
 }
 
-TEST(test_seq_next_with_list_preserves_structure) {
+TEST_SHARED(test_seq_next_with_list_preserves_structure) {
     CljList *list = make_list(fixnum(1), NULL);
     CljList *list2 = make_list(fixnum(2), NULL);
     CljList *list3 = make_list(fixnum(3), NULL);
@@ -134,16 +134,16 @@ TEST(test_seq_next_with_list_preserves_structure) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(as_list(l->rest)->first));
 }
 
-TEST(test_seq_next_with_single_element_list) {
+TEST_SHARED(test_seq_next_with_single_element_list) {
     TEST_ASSERT_NULL(eval_string("(next (seq (list 1)))", g_test_eval_state));
 }
 
-TEST(test_seq_next_with_empty_list) {
+TEST_SHARED(test_seq_next_with_empty_list) {
     ID result = eval_string("(seq (list))", g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL || seq_empty(result));
 }
 
-TEST(test_native_next_with_list) {
+TEST_SHARED(test_native_next_with_list) {
     ID result = eval_string("(next (list 1 2 3))", g_test_eval_state);
     TEST_ASSERT_EQUAL_INT(CLJ_LIST, TAG(result));
     CljList *l = as_list(result);
@@ -155,21 +155,21 @@ TEST(test_native_next_with_list) {
 // HIGH-LEVEL SEQ TESTS FOR MAPS
 // ============================================================================
 
-TEST(test_seq_map_returns_sequence) {
+TEST_SHARED(test_seq_map_returns_sequence) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(seq {:a 1 :b 2})", g_test_eval_state)));
 }
 
-TEST(test_seq_empty_map_returns_nil) {
+TEST_SHARED(test_seq_empty_map_returns_nil) {
     ID result = eval_string("(seq {})", g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL || seq_empty(result));
 }
 
-TEST(test_seq_nil_returns_nil) {
+TEST_SHARED(test_seq_nil_returns_nil) {
     ID result = eval_string("(seq nil)", g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL || seq_empty(result));
 }
 
-TEST(test_seq_map_first_returns_vector) {
+TEST_SHARED(test_seq_map_first_returns_vector) {
     ID result = eval_string("(first (seq {:a 1 :b 2}))", g_test_eval_state);
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result));
     CljVector *vec = as_vector(result);
@@ -178,33 +178,33 @@ TEST(test_seq_map_first_returns_vector) {
     TEST_ASSERT_TRUE(is_fixnum(vector_nth(vec, 1)));
 }
 
-TEST(test_seq_map_count) {
+TEST_SHARED(test_seq_map_count) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(eval_string("(count (seq {:a 1 :b 2}))", g_test_eval_state)));
 }
 
-TEST(test_seq_map_next_returns_sequence) {
+TEST_SHARED(test_seq_map_next_returns_sequence) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(next (seq {:a 1 :b 2}))", g_test_eval_state)));
 }
 
-TEST(test_seq_map_rest_returns_sequence) {
+TEST_SHARED(test_seq_map_rest_returns_sequence) {
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(rest (seq {:a 1 :b 2}))", g_test_eval_state)));
 }
 
-TEST(test_seq_map_iteration) {
+TEST_SHARED(test_seq_map_iteration) {
     TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(eval_string("(first (seq {:a 1 :b 2}))", g_test_eval_state)));
     TEST_ASSERT_EQUAL_INT(CLJ_SEQ, TAG(eval_string("(next (seq {:a 1 :b 2}))", g_test_eval_state)));
     TEST_ASSERT_EQUAL_INT(2, vector_count(as_vector(eval_string("(first (next (seq {:a 1 :b 2})))", g_test_eval_state))));
 }
 
-TEST(test_seq_map_single_entry_next) {
+TEST_SHARED(test_seq_map_single_entry_next) {
     TEST_ASSERT_NULL(eval_string("(next (seq {:a 1}))", g_test_eval_state));
 }
 
-TEST(test_seq_map_single_entry_rest) {
+TEST_SHARED(test_seq_map_single_entry_rest) {
     TEST_ASSERT_TRUE(is_seqable(eval_string("(rest (seq {:a 1}))", g_test_eval_state)));
 }
 
-TEST(test_seq_map_entry_structure) {
+TEST_SHARED(test_seq_map_entry_structure) {
     ID entry = eval_string("(first (seq {:a 1}))", g_test_eval_state);
     CljVector *vec = as_vector(entry);
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
@@ -216,7 +216,7 @@ TEST(test_seq_map_entry_structure) {
 // COW TESTS FOR SEGITERATOR
 // ============================================================================
 
-TEST(test_seq_cow_multiple_sequences_same_container) {
+TEST_SHARED(test_seq_cow_multiple_sequences_same_container) {
     ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(1)), fixnum(2)), fixnum(3));
@@ -233,7 +233,7 @@ TEST(test_seq_cow_multiple_sequences_same_container) {
     RELEASE(vec);
 }
 
-TEST(test_seq_cow_rc_one_inplace) {
+TEST_SHARED(test_seq_cow_rc_one_inplace) {
     ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
@@ -243,7 +243,7 @@ TEST(test_seq_cow_rc_one_inplace) {
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(seq_first(seq)));
 }
 
-TEST(test_seq_cow_rc_greater_one_copy_on_write) {
+TEST_SHARED(test_seq_cow_rc_greater_one_copy_on_write) {
     ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(v, fixnum(1)), fixnum(2));
@@ -257,7 +257,7 @@ TEST(test_seq_cow_rc_greater_one_copy_on_write) {
     RELEASE(vec);
 }
 
-TEST(test_seq_cow_multiple_sequences_preserved) {
+TEST_SHARED(test_seq_cow_multiple_sequences_preserved) {
     ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(10)), fixnum(20)), fixnum(30));
@@ -277,7 +277,7 @@ TEST(test_seq_cow_multiple_sequences_preserved) {
     RELEASE(vec); RELEASE(vec);
 }
 
-TEST(test_seq_cow_iteration_after_cow) {
+TEST_SHARED(test_seq_cow_iteration_after_cow) {
     ID vec = AUTORELEASE(make_vector(4, CLJ_VECTOR));
     CljVector *v = as_vector(vec);
     v = vector_conj(vector_conj(vector_conj(v, fixnum(1)), fixnum(2)), fixnum(3));
@@ -294,4 +294,4 @@ TEST(test_seq_cow_iteration_after_cow) {
 // TEST FUNCTIONS (no main function - called by unity_test_runner.c)
 // ============================================================================
 
-// Tests are automatically registered by TEST() macros
+// Tests are automatically registered by TEST_SHARED() macros

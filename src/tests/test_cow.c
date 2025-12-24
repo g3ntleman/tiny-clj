@@ -143,7 +143,7 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         // Now COW should trigger
         CljMap *new_map = map_assoc(map, fixnum(2), fixnum(20));
         TEST_ASSERT_EQUAL(2, map->base.rc);  // Original RC unchanged
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)map, (CljValue)new_map); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map); // NEW pointer!
         
         // Verify original map unchanged
         CljValue val1_orig = map_get((CljMap*)map, fixnum(1), NULL);
@@ -269,7 +269,7 @@ TEST(test_cow_closure_environment_sharing) {
         // Closure-Operation sollte COW triggern
         CljMap *new_env = map_assoc(env, intern_symbol_global("y"), fixnum(2));
         TEST_ASSERT_EQUAL(2, env->base.rc);  // Original unchanged
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)env, (CljValue)new_env); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)env, (CljValue)new_env); // NEW pointer!
         
         // Verify original env unchanged
         CljValue orig_x = map_get((CljMap*)env, intern_symbol_global("x"), NULL);
@@ -345,7 +345,7 @@ TEST(test_cow_actual_cow_demonstration) {
         // COW operation
         CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
         TEST_ASSERT_EQUAL(2, map->base.rc);
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)map, (CljValue)new_map);
+        TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map);
         
         // Verify original unchanged
         CljValue val3_orig = map_get((CljMap*)map, fixnum(3), NULL);
@@ -362,6 +362,71 @@ TEST(test_cow_actual_cow_demonstration) {
         TEST_ASSERT_EQUAL_INT(20, as_fixnum(val2_new));
         TEST_ASSERT_EQUAL_INT(30, as_fixnum(val3_new));
         
+        
+        // Cleanup
+        RELEASE(map);
+    });
+}
+
+// Test AUTORELEASE map_assoc with ASSIGN pattern (H1/H2/H3/H5 hypotheses)
+TEST(test_map_assoc_autorelease_with_assign) {
+    WITH_AUTORELEASE_POOL({
+        // H1: Create map and use ASSIGN with autoreleased result
+        CljMap *map = make_map(4);
+        TEST_ASSERT_NOT_NULL(map);
+        TEST_ASSERT_EQUAL(1, map->base.rc);
+        
+        // H2: ASSIGN should work correctly with autoreleased map
+        CljSymbol *key = intern_symbol_global("test-key");
+        CljObject *value = fixnum(42);
+        
+        // This is the pattern used in ns_define
+        ASSIGN(map, map_assoc(map, key, value));
+        
+        // H1: Map should still be valid after ASSIGN
+        TEST_ASSERT_NOT_NULL(map);
+        TEST_ASSERT_TRUE(map->base.rc >= 1);  // RC should be at least 1
+        
+        // H5: map_get should find the value
+        ID retrieved = map_get(map, key, NOT_FOUND);
+        TEST_ASSERT_TRUE(retrieved != NOT_FOUND);
+        
+        // H3: Value should be correct fixnum
+        TEST_ASSERT_TRUE(is_fixnum((CljValue)retrieved));
+        TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)retrieved));
+        
+        // Cleanup
+        RELEASE(map);
+    });
+}
+
+// Test multiple ASSIGN calls in sequence (simulates ns_define behavior)
+TEST(test_map_assoc_multiple_assign_sequence) {
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = make_map(4);
+        TEST_ASSERT_NOT_NULL(map);
+        
+        // Add multiple entries like ns_define does
+        CljSymbol *key1 = intern_symbol_global("var1");
+        CljSymbol *key2 = intern_symbol_global("var2");
+        CljSymbol *key3 = intern_symbol_global("var3");
+        
+        ASSIGN(map, map_assoc(map, key1, fixnum(10)));
+        ASSIGN(map, map_assoc(map, key2, fixnum(20)));
+        ASSIGN(map, map_assoc(map, key3, fixnum(30)));
+        
+        // All values should be retrievable
+        ID v1 = map_get(map, key1, NOT_FOUND);
+        ID v2 = map_get(map, key2, NOT_FOUND);
+        ID v3 = map_get(map, key3, NOT_FOUND);
+        
+        TEST_ASSERT_TRUE(v1 != NOT_FOUND);
+        TEST_ASSERT_TRUE(v2 != NOT_FOUND);
+        TEST_ASSERT_TRUE(v3 != NOT_FOUND);
+        
+        TEST_ASSERT_EQUAL(10, as_fixnum((CljValue)v1));
+        TEST_ASSERT_EQUAL(20, as_fixnum((CljValue)v2));
+        TEST_ASSERT_EQUAL(30, as_fixnum((CljValue)v3));
         
         // Cleanup
         RELEASE(map);
@@ -419,7 +484,7 @@ TEST(test_vector_conj_cow_rc_greater_one) {
         
         // Now COW should trigger
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, fixnum(20));
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, new_vec); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc); // Original RC unchanged
         
         // Verify original vector unchanged
@@ -454,7 +519,7 @@ TEST(test_vector_conj_cow_capacity_growth) {
         
         // Add more - should trigger COW with growth
         CljValue new_vec = (CljValue)vector_conj((CljVector*)vec, fixnum(30));
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, new_vec); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)vec, new_vec); // NEW pointer!
         
         CljVector *new_vec_data = as_vector(new_vec);
         // Capacity is implementation detail, only check count
@@ -579,7 +644,7 @@ TEST(test_vector_assoc_cow_rc_greater_one) {
         
         // Now COW should trigger
         CljVector *new_vec = vector_assoc(vec, 1, fixnum(99));
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec); // NEW pointer!
+        TEST_ASSERT_NOT_EQUAL((CljValue)vec, (CljValue)new_vec); // NEW pointer!
         TEST_ASSERT_EQUAL(2, ((CljObject*)vec)->rc); // Original RC unchanged
         
         // Verify original vector unchanged
@@ -614,7 +679,7 @@ TEST(test_vector_assoc_cow_original_unchanged) {
         CljVector *new_vec = vector_assoc(vec, 0, fixnum(99));
         
         // Should be different pointer (COW triggered)
-        TEST_ASSERT_NOT_EQUAL_PTR((CljValue)vec, (CljValue)new_vec);
+        TEST_ASSERT_NOT_EQUAL((CljValue)vec, (CljValue)new_vec);
         
         // Original should be unchanged
         TEST_ASSERT_EQUAL_INT(3, vector_count(vec));

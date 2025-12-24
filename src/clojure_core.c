@@ -58,6 +58,14 @@ static char* read_file_cstr_local(const char *path) {
   return buffer;
 }
 
+#ifdef PROFILE_STARTUP
+#include <time.h>
+static double g_parse_time_ms = 0;
+static double g_eval_time_ms = 0;
+static int g_form_count = 0;
+double g_canon_time_ms = 0;  // extern in parser.c
+#endif
+
 static bool eval_core_source(const char *src, const char *source_name, EvalState *st) {
   if (!src || !st)
     return false;
@@ -105,7 +113,13 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
     
+#ifdef PROFILE_STARTUP
+    clock_t parse_start = clock();
+#endif
     CljValue form = value_by_parsing_expr(&reader, st);
+#ifdef PROFILE_STARTUP
+    g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
+#endif
     if (!form) {
       // Continue to next expression instead of breaking
       expr_count++;
@@ -114,7 +128,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     
     // Evaluate with exception handling using TRY/CATCH
     TRY {
+#ifdef PROFILE_STARTUP
+      clock_t eval_start = clock();
+#endif
       ID result = eval_parsed((CljObject*)form, st, NULL);
+#ifdef PROFILE_STARTUP
+      g_eval_time_ms += (double)(clock() - eval_start) * 1000.0 / CLOCKS_PER_SEC;
+      g_form_count++;
+#endif
       // Don't RELEASE result - eval_parsed already returns AUTORELEASE
       // result can be NULL if nil was evaluated (legitimate case)
       // eval_parsed should throw exceptions for errors, not return NULL
@@ -199,6 +220,11 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     fprintf(stderr, "[%s] Evaluated %d form(s), %d succeeded.\n",
             ns_name, expr_count, success_count);
   }
+  
+#ifdef PROFILE_STARTUP
+  fprintf(stderr, "[PROFILE] Parse: %.2f ms, Canon: %.2f ms, Eval: %.2f ms, Forms: %d\n",
+          g_parse_time_ms, g_canon_time_ms, g_eval_time_ms, g_form_count);
+#endif
 
   // Ensure Math alias points to clojure.core so Math/sqrt style symbols resolve
   if (target_ns && target_ns->name == SYM_CLOJURE_CORE) {
