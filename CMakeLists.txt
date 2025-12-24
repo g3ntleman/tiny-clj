@@ -363,33 +363,8 @@ add_executable(unit-tests
     src/tests/test_core_functions.c
     src/tests/test_regex.c
     external/unity/src/unity.c
-    src/builtins.c
-    src/object.c
-    src/types.c
-    src/atom.c
-    src/symbol.c
-    src/symbol_token.c
-    src/namespace.c
-    src/parser.c
-    src/ast_canon.c
-    src/reader.c
-    src/eval.c
-    src/function.c
-    src/environment.c
-    src/equality.c
-    src/hash.c
-    src/event_loop.c
-    src/channel.c
-    src/list.c
-    src/seq.c
-    src/clojure_core.c
-    src/memory_profiler.c
-    src/runtime.c
-    src/error_messages.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
-    src/meta.c
+    # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
+    # but are needed for unit-tests (test_repl.c uses repl functionality)
     src/repl.c
     src/platform_macos.c
     src/line_editor.c
