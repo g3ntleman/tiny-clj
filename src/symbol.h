@@ -131,7 +131,11 @@ extern CljSymbol *SYM_CLOJURE_CORE;
 extern CljSymbol *SYM_CLOJURE_STRING;
 extern CljSymbol *SYM_CLOJURE_REPL;
 extern CljSymbol *SYM_CLOJURE_LANG;
+extern CljSymbol *SYM_TINYCLJ;
 extern CljSymbol *SYM_NS_STAR;
+
+// tinyclj namespace function symbols
+extern CljSymbol *SYM_RETAIN_COUNT;
 
 #if defined(CLJ_HOT_PATH)
     #if defined(__clang__) || defined(__GNUC__)
@@ -172,7 +176,7 @@ extern StaticSymbolData sym_last_index_of_data;
 extern StaticSymbolData sym_string_reverse_data;
 extern StaticSymbolData sym_source_data;
 extern StaticSymbolData sym_dir_data;
-extern StaticSymbolData sym_rt_data;
+extern StaticSymbolData sym_retain_count_data;
 extern StaticSymbolData sym_meta_data;
 extern StaticSymbolData sym_with_meta_data;
 extern StaticSymbolData sym_reduce_data;

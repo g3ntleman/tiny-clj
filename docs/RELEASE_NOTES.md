@@ -2,6 +2,15 @@
 
 ## Latest Updates (Recent Commits)
 
+### Date/Time Library (Latest)
+- **tinyclj.datetime**: Neue Datum/Zeit-Konvertierungsbibliothek
+  - `civil-from-days` / `days-from-civil` - Unix-Tage ↔ Datum (Jahr/Monat/Tag)
+  - `time-from-millis` / `millis-from-time` - Millisekunden ↔ Zeit (Stunde/Minute/Sekunde)
+  - `date-time` / `to-raw` - High-Level API für Timestamp-Konvertierung
+  - `format-iso` - ISO-8601 Formatierung (z.B. "2024-12-23T14:30:45")
+  - Basiert auf Howard Hinnants optimierten Datumsalgorithmen (Public Domain)
+  - Keine Lookup-Tables, keine Schleifen - rein mathematische Berechnung
+
 ### Clojure-Compatible Macroexpander & Destructuring (Latest)
 - **Macro System**: Vollständiger clojure-kompatibler Makroexpander implementiert
   - `defmacro` Special Form für Makro-Definitionen

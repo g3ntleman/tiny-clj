@@ -110,6 +110,10 @@ CljSymbol *SYM_CLOJURE_CORE = NULL;
 CljSymbol *SYM_CLOJURE_STRING = NULL;
 CljSymbol *SYM_CLOJURE_REPL = NULL;
 CljSymbol *SYM_CLOJURE_LANG = NULL;
+CljSymbol *SYM_TINYCLJ = NULL;
+
+// tinyclj namespace function symbols
+CljSymbol *SYM_RETAIN_COUNT = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
@@ -166,7 +170,7 @@ DEFINE_STATIC_SPECIAL_SYMBOL(sym_splice_unquote_data, "splice-unquote");
 DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_source_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_dir_data, "dir");
-DEFINE_EXTERN_SYMBOL(sym_rt_data, "rt");
+DEFINE_EXTERN_SYMBOL(sym_retain_count_data, "retain-count");
 DEFINE_EXTERN_SYMBOL(sym_meta_data, "meta");
 DEFINE_EXTERN_SYMBOL(sym_with_meta_data, "with-meta");
 DEFINE_EXTERN_SPECIAL_SYMBOL(sym_do_data, "do");
@@ -452,8 +456,11 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
-    // clojure.repl native function symbol for rt
-    INIT_SYMBOL_NS(SYM_RT_NATIVE, sym_rt_data, SYM_CLOJURE_REPL);
+    // Initialize tinyclj namespace symbol
+    SYM_TINYCLJ = intern_symbol_global("tinyclj");
+    
+    // tinyclj native function symbol for retain-count
+    INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);
     
     // clojure.core sqrt native function symbol
     INIT_SYMBOL_NS(SYM_SQRT_NATIVE, sym_sqrt_data, SYM_CLOJURE_CORE);
