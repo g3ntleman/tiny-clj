@@ -10,7 +10,7 @@
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()
 #include "map.h"            // For make_map()
-#include "hashmap.h"        // For hashmap_register_release_fn()
+#include "subjective-c/hashmap.h"        // For hashmap_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);

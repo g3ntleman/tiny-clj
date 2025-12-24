@@ -15,7 +15,7 @@
 #include "object.h"
 #include "memory.h"
 #include "vector.h"
-#include "hashmap.h"
+#include "subjective-c/hashmap.h"
 #include "namespace.h"
 #include <alloca.h>
 #include <stdlib.h>

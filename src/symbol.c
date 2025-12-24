@@ -7,7 +7,7 @@
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h" // For ASSIGN
 #include "vector.h"  // For vector operations
-#include "hashmap.h" // For HashMap symbol table (O(1) lookup)
+#include "subjective-c/hashmap.h" // For HashMap symbol table (O(1) lookup)
 #include "symbol_token.h"  // For CljSymbolToken
 #include "common.h"  // For CLJ_ASSERT
 #include "strings.h"  // For string_data()

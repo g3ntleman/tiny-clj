@@ -479,7 +479,7 @@ int seq_count(ID obj) {
     if (!obj) return 0;
     
     // If it's already a seq wrapper, count from iterator state
-    if (obj && TAG(obj) == CLJ_SEQ) {
+    if (TAG(obj) == CLJ_SEQ) {
         CljSeqIterator *seq = as_seq(obj);
         if (!seq) return 0;
         
@@ -505,7 +505,7 @@ int seq_count(ID obj) {
     }
     
     // Fast path for vectors - O(1)
-    if (obj && TAG(obj) == CLJ_VECTOR) {
+    if (TAG(obj) == CLJ_VECTOR) {
         CljVector *vec = as_vector((CljObject*)obj);
         return vec ? vector_count(vec) : 0;
     }

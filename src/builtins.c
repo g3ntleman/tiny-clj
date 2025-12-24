@@ -1610,7 +1610,7 @@ ID native_vec(ID *args, unsigned int argc) {
     // If already a vector, return same object (No-Op - Clojure behavior)
     // Note: coll is already AUTORELEASEd by eval_arg, so we need to AUTORELEASE it again
     // to ensure it's in the caller's pool
-    if (coll && TAG(coll) == CLJ_VECTOR) {
+    if (TAG(coll) == CLJ_VECTOR) {
         return AUTORELEASE(coll);
     }
 
@@ -2900,13 +2900,13 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljVector *vec = NULL;
 
     // Handle simple Symbol case: (require 'namespace)
-    if (spec && TAG(spec) == CLJ_SYMBOL) {
+    if (TAG(spec) == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(spec);
         if (!sym || !sym->cname) return false;
         ns_name = sym->cname;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
-    else if (spec && TAG(spec) == CLJ_VECTOR) {
+    else if (TAG(spec) == CLJ_VECTOR) {
         vec = as_vector(spec);
         if (vector_count(vec) < 1) return false;
 
@@ -4103,7 +4103,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
     }
 
     // For now, only support vectors as sequences
-    if (seq && TAG(seq) == CLJ_VECTOR) {
+    if (TAG(seq) == CLJ_VECTOR) {
         CljVector *vec = as_vector(seq);
         int count = vector_count(vec);
         CljValue arr = (CljValue)make_byte_array(count);
