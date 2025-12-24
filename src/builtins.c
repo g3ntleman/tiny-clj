@@ -331,7 +331,6 @@ ID native_subvec(ID *args, unsigned int argc) {
     }
 
     CljVector *v = as_vector(vec);
-    if (!v) return NULL;
 
     int start = AS_FIXNUM(start_idx);
     int end;
@@ -375,7 +374,6 @@ ID native_subvec(ID *args, unsigned int argc) {
     // Create new vector and add elements using vector_conj
     ID new_vec_obj = make_vector(subvec_count, CLJ_VECTOR);
     CljVector *new_vec = as_vector(new_vec_obj);
-    if (!new_vec) return NULL;
 
     // Copy elements from start to end using vector_conj
     for (int i = 0; i < subvec_count; i++) {
@@ -3828,7 +3826,6 @@ ID native_range(ID *args, unsigned int argc) {
     // Create vector with calculated capacity
     ID vec = make_vector(size, CLJ_VECTOR);
     CljVector *v = as_vector(vec);
-    if (!v) return NULL;
 
     // Fill vector
     for (int i = start; (step > 0) ? (i < end) : (i > end); i += step) {
@@ -3866,7 +3863,6 @@ ID native_repeat(ID *args, unsigned int argc) {
     // Create vector with exact capacity
     ID vec = make_vector(count, CLJ_VECTOR);
     CljVector *v = as_vector(vec);
-    if (!v) return NULL;
 
     // Fill vector with repeated value
     for (int i = 0; i < count; i++) {

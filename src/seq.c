@@ -94,9 +94,6 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
             CljVector *vec = as_vector(obj);
-            if (!vec) {
-                return true;  // Empty vector
-            }
             
             // Use vector_init_seq_iterator to avoid exposing internal data pointer
             if (!vector_init_seq_iterator(iter, vec)) {
@@ -124,7 +121,7 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         
         case CLJ_MAP: {
             CljMap *map = as_map(obj);
-            if (!map || map->count == 0) {
+            if (map->count == 0) {
                 return true;  // Empty map
             }
 
