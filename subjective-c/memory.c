@@ -146,7 +146,6 @@ static void release_object_default(CljObject *v);
 static void init_release_dispatch(void);
 static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
 static bool g_release_dispatch_initialized = false;
-static void autorelease_pool_clear(CljVector *pool);
 
 /** @brief Initialize the autorelease pool (call once at startup)
  * 
