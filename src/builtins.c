@@ -5257,9 +5257,6 @@ ID native_now(ID *args, unsigned int argc) {
         NOT_FOUND));
 }
 
-// NOTE: epoch-minutes and millis-in-minute removed in favor of (now) which returns
-// an atomic map {:days epoch-days :ms millis-in-day}
-
 // do: Evaluate expressions sequentially, return last value
 // Note: As a builtin, arguments are already evaluated, so we just return the last one
 ID native_do(ID *args, unsigned int argc) {
