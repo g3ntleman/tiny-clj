@@ -403,7 +403,7 @@ ID conj2_wrapper(ID *args, int argc) {
 ID conj2(ID vec, ID val) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
-    CljVector* result = vector_conj((CljVector*)vec, val);
+    CljVector* result = vector_conj(vec, val);
     if (!result) return NULL;
     return result;
 }
@@ -429,7 +429,7 @@ ID native_conj(ID *args, unsigned int argc) {
         // conj nil with values creates a list
         CljList *result = NULL;
         for (unsigned int i = argc - 1; i >= 1; i--) {
-            CljObject *val = args[i];
+            ID val = args[i];
             result = make_list(val, result);
         }
         return result;
@@ -468,14 +468,14 @@ ID native_first(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 1, "first")) return NULL;
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
     if (!coll) {
         // first of nil returns nil
         return NULL;
     }
 
     // Switch on collection type (DRY: consistent pattern)
-    switch (coll->type) {
+    switch (TAG(coll)) {
         case CLJ_LIST: {
             // Direct access for lists (already a seq) - no allocation needed
             CljObject *first = LIST_FIRST((CljList*)coll);
@@ -745,29 +745,29 @@ ID native_cons(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 2, "cons")) return NULL;
 
-    CljObject *elem = args[0];
-    CljObject *coll = args[1];
+    ID elem = args[0];
+    ID coll = args[1];
 
     if (!elem) elem = NULL;
 
-    CljObject *result = NULL;
+    ID result = NULL;
 
     // nil oder leer
     if (!coll) {
-        result = (CljObject*)make_list(elem, NULL);
+        result = make_list(elem, NULL);
         return AUTORELEASE(result);
     }
 
-    // Typ-basierte Behandlung
-    switch (coll->type) {
+    // Type-based handling
+    switch (TAG(coll)) {
         case CLJ_LIST:
         case CLJ_SEQ: {
             // Treat empty list like nil
-            CljList *list = (CljList*)coll;
+            CljList *list = coll;
             if (list_count(list) == 0) {
-                result = (CljObject*)make_list(elem, NULL);
+                result = make_list(elem, NULL);
             } else {
-                result = (CljObject*)make_list(elem, list);
+                result = make_list(elem, list);
             }
             return AUTORELEASE(result);
         }
@@ -776,9 +776,9 @@ ID native_cons(ID *args, unsigned int argc) {
             // Vektor oder andere → zu Seq konvertieren
             CljSeqIterator *seq = make_seq(coll);
             if (!seq) {
-                result = (CljObject*)make_list(elem, NULL);
+                result = make_list(elem, NULL);
             } else {
-                result = (CljObject*)make_list(elem, (CljList*)seq);
+                result = make_list(elem, (CljList*)seq);
             }
             return AUTORELEASE(result);
         }
@@ -875,7 +875,7 @@ ID native_reverse(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 1, "reverse")) return NULL;
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
 
     // Handle nil/empty
     if (!coll) {
@@ -902,9 +902,9 @@ ID native_reverse(ID *args, unsigned int argc) {
 
 ID assoc3(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 3, "assoc")) return NULL;
-    CljObject *coll = args[0];
-    CljObject *key = args[1];
-    CljObject *val = args[2];
+    ID coll = args[0];
+    ID key = args[1];
+    ID val = args[2];
 
     if (!coll) return NULL;
 
@@ -917,7 +917,7 @@ ID assoc3(ID *args, unsigned int argc) {
         CljVector *v = as_vector(coll);
         if (!v || i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljVector* result = vector_assoc((CljVector*)coll, i, val);
+        CljVector* result = vector_assoc(coll, i, val);
         if (!result) return NULL;
         return result;
     }
@@ -925,7 +925,7 @@ ID assoc3(ID *args, unsigned int argc) {
     // Handle maps
     if (coll_tag == CLJ_MAP) {
         // Note: key can be NULL (nil) - that's a valid key in Clojure!
-        return map_assoc((CljMap*)coll, key, val);
+        return map_assoc(coll, key, val);
     }
 
     // Unsupported collection type
@@ -942,7 +942,7 @@ ID native_dissoc(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljObject *map = args[0];
+    ID map = args[0];
     if (!map) return NULL;
 
     unsigned char map_tag = TAG(map);
@@ -960,16 +960,16 @@ ID native_dissoc(ID *args, unsigned int argc) {
     }
 
     // Remove keys one by one (Clojure semantics: multiple keys supported)
-    CljMap *result = (CljMap*)map;
+    CljMap *result = map;
     for (unsigned int i = 1; i < argc; i++) {
-        CljObject *key = args[i];
+        ID key = args[i];
         if (!key) continue;  // Skip NULL keys
 
         // map_remove returns a new map (or original if key not found)
         CljMap *new_result = map_remove(result, key);
-        if (new_result != (CljMap*)result) {
+        if (new_result != result) {
             // New map was created - release old one if it was retained
-            if (i > 1 || result != (CljMap*)map) {
+            if (i > 1 || result != map) {
                 RELEASE(result);
             }
             result = new_result;
@@ -997,7 +997,7 @@ ID native_merge(ID *args, unsigned int argc) {
         if (args[i]) {
             unsigned char tag = TAG(args[i]);
             if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-                result = (CljMap*)args[i];
+                result = args[i];
                 start_idx = i + 1;
                 break;
             }
@@ -1020,7 +1020,7 @@ ID native_merge(ID *args, unsigned int argc) {
             return NULL;
         }
         
-        CljMap *new_result = map_merge(result, (CljMap*)m, true);  // overwrite=true
+        CljMap *new_result = map_merge(result, m, true);  // overwrite=true
         if (new_result != result && i > start_idx) {
             // Don't release original arg
         }
@@ -1049,7 +1049,7 @@ ID native_contains_p(ID *args, unsigned int argc) {
     switch (tag) {
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT:
-            return map_contains((CljMap*)coll, key) ? clj_true : clj_false;
+            return map_contains(coll, key) ? clj_true : clj_false;
         
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT:
@@ -1057,7 +1057,7 @@ ID native_contains_p(ID *args, unsigned int argc) {
             // For vectors, key must be an integer index
             if (!is_fixnum(key)) return clj_false;
             long idx = as_fixnum(key);
-            unsigned int count = vector_count((CljVector*)coll);
+            unsigned int count = vector_count(coll);
             return (idx >= 0 && (unsigned long)idx < count) ? clj_true : clj_false;
         }
         
@@ -1094,7 +1094,7 @@ ID native_update(ID *args, unsigned int argc) {
     }
     
     // Get current value (nil if not found)
-    ID current_val = map_get((CljMap*)coll, key, NULL);
+    ID current_val = map_get(coll, key, NULL);
     
     // Build function call args: [current_val, extra_args...]
     unsigned int fn_argc = 1 + (argc - 3);
@@ -1108,7 +1108,7 @@ ID native_update(ID *args, unsigned int argc) {
     ID new_val = eval_function_call(func, fn_args, fn_argc, NULL, st);
     
     // assoc the new value
-    return map_assoc((CljMap*)coll, key, new_val);
+    return map_assoc(coll, key, new_val);
 }
 
 // into: Add all items from source into target collection
@@ -1144,18 +1144,18 @@ ID native_into(ID *args, unsigned int argc) {
     
     // Handle vector target
     if (to_tag == CLJ_VECTOR || to_tag == CLJ_VECTOR_TRANSIENT || to_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        CljVector *result = (CljVector*)to;
+        CljVector *result = to;
         
         // Iterate over source
         CljType from_tag = TAG(from);
         if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-            unsigned int count = vector_count((CljVector*)from);
+            unsigned int count = vector_count(from);
             for (unsigned int i = 0; i < count; i++) {
-                result = vector_conj(result, vector_nth((CljVector*)from, i));
+                result = vector_conj(result, vector_nth(from, i));
             }
         } else if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
             // Map entries become [k v] vectors
-            CljMap *m = (CljMap*)from;
+            CljMap *m = from;
             for (int i = 0; i < m->capacity; i++) {
                 ID key = KV_KEY(m->data, i);
                 if (key) {
@@ -1168,7 +1168,7 @@ ID native_into(ID *args, unsigned int argc) {
             }
         } else if (from_tag == CLJ_LIST || from_tag == CLJ_AST_NODE) {
             // Iterate over list (CLJ_LIST or CLJ_AST_NODE - both use same structure)
-            CljList *list = (CljList*)from;
+            CljList *list = from;
             while (list && !list_empty(list)) {
                 result = vector_conj(result, LIST_FIRST(list));
                 list = as_list(LIST_REST(list));
@@ -1180,20 +1180,20 @@ ID native_into(ID *args, unsigned int argc) {
     
     // Handle map target
     if (to_tag == CLJ_MAP || to_tag == CLJ_MAP_TRANSIENT) {
-        CljMap *result = (CljMap*)to;
+        CljMap *result = to;
         
         CljType from_tag = TAG(from);
         if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
             // Merge maps
-            result = map_merge(result, (CljMap*)from, true);
+            result = map_merge(result, from, true);
         } else if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT) {
             // Vector of [k v] pairs
-            unsigned int count = vector_count((CljVector*)from);
+            unsigned int count = vector_count(from);
             for (unsigned int i = 0; i < count; i++) {
-                ID entry = vector_nth((CljVector*)from, i);
+                ID entry = vector_nth(from, i);
                 unsigned char entry_tag = entry ? TAG(entry) : 0;
                 if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT) {
-                    CljVector *pair = (CljVector*)entry;
+                    CljVector *pair = entry;
                     if (vector_count(pair) >= 2) {
                         ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
                     }
@@ -1246,19 +1246,19 @@ ID native_select_keys(ID *args, unsigned int argc) {
     }
     
     CljMap *result = map_empty();
-    CljMap *source = (CljMap*)m;
+    CljMap *source = m;
     
     if (keys_tag == CLJ_VECTOR || keys_tag == CLJ_VECTOR_TRANSIENT || keys_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        unsigned int count = vector_count((CljVector*)keys);
+        unsigned int count = vector_count(keys);
         for (unsigned int i = 0; i < count; i++) {
-            ID key = vector_nth((CljVector*)keys, i);
+            ID key = vector_nth(keys, i);
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
                 ASSIGN(result, map_assoc(result, key, val));
             }
         }
     } else if (keys_tag == CLJ_LIST || keys_tag == CLJ_AST_NODE) {
-        CljList *list = (CljList*)keys;
+        CljList *list = keys;
         while (list && !list_empty(list)) {
             ID key = LIST_FIRST(list);
             if (map_contains(source, key)) {
@@ -1295,7 +1295,7 @@ ID native_find(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    CljMap *map = (CljMap*)m;
+    CljMap *map = m;
     
     if (!map_contains(map, key)) {
         return NULL;  // Key not found
@@ -1321,7 +1321,7 @@ ID native_transient(ID *args, unsigned int argc) {
     uint16_t tag = TAG(coll);
     switch (tag) {
         case CLJ_VECTOR:
-            return vector_transient((CljVector*)coll);
+            return vector_transient(coll);
         case CLJ_MAP:
             return map_transient(coll);
         case CLJ_VECTOR_TRANSIENT:
@@ -1348,7 +1348,7 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
     uint16_t tag = TAG(coll);
     switch (tag) {
         case CLJ_VECTOR_TRANSIENT:
-            return vector_persistent((CljVector*)coll);
+            return vector_persistent(coll);
         case CLJ_MAP_TRANSIENT:
             return map_persistent(coll);
         case CLJ_VECTOR:
@@ -1369,21 +1369,21 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
 ID native_conj_bang(ID *args, unsigned int argc) {
     if (argc < 2) return (NULL);
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
     if (!coll) return NULL;
 
     int tag = TAG(coll);
     if (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        CljVector *result = (CljVector*)coll;
+        CljVector *result = coll;
         // vector_conj automatically handles transient vectors correctly (always in-place)
         for (unsigned int i = 1; i < argc; i++) {
             result = vector_conj(result, args[i]);
             if (!result) return NULL;
         }
-        return (CljObject*)result;
+        return result;
     } else if (tag == CLJ_MAP_TRANSIENT) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
-        return (CljObject*)map_conj((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
+        return map_conj(coll, args[1], args[2]);
     }
 
     // Throw exception for unsupported collection type (Clojure-compatible)
@@ -1400,20 +1400,20 @@ ID native_get(ID *args, unsigned int argc) {
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    CljObject *map = args[0];
-    CljObject *key_obj = args[1];
+    ID map = args[0];
+    ID key_obj = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     if (!map) return NULL;
 
     // Convert SYM_NIL to NULL for key lookup
-    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == (CljObject*)SYM_NIL)
+    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == SYM_NIL)
         ? NULL
         : key_obj;
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_get((CljMap*)map, key, not_found);
+        return map_get(map, key, not_found);
     }
 
     return not_found ? not_found : NULL; // Return not_found or nil for unsupported types
@@ -1423,7 +1423,7 @@ ID native_count(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
 
     if (!validate_builtin_args(argc, 1, "count")) return NULL;
-    CljObject *coll = args[0];
+    ID coll = args[0];
     // Clojure behavior: (count nil) => 0
     if (!coll) {
         return fixnum(0);
@@ -1438,7 +1438,7 @@ ID native_count(ID *args, unsigned int argc) {
 
     if (coll) {
         if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-            return (fixnum(map_count((CljMap*)coll)));
+            return (fixnum(map_count(coll)));
         } else if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
             CljVector *vec = as_vector(coll);
             return (fixnum(vec ? vector_count(vec) : 0));
@@ -1458,12 +1458,12 @@ ID native_count(ID *args, unsigned int argc) {
 
 ID native_keys(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "keys")) return NULL;
-    CljObject *map = args[0];
+    ID map = args[0];
     if (!map) return (NULL);
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_keys((CljMap*)map);
+        return map_keys(map);
     }
 
     return NULL; // Return nil for unsupported types
@@ -1471,12 +1471,12 @@ ID native_keys(ID *args, unsigned int argc) {
 
 ID native_vals(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "vals")) return NULL;
-    CljObject *map = args[0];
+    ID map = args[0];
     if (!map) return (NULL);
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_vals((CljMap*)map);
+        return map_vals(map);
     }
 
     return NULL; // Return nil for unsupported types
@@ -1570,8 +1570,8 @@ ID native_array_map(ID *args, unsigned int argc) {
     // Add all key-value pairs
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     for (unsigned int i = 0; i < argc; i += 2) {
-        CljObject *key = args[i];
-        CljObject *value = args[i + 1];
+        ID key = args[i];
+        ID value = args[i + 1];
         CljMap *updated_map = map_assoc(map, key, value);
         ASSIGN(map, updated_map);
     }
@@ -1605,7 +1605,7 @@ ID native_vec(ID *args, unsigned int argc) {
     // Arity check: vec accepts exactly 1 argument
     if (!validate_builtin_args(argc, 1, "vec")) return NULL;
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
 
     // If nil, return empty vector singleton (Clojure behavior: '() is nil, (vec '()) => [])
     // empty_vector() returns singleton - no memory management needed
@@ -1712,7 +1712,7 @@ ID native_schedule(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "schedule")) return NULL;
 
     // First argument: delay in milliseconds (must be integer)
-    CljObject *delay_obj = args[0];
+    ID delay_obj = args[0];
     if (!delay_obj || TAG(delay_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule delay must be an integer",
@@ -1720,7 +1720,7 @@ ID native_schedule(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int delay_ms = as_fixnum((CljValue)delay_obj);
+    int delay_ms = as_fixnum(delay_obj);
     if (delay_ms < 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule delay must be non-negative",
@@ -1729,7 +1729,7 @@ ID native_schedule(ID *args, unsigned int argc) {
     }
 
     // Second argument: function to execute (must be a function)
-    CljObject *fn_obj = args[1];
+    ID fn_obj = args[1];
     unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
     if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1768,7 +1768,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 3, "schedule-periodic")) return NULL;
 
     // First argument: initial delay in milliseconds (must be integer)
-    CljObject *delay_obj = args[0];
+    ID delay_obj = args[0];
     if (!delay_obj || TAG(delay_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic delay must be an integer",
@@ -1776,7 +1776,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int delay_ms = as_fixnum((CljValue)delay_obj);
+    int delay_ms = as_fixnum(delay_obj);
     if (delay_ms < 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic delay must be non-negative",
@@ -1785,7 +1785,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     }
 
     // Second argument: period in milliseconds (must be integer)
-    CljObject *period_obj = args[1];
+    ID period_obj = args[1];
     if (!period_obj || TAG(period_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic period must be an integer",
@@ -1793,7 +1793,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int period_ms = as_fixnum((CljValue)period_obj);
+    int period_ms = as_fixnum(period_obj);
     if (period_ms <= 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic period must be positive",
@@ -1802,7 +1802,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     }
 
     // Third argument: function to execute (must be a function)
-    CljObject *fn_obj = args[2];
+    ID fn_obj = args[2];
     unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
     if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1831,7 +1831,7 @@ ID native_cancel_timer(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "cancel-timer")) return NULL;
 
     // First argument: timer ID (must be integer)
-    CljObject *timer_id_obj = args[0];
+    ID timer_id_obj = args[0];
     if (!timer_id_obj || TAG(timer_id_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "cancel-timer timer-id must be an integer",
@@ -1839,7 +1839,7 @@ ID native_cancel_timer(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int timer_id = as_fixnum((CljValue)timer_id_obj);
+    int timer_id = as_fixnum(timer_id_obj);
     if (timer_id <= 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "cancel-timer timer-id must be positive",
@@ -2047,13 +2047,13 @@ ID native_all_ns(ID *args, unsigned int argc) {
         return empty_list();
     }
 
-    CljObject *result = NULL;
+    ID result = NULL;
     MAP_FOR_EACH(g_runtime.ns_registry, key, val) {
         (void)key;
         if (!val) {
             continue;
         }
-        result = (CljObject*)make_list(val, (CljList*)result);
+        result = make_list(val, result);
     }
 
     if (!result) {
@@ -4498,7 +4498,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "sleep")) return NULL;
 
     // Get the sleep duration in seconds
-    CljObject *duration_obj = args[0];
+    ID duration_obj = args[0];
     if (TAG(duration_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
                        __FILE__, __LINE__, 0);
@@ -4506,7 +4506,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     }
 
     // Convert to seconds (assuming the number is in seconds)
-    int duration = as_fixnum((CljValue)duration_obj);
+    int duration = as_fixnum(duration_obj);
 
     // Use Unix sleep function
     sleep(duration);
@@ -4526,7 +4526,7 @@ ID native_atom(ID *args, unsigned int argc) {
     ID value = args[0];  // Can be NULL (nil) or immediate
     CljAtom *atom = make_atom(value);
 
-    return (CljObject*)atom;
+    return atom;
 }
 
 // Native deref implementation
@@ -4573,7 +4573,7 @@ ID native_swap_bang(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljObject *obj = args[0];
+    ID obj = args[0];
     if (!obj || TAG(obj) != CLJ_ATOM) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom",
                        __FILE__, __LINE__, 0);
