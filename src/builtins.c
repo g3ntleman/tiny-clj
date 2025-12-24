@@ -699,7 +699,7 @@ ID native_partition(ID *args, unsigned int argc) {
     }
     RELEASE(partitions);
     
-    return result ? AUTORELEASE(RETAIN(result)) : empty_list();
+    return result ? AUTORELEASE(result) : empty_list();
 }
 
 // some: Returns first truthy value from predicate applied to collection
@@ -950,7 +950,7 @@ ID native_dissoc(ID *args, unsigned int argc) {
 
     // If no keys to remove, return the map as-is
     if (argc == 1) {
-        return AUTORELEASE(RETAIN(map));
+        return map;
     }
 
     // Remove keys one by one (Clojure semantics: multiple keys supported)
@@ -970,8 +970,8 @@ ID native_dissoc(ID *args, unsigned int argc) {
         }
     }
 
-    // Return autoreleased result
-    return AUTORELEASE(RETAIN(result));
+    // Return result (already safe - from map_remove or parameter)
+    return result;
 }
 
 // merge: Combines multiple maps (later maps override earlier ones)
@@ -1021,7 +1021,7 @@ ID native_merge(ID *args, unsigned int argc) {
         result = new_result;
     }
     
-    return AUTORELEASE(RETAIN(result));
+    return result;
 }
 
 // contains?: Check if collection contains key
@@ -1126,7 +1126,7 @@ ID native_into(ID *args, unsigned int argc) {
     ID from = args[1];
     
     // nil source returns target unchanged
-    if (!from) return to ? AUTORELEASE(RETAIN(to)) : NULL;
+    if (!from) return to;
     
     // nil target - create appropriate empty collection based on source type
     if (!to) {
@@ -1169,7 +1169,7 @@ ID native_into(ID *args, unsigned int argc) {
             }
         }
         
-        return AUTORELEASE(RETAIN(result));
+        return result;
     }
     
     // Handle map target
@@ -1302,7 +1302,7 @@ ID native_find(ID *args, unsigned int argc) {
     entry = vector_conj(entry, key);
     entry = vector_conj(entry, val);
     
-    return AUTORELEASE(RETAIN(entry));
+    return entry;
 }
 
 // Transient functions
@@ -4644,13 +4644,8 @@ ID native_do(ID *args, unsigned int argc) {
     }
 
     // Arguments are already evaluated by eval_arg, so we just return the last one
-    // Note: We need to RETAIN the last argument since it will be released by the caller
     ID last = args[argc - 1];
-    // CRITICAL: If last is NULL (nil), return NULL directly without RETAIN/AUTORELEASE
-    if (!last) {
-        return NULL;
-    }
-    return AUTORELEASE(RETAIN(last));
+    return last;
 }
 
 // dotimes: Execute expression n times with variable bound to 0, 1, ..., n-1
@@ -4764,7 +4759,7 @@ ID native_re_matches(ID *args, unsigned int argc) {
     }
     
     // Return the matched string (entire string in this case)
-    return AUTORELEASE(RETAIN(str_arg));
+    return str_arg;
 }
 
 // re-seq: Returns lazy sequence of matches (simplified: returns list)
