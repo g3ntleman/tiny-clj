@@ -40,7 +40,6 @@ CljSymbol *SYM_SPLICE_UNQUOTE = NULL;
 CljSymbol *SYM_SOURCE = NULL;
 static CljSymbol *SYM_SOURCE_NATIVE = NULL;
 static CljSymbol *SYM_DIR_NATIVE = NULL;
-static CljSymbol *SYM_RT_NATIVE = NULL;
 static CljSymbol *SYM_SQRT_NATIVE = NULL;
 CljSymbol *SYM_DO = NULL;
 CljSymbol *SYM_LOOP = NULL;
