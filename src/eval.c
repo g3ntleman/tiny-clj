@@ -840,14 +840,14 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Evaluate key and value (nil should evaluate to NULL)
                 // Check for SYM_NIL before calling eval_body to avoid symbol resolution
                 ID eval_key = NULL;
-                if (key && key_tag == CLJ_SYMBOL && key == (ID)SYM_NIL) {
+                if (key && key_tag == CLJ_SYMBOL && key == (CljObject*)SYM_NIL) {
                     eval_key = NULL;  // nil evaluates to NULL
                 } else if (key) {
                     eval_key = eval_body(key, env, st, ctx);
                 }
 
                 ID eval_value = NULL;
-                if (value && value_tag == CLJ_SYMBOL && value == (ID)SYM_NIL) {
+                if (value && value_tag == CLJ_SYMBOL && value == (CljObject*)SYM_NIL) {
                     eval_value = NULL;  // nil evaluates to NULL
                 } else if (value) {
                     eval_value = eval_body(value, env, st, ctx);

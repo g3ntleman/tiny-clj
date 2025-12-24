@@ -452,7 +452,7 @@ ID native_conj(ID *args, unsigned int argc) {
         for (unsigned int i = 1; i < argc; i++) {
             result = make_list(args[i], result);
         }
-        return (ID)result;
+        return result;
     }
 
     // Throw exception for unsupported collection type
@@ -705,7 +705,7 @@ ID native_partition(ID *args, unsigned int argc) {
     }
     RELEASE(partitions);
     
-    return result ? AUTORELEASE(RETAIN((ID)result)) : (ID)empty_list();
+    return result ? AUTORELEASE(RETAIN(result)) : empty_list();
 }
 
 // some: Returns first truthy value from predicate applied to collection
@@ -897,7 +897,7 @@ ID native_reverse(ID *args, unsigned int argc) {
         seq_iter_next(&iter);
     }
 
-    return result ? AUTORELEASE((ID)result) : (ID)empty_list();
+    return result ? AUTORELEASE(result) : empty_list();
 }
 
 ID assoc3(ID *args, unsigned int argc) {
@@ -4438,7 +4438,7 @@ ID native_keyword(ID *args, unsigned int argc) {
     char kw_name[256];
     snprintf(kw_name, sizeof(kw_name), ":%s", name);
     
-    return (ID)intern_symbol_global(kw_name);
+    return intern_symbol_global(kw_name);
 }
 
 // (name x) - returns the name string of a symbol or keyword (without namespace or colon)
@@ -4461,7 +4461,7 @@ ID native_name(ID *args, unsigned int argc) {
         // Skip leading colon for keywords
         if (name[0] == ':') name++;
         
-        return (ID)make_string(name);
+        return make_string(name);
     }
     
     return NULL;
@@ -4637,9 +4637,9 @@ ID native_now(ID *args, unsigned int argc) {
     int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
     
     // Build result map {:days N :ms M}
-    return AUTORELEASE((ID)make_map_kv(
-        (ID)intern_symbol_global(":days"), fixnum(days),
-        (ID)intern_symbol_global(":ms"), fixnum(millis),
+    return AUTORELEASE(make_map_kv(
+        intern_symbol_global(":days"), fixnum(days),
+        intern_symbol_global(":ms"), fixnum(millis),
         NOT_FOUND));
 }
 
@@ -4699,7 +4699,7 @@ ID native_re_pattern(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    return AUTORELEASE((ID)re);
+    return AUTORELEASE(re);
 }
 
 // re-find: Find first match of pattern in string
@@ -4739,7 +4739,7 @@ ID native_re_find(ID *args, unsigned int argc) {
     CljString *result = make_string_buffer(match_len);
     memcpy(result->data, match_start, match_len);
     result->data[match_len] = '\0';
-    return AUTORELEASE((ID)result);
+    return AUTORELEASE(result);
 }
 
 // re-matches: Returns match if entire string matches pattern
@@ -4803,7 +4803,6 @@ ID native_re_seq(ID *args, unsigned int argc) {
     
     // Build list of matches (in reverse, then reverse at end)
     CljList *result = NULL;
-    int count = 0;
     
     while (*pos) {
         const char *match_start = NULL;
@@ -4820,9 +4819,8 @@ ID native_re_seq(ID *args, unsigned int argc) {
         match_str->data[match_len] = '\0';
         
         // Prepend to result list (builds in reverse)
-        result = make_list((ID)match_str, result);
+        result = make_list(match_str, result);
         RELEASE(match_str);
-        count++;
         
         // Move position past match (ensure progress)
         pos = match_end;
@@ -4845,7 +4843,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
         result = next;
     }
     
-    return AUTORELEASE((ID)reversed);
+    return AUTORELEASE(reversed);
 }
 
 // Helper function to register a builtin in clojure.core namespace (DRY principle)

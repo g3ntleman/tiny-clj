@@ -1252,8 +1252,8 @@ TEST(test_update_native_with_extra_args) {
 
 TEST(test_make_map_kv) {
     // Use interned symbols as keys (like in real usage)
-    ID kw1 = (ID)intern_symbol_global(":key1");
-    ID kw2 = (ID)intern_symbol_global(":key2");
+    ID kw1 = intern_symbol_global(":key1");
+    ID kw2 = intern_symbol_global(":key2");
     
     // Create persistent map with NOT_FOUND sentinel termination
     CljMap *map = make_map_kv(kw1, fixnum(10), kw2, fixnum(20), NOT_FOUND);
