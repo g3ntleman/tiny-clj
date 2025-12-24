@@ -60,7 +60,7 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     // Find variadic index (position of & in params), -1 if not variadic
     int8_t variadic_index = -1;
     for (int i = 0; i < param_count; i++) {
-        if (params[i] == (ID)SYM_AMP) {
+        if (params[i] == SYM_AMP) {
             variadic_index = (int8_t)i;
             break;
         }

@@ -79,7 +79,7 @@ static CljVector* destructure(EvalState *st, CljVector *bindings) {
         if (!destructure_fn) return NULL;  // Bootstrap: not loaded yet
     }
     
-    ID args[] = { (ID)bindings };
+    ID args[] = { bindings };
     ID result = eval_function_call(destructure_fn, args, 1, NULL, st);
     return (TAG(result) == CLJ_VECTOR) ? as_vector(result) : NULL;
 }
@@ -450,13 +450,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         // ========== END DESTRUCTURING TRANSFORMATION ==========
         
         // Canonicalize rest of list
-        ID rest = list->rest ? canonicalize_expr((ID)list->rest, st, child_in_quote) : NULL;
+        ID rest = list->rest ? canonicalize_expr(list->rest, st, child_in_quote) : NULL;
         
         // Early exit if nothing changed AND no type conversion needed
         // - in_quote needs CLJ_LIST (convert ASTNode to List)
         // - normal context needs CLJ_AST_NODE (convert List to ASTNode)
         bool correct_type = in_quote ? (tag == CLJ_LIST) : (tag == CLJ_AST_NODE);
-        if (correct_type && first == list->first && rest == (ID)list->rest) {
+        if (correct_type && first == list->first && rest == list->rest) {
             return expr;
         }
         
