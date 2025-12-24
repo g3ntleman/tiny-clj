@@ -127,10 +127,11 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             CljVector *vec = (CljVector*)vec_ptr;
             int count = vector_count(vec);
             size_t len = 2; // "[ ]"
-            for (int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            int i = 0;
+            VECTOR_FOR_EACH(vec, elem) {
                 len += to_string_calc_length((CljObject*)elem, escape_strings);
                 if (i < count - 1) len += 1; // space
+                i++;
             }
             if (v->type == CLJ_VECTOR_TRANSIENT) {
                 len += 11; // "<transient >"
@@ -365,13 +366,14 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             buffer[*offset] = '[';
             *offset += 1;
             int count = vector_count(vec);
-            for (int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            int i = 0;
+            VECTOR_FOR_EACH(vec, elem) {
                 to_string_build_string((CljObject*)elem, buffer, offset, escape_strings);
                 if (i < count - 1) {
                     buffer[*offset] = ' ';
                     *offset += 1;
                 }
+                i++;
             }
             buffer[*offset] = ']';
             *offset += 1;

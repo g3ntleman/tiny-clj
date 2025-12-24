@@ -488,12 +488,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         CLJ_ASSERT(canon_elems != NULL && "Out of memory");
         
         bool changed = false;
-        for (int i = 0; i < count; i++) {
-            ID elem = vector_nth(vec, i);
+        int i = 0;
+        VECTOR_FOR_EACH(vec, elem) {
             canon_elems[i] = canonicalize_expr(elem, st, in_quote);
             if (canon_elems[i] != elem) {
                 changed = true;
             }
+            i++;
         }
         
         if (!changed) {

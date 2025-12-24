@@ -1143,9 +1143,8 @@ ID native_into(ID *args, unsigned int argc) {
         // Iterate over source
         CljType from_tag = TAG(from);
         if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-            unsigned int count = vector_count(from);
-            for (unsigned int i = 0; i < count; i++) {
-                result = vector_conj(result, vector_nth(from, i));
+            VECTOR_FOR_EACH(from, elem) {
+                result = vector_conj(result, elem);
             }
         } else if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
             // Map entries become [k v] vectors
@@ -1163,9 +1162,8 @@ ID native_into(ID *args, unsigned int argc) {
         } else if (from_tag == CLJ_LIST || from_tag == CLJ_AST_NODE) {
             // Iterate over list (CLJ_LIST or CLJ_AST_NODE - both use same structure)
             CljList *list = from;
-            while (list && !list_empty(list)) {
-                result = vector_conj(result, LIST_FIRST(list));
-                list = as_list(LIST_REST(list));
+            LIST_FOR_EACH(list, elem) {
+                result = vector_conj(result, elem);
             }
         }
         
@@ -1182,9 +1180,7 @@ ID native_into(ID *args, unsigned int argc) {
             result = map_merge(result, from, true);
         } else if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT) {
             // Vector of [k v] pairs
-            unsigned int count = vector_count(from);
-            for (unsigned int i = 0; i < count; i++) {
-                ID entry = vector_nth(from, i);
+            VECTOR_FOR_EACH(from, entry) {
                 unsigned char entry_tag = entry ? TAG(entry) : 0;
                 if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT) {
                     CljVector *pair = entry;
@@ -1243,9 +1239,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
     CljMap *source = m;
     
     if (keys_tag == CLJ_VECTOR || keys_tag == CLJ_VECTOR_TRANSIENT || keys_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        unsigned int count = vector_count(keys);
-        for (unsigned int i = 0; i < count; i++) {
-            ID key = vector_nth(keys, i);
+        VECTOR_FOR_EACH(keys, key) {
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
                 ASSIGN(result, map_assoc(result, key, val));
@@ -1253,13 +1247,11 @@ ID native_select_keys(ID *args, unsigned int argc) {
         }
     } else if (keys_tag == CLJ_LIST || keys_tag == CLJ_AST_NODE) {
         CljList *list = keys;
-        while (list && !list_empty(list)) {
-            ID key = LIST_FIRST(list);
+        LIST_FOR_EACH(list, key) {
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
                 ASSIGN(result, map_assoc(result, key, val));
             }
-            list = as_list(LIST_REST(list));
         }
     }
     
@@ -2807,9 +2799,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     if (!symbols || TAG(symbols) != CLJ_VECTOR) return;
 
     CljVector *vec = as_vector(symbols);
-    int count = vector_count(vec);
-    for (int i = 0; i < count; i++) {
-        CljObject *sym = vector_nth(vec, i);
+    VECTOR_FOR_EACH(vec, sym) {
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
             RELEASE(sym);
             continue;
@@ -3204,13 +3194,11 @@ static ID normalize_require_spec(ID spec, bool *needs_release) {
         }
 
         CljList *current = list;
-        while (current) {
-            ID elem = LIST_FIRST(current);
+        LIST_FOR_EACH(current, elem) {
             transient_vec = vector_conj(transient_vec, elem);
             if (!transient_vec) {
                 return NULL;
             }
-            current = LIST_REST(current) ? as_list(LIST_REST(current)) : NULL;
         }
 
         CljVector *persistent_vec = vector_persistent(transient_vec);
@@ -4108,8 +4096,8 @@ ID native_byte_array(ID *args, unsigned int argc) {
         int count = vector_count(vec);
         CljValue arr = (CljValue)make_byte_array(count);
 
-        for (int i = 0; i < count; i++) {
-            ID elem = vector_nth(vec, i);
+        int i = 0;
+        VECTOR_FOR_EACH(vec, elem) {
             if (!elem || TAG(elem) != CLJ_INT) {
                 RELEASE(arr);
                 RELEASE(elem);
@@ -4126,6 +4114,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
                 return NULL;
             }
             byte_array_set(arr, i, (uint8_t)val);
+            i++;
         }
 
         return arr;
