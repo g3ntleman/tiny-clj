@@ -24,13 +24,15 @@ bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
 void throw_oom(void) __attribute__((noreturn));
 
-struct CljVector;
-struct CljVector *autorelease_pool_push();
-void autorelease_pool_cleanup_after_exception();
-void autorelease_pool_cleanup_all();
+// Autorelease pool API (checkpoint-based implementation)
+void autorelease_pool_init(void);     // Call once at startup
+void *autorelease_pool_push(void);    // Returns sentinel (non-NULL)
+void autorelease_pool_pop(void *pool); // pool parameter ignored
+void autorelease_pool_cleanup_after_exception(void);
+void autorelease_pool_cleanup_all(void);
+void autorelease_pool_destroy(void);
 bool is_autorelease_pool_active(void);
-void autorelease_pool_pop(struct CljVector *pool);
-int get_retain_count(ID obj);
+int retain_count(ID obj);
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 #define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
@@ -76,7 +78,7 @@ int get_retain_count(ID obj);
     })
 
     #define WITH_AUTORELEASE_POOL(code) do { \
-        struct CljVector *_pool = autorelease_pool_push(); \
+        void *_pool = autorelease_pool_push(); \
         TRY { \
             code; \
             autorelease_pool_pop(_pool); \
@@ -86,9 +88,9 @@ int get_retain_count(ID obj);
         } END_TRY \
     } while(0)
 
-    #define AUTORELEASE_POOL_BEGIN() struct CljVector *_pool = autorelease_pool_push()
+    #define AUTORELEASE_POOL_BEGIN() void *_pool = autorelease_pool_push()
     #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
-    #define REFERENCE_COUNT(obj) get_retain_count(obj)
+    #define REFERENCE_COUNT(obj) retain_count(obj)
     #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
         code; \
@@ -98,8 +100,9 @@ int get_retain_count(ID obj);
     #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
 #else
     #define DEALLOC(obj) do { \
-        if ((obj) && !IS_IMMEDIATE(obj)) { \
-            free((obj)); \
+        ID _obj = (obj); \
+        if (_obj && !IS_IMMEDIATE(_obj)) { \
+            free((void*)_obj); \
         } \
     } while(0)
 
@@ -128,7 +131,7 @@ int get_retain_count(ID obj);
     })
 
     #define WITH_AUTORELEASE_POOL(code) do { \
-        struct CljVector *_pool = autorelease_pool_push(); \
+        void *_pool = autorelease_pool_push(); \
         TRY { \
             code; \
             autorelease_pool_pop(_pool); \
@@ -138,13 +141,13 @@ int get_retain_count(ID obj);
         } END_TRY \
     } while(0)
 
-    #define AUTORELEASE_POOL_BEGIN() struct CljVector *_pool = autorelease_pool_push()
+    #define AUTORELEASE_POOL_BEGIN() void *_pool = autorelease_pool_push()
     #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
     #define WITH_MEMORY_PROFILING(code) do { code } while(0)
     #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
     #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
-    #define REFERENCE_COUNT(obj) get_retain_count(obj)
+    #define REFERENCE_COUNT(obj) retain_count(obj)
 #endif
 
 #if defined(ENABLE_MEMORY_PROFILING)

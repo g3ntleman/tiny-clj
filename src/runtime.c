@@ -34,6 +34,9 @@ TinyClJRuntime g_runtime = {
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
+    // Initialize autorelease pool first (needed by make_* functions)
+    autorelease_pool_init();
+    
     // Initialize all fields (allows multiple calls with same pointer)
     // ASSIGN automatically handles releasing old values, so multiple calls are safe
     
