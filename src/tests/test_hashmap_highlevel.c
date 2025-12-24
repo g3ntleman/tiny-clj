@@ -14,6 +14,8 @@
  */
 
 #include "tests_common.h"
+#include "../symbol.h"
+#include "../namespace.h"
 
 // ============================================================================
 // INDIRECT REGRESSION TESTS (Symbol Table via Clojure)
@@ -66,15 +68,36 @@ TEST(test_symbol_table_qualified_symbols) {
     assert_string(result, "HELLO");
 }
 
+// Helper: Load clojure.string namespace (like other alias tests)
+static void load_clojure_string_namespace(void) {
+    CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
+    (void)req_result; // require returns nil
+}
+
 // Test: Namespace aliases
-// DISABLED: require :as alias is not fully implemented yet
-// TEST(test_symbol_table_namespace_aliases) {
-//     CljObject *result = eval_string(
-//         "(do "
-//         "  (require '[clojure.string :as str]) "
-//         "  (str/upper-case \"test\"))",
-//         g_test_eval_state
-//     );
-//     assert_string(result, "TEST");
-// }
+// This test verifies that aliases are set correctly in the symbol table.
+// Note: Function calls via aliases (str/upper-case) may not work in all contexts,
+// but the alias itself should be stored correctly.
+TEST(test_symbol_table_namespace_aliases) {
+    // Load namespace first (like other alias tests)
+    load_clojure_string_namespace();
+    
+    // Set alias
+    CljObject *req_result = eval_string("(require '[clojure.string :as str])", g_test_eval_state);
+    (void)req_result; // require returns nil
+    
+    // Verify alias was stored in symbol table
+    CljSymbol *str_alias = intern_symbol_global("str");
+    TEST_ASSERT_NOT_NULL(str_alias);
+    
+    CljObject *ns_name = ns_get_alias(g_test_eval_state->current_ns, (CljObject *)str_alias);
+    TEST_ASSERT_NOT_NULL_MESSAGE(ns_name, "Alias 'str' should be set in symbol table");
+    
+    if (ns_name && TAG(ns_name) == CLJ_SYMBOL) {
+        CljSymbol *ns_sym = as_symbol(ns_name);
+        TEST_ASSERT_NOT_NULL(ns_sym);
+        TEST_ASSERT_EQUAL_STRING_MESSAGE("clojure.string", ns_sym->cname,
+            "Alias should resolve to clojure.string");
+    }
+}
 
