@@ -25,5 +25,5 @@ TEST(test_immediate_detection) {
 
     CljString *s = make_string("heap");
     TEST_ASSERT_FALSE(is_immediate((CljValue)s));
-    RELEASE((CljObject*)s);
+    RELEASE(s);
 }

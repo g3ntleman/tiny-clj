@@ -82,7 +82,7 @@ ID map_get(CljMap *map, ID key, ID not_found) {
 
 /** Associate key->value with COW: RC=1 → in-place mutation, RC>1 → COW.
  */
-CljMap* map_assoc(CljMap* map, ID key, ID value) {
+static CljMap* map_assoc_impl(CljMap* map, ID key, ID value, bool autorelease_result) {
   if (map && TAG(map) == CLJ_MAP) {
     CljObject *key_obj = (CljObject*)key;
     CljObject *value_obj = (CljObject*)value;
@@ -192,11 +192,22 @@ CljMap* map_assoc(CljMap* map, ID key, ID value) {
 
   // ASSERT removed for performance - was verifying with map_get after every map_assoc
 
-  return new_map;  // Return NEW map
+  if (autorelease_result) {
+    return AUTORELEASE(new_map);
+  }
+  return new_map;  // owned (rc=1)
   }
 
   // Error case: invalid map or wrong type
   return map;  // Return original map on error
+}
+
+CljMap* map_assoc(CljMap* map, ID key, ID value) {
+  return map_assoc_impl(map, key, value, true);
+}
+
+static CljMap* map_assoc_owned(CljMap* map, ID key, ID value) {
+  return map_assoc_impl(map, key, value, false);
 }
 
 /** Merge two maps with optional overwrite. */
@@ -327,7 +338,7 @@ int map_contains(CljMap *map, ID key) {
 /** Remove key if present - always returns a new map (COW disabled).
  * Returns the original map if key is not found.
  */
-CljMap* map_remove(CljMap *map, ID key) {
+static CljMap* map_remove_impl(CljMap *map, ID key, bool autorelease_result) {
   if (!map || !key)
     return map;  // Return original map on error
   CljObject *key_obj = (CljObject*)key;
@@ -372,7 +383,38 @@ CljMap* map_remove(CljMap *map, ID key) {
     }
   }
 
-  return new_map;  // Return NEW map
+  if (autorelease_result) {
+    return AUTORELEASE(new_map);
+  }
+  return new_map;  // owned (rc=1)
+}
+
+CljMap* map_remove(CljMap *map, ID key) {
+  return map_remove_impl(map, key, true);
+}
+
+static CljMap* map_remove_owned(CljMap *map, ID key) {
+  return map_remove_impl(map, key, false);
+}
+
+void map_assoc_inplace(CljMap **map_slot, ID key, ID value) {
+  if (!map_slot || !*map_slot) return;
+  CljMap *current = *map_slot;
+  CljMap *updated = map_assoc_owned(current, key, value);
+  if (updated && updated != current) {
+    RELEASE(current);
+    *map_slot = updated;
+  }
+}
+
+void map_remove_inplace(CljMap **map_slot, ID key) {
+  if (!map_slot || !*map_slot) return;
+  CljMap *current = *map_slot;
+  CljMap *updated = map_remove_owned(current, key);
+  if (updated && updated != current) {
+    RELEASE(current);
+    *map_slot = updated;
+  }
 }
 
 /** Create a transient map from variable number of key-value pairs.
@@ -618,29 +660,16 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
         CljObject *existing_key = m->data[i * 2];
         // Fast path: pointer comparison first (for interned symbols/keywords)
         if (existing_key == key_obj) {
-            // Replace existing value
-            // CRITICAL: value can be NULL (nil), which is valid
-            if (m->data[i * 2 + 1]) {
-                RELEASE(m->data[i * 2 + 1]);
-            }
-            // CRITICAL: ASSIGN handles RETAIN automatically
+            // Replace existing value - ASSIGN handles RETAIN/RELEASE automatically
             ASSIGN(m->data[i * 2 + 1], value ? (CljObject*)value : NULL);
             key_found = true;
-            CLJ_ASSERT(m->data[i * 2 + 1] == (CljObject*)value || (value && IS_IMMEDIATE(value)));
             return tmap;
         }
         // Fallback: structural comparison for non-interned objects
-        // Note: If key_obj is NULL, existing_key must also be NULL to match (already handled above)
         if (existing_key && key_obj && clj_equal(existing_key, key_obj)) {
-            // Replace existing value
-            // CRITICAL: value can be NULL (nil), which is valid
-            if (m->data[i * 2 + 1]) {
-                RELEASE(m->data[i * 2 + 1]);
-            }
-            // CRITICAL: ASSIGN handles RETAIN automatically
+            // Replace existing value - ASSIGN handles RETAIN/RELEASE automatically
             ASSIGN(m->data[i * 2 + 1], value ? (CljObject*)value : NULL);
             key_found = true;
-            CLJ_ASSERT(m->data[i * 2 + 1] == (CljObject*)value || (value && IS_IMMEDIATE(value)));
             return tmap;
         }
     }
@@ -660,7 +689,7 @@ CljMap* map_conj(CljMap *tmap, ID key, ID value) {
         return NULL;  // Out of capacity
     }
 
-    ASSIGN(m->data[m->count * 2], (CljObject*)key);
+    ASSIGN(m->data[m->count * 2], key);
     ASSIGN(m->data[m->count * 2 + 1], value ? (CljObject*)value : NULL);
     m->count++;
 

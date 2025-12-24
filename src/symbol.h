@@ -34,6 +34,18 @@ static inline bool is_keyword(ID obj) {
 }
 #define IS_KEYWORD(obj) is_keyword(obj)
 
+// Check if a symbol is a special form (if, let, fn, def, do, quote, etc.)
+// O(1) check using flags field in CljObject
+static inline bool is_special_symbol(CljSymbol *symbol) {
+    return symbol && (symbol->base.flags & CLJ_FLAG_SPECIAL);
+}
+
+// Check if a symbol is a native/builtin function (first, rest, +, -, etc.)
+// O(1) check using flags field in CljObject
+static inline bool is_native_symbol(CljSymbol *symbol) {
+    return symbol && (symbol->base.flags & CLJ_FLAG_NATIVE);
+}
+
 // Global Symbol pointers for special forms
 extern CljSymbol *SYM_TRY;
 extern CljSymbol *SYM_CATCH;
@@ -45,6 +57,7 @@ extern CljSymbol *SYM_LET;
 extern CljSymbol *SYM_FN;
 extern CljSymbol *SYM_DEF;
 extern CljSymbol *SYM_DEFN;
+extern CljSymbol *SYM_DEFMACRO;
 extern CljSymbol *SYM_VAR;
 extern CljSymbol *SYM_QUOTE;
 extern CljSymbol *SYM_QUASIQUOTE;
@@ -62,6 +75,7 @@ extern CljSymbol *SYM_GO;
 extern CljSymbol *SYM_TIME;
 extern CljSymbol *SYM_DEREF;
 extern CljSymbol *SYM_NIL;
+extern CljSymbol *SYM_AMP;  // & for variadic parameters
 
 // Global Symbol pointers for builtins
 extern CljSymbol *SYM_PLUS;

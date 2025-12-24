@@ -137,9 +137,8 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
     if (!ns_cache) {
         ns_cache = make_map(RESOLVE_CACHE_SIZE);
     }
-    ns_cache = map_assoc(ns_cache, op, resolved);
-    CljMap *updated_cache = map_assoc(g_runtime.resolve_cache, ns_key, ns_cache);
-    ASSIGN(g_runtime.resolve_cache, updated_cache);
+    ASSIGN(ns_cache, map_assoc(ns_cache, op, resolved));
+    ASSIGN(g_runtime.resolve_cache, map_assoc(g_runtime.resolve_cache, ns_key, ns_cache));
 }
 
 // Forward declarations
@@ -169,8 +168,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
-    unsigned char fn_tag = TAG(fn);
-    CLJ_ASSERT(fn_tag == CLJ_FUNC || fn_tag == CLJ_CLOSURE);
+    CLJ_ASSERT(TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE);
 
     // Check if it's a native function (CljCFunc) or Clojure function (CljFunction)
     if (is_native_fn(fn)) {
@@ -191,36 +189,56 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         return make_exception(EXCEPTION_RUNTIME, "Invalid function object", NULL, 0, 0);
     }
 
-    // Arity check
+    // Arity check - variadic functions accept >= required params
     int param_count = func->params ? vector_count(func->params) : 0;
-    if (argc != param_count) {
+    int8_t vi = func->variadic_index;
+    if ((vi < 0 ? argc != param_count : argc < vi)) {
         throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
         return NULL;
     }
 
-    // This prevents stack overflow in deep recursion while still allowing proper cleanup
-
     // OPTIMIZATION: Use static arrays instead of STACK_ALLOC to avoid alloca overhead
-    // Max 16 args supported, wastes some stack space but eliminates ___chkstk_darwin calls
     ID current_args[16];
     ID recur_args[16];
     int used_recur_slots = 0;
-    // Only initialize slots we actually need (param_count, not all 16)
-    for (int i = 0; i < param_count; i++) {
-        current_args[i] = (i < argc) ? args[i] : NULL;
-        recur_args[i] = NULL;
+    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
+    
+    // Variadic handling: build effective params/values only when needed
+    ID variadic_params[16];
+    ID *effective_params = params_array;
+    int effective_count = param_count;
+    
+    if (UNLIKELY(vi >= 0)) {
+        // Variadic: params before &, then rest param bound to list
+        effective_count = vi + 1;
+        for (int i = 0; i < vi; i++) {
+            variadic_params[i] = params_array[i];
+            current_args[i] = args[i];
+        }
+        variadic_params[vi] = params_array[vi + 1];  // rest param after &
+        // Collect remaining args into list (nil if none)
+        CljList *rest = NULL;
+        for (int i = argc - 1; i >= vi; i--)
+            rest = make_list(args[i], rest);
+        current_args[vi] = rest;
+        effective_params = variadic_params;
+    } else {
+        // Not variadic: direct copy
+        for (int i = 0; i < param_count; i++)
+            current_args[i] = args[i];
     }
-    int current_argc = argc;
+    
+    for (int i = 0; i < effective_count; i++)
+        recur_args[i] = NULL;
+    int current_argc = effective_count;
     int recur_arg_count = -1;
 
     // Create call frame with parameters (fixed-size stack variable)
-    CLJ_ASSERT(param_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
-    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
-    CallFrame call_frame_storage;  // Fixed size, no __chkstk_darwin
+    CLJ_ASSERT(effective_count <= CALLFRAME_MAX_PARAMS && "Too many parameters");
+    CallFrame call_frame_storage;
     CallFrame *call_frame = &call_frame_storage;
-    CallFrame *parent_frame = NULL;
-    frame_init(call_frame, parent_frame);
-    frame_set_bindings(call_frame, parent_frame, params_array, current_args, current_argc);
+    frame_init(call_frame, NULL);
+    frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
 
     // Legacy: Keep env_stack for closure environment (func->env_stack)
     // This is only used for closure bindings, not function parameters
@@ -275,7 +293,7 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             used_recur_slots = current_argc;
 
             // Recreate call frame with new parameters (stack-allocated)
-            frame_set_bindings(call_frame, parent_frame, params_array, current_args, current_argc);
+            frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
 
             // Continue loop - recur_arg_count will be reset at the start of the next iteration
             continue;
@@ -666,12 +684,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 ID eval_key = key ? eval_body_with_params(key, ctx) : NULL;
                 ID eval_value = value ? eval_body_with_params(value, ctx) : NULL;
                 
-                CljMap *new_result = map_assoc(result, eval_key, eval_value);
-                if (new_result != result) {
-                    RELEASE(result);
-                    result = new_result;
-                    RETAIN(result);
-                }
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
             }
             
             return AUTORELEASE(result);
@@ -799,7 +812,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 ID eval_elem = NULL;
                 
                 // Check for SYM_NIL before calling eval_body
-                if (elem && TAG(elem) == CLJ_SYMBOL && (CljObject*)elem == (CljObject*)SYM_NIL) {
+                if (elem && TAG(elem) == CLJ_SYMBOL && elem == SYM_NIL) {
                     eval_elem = NULL;  // nil evaluates to NULL
                 } else if (elem) {
                     eval_elem = eval_body(elem, env, st, ctx);
@@ -827,26 +840,21 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Evaluate key and value (nil should evaluate to NULL)
                 // Check for SYM_NIL before calling eval_body to avoid symbol resolution
                 ID eval_key = NULL;
-                if (key && key_tag == CLJ_SYMBOL && (CljObject*)key == (CljObject*)SYM_NIL) {
+                if (key && key_tag == CLJ_SYMBOL && key == (ID)SYM_NIL) {
                     eval_key = NULL;  // nil evaluates to NULL
                 } else if (key) {
                     eval_key = eval_body(key, env, st, ctx);
                 }
 
                 ID eval_value = NULL;
-                if (value && value_tag == CLJ_SYMBOL && (CljObject*)value == (CljObject*)SYM_NIL) {
+                if (value && value_tag == CLJ_SYMBOL && value == (ID)SYM_NIL) {
                     eval_value = NULL;  // nil evaluates to NULL
                 } else if (value) {
                     eval_value = eval_body(value, env, st, ctx);
                 }
 
                 // Add evaluated key-value pair to result map
-                CljMap *new_result = map_assoc(result, eval_key, eval_value);
-                if (new_result != result) {
-                    RELEASE(result);
-                    result = new_result;
-                    RETAIN(result);
-                }
+                ASSIGN(result, map_assoc(result, eval_key, eval_value));
 
                 // Release evaluated key and value if they were retained
                 if (eval_key && eval_key != key) RELEASE(eval_key);
@@ -956,6 +964,7 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     bool allow_callsite_cache = call_node && op_sym && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
 
     // OPTIMIZATION: Qualified symbols skip env_stack - go direct to namespace
+    // Unqualified symbols check env_stack first (let bindings, closures)
     bool is_qualified = op_sym && op_sym->ns_name;
     
     // Check env_stack only if not qualified and stack exists
@@ -981,6 +990,8 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     }
 
     // Namespace lookup - this result can be cached
+    // For qualified symbols, this is the primary lookup path
+    // For unqualified symbols, this is the fallback after env_stack
     resolved = eval_symbol(op_sym, ctx_st);
     
     // Cache namespace lookups for future calls
@@ -1332,28 +1343,15 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     // Use current namespace mappings as environment for evaluation
     // This ensures that builtin functions like + are available during evaluation
     CljMap *eval_env = (st && st->current_ns) ? st->current_ns->mappings : env;
-    CljObject *value = NULL;
+    ID value = NULL;
     if (value_expr) {
-        if (value_expr && list_type_matches(TAG(value_expr))) {
-            value = eval_list(as_list(value_expr), eval_env, st, NULL);
-        } else {
-            value = eval_parsed(value_expr, st, eval_env);
-        }
+        value = list_type_matches(TAG(value_expr))
+            ? eval_list(as_list(value_expr), eval_env, st, NULL)
+            : eval_parsed(value_expr, st, eval_env);
     }
     // If value_expr is NULL, value remains NULL (nil case)
     // value can be NULL if nil was evaluated (legitimate case)
     // If evaluation failed, eval_list/eval_parsed should have thrown an exception
-
-    // If the value is a function, set its name
-    // CRITICAL: Only set name for CLJ_CLOSURE (Clojure functions), not CLJ_FUNC (native functions)
-    // as_function only works with CLJ_CLOSURE, not CLJ_FUNC
-    if (value && TAG(value) == CLJ_CLOSURE) {
-        CljFunction *func = as_function(value);
-        CljSymbol *sym = as_symbol(symbol);
-        if (func && sym && sym->cname[0] && !func->name) {
-            func->name = strdup(sym->cname);
-        }
-    }
 
     // Store the symbol-value binding in the environment
     if (!st) {
@@ -1370,23 +1368,64 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
         return NULL;
     }
 
+    // Resolve symbol once for reuse
+    CljSymbol *sym = as_symbol(symbol);
+    
+    // If the value is a function, set its name and rewrite recursive calls
+    // CRITICAL: Only for CLJ_CLOSURE (Clojure functions), not CLJ_FUNC (native functions)
+    if (TAG(value) == CLJ_CLOSURE) {
+        CljFunction *func = as_function(value);
+        if (func && sym && sym->cname[0]) {
+            if (!func->name) func->name = strdup(sym->cname);
+            
+            // Rewrite recursive calls to use qualified name (for TCO optimization)
+            // Only if namespace is available (avoids unnecessary work)
+            if (st->current_ns && st->current_ns->name) {
+                CljSymbol *qualified = intern_symbol(st->current_ns->name, sym->cname);
+                if (qualified && qualified != sym) {
+                    rewrite_recursive_calls_in_slot((ID*)&func->body, sym, qualified);
+                }
+            }
+        }
+    }
+
     // Store in namespace (value can be NULL/nil - legitimate case)
     ns_define(st->current_ns, symbol, value);
-    CljSymbol *return_symbol = as_symbol(symbol);
 
     // Apply metadata to value
     // In Clojure, metadata from ^#^{...} (def ...) is applied to the value
 #ifdef ENABLE_META
-    // Try to get metadata from the def form (list object)
-    ID form_meta = meta_get((CljObject*)list);
-    if (form_meta && value) {
-        // Metadata found on the form - apply it to the value
-        meta_set((CljObject*)value, (CljObject*)form_meta);
+    if (value) {
+        unsigned char value_tag = TAG(value);
+        ID form_meta = meta_get(list);
+        
+        // Optimized: Only process metadata for functions (most common case)
+        // For non-functions, just copy form metadata if present
+        if (value_tag == CLJ_CLOSURE || value_tag == CLJ_FUNC) {
+            if (form_meta && TAG(form_meta) == CLJ_MAP) {
+                CljMap *meta_map = (CljMap*)RETAIN(form_meta);
+                // Add :name and :ns directly (map_assoc overwrites if present, :name/:ns are rare)
+                if (SYM_KW_NAME && sym && sym->cname && sym->cname[0] != '\0') {
+                    CljString *name_str = make_string(sym->cname);
+                    if (name_str) {
+                        ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_str));
+                        RELEASE(name_str);
+                    }
+                }
+                if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
+                    ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, st->current_ns->name));
+                }
+                meta_set(value, meta_map);
+                RELEASE(meta_map);
+            }
+        } else if (form_meta) {
+            meta_set(value, form_meta);
+        }
     }
 #endif // ENABLE_META
 
     // Return the symbol that was actually stored (Clojure-compatible: def returns the var/symbol, not the value)
-    return return_symbol;
+    return sym;
 }
 
 ID eval_ns(CljList *list, CljMap *env, EvalState *st) {
@@ -1510,18 +1549,26 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     // Check if second element is a symbol (named fn) but NOT a keyword
     // Also check it's not a vector (anonymous fn case)
+    CljList *body_rest = NULL;  // Rest of body expressions (for multiple bodies)
     if (TAG(second) == CLJ_SYMBOL && !IS_KEYWORD(second)) {
-        // Named fn: (fn name [params] body)
+        // Named fn: (fn name [params] body...)
         fn_name = (CljSymbol*)second;
         CljList *rest2 = as_list(LIST_REST(rest1));   // nach name
         params_list = LIST_FIRST(rest2);
-        CljList *rest3 = as_list(LIST_REST(rest2));
-        body = LIST_FIRST(rest3);
+        body_rest = as_list(LIST_REST(rest2));        // body expressions
+        body = body_rest ? LIST_FIRST(body_rest) : NULL;
     } else {
-        // Anonymous fn: (fn [params] body)
+        // Anonymous fn: (fn [params] body...)
         params_list = second;
-        CljList *rest2 = as_list(LIST_REST(rest1));
-        body = LIST_FIRST(rest2);
+        body_rest = as_list(LIST_REST(rest1));
+        body = body_rest ? LIST_FIRST(body_rest) : NULL;
+    }
+    
+    // Handle multiple body expressions: wrap in (do ...)
+    // (fn [x] expr1 expr2) → body becomes (do expr1 expr2)
+    if (body_rest && body_rest->rest) {
+        // Multiple body expressions - wrap in do block
+        body = make_list(SYM_DO, body_rest);
     }
 
     // Parameters can be a vector [a b] or a list (a b)
@@ -1532,6 +1579,40 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     if (!body) {
         return NULL;
+    }
+
+    // Check if body is :native marker (for native function stubs)
+    // Keywords are interned, so pointer comparison suffices
+    if (body == (CljObject*)SYM_KW_NATIVE) {
+        // Named fn required for :native lookup
+        if (!fn_name || !fn_name->cname) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                           "fn with :native requires a function name",
+                           NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Lookup native function by name (try qualified first, then unqualified)
+        BuiltinFn native_func = NULL;
+        CljSymbol *lookup_symbol = fn_name;
+        if (st && st->current_ns && st->current_ns->name) {
+            CljSymbol *qualified = intern_symbol(st->current_ns->name, fn_name->cname);
+            if (qualified) lookup_symbol = qualified;
+        }
+        native_func = native_function_lookup(lookup_symbol);
+        if (!native_func && lookup_symbol != fn_name) {
+            native_func = native_function_lookup(fn_name);
+        }
+        if (!native_func) {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg),
+                    "Native function not found for: %s", fn_name->cname);
+            throw_exception(EXCEPTION_RUNTIME, error_msg, NULL, 0, 0);
+            return NULL;
+        }
+        
+        // Create and return native function object
+        return AUTORELEASE(make_named_func(native_func, NULL, fn_name->cname));
     }
 
     // Convert parameter list/vector to array
@@ -1553,11 +1634,28 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
     }
 
+    // TCO: Transform recursive tail calls to recur for named functions
+    if (fn_name && body) {
+        CljObject *transformed = transform_recursive_tail_calls(body, (CljObject*)fn_name,
+                                                                 (CljObject**)params, param_count, body);
+        if (transformed) {
+            body = transformed;
+        }
+    }
+
     // CRITICAL: Use env_stack from context if available (for closures)
     // This ensures that nested functions can access outer function parameters
+    // OPTIMIZATION: Only create env_stack if we have a frame (lazy evaluation)
+    // Most functions don't need env_stack, so we avoid the expensive frame_chain_to_env_stack call
     CljList *fn_env_stack = NULL;
-    if (ctx && (ctx->frame || ctx->env_stack)) {
+    if (ctx && ctx->frame) {
+        // Only create env_stack if we have a frame (indicates closure might be needed)
+        // NOTE: This is a conservative approach - we create env_stack even if not strictly needed
+        // A more aggressive optimization would analyze the body to detect outer scope references
         fn_env_stack = frame_chain_to_env_stack(ctx->frame, ctx->env_stack);
+    } else if (ctx && ctx->env_stack) {
+        // No frame, but we have env_stack (from outer closure)
+        fn_env_stack = RETAIN(ctx->env_stack);
     } else {
         // Fallback: Create env_stack from env if provided, otherwise use namespace mappings
         fn_env_stack = env ? make_list(env, NULL) : NULL;
@@ -1573,6 +1671,13 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
     if (fn_name) {
         CljMap *self_binding = map_assoc(map_empty(), fn_name, fn);
         RELEASE(fn);  // Balance map_assoc's RETAIN
+        
+        // Rewrite recursive calls: For def, use qualified name (TCO optimization)
+        // For let, keep unqualified (function not in namespace, so qualified lookup would fail)
+        // The rewrite still happens to ensure recursive calls work correctly
+        // Note: eval_def will do the qualified rewrite when the function is stored in namespace
+        // Here we only handle the closure binding for let-based recursive functions
+        
         fn->env_stack = make_list(self_binding, fn->env_stack);
     }
 
@@ -1768,7 +1873,7 @@ ID eval_seq(CljList *list, CljMap *env) {
 
         default: {
             // For other seqable types, return SeqIterator directly
-            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE((CljObject*)make_seq(arg));
+            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
             if (!seq) return NULL;
 
             return (CljObject*)seq;
@@ -2074,7 +2179,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             binding_params[binding_index] = sym_val;
             binding_values[binding_index] = value;
             if (value && !IS_IMMEDIATE(value)) {
-                RETAIN((CljObject*)value);
+                RETAIN(value);
             }
             frame_set_bindings(let_frame, ctx ? ctx->frame : NULL,
                                binding_params, binding_values, binding_index + 1);
@@ -2096,7 +2201,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         }
 
         if (value && !IS_IMMEDIATE(value)) {
-            RELEASE((CljObject*)value);
+            RELEASE(value);
         }
 
         binding_index++;
@@ -2126,7 +2231,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
             RELEASE(result);
                 if (is_fixnum((CljValue)body_expr) || is_special((CljValue)body_expr)) {
                     result = body_expr;
-                RETAIN((CljObject*)result);
+                RETAIN(result);
                 } else {
                 result = eval_body(body_expr, body_env, st, &let_ctx);
             }
@@ -2141,414 +2246,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         RELEASE(parent_stack);
     }
     return result;
-}
-
-// ============================================================================
-// EVAL_DEFN - Function definition macro implementation
-// ============================================================================
-ID eval_defn(CljList *list, CljMap *env, EvalState *st) {
-    // (defn name [params*] body*)
-    // Expands to: (def name (fn [params*] body*))
-
-    CLJ_ASSERT(env != NULL);
-
-    if (!list || !st) {
-        return NULL;
-    }
-
-    // Parse arguments using rest traversal: (defn name [params] body...)
-    CljObject *rest_obj = list->rest;
-    CljList *rest = as_list(rest_obj);
-    if (!rest) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn requires function name",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-    // Get function name (first element after defn)
-    CljObject *name_sym = rest->first;
-    if (!name_sym || TAG(name_sym) != CLJ_SYMBOL) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn requires a symbol for function name",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-#ifdef ENABLE_META
-    // Capture metadata from symbol (user-provided) and form (location info)
-    CljObject *symbol_meta_obj = meta_get((CljObject*)name_sym);
-    CljObject *list_meta_obj = meta_get((CljObject*)list);
-    CljMap *symbol_meta_map = (symbol_meta_obj && TAG(symbol_meta_obj) == CLJ_MAP)
-                                ? (CljMap*)symbol_meta_obj : NULL;
-    CljMap *list_meta_map = (list_meta_obj && TAG(list_meta_obj) == CLJ_MAP)
-                                ? (CljMap*)list_meta_obj : NULL;
-#endif // ENABLE_META
-    
-    // Get parameter vector (second element after defn)
-    rest_obj = rest->rest;
-    rest = as_list(rest_obj);
-    if (!rest) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn requires parameter vector",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-    CljObject *params_vec = rest->first;
-    if (!params_vec || TAG(params_vec) != CLJ_VECTOR) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn requires a vector for parameters",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-    // Get body expressions (everything after params)
-    rest_obj = rest->rest;
-    rest = as_list(rest_obj);
-    if (!rest) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn requires at least one body expression",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-    // Extract parameters from vector
-    // NOTE: Destructuring is handled at AST canonicalization time, so params are symbols here
-    CljVector *params_vec_data = as_vector((CljValue)params_vec);
-    if (!params_vec_data) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn requires a valid parameter vector",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-    int param_count = vector_count(params_vec_data);
-    ID params_stack[16];
-    ID *params = alloc_obj_array(param_count, params_stack);
-
-    for (int i = 0; i < param_count; i++) {
-        params[i] = vector_nth(params_vec_data, i);
-        if (!params[i] || TAG(params[i]) != CLJ_SYMBOL) {
-            free_obj_array(params, params_stack);
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                           "defn parameters must be symbols",
-                           NULL, 0, 0);
-            return NULL;
-        }
-    }
-
-    // Create fn expression: (fn [params*] body*)
-    // We'll create this as a list structure
-
-    // Create body expression or list
-    // For multiple body expressions, we need to create a do block
-    CljObject *body_expr_obj = NULL;
-
-    // rest now points to the body expressions
-    // CRITICAL: For defn, body can be a single expression or multiple expressions
-    // If multiple, we need to wrap them in a do block
-    // However, we need to distinguish between:
-    // 1. Real multiple body expressions: (defn f [x] expr1 expr2)
-    // 2. Parsing errors where the next defn is incorrectly parsed as part of the body
-    // We check if the second element is a defn - if so, it's likely a parsing error
-    if (rest->rest == NULL) {
-        // Single body expression - use directly
-        body_expr_obj = rest->first;
-    } else {
-        // Check if second element is a defn (parsing error indicator)
-        CljList *rest_list = as_list(rest->rest);
-        bool is_parsing_error = false;
-        if (rest_list && rest_list->first && list_type_matches(TAG(rest_list->first))) {
-            CljList *second_list = as_list(rest_list->first);
-            if (second_list && second_list->first && TAG(second_list->first) == CLJ_SYMBOL) {
-                CljSymbol *second_sym = as_symbol(second_list->first);
-                if (second_sym && second_sym->cname && strcmp(second_sym->cname, "defn") == 0) {
-                    // Second element is a defn - this is likely a parsing error
-                    // Use only the first body expression
-                    is_parsing_error = true;
-                }
-            }
-        }
-
-        if (is_parsing_error) {
-            // Parsing error - use only first body expression
-            body_expr_obj = rest->first;
-        } else {
-            // Real multiple body expressions - wrap in do block
-            int body_count = 0;
-            CljList *current = rest;
-            while (current) {
-                body_count++;
-                if (!current->rest) break;
-                current = as_list(current->rest);
-            }
-
-            // Build do block: (do expr1 expr2 ...)
-            if (body_count > 15) {
-                free_obj_array(params, params_stack);
-                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                               "defn body has too many expressions (max 15)",
-                               NULL, 0, 0);
-                return NULL;
-            }
-
-            // Build do list backwards (from end to start) using make_list
-            CljList *do_result = NULL;
-            current = rest;
-            // First collect all body expressions
-            ID body_exprs[15];
-            int actual_count = 0;
-            for (int i = 0; i < body_count && i < 15; i++) {
-                if (current && current->first) {
-                    body_exprs[actual_count++] = current->first;
-                }
-                if (!current->rest) break;
-                current = as_list(current->rest);
-            }
-            // Build list backwards
-            for (int i = actual_count - 1; i >= 0; i--) {
-                do_result = make_list(body_exprs[i], do_result);
-            }
-            body_expr_obj = (CljObject*)make_list(SYM_DO, do_result);
-        }
-    }
-
-    if (!body_expr_obj) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                       "defn body cannot be empty",
-                       NULL, 0, 0);
-        return NULL;
-    }
-
-    // Check if body is :native marker (for native function stubs)
-    // Keywords are interned, so pointer comparison suffices
-    if (body_expr_obj == (CljObject*)SYM_KW_NATIVE) {
-        // Extract Clojure function name
-        CljSymbol *name_symbol = as_symbol(name_sym);
-        if (!name_symbol || !name_symbol->cname) {
-            free_obj_array(params, params_stack);
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
-                           "defn with :native requires a valid function name",
-                           NULL, 0, 0);
-            return NULL;
-        }
-
-        // Lookup native function by Clojure symbol (uses pointer comparison for efficiency)
-        BuiltinFn native_func = NULL;
-        CljSymbol *lookup_symbol = name_symbol;
-        if (st && st->current_ns && st->current_ns->name && name_symbol->cname) {
-            CljSymbol *qualified =
-                intern_symbol(st->current_ns->name, name_symbol->cname);
-            if (qualified) {
-                lookup_symbol = qualified;
-            }
-        }
-        native_func = native_function_lookup(lookup_symbol);
-        if (!native_func && lookup_symbol != name_symbol) {
-            native_func = native_function_lookup(name_symbol);
-        }
-        if (!native_func) {
-            free_obj_array(params, params_stack);
-            char error_msg[256];
-            snprintf(error_msg, sizeof(error_msg),
-                    "Native function not found for: %s", name_symbol->cname);
-            throw_exception(EXCEPTION_RUNTIME, error_msg, NULL, 0, 0);
-            return NULL;
-        }
-
-        // Create native function object
-        // Use Clojure function name (already interned symbol name)
-        CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, name_symbol->cname);
-        if (!native_func_obj) {
-            free_obj_array(params, params_stack);
-            throw_exception(EXCEPTION_RUNTIME,
-                           "Failed to create native function object",
-                           NULL, 0, 0);
-            return NULL;
-        }
-
-        // Register native function in namespace (replaces any existing registration)
-        ns_define(st->current_ns, name_sym, native_func_obj);
-
-        // Apply metadata to native function
-        // Merge user metadata (from ^#^{...}) with standard metadata (:name, :ns)
-#ifdef ENABLE_META
-        // Build standard metadata (:name, :ns)
-        CljMap *standard_meta = make_map(4);
-        
-        if (SYM_KW_NAME && name_symbol->cname && name_symbol->cname[0] != '\0') {
-            CljString *name_str = make_string(name_symbol->cname);
-            if (name_str) {
-                standard_meta = map_assoc(standard_meta, SYM_KW_NAME, name_str);
-                RELEASE(name_str);
-            }
-        }
-        
-        if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
-            standard_meta = map_assoc(standard_meta, SYM_KW_NS, st->current_ns->name);
-        }
-        
-        // Merge metadata: add location info first (no overwrite), then user metadata
-        CljMap *merged_meta = standard_meta;
-        if (list_meta_map) {
-            merged_meta = map_merge(merged_meta, list_meta_map, false);
-        }
-        if (symbol_meta_map) {
-            merged_meta = map_merge(merged_meta, symbol_meta_map, true);
-        }
-        
-        meta_set((CljObject*)native_func_obj, (CljObject*)merged_meta);
-        RELEASE(standard_meta);
-#endif // ENABLE_META
-
-        free_obj_array(params, params_stack);
-        return name_sym;  // defn returns the symbol
-    }
-
-    // Transform recursive tail calls to recur (automatic TCO)
-    CljObject *transformed_body = transform_recursive_tail_calls(body_expr_obj, name_sym,
-                                                                  (CljObject**)params, param_count,
-                                                                  body_expr_obj);
-    if (!transformed_body) {
-        // Transformation failed - use original body
-        transformed_body = body_expr_obj;
-    }
-
-    CljSymbol *name_symbol = as_symbol(name_sym);
-    if (name_symbol && st && st->current_ns && st->current_ns->name && name_symbol->cname) {
-        CljSymbol *qualified_name = intern_symbol(st->current_ns->name, name_symbol->cname);
-        if (qualified_name && qualified_name != name_symbol) {
-            ID body_id = transformed_body;
-            rewrite_recursive_calls_in_slot(&body_id, name_symbol, qualified_name);
-            transformed_body = (CljObject*)body_id;
-        }
-    }
-
-    // CRITICAL: Don't validate recur positions here - recur is only valid when
-    // the function is called, not when it's defined. validate_recur_positions
-    // would try to evaluate the body, which would fail because there's no RecurContext.
-
-    // Create function object directly (skip fn list creation to save code)
-    // Use current namespace mappings as environment for function evaluation
-    // This ensures that builtin functions like + are available in closures
-    if (!st || !st->current_ns) {
-        free_obj_array(params, params_stack);
-        throw_exception(EXCEPTION_RUNTIME, "defn requires an evaluation state with namespace", NULL, 0, 0);
-        return NULL;
-    }
-
-    // Create closure environment stack
-    // Get parent stack from env if provided, otherwise create from namespace mappings
-    CljList *parent_stack = env ? make_list(env, NULL) : NULL;
-    
-    // Create environment map with namespace mappings
-    int ns_mapping_count = st->current_ns->mappings ? ((CljMap*)st->current_ns->mappings)->count : 0;
-    extern TinyClJRuntime g_runtime;
-    int core_mapping_count = 0;
-    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
-    if (clojure_core && clojure_core->mappings) {
-        core_mapping_count = ((CljMap*)clojure_core->mappings)->count;
-    }
-    
-    CljMap *fn_env = (CljMap*)make_map(ns_mapping_count + core_mapping_count + 4);
-
-    // Add current namespace mappings
-    if (st->current_ns->mappings) {
-        CljMap *ns_mappings = (CljMap*)st->current_ns->mappings;
-        MAP_FOR_EACH(ns_mappings, key, val) {
-            if (!key) continue;
-            CljMap *new_fn_env = map_assoc(fn_env, key, val);
-            ASSIGN(fn_env, new_fn_env);
-
-            if (TAG(key) == CLJ_SYMBOL && st->current_ns->name != SYM_CLOJURE_CORE) {
-                CljSymbol *qualified_key = as_symbol(key);
-                CljSymbol *unqualified_sym = NULL;
-                if (qualified_key && qualified_key->cname) {
-                    unqualified_sym = intern_symbol_global(qualified_key->cname);
-                }
-                if (unqualified_sym && unqualified_sym != qualified_key && !map_contains(fn_env, unqualified_sym)) {
-                    CljMap *alias_env = map_assoc(fn_env, unqualified_sym, val);
-                    ASSIGN(fn_env, alias_env);
-                }
-            }
-        }
-    }
-
-    // Add clojure.core namespace mappings
-    if (fn_env && clojure_core && clojure_core->mappings) {
-        CljMap *core_mappings = (CljMap*)clojure_core->mappings;
-        MAP_FOR_EACH(core_mappings, key, val) {
-            if (!map_contains(fn_env, key)) {
-                CljMap *new_fn_env = map_assoc(fn_env, key, val);
-                ASSIGN(fn_env, new_fn_env);
-            }
-        }
-    }
-
-    // Create env_stack with fn_env as first and parent_stack as rest
-    CljList *fn_env_stack = make_list(fn_env, parent_stack);
-
-    // Create function object with env_stack
-    CljFunction *fn_obj = make_function(params, param_count, transformed_body, fn_env_stack, NULL, st ? st->current_ns : NULL);
-    if (!fn_obj) {
-        free_obj_array(params, params_stack);
-        return NULL;
-    }
-
-    // Set function name
-    CljFunction *func = fn_obj;
-    CljSymbol *sym = as_symbol(name_sym);
-    if (func && sym && sym->cname[0] && !func->name) {
-        func->name = strdup(sym->cname);
-    }
-
-    // Apply metadata to function
-#ifdef ENABLE_META
-    // Build standard metadata (:name, :ns) - same as for native functions
-    CljMap *standard_meta = make_map(4);
-    
-    if (SYM_KW_NAME && sym->cname && sym->cname[0] != '\0') {
-        CljString *name_str = make_string(sym->cname);
-        if (name_str) {
-            standard_meta = map_assoc(standard_meta, SYM_KW_NAME, name_str);
-            RELEASE(name_str);
-        }
-    }
-    
-    if (SYM_KW_NS && st->current_ns && st->current_ns->name) {
-        standard_meta = map_assoc(standard_meta, SYM_KW_NS, st->current_ns->name);
-    }
-    
-    CljMap *merged_meta = standard_meta;
-    if (list_meta_map) {
-        merged_meta = map_merge(merged_meta, list_meta_map, false);
-    }
-    if (symbol_meta_map) {
-        merged_meta = map_merge(merged_meta, symbol_meta_map, true);
-    }
-    
-    meta_set((CljObject*)fn_obj, (CljObject*)merged_meta);
-    RELEASE(standard_meta);
-#endif // ENABLE_META
-
-    // Register function in namespace (after creation for recursive calls)
-    ns_define(st->current_ns, name_sym, fn_obj);
-
-    // Add function to env_stack so it can find itself recursively
-    CljMap *first_env = (CljMap*)LIST_FIRST(func->env_stack);
-    if (first_env) {
-        CljObject *func_in_env = map_get((CljValue)first_env, (CljValue)name_sym, NULL);
-        if (func_in_env != (CljObject*)fn_obj) {
-            CljMap *new_first_env = map_assoc(first_env, name_sym, fn_obj);
-            CljList *new_env_stack = make_list(new_first_env, as_list(LIST_REST(func->env_stack)));
-            ASSIGN(func->env_stack, new_env_stack);
-        }
-    }
-
-    RELEASE((CljObject*)fn_obj);
-    free_obj_array(params, params_stack);
-    return name_sym;
 }
 
 // Helper function for evaluating arguments
@@ -2703,7 +2400,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         RETAIN(result);
         for (unsigned int i = 0; i < count; i++) {
             ID elem = vector_nth(vec, i);
-            ID eval_elem = (elem && elem != (ID)SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
+            ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
             ASSIGN(result, vector_conj(result, eval_elem));
         }
         return AUTORELEASE(result);
@@ -2789,14 +2486,12 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
         CljMap *new_env = NULL;
         if (base_env && TAG(base_env) == CLJ_MAP) {
             CljValue i_value = fixnum((int32_t)i);
-            new_env = map_assoc(base_env, var, i_value);
-            RETAIN(new_env);
+            new_env = RETAIN(map_assoc(base_env, var, i_value));
         } else {
             new_env = (CljMap*)make_map(4);
             if (new_env) {
                 CljValue i_value = fixnum((int32_t)i);
-                CljMap *updated_env = map_assoc(new_env, var, i_value);
-                ASSIGN(new_env, updated_env);
+                ASSIGN(new_env, map_assoc(new_env, var, i_value));
             }
         }
 

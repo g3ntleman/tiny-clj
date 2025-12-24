@@ -16,6 +16,9 @@
 #include "ast.h"
 #include "vector.h"
 #include <string.h>
+#ifdef PROFILE_STARTUP
+#include <time.h>
+#endif
 #include "map.h"
 #include <stdbool.h>
 #include "memory.h"
@@ -296,6 +299,53 @@ ID parse_expr(Reader *reader, EvalState *st) {
       // Create (deref <expr>) list: (deref expr)
       return AUTORELEASE(make_ast_list(SYM_DEREF, make_ast_list(atom_expr, NULL)));
 
+    case '`':
+      // Handle quasiquote `x => (quasiquote x)
+      reader_consume(reader); // consume `
+      reader_skip_all(reader);
+      size_t qq_before = reader_offset(reader);
+      ID qq_expr = parse_expr(reader, st);
+      size_t qq_after = reader_offset(reader);
+      if (qq_after <= qq_before && !reader_eof(reader)) {
+        throw_parser_exception("Parser made no progress after quasiquote", reader);
+        return NULL;
+      }
+      if (!qq_expr) return NULL;
+      // Create (quasiquote <expr>) list
+      return AUTORELEASE(make_ast_list(SYM_QUASIQUOTE, make_ast_list(qq_expr, NULL)));
+
+    case '~':
+      // Handle unquote ~x => (unquote x) or splice-unquote ~@x => (splice-unquote x)
+      reader_consume(reader); // consume ~
+      if (reader_peek_char(reader) == '@') {
+        // splice-unquote ~@x
+        reader_consume(reader); // consume @
+        reader_skip_all(reader);
+        size_t sq_before = reader_offset(reader);
+        ID sq_expr = parse_expr(reader, st);
+        size_t sq_after = reader_offset(reader);
+        if (sq_after <= sq_before && !reader_eof(reader)) {
+          throw_parser_exception("Parser made no progress after splice-unquote", reader);
+          return NULL;
+        }
+        if (!sq_expr) return NULL;
+        // Create (splice-unquote <expr>) list
+        return AUTORELEASE(make_ast_list(SYM_SPLICE_UNQUOTE, make_ast_list(sq_expr, NULL)));
+      } else {
+        // unquote ~x
+        reader_skip_all(reader);
+        size_t uq_before = reader_offset(reader);
+        ID uq_expr = parse_expr(reader, st);
+        size_t uq_after = reader_offset(reader);
+        if (uq_after <= uq_before && !reader_eof(reader)) {
+          throw_parser_exception("Parser made no progress after unquote", reader);
+          return NULL;
+        }
+        if (!uq_expr) return NULL;
+        // Create (unquote <expr>) list
+        return AUTORELEASE(make_ast_list(SYM_UNQUOTE, make_ast_list(uq_expr, NULL)));
+      }
+
     case '\\':
       // Handle character literals: \a, \space, \tab, \newline, \return, etc.
       return parse_character(reader, st);
@@ -367,7 +417,14 @@ ID eval_parsed(ID parsed_expr, EvalState *eval_state, CljMap *env) {
     } else {
         // Canonicalize the AST before evaluation
         // This converts symbol tokens to symbols and handles quote forms properly
+#ifdef PROFILE_STARTUP
+        extern double g_canon_time_ms;
+        clock_t canon_start = clock();
         parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+        g_canon_time_ms += (double)(clock() - canon_start) * 1000.0 / CLOCKS_PER_SEC;
+#else
+        parsed_expr = canonicalize_ast(parsed_expr, eval_state);
+#endif
     }
     
     if (parsed_expr && list_type_matches(TAG(parsed_expr))) {
@@ -1201,7 +1258,7 @@ static ID merge_metadata_with_object(ID obj, ID new_meta) {
           // Apply merged metadata to object
           meta_set((CljObject*)obj, (CljObject*)merged_meta);
         }
-        RELEASE((CljObject*)merged_meta);
+        RELEASE(merged_meta);
       }
     }
     RELEASE(new_meta);
@@ -1230,31 +1287,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     return NULL;
   }
 
-  // Special handling for defn forms: set metadata on the function name symbol instead of the list
-  // This ensures metadata persists even if the list object changes during evaluation
-  if (meta && list_type_matches(TAG(obj))) {
-    CljList *list = as_list(obj);
-    if (list && list->first && TAG(list->first) == CLJ_SYMBOL) {
-      CljSymbol *first_sym = as_symbol(list->first);
-      // Check if this is a defn form: (defn name ...)
-      CljSymbol *defn_sym = intern_symbol_global("defn");
-      if (defn_sym && first_sym == defn_sym && list->rest) {
-        CljList *rest = as_list(list->rest);
-        if (rest && rest->first && TAG(rest->first) == CLJ_SYMBOL) {
-          // This is a defn form - set metadata on the function name symbol
-          // RETAIN meta before setting (meta_set will handle it, but we need to ensure it's retained)
-          RETAIN((CljObject*)meta);
-          meta_set((CljObject*)rest->first, (CljObject*)meta);
-          // Also set on the list for backward compatibility (but symbol takes precedence)
-          meta_set(obj, meta);
-          // Don't release meta here - it will be released at the end of the function
-          // Continue with location metadata below
-        }
-      }
-    }
-  }
-
-  // Apply metadata if provided (if not already handled above)
+  // Apply metadata if provided (propagates to eval_def for functions)
   if (meta) {
     meta_set(obj, meta);
   }
@@ -1274,13 +1307,13 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
           // Update meta if it was merged
           meta_set(obj, (CljObject*)merged_meta);
         }
-        RELEASE((CljObject*)merged_meta);
+        RELEASE(merged_meta);
       }
     } else {
       // No existing metadata, just set location metadata
       meta_set(obj, (CljObject*)location_meta);
     }
-    RELEASE((CljObject*)location_meta);
+    RELEASE(location_meta);
   }
 #endif // ENABLE_META
 
@@ -1327,12 +1360,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
 
     // Associate keyword with true
-    // map_assoc may return same map (COW in-place) or new map (COW copy)
-    CljMap *updated_map = map_assoc(meta_map, keyword_meta, clj_true);
-    if (updated_map != meta_map) {
-        RELEASE(meta_map);  // Release original map only if new map was created
-    }
-    meta_map = updated_map;
+    ASSIGN(meta_map, map_assoc(meta_map, keyword_meta, clj_true));
     RELEASE(keyword_meta);
 
     // Parse the object (which might have more metadata)

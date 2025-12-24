@@ -95,6 +95,13 @@ R"CLOJURE(
       (filter pred (rest coll))))))
 
 ; ============================================================================
+; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
+; ============================================================================
+^#^{:doc "Defines a function. Same as (def name (fn name [params] body...))."}
+(defmacro defn [name params & body]
+  (list 'def name (cons 'fn (cons name (cons params body)))))
+
+; ============================================================================
 ; Metadata Functions
 ; ============================================================================
 ^#^{:doc "Returns the metadata of obj, returns nil if there is no metadata."}
@@ -317,8 +324,8 @@ R"CLOJURE(
 ; ============================================================================
 ; Sleep Functions (Native)
 ; ============================================================================
-^#^{:doc "Causes the current thread to sleep for ms milliseconds."}
-(defn sleep [ms] :native)
+^#^{:doc "Blocks the current thread for the specified number of seconds. For non-blocking delays in go blocks, use (schedule ms fn) instead."}
+(defn sleep [secs] :native)
 
 ; ============================================================================
 ; Byte Array Functions (Native)
@@ -659,5 +666,71 @@ R"CLOJURE(
                          (map? bform)    (proc-map bvec bform init)
                          :else           (conj (conj bvec bform) init))))]
     (reduce proc-entry [] (partition 2 bindings))))
+
+; ============================================================================
+; Macro Expansion Functions (bootstrap-safe: uses only basic special forms)
+; ============================================================================
+
+^#^{:doc "If form represents a macro call, returns its macro expansion, else returns form."}
+(def macroexpand-1
+  (fn [form]
+    (if (list? form)
+      (let [op (first form)]
+        (if (symbol? op)
+          (let [macro-fn (get-macro op)]
+            (if macro-fn
+              (apply macro-fn (rest form))
+              form))
+          form))
+      form)))
+
+^#^{:doc "Repeatedly calls macroexpand-1 on form until it no longer represents a macro form."}
+(def macroexpand
+  (fn [form]
+    (let [expanded (macroexpand-1 form)]
+      (if (identical? expanded form)
+        form
+        (macroexpand expanded)))))
+
+; ============================================================================
+; Quasiquote Implementation (bootstrap-safe: uses only basic special forms)
+; ============================================================================
+
+^#^{:doc "Transforms quasiquote forms with unquote and splice-unquote.
+          Handles nested quasiquotes and splicing."}
+(def quasiquote-fn
+  (fn [form]
+    (cond
+      ; Check for unquote: (unquote x) -> x
+      (and (list? form) (= (first form) 'unquote))
+        (second form)
+      
+      ; Check for splice-unquote: (splice-unquote x) -> error (must be inside list)
+      (and (list? form) (= (first form) 'splice-unquote))
+        (throw (str "splice-unquote not in list context: " form))
+      
+      ; Handle lists with potential splicing
+      (list? form)
+        (let [process-elem (fn [acc elem]
+                             (if (and (list? elem) (= (first elem) 'splice-unquote))
+                               ; Splice: concat the evaluated expr
+                               (list 'concat acc (second elem))
+                               ; Normal: conj the recursively processed elem
+                               (list 'conj acc (list 'quasiquote-fn (list 'quote elem)))))]
+          (reduce process-elem (list 'list) form))
+      
+      ; Handle vectors - similar to lists but return vector
+      (vector? form)
+        (list 'vec (list 'quasiquote-fn (list 'quote (seq form))))
+      
+      ; Handle maps - quote keys and values
+      (map? form)
+        (list 'into {} (list 'map (fn [[k v]] [(list 'quasiquote-fn (list 'quote k))
+                                                (list 'quasiquote-fn (list 'quote v))])
+                             (seq form)))
+      
+      ; Symbols, keywords, and other atoms - quote them
+      :else
+        (list 'quote form))))
 
 )CLOJURE"

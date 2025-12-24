@@ -251,7 +251,7 @@ TEST(test_repl_source_shows_qualified_recursive_call) {
     TEST_ASSERT_NOT_NULL_MESSAGE(strstr(body_cstr, "user/repl-source-foo"),
         "Function body should contain qualified recursive call");
 
-    RELEASE((CljObject*)body_str);
+    RELEASE(body_str);
     RELEASE(foo_fn_obj);
 }
 

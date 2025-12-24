@@ -7,10 +7,64 @@
 #include "tests_common.h"
 
 // ============================================================================
+// AUTORELEASE HYPOTHESIS TEST (must run first!)
+// ============================================================================
+
+// H1/H2/H3: Test map_assoc with AUTORELEASE returns correct value
+TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
+    // This test must run FIRST to verify AUTORELEASE behavior
+    CljMap *map = make_map(4);
+    TEST_ASSERT_NOT_NULL(map);
+    
+    CljSymbol *key = intern_symbol_global("debug-key");
+    CljObject *value = fixnum(42);
+    
+    // Use ASSIGN pattern like ns_define does
+    ASSIGN(map, map_assoc(map, key, value));
+    
+    // Retrieve value - this is what fails in namespace tests
+    ID retrieved = map_get(map, key, NOT_FOUND);
+    
+    // Critical assertions
+    TEST_ASSERT_TRUE_MESSAGE(retrieved != NOT_FOUND, "Value should be found");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)retrieved), "Retrieved value should be fixnum");
+    TEST_ASSERT_EQUAL_MESSAGE(42, as_fixnum((CljValue)retrieved), "Value should be 42");
+    
+    RELEASE(map);
+}
+
+// H6: Test ns_define and ns_resolve pattern
+TEST_SHARED(test_aab_ns_define_resolve_pattern) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
+    
+    // Create symbol and value
+    CljSymbol *test_sym = intern_symbol_global("aab-test-var");
+    TEST_ASSERT_NOT_NULL(test_sym);
+    CljObject *value = fixnum(99);
+    
+    // Store using ns_define
+    ns_define(g_test_eval_state->current_ns, test_sym, value);
+    
+    // Check ns->mappings directly
+    TEST_ASSERT_NOT_NULL_MESSAGE(g_test_eval_state->current_ns->mappings, "mappings should not be NULL");
+    
+    // Retrieve using ns_resolve
+    CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
+    
+    // Critical assertions
+    TEST_ASSERT_NOT_NULL_MESSAGE(resolved, "resolved should not be NULL");
+    TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "resolved should be fixnum");
+    TEST_ASSERT_EQUAL_MESSAGE(99, as_fixnum((CljValue)resolved), "Value should be 99");
+    
+    RELEASE(test_sym);
+}
+
+// ============================================================================
 // BASIC EQUALITY TESTS
 // ============================================================================
 
-TEST(test_equal_null_pointers) {
+TEST_SHARED(test_equal_null_pointers) {
     WITH_MEMORY_PROFILING({
     
     // Test null pointer cases
@@ -21,7 +75,7 @@ TEST(test_equal_null_pointers) {
     });
 }
 
-TEST(test_equal_different_strings) {
+TEST_SHARED(test_equal_different_strings) {
     WITH_MEMORY_PROFILING({
     
     // Test different strings
@@ -37,7 +91,7 @@ TEST(test_equal_different_strings) {
     });
 }
 
-TEST(test_equal_different_types) {
+TEST_SHARED(test_equal_different_types) {
     WITH_MEMORY_PROFILING({
     
     // Test different types
@@ -56,7 +110,7 @@ TEST(test_equal_different_types) {
     });
 }
 
-TEST(test_equal_immediate_values) {
+TEST_SHARED(test_equal_immediate_values) {
     WITH_MEMORY_PROFILING({
     
     // Test immediate values - these should not be passed to clj_equal
@@ -79,7 +133,7 @@ TEST(test_equal_immediate_values) {
 // VECTOR EQUALITY TESTS
 // ============================================================================
 
-TEST(test_vector_equal_same_vectors) {
+TEST_SHARED(test_vector_equal_same_vectors) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical vectors using CljValue API
@@ -114,7 +168,7 @@ TEST(test_vector_equal_same_vectors) {
     });
 }
 
-TEST(test_vector_equal_different_lengths) {
+TEST_SHARED(test_vector_equal_different_lengths) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different lengths
@@ -148,7 +202,7 @@ TEST(test_vector_equal_different_lengths) {
     });
 }
 
-TEST(test_vector_equal_different_values) {
+TEST_SHARED(test_vector_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with different values using CljValue API
@@ -179,7 +233,7 @@ TEST(test_vector_equal_different_values) {
     });
 }
 
-TEST(test_clj_equal_id_function) {
+TEST_SHARED(test_clj_equal_id_function) {
     WITH_MEMORY_PROFILING({
     
     // Test immediate values (CljValue)
@@ -217,7 +271,7 @@ TEST(test_clj_equal_id_function) {
     });
 }
 
-TEST(test_vector_equal_with_strings) {
+TEST_SHARED(test_vector_equal_with_strings) {
     WITH_MEMORY_PROFILING({
     
     // Create vectors with strings
@@ -257,7 +311,7 @@ TEST(test_vector_equal_with_strings) {
 // MAP EQUALITY TESTS
 // ============================================================================
 
-TEST(test_map_equal_same_maps) {
+TEST_SHARED(test_map_equal_same_maps) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical maps using old API
@@ -291,7 +345,7 @@ TEST(test_map_equal_same_maps) {
     });
 }
 
-TEST(test_map_equal_different_keys) {
+TEST_SHARED(test_map_equal_different_keys) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -326,7 +380,7 @@ TEST(test_map_equal_different_keys) {
     });
 }
 
-TEST(test_map_equal_different_values) {
+TEST_SHARED(test_map_equal_different_values) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -361,7 +415,7 @@ TEST(test_map_equal_different_values) {
     });
 }
 
-TEST(test_map_equal_different_sizes) {
+TEST_SHARED(test_map_equal_different_sizes) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -394,7 +448,7 @@ TEST(test_map_equal_different_sizes) {
     });
 }
 
-TEST(test_map_equal_with_nested_vectors) {
+TEST_SHARED(test_map_equal_with_nested_vectors) {
     WITH_MEMORY_PROFILING({
     
     CljMap *map1 = (CljMap*)make_map(16);
@@ -444,7 +498,7 @@ TEST(test_map_equal_with_nested_vectors) {
 // LIST EQUALITY TESTS
 // ============================================================================
 
-TEST(test_list_equal_same_lists) {
+TEST_SHARED(test_list_equal_same_lists) {
     WITH_MEMORY_PROFILING({
     
     // Create two identical lists
@@ -462,7 +516,7 @@ TEST(test_list_equal_same_lists) {
     });
 }
 
-TEST(test_list_equal_same_instance) {
+TEST_SHARED(test_list_equal_same_instance) {
     WITH_MEMORY_PROFILING({
     
     CljList *list1 = empty_list();
@@ -477,7 +531,7 @@ TEST(test_list_equal_same_instance) {
     });
 }
 
-TEST(test_list_equal_empty_lists) {
+TEST_SHARED(test_list_equal_empty_lists) {
     WITH_MEMORY_PROFILING({
     
     CljList *list1 = empty_list();
@@ -497,7 +551,7 @@ TEST(test_list_equal_empty_lists) {
 // NOT= TESTS
 // ============================================================================
 
-TEST(test_not_eq) {
+TEST_SHARED(test_not_eq) {
     if (!g_test_eval_state) {
         TEST_FAIL_MESSAGE("Failed to create EvalState");
         return;
@@ -538,49 +592,49 @@ TEST(test_not_eq) {
 // HIGH-LEVEL COLLECTION EQUALITY TESTS (using eval_string)
 // ============================================================================
 
-TEST(test_equal_quoted_lists) {
+TEST_SHARED(test_equal_quoted_lists) {
     // Test: (= '(1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= '(1 2 3) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= '(1 2 3) '(1 2 3)) should be true");
 }
 
-TEST(test_equal_quoted_lists_different) {
+TEST_SHARED(test_equal_quoted_lists_different) {
     // Test: (= '(1 2) '(1 2 3)) => false
     CljObject *result = eval_string("(= '(1 2) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= '(1 2) '(1 2 3)) should be false");
 }
 
-TEST(test_equal_vectors) {
+TEST_SHARED(test_equal_vectors) {
     // Test: (= [1 2 3] [1 2 3]) => true
     CljObject *result = eval_string("(= [1 2 3] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= [1 2 3] [1 2 3]) should be true");
 }
 
-TEST(test_equal_vectors_different) {
+TEST_SHARED(test_equal_vectors_different) {
     // Test: (= [1 2] [1 2 3]) => false
     CljObject *result = eval_string("(= [1 2] [1 2 3])", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= [1 2] [1 2 3]) should be false");
 }
 
-TEST(test_equal_maps) {
+TEST_SHARED(test_equal_maps) {
     // Test: (= {:a 1 :b 2} {:a 1 :b 2}) => true
     CljObject *result = eval_string("(= {:a 1 :b 2} {:a 1 :b 2})", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= {:a 1 :b 2} {:a 1 :b 2}) should be true");
 }
 
-TEST(test_equal_maps_different) {
+TEST_SHARED(test_equal_maps_different) {
     // Test: (= {:a 1} {:a 2}) => false
     CljObject *result = eval_string("(= {:a 1} {:a 2})", g_test_eval_state);
     TEST_ASSERT_FALSE_MESSAGE(clj_is_truthy(result), "(= {:a 1} {:a 2}) should be false");
 }
 
-TEST(test_equal_list_function_result) {
+TEST_SHARED(test_equal_list_function_result) {
     // Test: (= (list 1 2 3) '(1 2 3)) => true
     CljObject *result = eval_string("(= (list 1 2 3) '(1 2 3))", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result), "(= (list 1 2 3) '(1 2 3)) should be true");
 }
 
-TEST(test_equal_take_result) {
+TEST_SHARED(test_equal_take_result) {
     // Test: take result equality via first/last comparison
     // Direct list comparison may fail due to structural differences
     CljObject *take_exists = eval_string("(fn? take)", g_test_eval_state);
@@ -594,7 +648,7 @@ TEST(test_equal_take_result) {
     }
 }
 
-TEST(test_equal_empty_collections) {
+TEST_SHARED(test_equal_empty_collections) {
     // Test: (= [] []) => true (vectors work)
     CljObject *result2 = eval_string("(= [] [])", g_test_eval_state);
     TEST_ASSERT_TRUE_MESSAGE(clj_is_truthy(result2), "(= [] []) should be true");

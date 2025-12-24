@@ -9,7 +9,7 @@ static CljHashMap* adopt_hashmap(CljHashMap *current, CljHashMap *updated) {
         return current;
     }
     if (current && current != updated) {
-        RELEASE((CljObject*)current);
+        RELEASE(current);
     }
     return updated;
 }
@@ -32,17 +32,17 @@ TEST(test_hashmap_create) {
     CljHashMap *map = make_hashmap(0);
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
-    RELEASE((CljObject*)map);
+    RELEASE(map);
     
     map = make_hashmap(8);
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
-    RELEASE((CljObject*)map);
+    RELEASE(map);
     
     map = make_hashmap(100);
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
-    RELEASE((CljObject*)map);
+    RELEASE(map);
 }
 
 TEST(test_hashmap_put_get_single) {
@@ -57,9 +57,9 @@ TEST(test_hashmap_put_get_single) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)key);
-    RELEASE((CljObject*)value);
+    RELEASE(map);
+    RELEASE(key);
+    RELEASE(value);
 }
 
 TEST(test_hashmap_put_get_multiple) {
@@ -87,10 +87,10 @@ TEST(test_hashmap_put_get_multiple) {
         TEST_ASSERT_EQUAL_PTR(values[i], result);
     }
     
-    RELEASE((CljObject*)map);
+    RELEASE(map);
     for (int i = 0; i < 10; i++) {
-        RELEASE((CljObject*)keys[i]);
-        RELEASE((CljObject*)values[i]);
+        RELEASE(keys[i]);
+        RELEASE(values[i]);
     }
 }
 
@@ -113,11 +113,11 @@ TEST(test_hashmap_linear_probing_collision) {
     TEST_ASSERT_EQUAL_PTR(v1, hashmap_get(map, k1, NULL));
     TEST_ASSERT_EQUAL_PTR(v2, hashmap_get(map, k2, NULL));
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)k2);
-    RELEASE((CljObject*)v1);
-    RELEASE((CljObject*)v2);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(k2);
+    RELEASE(v1);
+    RELEASE(v2);
 }
 
 TEST(test_hashmap_overwrite_same_map) {
@@ -138,10 +138,10 @@ TEST(test_hashmap_overwrite_same_map) {
     ID result = hashmap_get(map, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v2, result);
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)v1);
-    RELEASE((CljObject*)v2);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(v1);
+    RELEASE(v2);
 }
 
 TEST(test_hashmap_overwrite_cow) {
@@ -153,7 +153,7 @@ TEST(test_hashmap_overwrite_cow) {
     map = adopt_hashmap(map, hashmap_assoc(map, k1, v1));
     
     // RC>1: should return new map (COW)
-    RETAIN((CljObject*)map);
+    RETAIN(map);
     CljHashMap *map_before = map;
     map = adopt_hashmap(map, hashmap_assoc(map, k1, v2));
     
@@ -168,11 +168,11 @@ TEST(test_hashmap_overwrite_cow) {
     ID orig_result = hashmap_get(map_before, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v1, orig_result);
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)map_before);
-    RELEASE((CljObject*)v1);
-    RELEASE((CljObject*)v2);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(map_before);
+    RELEASE(v1);
+    RELEASE(v2);
 }
 
 TEST(test_hashmap_not_found) {
@@ -183,9 +183,9 @@ TEST(test_hashmap_not_found) {
     ID result = hashmap_get(map, nonexistent, not_found_sentinel);
     TEST_ASSERT_EQUAL_PTR(not_found_sentinel, result);
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)nonexistent);
-    RELEASE((CljObject*)not_found_sentinel);
+    RELEASE(map);
+    RELEASE(nonexistent);
+    RELEASE(not_found_sentinel);
 }
 
 TEST(test_hashmap_remove_rc1) {
@@ -208,9 +208,9 @@ TEST(test_hashmap_remove_rc1) {
     ID result = hashmap_get(map, k1, NULL);
     TEST_ASSERT_NULL(result);
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)v1);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(v1);
 }
 
 TEST(test_hashmap_remove_cow) {
@@ -221,7 +221,7 @@ TEST(test_hashmap_remove_cow) {
     map = adopt_hashmap(map, hashmap_assoc(map, k1, v1));
     
     // RC>1: should return new map without the key
-    RETAIN((CljObject*)map);
+    RETAIN(map);
     CljHashMap *map_before = map;
     map = adopt_hashmap(map, hashmap_remove(map, k1));
     
@@ -237,10 +237,10 @@ TEST(test_hashmap_remove_cow) {
     ID orig_result = hashmap_get(map_before, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v1, orig_result);
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)map_before);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)v1);
+    RELEASE(map);
+    RELEASE(map_before);
+    RELEASE(k1);
+    RELEASE(v1);
 }
 
 TEST(test_hashmap_probe_over_tombstone) {
@@ -265,11 +265,11 @@ TEST(test_hashmap_probe_over_tombstone) {
     TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, k2));
     TEST_ASSERT_EQUAL_PTR(v2, hashmap_get(map, k2, NULL));
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)k2);
-    RELEASE((CljObject*)v1);
-    RELEASE((CljObject*)v2);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(k2);
+    RELEASE(v1);
+    RELEASE(v2);
 }
 
 TEST(test_hashmap_rehash_on_load) {
@@ -296,10 +296,10 @@ TEST(test_hashmap_rehash_on_load) {
         TEST_ASSERT_EQUAL_PTR(values[i], hashmap_get(map, keys[i], NULL));
     }
     
-    RELEASE((CljObject*)map);
+    RELEASE(map);
     for (int i = 0; i < 10; i++) {
-        RELEASE((CljObject*)keys[i]);
-        RELEASE((CljObject*)values[i]);
+        RELEASE(keys[i]);
+        RELEASE(values[i]);
     }
 }
 
@@ -316,10 +316,10 @@ TEST(test_hashmap_contains) {
     TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, k1));
     TEST_ASSERT_EQUAL_INT(0, hashmap_contains(map, k2));
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)k2);
-    RELEASE((CljObject*)v1);
+    RELEASE(map);
+    RELEASE(k1);
+    RELEASE(k2);
+    RELEASE(v1);
 }
 
 // ============================================================================
@@ -356,7 +356,7 @@ TEST(test_hashmap_cow_independence) {
     map = adopt_hashmap(map, hashmap_assoc(map, k1, v1));
     
     // Create copy via retain
-    RETAIN((CljObject*)map);
+    RETAIN(map);
     CljHashMap *copy = map;
     
     // Modify original
@@ -370,12 +370,12 @@ TEST(test_hashmap_cow_independence) {
     TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, k1));
     TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, k2));
     
-    RELEASE((CljObject*)map);
-    RELEASE((CljObject*)copy);
-    RELEASE((CljObject*)k1);
-    RELEASE((CljObject*)k2);
-    RELEASE((CljObject*)v1);
-    RELEASE((CljObject*)v2);
+    RELEASE(map);
+    RELEASE(copy);
+    RELEASE(k1);
+    RELEASE(k2);
+    RELEASE(v1);
+    RELEASE(v2);
 }
 
 TEST(test_hashmap_many_entries) {
@@ -401,10 +401,10 @@ TEST(test_hashmap_many_entries) {
         TEST_ASSERT_EQUAL_PTR(values[i], hashmap_get(map, keys[i], NULL));
     }
     
-    RELEASE((CljObject*)map);
+    RELEASE(map);
     for (int i = 0; i < 1000; i++) {
-        RELEASE((CljObject*)keys[i]);
-        RELEASE((CljObject*)values[i]);
+        RELEASE(keys[i]);
+        RELEASE(values[i]);
     }
 }
 

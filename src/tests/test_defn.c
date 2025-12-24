@@ -67,7 +67,7 @@ TEST(test_native_keyword_can_be_parsed) {
 }
 
 // ============================================================================
-// TEST: defn mit :native als Body erkannt werden
+// TEST: defn macro expands to def with fn
 // ============================================================================
 TEST(test_defn_with_native_marker_recognized) {
     WITH_AUTORELEASE_POOL({
@@ -75,37 +75,25 @@ TEST(test_defn_with_native_marker_recognized) {
         init_special_symbols();
 
         // Parse (defn trim [s] :native)
+        // After macro expansion: (def trim (fn trim [s] :native))
         Reader reader;
         reader_init(&reader, "(defn trim [s] :native)");
         ID form = value_by_parsing_expr(&reader, g_test_eval_state);
 
         TEST_ASSERT_NOT_NULL_MESSAGE(form, "should parse (defn trim [s] :native)");
 
-        // Verify it's a list
+        // Verify it expands to (def ...) - defn is now a macro
         ID canonical_form = canonicalize_ast(form, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(canonical_form);
         CljList *list = as_list(canonical_form);
-        TEST_ASSERT_NOT_NULL_MESSAGE(list, "parsed form should be a list");
+        TEST_ASSERT_NOT_NULL_MESSAGE(list, "expanded form should be a list");
 
-        // Get body (should be :native)
-        // Structure: (defn trim [s] :native)
-        // rest: (trim [s] :native)
-        // rest->rest: ([s] :native)
-        // rest->rest->rest: (:native)
-        CljList *rest1 = as_list(list->rest);
-        TEST_ASSERT_NOT_NULL(rest1);
-        CljList *rest2 = as_list(rest1->rest);
-        TEST_ASSERT_NOT_NULL(rest2);
-        CljList *rest3 = as_list(rest2->rest);
-        TEST_ASSERT_NOT_NULL(rest3);
-
-        CljObject *body = LIST_FIRST(rest3);
-        TEST_ASSERT_NOT_NULL_MESSAGE(body, "body should be :native");
-        TEST_ASSERT_TRUE_MESSAGE(IS_KEYWORD(body), "body should be a keyword");
-
-        // Compare with SYM_KW_NATIVE
-        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_KW_NATIVE, body,
-                                      "body should be SYM_KW_NATIVE");
+        // First element should be 'def' (not 'defn')
+        CljObject *first = LIST_FIRST(list);
+        TEST_ASSERT_NOT_NULL(first);
+        TEST_ASSERT_TRUE_MESSAGE(TAG(first) == CLJ_SYMBOL, "first element should be a symbol");
+        CljSymbol *first_sym = as_symbol(first);
+        TEST_ASSERT_TRUE_MESSAGE(first_sym == SYM_DEF, "defn should expand to def");
     });
 }
 
@@ -404,12 +392,13 @@ TEST(test_parameter_lookup_optimization) {
 // TEST: defn Special Form Recognition and Parsing Tests
 // ============================================================================
 
-// Test: Verify that defn is recognized as special form
+// Test: Verify that defn macro expands to def
 TEST(test_defn_symbol_recognized) {
     WITH_AUTORELEASE_POOL({
         TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-        // Get 'defn' symbol from parser
+        // Parse (defn test-fn [x] (+ x 1))
+        // defn is now a macro that expands to (def test-fn (fn test-fn [x] (+ x 1)))
         Reader reader;
         reader_init(&reader, "(defn test-fn [x] (+ x 1))");
         ID form = value_by_parsing_expr(&reader, g_test_eval_state);
@@ -418,33 +407,21 @@ TEST(test_defn_symbol_recognized) {
         ID canonical_form = canonicalize_ast(form, g_test_eval_state);
         TEST_ASSERT_NOT_NULL(canonical_form);
 
-        // Extract the 'defn' symbol from the list
+        // Extract the first symbol from the expanded list
         CljList *list = as_list(canonical_form);
         TEST_ASSERT_NOT_NULL(list);
-        CljObject *defn_sym = LIST_FIRST(list);
-        TEST_ASSERT_NOT_NULL(defn_sym);
-        TEST_ASSERT_TRUE_MESSAGE(defn_sym && TAG(defn_sym) == CLJ_SYMBOL,
+        CljObject *first_sym = LIST_FIRST(list);
+        TEST_ASSERT_NOT_NULL(first_sym);
+        TEST_ASSERT_TRUE_MESSAGE(first_sym && TAG(first_sym) == CLJ_SYMBOL,
                                  "first element should be a symbol");
 
-        // Check if defn_sym matches SYM_DEFN
-        extern CljSymbol *SYM_DEFN;
-        TEST_ASSERT_NOT_NULL(SYM_DEFN);
+        // After macro expansion, first symbol should be 'def' (not 'defn')
+        extern CljSymbol *SYM_DEF;
+        TEST_ASSERT_NOT_NULL(SYM_DEF);
 
-        // Check pointer equality
-        bool pointer_match = (defn_sym == (CljObject *)SYM_DEFN);
-
-        // If pointer doesn't match, check if they're the same symbol via symbol table
-        if (!pointer_match) {
-            CljSymbol *parsed_sym = as_symbol(defn_sym);
-            CljSymbol *special_sym = as_symbol(SYM_DEFN);
-            if (parsed_sym && special_sym && parsed_sym->cname && special_sym->cname) {
-                TEST_FAIL_MESSAGE("defn symbol pointer mismatch - parsed symbol has different pointer than SYM_DEFN (symbol interning issue)");
-            } else {
-                TEST_FAIL_MESSAGE("defn symbol pointer mismatch and cannot compare names");
-            }
-        }
-
-        // Don't RELEASE form - value_by_parsing_expr returns autoreleased object
+        // Check pointer equality - should be SYM_DEF now
+        TEST_ASSERT_EQUAL_PTR_MESSAGE(SYM_DEF, first_sym,
+                                      "defn should expand to def");
     });
 }
 

@@ -16,7 +16,7 @@ extern CljObject *meta_registry;
 // Meta access functions
 void meta_set(ID v, ID meta);
 ID meta_get(ID v);
-void meta_clear(CljObject *v);
+void meta_clear(ID v);
 void meta_registry_init();
 void meta_registry_cleanup();
 

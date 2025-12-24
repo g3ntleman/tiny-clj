@@ -19,7 +19,7 @@ int load_clojure_core(EvalState *st);
 // COLLECTION FUNCTIONS
 // ============================================================================
 
-TEST(test_core_count) {
+TEST_SHARED(test_core_count) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (count [1 2 3]) => 3
@@ -41,7 +41,7 @@ TEST(test_core_count) {
     TEST_ASSERT_EQUAL_INT(0, as_fixnum(result3));
 }
 
-TEST(test_core_first) {
+TEST_SHARED(test_core_first) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (first [1 2 3]) => 1
@@ -55,7 +55,7 @@ TEST(test_core_first) {
     TEST_ASSERT_NULL(result2);
 }
 
-TEST(test_core_rest) {
+TEST_SHARED(test_core_rest) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (first (rest [1 2 3])) => 2
@@ -69,7 +69,7 @@ TEST(test_core_rest) {
     TEST_ASSERT_NOT_NULL(result2);
 }
 
-TEST(test_core_conj) {
+TEST_SHARED(test_core_conj) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (conj [1 2] 3) => [1 2 3]
@@ -85,7 +85,7 @@ TEST(test_core_conj) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(result2));
 }
 
-TEST(test_core_cons) {
+TEST_SHARED(test_core_cons) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (cons 1 [2 3]) => (1 2 3)
@@ -95,7 +95,7 @@ TEST(test_core_cons) {
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
 }
 
-TEST(test_core_nth) {
+TEST_SHARED(test_core_nth) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (nth [1 2 3] 1) => 2
@@ -115,7 +115,7 @@ TEST(test_core_nth) {
 // ARITHMETIC FUNCTIONS
 // ============================================================================
 
-TEST(test_core_inc) {
+TEST_SHARED(test_core_inc) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (inc 1) => 2
@@ -131,7 +131,7 @@ TEST(test_core_inc) {
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result2));
 }
 
-TEST(test_core_dec) {
+TEST_SHARED(test_core_dec) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (dec 2) => 1
@@ -147,7 +147,7 @@ TEST(test_core_dec) {
     TEST_ASSERT_EQUAL_INT(-1, as_fixnum(result2));
 }
 
-TEST(test_core_plus) {
+TEST_SHARED(test_core_plus) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (+ 1 2) => 3
@@ -163,7 +163,7 @@ TEST(test_core_plus) {
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(result2));
 }
 
-TEST(test_core_minus) {
+TEST_SHARED(test_core_minus) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (- 5 3) => 2
@@ -179,7 +179,7 @@ TEST(test_core_minus) {
     TEST_ASSERT_EQUAL_INT(-10, as_fixnum(result2));
 }
 
-TEST(test_core_multiply) {
+TEST_SHARED(test_core_multiply) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (* 2 3) => 6
@@ -199,7 +199,7 @@ TEST(test_core_multiply) {
 // COMPARISON FUNCTIONS
 // ============================================================================
 
-TEST(test_core_equals) {
+TEST_SHARED(test_core_equals) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (= 1 1) => true
@@ -218,7 +218,7 @@ TEST(test_core_equals) {
     TEST_ASSERT_TRUE(result3 == clj_true);
 }
 
-TEST(test_core_not_equals) {
+TEST_SHARED(test_core_not_equals) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (not= 1 2) => true
@@ -232,7 +232,7 @@ TEST(test_core_not_equals) {
     TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
-TEST(test_core_less_than) {
+TEST_SHARED(test_core_less_than) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (< 1 2) => true
@@ -246,7 +246,7 @@ TEST(test_core_less_than) {
     TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
-TEST(test_core_greater_than) {
+TEST_SHARED(test_core_greater_than) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (> 2 1) => true
@@ -264,7 +264,7 @@ TEST(test_core_greater_than) {
 // PREDICATE FUNCTIONS
 // ============================================================================
 
-TEST(test_core_nil_predicate) {
+TEST_SHARED(test_core_nil_predicate) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (nil? nil) => true
@@ -278,7 +278,7 @@ TEST(test_core_nil_predicate) {
     TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
-TEST(test_core_empty_predicate) {
+TEST_SHARED(test_core_empty_predicate) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (empty? []) => true
@@ -292,7 +292,7 @@ TEST(test_core_empty_predicate) {
     TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
-TEST(test_core_vector_predicate) {
+TEST_SHARED(test_core_vector_predicate) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (vector? []) => true
@@ -306,7 +306,7 @@ TEST(test_core_vector_predicate) {
     TEST_ASSERT_TRUE(result2 == clj_false);
 }
 
-TEST(test_core_map_predicate) {
+TEST_SHARED(test_core_map_predicate) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (map? {}) => true
@@ -349,7 +349,7 @@ TEST(test_core_map_predicate) {
 // MAP FUNCTIONS
 // ============================================================================
 
-TEST(test_core_get) {
+TEST_SHARED(test_core_get) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (get {:a 1} :a) => 1
@@ -369,7 +369,7 @@ TEST(test_core_get) {
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(result3));
 }
 
-TEST(test_core_assoc) {
+TEST_SHARED(test_core_assoc) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (get (assoc {} :a 1) :a) => 1
@@ -379,7 +379,7 @@ TEST(test_core_assoc) {
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(result1));
 }
 
-TEST(test_core_dissoc) {
+TEST_SHARED(test_core_dissoc) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (get (dissoc {:a 1 :b 2} :a) :a) => nil
@@ -393,7 +393,7 @@ TEST(test_core_dissoc) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result2));
 }
 
-TEST(test_core_keys) {
+TEST_SHARED(test_core_keys) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (count (keys {:a 1 :b 2})) => 2
@@ -403,7 +403,7 @@ TEST(test_core_keys) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
-TEST(test_core_vals) {
+TEST_SHARED(test_core_vals) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (count (vals {:a 1 :b 2})) => 2
@@ -417,7 +417,7 @@ TEST(test_core_vals) {
 // BOOLEAN FUNCTIONS
 // ============================================================================
 
-TEST(test_core_not) {
+TEST_SHARED(test_core_not) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (not true) => false
@@ -440,7 +440,7 @@ TEST(test_core_not) {
 // SEQUENCE FUNCTIONS
 // ============================================================================
 
-TEST(test_core_map) {
+TEST_SHARED(test_core_map) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (first (map inc [1 2 3])) => 2
@@ -450,7 +450,7 @@ TEST(test_core_map) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
-TEST(test_core_filter) {
+TEST_SHARED(test_core_filter) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (count (filter (fn [x] (> x 2)) [1 2 3 4])) => 2
@@ -461,7 +461,7 @@ TEST(test_core_filter) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(result1));
 }
 
-TEST(test_core_reduce) {
+TEST_SHARED(test_core_reduce) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (reduce + [1 2 3 4]) => 10
@@ -477,7 +477,7 @@ TEST(test_core_reduce) {
     TEST_ASSERT_EQUAL_INT(106, as_fixnum(result2));
 }
 
-TEST(test_core_range) {
+TEST_SHARED(test_core_range) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Test: (count (range 5)) => 5

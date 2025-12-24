@@ -606,16 +606,11 @@ static void release_object_default(CljObject *v) {
         case CLJ_HASHMAP:
             {
                 CljHashMap *map = (CljHashMap*)v;
-                if (map) {
-                    // Release all key-value pairs
-                    for (unsigned int i = 0; i < map->capacity; i++) {
-                        if (KV_KEY(map->data, i) && KV_KEY(map->data, i) != HASHMAP_TOMBSTONE) {
-                            RELEASE(KV_KEY(map->data, i));
-                            RELEASE(KV_VALUE(map->data, i));
-                        }
-                    }
-                    // Note: map->data is a flexible array member, part of the struct
-                    // It will be freed automatically when DEALLOC frees the struct
+                ID hm_key;
+                ID hm_val;
+                HASHMAP_FOR_EACH(map, hm_key, hm_val) {
+                    RELEASE(hm_key);
+                    RELEASE(hm_val);
                 }
             }
             break;
@@ -679,13 +674,13 @@ static void release_object_default(CljObject *v) {
                 CljFunction *func = (CljFunction*)v;
                 if (func) {
                     // Release parameter vector (vector will release all elements) - RELEASE handles NULL
-                    RELEASE((CljObject*)func->params);
+                    RELEASE(func->params);
                     // Release body - RELEASE handles NULL
                     RELEASE(func->body);
                     // Release closure environment - RELEASE handles NULL
-                    RELEASE((CljObject*)func->env_stack);
+                    RELEASE(func->env_stack);
                     // Release captured namespace reference
-                    RELEASE((CljObject*)func->ns);
+                    RELEASE(func->ns);
                     // Free function name (strdup'd in make_function)
                     if (func->name) {
                         free((void*)func->name);

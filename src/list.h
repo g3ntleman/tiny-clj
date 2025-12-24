@@ -68,6 +68,12 @@ static inline CljList* as_list(ID obj) {
 }
 // No declaration needed in Release - as_list is inline
 #endif
+
+// Safe rest accessor - returns NULL if list is NULL or has no rest
+static inline CljList* list_rest_safe(CljList *l) {
+    return l && l->rest ? as_list(l->rest) : NULL;
+}
+
 ID list_nth(CljList *list, int n);
 int list_count(CljList *list);
 static inline bool is_list(ID v) {

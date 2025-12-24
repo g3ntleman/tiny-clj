@@ -25,9 +25,29 @@
 #include "meta.h"    // For meta_get and meta_set
 #include "symbol_token.h"
 #include "eval.h"    // For eval_function_call
+#include "macro.h"   // For lookup_macro_resolve
+// is_special_symbol is in symbol.h (already included)
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+// ============================================================================
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+// Move metadata from source to destination (clears source entry to prevent leaks)
+static INLINE void move_meta(ID src, ID dst) {
+#ifdef ENABLE_META
+    ID meta = meta_get(src);
+    if (meta) {
+        meta_set(dst, meta);
+        meta_clear(src);
+    }
+#else
+    (void)src; (void)dst;
+#endif
+}
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 
@@ -36,24 +56,18 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
 // Uses Clojure's destructure function when available
 // ============================================================================
 
-// Check if bindings vector needs destructuring (any binding is not a symbol)
-static bool bindings_need_destructuring(CljVector *bindings) {
-    unsigned int count = vector_count(bindings);
-    for (unsigned int i = 0; i < count; i += 2) {
-        ID binding_form = vector_nth(bindings, i);
-        if (TAG(binding_form) != CLJ_SYMBOL) return true;
+// Check if vector elements need destructuring (any element is not a simple symbol)
+// pairs_only: for bindings [name1 val1 name2 val2 ...] check only names (even indices)
+static bool vector_needs_destructuring(CljVector *vec, bool pairs_only) {
+    int i = 0;
+    VECTOR_FOR_EACH(vec, elem) {
+        if ((!pairs_only || (i++ & 1) == 0) && TAG(elem) != CLJ_SYMBOL) return true;
     }
     return false;
 }
 
-// Check if fn/defn params need destructuring
-static bool params_need_destructuring(CljVector *params) {
-    VECTOR_FOR_EACH(params, param) {
-        unsigned char tag = TAG(param);
-        if (tag == CLJ_VECTOR || tag == CLJ_MAP) return true;
-    }
-    return false;
-}
+#define bindings_need_destructuring(v) vector_needs_destructuring(v, true)
+#define params_need_destructuring(v)   vector_needs_destructuring(v, false)
 
 // Cached destructure function (resolved once after bootstrap)
 static ID destructure_fn = NULL;
@@ -87,12 +101,12 @@ static CljVector* transform_params(EvalState *st, CljVector *params, CljVector *
             char name[64];
             snprintf(name, sizeof(name), "p__%lu", ++param_gensym_counter);
             CljSymbol *gsym = intern_symbol_global(name);
-            new_params = vector_conj(new_params, gsym);
-            let_bindings = vector_conj(let_bindings, param);
-            let_bindings = vector_conj(let_bindings, gsym);
+            ASSIGN(new_params, vector_conj(new_params, gsym));
+            ASSIGN(let_bindings, vector_conj(let_bindings, param));
+            ASSIGN(let_bindings, vector_conj(let_bindings, gsym));
             has_destructuring = true;
         } else {
-            new_params = vector_conj(new_params, param);
+            ASSIGN(new_params, vector_conj(new_params, param));
         }
     }
     
@@ -268,6 +282,37 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         bool is_quote_form = (first == SYM_QUOTE);
         bool child_in_quote = in_quote || is_quote_form;
         
+        // ========== MACRO EXPANSION (compile-time) ==========
+        // Expand macros before destructuring and other transformations
+        // Skip macro lookup for special forms and native functions (they can't be macros)
+        if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
+            CljSymbol *head_sym = as_symbol(first);
+            CljFunction *macro = NULL;
+            if (!is_special_symbol(head_sym) && !is_native_symbol(head_sym)) {
+                macro = lookup_macro_resolve(st, head_sym);
+            }
+            if (macro) {
+                // Collect unevaluated arguments for macro call
+                ID args[16];
+                int argc = 0;
+                for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
+                     cur && argc < 16;
+                     cur = cur->rest ? as_list(cur->rest) : NULL) {
+                    args[argc++] = cur->first;
+                }
+                
+                // Call macro function to expand the form
+                ID expanded = eval_function_call((CljObject*)macro, args, argc, NULL, st);
+                if (!expanded) return NULL;
+                
+                // Transfer metadata from original form to expanded form
+                move_meta(list, expanded);
+                
+                // Recursively canonicalize the expanded form
+                return canonicalize_expr(expanded, st, in_quote);
+            }
+        }
+        
         // ========== DESTRUCTURING TRANSFORMATION (compile-time) ==========
         // Transform let/loop bindings and fn/defn params
         if (!in_quote && first && TAG(first) == CLJ_SYMBOL) {
@@ -315,14 +360,14 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                                 char name[64];
                                 snprintf(name, sizeof(name), "loop__%lu", ++gensym_counter);
                                 CljSymbol *gsym = intern_symbol_global(name);
-                                loop_bindings = vector_conj(loop_bindings, gsym);
-                                loop_bindings = vector_conj(loop_bindings, init_expr);
-                                let_bindings = vector_conj(let_bindings, binding_form);
-                                let_bindings = vector_conj(let_bindings, gsym);
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, gsym));
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
+                                ASSIGN(let_bindings, vector_conj(let_bindings, binding_form));
+                                ASSIGN(let_bindings, vector_conj(let_bindings, gsym));
                             } else {
                                 // Simple symbol binding - keep as-is
-                                loop_bindings = vector_conj(loop_bindings, binding_form);
-                                loop_bindings = vector_conj(loop_bindings, init_expr);
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, binding_form));
+                                ASSIGN(loop_bindings, vector_conj(loop_bindings, init_expr));
                             }
                         }
                         
@@ -399,88 +444,36 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                     }
                 }
             }
-            
-            // (defn name [params] body...)
-            if (head_sym == SYM_DEFN) {
-                CljList *rest1 = list->rest ? as_list(list->rest) : NULL;
-                if (rest1 && rest1->first && TAG(rest1->first) == CLJ_SYMBOL) {
-                    ID name_sym = rest1->first;
-                    CljList *rest2 = rest1->rest ? as_list(rest1->rest) : NULL;
-                    if (rest2 && rest2->first && TAG(rest2->first) == CLJ_VECTOR) {
-                        CljVector *params = as_vector(rest2->first);
-                        CljList *body_rest = rest2->rest ? as_list(rest2->rest) : NULL;
-                        
-                        if (params_need_destructuring(params)) {
-                            CljVector *expanded_let_bindings = NULL;
-                            CljVector *new_params = transform_params(st, params, &expanded_let_bindings);
-                            
-                            if (expanded_let_bindings && vector_count(expanded_let_bindings) > 0) {
-                                ID body = body_rest ? body_rest->first : NULL;
-                                CljList *let_form = make_list(SYM_LET,
-                                                              make_list(expanded_let_bindings,
-                                                                        make_list(body, NULL)));
-                                CljList *new_list = make_list(first,
-                                                    make_list(name_sym,
-                                                        make_list(new_params,
-                                                            make_list(let_form, NULL))));
-                                RELEASE(list);
-                                return canonicalize_expr(new_list, st, in_quote);
-                            }
-                        }
-                    }
-                }
-            }
+            // Note: defn is a macro that expands to (def name (fn ...)),
+            // so fn's destructuring handler above covers defn as well
         }
         // ========== END DESTRUCTURING TRANSFORMATION ==========
         
-        ID rest = NULL;
-        if (list->rest) {
-            rest = canonicalize_expr(list->rest, st, child_in_quote);
+        // Canonicalize rest of list
+        ID rest = list->rest ? canonicalize_expr((ID)list->rest, st, child_in_quote) : NULL;
+        
+        // Early exit if nothing changed AND no type conversion needed
+        // - in_quote needs CLJ_LIST (convert ASTNode to List)
+        // - normal context needs CLJ_AST_NODE (convert List to ASTNode)
+        bool correct_type = in_quote ? (tag == CLJ_LIST) : (tag == CLJ_AST_NODE);
+        if (correct_type && first == list->first && rest == (ID)list->rest) {
+            return expr;
         }
         
-        if (in_quote) {
-            // In quote context: keep/convert to CljList
-            CljList *new_list = make_list((CljObject*)first, (CljList*)rest);
-            if (!new_list) {
-                return expr;  // Out of memory - return original
-            }
-            
-#ifdef ENABLE_META
-            ID meta = meta_get((CljObject*)expr);
-            if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st, in_quote);
-                meta_set((CljObject*)new_list, (CljObject*)canon_meta);
-            }
-#endif
-            
-            RELEASE(list);  // Free the original list/ASTNode
-            return new_list;
-        }
+        // Create appropriate container based on context
+        ID result = in_quote 
+            ? (ID)make_list((CljObject*)first, (CljList*)rest)
+            : (ID)make_ast_node(first, rest);
         
-        // Normal context: Create/keep as ASTNode
-        // Check if anything changed - if not, return original ASTNode
-        if (tag == CLJ_AST_NODE && first == list->first && rest == (ID)list->rest) {
-            return expr;  // No changes needed
-        }
-        
-        CljASTNode *node = make_ast_node(first, rest);
-        if (!node) {
+        if (!result) {
             return expr;  // Out of memory - return original
         }
         
-        // Copy metadata if present (from CljList or ASTNode)
-        // Metadata is stored in global registry using object pointers as keys
-        // We need to copy metadata from the old list pointer to the new ASTNode pointer
-#ifdef ENABLE_META
-        ID meta = meta_get((CljObject*)expr);
-        if (meta) {
-            ID canon_meta = canonicalize_expr(meta, st, in_quote);
-            meta_set((CljObject*)node, (CljObject*)canon_meta);
-        }
-#endif
+        // Copy metadata (no recursive canonicalization - metadata has no symbol tokens)
+        move_meta(expr, result);
         
-        RELEASE(list);  // Free the original list
-        return node;
+        RELEASE(list);
+        return result;
     }
     
     // For other types (vectors, maps), recursively canonicalize elements
@@ -488,10 +481,13 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         CljVector *vec = (CljVector*)expr;
         CLJ_ASSERT(vec != NULL);
         int count = vector_count(vec);
-        bool changed = false;
-        ID *canon_elems = (ID*)malloc(count * sizeof(ID));
+        
+        // Stack buffer for small vectors (avoid malloc)
+        ID stack_buf[16];
+        ID *canon_elems = (count <= 16) ? stack_buf : (ID*)malloc(count * sizeof(ID));
         CLJ_ASSERT(canon_elems != NULL && "Out of memory");
         
+        bool changed = false;
         for (int i = 0; i < count; i++) {
             ID elem = vector_nth(vec, i);
             canon_elems[i] = canonicalize_expr(elem, st, in_quote);
@@ -500,26 +496,21 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
             }
         }
         
-        if (changed) {
-            // Create new vector with canonicalized elements
-            CljVector *new_vec = make_vector(count, CLJ_VECTOR);
-            for (int i = 0; i < count; i++) {
-                new_vec = vector_conj(new_vec, canon_elems[i]);
-            }
-#ifdef ENABLE_META
-            ID meta = meta_get((CljObject*)vec);
-            if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st, in_quote);
-                meta_set((CljObject*)new_vec, (CljObject*)canon_meta);
-            }
-#endif
-            free(canon_elems);
-            RELEASE(vec);  // Free original vector
-            return new_vec;
+        if (!changed) {
+            if (count > 16) free(canon_elems);
+            return expr;  // No changes needed
         }
         
-        free(canon_elems);
-        return expr;  // No changes needed
+        // Create new vector with canonicalized elements
+        CljVector *new_vec = make_vector(count, CLJ_VECTOR);
+        for (int i = 0; i < count; i++) {
+            ASSIGN(new_vec, vector_conj(new_vec, canon_elems[i]));
+        }
+        move_meta(vec, new_vec);
+        
+        if (count > 16) free(canon_elems);
+        RELEASE(vec);
+        return new_vec;
     }
     
     if (tag == CLJ_MAP) {
@@ -536,22 +527,16 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 if (!new_map) {
                     new_map = make_map(map_count(map));
                 }
-                new_map = map_assoc(new_map, canon_key, canon_value);
+                ASSIGN(new_map, map_assoc(new_map, canon_key, canon_value));
                 changed = true;
             } else if (new_map) {
-                new_map = map_assoc(new_map, key, value);
+                ASSIGN(new_map, map_assoc(new_map, key, value));
             }
         }
         
         if (changed && new_map) {
-#ifdef ENABLE_META
-            ID meta = meta_get((CljObject*)map);
-            if (meta) {
-                ID canon_meta = canonicalize_expr(meta, st, in_quote);
-                meta_set((CljObject*)new_map, (CljObject*)canon_meta);
-            }
-#endif
-            RELEASE(map);  // Free original map
+            move_meta(map, new_map);
+            RELEASE(map);
             return new_map;
         }
         

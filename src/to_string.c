@@ -51,11 +51,7 @@ bool strings_get_special_form_rendering(void) {
 static size_t to_string_calc_length(CljObject *v, bool escape_strings);
 static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings);
 
-// Check if symbol is a special form (matches Clojure behavior)
-// O(1) check using flags field in CljObject
-bool is_special_symbol(CljSymbol *symbol) {
-    return symbol && (symbol->base.flags & CLJ_FLAG_SPECIAL);
-}
+// is_special_symbol() moved to symbol.h (inline function)
 
 void strings_clear_special_forms(void) {
     // No-op: flags are set at symbol initialization
@@ -149,11 +145,10 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             int count = 0;
             LIST_FOR_EACH(v, elem) {
                 if (count >= 1000) break;
-                if (elem) {
-                    len += to_string_calc_length(elem, escape_strings);
-                    if (count > 0) len += 1; // space
-                    count++;
-                }
+                // nil elements are valid - to_string_calc_length handles NULL
+                if (count > 0) len += 1; // space
+                len += to_string_calc_length(elem, escape_strings);
+                count++;
             }
             return len;
         }
@@ -218,11 +213,10 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             bool first = true;
             while (!seq_iter_empty(&temp_iter)) {
                 CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
-                if (element) {
-                    if (!first) len += 1; // space
-                    len += to_string_calc_length(element, escape_strings);
-                    first = false;
-                }
+                // nil elements are valid - to_string_calc_length handles NULL
+                if (!first) len += 1; // space
+                len += to_string_calc_length(element, escape_strings);
+                first = false;
                 seq_iter_next(&temp_iter);
             }
             return len;
@@ -402,14 +396,13 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             int count = 0;
             LIST_FOR_EACH(v, elem) {
                 if (count >= 1000) break;
-                if (elem) {
-                    if (count > 0) {
-                        buffer[*offset] = ' ';
-                        *offset += 1;
-                    }
-                    to_string_build_string(elem, buffer, offset, escape_strings);
-                    count++;
+                // nil elements are valid - to_string_build_string handles NULL
+                if (count > 0) {
+                    buffer[*offset] = ' ';
+                    *offset += 1;
                 }
+                to_string_build_string(elem, buffer, offset, escape_strings);
+                count++;
             }
             buffer[*offset] = ')';
             *offset += 1;
@@ -504,14 +497,13 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             bool first = true;
             while (!seq_iter_empty(&temp_iter)) {
                 CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
-                if (element) {
-                    if (!first) {
-                        buffer[*offset] = ' ';
-                        *offset += 1;
-                    }
-                    to_string_build_string(element, buffer, offset, escape_strings);
-                    first = false;
+                // nil elements are valid - to_string_build_string handles NULL
+                if (!first) {
+                    buffer[*offset] = ' ';
+                    *offset += 1;
                 }
+                to_string_build_string(element, buffer, offset, escape_strings);
+                first = false;
                 seq_iter_next(&temp_iter);
             }
             buffer[*offset] = ')';

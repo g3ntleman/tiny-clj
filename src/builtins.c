@@ -34,6 +34,7 @@
 #include "parser.h"
 #include "meta.h"
 #include "eval.h"
+#include "macro.h"
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -409,7 +410,7 @@ ID conj2(ID vec, ID val) {
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
     CljVector* result = vector_conj((CljVector*)vec, val);
     if (!result) return NULL;
-    return RETAIN(result);
+    return result;
 }
 
 // Generic conj function that works with BuiltinFn signature
@@ -709,7 +710,7 @@ ID native_partition(ID *args, unsigned int argc) {
     }
     RELEASE(partitions);
     
-    return result ? AUTORELEASE(RETAIN(result)) : empty_list();
+    return result ? AUTORELEASE(RETAIN((ID)result)) : (ID)empty_list();
 }
 
 // some: Returns first truthy value from predicate applied to collection
@@ -873,7 +874,7 @@ ID native_nilp(ID *args, unsigned int argc) {
     return clj_false;
 }
 
-// Reverse function that reverses a list
+// Reverse function that reverses any seqable collection
 ID native_reverse(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
 
@@ -886,74 +887,22 @@ ID native_reverse(ID *args, unsigned int argc) {
         return empty_list();
     }
 
-    // Handle lists
-    if (coll && list_type_matches(TAG(coll))) {
-        // Safe cast - we already checked is_type
-        CljList *list = (CljList*)coll;
-        // Use list_count to check if list is empty (handles nil elements correctly)
-        if (!list || list_count(list) == 0) {
-            return empty_list();
-        }
-
-        // Build reversed list by traversing and consing
-        CljList *result = NULL;
-        CljObject *current = coll;
-
-        while (current && list_type_matches(TAG(current))) {
-            // Safe cast - we already checked is_type
-            CljList *list = (CljList*)current;
-            if (!list) break;
-
-            CljObject *first = list->first;
-            if (first) {
-                CljList *new_result = make_list(first, result);
-                RELEASE(result);
-                result = new_result;
-            }
-
-            current = list->rest;
-        }
-
-        // If result is NULL, return empty list
-        if (!result) {
-            return empty_list();
-        }
-
-        return result;
-    }
-
-    // Handle vectors and other seqable collections
-    // Convert to seq and build reversed list
-    CljSeqIterator *seq = make_seq(coll);
-    if (!seq) {
-        // Empty or not seqable - return empty list
+    // Use SeqIterator for all seqable types (lists, vectors, strings, etc.)
+    SeqIterator iter;
+    if (!seq_iter_init(&iter, coll)) {
         return empty_list();
     }
 
-    // Build reversed list by iterating through sequence
+    // Build reversed list by consing elements to front
     CljList *result = NULL;
-    while (!seq_empty(seq)) {
-        CljObject *first = seq_first(seq);
-        if (first) {
-            CljList *new_result = make_list(first, result);
-            RELEASE(result);
-            result = new_result;
-        }
-        // Advance iterator to next position
-        if (!seq_iter_next(&seq->iter)) {
-            break; // End of sequence
-        }
+    while (!seq_iter_empty(&iter)) {
+        ID elem = seq_iter_first(&iter);
+        // nil elements are preserved (no if check)
+        result = make_list(elem, result);
+        seq_iter_next(&iter);
     }
 
-    // Release seq object
-    RELEASE(seq);
-
-    // If result is NULL, return empty list
-    if (!result) {
-        return empty_list();
-    }
-
-    return result;
+    return result ? AUTORELEASE((ID)result) : (ID)empty_list();
 }
 
 ID assoc3(ID *args, unsigned int argc) {
@@ -975,14 +924,13 @@ ID assoc3(ID *args, unsigned int argc) {
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
         CljVector* result = vector_assoc((CljVector*)coll, i, val);
         if (!result) return NULL;
-        return RETAIN(result);
+        return result;
     }
 
     // Handle maps
     if (coll_tag == CLJ_MAP) {
         // Note: key can be NULL (nil) - that's a valid key in Clojure!
-        CljMap *result = map_assoc((CljMap*)coll, key, val);
-        return RETAIN(result);
+        return map_assoc((CljMap*)coll, key, val);
     }
 
     // Unsupported collection type
@@ -1165,8 +1113,7 @@ ID native_update(ID *args, unsigned int argc) {
     ID new_val = eval_function_call(func, fn_args, fn_argc, NULL, st);
     
     // assoc the new value
-    CljMap *result = map_assoc((CljMap*)coll, key, new_val);
-    return AUTORELEASE(RETAIN(result));
+    return map_assoc((CljMap*)coll, key, new_val);
 }
 
 // into: Add all items from source into target collection
@@ -1253,13 +1200,13 @@ ID native_into(ID *args, unsigned int argc) {
                 if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT) {
                     CljVector *pair = (CljVector*)entry;
                     if (vector_count(pair) >= 2) {
-                        result = map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1));
+                        ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
                     }
                 }
             }
         }
         
-        return AUTORELEASE(RETAIN(result));
+        return result;
     }
     
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1312,7 +1259,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
             ID key = vector_nth((CljVector*)keys, i);
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
-                result = map_assoc(result, key, val);
+                ASSIGN(result, map_assoc(result, key, val));
             }
         }
     } else if (keys_tag == CLJ_LIST || keys_tag == CLJ_AST_NODE) {
@@ -1321,13 +1268,13 @@ ID native_select_keys(ID *args, unsigned int argc) {
             ID key = LIST_FIRST(list);
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
-                result = map_assoc(result, key, val);
+                ASSIGN(result, map_assoc(result, key, val));
             }
             list = as_list(LIST_REST(list));
         }
     }
     
-    return AUTORELEASE(RETAIN(result));
+    return result;
 }
 
 // find: Return [key value] entry for key, or nil if not found
@@ -2990,6 +2937,57 @@ ID native_with_meta(ID *args, unsigned int argc) {
     (void)meta_map;
     return RETAIN(obj);
 #endif
+}
+
+// Get macro function by symbol: (get-macro 'name) -> macro-fn or nil
+ID native_get_macro(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "get-macro");
+    if (!args[0] || TAG(args[0]) != CLJ_SYMBOL || !g_current_eval_state) return NULL;
+    CljFunction *macro = lookup_macro_resolve(g_current_eval_state, as_symbol(args[0]));
+    return macro ? RETAIN(macro) : NULL;
+}
+
+// Apply function to arguments: (apply f args) or (apply f a b c args)
+ID native_apply(ID *args, unsigned int argc) {
+    if (argc < 2) {
+        throw_exception(EXCEPTION_ARITY, "apply requires at least 2 arguments", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    ID fn = args[0];
+    unsigned char fn_tag = fn ? TAG(fn) : 0;
+    if (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "apply: first argument must be a function", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Build args array: fixed args + sequence args
+    ID call_args[64];
+    int n = 0;
+    
+    // Copy fixed args (args[1] to args[argc-2])
+    for (unsigned int i = 1; i < argc - 1 && n < 64; i++) {
+        call_args[n++] = args[i];
+    }
+    
+    // Append sequence args from last argument
+    ID last = args[argc - 1];
+    if (last) {
+        unsigned char tag = TAG(last);
+        if (list_type_matches(tag)) {
+            for (CljList *l = as_list(last); l && n < 64; l = l->rest ? as_list(l->rest) : NULL) {
+                call_args[n++] = l->first;
+            }
+        } else if (tag == CLJ_VECTOR) {
+            CljVector *v = as_vector(last);
+            int cnt = vector_count(v);
+            for (int i = 0; i < cnt && n < 64; i++) {
+                call_args[n++] = vector_nth(v, i);
+            }
+        }
+    }
+    
+    return eval_function_call(fn, call_args, n, NULL, g_current_eval_state);
 }
 
 // Create symbol from string (with optional namespace)
@@ -5335,22 +5333,14 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
             if (SYM_KW_NAME && symbol_name && symbol_name[0] != '\0') {
                 CljString *name_str = make_string(symbol_name);
                 if (name_str) {
-                    CljMap *updated = map_assoc(meta_map, SYM_KW_NAME, name_str);
-                    if (updated != meta_map) {
-                        RELEASE(meta_map);
-                        meta_map = updated;
-                    }
+                    ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NAME, name_str));
                     RELEASE(name_str);
                 }
             }
 
             // Add :ns (namespace name as symbol)
             if (SYM_KW_NS && target_ns && target_ns->name) {
-                CljMap *updated = map_assoc(meta_map, SYM_KW_NS, target_ns->name);
-                if (updated != meta_map) {
-                    RELEASE(meta_map);
-                    meta_map = updated;
-                }
+                ASSIGN(meta_map, map_assoc(meta_map, SYM_KW_NS, target_ns->name));
             }
 
             // Set metadata on function object
@@ -5394,4 +5384,12 @@ void register_builtins() {
     
     // Time functions
     register_builtin_in_core("now", native_now);
+    register_builtin_in_core("epoch-minutes", native_epoch_minutes);
+    register_builtin_in_core("millis-in-minute", native_millis_in_minute);
+    
+    // Macro functions
+    register_builtin_in_core("get-macro", native_get_macro);
+    
+    // Apply function
+    register_builtin_in_core("apply", native_apply);
 }

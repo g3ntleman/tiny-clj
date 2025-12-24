@@ -575,7 +575,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
                     CljVector *vec = line_editor_get_history_vector(editor);
                     if (vec) {
                         // RETAIN before passing to save function (it may convert transient to persistent)
-                        RETAIN((CljObject*)vec);
+                        RETAIN(vec);
                         line_editor_history_save_default((CljObject*)vec);
                         RELEASE(vec);
                     }
@@ -600,7 +600,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             CljVector *vec = line_editor_get_history_vector(ed);
             if (vec) {
                 // RETAIN before passing to save function (it may convert transient to persistent)
-                RETAIN((CljObject*)vec);
+                RETAIN(vec);
                 line_editor_history_save_default((CljObject*)vec);
                 RELEASE(vec);
             }
@@ -614,10 +614,18 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
 #ifndef UNITY_TESTS
 int main(int argc, char **argv) {
+#ifdef PROFILE_STARTUP
+    #include <time.h>
+    clock_t t0 = clock();
+#endif
     platform_init();
     runtime_init(&g_runtime);
     meta_registry_init();  // Initialize metadata registry
     init_special_symbols();  // Initialize special symbols like SYM_DEF
+#ifdef PROFILE_STARTUP
+    clock_t t1 = clock();
+    fprintf(stderr, "[PROFILE] init: %.2f ms\n", (double)(t1 - t0) * 1000.0 / CLOCKS_PER_SEC);
+#endif
     EvalState *st = get_global_eval_state();
     // Note: set_global_eval_state() removed - Exception handling now independent
     evalstate_set_ns(st, "user");
@@ -676,19 +684,42 @@ int main(int argc, char **argv) {
     // Register builtin functions and load clojure.core in autorelease pool
     // Both operations may use AUTORELEASE calls (LIST_FIRST/LIST_REST macros)
     WITH_AUTORELEASE_POOL({
+#ifdef PROFILE_STARTUP
+        clock_t t2 = clock();
+#endif
         // Register builtin functions first (they may be used during core loading)
         register_builtins();
+#ifdef PROFILE_STARTUP
+        clock_t t3 = clock();
+        fprintf(stderr, "[PROFILE] register_builtins: %.2f ms\n", (double)(t3 - t2) * 1000.0 / CLOCKS_PER_SEC);
+#endif
 
         if (!no_core) {
+#ifdef PROFILE_STARTUP
+            clock_t t4 = clock();
+#endif
             // Load clojure.core in autorelease pool to handle AUTORELEASE calls
             load_clojure_core(st);
+#ifdef PROFILE_STARTUP
+            clock_t t5 = clock();
+            fprintf(stderr, "[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
+#endif
             // Load clojure.repl namespace for REPL helper functions
             load_clojure_repl(st);
+#ifdef PROFILE_STARTUP
+            clock_t t6 = clock();
+            fprintf(stderr, "[PROFILE] load_clojure_repl: %.2f ms\n", (double)(t6 - t5) * 1000.0 / CLOCKS_PER_SEC);
+#endif
             // Require clojure.repl with :refer :all to make functions available in user namespace
             // This ensures functions like doc, source, dir, etc. are available without namespace prefix
             evalstate_set_ns(st, "user");
             const char *require_code = "(require '[clojure.repl :refer :all])";
             eval_multiform_string(require_code, st);
+#ifdef PROFILE_STARTUP
+            clock_t t7 = clock();
+            fprintf(stderr, "[PROFILE] require clojure.repl: %.2f ms\n", (double)(t7 - t6) * 1000.0 / CLOCKS_PER_SEC);
+            fprintf(stderr, "[PROFILE] TOTAL startup: %.2f ms\n", (double)(t7 - t0) * 1000.0 / CLOCKS_PER_SEC);
+#endif
         }
     });
 

@@ -6,6 +6,9 @@
 #include "exception.h"
 #include "environment.h"
 #include "runtime.h"
+#include "function.h"
+#include "macro.h"
+#include "meta.h"
 
 // Special Form evaluation functions with unified signature (exported for symbol initialization)
 ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
@@ -172,11 +175,6 @@ ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     return AUTORELEASE(eval_fn_with_context(list, fn_env, st, ctx));
 }
 
-ID eval_special_defn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    (void)ctx;  // Unused
-    return eval_defn(list, env, st);
-}
-
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     return eval_let(list, env, st, ctx);
 }
@@ -280,4 +278,132 @@ ID eval_special_form_dispatch(CljList *list,
     CljSpecialSymbol *special = as_special_symbol(op_sym);
     if (!special || !special->eval_fn) return NULL;
     return special->eval_fn(list, env, st, ctx);
+}
+
+// ============================================================================
+// Quasiquote Special Form - delegates to Clojure quasiquote-fn after bootstrap
+// ============================================================================
+
+// Cached Clojure quasiquote-fn (resolved after bootstrap)
+static CljFunction *g_quasiquote_fn = NULL;
+
+ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    (void)env;  // Unused - quasiquote doesn't evaluate in current env
+    (void)ctx;
+    
+    // Get the expression to quasiquote: (quasiquote expr)
+    ID expr = list_get_element(list, 1);
+    if (!expr) return NULL;
+    
+    // Resolve quasiquote-fn from clojure.core (lazy initialization)
+    if (!g_quasiquote_fn) {
+        CljSymbol *sym = intern_symbol_global("quasiquote-fn");
+        CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
+        if (resolved && TAG(resolved) == CLJ_CLOSURE) {
+            g_quasiquote_fn = as_function(resolved);
+        }
+    }
+    
+    // If quasiquote-fn not available (bootstrap mode), throw error
+    if (!g_quasiquote_fn) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, 
+            "quasiquote requires clojure.core to be fully loaded", 
+            __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Delegate to Clojure quasiquote-fn
+    ID args[] = { expr };
+    ID result = eval_function_call((CljObject*)g_quasiquote_fn, args, 1, env, st);
+    
+    // The result is the expanded form - evaluate it
+    if (result) {
+        return eval_body(result, env, st, ctx);
+    }
+    return NULL;
+}
+
+// ============================================================================
+// defmacro Special Form - defines a macro in the current namespace
+// ============================================================================
+
+ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    (void)ctx;
+    
+    // Parse: (defmacro name [params] body) or (defmacro name docstring [params] body)
+    int argc = list_count(list);
+    if (argc < 3) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+            "defmacro requires at least a name and body",
+            __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Get macro name
+    ID name_obj = list_get_element(list, 1);
+    if (!name_obj || TAG(name_obj) != CLJ_SYMBOL) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+            "defmacro name must be a symbol",
+            __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    CljSymbol *name = as_symbol(name_obj);
+    
+    // Skip docstring if present (string as second element)
+    int params_index = 2;
+    ID params_obj = list_get_element(list, params_index);
+    unsigned char params_tag = params_obj ? TAG(params_obj) : 0;
+    if (params_tag == CLJ_STRING) {
+        params_index = 3;
+        params_obj = list_get_element(list, params_index);
+        params_tag = params_obj ? TAG(params_obj) : 0;
+    }
+    
+    // Get params vector
+    if (params_tag != CLJ_VECTOR) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+            "defmacro params must be a vector",
+            __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Build fn form: (fn [params] body...)
+    // Collect body expressions in reverse order and prepend params
+    CljList *fn_body = NULL;
+    for (int i = argc - 1; i > params_index; i--) {
+        ID body_expr = list_get_element(list, i);
+        fn_body = make_ast_list(body_expr, fn_body);
+    }
+    
+    // Create (fn [params] body...) list: fn -> [params] -> body1 -> body2 -> ...
+    CljList *params_and_body = make_ast_list(params_obj, fn_body);
+    CljList *fn_form = make_ast_list(SYM_FN, params_and_body);
+    
+    // Evaluate fn to get CljFunction (CLJ_CLOSURE type)
+    ID fn_result = eval_list(fn_form, env, st, ctx);
+    if (!fn_result || TAG(fn_result) != CLJ_CLOSURE) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+            "defmacro failed to create function",
+            __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljFunction *macro_fn = as_function(fn_result);
+    
+    // Set :macro true in metadata
+    CljMap *meta = make_map(4);
+    CljSymbol *kw_macro = intern_symbol_global(":macro");
+    ASSIGN(meta, map_assoc(meta, (ID)kw_macro, clj_true));
+    meta_set((CljObject*)macro_fn, (CljObject*)meta);
+    RELEASE(meta);
+    
+    // Register macro in current namespace
+    if (st->current_ns) {
+        register_macro(st->current_ns, name, macro_fn);
+    }
+    
+    // Also define as var (for (var macro-name) to work)
+    ns_define(st->current_ns, (ID)name, fn_result);
+    
+    return fn_result;
 }
