@@ -53,6 +53,10 @@ CljMap* make_map_kv(ID first_key, ...);  // NOT_FOUND terminated
 CljMap* make_map_from_stack(CljObject **pairs, int pair_count);
 CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int addition_count);
 
+// In-place helpers for long-lived slots (no AUTORELEASE + releases old map on replacement)
+void map_assoc_inplace(CljMap **map_slot, ID key, ID value);
+void map_remove_inplace(CljMap **map_slot, ID key);
+
 // Transient API
 CljMap* map_transient(CljMap *map);
 CljMap* map_conj(CljMap *tmap, ID key, ID value);
