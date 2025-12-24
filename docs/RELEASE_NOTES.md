@@ -2,6 +2,26 @@
 
 ## Latest Updates (Recent Commits)
 
+### Regular Expression Support (Latest)
+- **Regex Subset**: Basic regular expression support via `re-pattern`, `re-find`, `re-matches`, and `regex?`
+  - Based on tiny-regex-c library (Public Domain)
+  - Clojure-compatible string representation: Regex objects print as `#"pattern"`
+  - **Supported Features**:
+    - Character classes: `[a-z]`, `[^0-9]`
+    - Quantifiers: `*`, `+`, `?`
+    - Anchors: `^` (start), `$` (end)
+    - Shorthand classes: `\d` (digits), `\w` (word), `\s` (whitespace)
+    - Escaped characters: `\.`, `\\`, etc.
+  - **Unsupported Features** (throw exceptions with clear error messages):
+    - Alternation: `|`
+    - Quantifier bounds: `{n,m}`
+    - Lookahead/lookbehind: `(?=...)`, `(?!...)`, `(?<=...)`, `(?<!...)`
+    - Named groups: `(?<name>...)`
+    - Non-greedy quantifiers: `*?`, `+?`, `??`
+    - Backreferences: `\1` through `\9`
+  - Full test coverage with 28+ regex tests
+  - Maximum pattern length: 256 characters
+
 ### Date/Time Library (Latest)
 - **tinyclj.datetime**: Neue Datum/Zeit-Konvertierungsbibliothek
   - `civil-from-days` / `days-from-civil` - Unix-Tage ↔ Datum (Jahr/Monat/Tag)
