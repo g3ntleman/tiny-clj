@@ -5384,8 +5384,6 @@ void register_builtins() {
     
     // Time functions
     register_builtin_in_core("now", native_now);
-    register_builtin_in_core("epoch-minutes", native_epoch_minutes);
-    register_builtin_in_core("millis-in-minute", native_millis_in_minute);
     
     // Macro functions
     register_builtin_in_core("get-macro", native_get_macro);

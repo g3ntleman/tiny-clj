@@ -252,20 +252,6 @@ TEST(test_now_has_days_key) {
     TEST_ASSERT_TRUE(as_fixnum(result) > 19000);  // After 2022
 }
 
-TEST_SHARED(test_epoch_minutes_returns_fixnum) {
-    ID result = eval_string("(epoch-minutes)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_TRUE(as_fixnum(result) > 19000);  // After 2022
-}
-
-TEST_SHARED(test_millis_in_minute_range) {
-    ID result = eval_string("(millis-in-minute)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_TRUE(as_fixnum(result) >= 0 && as_fixnum(result) < 60000);
-}
-
 TEST(test_now_has_ms_key) {
     ID result = eval_string("(:ms (now))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
