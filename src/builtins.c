@@ -211,7 +211,7 @@ ID nth2(ID *args, unsigned int argc) {
     if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
         CljVector *v = as_vector(coll);
         int count = vector_count(v);
-        if (!v || i >= count) {
+        if (i >= count) {
             if (has_not_found) return not_found;
             return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for collection with %d elements", i, count);
@@ -222,17 +222,13 @@ ID nth2(ID *args, unsigned int argc) {
     // Fast path: Lists (O(n) access via list_nth)
     if (list_type_matches(TAG(coll))) {
         CljList *list = as_list(coll);
-        if (!list) {
-            if (has_not_found) return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                    "nth index %d is out of bounds for nil collection", i);
-        }
-        // Check bounds before calling list_nth (which throws)
-        int count = list_count(list);
-        if (i >= count) {
-            if (has_not_found) return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                    "nth index %d is out of bounds for list with %d elements", i, count);
+        // list_nth() validates bounds and throws exception if out of bounds
+        // For has_not_found case, we need to check bounds first
+        if (has_not_found) {
+            int count = list_count(list);
+            if (i >= count) {
+                return not_found;
+            }
         }
         return list_nth(list, i);
     }
@@ -289,7 +285,7 @@ ID native_pop(ID *args, unsigned int argc) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     CljVector *v = as_vector(vec);
     int count = vector_count(v);
-    if (!v || count == 0) {
+    if (count == 0) {
         // Return empty vector singleton (no memory management needed)
         return make_vector(0, CLJ_VECTOR);
     }
@@ -913,7 +909,7 @@ ID assoc3(ID *args, unsigned int argc) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljVector *v = as_vector(coll);
-        if (!v || i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
+        if (i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
         CljVector* result = vector_assoc(coll, i, val);
         if (!result) return NULL;

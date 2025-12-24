@@ -255,6 +255,28 @@ TEST_SHARED(test_regex_shorthand_whitespace) {
 }
 
 // ============================================================================
+// HIGH-LEVEL TESTS: String Representation
+// ============================================================================
+
+TEST_SHARED(test_regex_string_representation_basic) {
+    assert_string(eval_string("(str (re-pattern \"test\"))", g_test_eval_state), "#\"test\"");
+}
+
+TEST_SHARED(test_regex_string_representation_special_chars) {
+    assert_string(eval_string("(str (re-pattern \"hello.*world\"))", g_test_eval_state), "#\"hello.*world\"");
+}
+
+TEST_SHARED(test_regex_string_representation_digits) {
+    assert_string(eval_string("(str (re-pattern \"\\\\d+\"))", g_test_eval_state), "#\"\\d+\"");
+}
+
+TEST_SHARED(test_regex_string_representation_in_collection) {
+    CljObject *result = eval_string("(str [(re-pattern \"test\")])", g_test_eval_state);
+    CljString *str = as_clj_string(result);
+    TEST_ASSERT_NOT_NULL(strstr(clj_string_data(str), "#\"test\""));
+}
+
+// ============================================================================
 // UNSUPPORTED FEATURE TESTS
 // These features throw exceptions, which is the correct behavior.
 // The tests above demonstrate that the supported features work correctly.
