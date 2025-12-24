@@ -36,7 +36,6 @@
 #include "tiny_regex.h"
 #include <stdio.h>
 #include <ctype.h>
-#include "../subjective-c/common.h"
 
 /* Definitions: */
 
@@ -137,7 +136,7 @@ re_t re_compile(const char* pattern)
       case '*': {    re_compiled[j].type = STAR;            } break;
       case '+': {    re_compiled[j].type = PLUS;            } break;
       case '?': {    re_compiled[j].type = QUESTIONMARK;    } break;
-/*    case '|': {    re_compiled[j].type = BRANCH;          } break; <-- not working properly */
+/*    case '|': {    re_compiled[j].type = BRANCH;          } break; <-- Alternation (OR operator) not supported - implementation incomplete */
 
       /* Escaped character-classes (\s \w ...): */
       case '\\':
@@ -516,7 +515,10 @@ static int matchpattern(regex_t* pattern, const char* text, int* matchlength)
     {
       return (text[0] == '\0');
     }
-/*  Branching is not working properly
+/*  Alternation (OR operator '|') is not supported - the BRANCH type matching logic
+    is incomplete and does not work correctly. For example, patterns like "a|b" or
+    "cat|dog" are not supported. The pattern structure for alternation requires
+    proper handling of multiple branches, which is not implemented here.
     else if (pattern[1].type == BRANCH)
     {
       return (matchpattern(pattern, text) || matchpattern(&pattern[2], text));
