@@ -2221,8 +2221,8 @@ ID native_repl_dir(ID *args, unsigned int argc) {
     return NULL;
 }
 
-// rt: Return retain count of an object (native implementation for clojure.repl namespace)
-// Usage: (rt obj) - returns the reference count as an integer
+// retain-count: Return retain count of an object (native implementation for tinyclj namespace)
+// Usage: (tinyclj/retain-count obj) - returns the reference count as an integer
 ID native_retain_count(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "retain-count");
     
