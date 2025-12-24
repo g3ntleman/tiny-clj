@@ -113,99 +113,99 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     reader_skip_all(&reader);
     if (reader_is_eof(&reader)) break;
     
+    // Use separate autorelease pool for each expression to prevent unbounded growth
+    WITH_AUTORELEASE_POOL({
 #ifdef PROFILE_STARTUP
-    clock_t parse_start = clock();
+      clock_t parse_start = clock();
 #endif
-    CljValue form = value_by_parsing_expr(&reader, st);
+      CljValue form = value_by_parsing_expr(&reader, st);
 #ifdef PROFILE_STARTUP
-    g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
+      g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
 #endif
-    if (!form) {
-      // Continue to next expression instead of breaking
-      expr_count++;
-      continue;
-    }
-    
-    // Evaluate with exception handling using TRY/CATCH
-    TRY {
-#ifdef PROFILE_STARTUP
-      clock_t eval_start = clock();
-#endif
-      ID result = eval_parsed((CljObject*)form, st, NULL);
-#ifdef PROFILE_STARTUP
-      g_eval_time_ms += (double)(clock() - eval_start) * 1000.0 / CLOCKS_PER_SEC;
-      g_form_count++;
-#endif
-      // Don't RELEASE result - eval_parsed already returns AUTORELEASE
-      // result can be NULL if nil was evaluated (legitimate case)
-      // eval_parsed should throw exceptions for errors, not return NULL
-      if (result) {
-        success_count++;
+      if (!form) {
+        // Continue to next expression instead of breaking
+        expr_count++;
+        // Note: We still need to exit the WITH_AUTORELEASE_POOL block cleanly
       } else {
-        // NULL result could be nil (legitimate) or evaluation failure
-        // For def expressions, the symbol should be stored even if result is NULL
-        // For ns expressions, nil is a valid return value
-        // Check if this was a def or ns expression that might have stored something
-        if (form && list_type_matches(TAG(form))) {
-          CljList *list = as_list(form);
-          CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL) {
-            CljSymbol *first_sym = as_symbol(first);
-            if (first_sym == SYM_DEF) {
-              // def returns the symbol, not the value
-              // Even if value evaluation failed, def might have stored nil
-              success_count++;
-            } else if (first_sym == SYM_NS) {
-              // ns returns nil, which is a valid result
-              success_count++;
+        // Evaluate with exception handling using TRY/CATCH
+        TRY {
+#ifdef PROFILE_STARTUP
+          clock_t eval_start = clock();
+#endif
+          ID result = eval_parsed((CljObject*)form, st, NULL);
+#ifdef PROFILE_STARTUP
+          g_eval_time_ms += (double)(clock() - eval_start) * 1000.0 / CLOCKS_PER_SEC;
+          g_form_count++;
+#endif
+          // Don't RELEASE result - eval_parsed already returns AUTORELEASE
+          // result can be NULL if nil was evaluated (legitimate case)
+          // eval_parsed should throw exceptions for errors, not return NULL
+          if (result) {
+            success_count++;
+          } else {
+            // NULL result could be nil (legitimate) or evaluation failure
+            // For def expressions, the symbol should be stored even if result is NULL
+            // For ns expressions, nil is a valid return value
+            // Check if this was a def or ns expression that might have stored something
+            if (form && list_type_matches(TAG(form))) {
+              CljList *list = as_list(form);
+              CljObject *first = LIST_FIRST(list);
+              if (first && TAG(first) == CLJ_SYMBOL) {
+                CljSymbol *first_sym = as_symbol(first);
+                if (first_sym == SYM_DEF) {
+                  // def returns the symbol, not the value
+                  // Even if value evaluation failed, def might have stored nil
+                  success_count++;
+                } else if (first_sym == SYM_NS) {
+                  // ns returns nil, which is a valid result
+                  success_count++;
+                }
+              }
             }
           }
-        }
-      }
-    } CATCH(ex) {
-      // Exception occurred during evaluation
-      // Log the exception for debugging (always log for def expressions to catch silent failures)
-      bool is_def_expr = false;
-        if (form && list_type_matches(TAG(form))) {
-          CljList *list = as_list(form);
-          CljObject *first = LIST_FIRST(list);
-          if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
-          is_def_expr = true;
-        }
-      }
-      const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
-      const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
-      const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
-      int error_line = ex ? ex->line : 0;
-      const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
-                            ? target_ns->name->cname 
-                            : "clojure.core";
-      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
-      bool is_clojure_repl = target_ns && target_ns->name && 
-                             target_ns->name->cname && 
-                             strcmp(target_ns->name->cname, "clojure.repl") == 0;
-      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
-      if (!g_core_quiet || is_clojure_repl) {
-        fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
-                ns_name,
-                expr_count + 1,
-                is_def_expr ? " (def)" : "",
-                error_msg,
-                error_file,
-                error_line,
-                error_type);
+        } CATCH(ex) {
+          // Exception occurred during evaluation
+          // Log the exception for debugging (always log for def expressions to catch silent failures)
+          bool is_def_expr = false;
+          if (form && list_type_matches(TAG(form))) {
+            CljList *list = as_list(form);
+            CljObject *first = LIST_FIRST(list);
+            if (first && TAG(first) == CLJ_SYMBOL && as_symbol(first) == SYM_DEF) {
+              is_def_expr = true;
+            }
+          }
+          const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
+          const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
+          const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
+          int error_line = ex ? ex->line : 0;
+          const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
+                                ? target_ns->name->cname 
+                                : "clojure.core";
+          // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
+          bool is_clojure_repl = target_ns && target_ns->name && 
+                                 target_ns->name->cname && 
+                                 strcmp(target_ns->name->cname, "clojure.repl") == 0;
+          // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
+          if (!g_core_quiet || is_clojure_repl) {
+            fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
+                    ns_name,
+                    expr_count + 1,
+                    is_def_expr ? " (def)" : "",
+                    error_msg,
+                    error_file,
+                    error_line,
+                    error_type);
 #ifdef DEBUG
-        if (is_def_expr && ex) {
-          print_exception(ex);
-        }
+            if (is_def_expr && ex) {
+              print_exception(ex);
+            }
 #endif
+          }
+        } END_TRY
+        
+        expr_count++;
       }
-      
-    } END_TRY
-    
-    // value_by_parsing_expr returns AUTORELEASE object
-    
-    expr_count++;
+    });
   }
   
   // CRITICAL: Keep st->current_ns pointing to target_ns until after verification
