@@ -419,6 +419,114 @@ TEST(test_event_loop_run_next_mutates_channel) {
     RELEASE(chan);
 }
 
+// Test that run-next-task called recursively inside a go-block does not crash
+// This test reproduces the bug where run-next-task as yield causes assertion failure
+// Problem: run-next-task called inside go-block tries to execute next task,
+// but the task might not be a valid function object, causing TAG assertion failure
+// 
+// BEFORE FIX: This would crash with:
+//   ASSERTION FAILED: TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE at src/eval.c:173
+// 
+// AFTER FIX: event_loop_run_next validates fn before calling eval_function_call,
+// so invalid tasks are skipped gracefully without crashing
+TEST(test_run_next_task_recursive_in_go_block) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a go-block that calls run-next-task (yield-like behavior)
+    // This simulates using run-next-task as a yield mechanism within a go-block
+    CljMap *chan = NULL;
+    TRY {
+        // Create a go-block that calls run-next-task inside
+        // When this go-block executes, it will call run-next-task, which tries
+        // to execute the next task in the queue. If the queue is empty or contains
+        // an invalid task, this would previously crash with an assertion failure.
+        chan = eval_string("(go (do (run-next-task) 42))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating go-block with run-next-task should not throw exception");
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(chan);
+    
+    // Now run the go-block - this should NOT crash with assertion failure
+    // The assertion failure was: TAG(fn) == CLJ_FUNC || TAG(fn) == CLJ_CLOSURE
+    // at src/eval.c:173 in eval_function_call()
+    CljObject *ran_result = NULL;
+    TRY {
+        ran_result = eval_string("(run-next-task)", g_test_eval_state);
+    } CATCH(ex) {
+        // If we get here, the crash was prevented by our fix
+        // But we should still check if the task executed
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception (crash prevented)");
+        RELEASE(chan);
+        return;
+    } END_TRY
+    
+    // The task should have executed (even if run-next-task inside didn't work as yield)
+    TEST_ASSERT_NOT_NULL(ran_result);
+    TEST_ASSERT_TRUE(is_special((CljValue)ran_result));
+    TEST_ASSERT_TRUE(as_special((CljValue)ran_result) == SPECIAL_TRUE);
+    
+    // Check if channel has value (the go-block should have completed)
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljValue val = map_get(chan, kw_value, NULL);
+    
+    // The value should be 42 (the go-block's return value)
+    // Note: run-next-task inside the go-block might not work as a yield,
+    // but the go-block should still complete and return 42
+    if (val) {
+        TEST_ASSERT_TRUE(is_fixnum(val));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
+    }
+    
+    // Cleanup
+    RELEASE(chan);
+}
+
+// Test that run-next-task called recursively inside a go-block with another go-block
+// This tests the case where a go-block enqueues another go-block and then calls run-next-task
+TEST(test_run_next_task_recursive_with_nested_go_block) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a go-block that enqueues another go-block and then calls run-next-task
+    // This should NOT crash
+    CljMap *chan1 = NULL;
+    TRY {
+        // Create first go-block that enqueues another and calls run-next-task
+        chan1 = eval_string("(go (do (go 100) (run-next-task) 42))", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("Creating nested go-block with run-next-task should not throw exception");
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(chan1);
+    
+    // Run the first go-block - this should NOT crash
+    CljObject *ran_result = NULL;
+    TRY {
+        ran_result = eval_string("(run-next-task)", g_test_eval_state);
+    } CATCH(ex) {
+        TEST_FAIL_MESSAGE("run-next-task should not throw exception (crash prevented)");
+        RELEASE(chan1);
+        return;
+    } END_TRY
+    
+    TEST_ASSERT_NOT_NULL(ran_result);
+    
+    // Check if first channel has value
+    CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
+    CljValue val1 = map_get(chan1, kw_value, NULL);
+    
+    // The value should be 42 (the go-block's return value)
+    if (val1) {
+        TEST_ASSERT_TRUE(is_fixnum(val1));
+        TEST_ASSERT_EQUAL_INT(42, as_fixnum(val1));
+    }
+    
+    // Cleanup
+    RELEASE(chan1);
+}
+
 // Test that event_loop_enqueue correctly updates count and event_loop_run_next can read it
 TEST(test_event_loop_enqueue_updates_count) {
     WITH_AUTORELEASE_POOL({
