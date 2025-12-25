@@ -202,6 +202,7 @@ DEFINE_EXTERN_SYMBOL(sym_conj_data, "conj");
 DEFINE_EXTERN_SYMBOL(sym_nth_data, "nth");
 DEFINE_EXTERN_SYMBOL(sym_first_data, "first");
 DEFINE_EXTERN_SYMBOL(sym_rest_data, "rest");
+DEFINE_EXTERN_SYMBOL(sym_concat_data, "concat");
 DEFINE_EXTERN_SYMBOL(sym_count_data, "count");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)

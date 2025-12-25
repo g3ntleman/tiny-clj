@@ -180,10 +180,7 @@ R"CLOJURE(
 ; Sequence Helper Functions (needed by Threading Macros)
 ; ============================================================================
 ^#^{:doc "Returns a lazy seq representing the concatenation of the elements in x and y."}
-(defn concat [x y]
-  (if (empty? x)
-    (if (nil? y) (list) y)
-    (cons (first x) (concat (rest x) y))))
+(defn concat [x y] :native)
 
 ^#^{:doc "Returns the last item in coll, in linear time."}
 (defn last [coll]

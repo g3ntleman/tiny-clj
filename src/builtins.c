@@ -69,6 +69,7 @@ ID native_seq(ID *args, unsigned int argc);
 ID native_not(ID *args, unsigned int argc);
 ID native_first(ID *args, unsigned int argc);
 ID native_rest(ID *args, unsigned int argc);
+ID native_concat(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);
 ID native_nnext(ID *args, unsigned int argc);
 ID native_gensym(ID *args, unsigned int argc);
@@ -623,6 +624,60 @@ ID native_rest(ID *args, unsigned int argc) {
     // If it returns nil, convert to empty_list()
     ID next_result = native_next(args, argc);
     return next_result ? next_result : empty_list();
+}
+
+// Concat function that works with BuiltinFn signature
+// Concatenates two sequences: (concat x y) -> new list with all elements
+ID native_concat(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+
+    if (!validate_builtin_args(argc, 2, "concat")) return NULL;
+
+    ID x = args[0];
+    ID y = args[1];
+
+    // If x is empty or nil, return y (or empty list if y is nil)
+    if (!x || (list_type_matches(TAG(x)) && list_count(as_list(x)) == 0)) {
+        if (!y) {
+            return AUTORELEASE(make_list(NULL, NULL));  // Empty list
+        }
+        return RETAIN(y);
+    }
+
+    // If y is nil, return x
+    if (!y) {
+        return RETAIN(x);
+    }
+
+    // Build result list efficiently: collect all elements first, then build list
+    ID elements[256];
+    int count = 0;
+    
+    // Collect elements from x
+    SeqIterator iter_x;
+    if (seq_iter_init(&iter_x, x)) {
+        while (!seq_iter_empty(&iter_x) && count < 256) {
+            elements[count++] = seq_iter_first(&iter_x);
+            seq_iter_next(&iter_x);
+        }
+    }
+    
+    // Collect elements from y
+    SeqIterator iter_y;
+    if (seq_iter_init(&iter_y, y)) {
+        while (!seq_iter_empty(&iter_y) && count < 256) {
+            elements[count++] = seq_iter_first(&iter_y);
+            seq_iter_next(&iter_y);
+        }
+    }
+    
+    // Build list from elements (in reverse order, then reverse)
+    CljList *result = NULL;
+    for (int i = count - 1; i >= 0; i--) {
+        result = make_list(elements[i], result);
+    }
+    
+    return AUTORELEASE(result ? result : make_list(NULL, NULL));
 }
 
 // nnext: (next (next coll)) - returns the next of the next
@@ -2358,6 +2413,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_not_data.sym, native_not},
     {&sym_first_data.sym, native_first},
     {&sym_rest_data.sym, native_rest},
+    {&sym_concat_data.sym, native_concat},
     {&sym_next_data.sym, native_next},
     {&sym_nnext_data.sym, native_nnext},
     {&sym_nthnext_data.sym, native_nthnext},
