@@ -7,10 +7,20 @@ R"CLOJURE(
 ; ============================================================================
 
 ; ============================================================================
+; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
+; CRITICAL: Must be defined FIRST before any defn calls!
+; ============================================================================
+^#^{:doc "Defines a function. Same as (def name (fn name [params] body...))."}
+(defmacro defn [name params & body]
+  (list 'def name (cons 'fn (cons name (cons params body)))))
+
+; ============================================================================
 ; Core Collection Functions (must be defined early - used by other functions)
 ; ============================================================================
 ^#^{:doc "Creates a new list containing the items."}
 (defn list [& items] :native)
+^#^{:doc "Returns a sequence of the collection. Returns nil if coll is empty or nil."}
+(defn seq [coll] :native)
 ^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
 (defn first [coll] :native)
 ^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
@@ -132,13 +142,6 @@ R"CLOJURE(
     (if (pred (first coll))
       (cons (first coll) (filter pred (rest coll)))
       (filter pred (rest coll))))))
-
-; ============================================================================
-; defn Macro (bootstrap-safe: uses only def, fn, cons, list)
-; ============================================================================
-^#^{:doc "Defines a function. Same as (def name (fn name [params] body...))."}
-(defmacro defn [name params & body]
-  (list 'def name (cons 'fn (cons name (cons params body)))))
 
 ; ============================================================================
 ; Type Predicates (needed by Threading Macros)
@@ -432,6 +435,8 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns true if x is not nil, false otherwise."}
 (defn some? [x] (not (nil? x)))
+^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
+(defn not [x] :native)
 ^#^{:doc "Returns true if x is the value true, false otherwise."}
 (defn true? [x] (identical? x true))
 ^#^{:doc "Returns true if x is the value false, false otherwise."}

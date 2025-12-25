@@ -135,6 +135,7 @@ CljSymbol *SYM_NS_STAR = NULL;
 // Macro for non-static (extern) symbols that are statically initialized (compile-time, not dynamically allocated)
 // These are native/builtin functions, so they get CLJ_FLAG_NATIVE for fast macro-skip in ast_canon
 #define DEFINE_EXTERN_SYMBOL(var_name, symbol_name) \
+    extern StaticSymbolData var_name; \
     StaticSymbolData var_name = { \
         .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE }, .ns_name = NULL, .cname = symbol_name } \
     }
@@ -262,6 +263,7 @@ DEFINE_EXTERN_SYMBOL(sym_get_data, "get");
 DEFINE_EXTERN_SYMBOL(sym_keys_data, "keys");
 DEFINE_EXTERN_SYMBOL(sym_vals_data, "vals");
 DEFINE_EXTERN_SYMBOL(sym_nilp_data, "nil?");
+DEFINE_EXTERN_SYMBOL(sym_not_data, "not");
 DEFINE_EXTERN_SYMBOL(sym_not_eq_data, "not=");
 DEFINE_EXTERN_SYMBOL(sym_identical_data, "identical?");
 DEFINE_EXTERN_SYMBOL(sym_vector_p_data, "vector?");

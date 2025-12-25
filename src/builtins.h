@@ -56,6 +56,8 @@ ID native_persistent_bang(ID *args, unsigned int argc);
 ID native_conj_bang(ID *args, unsigned int argc);
 
 // Sequence functions with validation
+ID native_seq(ID *args, unsigned int argc);
+ID native_not(ID *args, unsigned int argc);
 ID native_first(ID *args, unsigned int argc);
 ID native_rest(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);

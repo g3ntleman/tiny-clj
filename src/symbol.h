@@ -190,6 +190,8 @@ extern StaticSymbolData sym_conj_data;
 extern StaticSymbolData sym_nth_data;
 extern StaticSymbolData sym_first_data;
 extern StaticSymbolData sym_rest_data;
+extern StaticSymbolData sym_seq_data;
+extern StaticSymbolData sym_not_data;
 extern StaticSymbolData sym_count_data;
 extern StaticSymbolData sym_cons_data;
 extern StaticSymbolData sym_next_data;

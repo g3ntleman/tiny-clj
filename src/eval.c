@@ -1266,7 +1266,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym == SYM_FIRST) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_first, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_REST)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_rest, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_CONS)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_cons, 2, ctx); if (r) return r; }
-    if (original_op_sym == SYM_SEQ)   { CljObject *r = eval_seq(list, effective_env); if (r) return r; }
+    if (original_op_sym == SYM_SEQ)   { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_seq, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_NEXT)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_next, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_COUNT) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_count, 1, ctx); if (r) return r; }
 
@@ -1742,7 +1742,6 @@ static inline bool is_builtin_function(CljSymbol *symbol) {
             symbol == SYM_REST ||
             symbol == SYM_COUNT ||
             symbol == SYM_CONS ||
-            symbol == SYM_SEQ ||
             symbol == SYM_NEXT ||
             symbol == SYM_FOR ||
             symbol == SYM_DOSEQ ||
@@ -1887,38 +1886,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     const char *cname = symbol->cname ? symbol->cname : "unknown";
     throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", cname);
     return NULL;
-}
-
-ID eval_seq(CljList *list, CljMap *env) {
-    CLJ_ASSERT(env != NULL);
-    CljObject *arg = eval_arg(list, 1, env, NULL);
-    if (!arg) return NULL;
-
-    // If argument is already nil, return nil
-    // Note: nil is now represented as NULL, so no special nil check needed
-
-    // Check if argument is seqable
-    if (!is_seqable(arg)) {
-        return NULL;
-    }
-
-    // For lists, check if empty - if so, return nil
-    switch (arg->type) {
-        case CLJ_LIST:
-        case CLJ_AST_NODE: {
-            CljList *list_data = as_list(arg);
-            if (!LIST_FIRST(list_data)) return NULL;  // Empty list -> nil
-            return AUTORELEASE(RETAIN(arg));
-        }
-
-        default: {
-            // For other seqable types, return SeqIterator directly
-            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
-            if (!seq) return NULL;
-
-            return (CljObject*)seq;
-        }
-    }
 }
 
 // ============================================================================

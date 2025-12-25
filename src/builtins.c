@@ -65,6 +65,8 @@ ID native_peek(ID *args, unsigned int argc);
 ID native_pop(ID *args, unsigned int argc);
 ID native_subvec(ID *args, unsigned int argc);
 ID native_conj(ID *args, unsigned int argc);
+ID native_seq(ID *args, unsigned int argc);
+ID native_not(ID *args, unsigned int argc);
 ID native_first(ID *args, unsigned int argc);
 ID native_rest(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);
@@ -512,6 +514,43 @@ ID native_first(ID *args, unsigned int argc) {
             return result;
         }
     }
+}
+
+// Seq function that works with BuiltinFn signature
+// Returns a sequence of the collection, or nil if empty or not seqable
+ID native_seq(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "seq")) return NULL;
+    
+    ID coll = args[0];
+    if (!coll) return NULL;  // nil -> nil
+    
+    // Check if seqable
+    if (!is_seqable(coll)) return NULL;
+    
+    // For lists, check if empty - if so, return nil
+    if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE) {
+        CljList *list_data = as_list(coll);
+        if (!LIST_FIRST(list_data)) return NULL;  // Empty list -> nil
+        return AUTORELEASE(RETAIN(coll));
+    }
+    
+    // For other seqable types, return SeqIterator
+    CljSeqIterator *seq = make_seq(coll);
+    if (!seq) return NULL;
+    return AUTORELEASE((ID)seq);
+}
+
+// Not function that works with BuiltinFn signature
+// Returns true if x is false or nil, false otherwise
+ID native_not(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "not")) return NULL;
+    
+    ID x = args[0];
+    // In Clojure: (not x) returns true if x is false or nil, false otherwise
+    if (!x || x == clj_false) {
+        return clj_true;
+    }
+    return clj_false;
 }
 
 // Next function that works with BuiltinFn signature
@@ -2705,6 +2744,8 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_pop_data.sym, native_pop},
     {&sym_subvec_data.sym, native_subvec},
     {&sym_conj_data.sym, native_conj},
+    {&sym_seq_data.sym, native_seq},
+    {&sym_not_data.sym, native_not},
     {&sym_first_data.sym, native_first},
     {&sym_rest_data.sym, native_rest},
     {&sym_next_data.sym, native_next},
@@ -5372,8 +5413,10 @@ void register_builtins() {
     // CRITICAL: Only register functions absolutely needed for macro expansion
     // defn macro uses: (list 'def name (cons 'fn (cons name (cons params body))))
     // Therefore we need: list, cons
+    // seq is used by first, rest, next - core collection functions
     register_builtin_in_core("list", native_list);
     register_builtin_in_core("cons", native_cons);
+    register_builtin_in_core("seq", native_seq);
 
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
