@@ -140,6 +140,15 @@ Planned
   - *ns*, *out*, *err* as first dynamic vars
   - Symbol resolution: check dynamic stack first, fallback to Root-Binding
   - Note: Metadata handling (^:dynamic) optional in Release builds
+- Lazy Sequences:
+  - Implement lazy sequence infrastructure for infinite sequences
+  - Lazy evaluation with memoization for efficient iteration
+  - Integration with existing seq functions (first, rest, next, etc.)
+  - Memory-efficient implementation for large/infinite sequences
+- Repeat Function Enhancement:
+  - Improve `(repeat x)` to use proper lazy infinite sequence instead of large vector (1M elements)
+  - Depends on lazy sequences implementation
+  - Current workaround: creates vector with 1,000,000 repetitions
 - Large-Map:
   - Small→Large promotion; open addressing; pointer-key fastpath for interned symbols
   - Benchmarks vs small maps (N≥16)
