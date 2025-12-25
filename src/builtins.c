@@ -35,6 +35,9 @@
 #include "meta.h"
 #include "eval.h"
 #include "macro.h"
+#ifdef DEBUG
+#include "debug.h"
+#endif
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -93,6 +96,10 @@ ID native_println(ID *args, unsigned int argc);
 ID native_print(ID *args, unsigned int argc);
 ID native_pr(ID *args, unsigned int argc);
 ID native_prn(ID *args, unsigned int argc);
+#ifdef DEBUG
+ID native_print_ast(ID *args, unsigned int argc);
+ID native_ast_string(ID *args, unsigned int argc);
+#endif
 ID native_lt(ID *args, unsigned int argc);
 ID native_gt(ID *args, unsigned int argc);
 ID native_le(ID *args, unsigned int argc);
@@ -473,6 +480,7 @@ ID native_first(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "first")) return NULL;
 
     CljObject *coll = args[0];
+    // Arguments are already evaluated - nil is NULL, not SYM_NIL
     if (!coll) {
         // first of nil returns nil
         return NULL;
@@ -483,7 +491,9 @@ ID native_first(ID *args, unsigned int argc) {
         case CLJ_LIST: {
             // Direct access for lists (already a seq) - no allocation needed
             CljObject *first = LIST_FIRST((CljList*)coll);
-            return first;  // Return existing object directly - no memory management needed
+            // Arguments are evaluated, but list elements might still be SYM_NIL
+            // Convert SYM_NIL to NULL (nil representation)
+            return (first == (CljObject*)SYM_NIL) ? NULL : first;
         }
 
         case CLJ_SEQ: {
@@ -1919,6 +1929,51 @@ ID native_prn(ID *args, unsigned int argc) {
     return NULL;
 }
 
+#ifdef DEBUG
+ID native_print_ast(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "print-ast");
+    
+    ID arg = args[0];
+    if (!arg) {
+        printf("nil\n");
+        return NULL;
+    }
+    
+    const char *ast_str = print_ast((CljObject*)arg);
+    if (ast_str) {
+        printf("%s\n", ast_str);
+        // print_ast returns a newly allocated string that must be freed
+        free((void*)ast_str);
+    }
+    return NULL;
+}
+
+ID native_ast_string(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "ast-string");
+    
+    ID arg = args[0];
+    // Distinguish between NULL (evaluated nil) and SYM_NIL (unevaluated nil symbol)
+    if (!arg) {
+        return make_string("nil");  // NULL = evaluated nil
+    }
+    
+    // Check if arg is SYM_NIL (unevaluated nil symbol)
+    if (arg == SYM_NIL) {
+        return make_string("SYM:nil");
+    }
+    
+    const char *ast_str = print_ast((CljObject*)arg);
+    if (ast_str) {
+        CljString *result = make_string(ast_str);
+        // print_ast returns a newly allocated string that must be freed
+        free((void*)ast_str);
+        return AUTORELEASE(result);
+    }
+    
+    return make_string("(error: could not generate AST string)");
+}
+#endif
+
 // ============================================================================
 // HELPER FUNCTIONS (DRY Principle)
 // ============================================================================
@@ -2625,6 +2680,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_meta_data.sym, native_meta},
     {&sym_with_meta_data.sym, native_with_meta},
     {&sym_reduce_data.sym, native_reduce},
+    {&sym_list_data.sym, native_list},
     {&sym_plus_data.sym, native_add_variadic},
     {&sym_minus_data.sym, native_sub_variadic},
     {&sym_multiply_data.sym, native_mul_variadic},
@@ -2721,6 +2777,9 @@ static const NativeFunctionEntry native_function_table[] = {
 #ifndef ESP32_BUILD
     {&sym_slurp_data.sym, native_slurp},
     {&sym_spit_data.sym, native_spit},
+#endif
+#ifdef DEBUG
+    {&sym_ast_string_data.sym, native_ast_string},
 #endif
     {NULL, NULL}  // Sentinel
 };
@@ -5302,6 +5361,20 @@ void register_builtins() {
     register_builtin_in_core("load-file", native_load_file);
 #endif
 
+    // Arithmetic functions - needed for tests and --no-core mode
+    register_builtin_in_core("+", native_add_variadic);
+    register_builtin_in_core("-", native_sub_variadic);
+    register_builtin_in_core("*", native_mul_variadic);
+    register_builtin_in_core("/", native_div_variadic);
+    register_builtin_in_core("mod", native_mod);
+    register_builtin_in_core("quot", native_quot);
+    
+    // CRITICAL: Only register functions absolutely needed for macro expansion
+    // defn macro uses: (list 'def name (cons 'fn (cons name (cons params body))))
+    // Therefore we need: list, cons
+    register_builtin_in_core("list", native_list);
+    register_builtin_in_core("cons", native_cons);
+
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
     // This allows metadata (docstrings) to be properly attached.
@@ -5311,6 +5384,12 @@ void register_builtins() {
     register_builtin_in_core("clojure.repl/source", native_source);
     register_builtin_in_core("clojure.repl/dir", native_repl_dir);
     register_builtin_in_core("clojure.repl/rt", native_rt);
+    
+#ifdef DEBUG
+    // Debug functions for tinyclj.runtime namespace
+    register_builtin_in_core("tinyclj.runtime/print-ast", native_print_ast);
+    register_builtin_in_core("tinyclj.runtime/ast-string", native_ast_string);
+#endif
     
     // Meta functions
     register_builtin_in_core("meta", native_meta);

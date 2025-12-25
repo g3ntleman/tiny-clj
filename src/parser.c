@@ -315,22 +315,22 @@ ID parse_expr(Reader *reader, EvalState *st) {
       return AUTORELEASE(make_ast_list(SYM_QUASIQUOTE, make_ast_list(qq_expr, NULL)));
 
     case '~':
-      // Handle unquote ~x => (unquote x) or splice-unquote ~@x => (splice-unquote x)
+      // Handle unquote ~x => (unquote x) or unquote-splice ~@x => (unquote-splice x)
       reader_consume(reader); // consume ~
       if (reader_peek_char(reader) == '@') {
-        // splice-unquote ~@x
+        // unquote-splice ~@x
         reader_consume(reader); // consume @
         reader_skip_all(reader);
         size_t sq_before = reader_offset(reader);
         ID sq_expr = parse_expr(reader, st);
         size_t sq_after = reader_offset(reader);
         if (sq_after <= sq_before && !reader_eof(reader)) {
-          throw_parser_exception("Parser made no progress after splice-unquote", reader);
+          throw_parser_exception("Parser made no progress after unquote-splice", reader);
           return NULL;
         }
         if (!sq_expr) return NULL;
-        // Create (splice-unquote <expr>) list
-        return AUTORELEASE(make_ast_list(SYM_SPLICE_UNQUOTE, make_ast_list(sq_expr, NULL)));
+        // Create (unquote-splice <expr>) list
+        return AUTORELEASE(make_ast_list(SYM_UNQUOTE_SPLICE, make_ast_list(sq_expr, NULL)));
       } else {
         // unquote ~x
         reader_skip_all(reader);

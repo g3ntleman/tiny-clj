@@ -62,7 +62,7 @@ extern CljSymbol *SYM_VAR;
 extern CljSymbol *SYM_QUOTE;
 extern CljSymbol *SYM_QUASIQUOTE;
 extern CljSymbol *SYM_UNQUOTE;
-extern CljSymbol *SYM_SPLICE_UNQUOTE;
+extern CljSymbol *SYM_UNQUOTE_SPLICE;
 extern CljSymbol *SYM_SOURCE;
 extern CljSymbol *SYM_DO;
 extern CljSymbol *SYM_LOOP;
@@ -240,6 +240,9 @@ extern StaticSymbolData sym_number_p_data;
 extern StaticSymbolData sym_integer_p_data;
 extern StaticSymbolData sym_float_p_data;
 extern StaticSymbolData sym_string_p_data;
+#ifdef DEBUG
+extern StaticSymbolData sym_ast_string_data;
+#endif
 extern StaticSymbolData sym_keyword_p_data;
 extern StaticSymbolData sym_keyword_data;
 extern StaticSymbolData sym_name_data;

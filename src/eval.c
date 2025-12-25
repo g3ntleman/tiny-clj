@@ -8,6 +8,7 @@
 #include "builtins.h"
 #include "optimize.h"
 #include "parser.h"  // For eval_parsed
+#include "reader.h"  // For Reader API (used by eval_string)
 #include "common.h"
 
 // Branch prediction hints for hot paths
@@ -1058,7 +1059,8 @@ static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
             g_eval_arg_depth++;
             ID result = call_function_with_args_and_context(fn, list, env, st, ctx);
             g_eval_arg_depth--;
-            return result;
+            // Convert SYM_NIL to NULL (nil representation)
+            return (result == SYM_NIL) ? NULL : result;
             // Exception propagates automatically - no cleanup needed!
         }
 
@@ -1067,12 +1069,27 @@ static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                     "Cannot call list as a function");
         }
 
-        return AUTORELEASE(RETAIN(fn));
+        // If fn is still a symbol, it means eval_symbol couldn't resolve it as a function
+        // This is an error - throw exception instead of returning the symbol
+        if (fn_tag == CLJ_SYMBOL) {
+            CljSymbol *sym = as_symbol(fn);
+            const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
+            throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call %s as a function", sym_name);
+            return NULL;
+        }
+
+        // Unknown type - should not happen, but throw exception to be safe
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                "Cannot call object of type %d as a function", fn_tag);
+        return NULL;
     }
 
     // Direct function call
     if (op_tag == CLJ_FUNC || op_tag == CLJ_CLOSURE) {
-        return call_function_with_args_and_context(op, list, env, st, ctx);
+        ID result = call_function_with_args_and_context(op, list, env, st, ctx);
+        // Convert SYM_NIL to NULL (nil representation)
+        return (result == SYM_NIL) ? NULL : result;
     }
 
     return NULL; // Not a function
@@ -1154,15 +1171,26 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // First element is the operator
     CljObject *op = head;
+    
+    // Check if op is an immediate value - if so, it's invalid for a list first element
+    // This can happen if the macro expansion returned corrupted data
+    CLJ_ASSERT(!IS_IMMEDIATE(op) && "Invalid list structure: first element is an immediate value");
 
     // If first element is a list, evaluate it first (for nested calls like ((array-map)))
     // CRITICAL: Pass ctx to preserve RecurContext
     if (op && list_type_matches(TAG(op))) {
         op = eval_list(as_list(op), effective_env, effective_st, ctx);
         if (!op) {
-            return NULL;
+            // Evaluation returned nil (NULL) - cannot call nil as a function
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call nil as a function");
         }
         // Now op is the result of evaluating the inner list - continue with it
+        // Check if result is an immediate value (e.g., number from arithmetic)
+        if (IS_IMMEDIATE(op)) {
+            return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                    "Cannot call immediate value as a function");
+        }
     }
 
     // Handle maps as functions (for key lookup) - must be first
@@ -1294,14 +1322,18 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         return eval_function_call_from_list(list, effective_env, effective_st, op, ctx);
     }
 
-    // Error: first element is not a function
+    // Safety check: ensure op is not NULL before accessing op->type
+    CLJ_ASSERT(op != NULL && "op must not be NULL before accessing op->type");
+
+    // Check if op is an immediate value BEFORE accessing op->type
+    // IS_IMMEDIATE is safe to call on any pointer (including invalid ones)
     if (IS_IMMEDIATE(op)) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call %s as a function", clj_type_name(op->type));
+                "Cannot call immediate value as a function");
     }
 
     // Error: op is a list (should have been evaluated earlier)
-    if (op && list_type_matches(op_tag)) {
+    if (list_type_matches(op_tag)) {
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call list as a function");
     }
@@ -1836,6 +1868,9 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     }
 
     // For builtin functions, resolve from namespace to get the actual function object
+    // CRITICAL: All functions must be registered in the namespace (via register_builtins()
+    // or via :native stubs in clojure.core.clj). No fallback to native_function_lookup
+    // to avoid hiding errors where functions are used before they are defined.
     ID value = ns_resolve(st, symbol);
     if (value) {
         // Special case: If value is SYM_NIL, return NULL
@@ -1847,21 +1882,8 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return value;
     }
 
-    // If not found in namespace but is a builtin, return symbol as fallback
-    // (will be handled by eval_list)
-    if (is_builtin_function(symbol)) {
-        return symbol;
-    }
-
-    // Check if symbol is a native function (via native_function_table lookup)
-    // Returns function object without registering - registration happens via stubs
-    BuiltinFn native_func = native_function_lookup(symbol);
-    if (native_func) {
-        const char *cname = symbol->cname ? symbol->cname : "unknown";
-        return (CljObject*)make_named_func(native_func, NULL, cname);
-    }
-
-    // Symbol not found
+    // Symbol not found in namespace - this is an error
+    // Functions must be registered via register_builtins() or :native stubs
     const char *cname = symbol->cname ? symbol->cname : "unknown";
     throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", cname);
     return NULL;
@@ -2644,22 +2666,14 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
 // ============================================================================
 
 /**
- * @brief Parse and evaluate a Clojure expression from a string (convenience)
- * @param expr_str The Clojure expression as a string
+ * @brief Evaluate a parsed CljValue (handles immediate values and heap objects)
+ * @param parsed The parsed CljValue (can be immediate or heap object)
  * @param eval_state The evaluation state
  * @return The evaluated result (autoreleased) or NULL only if result is nil
+ * 
+ * This is a DRY helper used by both eval_string and eval_multiform_string.
  */
-ID eval_string(const char* expr_str, EvalState *eval_state) {
-    CLJ_ASSERT(expr_str != NULL);
-    CLJ_ASSERT(eval_state != NULL);
-
-    CljValue parsed = parse(expr_str, eval_state);
-    if (parsed == NULL) {
-        // NULL from parse() indicates a parsing error (nil is now parsed as SYM_NIL)
-        throw_exception(EXCEPTION_PARSE, "Failed to parse expression", __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
+ID eval_parsed_value(CljValue parsed, EvalState *eval_state) {
     // Check if parsed is an immediate value
     if (IS_IMMEDIATE(parsed)) {
         // For immediate values, return them as CljObject* (they're already evaluated)
@@ -2669,9 +2683,37 @@ ID eval_string(const char* expr_str, EvalState *eval_state) {
     // For heap objects, evaluate them (use NULL env to use current_ns->mappings)
     ID result = eval_parsed(parsed, eval_state, NULL);
 
+    // Convert SYM_NIL to NULL (nil representation)
+    if (result == SYM_NIL) {
+        return NULL;
+    }
+
     // result can be NULL only if the evaluation result is nil
     // If eval_parsed fails, it should throw an exception, not return NULL
     return result;
+}
+
+/**
+ * @brief Parse and evaluate a Clojure expression from a string (convenience)
+ * @param expr_str The Clojure expression as a string
+ * @param eval_state The evaluation state
+ * @return The evaluated result (autoreleased) or NULL only if result is nil
+ */
+ID eval_string(const char* expr_str, EvalState *eval_state) {
+    CLJ_ASSERT(expr_str != NULL);
+    CLJ_ASSERT(eval_state != NULL);
+
+    Reader reader;
+    reader_init(&reader, expr_str);
+    reader_set_source_name(&reader, "<string input>");
+
+    CljValue parsed = parse_from_reader(&reader, eval_state);
+    if (parsed == NULL) {
+        throw_exception(EXCEPTION_PARSE, "Failed to parse expression", __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    return eval_parsed_value(parsed, eval_state);
 }
 
 // ============================================================================

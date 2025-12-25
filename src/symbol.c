@@ -36,7 +36,7 @@ CljSymbol *SYM_DEFMACRO = NULL;
 CljSymbol *SYM_QUOTE = NULL;
 CljSymbol *SYM_QUASIQUOTE = NULL;
 CljSymbol *SYM_UNQUOTE = NULL;
-CljSymbol *SYM_SPLICE_UNQUOTE = NULL;
+CljSymbol *SYM_UNQUOTE_SPLICE = NULL;
 CljSymbol *SYM_SOURCE = NULL;
 static CljSymbol *SYM_SOURCE_NATIVE = NULL;
 static CljSymbol *SYM_DIR_NATIVE = NULL;
@@ -159,7 +159,7 @@ DEFINE_STATIC_SYMBOL(sym_amp_data, "&");  // variadic parameter marker
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quote_data, "quote");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_quasiquote_data, "quasiquote");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_unquote_data, "unquote");
-DEFINE_STATIC_SPECIAL_SYMBOL(sym_splice_unquote_data, "splice-unquote");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_unquote_splice_data, "unquote-splice");
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
 DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
@@ -226,6 +226,9 @@ DEFINE_EXTERN_SYMBOL(sym_string_reverse_data, "reverse");
 
 // Extern symbol structs for clojure.core native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table
+#ifdef DEBUG
+DEFINE_EXTERN_SYMBOL(sym_ast_string_data, "ast-string");
+#endif
 DEFINE_EXTERN_SYMBOL(sym_mod_data, "mod");
 DEFINE_EXTERN_SYMBOL(sym_quot_data, "quot");
 DEFINE_EXTERN_SYMBOL(sym_bit_shift_left_data, "bit-shift-left");
@@ -353,7 +356,7 @@ void init_special_symbols() {
     INIT_SPECIAL_SYMBOL(SYM_QUOTE, sym_quote_data);
     INIT_SPECIAL_SYMBOL(SYM_QUASIQUOTE, sym_quasiquote_data);
     INIT_SPECIAL_SYMBOL(SYM_UNQUOTE, sym_unquote_data);
-    INIT_SPECIAL_SYMBOL(SYM_SPLICE_UNQUOTE, sym_splice_unquote_data);
+    INIT_SPECIAL_SYMBOL(SYM_UNQUOTE_SPLICE, sym_unquote_splice_data);
     INIT_SPECIAL_SYMBOL(SYM_DO, sym_do_data);
     INIT_SPECIAL_SYMBOL(SYM_LOOP, sym_loop_data);
     INIT_SPECIAL_SYMBOL(SYM_RECUR, sym_recur_data);
