@@ -517,40 +517,22 @@ ID native_first(ID *args, unsigned int argc) {
 }
 
 // Seq function that works with BuiltinFn signature
-// Returns a sequence of the collection, or nil if empty or not seqable
 ID native_seq(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "seq")) return NULL;
-    
     ID coll = args[0];
-    if (!coll) return NULL;  // nil -> nil
-    
-    // Check if seqable
-    if (!is_seqable(coll)) return NULL;
-    
-    // For lists, check if empty - if so, return nil
+    if (!coll || !is_seqable(coll)) return NULL;
     if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE) {
         CljList *list_data = as_list(coll);
-        if (!LIST_FIRST(list_data)) return NULL;  // Empty list -> nil
-        return AUTORELEASE(RETAIN(coll));
+        return LIST_FIRST(list_data) ? AUTORELEASE(RETAIN(coll)) : NULL;
     }
-    
-    // For other seqable types, return SeqIterator
     CljSeqIterator *seq = make_seq(coll);
-    if (!seq) return NULL;
-    return AUTORELEASE((ID)seq);
+    return seq ? AUTORELEASE((ID)seq) : NULL;
 }
 
-// Not function that works with BuiltinFn signature
-// Returns true if x is false or nil, false otherwise
 ID native_not(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "not")) return NULL;
-    
     ID x = args[0];
-    // In Clojure: (not x) returns true if x is false or nil, false otherwise
-    if (!x || x == clj_false) {
-        return clj_true;
-    }
-    return clj_false;
+    return (!x || x == clj_false) ? clj_true : clj_false;
 }
 
 // Next function that works with BuiltinFn signature
@@ -5410,10 +5392,8 @@ void register_builtins() {
     register_builtin_in_core("mod", native_mod);
     register_builtin_in_core("quot", native_quot);
     
-    // CRITICAL: Only register functions absolutely needed for macro expansion
-    // defn macro uses: (list 'def name (cons 'fn (cons name (cons params body))))
-    // Therefore we need: list, cons
-    // seq is used by first, rest, next - core collection functions
+    // Only register functions needed for macro expansion: defn uses (list 'def name (cons 'fn ...))
+    // seq is used by first, rest, next
     register_builtin_in_core("list", native_list);
     register_builtin_in_core("cons", native_cons);
     register_builtin_in_core("seq", native_seq);

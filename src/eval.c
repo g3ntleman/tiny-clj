@@ -1266,7 +1266,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym == SYM_FIRST) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_first, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_REST)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_rest, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_CONS)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_cons, 2, ctx); if (r) return r; }
-    if (original_op_sym == SYM_SEQ)   { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_seq, 1, ctx); if (r) return r; }
+    if (original_op_sym == SYM_SEQ) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_seq, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_NEXT)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_next, 1, ctx); if (r) return r; }
     if (original_op_sym == SYM_COUNT) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_count, 1, ctx); if (r) return r; }
 
