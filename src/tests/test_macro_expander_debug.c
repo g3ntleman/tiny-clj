@@ -102,9 +102,9 @@ TEST(test_macro_expander_debug_isolated) {
 #endif
     
     // Cleanup
-    RELEASE(parsed);
-    RELEASE(canonicalized);
-    RELEASE(double_sym);
+    // Note: parse() and canonicalize_ast() may return AUTORELEASE objects
+    // Don't call RELEASE on them - they're managed by the autorelease pool
+    // double_sym is an interned symbol, don't release it
 }
 
 // Test with a manually created macro function
@@ -156,9 +156,7 @@ TEST(test_macro_expander_debug_with_macro) {
 #endif
     
     // Cleanup
-    RELEASE(parsed);
-    if (canonicalized) {
-        RELEASE(canonicalized);
-    }
+    // Note: parse() and canonicalize_ast() may return AUTORELEASE objects
+    // Don't call RELEASE on them - they're managed by the autorelease pool
 }
 
