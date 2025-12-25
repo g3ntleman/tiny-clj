@@ -260,6 +260,19 @@ int load_clojure_core(EvalState *st) {
     }
   }
   
+  // IDEMPOTENCY: Check if clojure.core is already loaded
+  // If 'inc' is already in mappings, skip loading to avoid double-loading
+  if (clojure_core && clojure_core->mappings) {
+    CljSymbol *inc_sym = intern_symbol_global("inc");
+    if (inc_sym) {
+      CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
+      if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
+        // clojure.core is already loaded - return success without reloading
+        return 1;
+      }
+    }
+  }
+  
   // CRITICAL: Ensure st->current_ns points to the namespace from registry
   // This ensures all def operations store in the correct namespace
   st->current_ns = clojure_core;
