@@ -305,11 +305,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 
                 // Call macro function to expand the form
                 ID expanded = eval_function_call((CljObject*)macro, args, argc, NULL, st);
-                if (!expanded) {
-                    // Macro expansion failed - this might be due to concat or other helper functions
-                    // The exception should already be set by eval_function_call
-                    return NULL;
-                }
+                if (!expanded) return NULL;
                 
                 // Transfer metadata from original form to expanded form
                 move_meta(list, expanded);
