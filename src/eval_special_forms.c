@@ -313,8 +313,10 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
     }
     
     // Delegate to Clojure quasiquote-fn
+    // CRITICAL: Don't evaluate expr - pass it directly to quasiquote-fn
+    // quasiquote-fn needs to process unquote/unquote-splice forms before evaluation
     ID args[] = { expr };
-    ID result = eval_function_call((CljObject*)g_quasiquote_fn, args, 1, env, st);
+    ID result = eval_function_call((CljObject*)g_quasiquote_fn, args, 1, NULL, st);
     
     // The result is the expanded form - evaluate it
     if (result) {
