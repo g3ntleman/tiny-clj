@@ -263,7 +263,7 @@ R"CLOJURE(
 
 ^#^{:doc "Binds name to expr, evaluates the first form in the lexical context of that binding, then binds name to that result, repeating for each successive form, returning the result of the last form."}
 (defmacro as-> [expr name & forms]
-  (list 'let (concat (list name expr) (interleave-repeat name (butlast forms)))
+  (list 'let (vec (concat (list name expr) (interleave-repeat name (butlast forms))))
         (if (empty? forms)
           name
           (last forms))))
@@ -273,7 +273,7 @@ R"CLOJURE(
   (let [g (gensym)
         steps (map (fn [step] (list 'if (list 'nil? g) 'nil (list '-> g step)))
                    forms)]
-    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
           (if (empty? steps)
             g
             (last steps)))))
@@ -283,7 +283,7 @@ R"CLOJURE(
   (let [g (gensym)
         steps (map (fn [step] (list 'if (list 'nil? g) 'nil (list '->> g step)))
                    forms)]
-    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
           (if (empty? steps)
             g
             (last steps)))))
@@ -295,7 +295,7 @@ R"CLOJURE(
   (let [g (gensym)
         steps (map (fn [[test step]] (list 'if test (list '-> g step) g))
                    (partition 2 clauses))]
-    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
           (if (empty? steps)
             g
             (last steps)))))
@@ -307,7 +307,7 @@ R"CLOJURE(
   (let [g (gensym)
         steps (map (fn [[test step]] (list 'if test (list '->> g step) g))
                    (partition 2 clauses))]
-    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
           (if (empty? steps)
             g
             (last steps)))))
