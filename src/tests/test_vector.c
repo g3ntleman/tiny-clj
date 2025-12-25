@@ -1260,7 +1260,7 @@ TEST_SHARED(test_vector_for_each_with_null_elements) {
 TEST_SHARED(test_vector_set_nth_with_reference_counts) {
     CljVector *vec = make_vector(4, CLJ_VECTOR_TRANSIENT);
     TEST_ASSERT_NOT_NULL(vec);
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
+    TEST_ASSERT_EQUAL_INT(1, retain_count(vec));
     
     CljObject *old_val = AUTORELEASE(make_string("old"));
     CljObject *new_val = AUTORELEASE(make_string("new"));
@@ -1270,21 +1270,21 @@ TEST_SHARED(test_vector_set_nth_with_reference_counts) {
     vec = vector_conj(vec, fixnum(40));
     
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
+    TEST_ASSERT_EQUAL_INT(1, retain_count(vec));
     
-    int old_val_rc_before = get_retain_count(old_val);
+    int old_val_rc_before = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
     CljVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(vec, result);
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(result));
+    TEST_ASSERT_EQUAL_INT(1, retain_count(result));
     
     // For transient vectors, old value is NOT released
-    int old_val_rc_after = get_retain_count(old_val);
+    int old_val_rc_after = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);
     
-    int new_val_rc_after = get_retain_count(new_val);
+    int new_val_rc_after = retain_count(new_val);
     TEST_ASSERT_TRUE(new_val_rc_after > 0);
     
     ID elem = vector_nth(result, 0);
@@ -1309,24 +1309,24 @@ TEST_SHARED(test_vector_set_nth_copy_on_write) {
     vec = vector_conj(vec, fixnum(300));
     
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(vec));
+    TEST_ASSERT_EQUAL_INT(1, retain_count(vec));
     
     RETAIN(vec);
-    TEST_ASSERT_EQUAL_INT(2, get_retain_count(vec));
+    TEST_ASSERT_EQUAL_INT(2, retain_count(vec));
     
-    int old_val_rc_before = get_retain_count(old_val);
+    int old_val_rc_before = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
     CljVector *result = vector_set_nth(vec, 0, new_val);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(vec, result);
-    TEST_ASSERT_EQUAL_INT(2, get_retain_count(vec));
+    TEST_ASSERT_EQUAL_INT(2, retain_count(vec));
     
     // For transient vectors, old value is NOT released
-    int old_val_rc_after = get_retain_count(old_val);
+    int old_val_rc_after = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);
     
-    int new_val_rc_after = get_retain_count(new_val);
+    int new_val_rc_after = retain_count(new_val);
     TEST_ASSERT_EQUAL_INT(2, new_val_rc_after);
     
     ID elem = vector_nth(result, 0);
@@ -1353,7 +1353,7 @@ TEST_SHARED(test_vector_set_nth_transient) {
     
     TEST_ASSERT_EQUAL_INT(2, vector_count(vec));
     
-    int old_val_rc_before = get_retain_count(old_val);
+    int old_val_rc_before = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(2, old_val_rc_before);
     
     CljVector *result = vector_set_nth(vec, 0, new_val);
@@ -1369,10 +1369,10 @@ TEST_SHARED(test_vector_set_nth_transient) {
     TEST_ASSERT_EQUAL_STRING("new", str->data);
     
     // For transient vectors, old value is NOT released
-    int old_val_rc_after = get_retain_count(old_val);
+    int old_val_rc_after = retain_count(old_val);
     TEST_ASSERT_EQUAL_INT(old_val_rc_before, old_val_rc_after);
     
-    int new_val_rc_after = get_retain_count(new_val);
+    int new_val_rc_after = retain_count(new_val);
     TEST_ASSERT_TRUE(new_val_rc_after > 0);
     
     AUTORELEASE(vec);

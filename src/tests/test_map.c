@@ -1247,6 +1247,40 @@ TEST(test_update_native_with_extra_args) {
 }
 
 // ============================================================================
+// make_map_kv tests (C helper function)
+// ============================================================================
+
+TEST(test_make_map_kv) {
+    // Use interned symbols as keys (like in real usage)
+    ID kw1 = intern_symbol_global(":key1");
+    ID kw2 = intern_symbol_global(":key2");
+    
+    // Create persistent map with NOT_FOUND sentinel termination
+    CljMap *map = make_map_kv(kw1, fixnum(10), kw2, fixnum(20), NOT_FOUND);
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(map));  // persistent, not transient!
+    TEST_ASSERT_EQUAL_INT(2, map_count(map));
+    
+    CljValue v1 = map_get(map, kw1, NULL);
+    CljValue v2 = map_get(map, kw2, NULL);
+    TEST_ASSERT_TRUE(is_fixnum(v1));
+    TEST_ASSERT_TRUE(is_fixnum(v2));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(v1));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(v2));
+    
+    RELEASE(map);
+}
+
+TEST(test_make_map_kv_empty) {
+    // Empty map: only NOT_FOUND sentinel
+    CljMap *map = make_map_kv(NOT_FOUND);
+    TEST_ASSERT_NOT_NULL(map);
+    TEST_ASSERT_EQUAL_INT(0, map_count(map));
+    
+    RELEASE(map);  // Release retained empty singleton
+}
+
+// ============================================================================
 // AUTORELEASE + ASSIGN hypothesis tests (H1/H2/H3/H5)
 // ============================================================================
 

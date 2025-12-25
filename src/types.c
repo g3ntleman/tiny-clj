@@ -31,6 +31,7 @@ const char* clj_type_name(CljType type) {
         case CLJ_RAW_MEMORY: return "RawMemory";
         case CLJ_SYMBOL_TOKEN: return "SymbolToken";
         case CLJ_HASHMAP: return "HashMap";
+        case CLJ_REGEX: return "Regex";
         case CLJ_NIL: return "Nil";
         default: return "Unknown";
     }

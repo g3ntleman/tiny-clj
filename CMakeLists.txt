@@ -79,6 +79,7 @@ list(APPEND SOURCES
     src/types.c
     src/object.c
     src/builtins.c
+    src/builtins_strings.c
     src/runtime.c
     src/namespace.c
     src/symbol.c
@@ -112,6 +113,8 @@ list(APPEND SOURCES
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
+    src/regex.c
+    external/tiny_regex.c
 )
 
 # Main executable (not built by default; use REPL)
@@ -134,6 +137,7 @@ set(STM32_SOURCES
     src/types.c
     src/object.c
     src/builtins.c
+    src/builtins_strings.c
     src/runtime.c
     src/namespace.c
     src/symbol.c
@@ -166,6 +170,8 @@ set(STM32_SOURCES
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
+    src/regex.c
+    external/tiny_regex.c
 )
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -178,6 +184,7 @@ add_executable(tiny-clj-esp32
     src/types.c
     src/object.c
     src/builtins.c
+    src/builtins_strings.c
     src/runtime.c
     src/namespace.c
     src/symbol.c
@@ -207,6 +214,8 @@ add_executable(tiny-clj-esp32
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
+    src/regex.c
+    external/tiny_regex.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 
@@ -329,7 +338,7 @@ add_executable(unit-tests
     src/tests/test_native_lookup.c
     src/tests/test_clojure_core_loading.c
     src/tests/test_memory_leak_fibonacci.c
-    src/tests/test_time.c
+    src/tests/test_datetime.c
     src/tests/test_loops.c
     src/tests/test_go_blocks.c
     src/tests/test_fixed_point.c
@@ -356,34 +365,10 @@ add_executable(unit-tests
     src/tests/test_cow.c
     src/tests/test_special_forms.c
     src/tests/test_core_functions.c
+    src/tests/test_regex.c
     external/unity/src/unity.c
-    src/builtins.c
-    src/object.c
-    src/types.c
-    src/atom.c
-    src/symbol.c
-    src/symbol_token.c
-    src/namespace.c
-    src/parser.c
-    src/ast_canon.c
-    src/reader.c
-    src/eval.c
-    src/function.c
-    src/environment.c
-    src/equality.c
-    src/hash.c
-    src/event_loop.c
-    src/channel.c
-    src/list.c
-    src/seq.c
-    src/clojure_core.c
-    src/memory_profiler.c
-    src/runtime.c
-    src/error_messages.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
-    src/meta.c
+    # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
+    # but are needed for unit-tests (test_repl.c uses repl functionality)
     src/repl.c
     src/platform_macos.c
     src/line_editor.c

@@ -16,23 +16,24 @@
 #include <stdint.h>
 
 #include "to_string.h"
-#include "subjective-c/public/object.h"
-#include "subjective-c/public/strings.h"
+#include "subjective-c/object.h"
+#include "subjective-c/strings.h"
 #include "namespace.h"
-#include "subjective-c/public/value.h"
+#include "subjective-c/value.h"
 #include "symbol.h"
-#include "subjective-c/public/vector.h"
+#include "subjective-c/vector.h"
 #include "list.h"
-#include "subjective-c/public/map.h"
+#include "subjective-c/map.h"
 #include "function.h"
 #include "seq.h"
-#include "subjective-c/public/exception.h"
+#include "subjective-c/exception.h"
 #include "atom.h"
-#include "subjective-c/public/byte_array.h"
-#include "subjective-c/public/memory.h"
-#include "subjective-c/public/kv_macros.h"
-#include "subjective-c/public/types.h"
+#include "subjective-c/byte_array.h"
+#include "subjective-c/memory.h"
+#include "subjective-c/kv_macros.h"
+#include "subjective-c/types.h"
 #include "runtime.h"
+#include "regex.h"
 
 // Global flag for special form rendering mode
 static bool g_print_special_forms_as_tags = true;
@@ -100,7 +101,6 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
-            if (!sym) return 3; // "nil"
             if (!sym->cname) return 3; // "nil" if no name
             
             // Special forms are printed as #<special-form name> (like in Clojure)
@@ -124,14 +124,14 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             void *vec_ptr = as_vector(v);
-            if (!vec_ptr) return 2; // "[]"
             CljVector *vec = (CljVector*)vec_ptr;
             int count = vector_count(vec);
             size_t len = 2; // "[ ]"
-            for (int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            int i = 0;
+            VECTOR_FOR_EACH(vec, elem) {
                 len += to_string_calc_length((CljObject*)elem, escape_strings);
                 if (i < count - 1) len += 1; // space
+                i++;
             }
             if (v->type == CLJ_VECTOR_TRANSIENT) {
                 len += 11; // "<transient >"
@@ -156,7 +156,6 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map = as_map(v);
-            if (!map) return 2; // "{}"
             size_t len = 2; // "{ }"
             bool first = true;
             MAP_FOR_EACH(map, k, val) {
@@ -207,7 +206,6 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_SEQ: {
             CljSeqIterator *seq = as_seq(v);
-            if (!seq) return 2; // "()"
             size_t len = 2; // "( )"
             SeqIterator temp_iter = seq->iter;
             bool first = true;
@@ -244,13 +242,19 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_BYTE_ARRAY: {
             CljByteArray *ba = as_byte_array(v);
-            if (!ba) return 13; // "#<byte-array>"
             int preview_len = ba->length < 8 ? ba->length : 8;
             size_t len = 15; // "#<byte-array ["
             len += preview_len * 5; // "0x00 "
             if (ba->length > 8) len += 5; // " ..."
             len += 2; // "]>"
             return len;
+        }
+
+        case CLJ_REGEX: {
+            CljRegex *re = (CljRegex*)v;
+            const char *pattern = regex_pattern_string(re);
+            // Format: #"pattern"
+            return 2 + strlen(pattern) + 1; // #" + pattern + "
         }
 
         default:
@@ -315,11 +319,6 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
-            if (!sym) {
-                memcpy(buffer + *offset, "nil", 3);
-                *offset += 3;
-                return;
-            }
             if (!sym->cname) {
                 memcpy(buffer + *offset, "nil", 3);
                 *offset += 3;
@@ -359,11 +358,6 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_VECTOR_TRANSIENT_WEAK: {
             void *vec_ptr = as_vector(v);
-            if (!vec_ptr) {
-                memcpy(buffer + *offset, "[]", 2);
-                *offset += 2;
-                return;
-            }
             CljVector *vec = (CljVector*)vec_ptr;
             if (v->type == CLJ_VECTOR_TRANSIENT) {
                 memcpy(buffer + *offset, "<transient ", 11);
@@ -372,13 +366,14 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             buffer[*offset] = '[';
             *offset += 1;
             int count = vector_count(vec);
-            for (int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            int i = 0;
+            VECTOR_FOR_EACH(vec, elem) {
                 to_string_build_string((CljObject*)elem, buffer, offset, escape_strings);
                 if (i < count - 1) {
                     buffer[*offset] = ' ';
                     *offset += 1;
                 }
+                i++;
             }
             buffer[*offset] = ']';
             *offset += 1;
@@ -412,11 +407,6 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT: {
             CljMap *map = as_map(v);
-            if (!map) {
-                memcpy(buffer + *offset, "{}", 2);
-                *offset += 2;
-                return;
-            }
             if (v->type == CLJ_MAP_TRANSIENT) {
                 memcpy(buffer + *offset, "<transient ", 11);
                 *offset += 11;
@@ -486,11 +476,6 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_SEQ: {
             CljSeqIterator *seq = as_seq(v);
-            if (!seq) {
-                memcpy(buffer + *offset, "()", 2);
-                *offset += 2;
-                return;
-            }
             buffer[*offset] = '(';
             *offset += 1;
             SeqIterator temp_iter = seq->iter;
@@ -539,11 +524,6 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_BYTE_ARRAY: {
             CljByteArray *ba = as_byte_array(v);
-            if (!ba) {
-                memcpy(buffer + *offset, "#<byte-array>", 13);
-                *offset += 13;
-                return;
-            }
             int written = snprintf(buffer + *offset, 256, "#<byte-array [");
             *offset += written;
             int preview_len = ba->length < 8 ? ba->length : 8;
@@ -576,6 +556,22 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             size_t ns_name_len = strlen(ns_name);
             memcpy(buffer + *offset, ns_name, ns_name_len);
             *offset += ns_name_len;
+            return;
+        }
+
+        case CLJ_REGEX: {
+            CljRegex *re = (CljRegex*)v;
+            const char *pattern = regex_pattern_string(re);
+            // Format: #"pattern"
+            buffer[*offset] = '#';
+            *offset += 1;
+            buffer[*offset] = '"';
+            *offset += 1;
+            size_t pattern_len = strlen(pattern);
+            memcpy(buffer + *offset, pattern, pattern_len);
+            *offset += pattern_len;
+            buffer[*offset] = '"';
+            *offset += 1;
             return;
         }
 

@@ -24,5 +24,5 @@ ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 
     ID result = map_get((CljValue)map, (CljValue)key, NULL);
     RELEASE(key);
-    return AUTORELEASE(RETAIN(result));
+    return result;
 }

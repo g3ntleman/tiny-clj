@@ -48,16 +48,14 @@ void map_put(CljMap *map, ID key, ID value);
 void map_foreach(CljMap *map, void (*func)(ID, ID));
 int map_contains(CljMap *map, ID key);
 CljMap* map_remove(CljMap *map, ID key);
-
-// In-place helpers for long-lived slots (no AUTORELEASE + releases old map on replacement).
-// These functions update the pointer stored in *map_slot and RELEASE the old map
-// if a new map instance is produced (grow/COW).
-void map_assoc_inplace(CljMap **map_slot, ID key, ID value);
-void map_remove_inplace(CljMap **map_slot, ID key);
 CljMap* make_transient_map_from_kv(unsigned int count, ...);
 CljMap* make_map_kv(ID first_key, ...);  // NOT_FOUND terminated
 CljMap* make_map_from_stack(CljObject **pairs, int pair_count);
 CljMap* map_copy_with_additions(CljMap *parent_map, CljObject **additions, int addition_count);
+
+// In-place helpers for long-lived slots (no AUTORELEASE + releases old map on replacement)
+void map_assoc_inplace(CljMap **map_slot, ID key, ID value);
+void map_remove_inplace(CljMap **map_slot, ID key);
 
 // Transient API
 CljMap* map_transient(CljMap *map);

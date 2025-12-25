@@ -21,7 +21,40 @@
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
 #include "hashmap.h"  // For CljHashMap
+#include <subjective-c/thread_local.h>
 #include <string.h>
+
+// ============================================================================
+// CHECKPOINT-BASED AUTORELEASE POOL
+// ============================================================================
+//
+// Design: Single array for all autoreleased objects + checkpoint stack
+// - items[]: Array of autoreleased object pointers
+// - checkpoints[]: Stack of indices marking pool boundaries
+// - push() adds a checkpoint (current count)
+// - pop() releases all items from last checkpoint, removes checkpoint
+// - autorelease() appends object to items[]
+//
+// Advantages over vector-based approach:
+// - Zero allocations during push/pop/autorelease (after initial setup)
+// - Better cache locality
+// - COW-friendly: AUTORELEASE never increases reference count
+
+#define POOL_INITIAL_CAPACITY 1024
+#define POOL_CHECKPOINT_CAPACITY 32
+
+typedef struct {
+    CljObject **items;       // Array for autoreleased objects
+    uint32_t count;          // Current number of items
+    uint32_t capacity;       // Capacity of items array
+    
+    uint32_t *checkpoints;   // Stack of checkpoint indices
+    uint32_t cp_count;       // Number of active pools (checkpoint stack depth)
+    uint32_t cp_capacity;    // Capacity of checkpoints array
+} AutoreleasePoolState;
+
+// Thread-local pool state
+static THREAD_LOCAL AutoreleasePoolState g_pool = {0};
 
 // External reference to verbose mode
 extern bool g_memory_verbose_mode;
@@ -113,18 +146,22 @@ static void release_object_default(CljObject *v);
 static void init_release_dispatch(void);
 static SubjectiveCReleaseFn g_release_dispatch[CLJ_TYPE_COUNT];
 static bool g_release_dispatch_initialized = false;
-static void autorelease_pool_clear(CljVector *pool);
 
-// Ensure pool_stack is initialized as transient vector
-static void ensure_pool_stack_initialized(void) {
-    if (!g_runtime.pool_stack) {
-        CljVector* pool_vec = make_vector(0, CLJ_VECTOR);
-        if (pool_vec) {
-            CljVector* transient_pool = vector_transient(pool_vec);
-            RELEASE(pool_vec);
-            g_runtime.pool_stack = transient_pool;
-        }
-    }
+/** @brief Initialize the autorelease pool (call once at startup)
+ * 
+ * Must be called before any autorelease operations. Typically called
+ * from runtime_init().
+ */
+void autorelease_pool_init(void) {
+    if (g_pool.items) return;  // Already initialized
+    
+    g_pool.capacity = POOL_INITIAL_CAPACITY;
+    g_pool.items = (CljObject**)malloc(sizeof(CljObject*) * g_pool.capacity);
+    g_pool.count = 0;
+    
+    g_pool.cp_capacity = POOL_CHECKPOINT_CAPACITY;
+    g_pool.checkpoints = (uint32_t*)malloc(sizeof(uint32_t) * g_pool.cp_capacity);
+    g_pool.cp_count = 0;
 }
 
 static void init_release_dispatch(void) {
@@ -282,30 +319,33 @@ void release(CljObject *v) {
  * 
  * Adds object to the current autorelease pool for deferred cleanup. Requires
  * an active autorelease pool. The object is not retained when added to the pool.
+ * COW-friendly: Does NOT increase reference count.
  */
 CljObject *autorelease(CljObject *v) {
     if (!v) return NULL;
     
-    ensure_pool_stack_initialized();
+    CLJ_ASSERT(g_pool.items && "autorelease_pool_init() not called");
 
     // Require active autorelease pool
-    if (!g_runtime.pool_stack || vector_count(g_runtime.pool_stack) == 0) {
+    if (g_pool.cp_count == 0) {
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
                 v, v ? v->type : -1);
         return v;
-    } 
-    
-    unsigned int stack_depth = vector_count(g_runtime.pool_stack);
-    CljVector *pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
-    
-    // Update pool with new object (pool may be replaced by vector_conj due to COW)
-    CljVector *updated_pool = vector_conj(pool, v);
-    if (updated_pool != pool) {
-        // Pool was replaced (COW), update stack (vector_assoc supports transient vectors)
-        ASSIGN(g_runtime.pool_stack, vector_assoc(g_runtime.pool_stack, stack_depth - 1, updated_pool));
     }
+    
+    // Grow items array if needed
+    if (g_pool.count >= g_pool.capacity) {
+        uint32_t old_capacity = g_pool.capacity;
+        uint32_t new_capacity = g_pool.capacity * 2;
+        g_pool.items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        g_pool.capacity = new_capacity;
+        fprintf(stderr, "⚠️  AutoreleasePool: items grew %u -> %u\n", old_capacity, new_capacity);
+    }
+    
+    // Append object (no RETAIN - COW friendly!)
+    g_pool.items[g_pool.count++] = v;
     
     // Track for memory profiling
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
@@ -314,120 +354,83 @@ CljObject *autorelease(CljObject *v) {
 }
 
 // ============================================================================
-// AUTORELEASE POOL IMPLEMENTATION
+// CHECKPOINT-BASED AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
 
-/** @brief Push a new autorelease pool
+// Dummy pool pointer for API compatibility (non-NULL sentinel)
+// Non-NULL sentinel for API compatibility
+static int g_pool_sentinel_value = 1;
+
+/** @brief Push a new autorelease pool (checkpoint)
  * 
- * @return Pool handle for later use with autorelease_pool_pop_specific()
+ * @return Non-NULL sentinel (for API compatibility, value is meaningless)
  * 
- * Creates a new autorelease pool and makes it the current pool. Objects
- * added via autorelease() will be added to this pool and released when
- * the pool is popped.
+ * Creates a new checkpoint at the current item count. Objects added via 
+ * autorelease() will be tracked until pop() clears them.
  */
-static void autorelease_pool_clear(CljVector *pool) {
-    if (!pool) return;
-    // For CLJ_VECTOR_TRANSIENT_WEAK, don't RELEASE elements (weak reference)
-    // Just clear the count - elements are weak references, not owned
-    if (TAG(pool) == CLJ_VECTOR_TRANSIENT_WEAK) {
-        vector_clear(pool);
-    } else {
-        // For regular vectors, RELEASE will automatically free all elements via release_object_deep()
-        // But we need to release elements before clearing, so they're freed now
-        // Note: This is a special case - we're clearing the pool, not releasing it
-        // So we manually release elements, then clear the count
-        VECTOR_FOR_EACH(pool, elem) {
-            RELEASE(elem);
-        }
-        vector_clear(pool);
+void *autorelease_pool_push(void) {
+    CLJ_ASSERT(g_pool.items && "autorelease_pool_init() not called");
+    
+    // Grow checkpoints array if needed
+    if (g_pool.cp_count >= g_pool.cp_capacity) {
+        uint32_t old_capacity = g_pool.cp_capacity;
+        uint32_t new_capacity = g_pool.cp_capacity * 2;
+        g_pool.checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+        g_pool.cp_capacity = new_capacity;
+        fprintf(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
     }
-    // vector_clear already sets count to 0
-}
-
-
-CljVector *autorelease_pool_push() {
-    ensure_pool_stack_initialized();
     
-    // Check for stack overflow (assertion check)
-#if defined(DEBUG)
-    unsigned int stack_depth = vector_count(g_runtime.pool_stack);
-    CLJ_ASSERT(stack_depth < MAX_POOL_DEPTH && "Autorelease pool stack overflow! Maximum depth exceeded.");
-#else
-    CLJ_ASSERT(vector_count(g_runtime.pool_stack) < MAX_POOL_DEPTH && "Autorelease pool stack overflow! Maximum depth exceeded.");
-#endif
-    
-    CljVector *pool = make_vector(1024, CLJ_VECTOR_TRANSIENT_WEAK);
-
-    
-    // Push pool to stack using transient vector operations
-    ASSIGN(g_runtime.pool_stack, vector_conj(g_runtime.pool_stack, pool));
+    // Push checkpoint (current item count)
+    g_pool.checkpoints[g_pool.cp_count++] = g_pool.count;
     
     if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_push: Pool %p pushed to stack (depth=%u)\n", 
-               pool, vector_count(g_runtime.pool_stack));
+        printf("🔍 autorelease_pool_push: checkpoint at %u (depth=%u)\n", 
+               g_pool.count, g_pool.cp_count);
     }
     
-    return pool;
+    return &g_pool_sentinel_value;  // Non-NULL sentinel for API compatibility
 }
 
 
-void autorelease_pool_pop(CljVector *pool) {
+/** @brief Pop and drain the current autorelease pool
+ * 
+ * @param pool Ignored (for API compatibility)
+ * 
+ * Removes the checkpoint. Objects are NOT released (weak reference semantics).
+ * This matches the original CLJ_VECTOR_TRANSIENT_WEAK behavior where the pool
+ * only tracks objects but doesn't own them.
+ */
+void autorelease_pool_pop(void *pool) {
+    (void)pool;  // Unused, for API compatibility
+    
     // Check for stack underflow
-    if (!g_runtime.pool_stack || vector_count(g_runtime.pool_stack) == 0) {
+    if (g_pool.cp_count == 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
                "This indicates more pop() calls than push() calls.\n");
         return;
     }
     
-    // Always use the pool from the top of the stack
-    // The provided pool parameter may be outdated if autorelease() replaced the pool
-    unsigned int stack_depth = vector_count(g_runtime.pool_stack);
-    pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
+    // Get checkpoint (start index for this pool)
+    uint32_t checkpoint = g_pool.checkpoints[--g_pool.cp_count];
     
-    // Debug output
     if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_pop: Pool %p popped from stack (depth=%u)\n", 
-               pool, stack_depth);
+        printf("🔍 autorelease_pool_pop: clearing %u objects (checkpoint=%u, count=%u)\n", 
+               g_pool.count - checkpoint, checkpoint, g_pool.count);
     }
     
-    // Remove pool from stack BEFORE releasing (to avoid double-free if called multiple times)
-    ASSIGN(g_runtime.pool_stack, vector_pop(g_runtime.pool_stack));
+    // NOTE: We do NOT release objects here (weak reference semantics)
+    // Objects are tracked for debugging/profiling but not owned by the pool.
+    // This matches the original CLJ_VECTOR_TRANSIENT_WEAK behavior.
     
-    // Clear and release the pool (only if not already a zombie in DEBUG builds)
-    if (pool) {
-#ifdef DEBUG
-        // Check if pool is already a zombie (already freed)
-        if (get_retain_count(pool) != ZOMBIE_RC) {
-            autorelease_pool_clear(pool);
-            RELEASE(pool);
-        }
-        // If pool is already a zombie, skip release (already freed)
-#else
-        // In Release builds, always release (no zombie tracking)
-        autorelease_pool_clear(pool);
-        RELEASE(pool);
-#endif
-    }
-    
-    // Debug output to verify stack state
-    if (g_debug_output_active) {
-        printf("🔍 autorelease_pool_pop: After pop, stack_depth=%u\n", 
-               vector_count(g_runtime.pool_stack));
-    }
+    // Reset count to checkpoint (objects are forgotten, not released)
+    g_pool.count = checkpoint;
 }
 
 // Exception-safe cleanup function (called from CATCH blocks)
-void autorelease_pool_cleanup_after_exception() {
-    if (g_runtime.pool_stack) {
-        while (vector_count(g_runtime.pool_stack) > 0) {
-            unsigned int stack_depth = vector_count(g_runtime.pool_stack);
-            CljVector *pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
-            if (pool) {
-                autorelease_pool_clear(pool);
-                RELEASE(pool);
-            }
-            ASSIGN(g_runtime.pool_stack, vector_pop(g_runtime.pool_stack));
-        }
+void autorelease_pool_cleanup_after_exception(void) {
+    // Drain all pools
+    while (g_pool.cp_count > 0) {
+        autorelease_pool_pop(NULL);
     }
 }
 
@@ -458,13 +461,9 @@ void autorelease_pool_cleanup_after_exception() {
  * Pops all autorelease pools in the stack. Useful for global cleanup
  * at program termination or when you need to ensure all pools are drained.
  */
-void autorelease_pool_cleanup_all() {
-    if (g_runtime.pool_stack) {
-        while (vector_count(g_runtime.pool_stack) > 0) {
-            unsigned int stack_depth = vector_count(g_runtime.pool_stack);
-            CljVector *pool = (CljVector*)vector_nth(g_runtime.pool_stack, stack_depth - 1);
-            autorelease_pool_pop(pool);
-        }
+void autorelease_pool_cleanup_all(void) {
+    while (g_pool.cp_count > 0) {
+        autorelease_pool_pop(NULL);
     }
 }
 
@@ -475,7 +474,28 @@ void autorelease_pool_cleanup_all() {
  * Useful for debugging and ensuring proper pool management.
  */
 bool is_autorelease_pool_active(void) {
-    return g_runtime.pool_stack && vector_count(g_runtime.pool_stack) > 0;
+    return g_pool.cp_count > 0;
+}
+
+/** @brief Cleanup pool state (call at program exit or runtime reset)
+ */
+void autorelease_pool_destroy(void) {
+    // Drain all remaining pools
+    autorelease_pool_cleanup_all();
+    
+    // Free backing arrays
+    if (g_pool.items) {
+        free(g_pool.items);
+        g_pool.items = NULL;
+    }
+    if (g_pool.checkpoints) {
+        free(g_pool.checkpoints);
+        g_pool.checkpoints = NULL;
+    }
+    g_pool.count = 0;
+    g_pool.capacity = 0;
+    g_pool.cp_count = 0;
+    g_pool.cp_capacity = 0;
 }
 
 /** @brief Get retain count of object
@@ -487,7 +507,7 @@ bool is_autorelease_pool_active(void) {
  * reference counting. For other objects, returns the actual reference count.
  * Note: AUTORELEASE objects are not counted as they are deferred.
  */
-int get_retain_count(ID obj) {
+int retain_count(ID obj) {
     if (!obj || IS_IMMEDIATE(obj)) return 0;
     
     CljObject *obj_ptr = (CljObject*)obj;

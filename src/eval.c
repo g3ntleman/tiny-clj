@@ -522,7 +522,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
 
         default:
             // Literal value
-            return AUTORELEASE(RETAIN(body));
+            return body;
     }
 }
 
@@ -659,8 +659,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             CljVector *result = make_vector(count, CLJ_VECTOR);
             RETAIN(result);
             
-            for (unsigned int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
                 
                 // Evaluate element recursively
@@ -744,9 +743,10 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                     if (resolved_id == NOT_FOUND) {
                         return NULL;
                     }
-                    // resolve_symbol_in_env returns values from map_get (retained) or eval_symbol (AUTORELEASE)
+                    // resolve_symbol_in_env returns values from map_get (pointer) or eval_symbol (AUTORELEASE)
                     // eval_body should return AUTORELEASE objects
-                    // RETAIN and AUTORELEASE macros handle immediate values safely
+                    // For map_get: RETAIN needed. For eval_symbol: already AUTORELEASE.
+                    // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
                     return AUTORELEASE(RETAIN(resolved_id));
                 }
             }
@@ -801,15 +801,14 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             
             // Empty vector - return as-is
             if (count == 0) {
-                return AUTORELEASE(RETAIN(body));
+                return body;
             }
             
             // Create new vector with evaluated elements
             CljVector *result = make_vector(count, CLJ_VECTOR);
             RETAIN(result);
             
-            for (unsigned int i = 0; i < count; i++) {
-                ID elem = vector_nth(vec, i);
+            VECTOR_FOR_EACH(vec, elem) {
                 ID eval_elem = NULL;
                 
                 // Check for SYM_NIL before calling eval_body
@@ -841,14 +840,14 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 // Evaluate key and value (nil should evaluate to NULL)
                 // Check for SYM_NIL before calling eval_body to avoid symbol resolution
                 ID eval_key = NULL;
-                if (key && key_tag == CLJ_SYMBOL && key == (ID)SYM_NIL) {
+                if (key && key_tag == CLJ_SYMBOL && key == (CljObject*)SYM_NIL) {
                     eval_key = NULL;  // nil evaluates to NULL
                 } else if (key) {
                     eval_key = eval_body(key, env, st, ctx);
                 }
 
                 ID eval_value = NULL;
-                if (value && value_tag == CLJ_SYMBOL && value == (ID)SYM_NIL) {
+                if (value && value_tag == CLJ_SYMBOL && value == (CljObject*)SYM_NIL) {
                     eval_value = NULL;  // nil evaluates to NULL
                 } else if (value) {
                     eval_value = eval_body(value, env, st, ctx);
@@ -867,7 +866,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
         default:
             // Literal value
-            return AUTORELEASE(RETAIN(body));
+            return body;
     }
 }
 
@@ -1302,15 +1301,15 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Tier 6: Loop operations (for, doseq, dotimes) - inline dispatch
     if (original_op_sym == SYM_FOR) {
-        return AUTORELEASE(eval_for(list, effective_env));
+        return eval_for(list, effective_env);
     }
     if (original_op_sym == SYM_DOSEQ) {
-        return AUTORELEASE(eval_doseq(list, effective_env));
+        return eval_doseq(list, effective_env);
     }
     if (original_op_sym == SYM_DOTIMES) {
         // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
         EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
-        return AUTORELEASE(eval_dotimes(list, effective_env, eval_st));
+        return eval_dotimes(list, effective_env, eval_st);
     }
 
     // Try function call
@@ -1827,23 +1826,9 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             // If direct lookup failed, rely on namespace mappings to contain canonical keys.
         }
 
-        // Qualified symbol not found in mappings - try native function lookup
-        // This handles cases where native functions (like trim) are not yet registered in mappings
-        // NOTE: Alias resolution is now done in the parser, so symbol->ns_name is already resolved
-        // OPTIMIZATION: Use symbol directly (already qualified) instead of re-interning
-        if (symbol->cname) {
-            BuiltinFn native_func = native_function_lookup(symbol);
-            if (native_func) {
-                // Found native function - create function object and return it
-                CljCFunc *native_func_obj = (CljCFunc*)make_named_func(native_func, NULL, symbol->cname);
-                if (native_func_obj) {
-                    // Cache native function in namespace mappings to preserve invariants
-                    // Use symbol directly (already qualified) - no need to re-intern
-                    ns_define(target_ns, symbol, native_func_obj);
-                    return native_func_obj;
-                }
-            }
-        }
+        // CLOJURE COMPATIBILITY: Qualified symbols require explicit (require 'namespace)
+        // Native functions are only accessible via defn :native stubs in the Clojure source.
+        // This ensures clojure.string/pad-left only works after (require 'clojure.string).
 
         // Qualified symbol not found in target namespace
         const char *cname = symbol->cname ? symbol->cname : "unknown";
@@ -1881,6 +1866,16 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return value;
     }
 
+    // If not found in namespace but is a builtin, return symbol as fallback
+    // (will be handled by eval_list)
+    if (is_builtin_function(symbol)) {
+        return symbol;
+    }
+
+    // CLOJURE COMPATIBILITY: Native functions (e.g. clojure.string/trim) are only
+    // accessible after explicit (require 'clojure.string). The native_function_table
+    // is only used by (defn ... :native) stubs, not by symbol resolution.
+
     // Symbol not found in namespace - this is an error
     // Functions must be registered via register_builtins() or :native stubs
     const char *cname = symbol->cname ? symbol->cname : "unknown";
@@ -1888,6 +1883,37 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     return NULL;
 }
 
+ID eval_seq(CljList *list, CljMap *env) {
+    CLJ_ASSERT(env != NULL);
+    CljObject *arg = eval_arg(list, 1, env, NULL);
+    if (!arg) return NULL;
+
+    // If argument is already nil, return nil
+    // Note: nil is now represented as NULL, so no special nil check needed
+
+    // Check if argument is seqable
+    if (!is_seqable(arg)) {
+        return NULL;
+    }
+
+    // For lists, check if empty - if so, return nil
+    switch (arg->type) {
+        case CLJ_LIST:
+        case CLJ_AST_NODE: {
+            CljList *list_data = as_list(arg);
+            if (!LIST_FIRST(list_data)) return NULL;  // Empty list -> nil
+            return arg;
+        }
+
+        default: {
+            // For other seqable types, return SeqIterator directly
+            CljSeqIterator *seq = (CljSeqIterator*)AUTORELEASE(make_seq(arg));
+            if (!seq) return NULL;
+
+            return (CljObject*)seq;
+        }
+    }
+}
 // ============================================================================
 // FOR-LOOP IMPLEMENTATIONS
 // ============================================================================
@@ -2076,8 +2102,8 @@ ID eval_list_function(CljList *list, CljMap *env) {
     }
 
     // Simply return the arguments as a list (they're already evaluated by eval_list)
-    // ✅ FIX: LIST_REST does NOT return autoreleased object - need to autorelease it
-    return AUTORELEASE(RETAIN(args_list));
+    // args_list is part of the list_data structure, which is already safe (caller has strong reference)
+    return args_list;
 }
 
 // ============================================================================
@@ -2280,7 +2306,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     }
 
     if (env == NULL) {
-        return AUTORELEASE(RETAIN(expr));
+        return expr;
     }
 
     unsigned char expr_tag = TAG(expr);
@@ -2360,6 +2386,9 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             if (IS_IMMEDIATE(resolved_value)) {
                 return resolved_value;
             }
+            // resolved_value can come from map_get (pointer) or ns_resolve (safe)
+            // map_get returns only pointer, ns_resolve returns safe value
+            // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
             return AUTORELEASE(RETAIN(resolved_value));
         }
 
@@ -2401,12 +2430,11 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     if (expr_tag == CLJ_VECTOR || expr_tag == CLJ_VECTOR_TRANSIENT || expr_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
         CljVector *vec = (CljVector*)expr;
         unsigned int count = vector_count(vec);
-        if (count == 0) return AUTORELEASE(RETAIN(expr));
+        if (count == 0) return expr;
         
         CljVector *result = make_vector(count, CLJ_VECTOR);
         RETAIN(result);
-        for (unsigned int i = 0; i < count; i++) {
-            ID elem = vector_nth(vec, i);
+        VECTOR_FOR_EACH(vec, elem) {
             ID eval_elem = (elem && elem != SYM_NIL) ? eval_body(elem, env, st, ctx) : NULL;
             ASSIGN(result, vector_conj(result, eval_elem));
         }
@@ -2510,12 +2538,11 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
             CljObject *body_result = NULL;
             if (body_list && list_type_matches(TAG(body_list))) {
                 CljList *body_items = as_list(body_list);
-                while (body_items && body_items->first) {
+                LIST_FOR_EACH(body_items, body_expr) {
                     if (body_result) {
                         RELEASE(body_result);
                     }
-                    body_result = eval_body(body_items->first, new_env, eval_st, NULL);
-                    body_items = body_items->rest ? as_list(body_items->rest) : NULL;
+                    body_result = eval_body(body_expr, new_env, eval_st, NULL);
                 }
             } else {
                 body_result = eval_body(body_list, new_env, eval_st, NULL);

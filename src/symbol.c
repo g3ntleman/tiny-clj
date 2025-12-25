@@ -7,7 +7,7 @@
 #include "types.h"  // For SINGLETON_RC
 #include "memory.h" // For ASSIGN
 #include "vector.h"  // For vector operations
-#include "hashmap.h" // For HashMap symbol table (O(1) lookup)
+#include "subjective-c/hashmap.h" // For HashMap symbol table (O(1) lookup)
 #include "symbol_token.h"  // For CljSymbolToken
 #include "common.h"  // For CLJ_ASSERT
 #include "strings.h"  // For string_data()
@@ -40,7 +40,6 @@ CljSymbol *SYM_UNQUOTE_SPLICE = NULL;
 CljSymbol *SYM_SOURCE = NULL;
 static CljSymbol *SYM_SOURCE_NATIVE = NULL;
 static CljSymbol *SYM_DIR_NATIVE = NULL;
-static CljSymbol *SYM_RT_NATIVE = NULL;
 static CljSymbol *SYM_SQRT_NATIVE = NULL;
 CljSymbol *SYM_DO = NULL;
 CljSymbol *SYM_LOOP = NULL;
@@ -74,6 +73,7 @@ CljSymbol *SYM_NTH = NULL;
 CljSymbol *SYM_TRIM = NULL;
 CljSymbol *SYM_UPPER_CASE = NULL;
 CljSymbol *SYM_LOWER_CASE = NULL;
+CljSymbol *SYM_PAD_LEFT = NULL;
 CljSymbol *SYM_LAST_INDEX_OF = NULL;
 CljSymbol *SYM_STRING_REVERSE = NULL;
 CljSymbol *SYM_FIRST = NULL;
@@ -109,6 +109,10 @@ CljSymbol *SYM_CLOJURE_CORE = NULL;
 CljSymbol *SYM_CLOJURE_STRING = NULL;
 CljSymbol *SYM_CLOJURE_REPL = NULL;
 CljSymbol *SYM_CLOJURE_LANG = NULL;
+CljSymbol *SYM_TINYCLJ = NULL;
+
+// tinyclj namespace function symbols
+CljSymbol *SYM_RETAIN_COUNT = NULL;
 
 // Additional symbols for hot path optimization
 CljSymbol *SYM_NS_STAR = NULL;
@@ -166,7 +170,7 @@ DEFINE_STATIC_SPECIAL_SYMBOL(sym_unquote_splice_data, "unquote-splice");
 DEFINE_STATIC_SYMBOL(sym_source_special_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_source_data, "source");
 DEFINE_EXTERN_SYMBOL(sym_dir_data, "dir");
-DEFINE_EXTERN_SYMBOL(sym_rt_data, "rt");
+DEFINE_EXTERN_SYMBOL(sym_retain_count_data, "retain-count");
 DEFINE_EXTERN_SYMBOL(sym_meta_data, "meta");
 DEFINE_EXTERN_SYMBOL(sym_with_meta_data, "with-meta");
 DEFINE_EXTERN_SPECIAL_SYMBOL(sym_do_data, "do");
@@ -222,6 +226,7 @@ DEFINE_STATIC_SYMBOL(sym_dotimes_data, "dotimes");
 DEFINE_EXTERN_SYMBOL(sym_trim_data, "trim");
 DEFINE_EXTERN_SYMBOL(sym_upper_case_data, "upper-case");
 DEFINE_EXTERN_SYMBOL(sym_lower_case_data, "lower-case");
+DEFINE_EXTERN_SYMBOL(sym_pad_left_data, "pad-left");
 DEFINE_EXTERN_SYMBOL(sym_last_index_of_data, "last-index-of");
 DEFINE_EXTERN_SYMBOL(sym_string_reverse_data, "reverse");
 
@@ -442,6 +447,8 @@ void init_special_symbols() {
 
     INIT_SYMBOL_NS(SYM_LOWER_CASE, sym_lower_case_data, SYM_CLOJURE_STRING);
 
+    INIT_SYMBOL_NS(SYM_PAD_LEFT, sym_pad_left_data, SYM_CLOJURE_STRING);
+
     INIT_SYMBOL_NS(SYM_LAST_INDEX_OF, sym_last_index_of_data, SYM_CLOJURE_STRING);
 
     INIT_SYMBOL_NS(SYM_STRING_REVERSE, sym_string_reverse_data, SYM_CLOJURE_STRING);
@@ -453,8 +460,11 @@ void init_special_symbols() {
     INIT_SYMBOL_NS(SYM_SOURCE_NATIVE, sym_source_data, SYM_CLOJURE_REPL);
     // clojure.repl native function symbol for dir
     INIT_SYMBOL_NS(SYM_DIR_NATIVE, sym_dir_data, SYM_CLOJURE_REPL);
-    // clojure.repl native function symbol for rt
-    INIT_SYMBOL_NS(SYM_RT_NATIVE, sym_rt_data, SYM_CLOJURE_REPL);
+    // Initialize tinyclj namespace symbol
+    SYM_TINYCLJ = intern_symbol_global("tinyclj");
+    
+    // tinyclj native function symbol for retain-count
+    INIT_SYMBOL_NS(SYM_RETAIN_COUNT, sym_retain_count_data, SYM_TINYCLJ);
     
     // clojure.core sqrt native function symbol
     INIT_SYMBOL_NS(SYM_SQRT_NATIVE, sym_sqrt_data, SYM_CLOJURE_CORE);

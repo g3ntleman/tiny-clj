@@ -9,7 +9,7 @@
 #include "value.h"
 #include "object.h"
 #include "kv_macros.h"
-#include "subjective-c/public/callbacks.h"
+#include "subjective-c/callbacks.h"
 
 #define FNV1A_OFFSET 2166136261u
 #define FNV1A_PRIME  16777619u

@@ -1,6 +1,9 @@
 #ifndef TINY_CLJ_H
 #define TINY_CLJ_H
 
+// Version string
+#define TINY_CLJ_VERSION "0.2"
+
 #include <stdbool.h>
 #include "object.h"
 #include "exception.h"

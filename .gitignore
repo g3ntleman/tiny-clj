@@ -51,6 +51,8 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+venv/
+.venv/
 
 # System files
 .DS_Store
@@ -82,3 +84,4 @@ tags
 # CMake generated files with absolute paths
 DartConfiguration.tcl
 compile_commands.json
+subjective-c/subjective-c-tests

@@ -26,7 +26,7 @@ set(SUBJECTIVE_C_SOURCES
 add_library(subjective-c STATIC ${SUBJECTIVE_C_SOURCES})
 target_include_directories(subjective-c
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/public
+        ${CMAKE_SOURCE_DIR}               # For <subjective-c/...> includes
         ${CMAKE_SOURCE_DIR}/src
 )
 target_compile_features(subjective-c PUBLIC c_std_99)
@@ -65,8 +65,8 @@ add_executable(subjective-c-tests ${SUBJECTIVE_C_TEST_SOURCES})
 target_include_directories(subjective-c-tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/external/unity/src
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/public
+        ${CMAKE_SOURCE_DIR}               # For <subjective-c/...> includes
+        ${CMAKE_CURRENT_SOURCE_DIR}       # For "subjective-c.h" in tests
         ${CMAKE_SOURCE_DIR}/src
 )
 target_link_libraries(subjective-c-tests PRIVATE subjective-c)

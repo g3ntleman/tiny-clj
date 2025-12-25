@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_SYMBOLS_H
 #define TINY_CLJ_SYMBOLS_H
 
-#include "subjective-c/public/object.h"
+#include "subjective-c/object.h"
 #include <stdbool.h>
 
 // Forward declaration for CljSymbol (needed for self-reference)
@@ -95,6 +95,7 @@ extern CljSymbol *SYM_NTH;
 extern CljSymbol *SYM_TRIM;
 extern CljSymbol *SYM_UPPER_CASE;
 extern CljSymbol *SYM_LOWER_CASE;
+extern CljSymbol *SYM_PAD_LEFT;
 extern CljSymbol *SYM_LAST_INDEX_OF;
 extern CljSymbol *SYM_STRING_REVERSE;
 extern CljSymbol *SYM_FIRST;
@@ -130,7 +131,11 @@ extern CljSymbol *SYM_CLOJURE_CORE;
 extern CljSymbol *SYM_CLOJURE_STRING;
 extern CljSymbol *SYM_CLOJURE_REPL;
 extern CljSymbol *SYM_CLOJURE_LANG;
+extern CljSymbol *SYM_TINYCLJ;
 extern CljSymbol *SYM_NS_STAR;
+
+// tinyclj namespace function symbols
+extern CljSymbol *SYM_RETAIN_COUNT;
 
 #if defined(CLJ_HOT_PATH)
     #if defined(__clang__) || defined(__GNUC__)
@@ -166,11 +171,12 @@ typedef struct StaticSymbolData {
 extern StaticSymbolData sym_trim_data;
 extern StaticSymbolData sym_upper_case_data;
 extern StaticSymbolData sym_lower_case_data;
+extern StaticSymbolData sym_pad_left_data;
 extern StaticSymbolData sym_last_index_of_data;
 extern StaticSymbolData sym_string_reverse_data;
 extern StaticSymbolData sym_source_data;
 extern StaticSymbolData sym_dir_data;
-extern StaticSymbolData sym_rt_data;
+extern StaticSymbolData sym_retain_count_data;
 extern StaticSymbolData sym_meta_data;
 extern StaticSymbolData sym_with_meta_data;
 extern StaticSymbolData sym_reduce_data;
