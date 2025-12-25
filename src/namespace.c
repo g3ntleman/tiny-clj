@@ -149,13 +149,8 @@ static CljMap* grow_transient_map(CljMap *old_map) {
         new_map->data[i] = NULL;
     }
     
-    // Copy all existing entries using map_conj (handles RETAIN automatically)
     for (int i = 0; i < old_map->count; i++) {
-        CljObject *key = KV_KEY(old_map->data, i);
-        CljObject *value = KV_VALUE(old_map->data, i);
-        if (key) {
-            map_conj(new_map, key, value);
-        }
+        map_conj(new_map, KV_KEY(old_map->data, i), KV_VALUE(old_map->data, i));
     }
     
     return new_map;
@@ -279,8 +274,6 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     CljNamespace *ns = make_namespace(cname, file);
     if (!ns) return NULL;
     
-    // Add namespace to registry map (Key: name_symbol, Value: ns)
-    // map_conj() retains the value, so we need to retain ns before adding
     RETAIN(ns);
     CljMap *new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
     if (!new_registry) {
@@ -304,22 +297,16 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     }
     g_runtime.ns_registry = new_registry;
     
-    // CRITICAL: For clojure.core, also register it with NULL as key
-    // This allows ns_find_by_symbol(NULL) to return clojure.core
     if (ns->name == SYM_CLOJURE_CORE) {
         RETAIN(ns);
         CljMap *new_registry_with_null = map_conj(g_runtime.ns_registry, NULL, ns);
         if (new_registry_with_null) {
             g_runtime.ns_registry = new_registry_with_null;
         } else {
-            // Failed to add NULL key - this shouldn't happen, but don't fail
             RELEASE(ns);
         }
     }
     
-    // Cache clojure.core for priority lookup (fast symbol pointer comparison)
-    // Note: CljNamespace is now a CljObject subtype, but we just store a pointer here
-    // The namespace is retained when added to the registry, so no additional retain needed
     return ns;
 }
 
@@ -546,15 +533,12 @@ void ns_register(CljNamespace *ns) {
     }
     g_runtime.ns_registry = new_registry;
     
-    // CRITICAL: For clojure.core, also register it with NULL as key
-    // This allows ns_find_by_symbol(NULL) to return clojure.core
     if (ns->name == SYM_CLOJURE_CORE) {
         RETAIN(ns);
         CljMap *new_registry_with_null = map_conj(g_runtime.ns_registry, NULL, ns);
         if (new_registry_with_null) {
             g_runtime.ns_registry = new_registry_with_null;
         } else {
-            // Failed to add NULL key - this shouldn't happen, but don't fail
             RELEASE(ns);
         }
     }
@@ -608,17 +592,11 @@ CljNamespace* ns_find(const char *cname) {
 }
 
 void ns_cleanup() {
-    // Cleanup all namespaces (caches will be automatically rebuilt when needed)
     if (g_runtime.ns_registry) {
-        // Iterate over all namespaces and release them
-        map_foreach(g_runtime.ns_registry, release_namespace_callback);
-        
-        // Release the registry map itself
-        RELEASE(g_runtime.ns_registry);
+        CljMap *registry_to_free = g_runtime.ns_registry;
         g_runtime.ns_registry = NULL;
+        RELEASE(registry_to_free);
     }
-    
-    // Cache will be automatically rebuilt when needed via ns_find_by_symbol
 }
 
 // Thread-local global EvalState (zero-initialized)
@@ -655,6 +633,12 @@ void reset_eval_state(void) {
     memset(&g_eval_state, 0, sizeof(EvalState));
     g_eval_state.current_ns = ns_get_or_create("user", NULL);
     g_eval_state_initialized = true;
+}
+
+// Clear current_ns pointer without creating a new namespace
+// Used during cleanup to prevent dangling pointers
+void reset_eval_state_current_ns(void) {
+    g_eval_state.current_ns = NULL;
 }
 
 // EvalState functions

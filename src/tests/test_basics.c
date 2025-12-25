@@ -108,35 +108,29 @@ TEST(test_map_creation) {
 }
 
 TEST(test_array_map_builtin) {
-        EvalState *eval_state = evalstate_new(false);
+        // array-map requires clojure.core to be loaded, so use g_test_eval_state
+        TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
         // Test empty map: (array-map)
-        CljObject *result0 = parse("(array-map)", eval_state);
-        ID eval0 = eval_parsed(result0, eval_state, NULL);
+        CljObject *result0 = parse("(array-map)", g_test_eval_state);
+        ID eval0 = eval_parsed(result0, g_test_eval_state, NULL);
         TEST_ASSERT_EQUAL_INT(0, map_count(eval0));
-        // result0 and eval0 are automatically managed by AUTORELEASE
 
         // Test single key-value: (array-map "a" 1)
-        CljObject *eval1 = eval_string("(array-map \"a\" 1)", eval_state);
-
+        CljObject *eval1 = eval_string("(array-map \"a\" 1)", g_test_eval_state);
         TEST_ASSERT_NOT_NULL(eval1);
         TEST_ASSERT_EQUAL_INT(CLJ_MAP, eval1->type);
         TEST_ASSERT_EQUAL_INT(1, map_count((CljMap*)eval1));
-        // result1 and eval1 are automatically managed by parse() and eval_parsed()
 
         // Test multiple pairs: (array-map "a" 1 "b" 2)
-        CljObject *result2 = parse("(array-map \"a\" 1 \"b\" 2)", eval_state);
-        ID eval2 = eval_parsed(result2, eval_state, NULL);
+        CljObject *result2 = parse("(array-map \"a\" 1 \"b\" 2)", g_test_eval_state);
+        ID eval2 = eval_parsed(result2, g_test_eval_state, NULL);
         TEST_ASSERT_EQUAL_INT(2, map_count(eval2));
-        // result2 and eval2 are automatically managed by parse() and eval_parsed()
 
         // Test with keywords: (array-map :a 1 :b 2)
-        CljObject *result3 = parse("(array-map :a 1 :b 2)", eval_state);
-        ID eval3 = eval_parsed(result3, eval_state, NULL);
+        CljObject *result3 = parse("(array-map :a 1 :b 2)", g_test_eval_state);
+        ID eval3 = eval_parsed(result3, g_test_eval_state, NULL);
         TEST_ASSERT_EQUAL_INT(2, map_count(eval3));
-        // result3 and eval3 are automatically managed by parse() and eval_parsed()
-
-        evalstate_free(eval_state);
 }
 
 TEST(test_integer_creation) {

@@ -98,32 +98,21 @@ void runtime_init(TinyClJRuntime *runtime) {
 void runtime_reset(TinyClJRuntime *runtime) {
     if (!runtime) return;
     
-    // Cleanup in correct order
-    // CRITICAL: Don't cleanup symbol_table - it preserves SYM_CLOJURE_CORE and other special symbols
-    // that are used by namespaces. If we clean it up, intern_symbol will create new symbols
-    // that don't match the ones stored in namespace mappings, causing lookup failures.
-    // The symbol table will persist across tests, which is fine since symbols are interned.
-    meta_registry_cleanup();
+    reset_eval_state_current_ns();
     ns_cleanup();
-    macro_cache_reset();  // Reset cached namespace pointers for macro lookup
-    
-    // Reset static variables
+    meta_registry_cleanup();
+    macro_cache_reset();
     reset_eval_arg_depth();
     
-    // Cleanup all CljObject* fields using ASSIGN (automatically frees via release_object_deep())
     ASSIGN(runtime->task_queue, NULL);
     ASSIGN(runtime->timer_queue, NULL);
     ASSIGN(runtime->resolve_cache, NULL);
     runtime->resolve_cache_epoch = 0;
     ASSIGN(runtime->pool_stack, NULL);
-    ASSIGN(runtime->ns_registry, NULL);
     ASSIGN(runtime->meta_registry, NULL);
     
-    // Reset primitive fields
     runtime->builtins_registered = false;
     runtime->timer_id_counter = 0;
-    
-    // Clear event loop queues (they will be reinitialized in runtime_init())
     event_loop_clear();
 }
 
