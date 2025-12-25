@@ -127,9 +127,18 @@ TEST(test_clojure_core_loads_inc) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     TEST_ASSERT_NOT_NULL(inc_sym);
     
-    // Load clojure.core (use global st from setUp)
-    evalstate_set_ns(g_test_eval_state, "clojure.core");
-    load_clojure_core(g_test_eval_state);
+    // Check if clojure.core is already loaded (from setUp)
+    CljNamespace *clojure_core_before = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    bool already_loaded = (clojure_core_before != NULL && 
+                          clojure_core_before->mappings != NULL &&
+                          map_get(clojure_core_before->mappings, inc_sym, NULL) != NULL);
+    
+    // Only load clojure.core if it's not already loaded
+    // (setUp() already loads it, so this avoids double-loading)
+    if (!already_loaded) {
+        evalstate_set_ns(g_test_eval_state, "clojure.core");
+        load_clojure_core(g_test_eval_state);
+    }
     
     // Check if inc is in clojure.core mappings
     CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
@@ -186,9 +195,20 @@ TEST(test_clojure_core_loads_inc) {
 
 // Test: Verify that all core functions are loaded correctly
 TEST(test_clojure_core_loads_all_functions) {
-    // Load clojure.core (use global st from setUp)
-    evalstate_set_ns(g_test_eval_state, "clojure.core");
-    load_clojure_core(g_test_eval_state);
+    // Check if clojure.core is already loaded (from setUp)
+    CljNamespace *clojure_core_before = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    CljSymbol *inc_sym = intern_symbol_global("inc");
+    bool already_loaded = (clojure_core_before != NULL && 
+                          clojure_core_before->mappings != NULL &&
+                          inc_sym != NULL &&
+                          map_get(clojure_core_before->mappings, inc_sym, NULL) != NULL);
+    
+    // Only load clojure.core if it's not already loaded
+    // (setUp() already loads it, so this avoids double-loading)
+    if (!already_loaded) {
+        evalstate_set_ns(g_test_eval_state, "clojure.core");
+        load_clojure_core(g_test_eval_state);
+    }
     
     // Check if key functions are loaded
     CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
