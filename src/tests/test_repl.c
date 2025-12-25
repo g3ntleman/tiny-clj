@@ -385,9 +385,9 @@ TEST(test_repl_find_doc_can_be_called) {
     // Test: find-doc can be called (simplified implementation)
     // Note: find-doc may fail if dependencies are missing, so we catch exceptions
     TRY {
-        CljObject *result = eval_string("(clojure.repl/find-doc \"pattern\")", g_test_eval_state);
-        // find-doc prints to stdout and returns nil
-        TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL);
+    CljObject *result = eval_string("(clojure.repl/find-doc \"pattern\")", g_test_eval_state);
+    // find-doc prints to stdout and returns nil
+    TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL);
     } CATCH(ex) {
         // If find-doc fails due to missing dependencies, that's acceptable for now
         // The function exists, which is what we're testing
