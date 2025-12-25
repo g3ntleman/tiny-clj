@@ -4,7 +4,7 @@
 #include "memory.h"
 #include "exception.h"
 #include "channel.h"
-#include "types.h"  // For ZOMBIE_RC
+#include "types.h"  // For ZOMBIE_RC, clj_type_name
 #include "runtime.h"
 #include "vector.h"
 #include "map.h"
@@ -274,6 +274,34 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
     CljMap *result_chan;
     if (!task_from_map(task_map, &fn, &result_chan)) {
         RELEASE(task_map);
+        return false;
+    }
+    
+    // CRITICAL: Validate that fn is actually a function before calling eval_function_call
+    // This prevents crashes when run-next-task is called recursively during go-block execution
+    // The fn must be CLJ_FUNC (native function) or CLJ_CLOSURE (Clojure function)
+    // 
+    // NOTE: If fn is not a function, this indicates a serious bug in task creation/storage.
+    // We should throw an exception rather than silently skipping, to help debug the issue.
+    if (!fn || (TAG(fn) != CLJ_FUNC && TAG(fn) != CLJ_CLOSURE)) {
+        // Invalid function object - this should never happen if tasks are created correctly
+        // This could happen if:
+        // 1. The task map is corrupted
+        // 2. The function object was incorrectly stored in the task map
+        // 3. Memory corruption
+        // 
+        // Throw exception to help debug, but also handle gracefully to prevent crash
+        const char *fn_type = fn ? clj_type_name(TAG(fn)) : "NULL";
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+            "Invalid function object in task queue: expected CLJ_FUNC or CLJ_CLOSURE, got %s",
+            fn_type);
+        RELEASE(task_map);
+        if (result_chan) {
+            // Close channel without value (error case)
+            result_channel_close(result_chan);
+            RELEASE(result_chan);
+        }
+        if (fn) RELEASE(fn);
         return false;
     }
     
