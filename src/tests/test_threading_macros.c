@@ -7,6 +7,14 @@
 
 #include "tests_common.h"
 
+// Forward declarations
+int load_clojure_repl(EvalState *st);
+
+// Helper to load clojure.repl namespace
+static void load_repl_namespace(void) {
+    load_clojure_repl(g_test_eval_state);
+}
+
 // ============================================================================
 // TEST: -> (thread-first) Basic Functionality
 // ============================================================================
@@ -240,9 +248,13 @@ TEST(test_threading_cond_last_no_clauses) {
 TEST(test_threading_source_thread_first) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that -> macro is defined and has source
     // Note: source prints to stdout, so we just verify it doesn't crash
-    CljObject *result = eval_string("(source '->)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source '->)", g_test_eval_state);
     // source returns nil, so result should be NULL
     TEST_ASSERT_NULL(result);
 }
@@ -250,48 +262,72 @@ TEST(test_threading_source_thread_first) {
 TEST(test_threading_source_thread_last) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that ->> macro is defined and has source
-    CljObject *result = eval_string("(source '->>)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source '->>)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
 }
 
 TEST(test_threading_source_as) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that as-> macro is defined and has source
-    CljObject *result = eval_string("(source 'as->)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source 'as->)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
 }
 
 TEST(test_threading_source_some_first) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that some-> macro is defined and has source
-    CljObject *result = eval_string("(source 'some->)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source 'some->)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
 }
 
 TEST(test_threading_source_some_last) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that some->> macro is defined and has source
-    CljObject *result = eval_string("(source 'some->>)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source 'some->>)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
 }
 
 TEST(test_threading_source_cond_first) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that cond-> macro is defined and has source
-    CljObject *result = eval_string("(source 'cond->)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source 'cond->)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
 }
 
 TEST(test_threading_source_cond_last) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
+    // Load clojure.repl namespace (source is defined there)
+    load_repl_namespace();
+    
     // Verify that cond->> macro is defined and has source
-    CljObject *result = eval_string("(source 'cond->>)", g_test_eval_state);
+    // Use qualified name: clojure.repl/source
+    CljObject *result = eval_string("(clojure.repl/source 'cond->>)", g_test_eval_state);
     TEST_ASSERT_NULL(result);
 }
 
