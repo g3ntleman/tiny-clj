@@ -10,7 +10,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DENABLE_META")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DENABLE_META -DZOMBIE_ENABLED")
 set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG}")
 # Unity's setjmp/longjmp should be compatible with our exception system
 # Both use separate jmp_buf stacks, so they should work together
@@ -375,6 +375,10 @@ add_executable(unit-tests
 )
 target_link_libraries(unit-tests PRIVATE subjective-c)
 
+# Ensure subjective-c library is compiled with same DEBUG flags as unit-tests
+# This is critical: exception.c must use DEBUG to match CLJException struct size
+target_compile_definitions(subjective-c PRIVATE DEBUG UNITY_TESTS ENABLE_MEMORY_PROFILING ENABLE_META UNITY_INCLUDE_EXEC_TIME ZOMBIE_ENABLED)
+
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE
 # Remove any dependency on CMAKE_BUILD_TYPE for unit-tests
@@ -389,7 +393,7 @@ if(ENABLE_ASAN)
         # Use target_link_options to properly set linker flags
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -412,7 +416,7 @@ if(ENABLE_ASAN)
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -429,7 +433,7 @@ else()
         # macOS: disable dead_strip to preserve all functions (including test registrations)
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -449,7 +453,7 @@ else()
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"

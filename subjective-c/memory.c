@@ -74,19 +74,13 @@ static inline void update_debug_output_active(void) {
 }
 
 #ifdef DEBUG
-// Public flag to enable zombie mode (NSZombieEnabled)
-bool g_zombie_enabled = false;
-
-/** @brief Enable zombie mode for debugging */
-void enable_zombie_mode(void) {
-    g_zombie_enabled = true;
-}
+// Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
+// No runtime variable needed - if ZOMBIE_ENABLED is defined, zombie mode is active
+#ifdef ZOMBIE_ENABLED
+#warning "ZOMBIE_ENABLED is active - objects will NOT be freed, but marked as zombies"
+#endif
 #else
-bool g_zombie_enabled = false;
-void enable_zombie_mode(void) {
-    // No-op in non-DEBUG builds
-    g_zombie_enabled = false;
-}
+// Release builds: zombie mode not available
 #endif
 
 // Function to enable debug output after initialization
@@ -299,15 +293,20 @@ void release(CljObject *v) {
 #ifdef DEBUG
         // In zombie mode, mark object as zombie BEFORE deep release
         // This allows release_object_deep to access the object safely
-        if (g_zombie_enabled) {
-            v->rc = ZOMBIE_RC;  // Mark as zombie before deep release
-        }
+        // CRITICAL: Mark as zombie FIRST, then release_object_deep will skip free() calls
+#ifdef ZOMBIE_ENABLED
+        v->rc = ZOMBIE_RC;  // Mark as zombie before deep release
+#endif
 #endif
         release_object_deep(v); 
-        DEALLOC(v); // Hook for memory profiling - marks as zombie if enabled
+        DEALLOC(v); // Hook for memory profiling - marks as zombie if enabled (won't free if zombie)
 
         if (g_debug_output_active) {
+#ifdef ZOMBIE_ENABLED
+            printf("🔍 release: Object %p marked as zombie\n", v);
+#else
             printf("🔍 release: Object %p freed\n", v);
+#endif
         }
     }
 }
@@ -328,10 +327,23 @@ CljObject *autorelease(CljObject *v) {
 
     // Require active autorelease pool
     if (g_pool.cp_count == 0) {
+        // Safety: check if v is valid before accessing v->type
+        CljType type_val = CLJ_NIL;
+        if (v && (uintptr_t)v >= 0x1000) {
+            type_val = v->type;
+        }
+        // In DEBUG builds, throw exception to catch programming errors
+        // In release builds, silently ignore (object will be leaked, but program continues)
+#ifdef DEBUG
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
-                v, v ? v->type : -1);
+                v, type_val);
+#else
+        // In release builds, just return the object (it will be leaked)
+        // This prevents crashes in production code
+        return v;
+#endif
         return v;
     }
     
@@ -483,7 +495,8 @@ void autorelease_pool_destroy(void) {
     // Drain all remaining pools
     autorelease_pool_cleanup_all();
     
-    // Free backing arrays
+    // Free backing arrays (always free pool structures, even in zombie mode)
+    // Pool structures are not objects, so they should be freed normally
     if (g_pool.items) {
         free(g_pool.items);
         g_pool.items = NULL;
@@ -702,9 +715,12 @@ static void release_object_default(CljObject *v) {
                     // Release captured namespace reference
                     RELEASE(func->ns);
                     // Free function name (strdup'd in make_function)
+                    // Don't free in zombie mode - object must remain intact
+#ifndef ZOMBIE_ENABLED
                     if (func->name) {
                         free((void*)func->name);
                     }
+#endif
                 }
             }
             break;
@@ -712,9 +728,12 @@ static void release_object_default(CljObject *v) {
         case CLJ_BYTE_ARRAY:
             {
                 CljByteArray *ba = as_byte_array(v);
+                // Don't free in zombie mode - object must remain intact
+#ifndef ZOMBIE_ENABLED
                 if (ba && ba->data) {
                     free(ba->data);
                 }
+#endif
             }
             break;
             
@@ -743,9 +762,12 @@ static void release_object_default(CljObject *v) {
                     // Release aliases map (CljMap*) - RELEASE handles NULL
                     RELEASE(ns->aliases);
                     // Free filename (strdup'd in make_namespace/ns_get_or_create)
+                    // Don't free in zombie mode - object must remain intact
+#ifndef ZOMBIE_ENABLED
                     if (ns->filename) {
                         free((void*)ns->filename);
                     }
+#endif
                     // Note: name (CljSymbol*) is an interned symbol managed by the symbol table,
                     // so it should NOT be released here. The symbol table owns the symbol's lifetime.
                 }
