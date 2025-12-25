@@ -3,6 +3,7 @@
 #include "tiny_clj.h"
 #include "repl.h"
 #include "parser.h"
+#include "eval.h"  // For eval_parsed_value
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "object.h"
@@ -151,13 +152,8 @@ bool eval_multiform_string(const char *code, EvalState *st) {
 
             // Use TRY/CATCH to handle exceptions for each expression
             TRY {
-                // Parse one expression using the new parse_from_reader function
                 CljValue parsed = parse_from_reader(&reader, st);
-
-                // Evaluate the parsed expression (can be NULL for nil, e.g., () parses to nil)
-                ID eval_result = eval_parsed(parsed, st, NULL);
-
-                // Print the result (can be NULL for nil)
+                ID eval_result = eval_parsed_value(parsed, st);
                 print_result(eval_result);
 
                 // Check for EOF after processing (in case this was the last expression)

@@ -37,25 +37,28 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
     switch (v->type) {
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
-            if (sym && sym->cname) {
-                // Output symbol name as Clojure code (no "SYM:" prefix)
-                // If symbol has namespace, output as "namespace/name"
+            // Check if this is SYM_NIL (nil symbol) - distinguish from evaluated nil (NULL)
+            if (v == (CljObject*)SYM_NIL) {
+                *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:nil");
+            } else if (sym && sym->cname) {
+                // Output symbol name with SYM: prefix to distinguish from evaluated values
+                // If symbol has namespace, output as "SYM:namespace/name"
                 if (sym->ns_name && sym->ns_name->cname) {
-                    *offset += snprintf(buf + *offset, buf_size - *offset, "%s/%s", 
+                    *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:%s/%s", 
                                        sym->ns_name->cname, sym->cname);
                 } else {
-                    *offset += snprintf(buf + *offset, buf_size - *offset, "%s", sym->cname);
+                    *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:%s", sym->cname);
                 }
             } else {
-                *offset += snprintf(buf + *offset, buf_size - *offset, "?");
+                *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:?");
             }
             break;
         }
 
         case CLJ_LIST: {
             CljList *list = as_list(v);
-            // Output list as Clojure code: (element1 element2 ...)
-            *offset += snprintf(buf + *offset, buf_size - *offset, "(");
+            // Output list with type indicator: [List: (element1 element2 ...)]
+            *offset += snprintf(buf + *offset, buf_size - *offset, "[List: (");
             if (list) {
                 CljObject *current = list->first;
                 int count = 0;
@@ -78,7 +81,7 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
                     *offset += snprintf(buf + *offset, buf_size - *offset, " ...");
                 }
             }
-            *offset += snprintf(buf + *offset, buf_size - *offset, ")");
+            *offset += snprintf(buf + *offset, buf_size - *offset, ")]");
             break;
         }
 
@@ -111,6 +114,37 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
         case CLJ_VECTOR_TRANSIENT:
             *offset += snprintf(buf + *offset, buf_size - *offset, "#<vector>");
             break;
+
+        case CLJ_AST_NODE: {
+            CljASTNode *node = (CljASTNode*)v;
+            // Output ASTNode with type indicator: [ASTNode: (element1 element2 ...)]
+            *offset += snprintf(buf + *offset, buf_size - *offset, "[ASTNode: (");
+            if (node) {
+                CljObject *current = node->first;
+                int count = 0;
+                bool first = true;
+                CljList *rest = node->rest ? as_list(node->rest) : NULL;
+                while (current && count < 20) {  // Limit to 20 elements for readability
+                    if (!first) {
+                        *offset += snprintf(buf + *offset, buf_size - *offset, " ");
+                    }
+                    first = false;
+                    if (depth > 5) {
+                        *offset += snprintf(buf + *offset, buf_size - *offset, "...");
+                        break;
+                    }
+                    print_ast_recursive(current, depth + 1, buf, buf_size, offset);
+                    current = rest ? rest->first : NULL;
+                    rest = rest && rest->rest ? as_list(rest->rest) : NULL;
+                    count++;
+                }
+                if (current) {
+                    *offset += snprintf(buf + *offset, buf_size - *offset, " ...");
+                }
+            }
+            *offset += snprintf(buf + *offset, buf_size - *offset, ")]");
+            break;
+        }
 
         default:
             *offset += snprintf(buf + *offset, buf_size - *offset, "#<type:%d>", v->type);

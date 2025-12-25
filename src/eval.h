@@ -68,7 +68,15 @@ void set_suppress_time_output(bool suppress);
 // Reset eval arg depth (for test isolation)
 void reset_eval_arg_depth(void);
 
-// Convenience function for string evaluation
+// Convenience functions for string evaluation
+/**
+ * @brief Evaluate a parsed CljValue (handles immediate values and heap objects)
+ * @param parsed The parsed CljValue (can be immediate or heap object)
+ * @param eval_state The evaluation state
+ * @return The evaluated result (autoreleased) or NULL only if result is nil
+ */
+ID eval_parsed_value(CljValue parsed, EvalState *eval_state);
+
 /**
  * @brief Parse and evaluate a Clojure expression from a string (convenience)
  * @param expr_str The Clojure expression as a string

@@ -293,6 +293,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
             }
             if (macro) {
                 // Collect unevaluated arguments for macro call
+                // NOTE: Arguments are NOT canonicalized here - macros work with raw forms
+                // The expanded form will be canonicalized recursively below
                 ID args[16];
                 int argc = 0;
                 for (CljList *cur = list->rest ? as_list(list->rest) : NULL;
@@ -308,7 +310,25 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 // Transfer metadata from original form to expanded form
                 move_meta(list, expanded);
                 
+                // CRITICAL: Check if expanded is an immediate value (e.g., (-> 5) returns 5)
+                // Immediate values don't need wrapping and should be returned directly
+                if (IS_IMMEDIATE(expanded)) {
+                    // Return immediate value directly (canonicalize_expr handles this)
+                    return canonicalize_expr(expanded, st, in_quote);
+                }
+                
+                // CRITICAL: Ensure expanded form is a list-like type (CLJ_LIST or CLJ_AST_NODE)
+                // Macros can return PersistentList (CLJ_LIST) which needs to be canonicalized
+                unsigned char expanded_tag = TAG(expanded);
+                if (!list_type_matches(expanded_tag)) {
+                    // Expanded form is not a list - this shouldn't happen for threading macros
+                    // but handle it gracefully by wrapping in a list
+                    CljList *wrapped = make_list(expanded, NULL);
+                    expanded = (ID)wrapped;
+                }
+                
                 // Recursively canonicalize the expanded form
+                // This will convert CLJ_LIST to CLJ_AST_NODE and canonicalize all elements
                 return canonicalize_expr(expanded, st, in_quote);
             }
         }

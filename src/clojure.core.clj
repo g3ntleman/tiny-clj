@@ -7,8 +7,53 @@ R"CLOJURE(
 ; ============================================================================
 
 ; ============================================================================
-; Arithmetic Functions
+; Core Collection Functions (must be defined early - used by other functions)
 ; ============================================================================
+^#^{:doc "Creates a new list containing the items."}
+(defn list [& items] :native)
+^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
+(defn first [coll] :native)
+^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
+(defn rest [coll] :native)
+^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
+(defn next [coll] :native)
+^#^{:doc "Returns a new seq where x is the first element and seq is the rest."}
+(defn cons [x seq] :native)
+^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
+(defn count [coll] :native)
+^#^{:doc "Creates a new vector containing the args."}
+(defn vector [& args] :native)
+^#^{:doc "Returns a vector of the contents of coll."}
+(defn vec [coll] :native)
+^#^{:doc "Returns a lazy sequence of the first n items in coll."}
+(defn take [n coll]
+  (if (or (<= n 0) (empty? coll))
+    (list)
+    (cons (first coll) (take (dec n) (rest coll)))))
+^#^{:doc "Returns a lazy sequence of all but the first n items in coll."}
+(defn drop [n coll]
+  (if (or (<= n 0) (empty? coll))
+    coll
+    (drop (dec n) (rest coll))))
+
+; ============================================================================
+; Arithmetic Functions (Native) - defined early for use in numeric predicates
+; ============================================================================
+^#^{:doc "Returns the sum of numbers. (+) returns 0."}
+(defn + [& args] :native)
+^#^{:doc "Returns the difference of numbers. (- x) returns negation of x. (- x y) returns x minus y."}
+(defn - [& args] :native)
+^#^{:doc "Returns the product of numbers. (*) returns 1."}
+(defn * [& args] :native)
+^#^{:doc "Returns the quotient of dividing numerator by denominator(s)."}
+(defn / [& args] :native)
+^#^{:doc "Modulus of num and div. Truncates toward negative infinity."}
+(defn mod [num div] :native)
+^#^{:doc "quot[ient] of dividing numerator by denominator."}
+(defn quot [num div] :native)
+^#^{:doc "Bitwise left shift. Shifts x left by n bits."}
+(defn bit-shift-left [x n] :native)
+
 ^#^{:doc "Increments a number by 1. Returns the number plus one."}
 (def inc (fn [x] (+ x 1)))
 ^#^{:doc "Decrements a number by 1. Returns the number minus one."}
@@ -27,12 +72,6 @@ R"CLOJURE(
 (def even? (fn [x] (= (mod x 2) 0)))
 ^#^{:doc "Returns true if x is odd, false otherwise."}
 (def odd? (fn [x] (= (mod x 2) 1)))
-
-; ============================================================================
-; Comparison & Logic
-; ============================================================================
-^#^{:doc "Returns true if x is logical false, false otherwise."}
-(def not (fn [x] (if x false true)))
 ^#^{:doc "Returns the maximum of a and b."}
 (def max (fn [a b] (if (> a b) a b)))
 ^#^{:doc "Returns the minimum of a and b."}
@@ -124,6 +163,60 @@ R"CLOJURE(
 (defn seqable? [x] (or (nil? x) (coll? x) (string? x)))
 ^#^{:doc "Returns true if x implements IFn. Note that many data structures implement IFn."}
 (defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
+
+; ============================================================================
+; Sequence Helper Functions (needed by Threading Macros)
+; ============================================================================
+^#^{:doc "Returns a lazy seq representing the concatenation of the elements in x and y."}
+(defn concat [x y]
+  (if (empty? x)
+    (if (nil? y) (list) y)
+    (cons (first x) (concat (rest x) y))))
+
+^#^{:doc "Returns the last item in coll, in linear time."}
+(defn last [coll]
+  (if (empty? coll)
+    nil
+    (if (empty? (rest coll))
+      (first coll)
+      (last (rest coll)))))
+
+^#^{:doc "Return a seq of all but the last item in coll, in linear time."}
+(defn butlast [coll]
+  (if (or (empty? coll) (empty? (rest coll)))
+    nil
+    (cons (first coll) (butlast (rest coll)))))
+
+^#^{:doc "Returns a lazy seq of the first item in each coll, then the second etc."}
+(defn interleave [c1 c2]
+  (if (or (empty? c1) (empty? c2))
+    (list)
+    (cons (first c1)
+          (cons (first c2)
+                (interleave (rest c1) (rest c2))))))
+
+^#^{:doc "Helper function for threading macros: interleaves a repeated value with a collection"}
+(defn interleave-repeat [val coll]
+  (if (empty? coll)
+    (list)
+    (cons val
+          (cons (first coll)
+                (interleave-repeat val (rest coll))))))
+
+^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
+(defn repeat [n x] :native)
+
+^#^{:doc "Returns a lazy sequence of lists of n items each."}
+(defn partition [n coll]
+  (if (empty? coll)
+    (list)
+    (let [p (take n coll)]
+      (if (< (count (vector p)) n)
+        (list)
+        (cons (vector p) (partition n (drop n coll)))))))
+
+^#^{:doc "Generate unique symbol names."}
+(defn gensym [& prefix] :native)
 
 ; ============================================================================
 ; Threading Macros
@@ -225,7 +318,7 @@ R"CLOJURE(
 (defn reduce [f coll] :native)
 
 ; ============================================================================
-; Arithmetic Functions (Native)
+; Arithmetic Functions (Native) - defined early for use in numeric predicates
 ; ============================================================================
 ^#^{:doc "Returns the sum of numbers. (+) returns 0."}
 (defn + [& args] :native)
@@ -247,8 +340,6 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns a lazy seq of numbers from start (inclusive) to end (exclusive), by step, where start defaults to 0, step to 1, and end to infinity."}
 (defn range [& args] :native)
-^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
-(defn repeat [n x] :native)
 
 ; ============================================================================
 ; Math Functions (Native)
@@ -295,18 +386,6 @@ R"CLOJURE(
 (defn subvec [v start & end] :native)
 ^#^{:doc "Returns a new collection consisting of coll with the xs 'added'. (conj coll item) adds item at an appropriate 'place' in the collection. For lists, conj prepends. For vectors, conj appends."}
 (defn conj [coll & items] :native)
-^#^{:doc "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."}
-(defn first [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil."}
-(defn rest [coll] :native)
-^#^{:doc "Returns a sequence of the items after the first. Calls seq on its argument. If there are no more items, returns nil (not a sequence)."}
-(defn next [coll] :native)
-^#^{:doc "Returns a new seq where x is the first element and seq is the rest."}
-(defn cons [x seq] :native)
-^#^{:doc "Creates a new list containing the items."}
-(defn list [& items] :native)
-^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
-(defn count [coll] :native)
 ^#^{:doc "Returns a seq of the items in coll in reverse order. Not lazy."}
 (defn reverse [coll] :native)
 ^#^{:doc "Associates key with val in map. When key is a keyword, returns a new map with the key/value added. When key is not a keyword, returns a new map with the key/value added. If a key already exists, its value is replaced."}
@@ -475,34 +554,9 @@ R"CLOJURE(
 ; Sequence Functions (Phase 1)
 ; ============================================================================
 
-^#^{:doc "Returns a lazy seq representing the concatenation of the elements in x and y."}
-(defn concat [x y]
-  (if (empty? x)
-    (if (nil? y) (list) y)
-    (cons (first x) (concat (rest x) y))))
-
-^#^{:doc "Returns a lazy sequence of the first n items in coll."}
-(defn take [n coll]
-  (if (or (<= n 0) (empty? coll))
-    (list)
-    (cons (first coll) (take (dec n) (rest coll)))))
-
-^#^{:doc "Returns a lazy sequence of all but the first n items in coll."}
-(defn drop [n coll]
-  (if (or (<= n 0) (empty? coll))
-    coll
-    (drop (dec n) (rest coll))))
 
 ^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
 (defn nthnext [coll n] :native)
-
-^#^{:doc "Returns the last item in coll, in linear time."}
-(defn last [coll]
-  (if (empty? coll)
-    nil
-    (if (empty? (rest coll))
-      (first coll)
-      (last (rest coll)))))
 
 ; ============================================================================
 ; Predicate Functions (Phase 2)
@@ -559,12 +613,6 @@ R"CLOJURE(
       (drop-while pred (rest coll))
       coll)))
 
-^#^{:doc "Return a seq of all but the last item in coll, in linear time."}
-(defn butlast [coll]
-  (if (or (empty? coll) (empty? (rest coll)))
-    nil
-    (cons (first coll) (butlast (rest coll)))))
-
 ^#^{:doc "Returns a lazy sequence of the non-nil results of (f item)."}
 (defn keep [f coll]
   (if (empty? coll)
@@ -573,22 +621,6 @@ R"CLOJURE(
       (if (nil? result)
         (keep f (rest coll))
         (cons result (keep f (rest coll)))))))
-
-^#^{:doc "Returns a lazy seq of the first item in each coll, then the second etc."}
-(defn interleave [c1 c2]
-  (if (or (empty? c1) (empty? c2))
-    (list)
-    (cons (first c1)
-          (cons (first c2)
-                (interleave (rest c1) (rest c2))))))
-
-^#^{:doc "Helper function for threading macros: interleaves a repeated value with a collection"}
-(defn interleave-repeat [val coll]
-  (if (empty? coll)
-    (list)
-    (cons val
-          (cons (first coll)
-                (interleave-repeat val (rest coll))))))
 
 ; ============================================================================
 ; Aggregation Functions (Phase 4)
@@ -626,17 +658,8 @@ R"CLOJURE(
     (step {} coll)))
 
 ; ============================================================================
-; Partitioning Functions (Phase 5)
+; Partitioning Functions (Phase 5) - partition is now defined earlier
 ; ============================================================================
-
-^#^{:doc "Returns a lazy sequence of lists of n items each."}
-(defn partition [n coll]
-  (if (empty? coll)
-    (list)
-    (let [p (take n coll)]
-      (if (< (count (vec p)) n)
-        (list)
-        (cons (vec p) (partition n (drop n coll)))))))
 
 ^#^{:doc "Returns a lazy sequence of lists like partition, but may include partitions with fewer than n items at the end."}
 (defn partition-all [n coll]
