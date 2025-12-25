@@ -102,10 +102,121 @@ R"CLOJURE(
   (list 'def name (cons 'fn (cons name (cons params body)))))
 
 ; ============================================================================
+; Type Predicates (needed by Threading Macros)
+; ============================================================================
+^#^{:doc "Returns true if x is a kind of persistent list."}
+(defn list? [x] :native)
+^#^{:doc "Returns true if x is a vector, false otherwise."}
+(defn vector? [x] :native)
+^#^{:doc "Returns true if x is a map, false otherwise."}
+(defn map? [x] :native)
+^#^{:doc "Returns true if x implements IFn."}
+(defn fn? [x] :native)
+^#^{:doc "Returns true if x is a Keyword."}
+(defn keyword? [x] :native)
+^#^{:doc "Returns true if x is a String."}
+(defn string? [x] :native)
+^#^{:doc "Returns true if x is a persistent collection."}
+(defn coll? [x] (or (list? x) (vector? x) (map? x)))
+^#^{:doc "Returns true if x implements ISeq."}
+(defn seq? [x] (list? x))
+^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}
+(defn seqable? [x] (or (nil? x) (coll? x) (string? x)))
+^#^{:doc "Returns true if x implements IFn. Note that many data structures implement IFn."}
+(defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
+
+; ============================================================================
+; Threading Macros
+; ============================================================================
+
+^#^{:doc "Threads the expr through the forms. Inserts x as the second item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the second item in second form, etc."}
+(defmacro -> [x & forms]
+  (let [thread-step (fn thread-step [x forms]
+                      (if (nil? forms)
+                        x
+                        (let [form (first forms)
+                              threaded (if (seq? form)
+                                         (concat (list (first form) x) (rest form))
+                                         (list form x))
+                              rest-forms (next forms)]
+                          (if (nil? rest-forms)
+                            threaded
+                            (thread-step threaded rest-forms)))))]
+    (thread-step x forms)))
+
+^#^{:doc "Threads the expr through the forms. Inserts x as the last item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the last item in second form, etc."}
+(defmacro ->> [x & forms]
+  (let [thread-step (fn thread-step [x forms]
+                      (if (nil? forms)
+                        x
+                        (let [form (first forms)
+                              threaded (if (seq? form)
+                                         (concat form (list x))
+                                         (list form x))
+                              rest-forms (next forms)]
+                          (if (nil? rest-forms)
+                            threaded
+                            (thread-step threaded rest-forms)))))]
+    (thread-step x forms)))
+
+^#^{:doc "Binds name to expr, evaluates the first form in the lexical context of that binding, then binds name to that result, repeating for each successive form, returning the result of the last form."}
+(defmacro as-> [expr name & forms]
+  (list 'let (concat (list name expr) (interleave-repeat name (butlast forms)))
+        (if (empty? forms)
+          name
+          (last forms))))
+
+^#^{:doc "When expr is not nil, threads it into the first form (via ->), and when that result is not nil, through the next etc"}
+(defmacro some-> [expr & forms]
+  (let [g (gensym)
+        steps (map (fn [step] (list 'if (list 'nil? g) 'nil (list '-> g step)))
+                   forms)]
+    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+          (if (empty? steps)
+            g
+            (last steps)))))
+
+^#^{:doc "When expr is not nil, threads it into the first form (via ->>), and when that result is not nil, through the next etc"}
+(defmacro some->> [expr & forms]
+  (let [g (gensym)
+        steps (map (fn [step] (list 'if (list 'nil? g) 'nil (list '->> g step)))
+                   forms)]
+    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+          (if (empty? steps)
+            g
+            (last steps)))))
+
+^#^{:doc "Takes an expression and a set of test/form pairs. Threads expr (via ->) through each form for which the corresponding test expression is true. Note that, unlike cond branching, cond-> threading does not short circuit after the first true test expression."}
+(defmacro cond-> [expr & clauses]
+  (if (not (even? (count clauses)))
+    (throw "cond-> requires an even number of clauses"))
+  (let [g (gensym)
+        steps (map (fn [[test step]] (list 'if test (list '-> g step) g))
+                   (partition 2 clauses))]
+    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+          (if (empty? steps)
+            g
+            (last steps)))))
+
+^#^{:doc "Takes an expression and a set of test/form pairs. Threads expr (via ->>) through each form for which the corresponding test expression is true. Note that, unlike cond branching, cond->> threading does not short circuit after the first true test expression."}
+(defmacro cond->> [expr & clauses]
+  (if (not (even? (count clauses)))
+    (throw "cond->> requires an even number of clauses"))
+  (let [g (gensym)
+        steps (map (fn [[test step]] (list 'if test (list '->> g step) g))
+                   (partition 2 clauses))]
+    (list 'let (concat (list g expr) (interleave (repeat g) (butlast steps)))
+          (if (empty? steps)
+            g
+            (last steps)))))
+
+; ============================================================================
 ; Metadata Functions
 ; ============================================================================
 ^#^{:doc "Returns the metadata of obj, returns nil if there is no metadata."}
 (defn meta [x] :native)
+^#^{:doc "Returns an object of the same type and value as obj, with map m as its metadata."}
+(defn with-meta [obj m] :native)
 
 ; ============================================================================
 ; Reduce Functions
@@ -137,7 +248,7 @@ R"CLOJURE(
 ^#^{:doc "Returns a lazy seq of numbers from start (inclusive) to end (exclusive), by step, where start defaults to 0, step to 1, and end to infinity."}
 (defn range [& args] :native)
 ^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
-(defn repeat [x] :native)
+(defn repeat [n x] :native)
 
 ; ============================================================================
 ; Math Functions (Native)
@@ -220,10 +331,7 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns true if x is nil, false otherwise."}
 (defn nil? [x] :native)
-^#^{:doc "Returns true if x is a vector, false otherwise."}
-(defn vector? [x] :native)
-^#^{:doc "Returns true if x is a map, false otherwise."}
-(defn map? [x] :native)
+; vector? and map? are now defined earlier (before Threading Macros)
 
 ; ============================================================================
 ; Type Predicates (Native)
@@ -234,14 +342,9 @@ R"CLOJURE(
 (defn integer? [x] :native)
 ^#^{:doc "Returns true if n is a floating point number."}
 (defn float? [x] :native)
-^#^{:doc "Returns true if x is a String."}
-(defn string? [x] :native)
-^#^{:doc "Returns true if x is a Keyword."}
-(defn keyword? [x] :native)
+; string?, keyword?, and fn? are now defined earlier (before Threading Macros)
 ^#^{:doc "Returns true if x is a Symbol."}
 (defn symbol? [x] :native)
-^#^{:doc "Returns true if x implements IFn."}
-(defn fn? [x] :native)
 ^#^{:doc "Returns true if x is a Character."}
 (defn char? [x] :native)
 
@@ -260,14 +363,7 @@ R"CLOJURE(
 (defn list? [x] :native)
 ^#^{:doc "Returns true if x is a kind of persistent set."}
 (defn set? [x] false)
-^#^{:doc "Returns true if x is a persistent collection."}
-(defn coll? [x] (or (list? x) (vector? x) (map? x)))
-^#^{:doc "Returns true if x implements ISeq."}
-(defn seq? [x] (list? x))
-^#^{:doc "Returns true if (seq x) will succeed, false otherwise."}
-(defn seqable? [x] (or (nil? x) (coll? x) (string? x)))
-^#^{:doc "Returns true if x implements IFn. Note that many data structures implement IFn."}
-(defn ifn? [x] (or (fn? x) (keyword? x) (map? x) (vector? x)))
+; coll?, seq?, seqable?, and ifn? are now defined earlier (before Threading Macros)
 
 ; ============================================================================
 ; Comparison Functions (Native)
@@ -486,6 +582,14 @@ R"CLOJURE(
           (cons (first c2)
                 (interleave (rest c1) (rest c2))))))
 
+^#^{:doc "Helper function for threading macros: interleaves a repeated value with a collection"}
+(defn interleave-repeat [val coll]
+  (if (empty? coll)
+    (list)
+    (cons val
+          (cons (first coll)
+                (interleave-repeat val (rest coll))))))
+
 ; ============================================================================
 ; Aggregation Functions (Phase 4)
 ; ============================================================================
@@ -696,7 +800,7 @@ R"CLOJURE(
 ; Quasiquote Implementation (bootstrap-safe: uses only basic special forms)
 ; ============================================================================
 
-^#^{:doc "Transforms quasiquote forms with unquote and splice-unquote.
+^#^{:doc "Transforms quasiquote forms with unquote and unquote-splice.
           Handles nested quasiquotes and splicing."}
 (def quasiquote-fn
   (fn [form]
@@ -705,16 +809,17 @@ R"CLOJURE(
       (and (list? form) (= (first form) 'unquote))
         (second form)
       
-      ; Check for splice-unquote: (splice-unquote x) -> error (must be inside list)
-      (and (list? form) (= (first form) 'splice-unquote))
-        (throw (str "splice-unquote not in list context: " form))
+      ; Check for unquote-splice: (unquote-splice x) -> error (must be inside list)
+      (and (list? form) (= (first form) 'unquote-splice))
+        (throw (str "unquote-splice not in list context: " form))
       
       ; Handle lists with potential splicing
       (list? form)
         (let [process-elem (fn [acc elem]
-                             (if (and (list? elem) (= (first elem) 'splice-unquote))
-                               ; Splice: concat the evaluated expr
-                               (list 'concat acc (second elem))
+                             (if (and (list? elem) (= (first elem) 'unquote-splice))
+                               ; Splice: concat acc with the elements of (second elem)
+                               ; The (second elem) will be evaluated at runtime, so we need to ensure it's a seq
+                               (list 'concat acc (list 'seq (second elem)))
                                ; Normal: conj the recursively processed elem
                                (list 'conj acc (list 'quasiquote-fn (list 'quote elem)))))]
           (reduce process-elem (list 'list) form))
