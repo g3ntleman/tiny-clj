@@ -328,7 +328,6 @@ add_executable(unit-tests
     src/tests/test_defn.c
     src/tests/test_native_lookup.c
     src/tests/test_clojure_core_loading.c
-    src/tests/test_clojure_core_loading_debug.c
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_time.c
     src/tests/test_loops.c
