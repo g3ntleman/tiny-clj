@@ -1184,17 +1184,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
             return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                     "Cannot call nil as a function");
         }
-        // Now op is the result of evaluating the inner list - continue with it
-        // Check if result is an immediate value (e.g., number from arithmetic)
-        // This often happens when macro expansion returns an immediate value incorrectly
+        // Check if result is an immediate value (macro expansion may return incorrectly)
         if (IS_IMMEDIATE(op)) {
-            // Try to provide more context about what was being called
-            const char *type_name = "immediate value";
-            if (is_fixed((CljValue)op)) {
-                type_name = "number";
-            } else if (is_bool((CljValue)op)) {
-                type_name = "boolean";
-            }
+            const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
             return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                     "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
         }
@@ -1332,17 +1324,9 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Safety check: ensure op is not NULL before accessing op->type
     CLJ_ASSERT(op != NULL && "op must not be NULL before accessing op->type");
 
-    // Check if op is an immediate value BEFORE accessing op->type
-    // IS_IMMEDIATE is safe to call on any pointer (including invalid ones)
-    // This often happens when macro expansion returns an immediate value incorrectly
+    // Check if op is an immediate value (macro expansion may return incorrectly)
     if (IS_IMMEDIATE(op)) {
-        // Try to provide more context about what was being called
-        const char *type_name = "immediate value";
-        if (is_fixed((CljValue)op)) {
-            type_name = "number";
-        } else if (is_bool((CljValue)op)) {
-            type_name = "boolean";
-        }
+        const char *type_name = is_fixed((CljValue)op) ? "number" : (is_bool((CljValue)op) ? "boolean" : "immediate value");
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                 "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
     }
