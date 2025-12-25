@@ -50,7 +50,6 @@ bool clj_equal_full(ID a, ID b) {
         case CLJ_STRING: {
             CljString *str_a = (CljString*)a;
             CljString *str_b = (CljString*)b;
-            if (!str_a || !str_b) return false;
 
             // Special case: empty string singleton comparison
             if (str_a == string_empty_singleton && str_b == string_empty_singleton) {
@@ -66,7 +65,6 @@ bool clj_equal_full(ID a, ID b) {
         case CLJ_VECTOR_TRANSIENT: {
             CljVector *vec_a = (CljVector*)a;
             CljVector *vec_b = (CljVector*)b;
-            if (!vec_a || !vec_b) return false;
             int count_a = vector_count(vec_a);
             int count_b = vector_count(vec_b);
             if (count_a != count_b) return false;
@@ -82,7 +80,6 @@ bool clj_equal_full(ID a, ID b) {
         case CLJ_MAP: {
             CljMap *map_a = as_map(a);
             CljMap *map_b = as_map(b);
-            if (!map_a || !map_b) return false;
             if (map_a->count != map_b->count) return false;
             MAP_FOR_EACH(map_a, key_a, val_a) {
                 ID val_b = map_get((CljMap*)b, key_a, NULL);
@@ -95,7 +92,6 @@ bool clj_equal_full(ID a, ID b) {
             // Structural equality for lists (needed for metadata lookup)
             CljList *list_a = as_list(a);
             CljList *list_b = as_list(b);
-            if (!list_a || !list_b) return false;
 
             // Compare lists element by element
             CljList *curr_a = list_a;

@@ -233,19 +233,26 @@ TEST_SHARED(test_time_returns_expression_result) {
 }
 
 // ============================================================================
-// EPOCH-MINUTES AND MILLIS-IN-MINUTE TESTS
+// NOW TESTS (atomic timestamp as map)
 // ============================================================================
 
-TEST_SHARED(test_epoch_minutes_returns_fixnum) {
-    ID result = eval_string("(epoch-minutes)", g_test_eval_state);
+TEST(test_now_returns_map) {
+    ID result = eval_string("(now)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(is_fixnum(result));
-    TEST_ASSERT_TRUE(as_fixnum(result) > 28000000); // After 2023
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
 }
 
-TEST_SHARED(test_millis_in_minute_range) {
-    ID result = eval_string("(millis-in-minute)", g_test_eval_state);
+TEST(test_now_has_days_key) {
+    ID result = eval_string("(:days (now))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_TRUE(as_fixnum(result) > 19000);  // After 2022
+}
+
+TEST(test_now_has_ms_key) {
+    ID result = eval_string("(:ms (now))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
     int ms = as_fixnum(result);
-    TEST_ASSERT_TRUE(ms >= 0 && ms < 60000);
+    TEST_ASSERT_TRUE(ms >= 0 && ms < 86400000);  // 0 to 24h in ms
 }

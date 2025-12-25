@@ -1,5 +1,5 @@
 #include "subjective-c.h"
-#include "public/value.h"
+#include <subjective-c/value.h>
 
 // Temporarily include interpreter headers until migration completes
 #include "memory.h"

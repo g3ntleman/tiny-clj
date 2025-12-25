@@ -450,6 +450,45 @@ CljMap* make_transient_map_from_kv(unsigned int count, ...) {
     return tmap;
 }
 
+/** Create a persistent map from key-value pairs, terminated by NOT_FOUND.
+ * @param first_key First key, or NOT_FOUND for empty map
+ * @param ... Alternating value, key, value, ..., terminated by NOT_FOUND
+ * @return Persistent map with rc=1
+ * @note Example: make_map_kv(key1, val1, key2, val2, NOT_FOUND)
+ */
+CljMap* make_map_kv(ID first_key, ...) {
+    if (first_key == NOT_FOUND) {
+        return RETAIN(map_empty());
+    }
+    
+    // First pass: count pairs
+    va_list args;
+    va_start(args, first_key);
+    unsigned int count = 1;
+    va_arg(args, ID);  // skip first value
+    while (va_arg(args, ID) != NOT_FOUND) {
+        va_arg(args, ID);  // skip value
+        count++;
+    }
+    va_end(args);
+    
+    // Second pass: build map
+    CljMap *map = make_map(count);
+    
+    va_start(args, first_key);
+    ID key = first_key;
+    for (unsigned int i = 0; i < count; i++) {
+        ID value = va_arg(args, ID);
+        map_put(map, key, value);
+        if (i < count - 1) {
+            key = va_arg(args, ID);
+        }
+    }
+    va_end(args);
+    
+    return map;  // rc=1 from make_map
+}
+
 CljMap* make_map_from_stack(CljObject **pairs, int pair_count) {
     if (pair_count == 0) {
         return map_empty();

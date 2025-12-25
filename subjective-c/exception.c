@@ -15,7 +15,7 @@
 #include "strings.h"  // For to_cstring
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
-#include "public/callbacks.h"  // For clj_to_string
+#include <subjective-c/callbacks.h>  // For clj_to_string
 
 // Stacktrace support
 #ifdef __APPLE__

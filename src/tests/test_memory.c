@@ -49,17 +49,17 @@ TEST(test_memory_deallocation) {
         TEST_ASSERT_NOT_NULL(obj);
         
         // Test retain counting
-        int initial_refs = get_retain_count(obj);
+        int initial_refs = retain_count(obj);
         TEST_ASSERT_EQUAL_INT(1, initial_refs);
         
         // Retain and release
         CljObject *retained = RETAIN(obj);
-        TEST_ASSERT_EQUAL_INT(2, get_retain_count(obj));
+        TEST_ASSERT_EQUAL_INT(2, retain_count(obj));
         
         RELEASE(retained);
         // After releasing the retained reference, the object should still exist
         // The retain count should be 1 (original reference)
-        TEST_ASSERT_EQUAL_INT(1, get_retain_count(obj));
+        TEST_ASSERT_EQUAL_INT(1, retain_count(obj));
         
         // Final cleanup
         RELEASE(obj);

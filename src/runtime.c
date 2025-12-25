@@ -10,12 +10,12 @@
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()
 #include "map.h"            // For make_map()
-#include "hashmap.h"        // For hashmap_register_release_fn()
+#include "subjective-c/hashmap.h"        // For hashmap_register_release_fn()
 #include "hash.h"           // For clj_hash_full()
 // clj_equal_full is defined in equality.c
 extern bool clj_equal_full(ID a, ID b);
 #include "to_string.h"      // For to_string()
-#include "subjective-c/public/callbacks.h"  // For clj_set_callbacks
+#include "subjective-c/callbacks.h"  // For clj_set_callbacks
 
 // Statisch alloziertes globales Runtime-Struct (alle Zeiger mit NULL vorbelegt)
 TinyClJRuntime g_runtime = {
@@ -33,6 +33,9 @@ TinyClJRuntime g_runtime = {
 
 void runtime_init(TinyClJRuntime *runtime) {
     if (!runtime) return;
+    
+    // Initialize autorelease pool first (needed by make_* functions)
+    autorelease_pool_init();
     
     // Initialize all fields (allows multiple calls with same pointer)
     // ASSIGN automatically handles releasing old values, so multiple calls are safe

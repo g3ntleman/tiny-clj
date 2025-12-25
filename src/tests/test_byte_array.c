@@ -226,13 +226,13 @@ TEST(test_byte_array_memory_management) {
     TEST_ASSERT_NOT_NULL(arr);
     
     CljObject *obj = (CljObject*)arr;
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(obj));
+    TEST_ASSERT_EQUAL_INT(1, retain_count(obj));
     
     RETAIN(obj);
-    TEST_ASSERT_EQUAL_INT(2, get_retain_count(obj));
+    TEST_ASSERT_EQUAL_INT(2, retain_count(obj));
     
     RELEASE(obj);
-    TEST_ASSERT_EQUAL_INT(1, get_retain_count(obj));
+    TEST_ASSERT_EQUAL_INT(1, retain_count(obj));
     
     RELEASE(obj); // Final release
 }

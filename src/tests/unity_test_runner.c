@@ -10,6 +10,7 @@
 #include "../tiny_clj.h"
 #include "../event_loop.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
+#include <time.h>
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -320,6 +321,7 @@ static void run_specific_test(const char *test_name_or_pattern) {
 
 int main(int argc, char **argv) {
     UNITY_BEGIN();
+    clock_t start_time = clock();
     
     // Enable memory profiling for tests (only in DEBUG builds)
 #ifdef ENABLE_MEMORY_PROFILING
@@ -392,7 +394,13 @@ int main(int argc, char **argv) {
     g_test_eval_state = NULL;
     
     // Unity will print its own summary (Tests X Failures Y Ignored Z)
-    return UNITY_END();
+    int result = UNITY_END();
+    
+    // Print total runtime as last line
+    double elapsed = (double)(clock() - start_time) / CLOCKS_PER_SEC;
+    printf("Total runtime: %.3fs\n", elapsed);
+    
+    return result;
 }
 
 // ============================================================================

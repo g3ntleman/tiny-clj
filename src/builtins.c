@@ -38,6 +38,8 @@
 #ifdef DEBUG
 #include "debug.h"
 #endif
+#include "regex.h"
+#include "builtins_strings.h"
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -53,9 +55,7 @@ ID native_bit_shift_left(ID *args, unsigned int argc);
 ID native_range(ID *args, unsigned int argc);
 ID native_repeat(ID *args, unsigned int argc);
 ID native_math_sqrt(ID *args, unsigned int argc);
-ID native_format(ID *args, unsigned int argc);
-ID native_str(ID *args, unsigned int argc);
-ID native_subs(ID *args, unsigned int argc);
+// String functions moved to builtins_strings.c
 ID native_symbol(ID *args, unsigned int argc);
 ID native_type(ID *args, unsigned int argc);
 ID native_array_map(ID *args, unsigned int argc);
@@ -145,11 +145,7 @@ ID native_slurp(ID *args, unsigned int argc);
 ID native_spit(ID *args, unsigned int argc);
 ID native_load_file(ID *args, unsigned int argc);
 #endif
-ID native_trim(ID *args, unsigned int argc);
-ID native_upper_case(ID *args, unsigned int argc);
-ID native_lower_case(ID *args, unsigned int argc);
-ID native_last_index_of(ID *args, unsigned int argc);
-ID native_string_reverse(ID *args, unsigned int argc);
+// (declarations in builtins_strings.h)
 ID native_source(ID *args, unsigned int argc);
 ID native_repl_dir(ID *args, unsigned int argc);
 ID native_meta(ID *args, unsigned int argc);
@@ -224,7 +220,7 @@ ID nth2(ID *args, unsigned int argc) {
     if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
         CljVector *v = as_vector(coll);
         int count = vector_count(v);
-        if (!v || i >= count) {
+        if (i >= count) {
             if (has_not_found) return not_found;
             return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
                     "nth index %d is out of bounds for collection with %d elements", i, count);
@@ -235,17 +231,13 @@ ID nth2(ID *args, unsigned int argc) {
     // Fast path: Lists (O(n) access via list_nth)
     if (list_type_matches(TAG(coll))) {
         CljList *list = as_list(coll);
-        if (!list) {
-            if (has_not_found) return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                    "nth index %d is out of bounds for nil collection", i);
-        }
-        // Check bounds before calling list_nth (which throws)
-        int count = list_count(list);
-        if (i >= count) {
-            if (has_not_found) return not_found;
-            return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                    "nth index %d is out of bounds for list with %d elements", i, count);
+        // list_nth() validates bounds and throws exception if out of bounds
+        // For has_not_found case, we need to check bounds first
+        if (has_not_found) {
+            int count = list_count(list);
+            if (i >= count) {
+                return not_found;
+            }
         }
         return list_nth(list, i);
     }
@@ -302,7 +294,7 @@ ID native_pop(ID *args, unsigned int argc) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     CljVector *v = as_vector(vec);
     int count = vector_count(v);
-    if (!v || count == 0) {
+    if (count == 0) {
         // Return empty vector singleton (no memory management needed)
         return make_vector(0, CLJ_VECTOR);
     }
@@ -344,7 +336,6 @@ ID native_subvec(ID *args, unsigned int argc) {
     }
 
     CljVector *v = as_vector(vec);
-    if (!v) return NULL;
 
     int start = AS_FIXNUM(start_idx);
     int end;
@@ -388,7 +379,6 @@ ID native_subvec(ID *args, unsigned int argc) {
     // Create new vector and add elements using vector_conj
     ID new_vec_obj = make_vector(subvec_count, CLJ_VECTOR);
     CljVector *new_vec = as_vector(new_vec_obj);
-    if (!new_vec) return NULL;
 
     // Copy elements from start to end using vector_conj
     for (int i = 0; i < subvec_count; i++) {
@@ -416,7 +406,7 @@ ID conj2_wrapper(ID *args, int argc) {
 ID conj2(ID vec, ID val) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
     // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
-    CljVector* result = vector_conj((CljVector*)vec, val);
+    CljVector* result = vector_conj(vec, val);
     if (!result) return NULL;
     return result;
 }
@@ -442,7 +432,7 @@ ID native_conj(ID *args, unsigned int argc) {
         // conj nil with values creates a list
         CljList *result = NULL;
         for (unsigned int i = argc - 1; i >= 1; i--) {
-            CljObject *val = args[i];
+            ID val = args[i];
             result = make_list(val, result);
         }
         return result;
@@ -465,7 +455,7 @@ ID native_conj(ID *args, unsigned int argc) {
         for (unsigned int i = 1; i < argc; i++) {
             result = make_list(args[i], result);
         }
-        return (ID)result;
+        return result;
     }
 
     // Throw exception for unsupported collection type
@@ -481,7 +471,7 @@ ID native_first(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 1, "first")) return NULL;
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
     // Arguments are already evaluated - nil is NULL, not SYM_NIL
     if (!coll) {
         // first of nil returns nil
@@ -489,7 +479,7 @@ ID native_first(ID *args, unsigned int argc) {
     }
 
     // Switch on collection type (DRY: consistent pattern)
-    switch (coll->type) {
+    switch (TAG(coll)) {
         case CLJ_LIST: {
             // Direct access for lists (already a seq) - no allocation needed
             CljObject *first = LIST_FIRST((CljList*)coll);
@@ -740,7 +730,7 @@ ID native_partition(ID *args, unsigned int argc) {
     }
     RELEASE(partitions);
     
-    return result ? AUTORELEASE(RETAIN((ID)result)) : (ID)empty_list();
+    return result ? AUTORELEASE(result) : empty_list();
 }
 
 // some: Returns first truthy value from predicate applied to collection
@@ -780,29 +770,29 @@ ID native_cons(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 2, "cons")) return NULL;
 
-    CljObject *elem = args[0];
-    CljObject *coll = args[1];
+    ID elem = args[0];
+    ID coll = args[1];
 
     if (!elem) elem = NULL;
 
-    CljObject *result = NULL;
+    ID result = NULL;
 
     // nil oder leer
     if (!coll) {
-        result = (CljObject*)make_list(elem, NULL);
+        result = make_list(elem, NULL);
         return AUTORELEASE(result);
     }
 
-    // Typ-basierte Behandlung
-    switch (coll->type) {
+    // Type-based handling
+    switch (TAG(coll)) {
         case CLJ_LIST:
         case CLJ_SEQ: {
             // Treat empty list like nil
-            CljList *list = (CljList*)coll;
+            CljList *list = coll;
             if (list_count(list) == 0) {
-                result = (CljObject*)make_list(elem, NULL);
+                result = make_list(elem, NULL);
             } else {
-                result = (CljObject*)make_list(elem, list);
+                result = make_list(elem, list);
             }
             return AUTORELEASE(result);
         }
@@ -811,9 +801,9 @@ ID native_cons(ID *args, unsigned int argc) {
             // Vektor oder andere → zu Seq konvertieren
             CljSeqIterator *seq = make_seq(coll);
             if (!seq) {
-                result = (CljObject*)make_list(elem, NULL);
+                result = make_list(elem, NULL);
             } else {
-                result = (CljObject*)make_list(elem, (CljList*)seq);
+                result = make_list(elem, (CljList*)seq);
             }
             return AUTORELEASE(result);
         }
@@ -910,7 +900,7 @@ ID native_reverse(ID *args, unsigned int argc) {
 
     if (!validate_builtin_args(argc, 1, "reverse")) return NULL;
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
 
     // Handle nil/empty
     if (!coll) {
@@ -932,14 +922,14 @@ ID native_reverse(ID *args, unsigned int argc) {
         seq_iter_next(&iter);
     }
 
-    return result ? AUTORELEASE((ID)result) : (ID)empty_list();
+    return result ? AUTORELEASE(result) : empty_list();
 }
 
 ID assoc3(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 3, "assoc")) return NULL;
-    CljObject *coll = args[0];
-    CljObject *key = args[1];
-    CljObject *val = args[2];
+    ID coll = args[0];
+    ID key = args[1];
+    ID val = args[2];
 
     if (!coll) return NULL;
 
@@ -950,9 +940,9 @@ ID assoc3(ID *args, unsigned int argc) {
         if (!key || TAG(key) != CLJ_INT) return NULL;
         int i = AS_FIXNUM(key);
         CljVector *v = as_vector(coll);
-        if (!v || i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
+        if (i < 0 || (unsigned int)i >= vector_count(v)) return NULL;
         // Use COW-based vector_assoc (automatically handles RC=1 in-place, RC>1 COW)
-        CljVector* result = vector_assoc((CljVector*)coll, i, val);
+        CljVector* result = vector_assoc(coll, i, val);
         if (!result) return NULL;
         return result;
     }
@@ -960,7 +950,7 @@ ID assoc3(ID *args, unsigned int argc) {
     // Handle maps
     if (coll_tag == CLJ_MAP) {
         // Note: key can be NULL (nil) - that's a valid key in Clojure!
-        return map_assoc((CljMap*)coll, key, val);
+        return map_assoc(coll, key, val);
     }
 
     // Unsupported collection type
@@ -977,7 +967,7 @@ ID native_dissoc(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljObject *map = args[0];
+    ID map = args[0];
     if (!map) return NULL;
 
     unsigned char map_tag = TAG(map);
@@ -991,28 +981,28 @@ ID native_dissoc(ID *args, unsigned int argc) {
 
     // If no keys to remove, return the map as-is
     if (argc == 1) {
-        return AUTORELEASE(RETAIN(map));
+        return map;
     }
 
     // Remove keys one by one (Clojure semantics: multiple keys supported)
-    CljMap *result = (CljMap*)map;
+    CljMap *result = map;
     for (unsigned int i = 1; i < argc; i++) {
-        CljObject *key = args[i];
+        ID key = args[i];
         if (!key) continue;  // Skip NULL keys
 
         // map_remove returns a new map (or original if key not found)
         CljMap *new_result = map_remove(result, key);
-        if (new_result != (CljMap*)result) {
+        if (new_result != result) {
             // New map was created - release old one if it was retained
-            if (i > 1 || result != (CljMap*)map) {
+            if (i > 1 || result != map) {
                 RELEASE(result);
             }
             result = new_result;
         }
     }
 
-    // Return autoreleased result
-    return AUTORELEASE(RETAIN(result));
+    // Return result (already safe - from map_remove or parameter)
+    return result;
 }
 
 // merge: Combines multiple maps (later maps override earlier ones)
@@ -1032,7 +1022,7 @@ ID native_merge(ID *args, unsigned int argc) {
         if (args[i]) {
             unsigned char tag = TAG(args[i]);
             if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-                result = (CljMap*)args[i];
+                result = args[i];
                 start_idx = i + 1;
                 break;
             }
@@ -1055,14 +1045,14 @@ ID native_merge(ID *args, unsigned int argc) {
             return NULL;
         }
         
-        CljMap *new_result = map_merge(result, (CljMap*)m, true);  // overwrite=true
+        CljMap *new_result = map_merge(result, m, true);  // overwrite=true
         if (new_result != result && i > start_idx) {
             // Don't release original arg
         }
         result = new_result;
     }
     
-    return AUTORELEASE(RETAIN(result));
+    return result;
 }
 
 // contains?: Check if collection contains key
@@ -1084,7 +1074,7 @@ ID native_contains_p(ID *args, unsigned int argc) {
     switch (tag) {
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT:
-            return map_contains((CljMap*)coll, key) ? clj_true : clj_false;
+            return map_contains(coll, key) ? clj_true : clj_false;
         
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT:
@@ -1092,7 +1082,7 @@ ID native_contains_p(ID *args, unsigned int argc) {
             // For vectors, key must be an integer index
             if (!is_fixnum(key)) return clj_false;
             long idx = as_fixnum(key);
-            unsigned int count = vector_count((CljVector*)coll);
+            unsigned int count = vector_count(coll);
             return (idx >= 0 && (unsigned long)idx < count) ? clj_true : clj_false;
         }
         
@@ -1129,7 +1119,7 @@ ID native_update(ID *args, unsigned int argc) {
     }
     
     // Get current value (nil if not found)
-    ID current_val = map_get((CljMap*)coll, key, NULL);
+    ID current_val = map_get(coll, key, NULL);
     
     // Build function call args: [current_val, extra_args...]
     unsigned int fn_argc = 1 + (argc - 3);
@@ -1143,7 +1133,7 @@ ID native_update(ID *args, unsigned int argc) {
     ID new_val = eval_function_call(func, fn_args, fn_argc, NULL, st);
     
     // assoc the new value
-    return map_assoc((CljMap*)coll, key, new_val);
+    return map_assoc(coll, key, new_val);
 }
 
 // into: Add all items from source into target collection
@@ -1167,7 +1157,7 @@ ID native_into(ID *args, unsigned int argc) {
     ID from = args[1];
     
     // nil source returns target unchanged
-    if (!from) return to ? AUTORELEASE(RETAIN(to)) : NULL;
+    if (!from) return to;
     
     // nil target - create appropriate empty collection based on source type
     if (!to) {
@@ -1179,18 +1169,17 @@ ID native_into(ID *args, unsigned int argc) {
     
     // Handle vector target
     if (to_tag == CLJ_VECTOR || to_tag == CLJ_VECTOR_TRANSIENT || to_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        CljVector *result = (CljVector*)to;
+        CljVector *result = to;
         
         // Iterate over source
         CljType from_tag = TAG(from);
         if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-            unsigned int count = vector_count((CljVector*)from);
-            for (unsigned int i = 0; i < count; i++) {
-                result = vector_conj(result, vector_nth((CljVector*)from, i));
+            VECTOR_FOR_EACH(from, elem) {
+                result = vector_conj(result, elem);
             }
         } else if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
             // Map entries become [k v] vectors
-            CljMap *m = (CljMap*)from;
+            CljMap *m = from;
             for (int i = 0; i < m->capacity; i++) {
                 ID key = KV_KEY(m->data, i);
                 if (key) {
@@ -1203,32 +1192,29 @@ ID native_into(ID *args, unsigned int argc) {
             }
         } else if (from_tag == CLJ_LIST || from_tag == CLJ_AST_NODE) {
             // Iterate over list (CLJ_LIST or CLJ_AST_NODE - both use same structure)
-            CljList *list = (CljList*)from;
-            while (list && !list_empty(list)) {
-                result = vector_conj(result, LIST_FIRST(list));
-                list = as_list(LIST_REST(list));
+            CljList *list = from;
+            LIST_FOR_EACH(list, elem) {
+                result = vector_conj(result, elem);
             }
         }
         
-        return AUTORELEASE(RETAIN(result));
+        return result;
     }
     
     // Handle map target
     if (to_tag == CLJ_MAP || to_tag == CLJ_MAP_TRANSIENT) {
-        CljMap *result = (CljMap*)to;
+        CljMap *result = to;
         
         CljType from_tag = TAG(from);
         if (from_tag == CLJ_MAP || from_tag == CLJ_MAP_TRANSIENT) {
             // Merge maps
-            result = map_merge(result, (CljMap*)from, true);
+            result = map_merge(result, from, true);
         } else if (from_tag == CLJ_VECTOR || from_tag == CLJ_VECTOR_TRANSIENT) {
             // Vector of [k v] pairs
-            unsigned int count = vector_count((CljVector*)from);
-            for (unsigned int i = 0; i < count; i++) {
-                ID entry = vector_nth((CljVector*)from, i);
+            VECTOR_FOR_EACH(from, entry) {
                 unsigned char entry_tag = entry ? TAG(entry) : 0;
                 if (entry_tag == CLJ_VECTOR || entry_tag == CLJ_VECTOR_TRANSIENT) {
-                    CljVector *pair = (CljVector*)entry;
+                    CljVector *pair = entry;
                     if (vector_count(pair) >= 2) {
                         ASSIGN(result, map_assoc(result, vector_nth(pair, 0), vector_nth(pair, 1)));
                     }
@@ -1281,26 +1267,22 @@ ID native_select_keys(ID *args, unsigned int argc) {
     }
     
     CljMap *result = map_empty();
-    CljMap *source = (CljMap*)m;
+    CljMap *source = m;
     
     if (keys_tag == CLJ_VECTOR || keys_tag == CLJ_VECTOR_TRANSIENT || keys_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        unsigned int count = vector_count((CljVector*)keys);
-        for (unsigned int i = 0; i < count; i++) {
-            ID key = vector_nth((CljVector*)keys, i);
+        VECTOR_FOR_EACH(keys, key) {
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
                 ASSIGN(result, map_assoc(result, key, val));
             }
         }
     } else if (keys_tag == CLJ_LIST || keys_tag == CLJ_AST_NODE) {
-        CljList *list = (CljList*)keys;
-        while (list && !list_empty(list)) {
-            ID key = LIST_FIRST(list);
+        CljList *list = keys;
+        LIST_FOR_EACH(list, key) {
             if (map_contains(source, key)) {
                 ID val = map_get(source, key, NULL);
                 ASSIGN(result, map_assoc(result, key, val));
             }
-            list = as_list(LIST_REST(list));
         }
     }
     
@@ -1330,7 +1312,7 @@ ID native_find(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    CljMap *map = (CljMap*)m;
+    CljMap *map = m;
     
     if (!map_contains(map, key)) {
         return NULL;  // Key not found
@@ -1343,7 +1325,7 @@ ID native_find(ID *args, unsigned int argc) {
     entry = vector_conj(entry, key);
     entry = vector_conj(entry, val);
     
-    return AUTORELEASE(RETAIN(entry));
+    return entry;
 }
 
 // Transient functions
@@ -1356,7 +1338,7 @@ ID native_transient(ID *args, unsigned int argc) {
     uint16_t tag = TAG(coll);
     switch (tag) {
         case CLJ_VECTOR:
-            return vector_transient((CljVector*)coll);
+            return vector_transient(coll);
         case CLJ_MAP:
             return map_transient(coll);
         case CLJ_VECTOR_TRANSIENT:
@@ -1383,7 +1365,7 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
     uint16_t tag = TAG(coll);
     switch (tag) {
         case CLJ_VECTOR_TRANSIENT:
-            return vector_persistent((CljVector*)coll);
+            return vector_persistent(coll);
         case CLJ_MAP_TRANSIENT:
             return map_persistent(coll);
         case CLJ_VECTOR:
@@ -1404,21 +1386,21 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
 ID native_conj_bang(ID *args, unsigned int argc) {
     if (argc < 2) return (NULL);
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
     if (!coll) return NULL;
 
     int tag = TAG(coll);
     if (tag == CLJ_VECTOR_TRANSIENT || tag == CLJ_VECTOR_TRANSIENT_WEAK) {
-        CljVector *result = (CljVector*)coll;
+        CljVector *result = coll;
         // vector_conj automatically handles transient vectors correctly (always in-place)
         for (unsigned int i = 1; i < argc; i++) {
             result = vector_conj(result, args[i]);
             if (!result) return NULL;
         }
-        return (CljObject*)result;
+        return result;
     } else if (tag == CLJ_MAP_TRANSIENT) {
         if (argc != 3) return NULL; // conj! for maps needs key-value pair
-        return (CljObject*)map_conj((CljMap*)coll, (CljValue)args[1], (CljValue)args[2]);
+        return map_conj(coll, args[1], args[2]);
     }
 
     // Throw exception for unsupported collection type (Clojure-compatible)
@@ -1435,20 +1417,20 @@ ID native_get(ID *args, unsigned int argc) {
                        __FILE__, __LINE__, 0);
         return NULL;
     }
-    CljObject *map = args[0];
-    CljObject *key_obj = args[1];
+    ID map = args[0];
+    ID key_obj = args[1];
     ID not_found = argc == 3 ? args[2] : NULL;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     if (!map) return NULL;
 
     // Convert SYM_NIL to NULL for key lookup
-    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == (CljObject*)SYM_NIL)
+    ID key = (key_obj && TAG(key_obj) == CLJ_SYMBOL && key_obj == SYM_NIL)
         ? NULL
         : key_obj;
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_get((CljMap*)map, key, not_found);
+        return map_get(map, key, not_found);
     }
 
     return not_found ? not_found : NULL; // Return not_found or nil for unsupported types
@@ -1458,7 +1440,7 @@ ID native_count(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
 
     if (!validate_builtin_args(argc, 1, "count")) return NULL;
-    CljObject *coll = args[0];
+    ID coll = args[0];
     // Clojure behavior: (count nil) => 0
     if (!coll) {
         return fixnum(0);
@@ -1473,7 +1455,7 @@ ID native_count(ID *args, unsigned int argc) {
 
     if (coll) {
         if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-            return (fixnum(map_count((CljMap*)coll)));
+            return (fixnum(map_count(coll)));
         } else if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT) {
             CljVector *vec = as_vector(coll);
             return (fixnum(vec ? vector_count(vec) : 0));
@@ -1493,12 +1475,12 @@ ID native_count(ID *args, unsigned int argc) {
 
 ID native_keys(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "keys")) return NULL;
-    CljObject *map = args[0];
+    ID map = args[0];
     if (!map) return (NULL);
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_keys((CljMap*)map);
+        return map_keys(map);
     }
 
     return NULL; // Return nil for unsupported types
@@ -1506,12 +1488,12 @@ ID native_keys(ID *args, unsigned int argc) {
 
 ID native_vals(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "vals")) return NULL;
-    CljObject *map = args[0];
+    ID map = args[0];
     if (!map) return (NULL);
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_vals((CljMap*)map);
+        return map_vals(map);
     }
 
     return NULL; // Return nil for unsupported types
@@ -1605,8 +1587,8 @@ ID native_array_map(ID *args, unsigned int argc) {
     // Add all key-value pairs
     // CRITICAL: map_assoc may return a new map (COW), so we must use the result
     for (unsigned int i = 0; i < argc; i += 2) {
-        CljObject *key = args[i];
-        CljObject *value = args[i + 1];
+        ID key = args[i];
+        ID value = args[i + 1];
         CljMap *updated_map = map_assoc(map, key, value);
         ASSIGN(map, updated_map);
     }
@@ -1640,7 +1622,7 @@ ID native_vec(ID *args, unsigned int argc) {
     // Arity check: vec accepts exactly 1 argument
     if (!validate_builtin_args(argc, 1, "vec")) return NULL;
 
-    CljObject *coll = args[0];
+    ID coll = args[0];
 
     // If nil, return empty vector singleton (Clojure behavior: '() is nil, (vec '()) => [])
     // empty_vector() returns singleton - no memory management needed
@@ -1651,7 +1633,7 @@ ID native_vec(ID *args, unsigned int argc) {
     // If already a vector, return same object (No-Op - Clojure behavior)
     // Note: coll is already AUTORELEASEd by eval_arg, so we need to AUTORELEASE it again
     // to ensure it's in the caller's pool
-    if (coll && TAG(coll) == CLJ_VECTOR) {
+    if (TAG(coll) == CLJ_VECTOR) {
         return AUTORELEASE(coll);
     }
 
@@ -1747,7 +1729,7 @@ ID native_schedule(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "schedule")) return NULL;
 
     // First argument: delay in milliseconds (must be integer)
-    CljObject *delay_obj = args[0];
+    ID delay_obj = args[0];
     if (!delay_obj || TAG(delay_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule delay must be an integer",
@@ -1755,7 +1737,7 @@ ID native_schedule(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int delay_ms = as_fixnum((CljValue)delay_obj);
+    int delay_ms = as_fixnum(delay_obj);
     if (delay_ms < 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule delay must be non-negative",
@@ -1764,7 +1746,7 @@ ID native_schedule(ID *args, unsigned int argc) {
     }
 
     // Second argument: function to execute (must be a function)
-    CljObject *fn_obj = args[1];
+    ID fn_obj = args[1];
     unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
     if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1803,7 +1785,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 3, "schedule-periodic")) return NULL;
 
     // First argument: initial delay in milliseconds (must be integer)
-    CljObject *delay_obj = args[0];
+    ID delay_obj = args[0];
     if (!delay_obj || TAG(delay_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic delay must be an integer",
@@ -1811,7 +1793,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int delay_ms = as_fixnum((CljValue)delay_obj);
+    int delay_ms = as_fixnum(delay_obj);
     if (delay_ms < 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic delay must be non-negative",
@@ -1820,7 +1802,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     }
 
     // Second argument: period in milliseconds (must be integer)
-    CljObject *period_obj = args[1];
+    ID period_obj = args[1];
     if (!period_obj || TAG(period_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic period must be an integer",
@@ -1828,7 +1810,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int period_ms = as_fixnum((CljValue)period_obj);
+    int period_ms = as_fixnum(period_obj);
     if (period_ms <= 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "schedule-periodic period must be positive",
@@ -1837,7 +1819,7 @@ ID native_schedule_periodic(ID *args, unsigned int argc) {
     }
 
     // Third argument: function to execute (must be a function)
-    CljObject *fn_obj = args[2];
+    ID fn_obj = args[2];
     unsigned char fn_tag = fn_obj ? TAG(fn_obj) : 0;
     if (!fn_obj || (fn_tag != CLJ_FUNC && fn_tag != CLJ_CLOSURE)) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
@@ -1866,7 +1848,7 @@ ID native_cancel_timer(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "cancel-timer")) return NULL;
 
     // First argument: timer ID (must be integer)
-    CljObject *timer_id_obj = args[0];
+    ID timer_id_obj = args[0];
     if (!timer_id_obj || TAG(timer_id_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "cancel-timer timer-id must be an integer",
@@ -1874,7 +1856,7 @@ ID native_cancel_timer(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    int timer_id = as_fixnum((CljValue)timer_id_obj);
+    int timer_id = as_fixnum(timer_id_obj);
     if (timer_id <= 0) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                        "cancel-timer timer-id must be positive",
@@ -2038,363 +2020,8 @@ static int32_t fixnum_to_fixed(int fixnum) {
 }
 
 // ============================================================================
-// VARIADIC FUNCTIONS (Phase 1)
+// STRING FUNCTIONS - moved to builtins_strings.c
 // ============================================================================
-
-// String concatenation (variadic)
-ID native_str(ID *args, unsigned int argc) {
-    if (argc == 0) {
-        return make_string("");
-    }
-
-    // Optimization: If only one argument and it's already a string, return it directly
-    if (argc == 1 && args[0] && TAG(args[0]) == CLJ_STRING) {
-        return args[0];
-    }
-
-    // Calculate total length
-    size_t total_len = 0;
-    for (unsigned int i = 0; i < argc; i++) {
-        if (args[i] && TAG(args[i]) == CLJ_STRING) {
-            total_len += string_length(args[i]);
-        } else {
-            CljString *s = to_string(args[i]);
-            if (s) {
-                total_len += string_length(s);
-            }
-        }
-    }
-
-    // Allocate CljString buffer directly
-    CljString *result = make_string_buffer(total_len);
-    char *buffer = result->data;
-
-    // Concatenate all strings
-    for (unsigned int i = 0; i < argc; i++) {
-        if (args[i] && TAG(args[i]) == CLJ_STRING) {
-            strcat(buffer, string_data(args[i]));
-        } else {
-            CljString *s = to_string(args[i]);
-            if (s) {
-                strcat(buffer, string_data(s));
-            }
-        }
-    }
-
-    return (CljObject*)result;
-}
-
-// String substring: (subs s start) or (subs s start end)
-ID native_subs(ID *args, unsigned int argc) {
-    if (argc != 2 && argc != 3) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                "subs requires exactly 2 or 3 argument%s, got %u",
-                argc == 2 ? "" : "s", argc);
-        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    ID str_arg = args[0];
-    ID start_arg = args[1];
-    ID end_arg = argc == 3 ? args[2] : NULL;
-
-    // Validate string argument
-    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "subs requires a string as first argument");
-    }
-
-    // Validate start index
-    if (!start_arg || TAG(start_arg) != CLJ_INT) {
-        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "subs requires a number as start index");
-    }
-
-    CljString *str = as_clj_string(str_arg);
-    int start = AS_FIXNUM(start_arg);
-
-    // Cache string length to avoid multiple calls
-    int str_len = string_length(str);
-    int end;
-
-    // Determine end index: if not provided, use string length
-    if (end_arg) {
-        if (TAG(end_arg) != CLJ_INT) {
-            return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                    "subs requires a number as end index");
-        }
-        end = AS_FIXNUM(end_arg);
-    } else {
-        end = str_len;
-    }
-
-    // Bounds validation
-    if (start < 0) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs start index %d is negative", start);
-    }
-
-    if (end > str_len) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs end index %d is greater than string length %d", end, str_len);
-    }
-
-    if (start > end) {
-        return throw_exception_formatted(EXCEPTION_INDEX_OUT_OF_BOUNDS, __FILE__, __LINE__, 0,
-                "subs start index %d is greater than end index %d", start, end);
-    }
-
-    // Calculate substring length
-    int substr_len = end - start;
-
-    // Special case: empty substring (start == end)
-    if (substr_len == 0) {
-        return string_empty_singleton;
-    }
-
-    // Create CljString directly without temporary C-string
-    CljString *result = make_string_buffer(substr_len);
-    const char *str_data = string_data(str);
-    memcpy(result->data, str_data + start, substr_len);
-    result->data[substr_len] = '\0';
-
-    return AUTORELEASE(result);
-}
-
-// String trim: (trim s) - removes whitespace from both ends
-ID native_trim(ID *args, unsigned int argc) {
-    if (argc != 1) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                "trim requires exactly 1 argument, got %u", argc);
-        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    ID str_arg = args[0];
-
-    // Handle nil
-    if (!str_arg) {
-        return NULL; // nil -> nil
-    }
-
-    // Validate string argument
-    if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "trim requires a string argument");
-        return NULL;
-    }
-
-    CljString *str = as_clj_string(str_arg);
-    const char *str_data = string_data(str);
-    int str_len = string_length(str);
-
-    // Find start (skip leading whitespace)
-    int start = 0;
-    while (start < str_len && (str_data[start] == ' ' || str_data[start] == '\t' ||
-                               str_data[start] == '\n' || str_data[start] == '\r')) {
-        start++;
-    }
-
-    // Find end (skip trailing whitespace)
-    int end = str_len - 1;
-    while (end >= start && (str_data[end] == ' ' || str_data[end] == '\t' ||
-                            str_data[end] == '\n' || str_data[end] == '\r')) {
-        end--;
-    }
-
-    // Calculate trimmed length
-    int trimmed_len = end - start + 1;
-
-    // Special case: empty string or all whitespace
-    if (trimmed_len <= 0) {
-        return string_empty_singleton;
-    }
-
-    // Create CljString directly without temporary C-string
-    CljString *result = make_string_buffer(trimmed_len);
-    memcpy(result->data, str_data + start, trimmed_len);
-    result->data[trimmed_len] = '\0';
-    return AUTORELEASE(result);
-}
-
-// String upper-case: (upper-case s) - converts string to upper-case
-ID native_upper_case(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "upper-case");
-
-    ID str_arg = args[0];
-
-    // Handle nil
-    if (!str_arg) {
-        return NULL; // nil -> nil
-    }
-
-    // Validate string argument
-    if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "upper-case requires a string argument");
-        return NULL;
-    }
-
-    CljString *str = as_clj_string(str_arg);
-    const char *str_data = string_data(str);
-    uint16_t str_len = string_length(str);
-
-    if (str_len == 0) {
-        return string_empty_singleton;
-    }
-
-    // Convert to upper-case directly in CljString buffer
-    CljString *result = make_string_buffer(str_len);
-    for (uint16_t i = 0; i < str_len; i++) {
-        result->data[i] = (char)toupper((unsigned char)str_data[i]);
-    }
-    result->data[str_len] = '\0';
-    return AUTORELEASE(result);
-}
-
-// String lower-case: (lower-case s) - converts string to lower-case
-ID native_lower_case(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "lower-case");
-
-    ID str_arg = args[0];
-
-    // Handle nil
-    if (!str_arg) {
-        return NULL; // nil -> nil
-    }
-
-    // Validate string argument
-    if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "lower-case requires a string argument");
-        return NULL;
-    }
-
-    CljString *str = as_clj_string(str_arg);
-    const char *str_data = string_data(str);
-    uint16_t str_len = string_length(str);
-
-    if (str_len == 0) {
-        return string_empty_singleton;
-    }
-
-    // Convert to lower-case directly in CljString buffer
-    CljString *result = make_string_buffer(str_len);
-    for (uint16_t i = 0; i < str_len; i++) {
-        result->data[i] = (char)tolower((unsigned char)str_data[i]);
-    }
-    result->data[str_len] = '\0';
-    return AUTORELEASE(result);
-}
-
-// String last-index-of: (last-index-of s value) or (last-index-of s value from-index)
-ID native_last_index_of(ID *args, unsigned int argc) {
-    CHECK_ARITY_RANGE(argc, 2, 3, "last-index-of");
-
-    ID str_arg = args[0];
-    ID value_arg = args[1];
-    ID from_index_arg = argc == 3 ? args[2] : NULL;
-
-    // Validate string argument
-    if (!str_arg || TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "last-index-of requires a string as first argument");
-        return NULL;
-    }
-
-    // Validate value argument
-    if (!value_arg || TAG(value_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "last-index-of requires a string as second argument");
-        return NULL;
-    }
-
-    CljString *str = as_clj_string(str_arg);
-    CljString *value = as_clj_string(value_arg);
-    if (!str || !value) return NULL;
-
-    const char *str_data = string_data(str);
-    const char *value_data = clj_string_data(value);
-    uint16_t str_len = string_length(str);
-    uint16_t value_len = string_length(value);
-
-    // Handle empty value
-    if (value_len == 0) {
-        // Empty string always found at end
-        return fixnum(str_len);
-    }
-
-    // Validate from-index if provided
-    int from_index = str_len - 1; // Default: search from end
-    if (from_index_arg) {
-        if (TAG(from_index_arg) != CLJ_INT) {
-            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "last-index-of requires an integer as from-index");
-            return NULL;
-        }
-        from_index = as_fixnum(from_index_arg);
-        if (from_index < 0) from_index = 0;
-        if (from_index >= str_len) from_index = str_len - 1;
-    }
-
-    // Search backwards from from_index
-    for (int i = from_index; i >= 0; i--) {
-        if (i + value_len > str_len) continue;
-
-        // Check if substring matches
-        bool match = true;
-        for (uint16_t j = 0; j < value_len; j++) {
-            if (str_data[i + j] != value_data[j]) {
-                match = false;
-                break;
-            }
-        }
-
-        if (match) {
-            return fixnum(i);
-        }
-    }
-
-    // Not found
-    return NULL; // nil
-}
-
-// String reverse: (reverse s) - reverses a string (not lists)
-ID native_string_reverse(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "reverse");
-
-    ID str_arg = args[0];
-
-    // Handle nil
-    if (!str_arg) {
-        return NULL; // nil -> nil
-    }
-
-    // Validate string argument
-    if (TAG(str_arg) != CLJ_STRING) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "reverse requires a string argument");
-        return NULL;
-    }
-
-    CljString *str = as_clj_string(str_arg);
-    const char *str_data = string_data(str);
-    uint16_t str_len = string_length(str);
-
-    if (str_len == 0) {
-        return string_empty_singleton;
-    }
-
-    // Reverse string directly in CljString buffer
-    CljString *result = make_string_buffer(str_len);
-    for (uint16_t i = 0; i < str_len; i++) {
-        result->data[i] = str_data[str_len - 1 - i];
-    }
-    result->data[str_len] = '\0';
-    return AUTORELEASE(result);
-}
 
 // ============================================================================
 // Namespace introspection functions
@@ -2482,13 +2109,13 @@ ID native_all_ns(ID *args, unsigned int argc) {
         return empty_list();
     }
 
-    CljObject *result = NULL;
+    ID result = NULL;
     MAP_FOR_EACH(g_runtime.ns_registry, key, val) {
         (void)key;
         if (!val) {
             continue;
         }
-        result = (CljObject*)make_list(val, (CljList*)result);
+        result = make_list(val, result);
     }
 
     if (!result) {
@@ -2656,10 +2283,10 @@ ID native_repl_dir(ID *args, unsigned int argc) {
     return NULL;
 }
 
-// rt: Return retain count of an object (native implementation for clojure.repl namespace)
-// Usage: (rt obj) - returns the reference count as an integer
-ID native_rt(ID *args, unsigned int argc) {
-    CHECK_ARITY(argc, 1, "rt");
+// retain-count: Return retain count of an object (native implementation for tinyclj namespace)
+// Usage: (tinyclj/retain-count obj) - returns the reference count as an integer
+ID native_retain_count(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "retain-count");
     
     ID obj = args[0];
     if (!obj) {
@@ -2667,8 +2294,8 @@ ID native_rt(ID *args, unsigned int argc) {
         return fixnum(0);
     }
     
-    // Get retain count using get_retain_count from memory.h
-    int rc = get_retain_count(obj);
+    // Get retain count using retain_count from memory.h
+    int rc = retain_count(obj);
     return fixnum(rc);
 }
 
@@ -2691,12 +2318,13 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_trim_data.sym, native_trim},
     {&sym_upper_case_data.sym, native_upper_case},
     {&sym_lower_case_data.sym, native_lower_case},
+    {&sym_pad_left_data.sym, native_pad_left},
     {&sym_last_index_of_data.sym, native_last_index_of},
     {&sym_string_reverse_data.sym, native_string_reverse},
     // clojure.repl functions
     {&sym_source_data.sym, native_source},
     {&sym_dir_data.sym, native_repl_dir},
-    {&sym_rt_data.sym, native_rt},
+    {&sym_retain_count_data.sym, native_retain_count},
     // clojure.core functions
     {&sym_meta_data.sym, native_meta},
     {&sym_with_meta_data.sym, native_with_meta},
@@ -2808,76 +2436,55 @@ static const NativeFunctionEntry native_function_table[] = {
 };
 
 // Lookup native function by Clojure symbol
-// Uses pointer comparison for efficiency (symbols are interned)
-// Returns NULL if not found
+// Fast path: pointer comparison (symbols are interned)
+// Fallback: string comparison for symbols created at runtime (not pre-interned)
 BuiltinFn native_function_lookup(CljSymbol *symbol) {
-    if (!symbol) {
-        return NULL;
+    if (!symbol) return NULL;
+    
+    const char *cname = symbol->cname;
+    const char *ns_name = (symbol->ns_name) ? symbol->ns_name->cname : NULL;
+    
+    // Build qualified name once (if needed)
+    char qualified_name[128];
+    if (ns_name) {
+        snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
     }
-
-    // Compare symbol pointers directly (efficient due to interning)
-    // Note: We compare with the static symbol data structures, but since
-    // init_special_symbols() sets up SYM_TRIM = &sym_trim_data.sym and
-    // adds it to the symbol table, intern_symbol("clojure.string", "trim")
-    // will return the same pointer (SYM_TRIM) due to symbol interning.
+    
+    // Single pass through table with all checks
     for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
-        if (native_function_table[i].clojure_symbol == symbol) {
+        CljSymbol *table_sym = native_function_table[i].clojure_symbol;
+        if (!table_sym) continue;
+        
+        // Fast path: pointer equality (interned symbols)
+        if (table_sym == symbol) {
             return native_function_table[i].native_func;
+        }
+        
+        // Fallback: string comparison (for runtime-created symbols)
+        if (!cname || !table_sym->cname) continue;
+        
+        const char *table_ns = table_sym->ns_name ? table_sym->ns_name->cname : NULL;
+        
+        if (ns_name) {
+            // Qualified lookup: match ns/name or pseudo-qualified cname
+            if (table_ns && strcmp(table_ns, ns_name) == 0 && strcmp(table_sym->cname, cname) == 0) {
+                return native_function_table[i].native_func;
+            }
+            if (!table_ns && strcmp(table_sym->cname, qualified_name) == 0) {
+                return native_function_table[i].native_func;
+            }
+            // clojure.core special case: match unqualified entries
+            if (!table_ns && strcmp(ns_name, "clojure.core") == 0 && strcmp(table_sym->cname, cname) == 0) {
+                return native_function_table[i].native_func;
+            }
+        } else {
+            // Unqualified lookup: match by name only
+            if (strcmp(table_sym->cname, cname) == 0) {
+                return native_function_table[i].native_func;
+            }
         }
     }
     
-    const char *cname = symbol->cname ? symbol->cname : NULL;
-    const char *ns_name = (symbol->ns_name && symbol->ns_name->cname) ? symbol->ns_name->cname : NULL;
-    if (!cname) {
-        return NULL;
-    }
-
-    // First, try to find an entry whose namespace matches exactly (if symbol is qualified)
-    if (ns_name && ns_name[0]) {
-        char qualified_name[128];
-        snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
-
-        for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
-            CljSymbol *table_sym = native_function_table[i].clojure_symbol;
-            if (!table_sym || !table_sym->cname) continue;
-            if (table_sym->ns_name && table_sym->ns_name->cname &&
-                strcmp(table_sym->ns_name->cname, ns_name) == 0 &&
-                strcmp(table_sym->cname, cname) == 0) {
-                return native_function_table[i].native_func;
-            }
-        }
-
-        // Special case: clojure.core entries are stored without namespace (for compatibility)
-        // If no namespaced entry was found, allow matching unqualified entries only for clojure.core
-        if (strcmp(ns_name, "clojure.core") == 0) {
-            for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
-                CljSymbol *table_sym = native_function_table[i].clojure_symbol;
-                if (!table_sym || table_sym->ns_name || !table_sym->cname) continue;
-                if (strcmp(table_sym->cname, cname) == 0) {
-                    return native_function_table[i].native_func;
-                }
-            }
-        }
-
-        // Handle pseudo-qualified names stored as single cname (e.g., "Math/sqrt")
-        for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
-            CljSymbol *table_sym = native_function_table[i].clojure_symbol;
-            if (!table_sym || table_sym->ns_name || !table_sym->cname) continue;
-            if (strcmp(table_sym->cname, qualified_name) == 0) {
-                return native_function_table[i].native_func;
-            }
-        }
-        return NULL;
-    }
-
-    // Unqualified symbol: fall back to name match (for cases where symbol pointers differ)
-    for (int i = 0; native_function_table[i].clojure_symbol != NULL; i++) {
-        CljSymbol *table_sym = native_function_table[i].clojure_symbol;
-        if (table_sym && table_sym->cname && strcmp(table_sym->cname, cname) == 0) {
-            return native_function_table[i].native_func;
-        }
-    }
-
     return NULL;
 }
 
@@ -3274,9 +2881,7 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
     if (!symbols || TAG(symbols) != CLJ_VECTOR) return;
 
     CljVector *vec = as_vector(symbols);
-    int count = vector_count(vec);
-    for (int i = 0; i < count; i++) {
-        CljObject *sym = vector_nth(vec, i);
+    VECTOR_FOR_EACH(vec, sym) {
         if (!sym || TAG(sym) != CLJ_SYMBOL) {
             RELEASE(sym);
             continue;
@@ -3367,13 +2972,13 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljVector *vec = NULL;
 
     // Handle simple Symbol case: (require 'namespace)
-    if (spec && TAG(spec) == CLJ_SYMBOL) {
+    if (TAG(spec) == CLJ_SYMBOL) {
         CljSymbol *sym = as_symbol(spec);
         if (!sym || !sym->cname) return false;
         ns_name = sym->cname;
     }
     // Handle Vector case: [namespace :as alias] or [namespace :refer [syms]]
-    else if (spec && TAG(spec) == CLJ_VECTOR) {
+    else if (TAG(spec) == CLJ_VECTOR) {
         vec = as_vector(spec);
         if (vector_count(vec) < 1) return false;
 
@@ -3671,13 +3276,11 @@ static ID normalize_require_spec(ID spec, bool *needs_release) {
         }
 
         CljList *current = list;
-        while (current) {
-            ID elem = LIST_FIRST(current);
+        LIST_FOR_EACH(current, elem) {
             transient_vec = vector_conj(transient_vec, elem);
             if (!transient_vec) {
                 return NULL;
             }
-            current = LIST_REST(current) ? as_list(LIST_REST(current)) : NULL;
         }
 
         CljVector *persistent_vec = vector_persistent(transient_vec);
@@ -4289,7 +3892,6 @@ ID native_range(ID *args, unsigned int argc) {
     // Create vector with calculated capacity
     ID vec = make_vector(size, CLJ_VECTOR);
     CljVector *v = as_vector(vec);
-    if (!v) return NULL;
 
     // Fill vector
     for (int i = start; (step > 0) ? (i < end) : (i > end); i += step) {
@@ -4327,7 +3929,6 @@ ID native_repeat(ID *args, unsigned int argc) {
     // Create vector with exact capacity
     ID vec = make_vector(count, CLJ_VECTOR);
     CljVector *v = as_vector(vec);
-    if (!v) return NULL;
 
     // Fill vector with repeated value
     for (int i = 0; i < count; i++) {
@@ -4366,174 +3967,7 @@ ID native_math_sqrt(ID *args, unsigned int argc) {
     return create_fixed_result((int32_t)round(sqrt_result * (1 << 13)));
 }
 
-ID native_format(ID *args, unsigned int argc) {
-    CHECK_ARITY_MIN(argc, 1, "format");
-
-    // First argument must be a string (format string)
-    if (TAG(args[0]) != CLJ_STRING) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "format first argument must be a string",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    CljString *fmt_str = (CljString*)args[0];
-    if (!fmt_str || TAG(args[0]) != CLJ_STRING) return NULL;
-
-    // Allocate buffer for formatted string (start with reasonable size)
-    size_t buf_size = 256;
-    char *buffer = malloc(buf_size);
-    if (!buffer) {
-        throw_exception(EXCEPTION_RUNTIME, "format: failed to allocate buffer",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    // Format arguments based on format string
-    if (argc == 1) {
-        // No arguments, just copy format string
-        snprintf(buffer, buf_size, "%s", fmt_str->data);
-    } else {
-        // We need to handle variadic arguments
-        // For simplicity, support common format specifiers: %d, %f, %s
-        // This is a simplified version - full implementation would need to parse format string
-        const char *fmt = fmt_str->data;
-        const char *p = fmt;
-        char *out = buffer;
-        size_t remaining = buf_size - 1;
-        int arg_idx = 1;
-
-        while (*p && arg_idx < (int)argc && remaining > 0) {
-            if (*p == '%' && *(p + 1) != '\0') {
-                p++; // Skip '%'
-                char spec = *p++;
-
-                switch (spec) {
-                    case 'd': {
-                        // Integer
-                        int val = AS_FIXNUM(args[arg_idx]);
-                        int n = snprintf(out, remaining, "%d", val);
-                        if (n < 0 || n >= (int)remaining) {
-                            // Buffer too small, reallocate
-                            size_t used = out - buffer;
-                            buf_size *= 2;
-                            buffer = realloc(buffer, buf_size);
-                            if (!buffer) {
-                                throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                                               __FILE__, __LINE__, 0);
-                                return NULL;
-                            }
-                            out = buffer + used;
-                            remaining = buf_size - used - 1;
-                            n = snprintf(out, remaining, "%d", val);
-                        }
-                        out += n;
-                        remaining -= n;
-                        arg_idx++;
-                        break;
-                    }
-                    case 'f': {
-                        // Float
-                        float val = (TAG(args[arg_idx]) == CLJ_INT) ?
-                                   (float)AS_FIXNUM(args[arg_idx]) :
-                                   as_fixed((CljValue)args[arg_idx]);
-                        int n = snprintf(out, remaining, "%f", val);
-                        if (n < 0 || n >= (int)remaining) {
-                            size_t used = out - buffer;
-                            buf_size *= 2;
-                            buffer = realloc(buffer, buf_size);
-                            if (!buffer) {
-                                throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                                               __FILE__, __LINE__, 0);
-                                return NULL;
-                            }
-                            out = buffer + used;
-                            remaining = buf_size - used - 1;
-                            n = snprintf(out, remaining, "%f", val);
-                        }
-                        out += n;
-                        remaining -= n;
-                        arg_idx++;
-                        break;
-                    }
-                    case 's': {
-                        // String
-                        CljString *str = (TAG(args[arg_idx]) == CLJ_STRING) ? (CljString*)args[arg_idx] : NULL;
-                        if (!str) {
-                            // Try to convert to string
-                            CljString *str_repr = print_str(args[arg_idx]);
-                            if (str_repr) {
-                                int n = snprintf(out, remaining, "%s", string_data(str_repr));
-                                if (n < 0 || n >= (int)remaining) {
-                                    size_t used = out - buffer;
-                                    buf_size *= 2;
-                                    buffer = realloc(buffer, buf_size);
-                                    if (!buffer) {
-                                        throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                                                       __FILE__, __LINE__, 0);
-                                        return NULL;
-                                    }
-                                    out = buffer + used;
-                                    remaining = buf_size - used - 1;
-                                    n = snprintf(out, remaining, "%s", string_data(str_repr));
-                                }
-                                out += n;
-                                remaining -= n;
-                            }
-                        } else {
-                            int n = snprintf(out, remaining, "%s", str->data);
-                            if (n < 0 || n >= (int)remaining) {
-                                size_t used = out - buffer;
-                                buf_size *= 2;
-                                buffer = realloc(buffer, buf_size);
-                                if (!buffer) {
-                                    throw_exception(EXCEPTION_RUNTIME, "format: failed to reallocate buffer",
-                                                   __FILE__, __LINE__, 0);
-                                    return NULL;
-                                }
-                                out = buffer + used;
-                                remaining = buf_size - used - 1;
-                                n = snprintf(out, remaining, "%s", str->data);
-                            }
-                            out += n;
-                            remaining -= n;
-                        }
-                        arg_idx++;
-                        break;
-                    }
-                    case '%': {
-                        // Literal %
-                        *out++ = '%';
-                        remaining--;
-                        break;
-                    }
-                    default: {
-                        // Unknown specifier, copy as-is
-                        *out++ = '%';
-                        *out++ = spec;
-                        remaining -= 2;
-                        break;
-                    }
-                }
-            } else {
-                *out++ = *p++;
-                remaining--;
-            }
-        }
-        *out = '\0';
-    }
-
-    // Create string object from buffer
-    CljString *result = make_string(buffer);
-    free(buffer);
-
-    if (!result) {
-        throw_exception(EXCEPTION_RUNTIME, "format: failed to create string",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    return AUTORELEASE(result);
-}
+// native_format moved to builtins_strings.c
 
 // Set current EvalState (called by eval_function_call before calling builtins)
 void builtin_set_eval_state(EvalState *st) {
@@ -4739,13 +4173,13 @@ ID native_byte_array(ID *args, unsigned int argc) {
     }
 
     // For now, only support vectors as sequences
-    if (seq && TAG(seq) == CLJ_VECTOR) {
+    if (TAG(seq) == CLJ_VECTOR) {
         CljVector *vec = as_vector(seq);
         int count = vector_count(vec);
         CljValue arr = (CljValue)make_byte_array(count);
 
-        for (int i = 0; i < count; i++) {
-            ID elem = vector_nth(vec, i);
+        int i = 0;
+        VECTOR_FOR_EACH(vec, elem) {
             if (!elem || TAG(elem) != CLJ_INT) {
                 RELEASE(arr);
                 RELEASE(elem);
@@ -4762,6 +4196,7 @@ ID native_byte_array(ID *args, unsigned int argc) {
                 return NULL;
             }
             byte_array_set(arr, i, (uint8_t)val);
+            i++;
         }
 
         return arr;
@@ -5066,7 +4501,7 @@ ID native_keyword(ID *args, unsigned int argc) {
     char kw_name[256];
     snprintf(kw_name, sizeof(kw_name), ":%s", name);
     
-    return (ID)intern_symbol_global(kw_name);
+    return intern_symbol_global(kw_name);
 }
 
 // (name x) - returns the name string of a symbol or keyword (without namespace or colon)
@@ -5089,7 +4524,7 @@ ID native_name(ID *args, unsigned int argc) {
         // Skip leading colon for keywords
         if (name[0] == ':') name++;
         
-        return (ID)make_string(name);
+        return make_string(name);
     }
     
     return NULL;
@@ -5126,7 +4561,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "sleep")) return NULL;
 
     // Get the sleep duration in seconds
-    CljObject *duration_obj = args[0];
+    ID duration_obj = args[0];
     if (TAG(duration_obj) != CLJ_INT) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "sleep duration must be a number",
                        __FILE__, __LINE__, 0);
@@ -5134,7 +4569,7 @@ ID native_sleep(ID *args, unsigned int argc) {
     }
 
     // Convert to seconds (assuming the number is in seconds)
-    int duration = as_fixnum((CljValue)duration_obj);
+    int duration = as_fixnum(duration_obj);
 
     // Use Unix sleep function
     sleep(duration);
@@ -5154,7 +4589,7 @@ ID native_atom(ID *args, unsigned int argc) {
     ID value = args[0];  // Can be NULL (nil) or immediate
     CljAtom *atom = make_atom(value);
 
-    return (CljObject*)atom;
+    return atom;
 }
 
 // Native deref implementation
@@ -5201,7 +4636,7 @@ ID native_swap_bang(ID *args, unsigned int argc) {
         return NULL;
     }
 
-    CljObject *obj = args[0];
+    ID obj = args[0];
     if (!obj || TAG(obj) != CLJ_ATOM) {
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "swap! requires an atom",
                        __FILE__, __LINE__, 0);
@@ -5247,33 +4682,28 @@ ID native_swap_bang(ID *args, unsigned int argc) {
 // Note: def and ns are now special forms (not builtins) because they require non-evaluated arguments
 // They are handled directly in eval_list() via eval_def() and eval_ns()
 
-// epoch-minutes: Minutes since Unix epoch (1970-01-01)
-// Range: ~510 years (fits in 29-bit Fixnum)
-ID native_epoch_minutes(ID *args, unsigned int argc) {
+// now: Atomic timestamp as map {:days epoch-days :ms millis-in-day}
+// Single gettimeofday() call ensures consistency (no race condition at midnight)
+ID native_now(ID *args, unsigned int argc) {
     (void)args;
     if (argc != 0) {
-        throw_exception(EXCEPTION_ARITY, "epoch-minutes takes no arguments", NULL, 0, 0);
+        throw_exception(EXCEPTION_ARITY, "now takes no arguments", NULL, 0, 0);
         return NULL;
     }
+    
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    int64_t total_seconds = tv.tv_sec;
-    int32_t minutes = (int32_t)(total_seconds / 60);
-    return fixnum(minutes);
-}
-
-// millis-in-minute: Milliseconds within current minute (0-59999)
-ID native_millis_in_minute(ID *args, unsigned int argc) {
-    (void)args;
-    if (argc != 0) {
-        throw_exception(EXCEPTION_ARITY, "millis-in-minute takes no arguments", NULL, 0, 0);
-        return NULL;
-    }
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    int32_t sec_in_min = tv.tv_sec % 60;
-    int32_t millis = sec_in_min * 1000 + tv.tv_usec / 1000;
-    return fixnum(millis);
+    
+    // Calculate both values from same timestamp
+    int32_t days = (int32_t)(tv.tv_sec / 86400);
+    int32_t sec_in_day = tv.tv_sec % 86400;
+    int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
+    
+    // Build result map {:days N :ms M}
+    return AUTORELEASE(make_map_kv(
+        intern_symbol_global(":days"), fixnum(days),
+        intern_symbol_global(":ms"), fixnum(millis),
+        NOT_FOUND));
 }
 
 // do: Evaluate expressions sequentially, return last value
@@ -5285,17 +4715,194 @@ ID native_do(ID *args, unsigned int argc) {
     }
 
     // Arguments are already evaluated by eval_arg, so we just return the last one
-    // Note: We need to RETAIN the last argument since it will be released by the caller
     ID last = args[argc - 1];
-    // CRITICAL: If last is NULL (nil), return NULL directly without RETAIN/AUTORELEASE
-    if (!last) {
-        return NULL;
-    }
-    return AUTORELEASE(RETAIN(last));
+    return last;
 }
 
 // dotimes: Execute expression n times with variable bound to 0, 1, ..., n-1
 // dotimes is now implemented as a special form, not a builtin
+
+// ============================================================================
+// REGEX FUNCTIONS
+// ============================================================================
+
+// regex?: Returns true if x is a compiled regex pattern
+ID native_regex_p(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "regex?")) return NULL;
+    ID x = args[0];
+    if (x && !IS_IMMEDIATE(x) && TAG(x) == CLJ_REGEX) {
+        return clj_true;
+    }
+    return clj_false;
+}
+
+// re-pattern: Compile a string into a regex pattern
+ID native_re_pattern(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "re-pattern")) return NULL;
+    ID pattern_arg = args[0];
+    
+    if (!pattern_arg || IS_IMMEDIATE(pattern_arg) || TAG(pattern_arg) != CLJ_STRING) {
+        throw_exception(EXCEPTION_RUNTIME, "re-pattern: argument must be a string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljString *pattern_str = as_clj_string(pattern_arg);
+    const char *pattern = clj_string_data(pattern_str);
+    
+    char error[256];
+    CljRegex *re = regex_compile(pattern, error, sizeof(error));
+    if (!re) {
+        throw_exception(EXCEPTION_RUNTIME, error, __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    return AUTORELEASE(re);
+}
+
+// re-find: Find first match of pattern in string
+ID native_re_find(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "re-find")) return NULL;
+    
+    ID re_arg = args[0];
+    ID str_arg = args[1];
+    
+    // Validate regex argument
+    if (!re_arg || IS_IMMEDIATE(re_arg) || TAG(re_arg) != CLJ_REGEX) {
+        throw_exception(EXCEPTION_RUNTIME, "re-find: first argument must be a regex pattern",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Validate string argument
+    if (!str_arg || IS_IMMEDIATE(str_arg) || TAG(str_arg) != CLJ_STRING) {
+        throw_exception(EXCEPTION_RUNTIME, "re-find: second argument must be a string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljRegex *re = (CljRegex *)re_arg;
+    CljString *str = as_clj_string(str_arg);
+    const char *text = clj_string_data(str);
+    
+    const char *match_start = NULL;
+    const char *match_end = NULL;
+    
+    if (!regex_find(re, text, &match_start, &match_end)) {
+        return NULL; // nil - no match
+    }
+    
+    // Create string from match
+    size_t match_len = match_end - match_start;
+    CljString *result = make_string_buffer(match_len);
+    memcpy(result->data, match_start, match_len);
+    result->data[match_len] = '\0';
+    return AUTORELEASE(result);
+}
+
+// re-matches: Returns match if entire string matches pattern
+ID native_re_matches(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "re-matches")) return NULL;
+    
+    ID re_arg = args[0];
+    ID str_arg = args[1];
+    
+    // Validate regex argument
+    if (!re_arg || IS_IMMEDIATE(re_arg) || TAG(re_arg) != CLJ_REGEX) {
+        throw_exception(EXCEPTION_RUNTIME, "re-matches: first argument must be a regex pattern",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Validate string argument
+    if (!str_arg || IS_IMMEDIATE(str_arg) || TAG(str_arg) != CLJ_STRING) {
+        throw_exception(EXCEPTION_RUNTIME, "re-matches: second argument must be a string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljRegex *re = (CljRegex *)re_arg;
+    CljString *str = as_clj_string(str_arg);
+    const char *text = clj_string_data(str);
+    
+    if (!regex_matches(re, text)) {
+        return NULL; // nil - no match or partial match
+    }
+    
+    // Return the matched string (entire string in this case)
+    return str_arg;
+}
+
+// re-seq: Returns lazy sequence of matches (simplified: returns list)
+ID native_re_seq(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 2, "re-seq")) return NULL;
+    
+    ID re_arg = args[0];
+    ID str_arg = args[1];
+    
+    // Validate regex argument
+    if (!re_arg || IS_IMMEDIATE(re_arg) || TAG(re_arg) != CLJ_REGEX) {
+        throw_exception(EXCEPTION_RUNTIME, "re-seq: first argument must be a regex pattern",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Validate string argument
+    if (!str_arg || IS_IMMEDIATE(str_arg) || TAG(str_arg) != CLJ_STRING) {
+        throw_exception(EXCEPTION_RUNTIME, "re-seq: second argument must be a string",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljRegex *re = (CljRegex *)re_arg;
+    CljString *str = as_clj_string(str_arg);
+    const char *text = clj_string_data(str);
+    const char *pos = text;
+    
+    // Build list of matches (in reverse, then reverse at end)
+    CljList *result = NULL;
+    
+    while (*pos) {
+        const char *match_start = NULL;
+        const char *match_end = NULL;
+        
+        if (!regex_find(re, pos, &match_start, &match_end)) {
+            break; // No more matches
+        }
+        
+        // Create string from match
+        size_t match_len = match_end - match_start;
+        CljString *match_str = make_string_buffer(match_len);
+        memcpy(match_str->data, match_start, match_len);
+        match_str->data[match_len] = '\0';
+        
+        // Prepend to result list (builds in reverse)
+        result = make_list(match_str, result);
+        RELEASE(match_str);
+        
+        // Move position past match (ensure progress)
+        pos = match_end;
+        if (match_len == 0) {
+            if (*pos) pos++; // Avoid infinite loop on zero-length matches
+            else break;
+        }
+    }
+    
+    if (!result) {
+        return NULL; // nil - no matches
+    }
+    
+    // Reverse the list to get correct order
+    CljList *reversed = NULL;
+    while (result) {
+        CljList *next = as_list(result->rest);
+        result->rest = (CljObject*)reversed;
+        reversed = result;
+        result = next;
+    }
+    
+    return AUTORELEASE(reversed);
+}
 
 // Helper function to register a builtin in clojure.core namespace (DRY principle)
 // Also supports qualified symbols like "Math/sqrt" for other namespaces
@@ -5400,13 +5007,20 @@ void register_builtins() {
 
     // NOTE: clojure.string functions are NOT registered here as builtins.
     // They are defined in libs/clojure/string.clj and loaded via require.
+    
+    // Regex functions (needed for clojure.string and general regex support)
+    register_builtin_in_core("regex?", native_regex_p);
+    register_builtin_in_core("re-pattern", native_re_pattern);
+    register_builtin_in_core("re-find", native_re_find);
+    register_builtin_in_core("re-matches", native_re_matches);
+    register_builtin_in_core("re-seq", native_re_seq);
     // This allows metadata (docstrings) to be properly attached.
     
     // NOTE: clojure.repl/source is registered here because it's in a different namespace
     // and needs to be available before clojure.repl.clj is loaded.
     register_builtin_in_core("clojure.repl/source", native_source);
     register_builtin_in_core("clojure.repl/dir", native_repl_dir);
-    register_builtin_in_core("clojure.repl/rt", native_rt);
+    register_builtin_in_core("tinyclj/retain-count", native_retain_count);
     
 #ifdef DEBUG
     // Debug functions for tinyclj.runtime namespace
@@ -5419,8 +5033,7 @@ void register_builtins() {
     register_builtin_in_core("with-meta", native_with_meta);
     
     // Time functions
-    register_builtin_in_core("epoch-minutes", native_epoch_minutes);
-    register_builtin_in_core("millis-in-minute", native_millis_in_minute);
+    register_builtin_in_core("now", native_now);
     
     // Macro functions
     register_builtin_in_core("get-macro", native_get_macro);

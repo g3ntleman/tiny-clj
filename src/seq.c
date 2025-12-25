@@ -94,9 +94,6 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
             CljVector *vec = as_vector(obj);
-            if (!vec) {
-                return true;  // Empty vector
-            }
             
             // Use vector_init_seq_iterator to avoid exposing internal data pointer
             if (!vector_init_seq_iterator(iter, vec)) {
@@ -124,7 +121,7 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
         
         case CLJ_MAP: {
             CljMap *map = as_map(obj);
-            if (!map || map->count == 0) {
+            if (map->count == 0) {
                 return true;  // Empty map
             }
 
@@ -428,10 +425,8 @@ ID seq_next(ID seq_obj) {
             if (current_list) {
                 CljObject *rest = LIST_REST(current_list);
                 // next returns nil if rest is empty, otherwise rest
-                // CRITICAL: RETAIN and AUTORELEASE the rest list because it's part of the original list structure
-                // and may be freed when the original list is freed
-                // RETAIN and AUTORELEASE handle NULL safely
-                return AUTORELEASE(RETAIN(rest));
+                // rest is part of the original list structure, which is already safe (caller has strong reference)
+                return rest;
             }
         }
         // Empty list - return nil
@@ -482,7 +477,7 @@ int seq_count(ID obj) {
     if (!obj) return 0;
     
     // If it's already a seq wrapper, count from iterator state
-    if (obj && TAG(obj) == CLJ_SEQ) {
+    if (TAG(obj) == CLJ_SEQ) {
         CljSeqIterator *seq = as_seq(obj);
         if (!seq) return 0;
         
@@ -508,7 +503,7 @@ int seq_count(ID obj) {
     }
     
     // Fast path for vectors - O(1)
-    if (obj && TAG(obj) == CLJ_VECTOR) {
+    if (TAG(obj) == CLJ_VECTOR) {
         CljVector *vec = as_vector((CljObject*)obj);
         return vec ? vector_count(vec) : 0;
     }
