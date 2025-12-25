@@ -172,7 +172,6 @@ tiny-clj is an embedded-first Clojure interpreter written in pure C99/C11 for mi
 - **Protocols** - No `defprotocol`, `extend-type`
 - **Records** - No `defrecord`
 - **Java Interop** - No `.method`, `new`, `import`
-- **Lazy Sequences** - Sequences are eager
 - **Transducers** - Not implemented
 - **Spec** - Not implemented
 
@@ -239,5 +238,4 @@ Note: JVM and V8 benefit from JIT compilation. tiny-clj is a pure interpreter.
 1. **Performance** - Optimize evaluator (target: 2-3x speedup)
 2. **Regex** - Basic regex support for `split`, `replace`
 3. **Sets** - Implement `#{}` and `clojure.set`
-4. **Lazy Sequences** - Implement lazy evaluation
-5. **Documentation** - Improve inline docs and examples
+4. **Documentation** - Improve inline docs and examples
