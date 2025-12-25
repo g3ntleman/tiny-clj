@@ -3961,15 +3961,15 @@ ID native_repeat(ID *args, unsigned int argc) {
         value = args[0];
     } else if (argc == 2) {
         // (repeat n x) - create vector with n repetitions of x
-        if (TAG(args[0]) != CLJ_INT) {
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count must be an integer",
-                           __FILE__, __LINE__, 0);
-            return NULL;
-        }
+    if (TAG(args[0]) != CLJ_INT) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count must be an integer",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
         count = AS_FIXNUM(args[0]);
-        if (count < 0) {
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count cannot be negative",
-                           __FILE__, __LINE__, 0);
+    if (count < 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count cannot be negative",
+                       __FILE__, __LINE__, 0);
             return NULL;
         }
         value = args[1];

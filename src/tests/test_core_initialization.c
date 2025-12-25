@@ -136,8 +136,8 @@ TEST(test_clojure_core_loads_inc) {
     // Only load clojure.core if it's not already loaded
     // (setUp() already loads it, so this avoids double-loading)
     if (!already_loaded) {
-        evalstate_set_ns(g_test_eval_state, "clojure.core");
-        load_clojure_core(g_test_eval_state);
+    evalstate_set_ns(g_test_eval_state, "clojure.core");
+    load_clojure_core(g_test_eval_state);
     }
     
     // Check if inc is in clojure.core mappings
@@ -206,8 +206,8 @@ TEST(test_clojure_core_loads_all_functions) {
     // Only load clojure.core if it's not already loaded
     // (setUp() already loads it, so this avoids double-loading)
     if (!already_loaded) {
-        evalstate_set_ns(g_test_eval_state, "clojure.core");
-        load_clojure_core(g_test_eval_state);
+    evalstate_set_ns(g_test_eval_state, "clojure.core");
+    load_clojure_core(g_test_eval_state);
     }
     
     // Check if key functions are loaded
