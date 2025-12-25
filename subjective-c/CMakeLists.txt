@@ -31,6 +31,11 @@ target_include_directories(subjective-c
 )
 target_compile_features(subjective-c PUBLIC c_std_99)
 
+# Inherit DEBUG flags from parent project
+# This ensures exception.c is compiled with DEBUG when unit-tests are built
+# Check if we're building unit-tests (which needs DEBUG flags)
+# We'll set this from the parent CMakeLists.txt after unit-tests is defined
+
 # -----------------------------------------------------------------------------
 # Unity-based test executable (runs very early in migration)
 # -----------------------------------------------------------------------------

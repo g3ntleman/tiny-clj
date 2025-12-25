@@ -68,24 +68,25 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         return 3; // "nil"
     }
 
-    if (is_immediate(v)) {
-        if (is_fixnum(v)) {
+    CljValue val = (CljValue)v;
+    if (is_immediate(val)) {
+        if (is_fixnum(val)) {
             char buf[32];
-            return (size_t)snprintf(buf, sizeof(buf), "%d", as_fixnum(v));
+            return (size_t)snprintf(buf, sizeof(buf), "%d", as_fixnum(val));
         }
-        if (is_fixed(v)) {
-            char buf[32];
-            return (size_t)snprintf(buf, sizeof(buf), "%.2f", (double)as_fixed(v));
-        }
-        if (is_special(v)) {
-            uint8_t special = as_special(v);
+        if (is_special(val)) {
+            uint8_t special = as_special(val);
             switch (special) {
                 case SPECIAL_TRUE: return 4; // "true"
                 case SPECIAL_FALSE: return 5; // "false"
                 default: return 7; // "unknown"
             }
         }
-        if (is_character(v)) {
+        if (is_fixed(val)) {
+            char buf[32];
+            return (size_t)snprintf(buf, sizeof(buf), "%.2f", (double)as_fixed(val));
+        }
+        if (is_character(val)) {
             return 1; // single character
         }
     }
@@ -270,19 +271,17 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         return;
     }
 
-    if (is_immediate(v)) {
-        if (is_fixnum(v)) {
-            int written = snprintf(buffer + *offset, 32, "%d", as_fixnum(v));
+    CljValue val = (CljValue)v;
+    if (is_immediate(val)) {
+        if (is_fixnum(val)) {
+            int written = snprintf(buffer + *offset, 32, "%d", as_fixnum(val));
             *offset += written;
             return;
         }
-        if (is_fixed(v)) {
-            int written = snprintf(buffer + *offset, 32, "%.2f", (double)as_fixed(v));
-            *offset += written;
-            return;
-        }
-        if (is_special(v)) {
-            uint8_t special = as_special(v);
+        // CRITICAL: Check is_special BEFORE is_fixed to correctly identify booleans
+        // clj_false has tag 5 (TAG_BOOL), not tag 7 (TAG_FIXED)
+        if (is_special(val)) {
+            uint8_t special = as_special(val);
             switch (special) {
                 case SPECIAL_TRUE:
                     memcpy(buffer + *offset, "true", 4);
@@ -298,8 +297,13 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                     return;
             }
         }
-        if (is_character(v)) {
-            buffer[*offset] = (char)as_character(v);
+        if (is_fixed(val)) {
+            int written = snprintf(buffer + *offset, 32, "%.2f", (double)as_fixed(val));
+            *offset += written;
+            return;
+        }
+        if (is_character(val)) {
+            buffer[*offset] = (char)as_character(val);
             *offset += 1;
             return;
         }
@@ -588,10 +592,16 @@ CljString* to_string(ID v) {
 
 CljString* to_string_with_escape(ID v, bool escape_strings) {
     size_t len = to_string_calc_length((CljObject*)v, escape_strings);
+    // make_string_buffer allocates len + 1 bytes (including null terminator)
+    // But we need to ensure offset doesn't exceed len
     CljString *result = (CljString*)AUTORELEASE(make_string_buffer(len));
 
     size_t offset = 0;
     to_string_build_string((CljObject*)v, result->data, &offset, escape_strings);
+    // Safety check: ensure we don't write beyond allocated buffer
+    if (offset > len) {
+        offset = len;  // Truncate to allocated size
+    }
     result->data[offset] = '\0';
     result->length = (uint16_t)offset;
 
