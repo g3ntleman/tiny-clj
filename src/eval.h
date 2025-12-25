@@ -47,7 +47,6 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st);
 ID eval_time(CljList *list, CljMap *env, EvalState *st);
 
 // Additional built-in helpers
-ID eval_seq(CljList *list, CljMap *env);
 
 // For-loop functions
 ID eval_for(CljList *list, CljMap *env);
