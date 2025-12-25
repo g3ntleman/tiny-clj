@@ -1186,9 +1186,17 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
         // Now op is the result of evaluating the inner list - continue with it
         // Check if result is an immediate value (e.g., number from arithmetic)
+        // This often happens when macro expansion returns an immediate value incorrectly
         if (IS_IMMEDIATE(op)) {
+            // Try to provide more context about what was being called
+            const char *type_name = "immediate value";
+            if (is_fixed((CljValue)op)) {
+                type_name = "number";
+            } else if (is_bool((CljValue)op)) {
+                type_name = "boolean";
+            }
             return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                    "Cannot call immediate value as a function");
+                    "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
         }
     }
 
@@ -1326,9 +1334,17 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Check if op is an immediate value BEFORE accessing op->type
     // IS_IMMEDIATE is safe to call on any pointer (including invalid ones)
+    // This often happens when macro expansion returns an immediate value incorrectly
     if (IS_IMMEDIATE(op)) {
+        // Try to provide more context about what was being called
+        const char *type_name = "immediate value";
+        if (is_fixed((CljValue)op)) {
+            type_name = "number";
+        } else if (is_bool((CljValue)op)) {
+            type_name = "boolean";
+        }
         return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                "Cannot call immediate value as a function");
+                "Cannot call %s as a function (this may indicate a macro expansion error)", type_name);
     }
 
     // Error: op is a list (should have been evaluated earlier)
