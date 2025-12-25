@@ -1069,9 +1069,14 @@ static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
         }
 
         // If fn is still a symbol, it means eval_symbol couldn't resolve it as a function
-        // This is an error - throw exception instead of returning the symbol
+        // Check if it's unquote-splice (only valid inside quasiquote)
         if (fn_tag == CLJ_SYMBOL) {
             CljSymbol *sym = as_symbol(fn);
+            if (sym == SYM_UNQUOTE_SPLICE) {
+                throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                        "unquote-splice can only be used inside quasiquote");
+                return NULL;
+            }
             const char *sym_name = sym && sym->cname ? sym->cname : "unknown";
             throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
                     "Cannot call %s as a function", sym_name);

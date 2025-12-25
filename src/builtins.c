@@ -3948,38 +3948,49 @@ ID native_range(ID *args, unsigned int argc) {
 }
 
 ID native_repeat(ID *args, unsigned int argc) {
-    if (!validate_builtin_args(argc, 2, "repeat")) return NULL;
-
-    // First argument must be integer (count)
-    if (TAG(args[0]) != CLJ_INT) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count must be an integer",
-                       __FILE__, __LINE__, 0);
+    CLJ_ASSERT(args != NULL);
+    
+    int count;
+    ID value;
+    
+    if (argc == 1) {
+        // (repeat x) - use large count instead of infinite sequence
+        // Use large but practical value (1 million should be enough for most use cases)
+        count = 1000000;
+        value = args[0];
+    } else if (argc == 2) {
+        // (repeat n x) - create vector with n repetitions of x
+        if (TAG(args[0]) != CLJ_INT) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count must be an integer",
+                           __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        count = AS_FIXNUM(args[0]);
+        if (count < 0) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count cannot be negative",
+                           __FILE__, __LINE__, 0);
+            return NULL;
+        }
+        value = args[1];
+    } else {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg),
+                "repeat requires 1 or 2 arguments, got %u", argc);
+        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
 
-    int count = AS_FIXNUM(args[0]);
-    if (count < 0) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count cannot be negative",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    ID value = args[1]; // Second argument is the value to repeat
-
-    // Return empty vector singleton if count is 0
     if (count == 0) {
         return empty_vector();
     }
 
-    // Create vector with exact capacity
     ID vec = make_vector(count, CLJ_VECTOR);
     CljVector *v = as_vector(vec);
 
-    // Fill vector with repeated value
     for (int i = 0; i < count; i++) {
         ID val = RETAIN(value);
         v = vector_conj(v, val);
-        RELEASE(val); // vector_conj retains, so release our copy - RELEASE handles NULL
+        RELEASE(val);
     }
 
     return AUTORELEASE(vec);
