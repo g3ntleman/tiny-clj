@@ -242,6 +242,7 @@ DEFINE_EXTERN_SYMBOL(sym_quot_data, "quot");
 DEFINE_EXTERN_SYMBOL(sym_bit_shift_left_data, "bit-shift-left");
 DEFINE_EXTERN_SYMBOL(sym_range_data, "range");
 DEFINE_EXTERN_SYMBOL(sym_repeat_data, "repeat");
+DEFINE_EXTERN_SYMBOL(sym_repeatedly_data, "repeatedly");
 DEFINE_EXTERN_SYMBOL(sym_math_sqrt_data, "Math/sqrt");
 DEFINE_EXTERN_SYMBOL(sym_sqrt_data, "sqrt");
 DEFINE_EXTERN_SYMBOL(sym_format_data, "format");
@@ -558,6 +559,9 @@ void init_special_symbols() {
     }
     if (SYM_RECUR && (SYM_RECUR->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_RECUR)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_recur;
+    }
+    if (SYM_LOOP && (SYM_LOOP->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_LOOP)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_loop;
     }
     if (SYM_GO && (SYM_GO->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_GO)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_go;

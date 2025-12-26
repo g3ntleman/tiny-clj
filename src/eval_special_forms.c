@@ -189,6 +189,124 @@ ID eval_special_recur(CljList *list, CljMap *env, EvalState *st, const EvalConte
     return eval_handle_recur(list, ctx);
 }
 
+ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    // (loop [bindings*] body*)
+    if (!list || !st) return NULL;
+    
+    CljObject *bindings_vec = list_get_element(list, 1);
+    if (!bindings_vec || TAG(bindings_vec) != CLJ_VECTOR) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires a vector for bindings", NULL, 0, 0);
+        return NULL;
+    }
+    
+    CljVector *bindings = as_vector((CljValue)bindings_vec);
+    int binding_count = vector_count(bindings);
+    if (binding_count % 2 != 0 || binding_count == 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires an even number of forms in binding vector", NULL, 0, 0);
+        return NULL;
+    }
+    
+    int pair_count = binding_count / 2;
+    CLJ_ASSERT(pair_count <= CALLFRAME_MAX_PARAMS && "Too many loop bindings");
+    
+    int list_len = list_count(list);
+    if (list_len < 3) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop requires a body expression", NULL, 0, 0);
+        return NULL;
+    }
+    
+    // Parse bindings and evaluate initial values
+    // eval_body returns AUTORELEASE values - safe to use in this scope and pass to frame_set_bindings
+    ID params_stack[16] = {0}, recur_args[16] = {0}, current_values[16] = {0};
+    EvalContext init_ctx = ctx ? *ctx : (EvalContext){0};
+    init_ctx.env = env;
+    init_ctx.st = st;
+    
+    for (int i = 0; i < pair_count; i++) {
+        CljValue sym_val = (CljValue)vector_nth(bindings, i * 2);
+        CljValue init_val = (CljValue)vector_nth(bindings, i * 2 + 1);
+        
+        if (!sym_val || TAG(sym_val) != CLJ_SYMBOL) {
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "loop binding must be a symbol", NULL, 0, 0);
+            return NULL;
+        }
+        
+        params_stack[i] = sym_val;
+        current_values[i] = (!init_val || is_fixnum(init_val) || is_special(init_val)) ? init_val : eval_body(init_val, env, st, &init_ctx);
+    }
+    
+    // TCO Loop
+    CallFrame loop_frame_storage;
+    CallFrame *loop_frame = &loop_frame_storage;
+    frame_init(loop_frame, ctx ? ctx->frame : NULL);
+    frame_set_bindings(loop_frame, ctx ? ctx->frame : NULL, params_stack, current_values, pair_count);
+    
+    ID result = NULL;
+    int recur_arg_count = -1;
+    int used_recur_slots = 0;
+    
+    do {
+        recur_arg_count = -1;
+        // Cleanup recur_args from previous iteration (like eval_function_call)
+        if (used_recur_slots > 0) {
+            for (int i = 0; i < used_recur_slots; i++) {
+                RELEASE(recur_args[i]);
+                recur_args[i] = NULL;
+            }
+            used_recur_slots = 0;
+        }
+        
+        EvalContext loop_ctx = {
+            .env = env,
+            .env_stack = ctx ? ctx->env_stack : NULL,
+            .frame = loop_frame,
+            .st = st,
+            .recur_args = recur_args,
+            .recur_arg_count = &recur_arg_count,
+            .recur_param_count = pair_count
+        };
+        
+        ID new_result = NULL;
+        for (int i = 2; i < list_len; i++) {
+            ID body_expr = list_get_element(list, i);
+            if (body_expr) {
+                RELEASE(new_result);
+                new_result = eval_body_with_params(body_expr, &loop_ctx);
+            }
+        }
+        
+        if (recur_arg_count >= 0) {
+            RELEASE(new_result);
+            CLJ_ASSERT(recur_arg_count == pair_count);
+            // recur_args are already retained by eval_handle_recur
+            // frame_set_bindings will release old frame values and retain new ones
+            for (int i = 0; i < pair_count; i++) {
+                current_values[i] = recur_args[i];
+                recur_args[i] = NULL;  // Clear to prevent double-release in next iteration
+            }
+            used_recur_slots = pair_count;
+            frame_set_bindings(loop_frame, ctx ? ctx->frame : NULL, params_stack, current_values, pair_count);
+            continue;
+        }
+        
+        ASSIGN(result, new_result);
+        break;
+    } while (true);
+    
+    // Cleanup
+    // recur_args were already cleared (set to NULL) when used, so no cleanup needed
+    frame_release(loop_frame);
+    // Release our refs to current_values
+    // - Initial values: AUTORELEASE from eval_body, but frame_set_bindings retained them
+    // - After recur: retained by eval_handle_recur, frame_set_bindings retained them again
+    // frame_release already released frame's refs, so we release our refs here
+    for (int i = 0; i < pair_count; i++) {
+        if (current_values[i] && !IS_IMMEDIATE(current_values[i])) RELEASE(current_values[i]);
+    }
+    
+    return result;
+}
+
 ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     (void)ctx;  // Unused
     CljMap *time_env = env;
@@ -205,7 +323,7 @@ ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
 ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
     if (!ctx || !ctx->recur_args || !ctx->recur_arg_count) {
-        throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies", NULL, 0, 0);
+        throw_exception(EXCEPTION_RUNTIME, "recur can only be used inside function bodies or loop", NULL, 0, 0);
         return NULL;
     }
 

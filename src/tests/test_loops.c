@@ -125,6 +125,68 @@ TEST_SHARED(test_dotimes_simple_iteration_count) {
 
 
 // ============================================================================
+// LOOP TESTS
+// ============================================================================
+
+TEST(test_loop_simple_no_recur) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: Simple loop without recur - (loop [x 0] x) => 0
+    CljObject *result = eval_string("(loop [x 0] x)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+}
+
+TEST(test_loop_with_recur) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: loop with recur - (loop [i 3] (if (= i 0) i (recur (- i 1)))) => 0
+    CljObject *result = eval_string("(loop [i 3] (if (= i 0) i (recur (- i 1))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+}
+
+TEST(test_loop_multiple_bindings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: loop with multiple bindings - simple counter
+    // (loop [x 0 y 1] (if (= x 2) y (recur (+ x 1) (+ y 1)))) => 3
+    CljObject *result = eval_string("(loop [x 0 y 1] (if (= x 2) y (recur (+ x 1) (+ y 1))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+}
+
+TEST(test_loop_multiple_body_exprs) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: loop with multiple body expressions (like let)
+    // (loop [x 0] (+ x 1) (+ x 2)) => 2 (last expression is returned)
+    CljObject *result = eval_string("(loop [x 0] (+ x 1) (+ x 2))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
+TEST(test_loop_destructuring) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Test: loop with destructuring (AST transformation exists)
+    // (loop [[head & tail] [1 2 3] sum 0] (if head (recur tail (+ sum head)) sum)) => 6
+    CljObject *result = eval_string("(loop [[head & tail] [1 2 3] sum 0] (if head (recur tail (+ sum head)) sum))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(6, as_fixnum(result));
+}
+
+// Error cases are tested implicitly:
+// - Arity mismatch is handled by eval_handle_recur (tested in test_recur.c)
+// - Invalid bindings are validated in eval_special_loop
+// - recur outside loop/function throws exception (tested in test_recur.c)
+
+// ============================================================================
 // WHILE LOOP TESTS
 // ============================================================================
 
