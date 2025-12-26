@@ -10,10 +10,8 @@
 typedef void (*SubjectiveCReleaseFn)(CljObject *obj);
 void subjective_c_register_release_fn(CljType type, SubjectiveCReleaseFn fn);
 
-#ifdef DEBUG
-extern bool g_zombie_enabled;
-void enable_zombie_mode(void);
-#endif
+// Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
+// No runtime API needed
 
 void retain(CljObject *v);
 void release(CljObject *v);
@@ -38,20 +36,29 @@ int retain_count(ID obj);
 #define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
 
 #ifdef DEBUG
+    #ifdef ZOMBIE_ENABLED
     #define DEALLOC(obj) do { \
         typeof(obj) _tmp = (obj); \
         if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
             CljObject *_obj = (CljObject*)_tmp; \
             if (!is_singleton(_obj)) { \
                 memory_profiler_track_object_destruction(_obj); \
-                if (g_zombie_enabled) { \
-                    _obj->rc = ZOMBIE_RC; \
-                } else { \
-                    free(_obj); \
-                } \
+                _obj->rc = ZOMBIE_RC; \
             } \
         } \
     } while(0)
+    #else
+    #define DEALLOC(obj) do { \
+        typeof(obj) _tmp = (obj); \
+        if (_tmp && (void*)_tmp != (void*)0x1 && !IS_IMMEDIATE(_tmp)) { \
+            CljObject *_obj = (CljObject*)_tmp; \
+            if (!is_singleton(_obj)) { \
+                memory_profiler_track_object_destruction(_obj); \
+                free(_obj); \
+            } \
+        } \
+    } while(0)
+    #endif
 
     #define RETAIN(obj) ({ \
         ID _id = (obj); \

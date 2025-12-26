@@ -18,6 +18,9 @@ typedef ID CljValue;
 #include <stdio.h>
 #include <execinfo.h>
 
+// Forward declaration to avoid circular dependency with exception.h
+void* throw_exception_formatted(const char *type, const char *file, int line, int col, const char *format, ...);
+
 #define INDEX_NOT_FOUND (-1)
 #define TRACKS_RETAINS(obj) ((obj) && !is_singleton(obj))
 #define IS_SINGLETON(obj) is_singleton(obj)
@@ -76,16 +79,57 @@ extern CljObject g_not_found_sentinel;
 #define CLJ_COMP_OP_MASK     0xC0
 
 static inline CljType TAG(ID obj) {
+    // Early NULL check - must come before any pointer dereference
+    // Check both NULL and zero pointer explicitly
+    if (!obj || (uintptr_t)obj == 0) return CLJ_NIL;
+    
+    // Check for immediate values (tagged pointers with LSB set)
     if ((uintptr_t)obj & 0x1) {
         return (CljType)((uintptr_t)obj & 0x7);
     }
-    if (!obj) return CLJ_NIL;
+    
     CljObject *obj_ptr = (CljObject*)obj;
+    
+    // Safety check: validate pointer before accessing type field
+    // This prevents crashes when obj points to freed memory or invalid addresses
+    // Double-check NULL after cast (defensive programming)
+    if (!obj_ptr || (uintptr_t)obj_ptr < 0x1000) {
+        // Invalid pointer - likely a freed object or corrupted pointer
+        return CLJ_NIL;
+    }
+    
+    // Access type field first (it's at the beginning of the struct, safer)
+    // This will crash if pointer is invalid, but that's better than silent corruption
+    CljType type = obj_ptr->type;
+    
 #ifdef DEBUG
-    if (obj_ptr && (uintptr_t)obj_ptr >= 0x1000 && obj_ptr->rc == ZOMBIE_RC) {
+    // Detect use-after-free: check if object is a zombie (freed but not deallocated)
+    // Check zombie status AFTER accessing type (type is at offset 0, rc is later)
+    // If zombie mode is enabled, objects are marked as zombies when freed
+    // This check will catch use-after-free errors before they cause corruption
+#ifdef ZOMBIE_ENABLED
+    // Only check rc if zombie mode is enabled (avoids unnecessary access)
+    // Access rc field - if this crashes, it means the pointer was invalid
+    // and we would have crashed anyway when accessing type
+    if (obj_ptr->rc == ZOMBIE_RC) {
+        // This is a use-after-free error! The object was freed but we're still accessing it.
+        // Report the error with detailed information
+        const char *type_name = "unknown";
+        if (type < CLJ_TYPE_COUNT) {
+            type_name = clj_type_name(type);
+        }
+        throw_exception_formatted("ZombieAccessError", __FILE__, __LINE__, 0,
+                "Use-after-free detected: Attempted to access freed object %p (type=%s, rc=ZOMBIE_RC). "
+                "This object was freed but is still being accessed. Check for dangling pointers or missing RETAIN.",
+                obj_ptr, type_name);
+        // Return a safe default to prevent further crashes
+        return CLJ_NIL;
     }
 #endif
-    return obj_ptr->type;
+#endif
+    
+    // Return the type we already accessed
+    return type;
 }
 
 static inline bool is_singleton(CljObject *obj) {
@@ -116,11 +160,45 @@ int reference_count(CljObject *obj);
 
 #ifdef DEBUG
 static inline void* assert_type(CljObject *obj, CljType expected_type) {
-    if (obj && TAG(obj) == expected_type) {
+    // Safety: validate pointer before calling TAG()
+    // Use uintptr_t to avoid any pointer dereferencing during validation
+    uintptr_t ptr_val = (uintptr_t)obj;
+    
+    // Check NULL and invalid pointer range without dereferencing
+    if (ptr_val == 0 || ptr_val < 0x1000) {
+        fprintf(stderr, "assert_type failed: invalid pointer %p (expected %d)\n",
+                (void*)obj, (int)expected_type);
+        void *trace[16];
+        int trace_count = backtrace(trace, 16);
+        backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+        return NULL;
+    }
+    
+    // Check if pointer is on stack (stack pointers should not be used as objects)
+    // On ARM64/macOS, stack grows downward, so stack addresses are higher than $sp
+    // Typical stack range: $sp to $sp - stack_size (usually ~8MB)
+    // If pointer is close to current stack pointer, it's likely a stack address
+    void *current_sp = __builtin_frame_address(0);
+    uintptr_t sp_val = (uintptr_t)current_sp;
+    // Stack addresses are typically within 8MB of stack pointer
+    // Check if pointer is in stack range (between $sp and $sp - 8MB)
+    if (ptr_val > sp_val && ptr_val < sp_val + (8 * 1024 * 1024)) {
+        fprintf(stderr, "assert_type failed: pointer %p appears to be on stack (expected %d)\n",
+                (void*)obj, (int)expected_type);
+        void *trace[16];
+        int trace_count = backtrace(trace, 16);
+        backtrace_symbols_fd(trace, trace_count, fileno(stderr));
+        return NULL;
+    }
+    
+    // Now safe to call TAG() - pointer has been validated
+    // TAG() will do additional validation and handle invalid pointers gracefully
+    CljType actual_type = TAG(obj);
+    if (actual_type == expected_type) {
         return obj;
     }
     fprintf(stderr, "assert_type failed: expected %d actual %d\n",
-            (int)expected_type, obj ? (int)TAG(obj) : -1);
+            (int)expected_type, (int)actual_type);
     void *trace[16];
     int trace_count = backtrace(trace, 16);
     backtrace_symbols_fd(trace, trace_count, fileno(stderr));

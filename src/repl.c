@@ -410,10 +410,9 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #endif
 
 #ifdef DEBUG
-    // Enable zombie mode if requested via command line
-    if (zombie_mode) {
-        enable_zombie_mode();
-    }
+    // Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
+    // Command line flag is ignored - use compile-time flag instead
+    (void)zombie_mode; // Suppress unused parameter warning
     // Enable verbose memory debugging if requested
     if (memory_debug) {
         set_memory_verbose_mode(true);
