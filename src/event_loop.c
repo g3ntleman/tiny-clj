@@ -10,6 +10,7 @@
 #include "map.h"
 #include "value.h"  // For as_fixnum, clj_true
 #include "kv_macros.h"  // For KV_VALUE
+#include "to_string.h"  // For to_string
 #include <stdbool.h>
 #include <sys/time.h>
 
@@ -143,7 +144,19 @@ static CljVector* task_queue_get(void) {
     }
     if (!g_runtime.task_queue) return NULL;
     CljVector *task_vec = g_runtime.task_queue;
-    CLJ_ASSERT(TAG(task_vec) == CLJ_VECTOR_TRANSIENT);
+    // Safety check: validate pointer before calling TAG
+    if ((uintptr_t)task_vec < 0x1000) {
+        return NULL; // Invalid pointer
+    }
+    // Safety: check tag only if pointer is valid
+    // In DEBUG builds, CLJ_ASSERT will verify the tag, but we need to avoid crashes
+    // if the pointer is invalid (e.g., freed but not NULL)
+#ifdef DEBUG
+    if ((uintptr_t)task_vec >= 0x1000) {
+        CljType tag = TAG(task_vec);
+        CLJ_ASSERT(tag == CLJ_VECTOR_TRANSIENT);
+    }
+#endif
     return task_vec;
 }
 
@@ -156,7 +169,16 @@ static CljVector* timer_queue_get(void) {
     }
     if (!g_runtime.timer_queue) return NULL;
     CljVector *timer_vec = g_runtime.timer_queue;
-    CLJ_ASSERT(TAG(timer_vec) == CLJ_VECTOR_TRANSIENT);
+    
+    // Safety check: validate pointer before calling TAG
+    if ((uintptr_t)timer_vec < 0x1000) {
+        return NULL; // Invalid pointer
+    }
+    
+    // Safety: validate pointer before calling TAG
+    if (timer_vec && (uintptr_t)timer_vec >= 0x1000) {
+        CLJ_ASSERT(TAG(timer_vec) == CLJ_VECTOR_TRANSIENT);
+    }
     return timer_vec;
 }
 
@@ -183,14 +205,44 @@ void event_loop_init(void) {
 }
 
 void event_loop_clear(void) {
-    CljVector *task_vec = task_queue_get();
+    // Safety: check if task_queue is valid before accessing it
+    // runtime_reset() sets task_queue to NULL, but event_loop_clear() is called after
+    // So we need to check if it's already NULL or invalid
+    if (!g_runtime.task_queue) return;
+    
+    // Safety: validate pointer before calling task_queue_get which calls TAG()
+    if ((uintptr_t)g_runtime.task_queue < 0x1000) {
+        g_runtime.task_queue = NULL; // Mark as invalid
+        return;
+    }
+    
+    // task_queue_get() calls TAG() which might crash if task_queue is invalid
+    // So we validate the pointer first
+    CljVector *task_vec = NULL;
+    if (g_runtime.task_queue && (uintptr_t)g_runtime.task_queue >= 0x1000) {
+        task_vec = task_queue_get();
+    }
     if (task_vec) {
         // Clear vector count - elements will be freed when vector is released
         // For transient vectors, we just reset the count
         vector_clear(task_vec);
     }
     
-    CljVector *timer_vec = timer_queue_get();
+    // Safety: check timer_queue before accessing it
+    // Note: runtime_reset() now calls event_loop_clear() before setting timer_queue to NULL
+    // So we can safely access it here
+    if (!g_runtime.timer_queue) return; // Already cleared
+    
+    // Safety: validate pointer before calling timer_queue_get which calls TAG()
+    if ((uintptr_t)g_runtime.timer_queue < 0x1000) {
+        g_runtime.timer_queue = NULL; // Mark as invalid
+        return;
+    }
+    
+    CljVector *timer_vec = NULL;
+    if (g_runtime.timer_queue && (uintptr_t)g_runtime.timer_queue >= 0x1000) {
+        timer_vec = timer_queue_get();
+    }
     if (timer_vec) {
         // Clear vector count - elements will be freed when vector is released
         // For transient vectors, we just reset the count

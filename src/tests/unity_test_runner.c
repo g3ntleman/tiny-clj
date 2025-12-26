@@ -81,9 +81,7 @@ void setUp(void) {
         memory_update_debug_output_active();
 #endif
 
-#ifdef DEBUG
-        enable_zombie_mode();
-#endif
+// Zombie mode is automatically enabled via __attribute__((constructor)) if ZOMBIE_ENABLED is defined
     
     // Load clojure.core for each test (refresh state between tests)
     // Use autorelease pool for load_clojure_core to handle AUTORELEASE calls
@@ -114,7 +112,10 @@ void tearDown(void) {
     }
     memory_profiler_check_leaks("Test Complete");
     
-    runtime_reset(&g_runtime);
+    // Wrap runtime_reset in autorelease pool to handle AUTORELEASE calls during cleanup
+    WITH_AUTORELEASE_POOL({
+        runtime_reset(&g_runtime);
+    });
 }
 
 // ============================================================================
@@ -326,9 +327,7 @@ int main(int argc, char **argv) {
     // Disable memory leak reporting by default (only show on failures)
     set_memory_leak_reporting_enabled(false);
     set_memory_verbose_mode(false);
-#ifdef DEBUG
-    enable_zombie_mode();
-#endif
+    // Zombie mode is automatically enabled via __attribute__((constructor)) if ZOMBIE_ENABLED is defined
 #endif
     
     // Parse command line arguments
@@ -391,7 +390,11 @@ int main(int argc, char **argv) {
     }
     
     reset_eval_state_current_ns();
-    runtime_reset(&g_runtime);
+    
+    // Wrap runtime_reset in autorelease pool to handle AUTORELEASE calls during cleanup
+    WITH_AUTORELEASE_POOL({
+        runtime_reset(&g_runtime);
+    });
     
     evalstate_free(g_test_eval_state);
     g_test_eval_state = NULL;
