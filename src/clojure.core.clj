@@ -99,23 +99,8 @@ R"CLOJURE(
 ; ============================================================================
 ; Map Functions (native implementations with docstrings)
 ; ============================================================================
-^#^{:doc "Returns a map that consists of the rest of the maps conj-ed onto the first. If a key occurs in more than one map, the mapping from the latter (left-to-right) will be the mapping in the result."}
-(def merge merge)
-
-^#^{:doc "Returns true if key is present in the given collection, otherwise returns false. Note that for numerically indexed collections like vectors, this tests if the numeric key is within the range of indexes."}
-(def contains? contains?)
-
-^#^{:doc "Returns a new coll consisting of to-coll with all of the items of from-coll conjoined."}
-(def into into)
-
-^#^{:doc "Returns a map containing only those entries in map whose key is in keys."}
-(def select-keys select-keys)
-
-^#^{:doc "Returns the map entry for key, or nil if key not present."}
-(def find find)
-
-^#^{:doc "Updates a value in an associative structure, where k is a key and f is a function that will take the old value and any supplied args and return the new value. If the key does not exist, nil is passed as the old value."}
-(def update update)
+; Forward declarations removed - these functions are defined later as :native (lines 511-521)
+; The :native definitions will be registered when clojure.core.clj is loaded
 
 ; ============================================================================
 ; Utility Functions
@@ -167,6 +152,8 @@ R"CLOJURE(
 (defn keyword? [x] :native)
 ^#^{:doc "Returns true if x is a String."}
 (defn string? [x] :native)
+^#^{:doc "Returns true if x is nil, false otherwise."}
+(defn nil? [x] :native)
 ^#^{:doc "Returns true if x is a persistent collection."}
 (defn coll? [x] (or (list? x) (vector? x) (map? x)))
 ^#^{:doc "Returns true if x implements ISeq."}
@@ -237,8 +224,10 @@ R"CLOJURE(
                       (if (nil? forms)
                         x
                         (let [form (first forms)
-                              threaded (if (seq? form)
-                                         (concat (list (first form) x) (rest form))
+                              threaded (if (list? form)
+                                         (let [op (first form)
+                                               args (rest form)]
+                                           (cons op (cons x args)))
                                          (list form x))
                               rest-forms (next forms)]
                           (if (nil? rest-forms)
@@ -248,12 +237,18 @@ R"CLOJURE(
 
 ^#^{:doc "Threads the expr through the forms. Inserts x as the last item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the last item in second form, etc."}
 (defmacro ->> [x & forms]
-  (let [thread-step (fn thread-step [x forms]
+  (let [append-last (fn append-last [lst val]
+                      (if (nil? lst)
+                        (list val)
+                        (if (nil? (rest lst))
+                          (list (first lst) val)
+                          (cons (first lst) (append-last (rest lst) val)))))
+        thread-step (fn thread-step [x forms]
                       (if (nil? forms)
                         x
                         (let [form (first forms)
-                              threaded (if (seq? form)
-                                         (concat form (list x))
+                              threaded (if (list? form)
+                                         (append-last form x)
                                          (list form x))
                               rest-forms (next forms)]
                           (if (nil? rest-forms)
@@ -427,10 +422,9 @@ R"CLOJURE(
 ; ============================================================================
 ; Predicate Functions (Native)
 ; ============================================================================
-^#^{:doc "Returns true if x is nil, false otherwise."}
-(defn nil? [x] :native)
 ^#^{:doc "Returns true if x is a vector, false otherwise."}
 (defn vector? [x] :native)
+; nil? is now defined earlier (before Threading Macros)
 ; vector? and map? are now defined earlier (before Threading Macros)
 ^#^{:doc "Returns true if x is a map, false otherwise."}
 (defn map? [x] :native)
