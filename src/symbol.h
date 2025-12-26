@@ -202,6 +202,7 @@ extern StaticSymbolData sym_not_data;
 extern StaticSymbolData sym_count_data;
 extern StaticSymbolData sym_cons_data;
 extern StaticSymbolData sym_next_data;
+extern StaticSymbolData sym_empty_data;
 extern StaticSymbolData sym_nnext_data;
 extern StaticSymbolData sym_nthnext_data;
 extern StaticSymbolData sym_gensym_data;

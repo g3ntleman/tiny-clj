@@ -12,6 +12,10 @@
 #include "strings.h"
 #include "map.h"
 #include "symbol.h"
+#include "memory.h"
+#include "namespace.h"
+#include "eval.h"
+#include "function.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -375,38 +379,83 @@ CljSeqIterator* make_seq(ID obj) {
     return heap_seq;
 }
 
+CljLazySeq* make_lazy_seq(ID first, ID rest_fn) {
+    CljLazySeq *lazy = ALLOC(CljLazySeq, 1);
+    lazy->base.type = CLJ_LAZY_SEQ;
+    lazy->base.rc = 1;
+    lazy->first = RETAIN(first);
+    lazy->rest_fn = RETAIN(rest_fn);
+    lazy->cached_rest = NULL;
+    return lazy;
+}
+
 void seq_release(ID seq_obj) {
     if (!seq_obj) return;
+    
+    if (is_lazy_seq(seq_obj)) {
+        CljLazySeq *lazy = as_lazy_seq(seq_obj);
+        RELEASE(lazy->first);
+        RELEASE(lazy->rest_fn);
+        RELEASE(lazy->cached_rest);
+        DEALLOC(lazy);
+        return;
+    }
+    
     CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return;
-    
-    // Stack iterator doesn't need cleanup
     free(seq);
 }
 
 ID seq_first(ID seq_obj) {
     if (!seq_obj) return NULL;
-    CljSeqIterator *seq = as_seq(seq_obj);
-    if (!seq) return NULL;
     
-    return seq_iter_first(&seq->iter);
+    if (is_lazy_seq(seq_obj)) {
+        return RETAIN(as_lazy_seq(seq_obj)->first);
+    }
+    
+    CljSeqIterator *seq = as_seq(seq_obj);
+    return seq ? seq_iter_first(&seq->iter) : NULL;
 }
 
 ID seq_rest(ID seq_obj) {
     if (!seq_obj) return NULL;
+    
+    if (is_lazy_seq(seq_obj)) {
+        CljLazySeq *lazy = as_lazy_seq(seq_obj);
+        if (lazy->cached_rest) {
+            return RETAIN(lazy->cached_rest);
+        }
+        if (!lazy->rest_fn) {
+            return NULL;
+        }
+        
+        // Für native Funktionen: Übergib die Funktion selbst als ersten Parameter
+        // damit die Generator-Funktion auf env zugreifen kann
+        if (TAG(lazy->rest_fn) == CLJ_FUNC) {
+            CljCFunc *native_func = (CljCFunc*)lazy->rest_fn;
+            if (native_func && native_func->fn) {
+                ID fn_args[1] = {lazy->rest_fn};
+                ID rest_result = native_func->fn((CljObject**)fn_args, 1);
+                lazy->cached_rest = RETAIN(rest_result);
+                return RETAIN(rest_result);
+            }
+        }
+        
+        // Clojure-Funktion: Normale eval_function_call
+        ID rest_result = eval_function_call(lazy->rest_fn, NULL, 0, NULL, get_global_eval_state());
+        lazy->cached_rest = RETAIN(rest_result);
+        return RETAIN(rest_result);
+    }
+    
     CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
-    // Create new heap wrapper with advanced iterator
-    // Use malloc instead of calloc - all fields are immediately initialized
     CljSeqIterator *rest_seq = (CljSeqIterator*)malloc(sizeof(CljSeqIterator));
     if (!rest_seq) return NULL;
     
     rest_seq->base.type = CLJ_SEQ;
     rest_seq->base.rc = 1;
-    
-    // Copy iterator state
-    rest_seq->iter = seq->iter;  // Struct copy
+    rest_seq->iter = seq->iter;
     seq_iter_next(&rest_seq->iter);
     
     return (CljObject*)rest_seq;
@@ -451,6 +500,65 @@ ID seq_next(ID seq_obj) {
 ID seq_next_inplace(ID seq_obj) {
     if (!seq_obj) return NULL;
     
+    if (is_lazy_seq(seq_obj)) {
+        CljLazySeq *lazy = as_lazy_seq(seq_obj);
+        
+        // Recycling: Bei rc==1 können wir das lazy-seq Objekt selbst mutieren
+        if (lazy->base.rc == 1) {
+            // Hole nächste Sequenz vom Generator (falls noch nicht gecacht)
+            if (!lazy->cached_rest) {
+                if (!lazy->rest_fn) {
+                    return NULL;
+                }
+                ID rest_result = eval_function_call(lazy->rest_fn, NULL, 0, NULL, get_global_eval_state());
+                lazy->cached_rest = RETAIN(rest_result);
+            }
+            
+            ID next_seq = lazy->cached_rest;
+            if (!next_seq || seq_empty(next_seq)) {
+                // Sequenz zu Ende - setze first auf NULL
+                RELEASE(lazy->first);
+                lazy->first = NULL;
+                RELEASE(lazy->rest_fn);
+                lazy->rest_fn = NULL;
+                RELEASE(lazy->cached_rest);
+                lazy->cached_rest = NULL;
+                return NULL;
+            }
+            
+            // Recycling: Nur wenn nächste Sequenz auch lazy-seq ist
+            if (is_lazy_seq(next_seq)) {
+                CljLazySeq *next_lazy = as_lazy_seq(next_seq);
+                
+                // Update lazy-seq auf nächste Sequenz (recycle Objekt in-place)
+                ID next_first = next_lazy->first;
+                ID next_rest_fn = next_lazy->rest_fn;
+                
+                RELEASE(lazy->first);
+                lazy->first = RETAIN(next_first);
+                RELEASE(lazy->rest_fn);
+                lazy->rest_fn = RETAIN(next_rest_fn);
+                
+                // cached_rest zurücksetzen für nächste Iteration
+                RELEASE(lazy->cached_rest);
+                lazy->cached_rest = NULL;
+                
+                // Release next_lazy da wir seine Felder übernommen haben
+                RELEASE(next_lazy->first);
+                RELEASE(next_lazy->rest_fn);
+                DEALLOC(next_lazy);
+                
+                return seq_obj; // Gleiches Objekt wiederverwendet
+            }
+            
+            // Nächste Sequenz ist normale Sequenz - kein Recycling möglich
+            // Fallback zu normaler Logik
+        }
+        
+        // RC>1: Normale Logik (kein Recycling, da mehrere Referenzen existieren)
+        return seq_next(seq_obj);
+    }
+    
     CljSeqIterator *seq = as_seq(seq_obj);
     if (!seq) return NULL;
     
@@ -467,10 +575,13 @@ ID seq_next_inplace(ID seq_obj) {
 
 bool seq_empty(ID seq_obj) {
     if (!seq_obj) return true;
-    CljSeqIterator *seq = as_seq(seq_obj);
-    if (!seq) return true;
     
-    return seq_iter_empty(&seq->iter);
+    if (is_lazy_seq(seq_obj)) {
+        return as_lazy_seq(seq_obj)->first == NULL;
+    }
+    
+    CljSeqIterator *seq = as_seq(seq_obj);
+    return seq ? seq_iter_empty(&seq->iter) : true;
 }
 
 int seq_count(ID obj) {
@@ -525,7 +636,7 @@ int seq_count(ID obj) {
 // ============================================================================
 
 bool is_seqable(ID obj) {
-    if (!obj) return true; // nil is seqable
+    if (!obj) return true;
     
     switch (((CljObject*)obj)->type) {
         case CLJ_LIST:
@@ -535,8 +646,8 @@ bool is_seqable(ID obj) {
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_MAP:
         case CLJ_STRING:
-        case CLJ_SEQ:  // Sequences are seqable
-        // Note: nil is now represented as NULL
+        case CLJ_SEQ:
+        case CLJ_LAZY_SEQ:
             return true;
         default:
             return false;
@@ -545,9 +656,7 @@ bool is_seqable(ID obj) {
 
 bool is_seq(ID obj) {
     if (!obj) return false;
-    if (list_type_matches(TAG(obj))) {
-        return true;
-    }
-    return TAG(obj) == CLJ_SEQ;
+    CljType tag = TAG(obj);
+    return list_type_matches(tag) || tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ;
 }
 

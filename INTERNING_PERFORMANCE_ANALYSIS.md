@@ -205,3 +205,5 @@ Die O(n) Komplexität ist akzeptabel, weil:
 
 
 
+
+

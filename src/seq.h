@@ -127,9 +127,30 @@ typedef struct {
 } CljSeqIterator;
 
 /**
+ * @brief Lazy sequence structure
+ * Clojure-compatible lazy sequence with generator function
+ */
+typedef struct {
+    CljObject base;
+    ID first;
+    ID rest_fn;
+    ID cached_rest;
+} CljLazySeq;
+
+/**
  * @brief Create heap-allocated seq (legacy compatibility)
  */
 CljSeqIterator* make_seq(ID obj);
+
+CljLazySeq* make_lazy_seq(ID first, ID rest_fn);
+
+static inline bool is_lazy_seq(ID seq) {
+    return seq && TAG(seq) == CLJ_LAZY_SEQ;
+}
+
+static inline CljLazySeq* as_lazy_seq(ID obj) {
+    return (TAG(obj) == CLJ_LAZY_SEQ) ? (CljLazySeq*)obj : NULL;
+}
 
 /**
  * @brief Heap-based seq API (legacy compatibility, uses stack implementation internally)

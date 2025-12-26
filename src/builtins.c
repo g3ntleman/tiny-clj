@@ -41,6 +41,9 @@
 #include "regex.h"
 #include "builtins_strings.h"
 
+// Forward declaration for symbol data structures
+extern StaticSymbolData sym_empty_data;
+
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
 
@@ -72,6 +75,7 @@ ID native_rest(ID *args, unsigned int argc);
 ID native_concat(ID *args, unsigned int argc);
 ID native_next(ID *args, unsigned int argc);
 ID native_nnext(ID *args, unsigned int argc);
+ID native_empty(ID *args, unsigned int argc);
 ID native_gensym(ID *args, unsigned int argc);
 ID native_partition(ID *args, unsigned int argc);
 ID native_some(ID *args, unsigned int argc);
@@ -489,7 +493,8 @@ ID native_first(ID *args, unsigned int argc) {
             return (first == (CljObject*)SYM_NIL) ? NULL : first;
         }
 
-        case CLJ_SEQ: {
+        case CLJ_SEQ:
+        case CLJ_LAZY_SEQ: {
             // Already a sequence - just call seq_first (DRY)
             return seq_first(coll);
         }
@@ -505,6 +510,35 @@ ID native_first(ID *args, unsigned int argc) {
             return result;
         }
     }
+}
+
+// Empty? function that works with BuiltinFn signature
+ID native_empty(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+    
+    if (!validate_builtin_args(argc, 1, "empty?")) return NULL;
+    
+    ID coll = args[0];
+    if (!coll) {
+        // empty? of nil returns true
+        return clj_true;
+    }
+    
+    // Use seq_empty for lazy-seqs and other sequences
+    if (TAG(coll) == CLJ_LAZY_SEQ || TAG(coll) == CLJ_SEQ) {
+        return seq_empty(coll) ? clj_true : clj_false;
+    }
+    
+    // For other types, use seq_empty via make_seq
+    CljSeqIterator *seq = make_seq(coll);
+    if (!seq) {
+        // Empty or not seqable - return true
+        return clj_true;
+    }
+    
+    bool is_empty = seq_empty((ID)seq);
+    RELEASE(seq);
+    return is_empty ? clj_true : clj_false;
 }
 
 // Seq function that works with BuiltinFn signature
@@ -569,6 +603,12 @@ ID native_next(ID *args, unsigned int argc) {
         return NULL;
     }
 
+    // Lazy-seqs sind bereits Sequenzen - direkt verwenden
+    if (TAG(coll) == CLJ_LAZY_SEQ) {
+        ID result = seq_next(coll);
+        return result ? AUTORELEASE(result) : NULL;
+    }
+
     // Try to create a seq from the collection
     CljSeqIterator *seq = make_seq(coll);
     if (!seq) {
@@ -599,11 +639,10 @@ ID native_next(ID *args, unsigned int argc) {
     // seq_next now returns AUTORELEASE objects (already in pool) or NULL
     // For CLJ_LIST, seq_next returns AUTORELEASE(RETAIN(...)) - already in pool
     // For other types, seq_next returns new CljSeqIterator objects (rc=1) - need AUTORELEASE
-    // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST or CLJ_SEQ)
-    if (result && TAG(result) == CLJ_SEQ) {
-        // Only seq_next results that are freshly allocated seq iterators
-        // (TAG == CLJ_SEQ) still need to be autoreleased. LIST results that
-        // came from seq_next are already autoreleased inside seq_next.
+    // Note: seq_next never returns immediate values, only NULL or heap objects (CLJ_LIST, CLJ_SEQ, or CLJ_LAZY_SEQ)
+    if (result && (TAG(result) == CLJ_SEQ || TAG(result) == CLJ_LAZY_SEQ)) {
+        // Only seq_next results that are freshly allocated seq iterators or lazy-seqs
+        // still need to be autoreleased. LIST results that came from seq_next are already autoreleased inside seq_next.
         result = AUTORELEASE(result);
     }
 
@@ -2404,6 +2443,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_rest_data.sym, native_rest},
     {&sym_concat_data.sym, native_concat},
     {&sym_next_data.sym, native_next},
+    {&sym_empty_data.sym, native_empty},
     {&sym_nnext_data.sym, native_nnext},
     {&sym_nthnext_data.sym, native_nthnext},
     {&sym_gensym_data.sym, native_gensym},
@@ -2904,6 +2944,17 @@ static bool eval_source_in_current_state(const char *src, const char *src_name, 
                     reader_next(&reader);
                 }
             } CATCH(ex) {
+                // Print exception for debugging namespace loading issues
+                const char *error_type = (ex && ex->type[0]) ? ex->type : "Exception";
+                const char *error_msg = (ex && ex->message[0]) ? ex->message : "Unknown error";
+                const char *error_file = (ex && ex->file[0]) ? ex->file : "<unknown>";
+                int error_line = ex ? ex->line : 0;
+                const char *ns_name = (st && st->current_ns && st->current_ns->name && st->current_ns->name->cname)
+                                     ? st->current_ns->name->cname
+                                     : "<unknown>";
+                fprintf(stderr, "[%s] Exception while loading: %s (%s:%d) [%s]\n",
+                        ns_name, error_msg, error_file, error_line, error_type);
+                print_exception((CLJException*)ex);
                 // Skip to next line to avoid infinite loop
                 while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') reader_next(&reader);
                 if (!reader_is_eof(&reader)) reader_next(&reader);
@@ -3947,6 +3998,21 @@ ID native_range(ID *args, unsigned int argc) {
     return AUTORELEASE(vec);
 }
 
+// Generator-Funktion für (repeat x) - gibt sich selbst zurück (infinite lazy-seq)
+// Der value wird über env Pointer gespeichert (void* zu ID)
+// args[0] ist die Funktion selbst (von seq_rest übergeben)
+static ID repeat_generator(ID *args, unsigned int argc) {
+    if (argc < 1 || !args[0]) return NULL;
+    
+    // args[0] ist die Funktion selbst (CljCFunc*)
+    CljCFunc *func = (CljCFunc*)args[0];
+    ID value = (ID)func->env; // value ist im env gespeichert
+    
+    // Gib neue lazy-seq zurück (infinite - gibt sich selbst zurück)
+    ID generator = make_named_func(repeat_generator, value, "repeat-gen");
+    return make_lazy_seq(value, generator);
+}
+
 ID native_repeat(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
     
@@ -3954,11 +4020,10 @@ ID native_repeat(ID *args, unsigned int argc) {
     ID value;
     
     if (argc == 1) {
-        // (repeat x) - use large count instead of infinite sequence
-        // TODO: When lazy sequences are implemented, replace this with a proper lazy infinite sequence
-        // Use large but practical value (1 million should be enough for most use cases)
-        count = 1000000;
+        // (repeat x) - infinite lazy sequence
         value = args[0];
+        ID generator = make_named_func(repeat_generator, value, "repeat-gen");
+        return make_lazy_seq(value, generator);
     } else if (argc == 2) {
         // (repeat n x) - create vector with n repetitions of x
     if (TAG(args[0]) != CLJ_INT) {
