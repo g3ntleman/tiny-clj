@@ -519,22 +519,14 @@ ID native_empty(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "empty?")) return NULL;
     
     ID coll = args[0];
-    if (!coll) {
-        // empty? of nil returns true
-        return clj_true;
-    }
+    if (!coll) return clj_true;
     
-    // Use seq_empty for lazy-seqs and other sequences
     if (TAG(coll) == CLJ_LAZY_SEQ || TAG(coll) == CLJ_SEQ) {
         return seq_empty(coll) ? clj_true : clj_false;
     }
     
-    // For other types, use seq_empty via make_seq
     CljSeqIterator *seq = make_seq(coll);
-    if (!seq) {
-        // Empty or not seqable - return true
-        return clj_true;
-    }
+    if (!seq) return clj_true;
     
     bool is_empty = seq_empty((ID)seq);
     RELEASE(seq);
@@ -3999,16 +3991,13 @@ ID native_range(ID *args, unsigned int argc) {
 }
 
 // Generator-Funktion für (repeat x) - gibt sich selbst zurück (infinite lazy-seq)
-// Der value wird über env Pointer gespeichert (void* zu ID)
 // args[0] ist die Funktion selbst (von seq_rest übergeben)
 static ID repeat_generator(ID *args, unsigned int argc) {
     if (argc < 1 || !args[0]) return NULL;
     
-    // args[0] ist die Funktion selbst (CljCFunc*)
     CljCFunc *func = (CljCFunc*)args[0];
     ID value = (ID)func->env; // value ist im env gespeichert
     
-    // Gib neue lazy-seq zurück (infinite - gibt sich selbst zurück)
     ID generator = make_named_func(repeat_generator, value, "repeat-gen");
     return make_lazy_seq(value, generator);
 }
