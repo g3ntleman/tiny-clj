@@ -204,6 +204,7 @@ DEFINE_EXTERN_SYMBOL(sym_first_data, "first");
 DEFINE_EXTERN_SYMBOL(sym_rest_data, "rest");
 DEFINE_EXTERN_SYMBOL(sym_concat_data, "concat");
 DEFINE_EXTERN_SYMBOL(sym_count_data, "count");
+DEFINE_EXTERN_SYMBOL(sym_empty_data, "empty?");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
 // These are extern so they can be used in builtins.c's native function table

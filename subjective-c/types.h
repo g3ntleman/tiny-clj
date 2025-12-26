@@ -42,10 +42,11 @@ typedef enum {
     // Reserve 40-49 for subjective-c types
     CLJ_HASHMAP = 40,
     // Reserve 50+ for tiny-clj specific types if needed
-    CLJ_REGEX = 50
+    CLJ_REGEX = 50,
+    CLJ_LAZY_SEQ = 52
 } CljType;
 
-#define CLJ_TYPE_COUNT (CLJ_REGEX + 1)
+#define CLJ_TYPE_COUNT (CLJ_LAZY_SEQ + 1)
 
 const char* clj_type_name(CljType type);
 

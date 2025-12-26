@@ -105,3 +105,5 @@ Die Low-Level-Tests zeigen:
 4. **Fix:** Sicherstellen, dass `alias_sym` nicht NULL ist und korrekt verwendet wird
 
 
+
+

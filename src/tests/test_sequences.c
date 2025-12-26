@@ -867,6 +867,38 @@ TEST(test_repeat) {
     TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 1)));
 }
 
+TEST(test_repeat_infinite_lazy_seq) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (repeat 42) => lazy-seq mit 42
+    CljObject *result = eval_string("(repeat 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(result));
+    
+    // Test: first sollte 42 sein
+    CljObject *first_elem = eval_string("(first (repeat 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first_elem);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(first_elem));
+    
+    // Test: rest sollte wieder lazy-seq sein
+    CljObject *rest_seq = eval_string("(rest (repeat 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rest_seq);
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(rest_seq));
+    
+    // Test: first von rest sollte wieder 42 sein
+    CljObject *rest_first = eval_string("(first (rest (repeat 42)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(rest_first);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(rest_first));
+    
+    // Test: take sollte funktionieren
+    CljObject *taken = eval_string("(take 5 (repeat 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(taken);
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(eval_string("(count (take 5 (repeat 42)))", g_test_eval_state)));
+}
+
 // ============================================================================
 // CONS WITH EMPTY LIST TESTS
 // ============================================================================

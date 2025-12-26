@@ -214,6 +214,9 @@ R"CLOJURE(
 ^#^{:doc "Generate unique symbol names."}
 (defn gensym [& prefix] :native)
 
+^#^{:doc "Returns a seq of the items in coll in reverse order. Not lazy."}
+(defn reverse [coll] :native)
+
 ; ============================================================================
 ; Threading Macros
 ; ============================================================================
@@ -238,11 +241,11 @@ R"CLOJURE(
 ^#^{:doc "Threads the expr through the forms. Inserts x as the last item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the last item in second form, etc."}
 (defmacro ->> [x & forms]
   (let [append-last (fn append-last [lst val]
-                      (if (nil? lst)
-                        (list val)
-                        (if (nil? (rest lst))
-                          (list (first lst) val)
-                          (cons (first lst) (append-last (rest lst) val)))))
+                       (if (nil? lst)
+                         (list val)
+                         (if (nil? (rest lst))
+                           (list (first lst) val)
+                           (cons (first lst) (append-last (rest lst) val)))))
         thread-step (fn thread-step [x forms]
                       (if (nil? forms)
                         x
@@ -416,8 +419,6 @@ R"CLOJURE(
 (defn subvec [v start & end] :native)
 ^#^{:doc "Returns a new collection consisting of coll with the xs 'added'. (conj coll item) adds item at an appropriate 'place' in the collection. For lists, conj prepends. For vectors, conj appends."}
 (defn conj [coll & items] :native)
-^#^{:doc "Returns a seq of the items in coll in reverse order. Not lazy."}
-(defn reverse [coll] :native)
 
 ; ============================================================================
 ; Predicate Functions (Native)
@@ -705,10 +706,7 @@ R"CLOJURE(
 ^#^{:doc "Returns the second item in coll. Returns nil if coll contains less than 2 items."}
 (def second (fn [coll] (first (rest coll))))
 ^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
-(def empty? (fn [coll] 
-  (if coll
-    (= (count coll) 0)
-    true)))
+(defn empty? [coll] :native)
 
 ; ============================================================================
 ; Utility Functions
@@ -1018,11 +1016,15 @@ R"CLOJURE(
 
 ^#^{:doc "Repeatedly calls macroexpand-1 on form until it no longer represents a macro form."}
 (def macroexpand
-  (fn [form]
-    (let [expanded (macroexpand-1 form)]
-      (if (identical? expanded form)
-        form
-        (macroexpand expanded)))))
+  (let [macroexpand-impl (fn macroexpand-impl [form depth]
+                            (if (>= depth 100)
+                              form  ; Prevent infinite recursion
+                              (let [expanded (macroexpand-1 form)]
+                                (if (identical? expanded form)
+                                  form
+                                  (macroexpand-impl expanded (+ depth 1))))))]
+    (fn [form]
+      (macroexpand-impl form 0))))
 
 ; ============================================================================
 ; Quasiquote Implementation (bootstrap-safe: uses only basic special forms)

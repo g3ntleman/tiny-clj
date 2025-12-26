@@ -7,6 +7,8 @@
 #include "tests_common.h"
 #include "../list.h"
 #include "../seq.h"
+#include "../function.h"
+#include "../builtins.h"
 
 // is_list_like is defined in list.h as static inline
 
@@ -41,6 +43,185 @@ TEST_SHARED(test_make_seq_string) {
 
 TEST_SHARED(test_make_seq_map) {
     TEST_ASSERT_NOT_NULL(eval_string("(seq {:k1 10 :k2 20})", g_test_eval_state));
+}
+
+// ============================================================================
+// LAZY-SEQ TESTS
+// ============================================================================
+
+TEST_SHARED(test_make_lazy_seq_creation) {
+    ID first = fixnum(42);
+    ID rest_fn = NULL; // Generator-Funktion später
+    ID lazy = make_lazy_seq(first, rest_fn);
+    TEST_ASSERT_NOT_NULL(lazy);
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(lazy));
+    CljLazySeq *ls = as_lazy_seq(lazy);
+    TEST_ASSERT_NOT_NULL(ls);
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(ls->first));
+    TEST_ASSERT_NULL(ls->rest_fn);
+    TEST_ASSERT_NULL(ls->cached_rest);
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_seq_first_lazy_seq) {
+    ID first = fixnum(100);
+    ID lazy = make_lazy_seq(first, NULL);
+    ID result = seq_first(lazy);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(100, as_fixnum(result));
+    RELEASE(result);
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_seq_first_lazy_seq_nil) {
+    ID lazy = make_lazy_seq(NULL, NULL);
+    ID result = seq_first(lazy);
+    TEST_ASSERT_NULL(result);
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_seq_empty_lazy_seq) {
+    ID lazy_empty = make_lazy_seq(NULL, NULL);
+    TEST_ASSERT_TRUE(seq_empty(lazy_empty));
+    RELEASE(lazy_empty);
+    
+    ID lazy_nonempty = make_lazy_seq(fixnum(42), NULL);
+    TEST_ASSERT_FALSE(seq_empty(lazy_nonempty));
+    RELEASE(lazy_nonempty);
+}
+
+// Generator-Funktion für Tests: gibt nächste lazy-seq zurück
+static ID test_lazy_seq_generator(ID *args, unsigned int argc) {
+    (void)args; (void)argc;
+    // Generator gibt lazy-seq mit next value zurück
+    return make_lazy_seq(fixnum(43), NULL);
+}
+
+TEST_SHARED(test_seq_next_inplace_lazy_seq_recycles) {
+    // Erstelle Generator-Funktion, die eine neue lazy-seq zurückgibt
+    ID rest_fn = make_named_func(test_lazy_seq_generator, NULL, "test-gen");
+    ID lazy = make_lazy_seq(fixnum(42), rest_fn);
+    TEST_ASSERT_EQUAL_INT(1, ((CljLazySeq*)lazy)->base.rc);
+    
+    // seq_next_inplace sollte lazy-seq recyclen (rc==1 und nächste Sequenz ist lazy-seq)
+    ID result = seq_next_inplace(lazy);
+    TEST_ASSERT_EQUAL_PTR(lazy, result);
+    
+    // Lazy-seq sollte jetzt auf nächste Sequenz zeigen
+    CljLazySeq *ls = as_lazy_seq(lazy);
+    TEST_ASSERT_EQUAL_INT(43, as_fixnum(ls->first));
+    TEST_ASSERT_NULL(ls->cached_rest);
+    
+    RELEASE(rest_fn);
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_seq_next_inplace_lazy_seq_no_recycle_rc_greater_one) {
+    ID rest_fn = make_named_func(test_lazy_seq_generator, NULL, "test-gen");
+    ID lazy = make_lazy_seq(fixnum(42), rest_fn);
+    RETAIN(lazy); // rc wird jetzt 2
+    
+    // Bei rc>1 sollte kein Recycling stattfinden
+    ID result = seq_next_inplace(lazy);
+    TEST_ASSERT_TRUE(lazy != result);
+    
+    RELEASE(rest_fn);
+    RELEASE(lazy);
+    RELEASE(result);
+}
+
+TEST_SHARED(test_lazy_seq_memoization_two_branches) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Erstelle eine lazy-seq und speichere sie in einer Variable
+    // Dann verwenden wir zwei verschiedene Zweige, die beide auf die gleiche seq zugreifen
+    const char *code = "(let [s (repeat 100)] "
+                       "(let [branch1 (rest s) "
+                       "      branch2 (rest s)] "
+                       "(and (= (first branch1) 100) "
+                       "     (= (first branch2) 100) "
+                       "     (= (first branch1) (first branch2)))))";
+    
+    CljObject *result = eval_string(code, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+    
+    // Test: Beide Zweige sollten das gleiche gecachte Ergebnis erhalten
+    // Das bedeutet, dass rest nur einmal evaluiert wurde und beide branch1 und branch2
+    // auf das gleiche gecachte Objekt zeigen
+    const char *code2 = "(let [s (repeat 100) "
+                        "      branch1 (rest s) "
+                        "      branch2 (rest s)] "
+                        "(identical? branch1 branch2))";
+    
+    CljObject *identical_result = eval_string(code2, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(identical_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(identical_result));
+    
+    // Test: Beide Zweige können unabhängig weiter verwendet werden
+    const char *code3 = "(let [s (repeat 100) "
+                        "      branch1 (rest s) "
+                        "      branch2 (rest s)] "
+                        "(and (= (first (rest branch1)) 100) "
+                        "     (= (first (rest branch2)) 100)))";
+    
+    CljObject *independent_result = eval_string(code3, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(independent_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(independent_result));
+}
+
+TEST_SHARED(test_lazy_seq_memoization_different_rest_counts) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Erstelle eine lazy-seq und verwende zwei Branches mit unterschiedlich vielen rest-Aufrufen
+    // Branch1: rest einmal, dann nochmal rest
+    // Branch2: rest einmal
+    // Beide sollten korrekt funktionieren und die Memoization sollte funktionieren
+    const char *code = "(let [s (repeat 42) "
+                       "      branch1 (rest s) "
+                       "      branch2 (rest s)] "
+                       "(let [branch1_next (rest branch1)] "
+                       "(and (= (first branch1) 42) "
+                       "     (= (first branch2) 42) "
+                       "     (= (first branch1_next) 42) "
+                       "     (= (first branch1) (first branch2)))))";
+    
+    CljObject *result = eval_string(code, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
+    
+    // Test: Branch1 wird weiter verwendet (mehrfach rest), Branch2 bleibt auf erstem rest
+    // Beide sollten unabhängig korrekt funktionieren
+    const char *code2 = "(let [s (repeat 100) "
+                        "      branch1 (rest s) "
+                        "      branch2 (rest s)] "
+                        "(let [branch1_rest2 (rest branch1) "
+                        "      branch1_rest3 (rest branch1_rest2)] "
+                        "(and (= (first branch1) 100) "
+                        "     (= (first branch2) 100) "
+                        "     (= (first branch1_rest2) 100) "
+                        "     (= (first branch1_rest3) 100))))";
+    
+    CljObject *result2 = eval_string(code2, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(clj_is_truthy(result2));
+    
+    // Test: Prüfe, dass beide Branches identisch sind beim ersten rest
+    // (gleiche Objektreferenz durch Memoization)
+    const char *code3 = "(let [s (repeat 200) "
+                        "      branch1 (rest s) "
+                        "      branch2 (rest s)] "
+                        "(identical? branch1 branch2))";
+    
+    CljObject *identical_result = eval_string(code3, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(identical_result);
+    TEST_ASSERT_TRUE(clj_is_truthy(identical_result));
 }
 
 // ============================================================================

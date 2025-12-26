@@ -195,11 +195,10 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
                     error_file,
                     error_line,
                     error_type);
-#ifdef DEBUG
-            if (is_def_expr && ex) {
+            // Always print full exception details to help with debugging
+            if (ex) {
               print_exception(ex);
             }
-#endif
           }
         } END_TRY
         
