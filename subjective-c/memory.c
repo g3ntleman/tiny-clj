@@ -381,7 +381,11 @@ static int g_pool_sentinel_value = 1;
  * autorelease() will be tracked until pop() clears them.
  */
 void *autorelease_pool_push(void) {
-    CLJ_ASSERT(g_pool.items && "autorelease_pool_init() not called");
+    // Safety: initialize pool if not already initialized
+    if (!g_pool.items) {
+        autorelease_pool_init();
+    }
+    CLJ_ASSERT(g_pool.items && "autorelease_pool_init() failed");
     
     // Grow checkpoints array if needed
     if (g_pool.cp_count >= g_pool.cp_capacity) {
