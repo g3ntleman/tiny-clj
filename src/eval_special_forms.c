@@ -218,6 +218,9 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     // Parse bindings and evaluate initial values
     // eval_body returns AUTORELEASE values - safe to use in this scope and pass to frame_set_bindings
     ID params_stack[16] = {0}, recur_args[16] = {0}, current_values[16] = {0};
+    // Explicitly initialize recur_args to NULL (like eval_function_call)
+    for (int i = 0; i < 16; i++) recur_args[i] = NULL;
+    
     EvalContext init_ctx = ctx ? *ctx : (EvalContext){0};
     init_ctx.env = env;
     init_ctx.st = st;
@@ -243,18 +246,11 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     
     ID result = NULL;
     int recur_arg_count = -1;
-    int used_recur_slots = 0;
     
     do {
         recur_arg_count = -1;
-        // Cleanup recur_args from previous iteration (like eval_function_call)
-        if (used_recur_slots > 0) {
-            for (int i = 0; i < used_recur_slots; i++) {
-                RELEASE(recur_args[i]);
-                recur_args[i] = NULL;
-            }
-            used_recur_slots = 0;
-        }
+        // recur_args sind AUTORELEASE'd und wurden bereits von frame_set_bindings retained
+        // Kein manuelles Cleanup nötig (werden von frame_set_bindings verwaltet)
         
         EvalContext loop_ctx = {
             .env = env,
@@ -278,13 +274,13 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
         if (recur_arg_count >= 0) {
             RELEASE(new_result);
             CLJ_ASSERT(recur_arg_count == pair_count);
-            // recur_args are already retained by eval_handle_recur
-            // frame_set_bindings will release old frame values and retain new ones
+            // recur_args sind AUTORELEASE'd, werden von frame_set_bindings retained
+            // frame_set_bindings wird alte frame-Werte freigeben und neue retained
+            // Kopiere Werte und setze recur_args auf NULL vor nächster Iteration
             for (int i = 0; i < pair_count; i++) {
                 current_values[i] = recur_args[i];
-                recur_args[i] = NULL;  // Clear to prevent double-release in next iteration
+                recur_args[i] = NULL;  // Clear to prevent double-release in next eval_handle_recur
             }
-            used_recur_slots = pair_count;
             frame_set_bindings(loop_frame, ctx ? ctx->frame : NULL, params_stack, current_values, pair_count);
             continue;
         }
@@ -296,13 +292,8 @@ ID eval_special_loop(CljList *list, CljMap *env, EvalState *st, const EvalContex
     // Cleanup
     // recur_args were already cleared (set to NULL) when used, so no cleanup needed
     frame_release(loop_frame);
-    // Release our refs to current_values
-    // - Initial values: AUTORELEASE from eval_body, but frame_set_bindings retained them
-    // - After recur: retained by eval_handle_recur, frame_set_bindings retained them again
-    // frame_release already released frame's refs, so we release our refs here
-    for (int i = 0; i < pair_count; i++) {
-        if (current_values[i] && !IS_IMMEDIATE(current_values[i])) RELEASE(current_values[i]);
-    }
+    // Note: current_values are managed by frame_set_bindings/frame_release
+    // No additional cleanup needed here
     
     return result;
 }
@@ -362,7 +353,7 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
         if (arg) {
             ID eval_arg = eval_body_with_params(arg, &arg_ctx);
             if (eval_arg) {
-                evaluated_args[arg_index] = RETAIN(eval_arg);
+                evaluated_args[arg_index] = eval_arg; // AUTORELEASE'd, wird von frame_set_bindings retained
             }
         }
         arg_index++;
@@ -370,15 +361,13 @@ ID eval_handle_recur(CljList *list, const EvalContext *ctx) {
     }
 
     if (arg_node) {
-        for (int i = 0; i < expected; i++) {
-            RELEASE(evaluated_args[i]);
-        }
+        // evaluated_args sind AUTORELEASE'd, kein manuelles RELEASE nötig
         throw_exception(EXCEPTION_ARITY, "recur arity mismatch", NULL, 0, 0);
         return NULL;
     }
 
     for (int i = 0; i < expected; i++) {
-        RELEASE(ctx->recur_args[i]);
+        // Alte Werte sind nicht mehr retained (wurden bereits von frame_set_bindings released)
         ctx->recur_args[i] = evaluated_args[i];
     }
     *ctx->recur_arg_count = expected;

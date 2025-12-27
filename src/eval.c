@@ -201,7 +201,6 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // OPTIMIZATION: Use static arrays instead of STACK_ALLOC to avoid alloca overhead
     ID current_args[16];
     ID recur_args[16];
-    int used_recur_slots = 0;
     ID *params_array = func->params ? vector_as_array(func->params) : NULL;
     
     // Variadic handling: build effective params/values only when needed
@@ -252,15 +251,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         // Reset recur state for each iteration
         recur_arg_count = -1;  // -1 = no tail call
 
-        // OPTIMIZATION: Only cleanup recur_args if recur was actually used in previous iteration
-        // For functions without recur (like fib), this check is always false - zero overhead
-        if (used_recur_slots > 0) {
-        for (int i = 0; i < used_recur_slots; i++) {
-            RELEASE(recur_args[i]);
-            recur_args[i] = NULL;
-        }
-        used_recur_slots = 0;
-        }
+        // recur_args sind AUTORELEASE'd und wurden bereits von frame_set_bindings retained
+        // Kein manuelles Cleanup nötig (werden von frame_set_bindings verwaltet)
 
         // Evaluate function body with context (stack-only, no allocations)
         EvalContext eval_ctx = {
@@ -288,10 +280,9 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
             CLJ_ASSERT(recur_arg_count >= 0 && recur_arg_count <= param_count);
             current_argc = recur_arg_count;
             for (int i = 0; i < current_argc; i++) {
-                current_args[i] = recur_args[i]; // Already retained in recur evaluation
+                current_args[i] = recur_args[i]; // AUTORELEASE'd, wird von frame_set_bindings retained
                 recur_args[i] = NULL; // Clear to prevent double-release
             }
-            used_recur_slots = current_argc;
 
             // Recreate call frame with new parameters (stack-allocated)
             frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
@@ -306,18 +297,14 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         break;
     } while (true);
 
-    // current_args[i] is stored in call_env, and call_env holds a reference to it.
-    // If we release current_args[i] here, the object might be freed, but call_env
-    // still holds a pointer to it. When call_env is released later, RELEASE will
+    // current_args[i] is stored in call_frame, and call_frame holds a reference to it.
+    // If we release current_args[i] here, the object might be freed, but call_frame
+    // still holds a pointer to it. When call_frame is released later, RELEASE will
     // be called on the already-freed object, causing a use-after-free error.
-    // The call_env will be released below, which will properly release all stored values.
+    // The call_frame will be released below, which will properly release all stored values.
 
-    // OPTIMIZATION: Only cleanup if recur args were actually set
-    if (used_recur_slots > 0) {
-    for (int i = 0; i < used_recur_slots; i++) {
-        RELEASE(recur_args[i]);
-        }
-    }
+    // recur_args sind AUTORELEASE'd und wurden bereits von frame_set_bindings retained
+    // Kein manuelles Cleanup nötig
 
     // Cleanup call frame (stack-allocated, but may contain retained values)
     frame_release(call_frame);
