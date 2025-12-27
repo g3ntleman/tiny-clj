@@ -131,30 +131,35 @@ static void repl_process_event_loop(EvalState *st) {
 bool eval_multiform_string(const char *code, EvalState *st) {
     bool result = true; // Start optimistic
 
-    Reader reader;
-    reader_init(&reader, code);
-    reader_set_source_name(&reader, "<repl input>");
+    // Use WITH_AUTORELEASE_POOL for automatic cleanup
+    WITH_AUTORELEASE_POOL({
+        Reader reader;
+        reader_init(&reader, code);
+        reader_set_source_name(&reader, "<repl input>");
 
-    // Loop: Parse and evaluate each expression until EOF
-    while (!reader_is_eof(&reader)) {
-        // Skip whitespace and comments
-        reader_skip_all(&reader);
+        // Loop: Parse and evaluate each expression until EOF
+        while (!reader_is_eof(&reader)) {
+            // Skip whitespace and comments
+            reader_skip_all(&reader);
 
-        // Check if we're at EOF after skipping whitespace
-        if (reader_is_eof(&reader)) {
-            break;
-        }
+            // Check if we're at EOF after skipping whitespace
+            if (reader_is_eof(&reader)) {
+                break;
+            }
 
-        // Save current namespace in local variable before TRY - preserved by setjmp
-        CljNamespace *saved_ns = st ? st->current_ns : NULL;
+            // Save current namespace in local variable before TRY - preserved by setjmp
+            CljNamespace *saved_ns = st ? st->current_ns : NULL;
 
-        // Use separate autorelease pool for each expression to prevent unbounded growth
-        WITH_AUTORELEASE_POOL({
             // Use TRY/CATCH to handle exceptions for each expression
             TRY {
                 CljValue parsed = parse_from_reader(&reader, st);
                 ID eval_result = eval_parsed_value(parsed, st);
                 print_result(eval_result);
+
+                // Check for EOF after processing (in case this was the last expression)
+                if (reader_is_eof(&reader)) {
+                    break; // Normal EOF, exit loop
+                }
 
             } CATCH(ex) {
                 // Restore namespace from local variable on exception
@@ -175,13 +180,8 @@ bool eval_multiform_string(const char *code, EvalState *st) {
                     reader_next(&reader); // consume the newline
                 }
             } END_TRY
-        });
-
-        // Check for EOF after processing (in case this was the last expression)
-        if (reader_is_eof(&reader)) {
-            break; // Normal EOF, exit loop
         }
-    }
+    });
 
     return result;
 }
@@ -420,7 +420,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 #endif
 
-    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", TINY_CLJ_VERSION, platform_name());
+    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
 #ifdef ENABLE_LINE_EDITING
     // Line editor needs blocking input for proper character handling
     platform_set_stdin_nonblocking(0);
