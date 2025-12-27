@@ -1569,3 +1569,94 @@ TEST(test_core_namespace_find_inc) {
         TEST_ASSERT_TRUE_MESSAGE(false, "core_ns->mappings or inc_sym is NULL");
     }
 }
+
+// Test: Verify that remove-ns resets current namespace to clojure.core
+TEST(test_remove_ns_resets_current_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a test namespace
+    CljNamespace *test_ns = ns_get_or_create("test-remove-current", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+    
+    // Set it as the current namespace
+    EvalState *st = get_global_eval_state();
+    TEST_ASSERT_NOT_NULL(st);
+    CljNamespace *original_ns = st->current_ns;
+    st->current_ns = test_ns;
+    
+    // Verify current namespace is the test namespace
+    TEST_ASSERT_EQUAL_PTR(test_ns, st->current_ns);
+    
+    // Get clojure.core namespace for comparison
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    TEST_ASSERT_NOT_NULL(clojure_core);
+    
+    // Remove the current namespace
+    CljNamespace *removed = ns_remove(test_ns);
+    TEST_ASSERT_NOT_NULL(removed);
+    TEST_ASSERT_EQUAL_PTR(test_ns, removed);
+    
+    // Verify current namespace is now clojure.core
+    TEST_ASSERT_EQUAL_PTR(clojure_core, st->current_ns);
+    
+    // Verify the namespace is no longer in the registry
+    CljNamespace *found = ns_find("test-remove-current");
+    TEST_ASSERT_NULL(found);
+    
+    // Cleanup: restore original namespace
+    st->current_ns = original_ns;
+    RELEASE(removed);
+}
+
+// Test: Verify that clojure.core cannot be removed
+TEST(test_remove_ns_cannot_remove_clojure_core) {
+    // Get clojure.core namespace
+    CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    TEST_ASSERT_NOT_NULL(clojure_core);
+    
+    // Verify it exists in the registry
+    CljNamespace *found_before = ns_find("clojure.core");
+    TEST_ASSERT_EQUAL_PTR(clojure_core, found_before);
+    
+    // Try to remove clojure.core - should return NULL
+    CljNamespace *removed = ns_remove(clojure_core);
+    TEST_ASSERT_NULL(removed);
+    
+    // Verify clojure.core still exists in the registry
+    CljNamespace *found_after = ns_find("clojure.core");
+    TEST_ASSERT_EQUAL_PTR(clojure_core, found_after);
+}
+
+// Test: Verify that removing a non-current namespace works correctly
+TEST(test_remove_ns_non_current_namespace) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    
+    // Create a test namespace
+    CljNamespace *test_ns = ns_get_or_create("test-remove-non-current", NULL);
+    TEST_ASSERT_NOT_NULL(test_ns);
+    
+    // Verify it exists in the registry
+    CljNamespace *found_before = ns_find("test-remove-non-current");
+    TEST_ASSERT_EQUAL_PTR(test_ns, found_before);
+    
+    // Get current namespace (should not be test_ns)
+    EvalState *st = get_global_eval_state();
+    TEST_ASSERT_NOT_NULL(st);
+    CljNamespace *original_current_ns = st->current_ns;
+    TEST_ASSERT_TRUE(test_ns != original_current_ns);
+    
+    // Remove the namespace (not the current one)
+    CljNamespace *removed = ns_remove(test_ns);
+    TEST_ASSERT_NOT_NULL(removed);
+    TEST_ASSERT_EQUAL_PTR(test_ns, removed);
+    
+    // Verify the namespace is no longer in the registry
+    CljNamespace *found_after = ns_find("test-remove-non-current");
+    TEST_ASSERT_NULL(found_after);
+    
+    // Verify current namespace was not changed
+    TEST_ASSERT_EQUAL_PTR(original_current_ns, st->current_ns);
+    
+    // Cleanup
+    RELEASE(removed);
+}

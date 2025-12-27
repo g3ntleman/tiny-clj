@@ -131,6 +131,7 @@ ID native_sleep(ID *args, unsigned int argc);
 ID native_ns_map(ID *args, unsigned int argc);
 ID native_find_ns(ID *args, unsigned int argc);
 ID native_all_ns(ID *args, unsigned int argc);
+ID native_remove_ns(ID *args, unsigned int argc);
 ID native_do(ID *args, unsigned int argc);
 ID native_byte_array(ID *args, unsigned int argc);
 ID native_aget(ID *args, unsigned int argc);
@@ -2200,6 +2201,33 @@ ID native_all_ns(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
+// remove-ns: Removes a namespace from the registry
+// Usage: (remove-ns 'ns-name)
+// Returns the removed namespace object or nil if not found
+// Cannot remove clojure.core namespace
+// Standard Clojure: accepts only symbol argument
+ID native_remove_ns(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "remove-ns");
+    
+    ID ns_arg = args[0];
+    if (!ns_arg) return NULL; // nil -> nil (Clojure-compatible)
+    
+    int tag = TAG(ns_arg);
+    if (tag != CLJ_SYMBOL) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "remove-ns: argument must be a symbol");
+        return NULL;
+    }
+    
+    CljNamespace *ns = ns_find_by_symbol(as_symbol(ns_arg));
+    if (!ns) {
+        return NULL; // Namespace not found -> nil (Clojure-compatible)
+    }
+    
+    CljNamespace *removed = ns_remove(ns);
+    return removed ? (ID)removed : NULL;
+}
+
 // Helper for dir: convert argument to namespace
 static CljNamespace* namespace_from_value(ID value) {
     if (!value) {
@@ -2488,6 +2516,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_ns_map_data.sym, native_ns_map},
     {&sym_find_ns_data.sym, native_find_ns},
     {&sym_all_ns_data.sym, native_all_ns},
+    {&sym_remove_ns_data.sym, native_remove_ns},
     {(CljSymbol*)&sym_do_data.sym, native_do},
     {&sym_byte_array_data.sym, native_byte_array},
     {&sym_aget_data.sym, native_aget},
@@ -3933,12 +3962,49 @@ ID native_bit_shift_left(ID *args, unsigned int argc) {
     return create_fixnum_result(a << b);
 }
 
+// Parameter-Struktur für range Generator
+typedef struct {
+    int start;
+    int step;
+} RangeParams;
+
+// Generator-Funktion für (range) - infinite range
+// args[0] ist die Funktion selbst
+static ID range_generator(ID *args, unsigned int argc) {
+    if (argc < 1 || !args[0]) return NULL;
+    
+    CljCFunc *func = (CljCFunc*)args[0];
+    RangeParams *params = (RangeParams*)func->env;
+    if (!params) return NULL;
+    
+    int next_val = params->start + params->step;
+    RangeParams *next_params = (RangeParams*)malloc(sizeof(RangeParams));
+    if (!next_params) return NULL;
+    next_params->start = next_val;
+    next_params->step = params->step;
+    
+    ID generator = make_named_func(range_generator, next_params, "range-gen");
+    return make_lazy_seq(create_fixnum_result(next_val), generator);
+}
+
 ID native_range(ID *args, unsigned int argc) {
-    CHECK_ARITY_RANGE(argc, 1, 3, "range");
+    if (argc < 0 || argc > 3) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+            "range requires 0-3 arguments, got %u", argc);
+        return NULL;
+    }
 
     int start = 0, end = 0, step = 1;
 
-    if (argc == 1) {
+    if (argc == 0) {
+        // (range) => infinite lazy-seq [0 1 2 ...]
+        RangeParams *params = (RangeParams*)malloc(sizeof(RangeParams));
+        if (!params) return NULL;
+        params->start = 0;
+        params->step = 1;
+        ID generator = make_named_func(range_generator, params, "range-gen");
+        return make_lazy_seq(create_fixnum_result(0), generator);
+    } else if (argc == 1) {
         // (range end) => [0 1 2 ... end-1]
         end = AS_FIXNUM(args[0]);
         start = 0;
@@ -3996,7 +4062,7 @@ static ID repeat_generator(ID *args, unsigned int argc) {
     if (argc < 1 || !args[0]) return NULL;
     
     CljCFunc *func = (CljCFunc*)args[0];
-    ID value = (ID)func->env; // value ist im env gespeichert
+    ID value = (ID)func->env;
     
     ID generator = make_named_func(repeat_generator, value, "repeat-gen");
     return make_lazy_seq(value, generator);

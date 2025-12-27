@@ -113,6 +113,7 @@ static ID throw_ambiguous_symbol_error(CljSymbol *sym,
 
 // Helper context for namespace cleanup in ns_cleanup()
 // (no context needed, just release each namespace)
+static void release_namespace_callback(ID key, ID value) __attribute__((unused));
 static void release_namespace_callback(ID key, ID value) {
     (void)key; // Unused - we only need the value (namespace)
     CljNamespace *ns = (CljNamespace*)value;
@@ -597,6 +598,44 @@ void ns_cleanup() {
         g_runtime.ns_registry = NULL;
         RELEASE(registry_to_free);
     }
+}
+
+/** Remove namespace from registry
+ * 
+ * @param ns Namespace to remove (must not be NULL)
+ * @return Removed namespace object, or NULL if not found or cannot be removed
+ * 
+ * Removes the namespace from the registry. If the namespace is the current namespace,
+ * it will be reset to clojure.core. Cannot remove clojure.core namespace.
+ */
+CljNamespace* ns_remove(CljNamespace *ns) {
+    if (!ns || !ns->name || !g_runtime.ns_registry) return NULL;
+    
+    // Cannot remove clojure.core (use interned symbol comparison)
+    CLJ_ASSERT(SYM_CLOJURE_CORE != NULL && "SYM_CLOJURE_CORE must be initialized");
+    if (ns->name == SYM_CLOJURE_CORE) {
+        return NULL;
+    }
+    
+    // Retain namespace before removing from registry (map_remove_inplace may release it)
+    RETAIN(ns);
+    
+    // Invalidate resolve cache before removing from registry
+    ns_invalidate_resolve_cache();
+    
+    // Check if this is the current namespace
+    EvalState *st = get_global_eval_state();
+    if (st && st->current_ns == ns) {
+        // Reset current namespace to clojure.core if removing current namespace
+        // (clojure.core always exists and cannot be removed)
+        st->current_ns = ns_find_by_symbol(SYM_CLOJURE_CORE);
+    }
+    
+    // Remove from registry using map_remove_inplace (may release old map containing ns)
+    map_remove_inplace(&g_runtime.ns_registry, ns->name);
+    
+    // Return retained namespace (caller should autorelease it)
+    return AUTORELEASE(ns);
 }
 
 // Thread-local global EvalState (zero-initialized)

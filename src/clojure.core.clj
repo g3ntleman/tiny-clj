@@ -605,6 +605,8 @@ R"CLOJURE(
 (defn find-ns [sym] :native)
 ^#^{:doc "Returns a sequence of all namespaces currently loaded."}
 (defn all-ns [] :native)
+^#^{:doc "Removes a namespace from the registry. Returns the removed namespace or nil"}
+(defn remove-ns [sym] :native)
 
 ; ============================================================================
 ; Sleep Functions (Native)
@@ -924,10 +926,18 @@ R"CLOJURE(
 ; ============================================================================
 
 ^#^{:doc "Takes a function of no args, presumably with side effects, and returns an infinite lazy sequence of calls to it."}
-(defn repeatedly [n f]
-  (if (<= n 0)
-    (list)
-    (cons (f) (repeatedly (dec n) f))))
+; TODO: Wenn Multi-Arity implementiert ist, umstellen auf:
+; (defn repeatedly
+;   ([f] (lazy-seq (cons (f) (repeatedly f))))
+;   ([n f] (take n (repeatedly f))))
+
+(defn repeatedly [& args]
+  (if (= (count args) 1)
+    (let [f (first args)]
+      (lazy-seq (cons (f) (repeatedly f))))
+    (let [n (first args)
+          f (first (rest args))]
+      (take n (repeatedly f)))))
 
 ^#^{:doc "Reduces an associative collection. f should be a function of 3 arguments."}
 (defn reduce-kv [f init m]

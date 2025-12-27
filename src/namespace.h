@@ -54,6 +54,7 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value);  // For :refer - st
 void ns_invalidate_resolve_cache(void);  // Invalidate resolve cache (sets to NULL)
 void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
+CljNamespace* ns_remove(CljNamespace *ns);  // Remove namespace from registry, returns removed namespace or NULL
 
 // Namespace alias functions
 CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias);
