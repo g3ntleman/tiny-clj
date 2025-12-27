@@ -682,16 +682,19 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     }
 
     sym->base.type = CLJ_SYMBOL;
-    sym->base.rc = SINGLETON_RC;  // Interned symbols are singletons - never freed
+    sym->base.rc = 1;  // Set to 1 temporarily - will be set to SINGLETON_RC after successful initialization
     sym->base.flags = 0;  // Initialize flags to 0 (no special flags by default)
 
     // Store strdup'd name for heap-allocated symbols
     sym->cname = strdup(cname);
     if (!sym->cname) {
-        free(sym);
+        DEALLOC(sym);
         return throw_exception_formatted(EXCEPTION_OUT_OF_MEMORY, __FILE__, __LINE__, 0,
                 "Failed to duplicate string for symbol '%s'", cname);
     }
+    
+    // Mark as singleton only after successful initialization
+    sym->base.rc = SINGLETON_RC;  // Interned symbols are singletons - never freed
 
     // Enforce invariant: symbols always have a name
     CLJ_ASSERT(sym->cname != NULL && "Symbol must have a name after creation");

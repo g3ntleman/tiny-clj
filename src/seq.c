@@ -94,6 +94,22 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             return true;
         }
         
+        case CLJ_LAZY_SEQ: {
+            // Lazy sequence - treat as a list and iterate through it
+            CljLazySeq *lazy = as_lazy_seq(obj);
+            if (!lazy || !lazy->first) {
+                // Empty lazy seq - don't set seq_type, leave it as 0
+                return true;  // Empty lazy seq
+            }
+            
+            // Convert lazy-seq to list for iteration
+            // We'll iterate by calling seq_first and seq_rest
+            iter->state.list.current = (CljObject*)obj;  // Store lazy-seq itself
+            iter->state.list.index = 0;
+            iter->seq_type = CLJ_LAZY_SEQ;
+            return true;
+        }
+        
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
         case CLJ_VECTOR_TRANSIENT: {
@@ -189,6 +205,16 @@ ID seq_iter_first(const SeqIterator *iter) {
             return NULL;
         }
         
+        case CLJ_LAZY_SEQ: {
+            if (iter->state.list.current) {
+                CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
+                if (lazy && lazy->first) {
+                    return RETAIN(lazy->first);
+                }
+            }
+            return NULL;
+        }
+        
         default:
             return NULL;
     }
@@ -252,6 +278,32 @@ bool seq_iter_next(SeqIterator *iter) {
             return false;
         }
         
+        case CLJ_LAZY_SEQ: {
+            if (iter->state.list.current) {
+                CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
+                if (lazy) {
+                    ID rest = seq_rest((ID)lazy);
+                    if (rest && is_lazy_seq(rest)) {
+                        iter->state.list.current = (CljObject*)rest;
+                        iter->state.list.index++;
+                        return true;
+                    } else if (rest) {
+                        // Rest is not a lazy-seq, convert to list for iteration
+                        iter->state.list.current = (CljObject*)rest;
+                        iter->state.list.index++;
+                        // Update seq_type if rest is a list
+                        if (TAG(rest) == CLJ_LIST) {
+                            iter->seq_type = CLJ_LIST;
+                        }
+                        return true;
+                    }
+                }
+            }
+            // Mark as exhausted
+            iter->state.list.current = NULL;
+            return false;
+        }
+        
         default:
             return false;
     }
@@ -302,6 +354,9 @@ bool seq_iter_empty(const SeqIterator *iter) {
 
         case CLJ_MAP:
             return iter->state.map.index >= iter->state.map.count;
+        
+        case CLJ_LAZY_SEQ:
+            return iter->state.list.current == NULL;
         
         default:
             // If seq_type is 0 (not set), it's an empty sequence
@@ -366,13 +421,13 @@ CljSeqIterator* make_seq(ID obj) {
     
     // Initialize embedded stack iterator
     if (!seq_iter_init(&heap_seq->iter, (CljObject*)obj)) {
-        free(heap_seq);
+        DEALLOC(heap_seq);
         return NULL;  // Empty or not seqable
     }
     
     // If iterator is empty, return nil (NULL) - JVM-compatible
     if (seq_iter_empty(&heap_seq->iter)) {
-        free(heap_seq);
+        DEALLOC(heap_seq);
         return NULL;
     }
     
@@ -395,6 +450,21 @@ void seq_release(ID seq_obj) {
     if (is_lazy_seq(seq_obj)) {
         CljLazySeq *lazy = as_lazy_seq(seq_obj);
         RELEASE(lazy->first);
+        
+        // Für native Generator-Funktionen: env-Pointer freigeben falls RangeParams oder RepeatedlyParams
+        if (lazy->rest_fn && TAG(lazy->rest_fn) == CLJ_FUNC) {
+            CljCFunc *native_func = (CljCFunc*)lazy->rest_fn;
+            // Prüfe ob env ein RangeParams* oder RepeatedlyParams* ist
+            // Wir erkennen es am Funktionsnamen
+            if (native_func->env && native_func->name) {
+                if (strcmp(native_func->name, "range-gen") == 0 ||
+                    strcmp(native_func->name, "repeatedly-gen") == 0) {
+                    free(native_func->env);
+                    native_func->env = NULL; // Prevent double free
+                }
+            }
+        }
+        
         RELEASE(lazy->rest_fn);
         RELEASE(lazy->cached_rest);
         DEALLOC(lazy);
@@ -402,8 +472,7 @@ void seq_release(ID seq_obj) {
     }
     
     CljSeqIterator *seq = as_seq(seq_obj);
-    if (!seq) return;
-    free(seq);
+    DEALLOC(seq);
 }
 
 ID seq_first(ID seq_obj) {

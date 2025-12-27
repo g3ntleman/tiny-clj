@@ -41,7 +41,7 @@ CljByteArray* make_byte_array(int length) {
     if (length > 0) {
         ba->data = (uint8_t*)calloc(length, sizeof(uint8_t));
         if (!ba->data) {
-            free(ba);
+            DEALLOC(ba);
             throw_oom();
         }
     } else {
