@@ -467,19 +467,9 @@ TEST_SHARED(test_complement_pos) {
 // PHASE 8: ITERATION
 // ============================================================================
 
-// --- repeatedly ---
-
-TEST_SHARED(test_repeatedly_count) {
-    // (count (vec (repeatedly 5 (fn [] 1)))) => 5
-    assert_eval_truthy("(= (count (vec (repeatedly 5 (fn [] 1)))) 5)");
-}
-
-TEST_SHARED(test_repeatedly_values) {
-    // (repeatedly 3 (fn [] :x)) => (:x :x :x)
-    assert_eval_truthy("(= (first (repeatedly 3 (fn [] :x))) :x)");
-}
-
 // --- reduce-kv ---
+// Note: repeatedly tests moved to test_repeat_repeatedly.c
+
 
 TEST_SHARED(test_reduce_kv_sum_values) {
     // (reduce-kv (fn [acc k v] (+ acc v)) 0 {:a 1 :b 2 :c 3}) => 6

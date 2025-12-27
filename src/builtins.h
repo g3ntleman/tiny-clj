@@ -19,7 +19,7 @@ ID native_array_map(ID *args, unsigned int argc);
 ID native_vector(ID *args, unsigned int argc);
 
 // Function value constructors
-ID make_named_func(BuiltinFn fn, void *env, const char *cname);
+ID make_named_func(BuiltinFn fn, const char *cname);
 
 // Legacy apply_builtin removed - all builtins now use namespace registration
 
@@ -40,7 +40,6 @@ ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
 ID native_quot(ID *args, unsigned int argc);
 ID native_bit_shift_left(ID *args, unsigned int argc);
-ID native_range(ID *args, unsigned int argc);
 ID native_repeat(ID *args, unsigned int argc);
 ID native_math_sqrt(ID *args, unsigned int argc);
 ID native_format(ID *args, unsigned int argc);

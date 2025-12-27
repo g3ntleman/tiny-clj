@@ -13,9 +13,11 @@
 #include "map.h"
 #include "symbol.h"
 #include "memory.h"
+#include "exception.h"
 #include "namespace.h"
 #include "eval.h"
 #include "function.h"
+#include "builtins.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -451,19 +453,7 @@ void seq_release(ID seq_obj) {
         CljLazySeq *lazy = as_lazy_seq(seq_obj);
         RELEASE(lazy->first);
         
-        // Für native Generator-Funktionen: env-Pointer freigeben falls RangeParams oder RepeatedlyParams
-        if (lazy->rest_fn && TAG(lazy->rest_fn) == CLJ_FUNC) {
-            CljCFunc *native_func = (CljCFunc*)lazy->rest_fn;
-            // Prüfe ob env ein RangeParams* oder RepeatedlyParams* ist
-            // Wir erkennen es am Funktionsnamen
-            if (native_func->env && native_func->name) {
-                if (strcmp(native_func->name, "range-gen") == 0 ||
-                    strcmp(native_func->name, "repeatedly-gen") == 0) {
-                    free(native_func->env);
-                    native_func->env = NULL; // Prevent double free
-                }
-            }
-        }
+        // RangeParams wurde entfernt - keine manuelle Speicherverwaltung mehr nötig
         
         RELEASE(lazy->rest_fn);
         RELEASE(lazy->cached_rest);
@@ -511,7 +501,22 @@ ID seq_rest(ID seq_obj) {
         }
         
         // Clojure-Funktion: Normale eval_function_call
-        ID rest_result = eval_function_call(lazy->rest_fn, NULL, 0, NULL, get_global_eval_state());
+        // Verwende g_current_eval_state falls verfügbar, sonst g_test_eval_state (in Tests) oder get_global_eval_state()
+        EvalState *st = builtin_get_eval_state();
+        if (!st) {
+            // In Tests: g_test_eval_state sollte verfügbar sein
+            extern EvalState* g_test_eval_state;
+            if (g_test_eval_state) {
+                st = g_test_eval_state;
+            } else {
+                st = get_global_eval_state();
+            }
+        }
+        if (!st) {
+            // Kein EvalState verfügbar - kann nicht evaluieren
+            return NULL;
+        }
+        ID rest_result = eval_function_call(lazy->rest_fn, NULL, 0, NULL, st);
         lazy->cached_rest = RETAIN(rest_result);
         return RETAIN(rest_result);
     }
@@ -579,7 +584,21 @@ ID seq_next_inplace(ID seq_obj) {
                 if (!lazy->rest_fn) {
                     return NULL;
                 }
-                ID rest_result = eval_function_call(lazy->rest_fn, NULL, 0, NULL, get_global_eval_state());
+                // Verwende g_current_eval_state falls verfügbar, sonst g_test_eval_state (in Tests) oder get_global_eval_state()
+                EvalState *st = builtin_get_eval_state();
+                if (!st) {
+                    // In Tests: g_test_eval_state sollte verfügbar sein
+                    extern EvalState* g_test_eval_state;
+                    if (g_test_eval_state) {
+                        st = g_test_eval_state;
+                    } else {
+                        st = get_global_eval_state();
+                    }
+                }
+                if (!st) {
+                    return NULL;
+                }
+                ID rest_result = eval_function_call(lazy->rest_fn, NULL, 0, NULL, st);
                 lazy->cached_rest = RETAIN(rest_result);
             }
             

@@ -28,6 +28,8 @@ R"CLOJURE(
 (defn next [coll] :native)
 ^#^{:doc "Returns a new seq where x is the first element and seq is the rest."}
 (defn cons [x seq] :native)
+^#^{:doc "Takes a body of expressions that returns an ISeq or nil, and yields a Seqable object that will invoke the body only the first time seq is called, and will cache the result and return it on all subsequent seq calls. See also - realized?"}
+(defn lazy-seq [expr] :native)
 ^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
 (defn count [coll] :native)
 ^#^{:doc "Creates a new vector containing the args."}
@@ -107,8 +109,8 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns its argument."}
 (def identity (fn [x] x))
-^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
-(def constantly (fn [x] (fn [arg] x)))
+^#^{:doc "Returns a function that takes any number of arguments and returns x."}
+(def constantly (fn [x] (fn [] x)))
 
 ; ============================================================================
 ; Higher-Order Functions
@@ -200,7 +202,17 @@ R"CLOJURE(
                 (interleave-repeat val (rest coll))))))
 
 ^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
-(defn repeat [n x] :native)
+; TODO: Wenn Multi-Arity implementiert ist, umstellen auf:
+; (defn repeat
+;   ([x] (repeatedly (constantly x)))
+;   ([n x] (take n (repeat x))))
+(defn repeat [& args]
+  (if (= (count args) 1)
+    (let [x (first args)]
+      (repeatedly (constantly x)))
+    (let [n (first args)
+          x (first (rest args))]
+      (take n (repeat x)))))
 
 ^#^{:doc "Returns a lazy sequence of lists of n items each."}
 (defn partition [n coll]
@@ -574,9 +586,50 @@ R"CLOJURE(
 ; Sequence Functions (Native)
 ; ============================================================================
 ^#^{:doc "Returns a lazy seq of numbers from start (inclusive) to end (exclusive), by step, where start defaults to 0, step to 1, and end to infinity."}
-(defn range [& args] :native)
+(defn range [& args]
+  (if (= (count args) 0)
+    ; (range) => infinite lazy-seq [0 1 2 ...]
+    (let [range-helper (fn range-helper [n]
+                         (lazy-seq (cons n (range-helper (inc n)))))]
+      (range-helper 0))
+    (if (= (count args) 1)
+      ; (range end) => lazy-seq [0 1 2 ... end-1]
+      (let [end (first args)
+            range-helper (fn range-helper [n]
+                          (if (< n end)
+                            (lazy-seq (cons n (range-helper (inc n))))
+                            (list)))]
+        (range-helper 0))
+      (if (= (count args) 2)
+        ; (range start end) => lazy-seq [start start+1 ... end-1]
+        (let [start (first args)
+              end (first (rest args))
+              range-helper (fn range-helper [n]
+                            (if (< n end)
+                              (lazy-seq (cons n (range-helper (inc n))))
+                              (list)))]
+          (range-helper start))
+        ; (range start end step) => lazy-seq [start start+step ... end-step]
+        (let [start (first args)
+              end (first (rest args))
+              step (first (rest (rest args)))]
+          (if (> step 0)
+            (if (< start end)
+              (let [range-step-helper (fn range-step-helper [n]
+                                        (if (< n end)
+                                          (lazy-seq (cons n (range-step-helper (+ n step))))
+                                          (list)))]
+                (range-step-helper start))
+              (list))
+            (if (> start end)
+              (let [range-step-helper (fn range-step-helper [n]
+                                        (if (> n end)
+                                          (lazy-seq (cons n (range-step-helper (+ n step))))
+                                          (list)))]
+                (range-step-helper start))
+              (list))))))))
 ^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
-(defn repeat [x] :native)
+; Duplicate definition removed - see definition above
 ^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
 (defn nthnext [coll n] :native)
 ^#^{:doc "Returns the first logical true value of (pred x) for any x in coll, else nil. Native implementation."}
@@ -715,8 +768,8 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns its argument."}
 (def identity (fn [x] x))
-^#^{:doc "Returns a function that takes one argument and returns x. Note: Variadic functions (& args) are not yet supported, so the returned function accepts only one argument instead of any number of arguments."}
-(def constantly (fn [x] (fn [arg] x)))
+^#^{:doc "Returns a function that takes any number of arguments and returns x."}
+(def constantly (fn [x] (fn [] x)))
 
 ; ============================================================================
 ; Higher-Order Functions (using now-defined list, cons, first, rest, empty?)

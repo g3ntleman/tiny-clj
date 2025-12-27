@@ -11,7 +11,6 @@ struct CljNamespace;
 typedef struct {
     CljObject base;
     CljObject* (*fn)(CljObject **args, int argc);
-    void *env;
     const char *name;
 } CljCFunc;
 

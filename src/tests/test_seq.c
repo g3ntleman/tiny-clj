@@ -49,6 +49,24 @@ TEST_SHARED(test_make_seq_map) {
 // LAZY-SEQ TESTS
 // ============================================================================
 
+// Generator-Funktion für Tests: gibt nächste lazy-seq zurück
+static ID test_lazy_seq_generator(ID *args, unsigned int argc) {
+    (void)args; (void)argc;
+    // Generator gibt lazy-seq mit next value zurück
+    return make_lazy_seq(fixnum(43), NULL);
+}
+
+// Generator-Funktion für Tests: gibt normale Sequenz zurück
+static ID test_normal_seq_generator(ID *args, unsigned int argc) __attribute__((unused));
+static ID test_normal_seq_generator(ID *args, unsigned int argc) {
+    (void)args; (void)argc;
+    // Generator gibt normale Sequenz zurück (CLJ_SEQ)
+    ID vec = make_vector(1, CLJ_VECTOR);
+    CljVector *v = as_vector(vec);
+    v = vector_conj(v, fixnum(43));
+    return make_seq(vec);
+}
+
 TEST_SHARED(test_make_lazy_seq_creation) {
     ID first = fixnum(42);
     ID rest_fn = NULL; // Generator-Funktion später
@@ -90,16 +108,93 @@ TEST_SHARED(test_seq_empty_lazy_seq) {
     RELEASE(lazy_nonempty);
 }
 
-// Generator-Funktion für Tests: gibt nächste lazy-seq zurück
-static ID test_lazy_seq_generator(ID *args, unsigned int argc) {
-    (void)args; (void)argc;
-    // Generator gibt lazy-seq mit next value zurück
-    return make_lazy_seq(fixnum(43), NULL);
+TEST_SHARED(test_seq_rest_lazy_seq_calls_generator) {
+    // Erstelle Generator-Funktion, die eine neue Sequenz zurückgibt
+    ID rest_fn = make_named_func(test_lazy_seq_generator, "test-gen");
+    ID lazy = make_lazy_seq(fixnum(42), rest_fn);
+    
+    ID rest1 = seq_rest(lazy);
+    TEST_ASSERT_NOT_NULL(rest1);
+    // rest1 ist eine NEUE Sequenz (nicht die gleiche lazy-seq)
+    TEST_ASSERT_TRUE(rest1 != lazy);
+    TEST_ASSERT_EQUAL_INT(43, as_fixnum(seq_first(rest1)));
+    
+    // Caching: Zweiter Aufruf sollte gecachtes Ergebnis zurückgeben
+    ID rest2 = seq_rest(lazy);
+    TEST_ASSERT_EQUAL_PTR(rest1, rest2); // Gleiche Sequenz (gecacht)
+    
+    RELEASE(rest1);
+    RELEASE(rest2);
+    RELEASE(rest_fn);
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_seq_rest_lazy_seq_memory_management) {
+    // Test Memory Management: cached_rest sollte korrekt gecacht werden
+    ID rest_fn = make_named_func(test_lazy_seq_generator, "test-gen");
+    ID lazy = make_lazy_seq(fixnum(42), rest_fn);
+    
+    ID rest1 = seq_rest(lazy);
+    CljLazySeq *ls = as_lazy_seq(lazy);
+    TEST_ASSERT_NOT_NULL(ls->cached_rest);
+    // cached_rest sollte mit RETAIN gesetzt sein (Memory Policy)
+    TEST_ASSERT_EQUAL_PTR(rest1, ls->cached_rest);
+    
+    // Zweiter Aufruf sollte gecachtes Ergebnis zurückgeben
+    ID rest2 = seq_rest(lazy);
+    TEST_ASSERT_EQUAL_PTR(rest1, rest2);
+    
+    RELEASE(rest1);
+    RELEASE(rest2);
+    RELEASE(rest_fn);
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_seq_next_lazy_seq) {
+    ID rest_fn = make_named_func(test_lazy_seq_generator, "test-gen");
+    ID lazy = make_lazy_seq(fixnum(42), rest_fn);
+    
+    ID next = seq_next(lazy);
+    TEST_ASSERT_NOT_NULL(next);
+    TEST_ASSERT_EQUAL_INT(43, as_fixnum(seq_first(next)));
+    
+    // Leere lazy-seq
+    ID empty_lazy = make_lazy_seq(NULL, NULL);
+    TEST_ASSERT_NULL(seq_next(empty_lazy));
+    
+    RELEASE(next);
+    RELEASE(rest_fn);
+    RELEASE(lazy);
+    RELEASE(empty_lazy);
+}
+
+TEST_SHARED(test_seq_release_lazy_seq) {
+    ID first = fixnum(42);
+    ID rest_fn = make_named_func(test_lazy_seq_generator, "test-gen");
+    ID lazy = make_lazy_seq(RETAIN(first), RETAIN(rest_fn));
+    
+    // Test Memory Management
+    seq_release(lazy);
+    // Objekte sollten freigegeben sein (Memory Profiler prüft)
+    
+    RELEASE(first);
+    RELEASE(rest_fn);
+}
+
+TEST_SHARED(test_is_seqable_lazy_seq) {
+    ID lazy = make_lazy_seq(fixnum(42), NULL);
+    TEST_ASSERT_TRUE(is_seqable(lazy));
+    TEST_ASSERT_TRUE(is_seq(lazy));
+    RELEASE(lazy);
+}
+
+TEST_SHARED(test_clj_type_name_lazy_seq) {
+    TEST_ASSERT_EQUAL_STRING("LazySeq", clj_type_name(CLJ_LAZY_SEQ));
 }
 
 TEST_SHARED(test_seq_next_inplace_lazy_seq_recycles) {
     // Erstelle Generator-Funktion, die eine neue lazy-seq zurückgibt
-    ID rest_fn = make_named_func(test_lazy_seq_generator, NULL, "test-gen");
+    ID rest_fn = make_named_func(test_lazy_seq_generator, "test-gen");
     ID lazy = make_lazy_seq(fixnum(42), rest_fn);
     TEST_ASSERT_EQUAL_INT(1, ((CljLazySeq*)lazy)->base.rc);
     
@@ -117,7 +212,7 @@ TEST_SHARED(test_seq_next_inplace_lazy_seq_recycles) {
 }
 
 TEST_SHARED(test_seq_next_inplace_lazy_seq_no_recycle_rc_greater_one) {
-    ID rest_fn = make_named_func(test_lazy_seq_generator, NULL, "test-gen");
+    ID rest_fn = make_named_func(test_lazy_seq_generator, "test-gen");
     ID lazy = make_lazy_seq(fixnum(42), rest_fn);
     RETAIN(lazy); // rc wird jetzt 2
     
@@ -222,6 +317,52 @@ TEST_SHARED(test_lazy_seq_memoization_different_rest_counts) {
     CljObject *identical_result = eval_string(code3, g_test_eval_state);
     TEST_ASSERT_NOT_NULL(identical_result);
     TEST_ASSERT_TRUE(clj_is_truthy(identical_result));
+}
+
+TEST_SHARED(test_range_infinite_lazy_seq) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // Test: (range) ohne Argumente gibt infinite lazy-seq zurück
+    const char *code = "(first (range))";
+    CljObject *result = eval_string(code, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_INT);
+    TEST_ASSERT_EQUAL_INT(0, AS_FIXNUM(result));
+
+    // Test: (take 5 (range)) gibt (0 1 2 3 4) zurück
+    const char *code2 = "(take 5 (range))";
+    CljObject *result2 = eval_string(code2, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(TAG(result2) == CLJ_LIST);
+
+    // Test: (first (rest (range))) gibt 1 zurück
+    const char *code3 = "(first (rest (range)))";
+    CljObject *result3 = eval_string(code3, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result3);
+    TEST_ASSERT_TRUE(TAG(result3) == CLJ_INT);
+    TEST_ASSERT_EQUAL_INT(1, AS_FIXNUM(result3));
+}
+
+TEST_SHARED(test_range_memoization) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    // Test: Memoization bei mehreren rest-Aufrufen auf derselben range
+    const char *code = "(let [r (range) "
+                       "      branch1 (rest r) "
+                       "      branch2 (rest r)] "
+                       "(and (= (first branch1) 1) "
+                       "     (= (first branch2) 1) "
+                       "     (identical? branch1 branch2)))";
+
+    CljObject *result = eval_string(code, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(clj_is_truthy(result));
 }
 
 // ============================================================================

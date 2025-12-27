@@ -53,8 +53,8 @@ TEST(test_macro_expander_debug_isolated) {
     // where double is defined as: (defmacro double [x] (list '* x 2))
     
     // First, manually register a macro function
-    CljSymbol *double_sym = intern_symbol_global("double");
-    CljNamespace *user_ns = st->current_ns;
+    (void)intern_symbol_global("double");  // double_sym unused
+    (void)st->current_ns;  // user_ns unused
     
     // Create a macro function that expands (double x) to (* x 2)
     // We'll use eval_string to create the macro, but we need list and quote first
@@ -67,7 +67,8 @@ TEST(test_macro_expander_debug_isolated) {
     
 #ifdef DEBUG
     fprintf(stderr, "\n=== MACRO EXPANSION DEBUG TEST (isolated) ===\n");
-    const char *parsed_ast = print_ast((CljObject*)parsed);
+    const char *parsed_ast = NULL;  // print_ast not available
+    (void)parsed_ast;  // Suppress unused variable warning
     fprintf(stderr, "[DEBUG] Parsed form: %s\n", parsed_ast);
     free((void*)parsed_ast);
 #endif
@@ -77,7 +78,8 @@ TEST(test_macro_expander_debug_isolated) {
     TEST_ASSERT_NOT_NULL(canonicalized);
     
 #ifdef DEBUG
-    const char *canon_ast = print_ast((CljObject*)canonicalized);
+    const char *canon_ast = NULL;  // print_ast not available
+    (void)canon_ast;  // Suppress unused variable warning
     fprintf(stderr, "[DEBUG] Canonicalized form: %s\n", canon_ast);
     free((void*)canon_ast);
     
@@ -92,7 +94,8 @@ TEST(test_macro_expander_debug_isolated) {
             
             if (is_immediate && first_tag != CLJ_SYMBOL) {
                 fprintf(stderr, "[DEBUG] ERROR: First element is immediate value, not a symbol!\n");
-                const char *first_ast = print_ast((CljObject*)list->first);
+                const char *first_ast = NULL;  // print_ast not available
+                (void)first_ast;  // Suppress unused variable warning
                 fprintf(stderr, "[DEBUG] First element AST: %s\n", first_ast);
                 free((void*)first_ast);
             }
@@ -136,7 +139,8 @@ TEST(test_macro_expander_debug_with_macro) {
     
 #ifdef DEBUG
     fprintf(stderr, "\n=== MACRO EXPANSION WITH MACRO FUNCTION ===\n");
-    const char *parsed_ast = print_ast((CljObject*)parsed);
+    const char *parsed_ast = NULL;  // print_ast not available
+    (void)parsed_ast;  // Suppress unused variable warning
     fprintf(stderr, "[DEBUG] Original parsed form: %s\n", parsed_ast);
     free((void*)parsed_ast);
 #endif
@@ -146,7 +150,8 @@ TEST(test_macro_expander_debug_with_macro) {
     
 #ifdef DEBUG
     if (canonicalized) {
-        const char *canon_ast = print_ast((CljObject*)canonicalized);
+        const char *canon_ast = NULL;  // print_ast not available
+    (void)canon_ast;  // Suppress unused variable warning
         fprintf(stderr, "[DEBUG] After canonicalization: %s\n", canon_ast);
         free((void*)canon_ast);
     } else {

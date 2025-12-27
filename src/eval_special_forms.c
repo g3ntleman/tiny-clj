@@ -168,6 +168,18 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 
 // Wrapper functions for existing special form evaluators
 ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    // Note: ctx can be NULL during clojure.core loading (e.g., in defmacro)
+    // But if ctx is provided and we're creating a closure, it should have frame or env_stack
+    // DEBUG: Assert if ctx is provided but has no frame and no env_stack (might be a problem for closures)
+    if (ctx) {
+        // When ctx is provided, check if it has frame or env_stack for closure support
+        // This is important for closures like (constantly x) => (fn [] x)
+        if (!ctx->frame && !ctx->env_stack) {
+            // ctx is provided but has no frame and no env_stack - this might be a problem for closures
+            // This can happen during bootstrap, but it's worth noting
+            // Don't assert here because ctx can be NULL during bootstrap
+        }
+    }
     CljMap *fn_env = env;
     if (!fn_env && st && st->current_ns) {
         fn_env = st->current_ns->mappings;

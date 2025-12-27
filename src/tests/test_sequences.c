@@ -798,106 +798,76 @@ TEST(test_range) {
         return;
     }
     
-    // Test: (range 5) => [0 1 2 3 4]
+    // Test: (range 5) => lazy-seq, test first elements
     CljObject *result1 = eval_string("(range 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result1));
-    CljVector *vec1 = as_vector(result1);
-    TEST_ASSERT_EQUAL_INT(5, vector_count(vec1));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vector_nth(vec1, 0)));
-    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(vec1, 4)));
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(result1));
     
-    // Test: (range 2 5) => [2 3 4]
+    CljObject *first1 = eval_string("(first (range 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first1);
+    TEST_ASSERT_TRUE(is_fixnum(first1));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(first1));
+    
+    CljObject *first2 = eval_string("(first (rest (range 5)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first2);
+    TEST_ASSERT_TRUE(is_fixnum(first2));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(first2));
+    
+    CljObject *first3 = eval_string("(first (rest (rest (rest (rest (range 5))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first3);
+    TEST_ASSERT_TRUE(is_fixnum(first3));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(first3));
+    
+    // Test: (range 2 5) => lazy-seq [2 3 4]
     CljObject *result2 = eval_string("(range 2 5)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result2));
-    CljVector *vec2 = as_vector(result2);
-    TEST_ASSERT_EQUAL_INT(3, vector_count(vec2));
-    TEST_ASSERT_EQUAL_INT(2, as_fixnum((CljValue)vector_nth(vec2, 0)));
-    TEST_ASSERT_EQUAL_INT(4, as_fixnum((CljValue)vector_nth(vec2, 2)));
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(result2));
     
-    // Test: (range 0 10 2) => [0 2 4 6 8]
+    CljObject *first2_1 = eval_string("(first (range 2 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first2_1);
+    TEST_ASSERT_TRUE(is_fixnum(first2_1));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(first2_1));
+    
+    CljObject *first2_2 = eval_string("(first (rest (range 2 5)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first2_2);
+    TEST_ASSERT_TRUE(is_fixnum(first2_2));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(first2_2));
+    
+    CljObject *first2_3 = eval_string("(first (rest (rest (range 2 5))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first2_3);
+    TEST_ASSERT_TRUE(is_fixnum(first2_3));
+    TEST_ASSERT_EQUAL_INT(4, as_fixnum(first2_3));
+    
+    // Test: (range 0 10 2) => lazy-seq [0 2 4 6 8]
     CljObject *result3 = eval_string("(range 0 10 2)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result3));
-    CljVector *vec3 = as_vector(result3);
-    TEST_ASSERT_EQUAL_INT(5, vector_count(vec3));
-    TEST_ASSERT_EQUAL_INT(0, as_fixnum((CljValue)vector_nth(vec3, 0)));
-    TEST_ASSERT_EQUAL_INT(8, as_fixnum((CljValue)vector_nth(vec3, 4)));
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(result3));
     
-    // Test: (range 0) => []
+    CljObject *first3_1 = eval_string("(first (range 0 10 2))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first3_1);
+    TEST_ASSERT_TRUE(is_fixnum(first3_1));
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(first3_1));
+    
+    CljObject *first3_2 = eval_string("(first (rest (range 0 10 2)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first3_2);
+    TEST_ASSERT_TRUE(is_fixnum(first3_2));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(first3_2));
+    
+    CljObject *first3_3 = eval_string("(first (rest (rest (rest (rest (range 0 10 2))))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(first3_3);
+    TEST_ASSERT_TRUE(is_fixnum(first3_3));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum(first3_3));
+    
+    // Test: (range 0) => empty lazy-seq
     CljObject *result4 = eval_string("(range 0)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)result4)->type);
-    CljVector *vec4 = as_vector(result4);
-    TEST_ASSERT_EQUAL_INT(0, vector_count(vec4));
+    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(result4));
+    CljObject *first4 = eval_string("(first (range 0))", g_test_eval_state);
+    TEST_ASSERT_NULL(first4);
 }
 
 // ============================================================================
-// REPEAT TESTS
-// ============================================================================
-
-TEST(test_repeat) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
-    // Test: (repeat 3 "x") => ["x" "x" "x"]
-    CljObject *result1 = eval_string("(repeat 3 \"x\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result1));
-    CljVector *vec1 = as_vector(result1);
-    TEST_ASSERT_EQUAL_INT(3, vector_count(vec1));
-    
-    // Test: (repeat 0 "x") => []
-    CljObject *result2 = eval_string("(repeat 0 \"x\")", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, ((CljObject*)result2)->type);
-    CljVector *vec2 = as_vector(result2);
-    TEST_ASSERT_EQUAL_INT(0, vector_count(vec2));
-    
-    // Test: (repeat 2 42) => [42 42]
-    CljObject *result3 = eval_string("(repeat 2 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_EQUAL_INT(CLJ_VECTOR, TAG(result3));
-    CljVector *vec3 = as_vector(result3);
-    TEST_ASSERT_EQUAL_INT(2, vector_count(vec3));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 0)));
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum((CljValue)vector_nth(vec3, 1)));
-}
-
-TEST(test_repeat_infinite_lazy_seq) {
-    if (!g_test_eval_state) {
-        TEST_FAIL_MESSAGE("Failed to create EvalState");
-        return;
-    }
-    
-    // Test: (repeat 42) => lazy-seq mit 42
-    CljObject *result = eval_string("(repeat 42)", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(result));
-    
-    // Test: first sollte 42 sein
-    CljObject *first_elem = eval_string("(first (repeat 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(first_elem);
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(first_elem));
-    
-    // Test: rest sollte wieder lazy-seq sein
-    CljObject *rest_seq = eval_string("(rest (repeat 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(rest_seq);
-    TEST_ASSERT_EQUAL_INT(CLJ_LAZY_SEQ, TAG(rest_seq));
-    
-    // Test: first von rest sollte wieder 42 sein
-    CljObject *rest_first = eval_string("(first (rest (repeat 42)))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(rest_first);
-    TEST_ASSERT_EQUAL_INT(42, as_fixnum(rest_first));
-    
-    // Test: take sollte funktionieren
-    CljObject *taken = eval_string("(take 5 (repeat 42))", g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(taken);
-    TEST_ASSERT_EQUAL_INT(5, as_fixnum(eval_string("(count (take 5 (repeat 42)))", g_test_eval_state)));
-}
+// Note: repeat tests moved to test_repeat_repeatedly.c
 
 // ============================================================================
 // CONS WITH EMPTY LIST TESTS
@@ -976,3 +946,217 @@ TEST(test_take_with_nil_element) {
     TEST_ASSERT_NOT_NULL(count_result);
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(count_result));
 }
+
+// ============================================================================
+// CLOSURE TESTS (Inner Functions)
+// ============================================================================
+
+// Simple closure test: inner function accesses outer parameter
+TEST(test_closure_simple) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (fn [x] (fn [] x)) - inner function returns outer parameter
+    CljObject *result = eval_string("((fn [x] (fn [] x)) 42)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_FUNC || TAG(result) == CLJ_CLOSURE);
+    
+    // Call the returned function
+    CljObject *call_result = eval_string("(((fn [x] (fn [] x)) 42))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(call_result);
+    TEST_ASSERT_TRUE(is_fixnum(call_result));
+    TEST_ASSERT_EQUAL_INT(42, as_fixnum(call_result));
+}
+
+// Simple closure test: constantly function
+TEST(test_closure_constantly) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (constantly 5) should return a function that always returns 5
+    CljObject *const_fn = eval_string("(constantly 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(const_fn);
+    TEST_ASSERT_TRUE(TAG(const_fn) == CLJ_FUNC || TAG(const_fn) == CLJ_CLOSURE);
+    
+    // Call the function multiple times
+    CljObject *result1 = eval_string("((constantly 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum(result1));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result1));
+    
+    CljObject *result2 = eval_string("((constantly 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result2));
+}
+
+// Simple closure test: inner function accesses outer let binding
+TEST(test_closure_let_binding) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (let [x 10] (fn [] x)) - inner function accesses let binding
+    CljObject *result = eval_string("((let [x 10] (fn [] x)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(10, as_fixnum(result));
+}
+
+// Simple closure test: nested closures
+TEST(test_closure_nested) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (fn [x] (fn [y] (fn [] (+ x y)))) - triple nested closure
+    CljObject *result = eval_string("(((fn [x] (fn [y] (fn [] (+ x y)))) 3) 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_FUNC || TAG(result) == CLJ_CLOSURE);
+    
+    // Call the innermost function
+    CljObject *call_result = eval_string("((((fn [x] (fn [y] (fn [] (+ x y)))) 3) 4))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(call_result);
+    TEST_ASSERT_TRUE(is_fixnum(call_result));
+    TEST_ASSERT_EQUAL_INT(7, as_fixnum(call_result));
+}
+
+// Simple closure test: closure with multiple outer variables
+TEST(test_closure_multiple_vars) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (fn [a b] (fn [] (+ a b))) - inner function accesses two outer parameters
+    CljObject *result = eval_string("(((fn [a b] (fn [] (+ a b))) 5 7))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(12, as_fixnum(result));
+}
+
+// Complex closure test: counter function (closure with mutable-like behavior)
+TEST(test_closure_complex_counter) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: Create a counter function that increments a captured value
+    // (fn [start] (fn [inc] (+ start inc))) - closure that captures start value
+    CljObject *counter = eval_string("(fn [start] (fn [inc] (+ start inc)))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(counter);
+    TEST_ASSERT_TRUE(TAG(counter) == CLJ_FUNC || TAG(counter) == CLJ_CLOSURE);
+    
+    // Create counter starting at 10
+    CljObject *counter10 = eval_string("((fn [start] (fn [inc] (+ start inc))) 10)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(counter10);
+    TEST_ASSERT_TRUE(TAG(counter10) == CLJ_FUNC || TAG(counter10) == CLJ_CLOSURE);
+    
+    // Test counter with different increments
+    CljObject *result1 = eval_string("(((fn [start] (fn [inc] (+ start inc))) 10) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum(result1));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum(result1));
+    
+    CljObject *result2 = eval_string("(((fn [start] (fn [inc] (+ start inc))) 10) 3)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(13, as_fixnum(result2));
+}
+
+// Complex closure test: adder factory
+TEST(test_closure_complex_adder_factory) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: Create an adder factory that returns functions that add a fixed value
+    // (fn [n] (fn [x] (+ x n))) - returns a function that adds n to its argument
+    CljObject *add5 = eval_string("((fn [n] (fn [x] (+ x n))) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(add5);
+    TEST_ASSERT_TRUE(TAG(add5) == CLJ_FUNC || TAG(add5) == CLJ_CLOSURE);
+    
+    // Test the adder function
+    CljObject *result1 = eval_string("(((fn [n] (fn [x] (+ x n))) 5) 10)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result1);
+    TEST_ASSERT_TRUE(is_fixnum(result1));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum(result1));
+    
+    CljObject *result2 = eval_string("(((fn [n] (fn [x] (+ x n))) 5) 20)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result2);
+    TEST_ASSERT_TRUE(is_fixnum(result2));
+    TEST_ASSERT_EQUAL_INT(25, as_fixnum(result2));
+}
+
+// Complex closure test: closure with let and multiple bindings
+TEST(test_closure_complex_let_multiple) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (let [a 2 b 3] (fn [] (+ a b))) - closure accessing multiple let bindings
+    CljObject *result = eval_string("((let [a 2 b 3] (fn [] (+ a b))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result));
+}
+
+// Complex closure test: closure in closure (double nesting with let)
+TEST(test_closure_complex_double_nested_let) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (let [x 5] (let [y 3] (fn [] (+ x y)))) - double nested let with closure
+    CljObject *result = eval_string("((let [x 5] (let [y 3] (fn [] (+ x y)))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(8, as_fixnum(result));
+}
+
+// Complex closure test: closure that returns another closure
+TEST(test_closure_complex_returning_closure) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+    
+    // Test: (fn [x] (fn [y] (fn [] (* x y)))) - function that returns closure that returns closure
+    CljObject *outer = eval_string("(fn [x] (fn [y] (fn [] (* x y))))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(outer);
+    TEST_ASSERT_TRUE(TAG(outer) == CLJ_FUNC || TAG(outer) == CLJ_CLOSURE);
+    
+    // Apply outer function
+    CljObject *middle = eval_string("((fn [x] (fn [y] (fn [] (* x y)))) 4)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(middle);
+    TEST_ASSERT_TRUE(TAG(middle) == CLJ_FUNC || TAG(middle) == CLJ_CLOSURE);
+    
+    // Apply middle function
+    CljObject *inner = eval_string("(((fn [x] (fn [y] (fn [] (* x y)))) 4) 5)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(inner);
+    TEST_ASSERT_TRUE(TAG(inner) == CLJ_FUNC || TAG(inner) == CLJ_CLOSURE);
+    
+    // Call innermost function
+    CljObject *result = eval_string("((((fn [x] (fn [y] (fn [] (* x y)))) 4) 5))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(20, as_fixnum(result));
+}
+
+// Note: repeatedly closure tests moved to test_repeat_repeatedly.c
+
+// ============================================================================
+// LOW-LEVEL TESTS FOR CLOSURE HYPOTHESES
+// ============================================================================
+
+// Note: Hypothesis tests moved to test_repeat_repeatedly.c

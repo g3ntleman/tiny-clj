@@ -365,6 +365,7 @@ add_executable(unit-tests
     src/tests/test_cow.c
     src/tests/test_special_forms.c
     src/tests/test_core_functions.c
+    src/tests/test_repeat_repeatedly.c
     src/tests/test_regex.c
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}

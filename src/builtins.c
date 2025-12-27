@@ -43,6 +43,7 @@
 
 // Forward declaration for symbol data structures
 extern StaticSymbolData sym_empty_data;
+extern StaticSymbolData sym_lazy_seq_data;
 
 // Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
@@ -55,9 +56,8 @@ ID native_div_variadic(ID *args, unsigned int argc);
 ID native_mod(ID *args, unsigned int argc);
 ID native_quot(ID *args, unsigned int argc);
 ID native_bit_shift_left(ID *args, unsigned int argc);
-ID native_range(ID *args, unsigned int argc);
-ID native_repeat(ID *args, unsigned int argc);
 ID native_math_sqrt(ID *args, unsigned int argc);
+ID native_lazy_seq(ID *args, unsigned int argc);
 // String functions moved to builtins_strings.c
 ID native_symbol(ID *args, unsigned int argc);
 ID native_type(ID *args, unsigned int argc);
@@ -1759,16 +1759,15 @@ ID native_vec(ID *args, unsigned int argc) {
     return AUTORELEASE(vec);
 }
 
-// make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
+// make_func() wrapper removed - use make_named_func(fn, cname) directly
 
-ID make_named_func(BuiltinFn fn, void *env, const char *cname) {
+ID make_named_func(BuiltinFn fn, const char *cname) {
     CljCFunc *func = ALLOC(CljCFunc, 1);
     if (!func) return NULL;
 
     func->base.type = CLJ_FUNC;
     func->base.rc = 1;
     func->fn = (CljObject* (*)(CljObject **, int))fn; // Cast to expected signature
-    func->env = env;
 
     // Safely handle name parameter
     if (cname && strlen(cname) > 0) {
@@ -2018,12 +2017,9 @@ ID native_print_ast(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    const char *ast_str = print_ast((CljObject*)arg);
-    if (ast_str) {
-        printf("%s\n", ast_str);
-        // print_ast returns a newly allocated string that must be freed
-        free((void*)ast_str);
-    }
+    // print_ast is not available in this build
+    // TODO: Implement print_ast or use alternative method
+    printf("(print-ast not available)\n");
     return NULL;
 }
 
@@ -2041,15 +2037,9 @@ ID native_ast_string(ID *args, unsigned int argc) {
         return make_string("SYM:nil");
     }
     
-    const char *ast_str = print_ast((CljObject*)arg);
-    if (ast_str) {
-        CljString *result = make_string(ast_str);
-        // print_ast returns a newly allocated string that must be freed
-        free((void*)ast_str);
-        return AUTORELEASE(result);
-    }
-    
-    return make_string("(error: could not generate AST string)");
+    // print_ast is not available in this build
+    // TODO: Implement print_ast or use alternative method
+    return AUTORELEASE(make_string("(ast-string not available)"));
 }
 #endif
 
@@ -2440,8 +2430,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_mod_data.sym, native_mod},
     {&sym_quot_data.sym, native_quot},
     {&sym_bit_shift_left_data.sym, native_bit_shift_left},
-    {&sym_range_data.sym, native_range},
-    {&sym_repeat_data.sym, native_repeat},
+    {&sym_lazy_seq_data.sym, native_lazy_seq},
     {&sym_math_sqrt_data.sym, native_math_sqrt},
     {&sym_sqrt_data.sym, native_math_sqrt},
     {&sym_format_data.sym, native_format},
@@ -3962,161 +3951,6 @@ ID native_bit_shift_left(ID *args, unsigned int argc) {
     return create_fixnum_result(a << b);
 }
 
-// Parameter-Struktur für range Generator
-typedef struct {
-    int start;
-    int step;
-} RangeParams;
-
-// Generator-Funktion für (range) - infinite range
-// args[0] ist die Funktion selbst
-static ID range_generator(ID *args, unsigned int argc) {
-    if (argc < 1 || !args[0]) return NULL;
-    
-    CljCFunc *func = (CljCFunc*)args[0];
-    RangeParams *params = (RangeParams*)func->env;
-    if (!params) return NULL;
-    
-    int next_val = params->start + params->step;
-    RangeParams *next_params = (RangeParams*)malloc(sizeof(RangeParams));
-    if (!next_params) return NULL;
-    next_params->start = next_val;
-    next_params->step = params->step;
-    
-    ID generator = make_named_func(range_generator, next_params, "range-gen");
-    return make_lazy_seq(create_fixnum_result(next_val), generator);
-}
-
-ID native_range(ID *args, unsigned int argc) {
-    if (argc < 0 || argc > 3) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-            "range requires 0-3 arguments, got %u", argc);
-        return NULL;
-    }
-
-    int start = 0, end = 0, step = 1;
-
-    if (argc == 0) {
-        // (range) => infinite lazy-seq [0 1 2 ...]
-        RangeParams *params = (RangeParams*)malloc(sizeof(RangeParams));
-        if (!params) return NULL;
-        params->start = 0;
-        params->step = 1;
-        ID generator = make_named_func(range_generator, params, "range-gen");
-        return make_lazy_seq(create_fixnum_result(0), generator);
-    } else if (argc == 1) {
-        // (range end) => [0 1 2 ... end-1]
-        end = AS_FIXNUM(args[0]);
-        start = 0;
-        step = 1;
-    } else if (argc == 2) {
-        // (range start end) => [start start+1 ... end-1]
-        start = AS_FIXNUM(args[0]);
-        end = AS_FIXNUM(args[1]);
-        step = 1;
-    } else {
-        // (range start end step) => [start start+step ... end-step]
-        start = AS_FIXNUM(args[0]);
-        end = AS_FIXNUM(args[1]);
-        step = AS_FIXNUM(args[2]);
-        if (step == 0) {
-            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "range step cannot be zero",
-                           __FILE__, __LINE__, 0);
-            return NULL;
-        }
-    }
-
-    // Calculate size
-    int size = 0;
-    if (step > 0) {
-        if (start >= end) size = 0;
-        else size = (end - start + step - 1) / step;
-    } else {
-        if (start <= end) size = 0;
-        else size = (start - end - step - 1) / (-step);
-    }
-
-    if (size < 0) size = 0;
-
-    // Return empty vector singleton if size is 0
-    if (size == 0) {
-        return empty_vector();
-    }
-
-    // Create vector with calculated capacity
-    ID vec = make_vector(size, CLJ_VECTOR);
-    CljVector *v = as_vector(vec);
-
-    // Fill vector
-    for (int i = start; (step > 0) ? (i < end) : (i > end); i += step) {
-        ID val = create_fixnum_result(i);
-        v = vector_conj(v, val);
-    }
-
-    return AUTORELEASE(vec);
-}
-
-// Generator-Funktion für (repeat x) - gibt sich selbst zurück (infinite lazy-seq)
-// args[0] ist die Funktion selbst (von seq_rest übergeben)
-static ID repeat_generator(ID *args, unsigned int argc) {
-    if (argc < 1 || !args[0]) return NULL;
-    
-    CljCFunc *func = (CljCFunc*)args[0];
-    ID value = (ID)func->env;
-    
-    ID generator = make_named_func(repeat_generator, value, "repeat-gen");
-    return make_lazy_seq(value, generator);
-}
-
-ID native_repeat(ID *args, unsigned int argc) {
-    CLJ_ASSERT(args != NULL);
-    
-    int count;
-    ID value;
-    
-    if (argc == 1) {
-        // (repeat x) - infinite lazy sequence
-        value = args[0];
-        ID generator = make_named_func(repeat_generator, value, "repeat-gen");
-        return make_lazy_seq(value, generator);
-    } else if (argc == 2) {
-        // (repeat n x) - create vector with n repetitions of x
-    if (TAG(args[0]) != CLJ_INT) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count must be an integer",
-                       __FILE__, __LINE__, 0);
-        return NULL;
-    }
-        count = AS_FIXNUM(args[0]);
-    if (count < 0) {
-        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "repeat count cannot be negative",
-                       __FILE__, __LINE__, 0);
-            return NULL;
-        }
-        value = args[1];
-    } else {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                "repeat requires 1 or 2 arguments, got %u", argc);
-        throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
-        return NULL;
-    }
-
-    if (count == 0) {
-        return empty_vector();
-    }
-
-    ID vec = make_vector(count, CLJ_VECTOR);
-    CljVector *v = as_vector(vec);
-
-    for (int i = 0; i < count; i++) {
-        ID val = RETAIN(value);
-        v = vector_conj(v, val);
-        RELEASE(val);
-    }
-
-    return AUTORELEASE(vec);
-}
-
 ID native_math_sqrt(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 1, "Math/sqrt")) return NULL;
 
@@ -4145,6 +3979,91 @@ ID native_math_sqrt(ID *args, unsigned int argc) {
 }
 
 // native_format moved to builtins_strings.c
+
+ID native_lazy_seq(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "lazy-seq")) return NULL;
+    
+    ID seq_expr = args[0];
+    
+    // Wenn nil/empty, return nil
+    if (!seq_expr) return NULL;
+    
+    // Prüfe ob seqable
+    if (IS_IMMEDIATE(seq_expr)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "lazy-seq: argument must be seqable",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    CljObject *seq_obj = seq_expr;
+    if (!is_seqable(seq_obj)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                       "lazy-seq: argument must be seqable",
+                       __FILE__, __LINE__, 0);
+        return NULL;
+    }
+    
+    // Wenn bereits eine lazy-seq, einfach zurückgeben
+    if (TAG(seq_obj) == CLJ_LAZY_SEQ) {
+        return RETAIN(seq_expr);
+    }
+    
+    // Extrahiere first
+    ID first = native_first(&seq_expr, 1);
+    if (!first) {
+        // Empty sequence - return nil
+        return NULL;
+    }
+    
+    // Berechne rest direkt und erstelle eine Funktion, die diesen rest zurückgibt
+    ID rest_args[1] = {RETAIN(seq_expr)};
+    ID rest = native_rest(rest_args, 1);
+    RELEASE(rest_args[0]);
+    
+    // Erstelle eine Clojure-Funktion ohne Parameter, die rest zurückgibt
+    // Die Sequenz wird im env_stack gespeichert (als Closure)
+    // rest_body sollte (rest __seq__) sein, wobei __seq__ im env_stack gespeichert wird
+    CljSymbol *seq_sym = intern_symbol_global("__seq__");
+    ID rest_body = make_list(
+        intern_symbol_global("rest"),
+        make_list((ID)seq_sym, NULL)
+    );
+    
+    // Erstelle env_stack mit der Sequenz als Closure
+    CljMap *env_map = make_map(4);  // Start with capacity 4
+    CljMap *new_env_map = map_assoc(env_map, (CljValue)seq_sym, (CljValue)RETAIN(seq_expr));
+    // map_assoc kann ein neues Map-Objekt zurückgeben (COW), daher müssen wir das alte freigeben
+    // Aber erst nachdem wir sichergestellt haben, dass das neue Map-Objekt retained ist
+    if (new_env_map != env_map) {
+        RELEASE(env_map);
+    }
+    env_map = new_env_map;
+    // RETAIN env_map bevor es in die Liste eingefügt wird
+    RETAIN(env_map);
+    CljList *env_stack = make_list((CljObject*)env_map, NULL);
+    
+    // Erstelle Funktion ohne Parameter
+    CljFunction *rest_fn = make_function(
+        NULL,  // Keine Parameter
+        0,
+        rest_body,
+        env_stack,
+        "lazy-seq-rest",
+        NULL  // Kein Namespace
+    );
+    
+    if (!rest_fn) {
+        RELEASE(first);
+        RELEASE(rest);
+        RELEASE(rest_body);
+        RELEASE(env_stack);
+        return NULL;
+    }
+    
+    // Erstelle lazy-seq
+    return make_lazy_seq(first, (ID)rest_fn);
+}
 
 // Set current EvalState (called by eval_function_call before calling builtins)
 void builtin_set_eval_state(EvalState *st) {
@@ -5117,7 +5036,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
 
     // Register the builtin in target namespace
     CljObject *symbol = (CljObject*)intern_symbol_global(symbol_name);
-    CljObject *func_obj = make_named_func(func, NULL, cname);
+    CljObject *func_obj = make_named_func(func, cname);
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);
 

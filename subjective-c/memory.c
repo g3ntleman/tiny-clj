@@ -351,7 +351,11 @@ CljObject *autorelease(CljObject *v) {
     if (g_pool.count >= g_pool.capacity) {
         uint32_t old_capacity = g_pool.capacity;
         uint32_t new_capacity = g_pool.capacity * 2;
-        g_pool.items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        CljObject **new_items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        if (!new_items) {
+            throw_oom();  // Never returns
+        }
+        g_pool.items = new_items;
         g_pool.capacity = new_capacity;
         fprintf(stderr, "⚠️  AutoreleasePool: items grew %u -> %u\n", old_capacity, new_capacity);
     }
@@ -391,7 +395,11 @@ void *autorelease_pool_push(void) {
     if (g_pool.cp_count >= g_pool.cp_capacity) {
         uint32_t old_capacity = g_pool.cp_capacity;
         uint32_t new_capacity = g_pool.cp_capacity * 2;
-        g_pool.checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+        uint32_t *new_checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+        if (!new_checkpoints) {
+            throw_oom();  // Never returns
+        }
+        g_pool.checkpoints = new_checkpoints;
         g_pool.cp_capacity = new_capacity;
         fprintf(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
     }
@@ -440,6 +448,17 @@ void autorelease_pool_pop(void *pool) {
     
     // Reset count to checkpoint (objects are forgotten, not released)
     g_pool.count = checkpoint;
+    
+    // Shrink pool capacity if it's much larger than needed (after clearing)
+    // This prevents memory bloat when pool grows large during tests
+    if (g_pool.count == 0 && g_pool.capacity > POOL_INITIAL_CAPACITY * 4) {
+        uint32_t new_capacity = POOL_INITIAL_CAPACITY * 2;
+        CljObject **new_items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
+        if (new_items) {
+            g_pool.items = new_items;
+            g_pool.capacity = new_capacity;
+        }
+    }
 }
 
 // Exception-safe cleanup function (called from CATCH blocks)
@@ -703,7 +722,18 @@ static void release_object_default(CljObject *v) {
             break;
 
         case CLJ_FUNC:
-            // Native functions are static - no cleanup needed
+            {
+                CljCFunc *cfunc = (CljCFunc*)v;
+                if (cfunc) {
+                    // Free function name (strdup'd in make_named_func)
+                    // Don't free in zombie mode - object must remain intact
+#ifndef ZOMBIE_ENABLED
+                    if (cfunc->name) {
+                        free((void*)cfunc->name);
+                    }
+#endif
+                }
+            }
             break;
             
         case CLJ_CLOSURE:
@@ -731,12 +761,14 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_BYTE_ARRAY:
             {
-                CljByteArray *ba = as_byte_array(v);
                 // Don't free in zombie mode - object must remain intact
 #ifndef ZOMBIE_ENABLED
+                CljByteArray *ba = as_byte_array(v);
                 if (ba && ba->data) {
                     free(ba->data);
                 }
+#else
+                (void)v;  // Suppress unused variable warning in zombie mode
 #endif
             }
             break;

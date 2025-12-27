@@ -11,6 +11,9 @@
 #include "../event_loop.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
 #include <time.h>
+#include <signal.h>
+#include <execinfo.h>
+#include <unistd.h>
 
 // Forward declaration for clojure_core_set_quiet
 extern void clojure_core_set_quiet(bool quiet);
@@ -116,6 +119,9 @@ void tearDown(void) {
     WITH_AUTORELEASE_POOL({
         runtime_reset(&g_runtime);
     });
+    
+    // Clean up all autorelease pools after each test to prevent memory bloat
+    autorelease_pool_cleanup_all();
 }
 
 // ============================================================================
@@ -317,7 +323,32 @@ static void run_specific_test(const char *test_name_or_pattern) {
     }
 }
 
+// Signal handler for segmentation faults
+static void segfault_handler(int sig) {
+    (void)sig;
+    fprintf(stderr, "\n=== SEGMENTATION FAULT DETECTED ===\n");
+    fprintf(stderr, "Stack trace:\n");
+    
+    void *array[50];
+    size_t size = backtrace(array, 50);
+    char **strings = backtrace_symbols(array, size);
+    
+    if (strings != NULL) {
+        for (size_t i = 0; i < size; i++) {
+            fprintf(stderr, "%zu: %s\n", i, strings[i]);
+        }
+        free(strings);
+    }
+    
+    fprintf(stderr, "=====================================\n");
+    _exit(1);
+}
+
 int main(int argc, char **argv) {
+    // Install signal handler for segmentation faults
+    signal(SIGSEGV, segfault_handler);
+    signal(SIGABRT, segfault_handler);
+    
     UNITY_BEGIN();
     clock_t start_time = clock();
     

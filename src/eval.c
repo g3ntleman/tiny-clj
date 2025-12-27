@@ -38,6 +38,7 @@
 
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
+#include "debug.h"
 
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
@@ -163,9 +164,20 @@ static void throw_unresolved_symbol_exception(const char *sym_name) {
         "Unable to resolve symbol: %s in this context", sym_name);
 }
 
+// Forward declarations
+static ID eval_function_call_with_context(ID fn, ID *args, int argc, CljMap *env, EvalState *st, const EvalContext *outer_ctx);
+static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack);
+static CljList* combine_env_stacks(CljList *outer_stack, CljList *inner_stack);
+
 // Extended function call implementation with complete evaluation
 /** @brief Main function call evaluator */
 ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
+    return eval_function_call_with_context(fn, args, argc, env, st, NULL);
+}
+
+// Extended function call with context support for closures
+/** @brief Function call evaluator with EvalContext for closure support */
+static ID eval_function_call_with_context(ID fn, ID *args, int argc, CljMap *env, EvalState *st, const EvalContext *outer_ctx) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
@@ -240,10 +252,32 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     frame_init(call_frame, NULL);
     frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
 
-    // Legacy: Keep env_stack for closure environment (func->env_stack)
-    // This is only used for closure bindings, not function parameters
-    // NOTE: func->env_stack is borrowed (not retained) - func lives during the entire call
+    // Combine outer_ctx->env_stack with func->env_stack for nested closures
+    // This ensures that inner functions (like constantly) can access outer function parameters (like x from let)
+    // Resolution order: CallFrame → [outer frames...] -> [func closure frames...] → namespace
     CljList *call_env_stack = func->env_stack;
+    CljList *outer_stack = NULL;
+    
+    if (outer_ctx) {
+        // Convert outer_ctx->frame to env_stack if present
+        if (outer_ctx->frame) {
+            outer_stack = frame_chain_to_env_stack(outer_ctx->frame, outer_ctx->env_stack);
+        } else if (outer_ctx->env_stack) {
+            outer_stack = RETAIN(outer_ctx->env_stack);
+        }
+        
+        // Combine outer_stack with func->env_stack
+        if (outer_stack) {
+            if (func->env_stack) {
+                CljList *combined = combine_env_stacks(outer_stack, func->env_stack);
+                RELEASE(outer_stack);
+                call_env_stack = combined;
+            } else {
+                // func->env_stack is NULL, just use outer_stack
+                call_env_stack = outer_stack;
+            }
+        }
+    }
 
     // TCO Loop - iterate on recur
     ID result = NULL;
@@ -255,6 +289,8 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
         // Kein manuelles Cleanup nötig (werden von frame_set_bindings verwaltet)
 
         // Evaluate function body with context (stack-only, no allocations)
+        // NOTE: env_stack combines func->env_stack (closure) with outer ctx->env_stack (for nested closures)
+        // This ensures that inner functions can access outer function parameters
         EvalContext eval_ctx = {
             .env = NULL,
             .env_stack = call_env_stack,  // Closure environment only
@@ -309,7 +345,11 @@ ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
     // Cleanup call frame (stack-allocated, but may contain retained values)
     frame_release(call_frame);
     
-    // NOTE: call_env_stack is borrowed from func->env_stack, no release needed
+    // Release combined env_stack if we created it (only if it differs from func->env_stack)
+    // Note: call_env_stack is borrowed from func->env_stack if no combination was done
+    if (call_env_stack != func->env_stack && call_env_stack) {
+        RELEASE(call_env_stack);
+    }
 
     return result;
 }
@@ -452,6 +492,7 @@ static inline ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
 
 // Convert a CallFrame chain into a heap-based env_stack for closures
 static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack) {
+    // Note: frame can be NULL at the end of the chain (recursive base case)
     if (!frame) {
         return RETAIN(parent_stack);
     }
@@ -460,6 +501,7 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
 
     int initial_capacity = frame->param_count > 0 ? frame->param_count : 4;
     CljMap *frame_map = make_map(initial_capacity);
+    CLJ_ASSERT(frame_map != NULL && "frame_chain_to_env_stack: make_map should return non-NULL");
 
     if (frame->params) {
     for (int i = 0; i < frame->param_count; i++) {
@@ -468,16 +510,38 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
 
             ID value = frame_decode_value(frame->values[i]);
         CljMap *new_map = map_assoc(frame_map, key, value);
+        CLJ_ASSERT(new_map != NULL && "frame_chain_to_env_stack: map_assoc should return non-NULL");
         ASSIGN(frame_map, new_map);
         }
     }
 
     CljList *new_stack = make_list(frame_map, parent_with_frames);
+    CLJ_ASSERT(new_stack != NULL && "frame_chain_to_env_stack: make_list should return non-NULL");
     RELEASE(frame_map);
     if (parent_with_frames) {
         RELEASE(parent_with_frames);
     }
     return new_stack;
+}
+
+// Helper: Combine two env_stacks by appending inner_stack to the end of outer_stack
+// Returns a new list: [outer_stack...] -> [inner_stack...]
+// Both stacks are retained in the result
+// Recursive implementation (env_stacks are typically short, so recursion depth is limited)
+static CljList* combine_env_stacks(CljList *outer_stack, CljList *inner_stack) {
+    if (!outer_stack) {
+        return inner_stack ? RETAIN(inner_stack) : NULL;
+    }
+    if (!inner_stack) {
+        return RETAIN(outer_stack);
+    }
+    
+    // Recursively build: (first outer_stack, combine(rest outer_stack, inner_stack))
+    // Note: make_list already calls RETAIN on rest, so we don't need to release rest_combined
+    CljList *rest = as_list(LIST_REST(outer_stack));
+    CljList *rest_combined = combine_env_stacks(rest, inner_stack);
+    ID first = LIST_FIRST(outer_stack);
+    return make_list(first, rest_combined);
 }
 
 // Helper: Add namespace mappings to environment
@@ -1130,7 +1194,9 @@ static inline ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
     }
 
     // Call function - no TRY/CATCH needed, exception cleanup happens in outer handler
-    ID result = eval_function_call(fn, args, argc, env, st);
+    // CRITICAL: Pass ctx to eval_function_call_with_context so it can preserve outer frame/env_stack for closures
+    // This ensures that when constantly creates (fn [] x), x can be resolved from the outer let/fn frame
+    ID result = eval_function_call_with_context(fn, args, argc, env, st, ctx);
 
     // Restore namespace after successful call (st guaranteed non-NULL if switched_ns)
     if (switched_ns) {
@@ -1635,7 +1701,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
         
         // Create and return native function object
-        return AUTORELEASE(make_named_func(native_func, NULL, fn_name->cname));
+        return AUTORELEASE(make_named_func(native_func, fn_name->cname));
     }
 
     // Convert parameter list/vector to array
@@ -1675,12 +1741,23 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         // Only create env_stack if we have a frame (indicates closure might be needed)
         // NOTE: This is a conservative approach - we create env_stack even if not strictly needed
         // A more aggressive optimization would analyze the body to detect outer scope references
+        CLJ_ASSERT(ctx->frame != NULL && "ctx->frame should be non-NULL when creating closure");
         fn_env_stack = frame_chain_to_env_stack(ctx->frame, ctx->env_stack);
+        CLJ_ASSERT(fn_env_stack != NULL && "frame_chain_to_env_stack should return non-NULL env_stack");
     } else if (ctx && ctx->env_stack) {
         // No frame, but we have env_stack (from outer closure)
+        CLJ_ASSERT(ctx->env_stack != NULL && "ctx->env_stack should be non-NULL");
         fn_env_stack = RETAIN(ctx->env_stack);
     } else {
         // Fallback: Create env_stack from env if provided, otherwise use namespace mappings
+        // DEBUG: Assert if ctx is provided but has no frame and no env_stack (might be a problem for closures)
+        if (ctx && !ctx->frame && !ctx->env_stack) {
+            // ctx is provided but has no frame and no env_stack - this might be a problem for closures
+            // This happens when fn is called without a context (e.g., during bootstrap)
+            // But we don't assert here because ctx can be NULL during bootstrap
+            // However, if ctx is provided, it should have frame or env_stack for closure support
+            // This is a warning condition, not an error (bootstrap can work without it)
+        }
         fn_env_stack = env ? make_list(env, NULL) : NULL;
         if (!fn_env_stack && st && st->current_ns && st->current_ns->mappings) {
             fn_env_stack = make_list(st->current_ns->mappings, NULL);

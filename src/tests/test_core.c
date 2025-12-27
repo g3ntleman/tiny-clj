@@ -305,15 +305,16 @@ TEST(test_native_nilp_low_level) {
     TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result3));
     
     // Test via make_named_func and CljCFunc->fn (simulating eval_function_call)
-    ID func_obj = make_named_func(native_nilp, NULL, "nil?");
+    ID func_obj = make_named_func(native_nilp, "nil?");
     TEST_ASSERT_NOT_NULL(func_obj);
     CljCFunc *native_func = (CljCFunc*)func_obj;
     TEST_ASSERT_NOT_NULL(native_func->fn);
     
     // Call via CljCFunc->fn signature (as done in eval_function_call)
-    ID cast_args[1];
-    cast_args[0] = (ID)fixnum(5);
-    ID cast_result = native_func->fn(cast_args, 1);
+    CljObject *cast_args[1];
+    cast_args[0] = (CljObject*)fixnum(5);
+    CljObject *cast_result_obj = native_func->fn(cast_args, 1);
+    ID cast_result = (ID)cast_result_obj;
     
     if (cast_result) {
         CljValue cast_result_val = (CljValue)cast_result;
