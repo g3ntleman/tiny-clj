@@ -66,9 +66,9 @@ TEST(test_macro_expander_debug_isolated) {
     TEST_ASSERT_NOT_NULL(parsed);
     
 #ifdef DEBUG
-    fprintf(stderr, "\n=== MACRO EXPANSION DEBUG TEST (isolated) ===\n");
+    // Debug output removed for silent test execution
     const char *parsed_ast = print_ast((CljObject*)parsed);
-    fprintf(stderr, "[DEBUG] Parsed form: %s\n", parsed_ast);
+    (void)parsed_ast; // Suppress unused variable warning
     free((void*)parsed_ast);
 #endif
     
@@ -77,8 +77,9 @@ TEST(test_macro_expander_debug_isolated) {
     TEST_ASSERT_NOT_NULL(canonicalized);
     
 #ifdef DEBUG
+    // Debug output removed for silent test execution
     const char *canon_ast = print_ast((CljObject*)canonicalized);
-    fprintf(stderr, "[DEBUG] Canonicalized form: %s\n", canon_ast);
+    (void)canon_ast; // Suppress unused variable warning
     free((void*)canon_ast);
     
     // Check if first element is a symbol or immediate
@@ -87,18 +88,17 @@ TEST(test_macro_expander_debug_isolated) {
         if (list && list->first) {
             unsigned char first_tag = TAG(list->first);
             bool is_immediate = IS_IMMEDIATE(list->first);
-            fprintf(stderr, "[DEBUG] First element tag: %d, is_immediate: %d\n", 
-                    first_tag, is_immediate);
+            (void)first_tag; // Suppress unused variable warning
+            (void)is_immediate; // Suppress unused variable warning
             
             if (is_immediate && first_tag != CLJ_SYMBOL) {
-                fprintf(stderr, "[DEBUG] ERROR: First element is immediate value, not a symbol!\n");
+                // Debug output removed for silent test execution
                 const char *first_ast = print_ast((CljObject*)list->first);
-                fprintf(stderr, "[DEBUG] First element AST: %s\n", first_ast);
+                (void)first_ast; // Suppress unused variable warning
                 free((void*)first_ast);
             }
         }
     }
-    fprintf(stderr, "=== END DEBUG TEST ===\n\n");
 #endif
     
     // Cleanup
@@ -135,9 +135,9 @@ TEST(test_macro_expander_debug_with_macro) {
     TEST_ASSERT_NOT_NULL(parsed);
     
 #ifdef DEBUG
-    fprintf(stderr, "\n=== MACRO EXPANSION WITH MACRO FUNCTION ===\n");
+    // Debug output removed for silent test execution
     const char *parsed_ast = print_ast((CljObject*)parsed);
-    fprintf(stderr, "[DEBUG] Original parsed form: %s\n", parsed_ast);
+    (void)parsed_ast; // Suppress unused variable warning
     free((void*)parsed_ast);
 #endif
     
@@ -145,14 +145,12 @@ TEST(test_macro_expander_debug_with_macro) {
     ID canonicalized = canonicalize_ast(parsed, st);
     
 #ifdef DEBUG
+    // Debug output removed for silent test execution
     if (canonicalized) {
         const char *canon_ast = print_ast((CljObject*)canonicalized);
-        fprintf(stderr, "[DEBUG] After canonicalization: %s\n", canon_ast);
+        (void)canon_ast; // Suppress unused variable warning
         free((void*)canon_ast);
-    } else {
-        fprintf(stderr, "[DEBUG] Canonicalization returned NULL\n");
     }
-    fprintf(stderr, "=== END MACRO FUNCTION TEST ===\n\n");
 #endif
     
     // Cleanup

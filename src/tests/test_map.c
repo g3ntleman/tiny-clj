@@ -1344,3 +1344,140 @@ TEST(test_map_assoc_multiple_assign_hypothesis) {
     // Cleanup
     RELEASE(map);
 }
+
+// ============================================================================
+// Tests for embedded array functionality
+// ============================================================================
+
+TEST(test_embedded_array_single_malloc) {
+    WITH_AUTORELEASE_POOL({
+        // Create map with embedded array
+        CljMap *map = make_map(4);
+        
+        // Verify embedded array is accessible
+        TEST_ASSERT_NOT_NULL(map->data);
+        TEST_ASSERT_EQUAL(4, map->capacity);
+        TEST_ASSERT_EQUAL(0, map->count);
+        
+        // Add entries to test embedded array
+        map = map_assoc(map, fixnum(1), fixnum(10));
+        map = map_assoc(map, fixnum(2), fixnum(20));
+        
+        // Verify entries in embedded array
+        CljValue val1 = map_get((CljMap*)map, fixnum(1), NULL);
+        CljValue val2 = map_get((CljMap*)map, fixnum(2), NULL);
+        TEST_ASSERT_NOT_NULL(val1);
+        TEST_ASSERT_NOT_NULL(val2);
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
+        TEST_ASSERT_EQUAL_INT(20, as_fixnum(val2));
+    });
+}
+
+TEST(test_embedded_array_memory_efficiency) {
+    WITH_AUTORELEASE_POOL({
+        // Create multiple maps to test memory efficiency
+        CljMap *map1 = make_map(2);
+        CljMap *map2 = make_map(4);
+        CljMap *map3 = make_map(8);
+        
+        // Add entries to each map
+        map1 = map_assoc(map1, fixnum(1), fixnum(10));
+        map2 = map_assoc(map2, fixnum(2), fixnum(20));
+        map3 = map_assoc(map3, fixnum(3), fixnum(30));
+        
+        // Verify all maps work independently
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map1, fixnum(1), NULL));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map2, fixnum(2), NULL));
+        TEST_ASSERT_NOT_NULL(map_get((CljMap*)map3, fixnum(3), NULL));
+        
+        // Verify embedded arrays are separate
+        TEST_ASSERT_NOT_EQUAL(map1->data, map2->data);
+        TEST_ASSERT_NOT_EQUAL(map2->data, map3->data);
+        TEST_ASSERT_NOT_EQUAL(map1->data, map3->data);
+    });
+}
+
+TEST(test_embedded_array_cow) {
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = make_map(4);
+        map = map_assoc(map, fixnum(1), fixnum(10));
+        
+        // Simulate sharing (RC=2)
+        RETAIN(map);
+        TEST_ASSERT_EQUAL(2, map->base.rc);
+        
+        // COW operation should create new map with embedded array
+        CljMap *new_map = map_assoc(map, fixnum(2), fixnum(20));
+        
+        // Verify new map has embedded array
+        TEST_ASSERT_NOT_NULL(new_map->data);
+        TEST_ASSERT_EQUAL(4, new_map->capacity);
+        TEST_ASSERT_EQUAL(2, new_map->count);
+        
+        // Verify entries in new map
+        CljValue val1 = map_get(new_map, fixnum(1), NULL);
+        CljValue val2 = map_get(new_map, fixnum(2), NULL);
+        TEST_ASSERT_NOT_NULL(val1);
+        TEST_ASSERT_NOT_NULL(val2);
+        TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1));
+        TEST_ASSERT_EQUAL_INT(20, as_fixnum(val2));
+        
+        // Verify original unchanged
+        TEST_ASSERT_EQUAL(1, map->count);
+        TEST_ASSERT_NULL(map_get((CljMap*)map, fixnum(2), NULL));
+        
+        RELEASE(map);  // Cleanup
+    });
+}
+
+TEST(test_embedded_array_capacity_growth) {
+    WITH_AUTORELEASE_POOL({
+        CljMap *map = make_map(2);  // Small capacity
+        
+        // Fill initial capacity
+        map = map_assoc(map, fixnum(1), fixnum(10));
+        map = map_assoc(map, fixnum(2), fixnum(20));
+        
+        // Simulate sharing to trigger COW with growth
+        RETAIN(map);
+        
+        // Add more entries - should trigger COW with capacity growth
+        CljMap *new_map = map_assoc(map, fixnum(3), fixnum(30));
+        
+        // Verify new map has larger capacity
+        TEST_ASSERT_TRUE(new_map->capacity > map->capacity);
+        
+        // Verify all entries exist in new map
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(1), NULL));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(2), NULL));
+        TEST_ASSERT_NOT_NULL(map_get(new_map, fixnum(3), NULL));
+        
+        RELEASE(map);  // Cleanup
+    });
+}
+
+TEST(test_embedded_array_performance) {
+    WITH_AUTORELEASE_POOL({
+        CljMap *env = make_map(4);
+        
+        // Simulate loop pattern with embedded arrays
+        for (int i = 0; i < 50; i++) {
+            env = AUTORELEASE(map_assoc(env, fixnum(i), fixnum(i * 10)));
+            
+            // RC should stay 1 (in-place optimization)
+            TEST_ASSERT_EQUAL(1, env->base.rc);
+            
+            // Performance check every 10 iterations
+            if (i % 10 == 0) {
+                // RC should stay 1 (in-place optimization)
+                TEST_ASSERT_EQUAL(1, env->base.rc);
+            }
+        }
+        
+        // Verify final state
+        TEST_ASSERT_EQUAL(50, env->count);
+        CljValue val25 = map_get((CljMap*)env, fixnum(25), NULL);
+        TEST_ASSERT_NOT_NULL(val25);
+        TEST_ASSERT_EQUAL_INT(250, as_fixnum(val25));
+    });
+}

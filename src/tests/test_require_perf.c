@@ -13,7 +13,7 @@ TEST(test_require_clojure_string_time) {
     
     // Test: (time (require 'clojure.string)) - measure load time using Clojure's time function
     // time prints the elapsed time and returns the result
-    fprintf(stderr, "\n[PERF] Measuring require 'clojure.string with (time):\n");
+    // Performance output removed for silent test execution
     CljObject *result = eval_string("(time (require 'clojure.string))", g_test_eval_state);
     (void)result; // require returns nil, time returns the result
     
@@ -33,7 +33,7 @@ TEST(test_require_clojure_string_performance) {
     set_suppress_time_output(false);
     
     // Measure require time multiple times
-    fprintf(stderr, "\n[PERF] Measuring require 'clojure.string load time (5 runs):\n");
+    // Performance output removed for silent test execution
     for (int i = 0; i < 5; i++) {
         // Use (time) to measure - output will show elapsed time
         CljObject *result = eval_string("(time (require 'clojure.string))", g_test_eval_state);
@@ -69,10 +69,11 @@ TEST(test_require_clojure_string_multiple_times) {
     double total = 0;
     for (int i = 0; i < 5; i++) {
         total += times[i];
-        fprintf(stderr, "[PERF] require #%d: %.2f ms\n", i+1, times[i]);
+        // Performance output removed for silent test execution
     }
     double avg = total / 5.0;
-    fprintf(stderr, "[PERF] Average require time: %.2f ms\n", avg);
+    (void)avg; // Suppress unused variable warning
+    // Performance output removed for silent test execution
     
     // Test passes
     TEST_ASSERT_TRUE(true);

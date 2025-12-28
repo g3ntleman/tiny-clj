@@ -317,8 +317,9 @@ set_target_properties(tiny-clj-esp32-repl PROPERTIES
 # Unity Test Framework (central runner with separate test files)
 add_executable(unit-tests
     ${SOURCES}
+    subjective-c/tests/test_runner.c
     src/tests/unity_test_runner.c
-    src/tests/test_registry.c
+    subjective-c/tests/test_registry.c
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
@@ -373,7 +374,14 @@ add_executable(unit-tests
     src/platform_macos.c
     src/line_editor.c
 )
+target_compile_definitions(unit-tests PRIVATE TINY_CLJ_TEST_RUNNER)
 target_link_libraries(unit-tests PRIVATE subjective-c)
+target_include_directories(unit-tests
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/subjective-c/tests
+        ${CMAKE_SOURCE_DIR}/subjective-c
+        ${CMAKE_SOURCE_DIR}
+)
 
 # Ensure subjective-c library is compiled with same DEBUG flags as unit-tests
 # This is critical: exception.c must use DEBUG to match CLJException struct size
@@ -469,7 +477,7 @@ endif()
 # Normalize test file paths in Unity-Ausgabe:
 # Ersetze das Projekt-Wurzelverzeichnis in __FILE__ durch einen relativen Pfad,
 # damit Test-Dateinamen ohne absolute Prefixe erscheinen.
-target_compile_options(unit-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=")
+target_compile_options(unit-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/=" "-DTINY_CLJ_TEST_RUNNER")
 
 # Copy-on-Write Assumptions Tests are now integrated into cow_tests.c
 

@@ -235,6 +235,67 @@ RELEASE(vec);  // Or AUTORELEASE(vec) in tests
 CljValue num = make_fixnum(42);  // No RELEASE() needed
 ```
 
+## `_inplace` Functions for COW Optimizations
+
+**Problem**: Functions like `map_assoc()`, `vector_conj()`, etc. return `AUTORELEASE(obj)`. When the caller uses `ASSIGN()` or `RETAIN()`, the reference count increases and COW optimizations (`rc == 1` check) fail.
+
+**Solution**: Use `_inplace` functions for long-lived variables to maintain `rc=1` for optimal COW behavior.
+
+### Available `_inplace` Functions
+
+**Maps:**
+- `map_assoc_inplace(CljMap **map_slot, ID key, ID value)`
+- `map_remove_inplace(CljMap **map_slot, ID key)`
+
+**Vectors:**
+- `vector_conj_inplace(CljVector **vec_slot, ID item)`
+- `vector_assoc_inplace(CljVector **vec_slot, unsigned int index, ID value)`
+- `vector_insert_at_inplace(CljVector **vec_slot, unsigned int index, ID item)`
+- `vector_remove_at_inplace(CljVector **vec_slot, unsigned int index)`
+- `vector_pop_inplace(CljVector **vec_slot)`
+
+### Usage Pattern
+
+**Before (Problem - RC increases):**
+```c
+CljVector *vec = make_vector(10, CLJ_VECTOR);
+ASSIGN(vec, vector_conj(vec, item));  // rc becomes 2 → COW fails
+```
+
+**After (Solution - RC stays 1):**
+```c
+CljVector *vec = make_vector(10, CLJ_VECTOR);
+vector_conj_inplace(&vec, item);  // rc stays 1 → COW works!
+```
+
+### Best Practices
+
+1. **For long-lived variables**: Use `_inplace` functions
+   ```c
+   CljVector *stack = make_vector(100, CLJ_VECTOR);
+   vector_conj_inplace(&stack, item1);  // rc stays 1
+   vector_conj_inplace(&stack, item2);  // rc stays 1, COW works
+   vector_pop_inplace(&stack);  // Removes item2, rc stays 1
+   ```
+
+2. **In loops**: `_inplace` for performance
+   ```c
+   CljVector *result = make_vector(1000, CLJ_VECTOR);
+   for (int i = 0; i < 1000; i++) {
+       vector_conj_inplace(&result, item(i));  // rc stays 1, in-place possible
+   }
+   ```
+
+3. **Builtin functions**: Use `_inplace` for internal operations
+   - `native_subvec()` uses `vector_conj_inplace()` for better COW behavior
+
+### Memory Management
+
+`_inplace` functions automatically handle memory:
+- If a new object is created (COW), the old object is `RELEASE()`d
+- The pointer in `*slot` is updated to the new object
+- `rc` remains 1 for optimal COW behavior
+
 ## Best Practices Summary
 
 1. **Balance Rule**: Every `RETAIN()` or `make_*()` call must be balanced with `RELEASE()` or `AUTORELEASE()`
@@ -244,6 +305,7 @@ CljValue num = make_fixnum(42);  // No RELEASE() needed
 5. **Production**: Use `RELEASE()` for performance
 6. **API Functions**: Trust that return values are safe to use until pool closes
 7. **Macros**: Always use `RETAIN()`, `RELEASE()`, `AUTORELEASE()`, `ASSIGN()` instead of direct function calls
+8. **COW Optimizations**: Use `_inplace` functions for long-lived variables to maintain `rc=1`
 
 ## Autorelease Pool Management
 

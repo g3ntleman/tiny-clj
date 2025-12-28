@@ -7,7 +7,7 @@
 #include "tests_common.h"
 #include "../event_loop.h"
 #include "../channel.h"
-#include "test_registry.h"
+// test_registry.h is included via tests_common.h (uses subjective-c test infrastructure)
 #include <sys/time.h>
 #include <unistd.h>
 
