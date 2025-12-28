@@ -41,8 +41,37 @@
 #include "../strings.h"
 #include "../tiny_clj.h"
 
-// Test Registry
-#include "test_registry.h"
+// Test Registry - use subjective-c test infrastructure
+#include <subjective-c/tests/test_registry.h>
+
+// Compatibility aliases for tiny-clj tests
+#define test_registry_add subjective_c_test_registry_add
+#define test_registry_add_with_group(name, fn, group) \
+    subjective_c_test_registry_add_with_file_info(name, fn, group, __FILE__, __LINE__)
+#define test_registry_add_with_file_info subjective_c_test_registry_add_with_file_info
+#define test_registry_find subjective_c_test_registry_find
+#define test_registry_find_by_qualified_name subjective_c_test_registry_find_by_qualified_name
+#define test_registry_find_by_pattern subjective_c_test_registry_find_by_pattern
+#define test_registry_get_all subjective_c_test_registry_entries
+#define test_registry_get_by_group subjective_c_test_registry_get_by_group
+#define test_registry_list_all subjective_c_test_registry_list_all
+#define test_registry_list_groups subjective_c_test_registry_list_groups
+#define test_extract_filename_from_path subjective_c_test_extract_filename_from_path
+#define test_name_matches_pattern subjective_c_test_name_matches_pattern
+
+// Compatibility typedef with field mapping
+typedef struct {
+    const char *name;
+    const char *qualified_name;
+    void (*func)(void);  // Maps to fn in SubjectiveCTestEntry
+    const char *group;
+    const char *file;
+    int line;
+} Test;
+typedef void (*TestFunc)(void);
+
+// Compatibility macro to access func field
+#define TEST_GET_FUNC(entry) ((TestFunc)((SubjectiveCTestEntry*)(entry))->fn)
 
 // Global test EvalState (available in all tests)
 extern EvalState* g_test_eval_state;
@@ -58,38 +87,18 @@ extern EvalState* test_get_eval_state(void);
         test_registry_add_with_group(#func, func, "test"); \
     }
 
-// Simple TEST macro that defines and registers a test function
-// Automatically wraps test in WITH_AUTORELEASE_POOL for memory management
-// Extracts filename from __FILE__ to use as group name
-// Stores file path and line number for Unity error reporting
+// TEST macro uses subjective-c test infrastructure (defined in test_registry.h)
+// It automatically extracts filename from __FILE__ to use as group name
+// and stores file path and line number for Unity error reporting
 // Note: The global variable g_test_eval_state (or st via #define) is available in all tests
-// Note: __attribute__((used)) prevents dead-strip from removing these functions
-#define TEST(name) \
-    static void name##_body(void); \
-    void name(void) { \
-        WITH_AUTORELEASE_POOL({ \
-            name##_body(); \
-        }); \
-    } \
-    static void register_##name(void) __attribute__((constructor, used)); \
-    static void register_##name(void) { \
-        char *filename = test_extract_filename_from_path(__FILE__); \
-        if (filename) { \
-            test_registry_add_with_file_info(#name, name, filename, __FILE__, __LINE__); \
-            free(filename); \
-        } \
-    } \
-    static void name##_body(void)
 
 // TEST_SHARED macro for tests that can share clojure.core state (read-only tests)
 // These tests are batched together with only one setUp/tearDown per batch
 // Use for tests that don't define new functions/vars via defn/def
 #define TEST_SHARED(name) \
-    static void name##_body(void); \
-    void name(void) { \
-        WITH_AUTORELEASE_POOL({ \
-            name##_body(); \
-        }); \
+    static void name##_impl(void); \
+    static void name(void) { \
+        WITH_AUTORELEASE_POOL({ name##_impl(); }); \
     } \
     static void register_##name(void) __attribute__((constructor, used)); \
     static void register_##name(void) { \
@@ -101,7 +110,7 @@ extern EvalState* test_get_eval_state(void);
             free(filename); \
         } \
     } \
-    static void name##_body(void)
+    static void name##_impl(void)
 
 // ============================================================================
 // HELPER FUNCTIONS FOR COMMON TEST PATTERNS

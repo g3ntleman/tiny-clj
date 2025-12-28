@@ -108,15 +108,30 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   int expr_count = 0;
   int success_count = 0;
   
-  // Parse and evaluate all expressions in the source with TRY/CATCH
-  while (!reader_is_eof(&reader)) {
-    reader_skip_all(&reader);
-    if (reader_is_eof(&reader)) break;
-    
+  // Wrap entire parsing loop in TRY/CATCH to catch any unhandled ParseErrors
+  TRY {
+    // Parse and evaluate all expressions in the source with TRY/CATCH
+    while (!reader_is_eof(&reader)) {
+      reader_skip_all(&reader);
+      if (reader_is_eof(&reader)) break;
+      
 #ifdef PROFILE_STARTUP
-    clock_t parse_start = clock();
+      clock_t parse_start = clock();
 #endif
-    CljValue form = value_by_parsing_expr(&reader, st);
+      CljValue form;
+      TRY {
+        form = value_by_parsing_expr(&reader, st);
+      } CATCH(ex) {
+        // ParseError during parsing - log and continue to next expression
+        if (ex) {
+          if (!g_core_quiet) {
+            fprintf(stderr, "[%s] ParseError at form #%d: %s - %s\n",
+                    label, expr_count + 1, ex->type, ex->message);
+          }
+        }
+        expr_count++;
+        continue;  // Skip this expression and continue with next
+      } END_TRY
 #ifdef PROFILE_STARTUP
     g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
 #endif
@@ -206,7 +221,18 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     // value_by_parsing_expr returns AUTORELEASE object
     
     expr_count++;
-  }
+    }
+  } CATCH(ex) {
+    // ParseError or other exception during clojure.core loading
+    // Log but don't fail - some expressions may have loaded successfully
+    if (ex) {
+      if (!g_core_quiet) {
+        fprintf(stderr, "Warning: Exception during clojure.core loading: %s - %s\n", 
+                ex->type, ex->message);
+      }
+    }
+    // Continue - return success if at least some expressions loaded
+  } END_TRY
   
   // CRITICAL: Keep st->current_ns pointing to target_ns until after verification
   // Don't restore original_ns here - let load_clojure_core handle it after verification

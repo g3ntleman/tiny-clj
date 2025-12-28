@@ -113,7 +113,7 @@ static void write_baseline_results(const char *filename,
     
     FILE *fp = fopen(filename, "w");
     if (!fp) {
-        fprintf(stderr, "Warning: Could not open %s for writing\n", filename);
+        // File open failed - silently return (no fprintf output in tests)
         return;
     }
     
@@ -156,10 +156,7 @@ TEST(test_let_creation_time_baseline) {
         TEST_ASSERT_TRUE(times[1] > 0);
         TEST_ASSERT_TRUE(times[2] > 0);
         
-        printf("\n[Baseline] let-Erstellungszeit:\n");
-        printf("  10 Iterationen:  %.3f ms\n", times[0]);
-        printf("  100 Iterationen: %.3f ms\n", times[1]);
-        printf("  1000 Iterationen: %.3f ms\n", times[2]);
+        // Performance output removed for silent test execution
     });
 }
 
@@ -182,10 +179,7 @@ TEST(test_nested_let_resolution_time_baseline) {
             TEST_ASSERT_TRUE(times[i] > 0);
         }
         
-        printf("\n[Baseline] Symbol-Auflösungszeit (verschachtelte let-Blöcke):\n");
-        for (int i = 0; i < max_depth; i++) {
-            printf("  Tiefe %2d: %.3f ms\n", i + 1, times[i]);
-        }
+        // Performance output removed for silent test execution
     });
 }
 
@@ -223,8 +217,7 @@ TEST(test_let_performance_baseline_complete) {
                               nested_resolution_times,
                               max_depth);
         
-        printf("\n[Performance] Messung abgeschlossen.\n");
-        printf("Ergebnisse gespeichert in: %s\n", filename);
+        // Performance output removed for silent test execution
         
         // Verify file was created
         FILE *fp = fopen(filename, "r");

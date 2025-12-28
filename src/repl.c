@@ -462,8 +462,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
         } END_TRY
     });
     // Verwende die geladene History
+    // line_editor_set_history_from_vector ruft clj_conj auf, das AUTORELEASE verwendet
     if (history_vec && TAG(history_vec) == CLJ_VECTOR) {
-        line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
+        WITH_AUTORELEASE_POOL({
+            line_editor_set_history_from_vector(editor, (CljVector*)history_vec);
+        });
         RELEASE(history_vec);  // Release nach Verwendung
     } else {
         line_editor_clear_history(editor);

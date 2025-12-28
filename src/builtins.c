@@ -377,23 +377,22 @@ ID native_subvec(ID *args, unsigned int argc) {
         return make_vector(0, CLJ_VECTOR);  // Returns empty-vector singleton (no memory management needed)
     }
 
-    // Create new vector and add elements using vector_conj
-    ID new_vec_obj = make_vector(subvec_count, CLJ_VECTOR);
-    CljVector *new_vec = as_vector(new_vec_obj);
+    // Create new vector and add elements using vector_conj_inplace
+    CljVector *new_vec = make_vector(subvec_count, CLJ_VECTOR);
 
-    // Copy elements from start to end using vector_conj
+    // Copy elements from start to end using vector_conj_inplace
+    // This keeps rc=1 for COW optimizations
     for (int i = 0; i < subvec_count; i++) {
         ID elem = vector_nth(v, start + i);
         if (elem) {
-            // vector_conj retains the element, so we need to retain it first
-            new_vec = vector_conj(new_vec, RETAIN(elem));
+            // vector_conj_inplace retains the element internally
+            vector_conj_inplace(&new_vec, RETAIN(elem));
         } else {
-            new_vec = vector_conj(new_vec, NULL);  // nil elements
+            vector_conj_inplace(&new_vec, NULL);  // nil elements
         }
-        new_vec_obj = (CljValue)new_vec;
     }
 
-    return AUTORELEASE(new_vec_obj);
+    return AUTORELEASE(new_vec);
 }
 
 // Forward declaration
@@ -2207,7 +2206,6 @@ ID native_source(ID *args, unsigned int argc) {
     
     ID arg = args[0];
     if (!arg) {
-        printf("Source not available\n");
         return NULL;
     }
     
@@ -2239,14 +2237,11 @@ ID native_source(ID *args, unsigned int argc) {
             strings_set_special_form_rendering(previous_mode);
 
             if (!params_repr || !body_repr) {
-                printf("Source not available\n");
                 return NULL;
             }
 
             RETAIN(params_repr);
             RETAIN(body_repr);
-
-            printf("(fn %s %s)\n", string_data(params_repr), string_data(body_repr));
 
             RELEASE(body_repr);
             RELEASE(params_repr);
@@ -2254,15 +2249,7 @@ ID native_source(ID *args, unsigned int argc) {
         }
     }
     
-    // Otherwise, print the argument as-is
-    ID args_str[] = { arg };
-    CljString *result = native_str(args_str, 1);
-    if (result) {
-        printf("%s\n", string_data(result));
-        RELEASE(result);
-    } else {
-        printf("Source not available\n");
-    }
+    // Otherwise, return NULL (source not available)
     return NULL;
 }
 
