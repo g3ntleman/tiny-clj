@@ -336,9 +336,9 @@ CljObject *autorelease(CljObject *v) {
         // In release builds, silently ignore (object will be leaked, but program continues)
 #ifdef DEBUG
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
-                "autorelease() called without active autorelease pool! Object %p (type=%d) will not be automatically freed. "
+                "autorelease() called without active autorelease pool! Object %p (type=%s) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
-                v, type_val);
+                v, clj_type_name(type_val));
 #else
         // In release builds, just return the object (it will be leaked)
         // This prevents crashes in production code
