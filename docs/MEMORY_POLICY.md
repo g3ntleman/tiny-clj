@@ -24,9 +24,6 @@ CljValue num = make_fixnum(42);        // No RELEASE() needed
 CljValue ch = make_char('A');          // No RELEASE() needed  
 CljValue flag = make_special(SPECIAL_TRUE); // No RELEASE() needed
 CljValue nil_val = NULL;               // No RELEASE() needed
-
-// ✅ CORRECT: RELEASE() macro handles immediate values automatically
-RELEASE((CljObject*)value);  // Safe for both heap objects and immediates
 ```
 
 #### Benefits of Immediate Values:
@@ -41,134 +38,72 @@ RELEASE((CljObject*)value);  // Safe for both heap objects and immediates
 - **`release(obj)`** decrements reference count and frees when `rc=0`
 - **`autorelease(obj)`** adds object to autorelease pool for later cleanup
 
+#### Balance Rule
+**Every `RETAIN()` or `make_*()` call must be balanced with a `RELEASE()` or `AUTORELEASE()` call:**
+- Objects created with `make_*()` have `rc=1` and must be released or autoreleased
+- Objects retained with `RETAIN()` must be released or autoreleased
+- This ensures proper memory management and prevents leaks
+
 ### 2. Memory Management Patterns
+
+**Important:** The `TEST()` macro already creates an autorelease pool automatically. You do **NOT** need to wrap test code with `WITH_AUTORELEASE_POOL`.
 
 #### Test Code Pattern (Comfort & Readability)
 ```c
-// Use autorelease() for cleaner, more readable test code
-CljObject *vec = autorelease(make_vector(3, 1));
-CljObject *list = autorelease(make_list());
-// Objects automatically freed at test end - no manual cleanup needed
-```
-
-**Important:** The `TEST()` macro already creates an autorelease pool automatically. You do **NOT** need to wrap test code with `WITH_AUTORELEASE_POOL`:
-
-```c
 // ✅ CORRECT: TEST macro provides autorelease pool automatically
 TEST(test_something) {
-    CljObject *vec = autorelease(make_vector(3, 1));
-    CljObject *list = autorelease(make_list());
+    ID vec = AUTORELEASE(make_vector(3, 1));
+    ID list = AUTORELEASE(make_list());
     // Objects automatically freed - no manual cleanup needed
 }
 
 // ❌ REDUNDANT: Don't wrap TEST code with WITH_AUTORELEASE_POOL
 TEST(test_something) {
     WITH_AUTORELEASE_POOL({  // ❌ UNNECESSARY: TEST already provides pool
-        CljObject *vec = autorelease(make_vector(3, 1));
-        CljObject *list = autorelease(make_list());
+        ID vec = AUTORELEASE(make_vector(3, 1));
+        ID list = AUTORELEASE(make_list());
     });
 }
 ```
 
 #### Production Code Pattern (Performance)
 ```c
-// Use explicit release() for performance-critical code
-CljObject *vec = make_vector(3, 1);
-CljObject *list = make_list();
+// Use explicit RELEASE() for performance-critical code
+ID vec = make_vector(3, 1);
+ID list = make_list();
 // ... use objects ...
-release(vec);
-release(list);
+RELEASE(vec);
+RELEASE(list);
 ```
 
-### 3. When to Use Each Pattern
+**When to use:**
+- **`AUTORELEASE()`**: Tests, debugging, prototyping, non-performance-critical code
+- **`RELEASE()`**: Production, performance-critical code, real-time systems, objects not returned as values
 
-#### Use `AUTORELEASE()` in Tests:
-- ✅ **Test code**: Less verbose, cleaner syntax
-- ✅ **Debugging**: Automatic cleanup, fewer manual calls
-- ✅ **Prototyping**: Quick iteration without cleanup concerns
-- ✅ **Non-performance-critical code**: Convenience over speed
-- ✅ **Readability**: More readable test code with less cleanup boilerplate
-- ✅ **Maintainability**: Easier to write and maintain test code
-- ✅ **Compatibility**: Funktioniert mit `setjmp`/`longjmp` (wie Foundation pre-ARC)
+### 3. Object Lifecycle Rules
 
-#### Use `RELEASE()` in Production:
-- ✅ **Performance-critical code**: No autorelease pool overhead
-- ✅ **Real-time systems**: Predictable memory timing
-- ✅ **Long-running processes**: Explicit control over object lifetime
-- ✅ **Memory-constrained environments**: Immediate cleanup
-- ✅ **Objects not returned as values**: Use `RELEASE()` when result is not used as return value
-- ✅ **Compatibility**: Funktioniert mit `setjmp`/`longjmp` exception handling
+**Objects that permanently store references to other objects must call `RETAIN()` on those objects and use `ASSIGN()` for updates:**
 
-### 4. Object Lifecycle Rules
-
-#### Creating Objects:
 ```c
-// Correct: Object starts with rc=1
-CljObject *obj = make_vector(10, 1);
-```
-
-#### Storing in Data Structures:
-```c
-// If storing in another object's data structure:
+// ✅ CORRECT: Use RETAIN when storing objects permanently
 data->items[i] = obj;
-retain(obj);  // Increment ref count for the data structure's ownership
+RETAIN(obj);  // Increment ref count for the data structure's ownership
+
+// ✅ CORRECT: Use ASSIGN for safe updates (handles RETAIN/RELEASE automatically)
+ASSIGN(data->items[i], new_obj);  // Old value released, new value retained automatically
 ```
 
-#### Returning Objects:
+### 4. Common Anti-Patterns
+
 ```c
-// If returning from function (caller gets ownership):
-return obj;  // Caller must release()
-```
+// ❌ WRONG: Double release, forgetting to release, using AUTORELEASE in production loops
+ID obj = make_vector(3, 1);
+RELEASE(obj);
+RELEASE(obj);  // ❌ CRASH: Double free
 
-#### Temporary Objects:
-```c
-// For temporary objects in tests (improved readability):
-CljObject *temp = autorelease(make_list());
-// Automatically cleaned up - no manual release() needed
-```
-
-### 5. Common Anti-Patterns
-
-#### ❌ Don't Do This:
-```c
-// Double release
-CljObject *obj = make_vector(3, 1);
-release(obj);
-release(obj);  // ❌ CRASH: Double free
-
-// Forgetting to release
-CljObject *obj = make_vector(3, 1);
-// ... use obj ...
-// ❌ LEAK: Never released
-
-// Using autorelease in production loops
-for (int i = 0; i < 1000000; i++) {
-    CljObject *temp = autorelease(make_vector(10, 1));  // ❌ SLOW: Pool overhead
-}
-```
-
-#### ✅ Do This Instead:
-```c
-// Correct release pattern
-CljObject *obj = make_vector(3, 1);
-release(obj);
-
-// Test pattern with autorelease (improved readability)
-CljObject *obj = autorelease(make_vector(3, 1));
-// No manual cleanup needed - automatically freed
-
-// Production loop pattern
-for (int i = 0; i < 1000000; i++) {
-    CljObject *temp = make_vector(10, 1);
-    // ... use temp ...
-    release(temp);  // ✅ FAST: Immediate cleanup
-}
-
-// Production pattern for non-return values
-CljObject *int_obj = make_int(i);
-tail_data->head = int_obj;
-// ... use int_obj ...
-release(int_obj);  // ✅ FAST: No autorelease pool overhead
+// ✅ CORRECT: Balance every make_*() with RELEASE() or AUTORELEASE()
+ID obj = make_vector(3, 1);
+RELEASE(obj);  // Or AUTORELEASE(obj) in tests
 ```
 
 ## Memory Profiling
@@ -206,91 +141,16 @@ This ensures consistent memory profiling and better tracking of all memory opera
 
 ### RETAIN/RELEASE/AUTORELEASE Macros - NULL and Immediate Value Safety
 
-**Important:** The `RETAIN()`, `RELEASE()`, and `AUTORELEASE()` macros **do NOT require NULL checks**. They safely handle NULL values and immediate values automatically.
+**Important:** The `RETAIN()`, `RELEASE()`, and `AUTORELEASE()` macros **do NOT require NULL checks or immediate value checks**. They safely handle NULL values and immediate values automatically.
 
-#### NULL Safety:
 ```c
-// ✅ CORRECT: No NULL check needed
-CljObject *obj = NULL;
-RETAIN(obj);      // Safe - no operation performed on NULL
-RELEASE(obj);     // Safe - no operation performed on NULL
-AUTORELEASE(obj); // Safe - no operation performed on NULL
-
-// ❌ UNNECESSARY: Manual NULL check
-if (obj != NULL) {
-    RETAIN(obj);  // ❌ Unnecessary check - RETAIN handles NULL safely
-}
-```
-
-#### Immediate Value Safety:
-```c
-// ✅ CORRECT: No immediate value check needed
+// ✅ CORRECT: No checks needed
+ID obj = NULL;
 CljValue num = make_fixnum(42);
-CljValue ch = make_char('A');
-RETAIN(num);      // Safe - IS_IMMEDIATE check inside macro
-RELEASE(ch);      // Safe - IS_IMMEDIATE check inside macro
-AUTORELEASE(num); // Safe - IS_IMMEDIATE check inside macro
-
-// ❌ UNNECESSARY: Manual immediate value check
-if (!IS_IMMEDIATE(value)) {
-    RETAIN(value);  // ❌ Unnecessary check - RETAIN handles immediates safely
-}
+RETAIN(obj);      // Safe - handles NULL automatically
+RELEASE(num);     // Safe - handles immediate values automatically
+AUTORELEASE(obj); // Safe - handles NULL automatically
 ```
-
-#### How It Works:
-The macros internally check for immediate values, and the underlying functions (`retain()`, `release()`, `autorelease()`) safely handle NULL:
-```c
-#define RETAIN(obj) ({ \
-    ID _id = (obj); \
-    if (!IS_IMMEDIATE(_id)) { \
-        CljObject* _tmp = (CljObject*)_id; \
-        retain(_tmp);  // retain() safely handles NULL
-    } \
-    _id; \
-})
-
-#define RELEASE(obj) ({ \
-    ID _id = (obj); \
-    if (!IS_IMMEDIATE(_id)) { \
-        CljObject* _tmp = (CljObject*)_id; \
-        release(_tmp);  // release() safely handles NULL
-    } \
-    (CljObject*)_id; \
-})
-
-#define AUTORELEASE(obj) ({ \
-    ID _id = (obj); \
-    if (!IS_IMMEDIATE(_id)) { \
-        CljObject* _tmp = (CljObject*)_id; \
-        autorelease(_tmp);  // autorelease() safely handles NULL
-    } \
-    (CljObject*)_id; \
-})
-```
-
-The underlying functions have built-in NULL safety:
-```c
-void retain(CljObject *v) {
-    if (!v) return;  // NULL-safe
-    // ... rest of implementation
-}
-
-void release(CljObject *v) {
-    if (!v) return;  // NULL-safe
-    // ... rest of implementation
-}
-
-CljObject *autorelease(CljObject *v) {
-    if (!v) return NULL;  // NULL-safe
-    // ... rest of implementation
-}
-```
-
-**Key Benefits:**
-- **No NULL checks needed** - Macros handle NULL safely
-- **No immediate value checks needed** - Macros check `IS_IMMEDIATE()` internally
-- **Cleaner code** - Less boilerplate, more readable
-- **Consistent safety** - Same behavior across all memory management macros
 
 ### RETAIN/RELEASE Macros Return Values
 
@@ -298,624 +158,152 @@ CljObject *autorelease(CljObject *v) {
 
 ```c
 // ✅ CORRECT: Compact and fluent
-CljObject* nth2(CljObject *vec, CljObject *idx) {
-    if (!v || i < 0 || i >= v->count) return NULL;
-    return RETAIN(v->data[i]);  // Returns retained object
-}
-
-// ❌ VERBOSE: Don't do this
-CljObject* nth2(CljObject *vec, CljObject *idx) {
-    if (!v || i < 0 || i >= v->count) return NULL;
-    RETAIN(v->data[i]);
-    return v->data[i];  // Unnecessary extra line
-}
+return RETAIN(v->data[i]);  // Returns retained object
 
 // ✅ CORRECT: Fluent chaining
-if (is_mutable) {
-    v->data[i] = (RETAIN(val), val);
-    return RETAIN(vec);  // Both retain and return in one expression
-}
-
-// ✅ CORRECT: Test and assign in one expression
-for (int i = 0; i < count; i++) {
-    CljObject *val = get_value(i);
-    if ((vec->data[i] = RETAIN(val))) {  // Assign and test in one line
-      vec->count++;
-    }
-}
+v->data[i] = (RETAIN(val), val);
 ```
-
-**Macro Definition:**
-```c
-// DEBUG build (with profiling)
-#define RETAIN(obj) ({ \
-    typeof(obj) _tmp = (obj); \
-    memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
-    retain(_tmp); \
-    _tmp; \  // Returns the object
-})
-
-// RELEASE build (optimized)
-#define RETAIN(obj) ({ \
-    typeof(obj) _tmp = (obj); \
-    retain(_tmp); \
-    _tmp; \  // Returns the object
-})
-```
-
-**Benefits:**
-- **Concise code** - One line instead of two
-- **Better readability** - Intent is clearer
-- **Fluent API** - Enables chaining patterns
-- **Consistent style** - Same pattern as `AUTORELEASE()`
 
 ### ASSIGN Macro for Safe Object Assignment
 
-The `ASSIGN(var, new_obj)` macro provides safe object assignment following the classic Objective-C pattern. It handles retain/release operations automatically and prevents common memory management errors.
+The `ASSIGN(var, new_obj)` macro provides safe object assignment following the classic Objective-C pattern. It automatically handles RETAIN/RELEASE operations and NULL checks.
 
-**Note:** ASSIGN is typically used for heap objects (CljObject*), not immediate values (CljValue). For immediate values, direct assignment is sufficient since they don't require reference counting.
+**Note:** ASSIGN is typically used for heap objects (CljObject*), not immediate values (CljValue).
 
-#### Usage Pattern:
 ```c
-CljObject *obj = NULL;
-CljObject *new_obj = make_int(42);
+// ✅ CORRECT: ASSIGN handles everything automatically
+ASSIGN(obj, new_obj);  // Old value released, new value retained
+ASSIGN(obj, NULL);     // Safely releases obj and sets to NULL
 
-// Safe assignment - handles retain/release automatically
-ASSIGN(obj, new_obj);  // obj is now retained, old value (if any) is released
-```
-
-#### What ASSIGN Does:
-1. **Retains the new object** (if not NULL and not immediate)
-2. **Releases the old object** (if not NULL and not immediate) 
-3. **Assigns the new object** to the variable
-4. **Optimizes self-assignment** (skips operations if `new_obj == var`)
-5. **Handles NULL safely** in both `var` and `new_obj` parameters
-6. **Eliminates need for manual NULL checks** - no need to check if old value exists before releasing
-7. **Eliminates need for manual RELEASE calls** - ASSIGN handles release automatically
-
-#### Classic Objective-C Pattern:
-```c
-// ❌ Manual pattern (error-prone):
-if (old_obj) {
-    release(old_obj);
-}
-if (new_obj) {
-    retain(new_obj);
-}
+// ❌ WRONG: Manual pattern (error-prone)
+if (old_obj) RELEASE(old_obj);
+if (new_obj) RETAIN(new_obj);
 obj = new_obj;
-
-// ✅ ASSIGN macro (safe and concise):
-ASSIGN(obj, new_obj);
 ```
-
-#### Key Benefits - No Manual NULL Checks Needed:
-```c
-// ❌ Unnecessary: Manual NULL check and RELEASE
-if (st->pending_metadata) {
-    RELEASE(st->pending_metadata);
-}
-st->pending_metadata = new_meta;
-RETAIN(new_meta);
-
-// ✅ Correct: ASSIGN handles everything automatically
-ASSIGN(st->pending_metadata, new_meta);
-
-// ❌ Unnecessary: Manual NULL check for cleanup
-if (st->pending_metadata) {
-    RELEASE(st->pending_metadata);
-    st->pending_metadata = NULL;
-}
-
-// ✅ Correct: ASSIGN with NULL safely releases old value
-ASSIGN(st->pending_metadata, NULL);
-```
-
-**Important:** `ASSIGN` automatically handles:
-- **NULL checks** - No need to check if old value exists
-- **RELEASE of old value** - Automatically released if not NULL
-- **RETAIN of new value** - Automatically retained if not NULL
-- **Self-assignment optimization** - Skips operations if assigning to itself
-
-#### Common Use Cases:
-
-**Property-like Assignment:**
-```c
-// Setting instance variables safely
-ASSIGN(self->name, new_name);
-ASSIGN(self->value, new_value);
-```
-
-**Replacing Objects:**
-```c
-CljObject *old_vec = make_vector(3, 1);
-CljObject *new_vec = make_vector(5, 2);
-
-ASSIGN(old_vec, new_vec);  // old_vec now points to new_vec, old data released
-```
-
-**NULL Assignment (Cleanup):**
-```c
-CljObject *obj = make_int(42);
-// ... use obj ...
-ASSIGN(obj, NULL);  // Safely releases obj and sets to NULL
-```
-
-**NULL to NULL Assignment:**
-```c
-CljObject *obj = NULL;
-ASSIGN(obj, NULL);  // Safe no-op - no operations performed
-```
-
-**Self-Assignment Optimization:**
-```c
-CljObject *obj = make_int(42);
-ASSIGN(obj, obj);  // Optimized - no operations performed
-```
-
-#### Macro Definition:
-```c
-#define ASSIGN(var, new_obj) do { \
-    typeof(var) _tmp = (new_obj); \
-    if (_tmp != (var)) { \
-        if (_tmp != NULL) { \
-            memory_hook_trigger(MEMORY_HOOK_RETAIN, _tmp, 0); \
-            retain(_tmp); \
-        } \
-        if ((var) != NULL) { \
-            memory_hook_trigger(MEMORY_HOOK_RELEASE, (var), 0); \
-            release(var); \
-        } \
-        (var) = _tmp; \
-    } \
-} while(0)
-```
-
-#### Benefits:
-- **Memory Safety** - Prevents leaks and double-frees
-- **Self-Assignment Safe** - Optimizes `ASSIGN(obj, obj)` 
-- **NULL Safe** - Handles NULL assignments correctly
-- **Consistent** - Same pattern as classic Objective-C
-- **Profiled** - Integrates with memory profiling system
 
 ## Function Return Value Memory Policy
 
-### When to Use AUTORELEASE
+**Critical Principle:** Functions that return objects are responsible for ensuring the caller can safely use the pointer until the enclosing autorelease pool is closed.
 
-**Critical Principle: AUTORELEASE is only needed when you create an object yourself with `make_*()` functions.**
-
-#### ✅ Use AUTORELEASE for Self-Created Objects
+**Rules:**
+1. **Objects created with `make_*()`** have `rc=1` and must be autoreleased before returning
+2. **Objects from other functions** are already safe to use - just return them
+3. **Only use AUTORELEASE** when you created the object yourself with `make_*()`
 
 ```c
-// ✅ CORRECT: We created the object, so we use AUTORELEASE
+// ✅ CORRECT: We created it, so we use AUTORELEASE
 ID my_function() {
-    CljObject *obj = make_vector(10, 0);  // We created it
+    ID obj = make_vector(10, 0);  // We created it
     return AUTORELEASE(obj);  // Transfer ownership to caller's pool
 }
-```
 
-#### ✅ Do NOT Use AUTORELEASE for Objects from Other Functions
-
-```c
-// ✅ CORRECT: ns_resolve returns a value safe to use in our scope
+// ✅ CORRECT: We didn't create it, just return it
 ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     ID value = ns_resolve(st, symbol);  // We didn't create this
-    if (value) {
-        return value;  // Just return it - no AUTORELEASE needed
-    }
-    return NULL;
-}
-
-// ❌ WRONG: Unnecessary AUTORELEASE/RETAIN
-ID eval_symbol(CljSymbol *symbol, EvalState *st) {
-    ID value = ns_resolve(st, symbol);
-    if (value) {
-        return AUTORELEASE(RETAIN(value));  // ❌ Unnecessary - value is already safe
-    }
-    return NULL;
+    return value;  // No AUTORELEASE needed - already safe
 }
 ```
 
-#### Key Principle
+**Pattern: AUTORELEASE(RETAIN(obj))**
 
-**Inner functions are responsible for ensuring their return values are safe to use in the caller's scope.** The caller should trust this contract and not add unnecessary memory management operations.
-
-#### Examples
+Use when there's a risk that the last strong reference might be lost:
 
 ```c
-// ✅ CORRECT: map_get returns retained value - safe to use
-ID get_from_map(CljMap *map, ID key) {
-    ID value = map_get(map, key);  // map_get ensures value is safe
-    return value;  // No AUTORELEASE needed - we didn't create it
-}
-
-// ✅ CORRECT: ns_resolve returns value safe to use
-ID resolve_symbol(CljSymbol *sym, EvalState *st) {
-    ID resolved = ns_resolve(st, sym);  // ns_resolve ensures value is safe
-    return resolved;  // No AUTORELEASE needed - we didn't create it
-}
-
-// ✅ CORRECT: We create the object, so we use AUTORELEASE
-ID create_and_return() {
-    CljObject *obj = make_list();  // We created it
-    return AUTORELEASE(obj);  // Transfer ownership to caller
+// ✅ CORRECT: Protect against losing the last reference
+ID safe_return(ID obj) {
+    return AUTORELEASE(RETAIN(obj));  // Ensures object survives until pool closes
 }
 ```
-
-#### Memory Management Contract
-
-1. **Functions that create objects** (`make_*()`) return objects with `rc=1` - caller must manage
-2. **Functions that return existing objects** (like `map_get`, `ns_resolve`) ensure their return values are safe to use in the caller's scope
-3. **Callers should trust the contract** - no need to add AUTORELEASE/RETAIN for values returned from other functions
-4. **Only use AUTORELEASE** when you created the object yourself with `make_*()`
 
 ## API Memory Policy
 
-### Public API Functions
+**Function Categories:**
+- **Parse/Eval Functions** (`parse_string`, `eval_parsed`, etc.): Return autoreleased objects - no manual cleanup needed
+- **Object Creation** (`make_vector`, `make_list`, etc.): Return objects with `rc=1` - must be released or autoreleased
+- **Immediate Values** (`make_fixnum`, `make_char`, etc.): No memory management needed
 
-#### Parse Functions
 ```c
-CljObject* parse_string(const char* expr_str, EvalState *eval_state);
-```
-- **Returns**: Autoreleased object
-- **Memory**: Automatically managed by autorelease pool
-- **Usage**: No manual `RELEASE()` needed
+// ✅ CORRECT: API functions return autoreleased objects
+ID result = eval_string(expr, eval_state);
+// No manual cleanup needed
 
-#### Evaluation Functions
-```c
-CljObject* eval_parsed(CljObject *parsed_expr, EvalState *eval_state);
-CljObject* eval_string(const char* expr_str, EvalState *eval_state);
-```
-- **Returns**: Autoreleased object
-- **Memory**: Automatically managed by autorelease pool
-- **Usage**: No manual `RELEASE()` needed
+// ✅ CORRECT: make_*() requires manual management
+ID vec = make_vector(10, 1);
+RELEASE(vec);  // Or AUTORELEASE(vec) in tests
 
-#### Object Creation Functions
-```c
-CljObject* make_vector(int count, int initial_value);
-CljObject* make_list();
-CljObject* make_string(const char* str);
-```
-- **Returns**: Object with `rc=1` (caller must release)
-- **Memory**: Manual management required
-- **Usage**: Must call `release()` when done
-
-#### Immediate Value Functions
-```c
-CljValue make_fixnum(int32_t value);
-CljValue make_char(uint32_t codepoint);
-CljValue make_special(uint8_t special);
-CljValue make_fixed(float value);
-```
-- **Returns**: Immediate value (no memory management needed)
-- **Memory**: No heap allocation, no reference counting
-- **Usage**: No `release()` needed - values are stored directly in pointers
-
-### API Usage Patterns
-
-#### Correct API Usage:
-```c
-// Parse and evaluate (both return autoreleased objects)
-CljObject *parsed = parse_string(expr, eval_state);
-CljObject *result = eval_parsed(parsed, eval_state);
-// No manual cleanup needed - both are autoreleased
-
-// Convenience function (also returns autoreleased object)
-CljObject *result = eval_string(expr, eval_state);
-// No manual cleanup needed - result is autoreleased
-```
-
-#### Object Creation (manual management):
-```c
-// Object creation requires manual release
-CljObject *vec = make_vector(10, 1);
-// ... use vec ...
-release(vec);  // Must release manually
-```
-
-#### Immediate Values (no memory management):
-```c
-// Immediate values - no memory management needed
-CljValue num = make_fixnum(42);        // No RELEASE() needed
-CljValue ch = make_char('A');          // No RELEASE() needed
-CljValue flag = make_special(SPECIAL_TRUE); // No RELEASE() needed
-
-// Mixed usage - check type before releasing
-CljValue value = get_some_value();
-if (!is_immediate(value)) {
-    RELEASE((CljObject*)value);  // Only release heap objects
-}
+// ✅ CORRECT: Immediate values need no management
+CljValue num = make_fixnum(42);  // No RELEASE() needed
 ```
 
 ## Best Practices Summary
 
-1. **API Functions**: Return autoreleased objects (no manual cleanup)
-2. **Object Creation**: Return objects with `rc=1` (manual cleanup required)
-3. **Immediate Values**: No memory management needed - stored directly in pointers
-4. **Tests**: Use `AUTORELEASE()` for convenience and readability
+1. **Balance Rule**: Every `RETAIN()` or `make_*()` call must be balanced with `RELEASE()` or `AUTORELEASE()`
+2. **Data Structures**: Use `RETAIN()` when storing objects, `ASSIGN()` for updates
+3. **Return Values**: Objects created with `make_*()` must be autoreleased before returning
+4. **Tests**: Use `AUTORELEASE()` for convenience
 5. **Production**: Use `RELEASE()` for performance
-6. **Non-return values**: Use `RELEASE()` when object is not returned as function result
-7. **Data Structures**: Use `RETAIN()` when storing objects
-8. **Type Checking**: `RELEASE()` macro handles immediate values automatically - no manual check needed
-9. **Profiling**: Always track memory usage in tests
-10. **Debugging**: Use memory profiler to find leaks
-11. **Trust API Design**: Follow documented memory policy
-
-## Implementation Notes
-
-- Memory profiling is **DEBUG-only** (zero overhead in release builds)
-- Hook-based system allows clean separation of profiling from business logic
-- Vector elements are automatically freed by `release_object_deep()`
-- Singletons (empty vectors/lists) skip reference counting
-- **Immediate values** (fixnums, chars, booleans, nil, fixed-point) are not reference counted
-- **32-bit tagged pointers** store immediate values directly without heap allocation
-- **Type checking** via `is_immediate()` determines if value needs memory management
+6. **API Functions**: Trust that return values are safe to use until pool closes
+7. **Macros**: Always use `RETAIN()`, `RELEASE()`, `AUTORELEASE()`, `ASSIGN()` instead of direct function calls
 
 ## Autorelease Pool Management
 
-### Autorelease Pool Behavior
+**Important:** `WITH_AUTORELEASE_POOL` provides exception-safe memory cleanup. The same object can appear multiple times in a pool - this is normal.
 
-#### Object Duplicates in Pool
+### Balanced Push/Pop Operations
 
-**It is normal and expected for the same object to appear multiple times in an autorelease pool.** This happens when:
-
-1. **Multiple `AUTORELEASE()` calls on the same object** - An object can be autoreleased multiple times
-2. **Object returned from nested functions** - Each function may autorelease the same object before returning it
-3. **Reference counting safety** - Each `AUTORELEASE()` call adds the object to the pool, but the object's reference count determines when it's actually freed
-
-```c
-// ✅ NORMAL: Same object autoreleased multiple times
-CljObject *obj = make_vector(10, 0);
-AUTORELEASE(obj);  // Added to pool
-AUTORELEASE(obj);  // Added to pool again - this is normal!
-// Pool will release obj when popped, but only once per reference count
-
-// ✅ NORMAL: Object passed through multiple functions
-CljObject *parse_and_return(const char *input) {
-    CljObject *result = parse_expr(input);  // Returns AUTORELEASEd object
-    return AUTORELEASE(result);  // Added to pool again - normal!
-}
-```
-
-**Important:** The pool tracks objects by pointer, not by uniqueness. When the pool is popped, each object is released according to its reference count, ensuring correct memory management even with duplicates.
-
-### Exception-Safe Memory Cleanup
-
-**`WITH_AUTORELEASE_POOL` provides exception-safe memory cleanup** that automatically handles both normal execution and exception scenarios:
+**`autorelease_pool_pop()` on empty stack** indicates unbalanced operations:
+- Missing `WITH_AUTORELEASE_POOL` wrappers
+- Early returns from pool scope
+- Exceptions jumping out of pool scope
 
 ```c
-#define WITH_AUTORELEASE_POOL(code) do { \
-    CljObjectPool *_pool = autorelease_pool_push(); \
-    TRY { \
-        code; \
-        autorelease_pool_pop(_pool);  // ← Normal cleanup
-    } CATCH(ex) { \
-        autorelease_pool_pop(_pool);  // ← Cleanup also on exception!
-        THROW(ex);                   // ← Exception propagation
-    } END_TRY \
-} while(0)
-```
-
-#### Key Benefits:
-
-1. **Exception-Safe Cleanup**: Objects are freed even when exceptions occur
-2. **No Memory Leaks**: Pool cleanup happens in both success and failure paths
-3. **Exception Propagation**: Exceptions are properly propagated to callers
-4. **Simplified Code**: No need for manual exception handling in many cases
-
-#### Impact on Code Design:
-
-**Before (redundant exception handling):**
-```c
-CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
-    TRY {
-        result = eval_symbol(expr, st);
-        result = AUTORELEASE(result);
-    } CATCH(ex) {
-        throw_exception_formatted(...);  // ← Redundant!
-        result = NULL;
-    } END_TRY
-    return result;
-}
-```
-
-**After (simplified with WITH_AUTORELEASE_POOL):**
-```c
-CljObject* eval_expr_simple(CljObject *expr, EvalState *st) {
-    result = eval_symbol(expr, st);
-    result = AUTORELEASE(result);  // ← Exception-safe via pool
-    return result;
-}
-```
-
-#### When Exception Handlers Are Still Needed:
-
-- **Custom exception handling logic** beyond simple propagation
-- **Resource cleanup** beyond autorelease pool (file handles, etc.)
-- **Exception transformation** (changing exception types/messages)
-- **Recovery logic** (fallback behavior on exceptions)
-
-#### When Exception Handlers Are Redundant:
-
-- **Simple propagation** - `WITH_AUTORELEASE_POOL` handles this automatically
-- **Memory cleanup only** - Pool cleanup is exception-safe
-- **Standard evaluation** - Most eval functions can rely on pool cleanup
-
-### Critical Rule: Balanced Push/Pop Operations
-
-**`autorelease_pool_pop()` on empty stack** indicates **unbalanced autorelease pool operations**, not too many pools. This happens when:
-
-1. **Missing `WITH_AUTORELEASE_POOL` wrappers** - Code uses `AUTORELEASE` without a pool
-2. **Early returns** - Code jumps out of pool with `return` statements  
-3. **Exception handling** - Code jumps out of pool with exceptions
-
-### ❌ Common Unbalanced Pool Patterns
-
-```c
-// WRONG: AUTORELEASE without pool
-CljValue result = parse("42", st);  // parse() uses AUTORELEASE internally
-AUTORELEASE(result);  // ❌ ERROR: No WITH_AUTORELEASE_POOL wrapper!
-
-// WRONG: Early return from pool
+// ❌ WRONG: AUTORELEASE without pool, early return, exception from pool
+AUTORELEASE(obj);  // ❌ ERROR: No pool!
 WITH_AUTORELEASE_POOL({
-    if (error) {
-        return;  // ❌ ERROR: Jumps out of pool, never popped!
-    }
-    // Pool never gets popped
+    if (error) return;  // ❌ ERROR: Jumps out of pool!
+    throw_exception("Error");  // ❌ ERROR: Jumps out of pool!
 });
 
-// WRONG: Exception from pool
-WITH_AUTORELEASE_POOL({
-    throw_exception("Error");  // ❌ ERROR: Jumps out of pool, never popped!
-    // Pool never gets popped
-});
-```
-
-### ✅ Correct Pool Management
-
-```c
-// CORRECT: Pool wraps all AUTORELEASE usage
+// ✅ CORRECT: Pool wraps all AUTORELEASE usage
 WITH_AUTORELEASE_POOL({
     CljValue result = parse("42", st);
     AUTORELEASE(result);
     // Pool automatically popped at end
 });
-
-// CORRECT: Exception handling with pool
-WITH_AUTORELEASE_POOL_TRY_CATCH({
-    CljValue result = parse("42", st);
-    AUTORELEASE(result);
-}, {
-    // Exception handler - pool still gets popped
-});
-
-// CORRECT: No early returns from pool
-WITH_AUTORELEASE_POOL({
-    CljValue result = NULL;
-    if (!error) {
-        result = parse("42", st);
-        AUTORELEASE(result);
-    }
-    // Pool automatically popped at end
-});
 ```
-
-### Debugging Unbalanced Pools
-
-When you see `autorelease_pool_pop() called on empty stack` warnings:
-
-1. **Check for missing `WITH_AUTORELEASE_POOL`** around code that uses `AUTORELEASE`
-2. **Look for early returns** that jump out of pool scope
-3. **Check for exceptions** that jump out of pool scope
-4. **Verify pool nesting** - ensure every `push` has a corresponding `pop`
 
 ### Transferring Objects Between Pools
 
-**When you need to return an object from an inner autorelease pool to an outer pool**, use the standard RETAIN/RELEASE/AUTORELEASE pattern. **Do NOT** create special functions to remove objects from pools.
-
-#### ✅ Correct Pattern: RETAIN Before Pool Pop
+**Use RETAIN before pool pop, then AUTORELEASE for outer pool:**
 
 ```c
 CljValue parse_from_reader(Reader *reader, EvalState *st) {
   CljValue result = NULL;
-  
-  // Create autorelease pool for parse operations
   WITH_AUTORELEASE_POOL({
     result = value_by_parsing_expr(reader, st);
-    
-    // RETAIN to prevent inner pool from releasing the result
     if (result && !IS_IMMEDIATE(result)) {
-      RETAIN(result);  // Increases rc (e.g., from 1 to 2)
+      RETAIN(result);  // Prevents inner pool from freeing it
     }
-  });  // Pool is popped, RELEASE is called, but rc > 0, so object is NOT freed
-  
-  // AUTORELEASE to transfer ownership to outer pool
-  return AUTORELEASE(result);
+  });  // Pool popped, but rc > 0, so object survives
+  return AUTORELEASE(result);  // Transfer to outer pool
 }
 ```
 
-#### Why This Works
-
-1. **`RETAIN(result)`** increases the reference count (e.g., from 1 to 2)
-2. **Pool is popped** - `RELEASE` is called on all objects in the pool
-3. **Object is NOT freed** because `rc > 0` (rc is now 1 after RELEASE)
-4. **`AUTORELEASE(result)`** adds the object to the outer pool
-
-#### ❌ Wrong Approach: Manual Pool Manipulation
+## Common Mistakes
 
 ```c
-// ❌ WRONG: Don't create special functions to remove objects from pools
-void autorelease_pool_remove_object(CljObject *obj);  // ❌ Don't do this!
-
-CljValue parse_from_reader(Reader *reader, EvalState *st) {
-  WITH_AUTORELEASE_POOL({
-    result = value_by_parsing_expr(reader, st);
-    RETAIN(result);
-    autorelease_pool_remove_object(result);  // ❌ WRONG: Unnecessary!
-  });
-  return AUTORELEASE(result);
-}
-```
-
-#### Key Principle
-
-**Reference counting with RETAIN/RELEASE is sufficient.** No manual pool manipulation is needed. The standard mechanisms handle object transfer between pools correctly.
-
-### Memory Policy Impact
-
-- **Unbalanced pools** cause memory leaks (objects never freed)
-- **Missing pools** cause crashes (AUTORELEASE called without active pool)
-- **Early returns** prevent proper cleanup
-- **Exception handling** must use `WITH_AUTORELEASE_POOL_TRY_CATCH`
-
-## Common Mistakes and Solutions
-
-### ❌ Incorrect Assumptions
-```c
-// WRONG: Assuming parse_string needs manual release
-CljObject *parsed = parse_string(expr, eval_state);
+// ❌ WRONG: Unnecessary RELEASE on autoreleased objects
+ID parsed = parse_string(expr, eval_state);
 RELEASE(parsed);  // ❌ UNNECESSARY: parse_string returns autoreleased object
 
-// WRONG: Manual retain/release assignment (error-prone)
-CljObject *obj = NULL;
-CljObject *new_obj = make_int(42);
-if (obj) release(obj);  // ❌ ERROR-PRONE: Easy to forget or get order wrong
-if (new_obj) retain(new_obj);
+// ❌ WRONG: Manual retain/release assignment (error-prone)
+if (obj) RELEASE(obj);
+if (new_obj) RETAIN(new_obj);
 obj = new_obj;
 
-// WRONG: This is actually safe - RELEASE() handles immediates automatically
-// (Immediate values don't need releasing, but RELEASE() won't crash on them)
-CljValue num = make_fixnum(42);
-RELEASE((CljObject*)num);  // ✅ SAFE: RELEASE() macro checks IS_IMMEDIATE internally
+// ✅ CORRECT: Trust the API design, use ASSIGN macro
+ID parsed = parse_string(expr, eval_state);
+// No manual cleanup needed - autoreleased
 
-// WRONG: This is actually safe - RELEASE() handles immediates automatically
-// (This example is kept for historical reference, but RELEASE() is safe for immediates)
-```
-
-### ✅ Correct Usage
-```c
-// CORRECT: Trust the API design
-CljObject *parsed = parse_string(expr, eval_state);
-CljObject *result = eval_parsed(parsed, eval_state);
-// Both are autoreleased - no manual cleanup needed
-
-// CORRECT: Use ASSIGN macro for safe assignment
-CljObject *obj = NULL;
-CljObject *new_obj = make_int(42);
 ASSIGN(obj, new_obj);  // ✅ SAFE: Handles retain/release automatically
-
-// CORRECT: Immediate values need no memory management
-CljValue num = make_fixnum(42);        // ✅ SAFE: No RELEASE() needed
-CljValue ch = make_char('A');          // ✅ SAFE: No RELEASE() needed
-CljValue flag = make_special(SPECIAL_TRUE); // ✅ SAFE: No RELEASE() needed
-
-// CORRECT: RELEASE() macro handles immediate values automatically
-CljValue value = get_some_value();
-RELEASE((CljObject*)value);  // ✅ SAFE: Works for both heap objects and immediates
 ```
-
-### Memory Policy Verification
-- **Always check Doxygen documentation** for memory policy
-- **Use memory profiling** to validate assumptions
-- **Test-First development** prevents incorrect implementations
-- **RELEASE() macro** handles immediate values automatically - no manual check needed
-- **Trust existing API design** unless proven otherwise
