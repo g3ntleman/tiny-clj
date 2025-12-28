@@ -383,9 +383,18 @@ target_include_directories(unit-tests
         ${CMAKE_SOURCE_DIR}
 )
 
-# Ensure subjective-c library is compiled with same DEBUG flags as unit-tests
+# Ensure subjective-c library is compiled with same flags as unit-tests
 # This is critical: exception.c must use DEBUG to match CLJException struct size
-target_compile_definitions(subjective-c PRIVATE DEBUG UNITY_TESTS ENABLE_MEMORY_PROFILING ENABLE_META UNITY_INCLUDE_EXEC_TIME ZOMBIE_ENABLED)
+# Note: DEBUG is set in subjective-c/CMakeLists.txt based on CMAKE_BUILD_TYPE
+# For unit-tests, we need additional flags (UNITY_TESTS, etc.)
+# Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
+target_compile_definitions(subjective-c PRIVATE 
+    UNITY_TESTS 
+    ENABLE_MEMORY_PROFILING 
+    ENABLE_META 
+    UNITY_INCLUDE_EXEC_TIME 
+    ZOMBIE_ENABLED
+)
 
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE

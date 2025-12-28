@@ -398,9 +398,6 @@ bool is_autoreleased(CljObject *obj) {
 // CHECKPOINT-BASED AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
 
-// Dummy pool pointer for API compatibility (non-NULL sentinel)
-// Non-NULL sentinel for API compatibility
-static int g_pool_sentinel_value = 1;
 
 /** @brief Grow the checkpoints array if needed
  * 
@@ -419,7 +416,7 @@ static inline void autorelease_pool_grow(void) {
 
 /** @brief Push a new autorelease pool (checkpoint)
  * 
- * @return Non-NULL sentinel (for API compatibility, value is meaningless)
+ * @return void (no return value)
  * 
  * Creates a new checkpoint at the current item count. Objects added via 
  * autorelease() will be tracked until pop() clears them.
@@ -448,7 +445,7 @@ void autorelease_pool_push() {
 
 /** @brief Pop and drain the current autorelease pool
  * 
- * @param pool Ignored (for API compatibility)
+ * @return void (no parameters)
  * 
  * Removes the checkpoint. Objects are NOT released (weak reference semantics).
  * This matches the original CLJ_VECTOR_TRANSIENT_WEAK behavior where the pool
