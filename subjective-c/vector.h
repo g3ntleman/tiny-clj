@@ -7,23 +7,14 @@
 
 typedef struct CljVector CljVector;
 
-#ifdef DEBUG
 static inline CljVector* as_vector(ID obj) {
-    if (obj) {
-        int tag = (int)TAG(obj);
-        if (tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT) {
-            return (CljVector*)obj;
-        }
-    }
-    CLJ_ASSERT(0 && "Expected Vector type");
-    return NULL;
-}
-#else
-// Release: zero-overhead cast
-static inline CljVector* as_vector(ID obj) {
+    // NULL is valid (nil)
+    // TAG() already handles NULL safely (returns CLJ_NIL)
+    // CLJ_ASSERT already has #ifdef DEBUG internally
+    CljType tag;
+    CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)));
     return (CljVector*)obj;
 }
-#endif
 
 static inline bool is_vector(CljObject *obj) {
     if (!obj) return false;
@@ -51,6 +42,16 @@ void vector_clear(CljVector *vec);
 CljVector* vector_transient(CljVector *vec);
 CljVector* clj_conj(CljVector *tvec, ID item);
 ID vector_persistent(CljVector *tvec);
+
+// In-place helpers for long-lived slots (no AUTORELEASE + releases old vector on replacement).
+// These functions update the pointer stored in *vec_slot and RELEASE the old vector
+// if a new vector instance is produced (grow/COW).
+// Use these for performance-critical code where you want to maintain rc=1 for COW optimizations.
+void vector_conj_inplace(CljVector **vec_slot, ID item);
+void vector_assoc_inplace(CljVector **vec_slot, unsigned int index, ID value);
+void vector_insert_at_inplace(CljVector **vec_slot, unsigned int index, ID item);
+void vector_remove_at_inplace(CljVector **vec_slot, unsigned int index);
+void vector_pop_inplace(CljVector **vec_slot);
 
 #define VECTOR_FOR_EACH(vector, elem_var) \
     for (int _i = 0, _cnt = vector_count(vector); (vector) && _i < _cnt; ++_i) \

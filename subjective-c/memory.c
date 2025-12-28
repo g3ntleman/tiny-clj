@@ -198,8 +198,8 @@ void retain(CljObject *v) {
             v, clj_type_name(v->type));
         CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
         if (ex) {
-            ex->object = (CljObject*)v;  // Store zombie object in exception
-            throw_exception_object(ex);
+            ex->object = RETAIN(v);  // Store zombie object in exception
+            throw_exception_object(AUTORELEASE(ex));
         }
         return;
     }
@@ -349,11 +349,12 @@ CljObject *autorelease(CljObject *v) {
     
     // Grow items array if needed
     if (g_pool.count >= g_pool.capacity) {
-        uint32_t old_capacity = g_pool.capacity;
         uint32_t new_capacity = g_pool.capacity * 2;
         g_pool.items = (CljObject**)realloc(g_pool.items, sizeof(CljObject*) * new_capacity);
         g_pool.capacity = new_capacity;
-        fprintf(stderr, "⚠️  AutoreleasePool: items grew %u -> %u\n", old_capacity, new_capacity);
+#ifdef DEBUG
+        fprintf(stderr, "⚠️  AutoreleasePool: items grew %u -> %u\n", new_capacity / 2, new_capacity);
+#endif
     }
     
     // Append object (no RETAIN - COW friendly!)
@@ -365,6 +366,32 @@ CljObject *autorelease(CljObject *v) {
     return v;
 }
 
+#ifdef DEBUG
+/** @brief Check if an object is in the autorelease pool (O(n) search)
+ * 
+ * @param obj Object to check
+ * @return true if object is in the current autorelease pool, false otherwise
+ * 
+ * Debug-only function that searches through the autorelease pool items array
+ * to determine if the given object is currently autoreleased.
+ * This is O(n) where n is the number of objects in the pool.
+ */
+bool is_autoreleased(CljObject *obj) {
+    if (!obj || !g_pool.items) {
+        return false;
+    }
+    
+    // Search through all items in the pool
+    for (uint32_t i = 0; i < g_pool.count; i++) {
+        if (g_pool.items[i] == obj) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+#endif // DEBUG
+
 // ============================================================================
 // CHECKPOINT-BASED AUTORELEASE POOL IMPLEMENTATION
 // ============================================================================
@@ -372,6 +399,21 @@ CljObject *autorelease(CljObject *v) {
 // Dummy pool pointer for API compatibility (non-NULL sentinel)
 // Non-NULL sentinel for API compatibility
 static int g_pool_sentinel_value = 1;
+
+/** @brief Grow the checkpoints array if needed
+ * 
+ * Doubles the capacity of the checkpoints array when it's full.
+ * Inline for performance (growth is rare but in hot path).
+ */
+static inline void autorelease_pool_grow(void) {
+    uint32_t old_capacity = g_pool.cp_capacity;
+    uint32_t new_capacity = g_pool.cp_capacity * 2;
+    g_pool.checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
+    g_pool.cp_capacity = new_capacity;
+#ifdef DEBUG
+    fprintf(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
+#endif
+}
 
 /** @brief Push a new autorelease pool (checkpoint)
  * 
@@ -389,11 +431,7 @@ void *autorelease_pool_push(void) {
     
     // Grow checkpoints array if needed
     if (g_pool.cp_count >= g_pool.cp_capacity) {
-        uint32_t old_capacity = g_pool.cp_capacity;
-        uint32_t new_capacity = g_pool.cp_capacity * 2;
-        g_pool.checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
-        g_pool.cp_capacity = new_capacity;
-        fprintf(stderr, "⚠️  AutoreleasePool: checkpoints grew %u -> %u\n", old_capacity, new_capacity);
+        autorelease_pool_grow();
     }
     
     // Push checkpoint (current item count)
@@ -524,6 +562,7 @@ void autorelease_pool_destroy(void) {
  * reference counting. For other objects, returns the actual reference count.
  * Note: AUTORELEASE objects are not counted as they are deferred.
  */
+#ifdef DEBUG
 int retain_count(ID obj) {
     if (!obj || IS_IMMEDIATE(obj)) return 0;
     
@@ -537,6 +576,7 @@ int retain_count(ID obj) {
     // Return actual retain count for tracked objects
     return obj_ptr->rc;
 }
+#endif // DEBUG
 
 // ============================================================================
 // DEEP OBJECT RELEASE IMPLEMENTATION

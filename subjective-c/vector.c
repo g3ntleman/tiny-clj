@@ -216,7 +216,10 @@ CljVector* make_vector_copy(CljVector* vec, unsigned capacity) {
  * @param vec Vector to pop from
  * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
  */
-CljVector* vector_pop(CljVector* vec) {
+/** Core implementation: Remove last element from vector.
+ * Returns owned object (rc=1, no AUTORELEASE).
+ */
+static CljVector* vector_pop_core(CljVector* vec) {
     if (vec) {
         CljVector *v = as_vector(vec);
         if (v && v->count > 0) {
@@ -243,20 +246,26 @@ CljVector* vector_pop(CljVector* vec) {
             CljVector *new_vec = make_vector_copy(v, original_count - 1);
             v->count = original_count;  // Restore original count
             
-            return new_vec;
+            return new_vec;  // owned (rc=1)
         }
         return vec;  // Empty vector, return as-is
     }
     return NULL;
 }
 
-/** Insert element at index in vector (in-place if RC=1, COW if RC>1).
+CljVector* vector_pop(CljVector* vec) {
+    CljVector* result = vector_pop_core(vec);
+    return AUTORELEASE(result);
+}
+
+/** Core implementation: Insert element at index in vector (in-place if RC=1, COW if RC>1).
+ * Returns owned object (rc=1, no AUTORELEASE).
  * @param vec Vector to insert into
  * @param index Index where to insert (0-based, must be <= count)
  * @param item Item to insert
  * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
  */
-CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
+static CljVector* vector_insert_at_core(CljVector* vec, unsigned int index, ID item) {
     if (!vec) return NULL;
     CljVector *v = as_vector(vec);
     if (!v || index > v->count) return vec;  // Invalid index, return as-is
@@ -322,15 +331,27 @@ CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
         new_vec->data[i + 1] = is_weak ? v->data[i] : (v->data[i] ? RETAIN(v->data[i]) : NULL);
     }
     
-    return new_vec;
+    return new_vec;  // owned (rc=1)
 }
 
-/** Remove element at index from vector (in-place if RC=1, COW if RC>1).
+/** Insert element at index in vector (in-place if RC=1, COW if RC>1).
+ * @param vec Vector to insert into
+ * @param index Index where to insert (0-based, must be <= count)
+ * @param item Item to insert
+ * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
+ */
+CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
+    CljVector* result = vector_insert_at_core(vec, index, item);
+    return AUTORELEASE(result);
+}
+
+/** Core implementation: Remove element at index from vector (in-place if RC=1, COW if RC>1).
+ * Returns owned object (rc=1, no AUTORELEASE).
  * @param vec Vector to remove from
  * @param index Index of element to remove (0-based)
  * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
  */
-CljVector* vector_remove_at(CljVector* vec, unsigned int index) {
+static CljVector* vector_remove_at_core(CljVector* vec, unsigned int index) {
     if (!vec) return NULL;
     CljVector *v = as_vector(vec);
     if (!v || index >= v->count) return vec;  // Invalid index, return as-is
@@ -366,7 +387,17 @@ CljVector* vector_remove_at(CljVector* vec, unsigned int index) {
         }
     }
     
-    return new_vec;
+    return new_vec;  // owned (rc=1)
+}
+
+/** Remove element at index from vector (in-place if RC=1, COW if RC>1).
+ * @param vec Vector to remove from
+ * @param index Index of element to remove (0-based)
+ * @return Same vector (in-place) if RC=1, new vector if RC>1, or NULL on error
+ */
+CljVector* vector_remove_at(CljVector* vec, unsigned int index) {
+    CljVector* result = vector_remove_at_core(vec, index);
+    return AUTORELEASE(result);
 }
 
 // Creates a CljVector*.
@@ -416,13 +447,14 @@ CljVector* make_vector(unsigned int capacity, CljType type) {
     return vec;
 }
 
-/** Return a new vector with item appended; original vector remains unchanged.
+/** Core implementation: Return a new vector with item appended; original vector remains unchanged.
+ * Returns owned object (rc=1, no AUTORELEASE).
  * Behavior depends on vector type:
  * - CLJ_VECTOR: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
  * - CLJ_VECTOR_TRANSIENT: Always mutates in-place (transient behavior)
  * - CLJ_VECTOR_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references)
  */
-CljVector* vector_conj(CljVector* vec, ID item) {
+static CljVector* vector_conj_core(CljVector* vec, ID item) {
     if (!vec) return NULL;
 
     // Note: item can be NULL (nil) - it's a valid value in Clojure collections
@@ -473,7 +505,7 @@ CljVector* vector_conj(CljVector* vec, ID item) {
             return vec;
         new_vec->data[0] = item ? RETAIN(item) : NULL;
         new_vec->count = 1;
-        return AUTORELEASE(new_vec);
+        return new_vec;  // owned (rc=1)
     }
 
     // COW path: RC>1 or capacity insufficient (even with RC=1, use COW for safety)
@@ -496,19 +528,30 @@ CljVector* vector_conj(CljVector* vec, ID item) {
     // Append new item (NULL/nil is a valid value)
     new_vec->data[new_vec->count++] = item ? RETAIN(item) : NULL;
     
-    return AUTORELEASE(new_vec);  // Return autoreleased - caller uses ASSIGN
+    return new_vec;  // owned (rc=1)
 }
 
-/** Update element at index with COW: RC=1 → in-place, RC>1 → COW. */
-CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
+/** Return a new vector with item appended; original vector remains unchanged.
+ * Behavior depends on vector type:
+ * - CLJ_VECTOR: Uses Copy-on-Write (RC=1 → in-place mutation, RC>1 → COW)
+ * - CLJ_VECTOR_TRANSIENT: Always mutates in-place (transient behavior)
+ * - CLJ_VECTOR_TRANSIENT_WEAK: Always mutates in-place (transient behavior, weak references)
+ */
+CljVector* vector_conj(CljVector* vec, ID item) {
+    CljVector* result = vector_conj_core(vec, item);
+    return AUTORELEASE(result);
+}
+
+/** Core implementation: Update element at index with COW: RC=1 → in-place, RC>1 → COW.
+ * Returns owned object (rc=1, no AUTORELEASE).
+ * Note: value can be NULL (nil) - that's a valid value in Clojure!
+ */
+static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value) {
     if (!vec) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "vector_assoc: vector is NULL");
     }
-    if (!value) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                "vector_assoc: value is NULL");
-    }
+    // Note: value can be NULL (nil) - that's a valid value in Clojure!
     
     CLJ_ASSERT(vec->base.type == CLJ_VECTOR || vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK || vec->base.type == CLJ_VECTOR_TRANSIENT);
 
@@ -592,7 +635,89 @@ CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
     // For CLJ_VECTOR_TRANSIENT_WEAK, don't RETAIN (weak reference)
     new_vec->data[index] = old_vec->base.type == CLJ_VECTOR_TRANSIENT_WEAK ? value : RETAIN(value);
 
-    return AUTORELEASE(new_vec);  // Return autoreleased - caller uses ASSIGN
+    return new_vec;  // owned (rc=1)
+}
+
+/** Update element at index with COW: RC=1 → in-place, RC>1 → COW.
+ * Note: value can be NULL (nil) - that's a valid value in Clojure!
+ */
+CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
+    CljVector* result = vector_assoc_core(vec, index, value);
+    return AUTORELEASE(result);
+}
+
+// === _owned functions (for internal use) ===
+
+static CljVector* vector_conj_owned(CljVector* vec, ID item) {
+    return vector_conj_core(vec, item);
+}
+
+static CljVector* vector_assoc_owned(CljVector* vec, unsigned int index, ID value) {
+    return vector_assoc_core(vec, index, value);
+}
+
+static CljVector* vector_insert_at_owned(CljVector* vec, unsigned int index, ID item) {
+    return vector_insert_at_core(vec, index, item);
+}
+
+static CljVector* vector_remove_at_owned(CljVector* vec, unsigned int index) {
+    return vector_remove_at_core(vec, index);
+}
+
+static CljVector* vector_pop_owned(CljVector* vec) {
+    return vector_pop_core(vec);
+}
+
+// === _inplace functions (for long-lived slots) ===
+
+void vector_conj_inplace(CljVector **vec_slot, ID item) {
+    if (!vec_slot || !*vec_slot) return;
+    CljVector *current = *vec_slot;
+    CljVector *updated = vector_conj_owned(current, item);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *vec_slot = updated;
+    }
+}
+
+void vector_assoc_inplace(CljVector **vec_slot, unsigned int index, ID value) {
+    if (!vec_slot || !*vec_slot) return;
+    CljVector *current = *vec_slot;
+    CljVector *updated = vector_assoc_owned(current, index, value);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *vec_slot = updated;
+    }
+}
+
+void vector_insert_at_inplace(CljVector **vec_slot, unsigned int index, ID item) {
+    if (!vec_slot || !*vec_slot) return;
+    CljVector *current = *vec_slot;
+    CljVector *updated = vector_insert_at_owned(current, index, item);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *vec_slot = updated;
+    }
+}
+
+void vector_remove_at_inplace(CljVector **vec_slot, unsigned int index) {
+    if (!vec_slot || !*vec_slot) return;
+    CljVector *current = *vec_slot;
+    CljVector *updated = vector_remove_at_owned(current, index);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *vec_slot = updated;
+    }
+}
+
+void vector_pop_inplace(CljVector **vec_slot) {
+    if (!vec_slot || !*vec_slot) return;
+    CljVector *current = *vec_slot;
+    CljVector *updated = vector_pop_owned(current);
+    if (updated && updated != current) {
+        RELEASE(current);
+        *vec_slot = updated;
+    }
 }
 
 // === Transient API (Phase 2) ===

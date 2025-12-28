@@ -408,3 +408,137 @@ TEST(test_hashmap_many_entries) {
     }
 }
 
+TEST(test_hashmap_nil_as_key_assoc_and_get) {
+    CljHashMap *map = make_hashmap_or_fail(8);
+    CljString *value = make_test_string("value-for-nil-key");
+    
+    // Add nil (NULL) as key
+    map = adopt_hashmap(map, hashmap_assoc(map, NULL, value));
+    TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
+    
+    // Get value using nil key
+    ID result = hashmap_get(map, NULL, NOT_FOUND);
+    TEST_ASSERT_TRUE(result != NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(value, result);
+    
+    // Verify NOT_FOUND is returned for non-existent key
+    CljString *non_existent_key = make_test_string("nonexistent");
+    ID not_found_result = hashmap_get(map, non_existent_key, NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, not_found_result);
+    
+    RELEASE(map);
+    RELEASE(value);
+    RELEASE(non_existent_key);
+}
+
+TEST(test_hashmap_nil_as_key_remove) {
+    CljHashMap *map = make_hashmap_or_fail(8);
+    CljString *value = make_test_string("value-for-nil-key");
+    
+    // Add nil (NULL) as key
+    map = adopt_hashmap(map, hashmap_assoc(map, NULL, value));
+    TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
+    
+    // Remove nil key (hashmap_remove will RELEASE the value)
+    map = adopt_hashmap(map, hashmap_remove(map, NULL));
+    TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
+    
+    // Verify nil key is not found after removal
+    ID result = hashmap_get(map, NULL, NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
+    
+    RELEASE(map);
+    // value was already released by hashmap_remove
+}
+
+TEST(test_hashmap_nil_as_value_assoc_and_get) {
+    CljHashMap *map = make_hashmap_or_fail(8);
+    CljString *key = make_test_string("test-key");
+    
+    // Add nil (NULL) as value
+    map = adopt_hashmap(map, hashmap_assoc(map, key, NULL));
+    TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
+    
+    // Get nil value
+    ID result = hashmap_get(map, key, NOT_FOUND);
+    TEST_ASSERT_TRUE(result != NOT_FOUND);
+    TEST_ASSERT_NULL(result);
+    
+    // Update to non-nil value
+    CljString *new_value = make_test_string("new-value");
+    map = adopt_hashmap(map, hashmap_assoc(map, key, new_value));
+    result = hashmap_get(map, key, NOT_FOUND);
+    TEST_ASSERT_TRUE(result != NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(new_value, result);
+    
+    // Set back to nil
+    map = adopt_hashmap(map, hashmap_assoc(map, key, NULL));
+    result = hashmap_get(map, key, NOT_FOUND);
+    TEST_ASSERT_TRUE(result != NOT_FOUND);
+    TEST_ASSERT_NULL(result);
+    
+    RELEASE(map);
+    RELEASE(key);
+    RELEASE(new_value);
+}
+
+TEST(test_hashmap_nil_as_value_remove) {
+    CljHashMap *map = make_hashmap_or_fail(8);
+    CljString *key = make_test_string("test-key");
+    
+    // Add nil (NULL) as value
+    map = adopt_hashmap(map, hashmap_assoc(map, key, NULL));
+    TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
+    
+    // Remove the key (hashmap_remove will RELEASE the key)
+    map = adopt_hashmap(map, hashmap_remove(map, key));
+    TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
+    
+    // Verify key is not found after removal
+    ID result = hashmap_get(map, key, NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
+    
+    RELEASE(map);
+    // key was already released by hashmap_remove
+}
+
+TEST(test_hashmap_nil_key_and_value_together) {
+    CljHashMap *map = make_hashmap_or_fail(8);
+    CljString *non_nil_key = make_test_string("other-key");
+    CljString *non_nil_value = make_test_string("other-value");
+    
+    // Add nil key with nil value
+    map = adopt_hashmap(map, hashmap_assoc(map, NULL, NULL));
+    TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
+    
+    // Add another entry with non-nil key
+    map = adopt_hashmap(map, hashmap_assoc(map, non_nil_key, non_nil_value));
+    TEST_ASSERT_EQUAL_UINT(2, hashmap_count(map));
+    
+    // Verify nil key with nil value
+    ID nil_result = hashmap_get(map, NULL, NOT_FOUND);
+    TEST_ASSERT_TRUE(nil_result != NOT_FOUND);
+    TEST_ASSERT_NULL(nil_result);
+    
+    // Verify non-nil key
+    ID other_result = hashmap_get(map, non_nil_key, NOT_FOUND);
+    TEST_ASSERT_TRUE(other_result != NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(non_nil_value, other_result);
+    
+    // Remove nil key
+    map = adopt_hashmap(map, hashmap_remove(map, NULL));
+    TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
+    
+    // Verify nil key is gone but other key remains
+    ID nil_after_remove = hashmap_get(map, NULL, NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, nil_after_remove);
+    
+    ID other_after_remove = hashmap_get(map, non_nil_key, NOT_FOUND);
+    TEST_ASSERT_TRUE(other_after_remove != NOT_FOUND);
+    TEST_ASSERT_EQUAL_PTR(non_nil_value, other_after_remove);
+    
+    RELEASE(map);
+    RELEASE(non_nil_key);
+    RELEASE(non_nil_value);
+}
+
