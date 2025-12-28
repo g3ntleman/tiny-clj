@@ -65,7 +65,7 @@ else()
 endif()
 
 # Include directories
-include_directories(${CMAKE_SOURCE_DIR} include subjective-c/public src external)
+include_directories(${CMAKE_SOURCE_DIR} include src external)
 
 # Subjective-C subproject (static library + early tests)
 add_subdirectory(subjective-c)
