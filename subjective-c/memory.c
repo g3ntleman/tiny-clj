@@ -23,6 +23,8 @@
 #include "hashmap.h"  // For CljHashMap
 #include <subjective-c/thread_local.h>
 #include <string.h>
+#include <execinfo.h>
+#include <stdlib.h>
 
 // ============================================================================
 // CHECKPOINT-BASED AUTORELEASE POOL
@@ -422,7 +424,7 @@ static inline void autorelease_pool_grow(void) {
  * Creates a new checkpoint at the current item count. Objects added via 
  * autorelease() will be tracked until pop() clears them.
  */
-void *autorelease_pool_push(void) {
+void autorelease_pool_push() {
     // Safety: initialize pool if not already initialized
     if (!g_pool.items) {
         autorelease_pool_init();
@@ -441,8 +443,6 @@ void *autorelease_pool_push(void) {
         printf("🔍 autorelease_pool_push: checkpoint at %u (depth=%u)\n", 
                g_pool.count, g_pool.cp_count);
     }
-    
-    return &g_pool_sentinel_value;  // Non-NULL sentinel for API compatibility
 }
 
 
@@ -454,13 +454,25 @@ void *autorelease_pool_push(void) {
  * This matches the original CLJ_VECTOR_TRANSIENT_WEAK behavior where the pool
  * only tracks objects but doesn't own them.
  */
-void autorelease_pool_pop(void *pool) {
-    (void)pool;  // Unused, for API compatibility
+void autorelease_pool_pop(void) {
     
     // Check for stack underflow
     if (g_pool.cp_count == 0) {
         printf("WARNING: autorelease_pool_pop() called on empty stack! "
                "This indicates more pop() calls than push() calls.\n");
+#ifdef DEBUG
+        // Print stack trace for debugging
+        void *trace[16];
+        int trace_count = backtrace(trace, 16);
+        char **symbols = backtrace_symbols(trace, trace_count);
+        if (symbols) {
+            fprintf(stderr, "Stack trace:\n");
+            for (int i = 0; i < trace_count; i++) {
+                fprintf(stderr, "  %s\n", symbols[i]);
+            }
+            free(symbols);
+        }
+#endif
         return;
     }
     
@@ -484,7 +496,7 @@ void autorelease_pool_pop(void *pool) {
 void autorelease_pool_cleanup_after_exception(void) {
     // Drain all pools
     while (g_pool.cp_count > 0) {
-        autorelease_pool_pop(NULL);
+        autorelease_pool_pop();
     }
 }
 
@@ -517,7 +529,7 @@ void autorelease_pool_cleanup_after_exception(void) {
  */
 void autorelease_pool_cleanup_all(void) {
     while (g_pool.cp_count > 0) {
-        autorelease_pool_pop(NULL);
+        autorelease_pool_pop();
     }
 }
 
@@ -771,12 +783,14 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_BYTE_ARRAY:
             {
-                CljByteArray *ba = as_byte_array(v);
                 // Don't free in zombie mode - object must remain intact
 #ifndef ZOMBIE_ENABLED
+                CljByteArray *ba = as_byte_array(v);
                 if (ba && ba->data) {
                     free(ba->data);
                 }
+#else
+                (void)v; // Suppress unused variable warning in zombie mode
 #endif
             }
             break;

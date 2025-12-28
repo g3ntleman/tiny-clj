@@ -94,8 +94,7 @@ TEST(test_autorelease_pool_cleanup_on_exception) {
     TEST_ASSERT_NOT_NULL(caught_ex);
     
     // Test cleanup function
-    CljVector *test_pool = autorelease_pool_push();
-    TEST_ASSERT_NOT_NULL(test_pool);
+    autorelease_pool_push();
     TEST_ASSERT_TRUE(is_autorelease_pool_active());
     
     CljString *test_obj = (CljString*)AUTORELEASE(make_string("test"));

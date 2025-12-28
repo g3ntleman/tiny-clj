@@ -113,7 +113,7 @@ static ID throw_ambiguous_symbol_error(CljSymbol *sym,
 
 // Helper context for namespace cleanup in ns_cleanup()
 // (no context needed, just release each namespace)
-static void release_namespace_callback(ID key, ID value) {
+__attribute__((unused)) static void release_namespace_callback(ID key, ID value) {
     (void)key; // Unused - we only need the value (namespace)
     CljNamespace *ns = (CljNamespace*)value;
     if (ns) {
