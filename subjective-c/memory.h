@@ -30,7 +30,28 @@ void autorelease_pool_cleanup_after_exception(void);
 void autorelease_pool_cleanup_all(void);
 void autorelease_pool_destroy(void);
 bool is_autorelease_pool_active(void);
+
+#ifdef DEBUG
+/** @brief Get the reference count of an object (debug only)
+ * 
+ * @param obj Object to check
+ * @return Reference count of the object, or 0 for immediate values/NULL
+ * 
+ * Debug-only function to inspect the reference count of an object.
+ * Immediate values (fixnums, chars, etc.) always return 0.
+ */
 int retain_count(ID obj);
+/** @brief Check if an object is in the autorelease pool (O(n) search)
+ * 
+ * @param obj Object to check
+ * @return true if object is in the current autorelease pool, false otherwise
+ * 
+ * Debug-only function that searches through the autorelease pool items array
+ * to determine if the given object is currently autoreleased.
+ * This is O(n) where n is the number of objects in the pool.
+ */
+bool is_autoreleased(CljObject *obj);
+#endif // DEBUG
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
 #define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
@@ -84,20 +105,7 @@ int retain_count(ID obj);
         _id; \
     })
 
-    #define WITH_AUTORELEASE_POOL(code) do { \
-        void *_pool = autorelease_pool_push(); \
-        TRY { \
-            code; \
-            autorelease_pool_pop(_pool); \
-        } CATCH(ex) { \
-            autorelease_pool_pop(_pool); \
-            THROW(ex); \
-        } END_TRY \
-    } while(0)
-
-    #define AUTORELEASE_POOL_BEGIN() void *_pool = autorelease_pool_push()
-    #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
-    #define REFERENCE_COUNT(obj) retain_count(obj)
+    #define REFERENCE_COUNT(obj) retain_count(obj)  // Only available in DEBUG builds
     #define WITH_MEMORY_PROFILING(code) do { \
         MEMORY_TEST_START(__FUNCTION__); \
         code; \
@@ -137,24 +145,11 @@ int retain_count(ID obj);
         _id; \
     })
 
-    #define WITH_AUTORELEASE_POOL(code) do { \
-        void *_pool = autorelease_pool_push(); \
-        TRY { \
-            code; \
-            autorelease_pool_pop(_pool); \
-        } CATCH(ex) { \
-            autorelease_pool_pop(_pool); \
-            THROW(ex); \
-        } END_TRY \
-    } while(0)
-
-    #define AUTORELEASE_POOL_BEGIN() void *_pool = autorelease_pool_push()
-    #define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
     #define WITH_AUTORELEASE_POOL_EVAL(code) do { code } while(0)
     #define WITH_MEMORY_PROFILING(code) do { code } while(0)
     #define WITH_MEMORY_TEST(code) WITH_MEMORY_PROFILING(code)
     #define WITH_TIME_PROFILING(code) WITH_MEMORY_PROFILING(code)
-    #define REFERENCE_COUNT(obj) retain_count(obj)
+    #define REFERENCE_COUNT(obj) (0)  // Not available in release builds
 #endif
 
 #if defined(ENABLE_MEMORY_PROFILING)
@@ -178,5 +173,24 @@ int retain_count(ID obj);
 } while(0)
 
 void* alloc(size_t type_size, size_t count, CljType obj_type);
+
+// ============================================================================
+// AUTORELEASE POOL MACROS - Always available in all builds
+// ============================================================================
+
+// WITH_AUTORELEASE_POOL is essential and must be available in all builds
+#define WITH_AUTORELEASE_POOL(code) do { \
+    void *_pool = autorelease_pool_push(); \
+    TRY { \
+        code; \
+        autorelease_pool_pop(_pool); \
+    } CATCH(ex) { \
+        autorelease_pool_pop(_pool); \
+        THROW(ex); \
+    } END_TRY \
+} while(0)
+
+#define AUTORELEASE_POOL_BEGIN() void *_pool = autorelease_pool_push()
+#define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
 
 #endif // SUBJECTIVE_C_MEMORY_H

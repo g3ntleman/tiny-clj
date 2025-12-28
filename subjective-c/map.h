@@ -14,23 +14,14 @@ typedef struct {
 } CljMap;
 
 // Type-safe casting
-#ifdef DEBUG
 static inline CljMap* as_map(ID obj) {
-    if (obj) {
-        int tag = TAG(obj);
-        if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-            return (CljMap*)obj;
-        }
-    }
-    CLJ_ASSERT(0 && "Expected Map type");
-    return NULL;
-}
-#else
-// Release: zero-overhead cast
-static inline CljMap* as_map(ID obj) {
+    // NULL is valid (nil)
+    // TAG() already handles NULL safely (returns CLJ_NIL)
+    // CLJ_ASSERT already has #ifdef DEBUG internally
+    CljType tag;
+    CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)));
     return (CljMap*)obj;
 }
-#endif
 
 // Map operations
 CljMap* make_map(int capacity);
