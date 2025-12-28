@@ -24,8 +24,8 @@ void throw_oom(void) __attribute__((noreturn));
 
 // Autorelease pool API (checkpoint-based implementation)
 void autorelease_pool_init(void);     // Call once at startup
-void *autorelease_pool_push(void);    // Returns sentinel (non-NULL)
-void autorelease_pool_pop(void *pool); // pool parameter ignored
+void autorelease_pool_push(void);      // Push new checkpoint
+void autorelease_pool_pop(void);       // Pop current checkpoint
 void autorelease_pool_cleanup_after_exception(void);
 void autorelease_pool_cleanup_all(void);
 void autorelease_pool_destroy(void);
@@ -180,17 +180,17 @@ void* alloc(size_t type_size, size_t count, CljType obj_type);
 
 // WITH_AUTORELEASE_POOL is essential and must be available in all builds
 #define WITH_AUTORELEASE_POOL(code) do { \
-    void *_pool = autorelease_pool_push(); \
+    autorelease_pool_push(); \
     TRY { \
         code; \
-        autorelease_pool_pop(_pool); \
+        autorelease_pool_pop(); \
     } CATCH(ex) { \
-        autorelease_pool_pop(_pool); \
+        autorelease_pool_pop(); \
         THROW(ex); \
     } END_TRY \
 } while(0)
 
-#define AUTORELEASE_POOL_BEGIN() void *_pool = autorelease_pool_push()
-#define AUTORELEASE_POOL_END() autorelease_pool_pop(_pool)
+#define AUTORELEASE_POOL_BEGIN() autorelease_pool_push()
+#define AUTORELEASE_POOL_END() autorelease_pool_pop()
 
 #endif // SUBJECTIVE_C_MEMORY_H

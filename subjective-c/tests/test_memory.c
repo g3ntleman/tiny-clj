@@ -19,12 +19,12 @@ TEST(test_nested_autorelease_pools) {
     TEST_ASSERT_EQUAL_INT(2, REFERENCE_COUNT(inner));
     
     // Pop inner pool - no RC changes (weak reference semantics)
-    autorelease_pool_pop(NULL);
+    autorelease_pool_pop();
     TEST_ASSERT_EQUAL_INT(2, REFERENCE_COUNT(outer));  // outer unchanged
     TEST_ASSERT_EQUAL_INT(2, REFERENCE_COUNT(inner));  // inner unchanged
     
     // Pop outer pool - no RC changes
-    autorelease_pool_pop(NULL);
+    autorelease_pool_pop();
     
     RELEASE(inner);  // rc=1
     RELEASE(outer);  // rc=1
@@ -44,7 +44,7 @@ TEST(test_autorelease_pool_many_objects) {
         AUTORELEASE(handles[i]);
     }
     
-    autorelease_pool_pop(NULL);
+    autorelease_pool_pop();
     
     // All handles should still be valid (we retained them)
     for (int i = 0; i < 100; i++) {
@@ -66,15 +66,14 @@ TEST(test_retain_release_reference_count) {
 }
 
 TEST(test_autorelease_pool_drains_objects) {
-    void *pool = autorelease_pool_push();
-    TEST_ASSERT_NOT_NULL(pool);
+    autorelease_pool_push();
 
     CljString *s = make_string("autorelease");
     RETAIN(s); // keep handle after draining
     int before = REFERENCE_COUNT(s);
 
     AUTORELEASE(s);
-    autorelease_pool_pop(pool);
+    autorelease_pool_pop();
 
     TEST_ASSERT_EQUAL_INT(before, REFERENCE_COUNT(s));
     RELEASE(s);
