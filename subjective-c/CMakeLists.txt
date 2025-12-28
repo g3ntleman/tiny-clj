@@ -31,10 +31,20 @@ target_include_directories(subjective-c
 )
 target_compile_features(subjective-c PUBLIC c_std_99)
 
-# Inherit DEBUG flags from parent project
-# This ensures exception.c is compiled with DEBUG when unit-tests are built
-# Check if we're building unit-tests (which needs DEBUG flags)
-# We'll set this from the parent CMakeLists.txt after unit-tests is defined
+# Inherit build configuration from parent project based on CMAKE_BUILD_TYPE
+# This ensures subjective-c is built with the same build type as tiny-clj targets
+# Debug builds of tiny-clj should link Debug builds of subjective-c
+# Release builds of tiny-clj should link Release builds of subjective-c
+# Use generator expressions to support all build types properly
+# DEBUG is enabled for Debug builds (default if CMAKE_BUILD_TYPE is not set)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
+    target_compile_definitions(subjective-c PUBLIC DEBUG)
+    message(STATUS "subjective-c: DEBUG enabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+else()
+    message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+endif()
+# CMake automatically applies CMAKE_C_FLAGS_<CONFIG> based on build type
+# No need to manually set COMPILE_FLAGS - CMake handles this automatically
 
 # -----------------------------------------------------------------------------
 # Unity-based test executable (runs very early in migration)
@@ -75,18 +85,25 @@ target_include_directories(subjective-c-tests
         ${CMAKE_SOURCE_DIR}/src
 )
 # Unity Tests - Always in Debug mode for comprehensive testing
-# Force Debug build regardless of CMAKE_BUILD_TYPE
+# Force Debug build regardless of CMAKE_BUILD_TYPE using generator expressions
+target_compile_definitions(subjective-c-tests PRIVATE
+    DEBUG
+    UNITY_TESTS
+    ENABLE_MEMORY_PROFILING
+    ENABLE_META
+    UNITY_INCLUDE_EXEC_TIME
+    ZOMBIE_ENABLED
+)
+# Force Debug compiler flags for all build types
+target_compile_options(subjective-c-tests PRIVATE
+    $<$<CONFIG:Debug>:-g;-O0;-DDEBUG;-fno-omit-frame-pointer>
+    $<$<CONFIG:Release>:-g;-O0;-DDEBUG;-fno-omit-frame-pointer>
+    $<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG;-fno-omit-frame-pointer>
+    $<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG;-fno-omit-frame-pointer>
+)
+# Preserve test registration functions by disabling dead code elimination
 if(APPLE)
-    set_target_properties(subjective-c-tests PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-        COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
-        # Force Debug configuration regardless of CMAKE_BUILD_TYPE
-        COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
-        COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
-        COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
-        COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
-    )
-    # Remove dead_strip from global flags if present to preserve test registration functions
+    # Remove dead_strip from global flags if present
     string(REPLACE "-Wl,-dead_strip" "" TMP_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
     string(REPLACE "-Wl,-S" "" TMP_FLAGS "${TMP_FLAGS}")
     if(TMP_FLAGS)
@@ -94,17 +111,6 @@ if(APPLE)
     endif()
 else()
     # Linux/other: disable gc-sections to preserve all functions
-    set_target_properties(subjective-c-tests PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-        COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
-        # Force Debug configuration regardless of CMAKE_BUILD_TYPE
-        COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
-        COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
-        COMPILE_OPTIONS "$<$<CONFIG:RelWithDebInfo>:-g;-O0;-DDEBUG>"
-        COMPILE_OPTIONS "$<$<CONFIG:MinSizeRel>:-g;-O0;-DDEBUG>"
-    )
-    target_link_options(subjective-c-tests PRIVATE
-        -Wl,--no-gc-sections
-    )
+    target_link_options(subjective-c-tests PRIVATE -Wl,--no-gc-sections)
 endif()
 target_link_libraries(subjective-c-tests PRIVATE subjective-c)

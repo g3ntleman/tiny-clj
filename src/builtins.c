@@ -41,10 +41,7 @@
 #include "regex.h"
 #include "builtins_strings.h"
 
-// Forward declaration for eval_body_with_env
 extern ID eval_body_with_env(ID body, CljMap *env);
-
-// Forward declarations for native functions used in native_function_table
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
@@ -181,13 +178,9 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
 }
 
 ID nth2(ID *args, unsigned int argc) {
-    // nth accepts 2 or 3 arguments: (nth coll index) or (nth coll index not-found)
-    // With not-found: returns not-found instead of throwing exception for out-of-bounds
-    // Clojure-compatible: supports vectors (O(1)), lists (O(n)), and sequences (O(n))
     if (argc != 2 && argc != 3) {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                "nth requires exactly 2 or 3 argument%s, got %u",
+        snprintf(error_msg, sizeof(error_msg), "nth requires exactly 2 or 3 argument%s, got %u",
                 argc == 1 ? "" : "s", argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
@@ -309,7 +302,6 @@ ID native_pop(ID *args, unsigned int argc) {
 // subvec: returns sub-vector from start (inclusive) to end (exclusive)
 // (subvec v start) → sub-vector from start to end of vector
 // (subvec v start end) → sub-vector from start (inclusive) to end (exclusive)
-// Clojure-compatible: always creates new immutable vector (O(n) operation)
 ID native_subvec(ID *args, unsigned int argc) {
     // subvec accepts 2 or 3 arguments: (subvec v start) or (subvec v start end)
     if (argc != 2 && argc != 3) {
@@ -395,20 +387,16 @@ ID native_subvec(ID *args, unsigned int argc) {
     return AUTORELEASE(new_vec);
 }
 
-// Forward declaration
-ID conj2(ID vec, ID val);
+static ID conj2(ID vec, ID val);
 
-ID conj2_wrapper(ID *args, int argc) {
+ID conj2_wrapper(ID *args, unsigned int argc) {
     if (!validate_builtin_args(argc, 2, "conj")) return NULL;
     return conj2(args[0], args[1]);
 }
 
 ID conj2(ID vec, ID val) {
     if (!vec || TAG(vec) != CLJ_VECTOR) return NULL;
-    // Use COW-based vector_conj (automatically handles RC=1 in-place, RC>1 COW)
-    CljVector* result = vector_conj(vec, val);
-    if (!result) return NULL;
-    return result;
+    return vector_conj(vec, val);
 }
 
 // Generic conj function that works with BuiltinFn signature
@@ -526,7 +514,6 @@ ID native_not(ID *args, unsigned int argc) {
 }
 
 // Next function that works with BuiltinFn signature
-// Clojure-compatible: returns nil if sequence is empty, otherwise rest sequence
 ID native_next(ID *args, unsigned int argc) {
     CLJ_ASSERT(args != NULL);
 
@@ -1386,13 +1373,13 @@ ID native_transient(ID *args, unsigned int argc) {
             return map_transient(coll);
         case CLJ_VECTOR_TRANSIENT:
         case CLJ_MAP_TRANSIENT:
-            // Clojure-compatible: transient on transient returns the same object
+            // transient on transient returns the same object
             return coll;
         default:
             break;
     }
 
-    // Throw exception for unsupported collection type (Clojure-compatible)
+    // Throw exception for unsupported collection type
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                     "transient requires a collection at position 1",
                     __FILE__, __LINE__, 0);
@@ -1413,13 +1400,13 @@ ID native_persistent_bang(ID *args, unsigned int argc) {
             return map_persistent(coll);
         case CLJ_VECTOR:
         case CLJ_MAP:
-            // Clojure-compatible: persistent! on persistent returns the same object
+            // persistent! on persistent returns the same object
             return coll;
         default:
             break;
     }
 
-    // Throw exception for unsupported collection type (Clojure-compatible)
+    // Throw exception for unsupported collection type
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                     "persistent! requires a transient collection at position 1",
                     __FILE__, __LINE__, 0);
@@ -1446,7 +1433,7 @@ ID native_conj_bang(ID *args, unsigned int argc) {
         return map_conj(coll, args[1], args[2]);
     }
 
-    // Throw exception for unsupported collection type (Clojure-compatible)
+    // Throw exception for unsupported collection type
     throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                     "conj! requires a transient collection at position 1",
                     __FILE__, __LINE__, 0);
@@ -1550,7 +1537,7 @@ ID native_type(ID *args, unsigned int argc) {
     // Get the tag to determine immediate vs heap object
     uint8_t tag = get_tag(val);
 
-    // Return namespace-qualified symbols in clojure.lang namespace (Clojure-compatible)
+    // Return namespace-qualified symbols in clojure.lang namespace
     // Switch on tag for immediate values
     switch (tag) {
         case TAG_FIXNUM:
@@ -1640,7 +1627,6 @@ ID native_array_map(ID *args, unsigned int argc) {
 }
 
 ID native_vector(ID *args, unsigned int argc) {
-    // Clojure-compatible: (vector) returns empty vector singleton
     // This is the same singleton returned by make_vector(0, CLJ_VECTOR)
     if (argc == 0) {
         return vector_empty_singleton;  // Returns empty-vector singleton (no memory management needed)
@@ -1650,7 +1636,7 @@ ID native_vector(ID *args, unsigned int argc) {
     // (vector_conj uses COW when count >= capacity, so we need capacity > argc)
     CljVector *v = make_vector(argc + 1, CLJ_VECTOR);
 
-    // Add all elements using vector_conj (Clojure-compatible: all args are retained)
+    // Add all elements using vector_conj
     for (unsigned int i = 0; i < argc; i++) {
         ASSIGN(v, vector_conj(v, args[i]));
     }
@@ -1660,7 +1646,7 @@ ID native_vector(ID *args, unsigned int argc) {
 
 // vec: converts a sequence to a vector
 // (vec coll) => vector with elements from coll
-// Clojure-compatible: if coll is already a vector, returns same vector (No-Op)
+// If coll is already a vector, returns same vector (No-Op)
 ID native_vec(ID *args, unsigned int argc) {
     // Arity check: vec accepts exactly 1 argument
     if (!validate_builtin_args(argc, 1, "vec")) return NULL;
@@ -1734,7 +1720,7 @@ ID make_named_func(BuiltinFn fn, void *env, const char *cname) {
 
     func->base.type = CLJ_FUNC;
     func->base.rc = 1;
-    func->fn = (CljObject* (*)(CljObject **, int))fn; // Cast to expected signature
+    func->fn = fn;
     func->env = env;
 
     // Safely handle name parameter
@@ -2330,7 +2316,6 @@ ID native_retain_count(ID *args, unsigned int argc) {
     return fixnum(rc);
 }
 
-// Forward declarations for native functions used in lookup table
 ID native_meta(ID *args, unsigned int argc);
 
 // ============================================================================
@@ -2736,7 +2721,6 @@ ID native_slurp(ID *args, unsigned int argc) {
     return AUTORELEASE(result);
 }
 
-// Forward declaration for eval_source_in_current_state (defined below in require section)
 static bool eval_source_in_current_state(const char *src, const char *src_name, EvalState *st);
 
 // load-file: read and evaluate all forms in a file (Clojure standard function)
@@ -3413,7 +3397,7 @@ ID native_spit(ID *args, unsigned int argc) {
     }
     const char *content_str = string_data(content_str_obj);
 
-    // Open file for writing (overwrites if exists - Clojure-compatible)
+    // Open file for writing (overwrites if exists)
     FILE *fp = fopen(filename_str, "w");
     if (!fp) {
         char error_msg[256];
@@ -3453,7 +3437,7 @@ ID native_spit(ID *args, unsigned int argc) {
     // Cleanup
     fclose(fp);
 
-    // Clojure-compatible: spit returns nil
+    // spit returns nil
     return NULL;
 }
 #endif // ESP32_BUILD
@@ -4988,7 +4972,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);
 
-        // Add metadata to native function (Clojure-compatible: :name and :ns)
+        // Add metadata to native function (:name and :ns)
 #ifdef ENABLE_META
         // Ensure special symbols are initialized
         init_special_symbols();

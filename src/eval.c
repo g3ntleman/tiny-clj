@@ -89,9 +89,6 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
     }
 }
 
-// Use C stack for recur state - each function call has its own stack frame
-// No global variables needed - local variables in eval_function_call are automatically isolated
-
 // Evaluation context structures are defined in function_call.h
 
 #include "map.h"
@@ -103,7 +100,6 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
 // Global variable to suppress time output in tests
 static bool g_suppress_time_output = false;
 
-// Function to set time output suppression (for tests)
 void set_suppress_time_output(bool suppress) {
     g_suppress_time_output = suppress;
 }
@@ -165,7 +161,7 @@ static void throw_unresolved_symbol_exception(const char *sym_name) {
 
 // Extended function call implementation with complete evaluation
 /** @brief Main function call evaluator */
-ID eval_function_call(ID fn, ID *args, int argc, CljMap *env, EvalState *st) {
+ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState *st) {
     // for Clojure functions. For native functions, env is not used.
     (void)env; // Suppress unused parameter warning
 
@@ -1101,7 +1097,7 @@ static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
 
 static inline ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     ID args[16];
-    int argc = 0;
+    unsigned int argc = 0;
     unsigned char fn_tag = TAG(fn);
 
     // Hot path: Most calls have <= 2 args (fib, +, -, <, etc.)
