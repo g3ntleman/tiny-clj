@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // Tiny-CLJ Core Headers
 #include "../object.h"
@@ -25,7 +26,7 @@
 #include "../value.h"
 #include "../builtins.h"
 #include "../symbol.h"
-#include "../map.h"
+#include <subjective-c/map.h>
 #include "../list.h"
 #include "../vector.h"
 #include "../function.h"

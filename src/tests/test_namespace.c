@@ -5,7 +5,7 @@
 #include "eval.h"
 #include "reader.h"
 #include "list.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 #include <errno.h>

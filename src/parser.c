@@ -19,7 +19,7 @@
 #ifdef PROFILE_STARTUP
 #include <time.h>
 #endif
-#include "map.h"
+#include <subjective-c/map.h>
 #include <stdbool.h>
 #include "memory.h"
 #include "utf8.h"

@@ -5,12 +5,12 @@
 #include <string.h>
 #include <assert.h>
 
-// Empty byte-array singleton: CLJ_BYTE_ARRAY with rc=0, statically initialized
+// Empty byte-array singleton: CLJ_BYTE_ARRAY with rc=SINGLETON_RC, statically initialized
 static struct {
     CljByteArray ba;
 } clj_empty_byte_array_singleton_data = {
     .ba = {
-        .base = { .type = CLJ_BYTE_ARRAY, .rc = 0 },
+        .base = { .type = CLJ_BYTE_ARRAY, .rc = SINGLETON_RC },
         .length = 0,
         .data = NULL
     }

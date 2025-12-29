@@ -5,7 +5,7 @@
 
 #ifdef DEBUG
 #ifndef ZOMBIE_RC
-#define ZOMBIE_RC -1
+#define ZOMBIE_RC 0  // Zombie objects have rc=0 (already freed but not DEALLOCed)
 #endif
 #endif
 

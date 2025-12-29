@@ -2,7 +2,7 @@
 #define TINY_CLJ_FUNCTION_H
 
 #include "object.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "vector.h"
 #include "list.h"
 

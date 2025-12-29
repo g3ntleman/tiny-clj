@@ -20,7 +20,7 @@
 #include "memory.h"
 #include "runtime.h"
 #include "seq.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "atom.h"
 #include "kv_macros.h"
 #include "namespace.h"

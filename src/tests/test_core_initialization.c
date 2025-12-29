@@ -2,7 +2,7 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "runtime.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "kv_macros.h"
 #include "reader.h"
 #include "eval.h"

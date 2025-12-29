@@ -12,7 +12,7 @@
 #include <ctype.h>
 #include "object.h"
 #include "vector.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "atom.h"
 #include "kv_macros.h"
 #include "numeric_utils.h"

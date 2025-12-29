@@ -190,7 +190,7 @@ void retain(CljObject *v) {
     
 #ifdef DEBUG
     // Check for zombie object
-    if (v->rc == ZOMBIE_RC) {
+    if (v->rc == 0) {
         // Zombie detected: throw exception with stacktrace and zombie object
         // Don't try to print object representation (may fail if object is corrupted)
         char message[512];
@@ -200,7 +200,7 @@ void retain(CljObject *v) {
             v, clj_type_name(v->type));
         CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
         if (ex) {
-            ex->object = RETAIN(v);  // Store zombie object in exception
+            ex->object = (uintptr_t)v;  // Address-only: store without retaining
             throw_exception_object(AUTORELEASE(ex));
         }
         return;
@@ -250,33 +250,14 @@ void release(CljObject *v) {
     // Note: CLJ_FUNC (native functions) are static and don't need release
     // CLJ_CLOSURE (interpreted functions) need to be released and will be handled by release_object_deep
     
-#ifdef DEBUG
-    // Check for zombie object BEFORE checking for underflow
-    if (v->rc == ZOMBIE_RC) {
-        // Zombie detected: throw exception with stacktrace and zombie object
-        // This indicates a double-free problem - the object was already freed
-        // Don't try to print object representation (may fail if object is corrupted)
-        char message[512];
-        snprintf(message, sizeof(message),
-            "Attempted to release zombie object %p (type=%s). "
-            "This object was already freed but marked as zombie for debugging.",
-            v, clj_type_name(v->type));
-        CLJException *ex = make_exception(EXCEPTION_ZOMBIE_ACCESS, message, __FILE__, __LINE__, 0);
-        if (ex) {
-            ex->object = (CljObject*)v;  // Store zombie object in exception
-            throw_exception_object(ex);
-        }
-        return;
-    }
-#endif
-    
-    // Check for underflow BEFORE decrementing
+    // Check for double-free BEFORE decrementing (ALWAYS, not just in DEBUG)
+    // This detects attempts to release already-freed objects
     if (v->rc == 0) {
-        printf("❌ UNDERFLOW! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
+        printf("❌ DOUBLE-FREE! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
         printf("🔍 Stack trace for object %p:\n", v);
         // Print stack trace or more debugging info
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
-            "Use-after-free detected! Object %p (type=%s) was already freed (rc=0). "
+            "Double-free detected! Object %p (type=%s) was already freed (rc=0). "
             "This indicates the object was released more times than retained, "
             "likely due to duplicate AUTORELEASE or incorrect memory management.",
             v, clj_type_name(v->type));
@@ -292,24 +273,28 @@ void release(CljObject *v) {
         if (g_debug_output_active) {
             printf("🔍 release: Object %p will be freed (rc=0)\n", v);
         }
-#ifdef DEBUG
-        // In zombie mode, mark object as zombie BEFORE deep release
-        // This allows release_object_deep to access the object safely
-        // CRITICAL: Mark as zombie FIRST, then release_object_deep will skip free() calls
+        
+        // Release contained values (for containers)
+        // Note: rc is already 0 at this point (after decrement).
+        // In zombie mode, rc=0 means the object is a zombie (freed but not DEALLOCed).
+        // release_object_deep() uses direct casts in release_object_default() (not as_*() functions),
+        // so it's safe to call even when rc=0 (zombie mode).
+        release_object_deep(v);
+        
 #ifdef ZOMBIE_ENABLED
-        v->rc = ZOMBIE_RC;  // Mark as zombie before deep release
-#endif
-#endif
-        release_object_deep(v); 
-        DEALLOC(v); // Hook for memory profiling - marks as zombie if enabled (won't free if zombie)
-
+        // In zombie mode: DON'T free the object, keep it at rc=0 for inspection
+        // The object remains in memory so we can examine it later
+        // rc is already 0, so no need to set it again
         if (g_debug_output_active) {
-#ifdef ZOMBIE_ENABLED
-            printf("🔍 release: Object %p marked as zombie\n", v);
-#else
-            printf("🔍 release: Object %p freed\n", v);
-#endif
+            printf("🔍 release: Object %p marked as zombie (rc=0, not DEALLOCed)\n", v);
         }
+#else
+        // Normal mode: free the object
+        DEALLOC(v);
+        if (g_debug_output_active) {
+            printf("🔍 release: Object %p freed\n", v);
+        }
+#endif
     }
 }
 
@@ -608,22 +593,10 @@ static void release_object_deep(CljObject *v) {
         return;
     }
     
-#ifdef DEBUG
-    // For zombie objects, only cleanup CLJ_ATOM
-    // For all other types, skip cleanup to avoid accessing freed memory
-    if (v->rc == ZOMBIE_RC) {
-        CljType type = v->type;
-        if (type != CLJ_ATOM) {
-            if (g_debug_output_active) {
-                printf("🔍 release_object_deep: Skipping zombie object %p (type=%s)\n", v, clj_type_name(type));
-            }
-            return;
-        }
-        // For CLJ_ATOM, continue with cleanup to release the atom's value
-        if (g_debug_output_active) {
-            printf("🔍 release_object_deep: Cleaning up zombie CLJ_ATOM %p\n", v);
-        }
-    }
+#ifdef ZOMBIE_ENABLED
+    // In zombie mode: rc=0 is the zombie marker (object freed but not DEALLOCed)
+    // We can safely access the object structure even if it's a zombie
+    // (object remains in memory for inspection)
 #endif
     
     if (g_debug_output_active) {
@@ -658,12 +631,16 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_VECTOR:
             {
-                CljVector *vec = as_vector(v);
-                // Release all vector elements
-                VECTOR_FOR_EACH(vec, elem) {
-                    RELEASE(elem);
+                // Direct cast - we already know it's a Vector from the switch case
+                // Using as_vector() would call TAG() which fails when rc=0 (zombie mode)
+                CljVector *vec = (CljVector*)v;
+                if (vec) {
+                    // Release all vector elements
+                    VECTOR_FOR_EACH(vec, elem) {
+                        RELEASE(elem);
+                    }
+                    // Note: data array wird automatisch freigegeben
                 }
-                // Note: data array wird automatisch freigegeben
             }
             break;
             
@@ -676,7 +653,9 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_MAP:
             {
-                CljMap *map = as_map(v);
+                // Direct cast - we already know it's a Map from the switch case
+                // Using as_map() would call TAG() which fails when rc=0 (zombie mode)
+                CljMap *map = (CljMap*)v;
                 if (map) {
                     // Release all key-value pairs
                     MAP_FOR_EACH(map, key, value) {
@@ -703,29 +682,35 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_LIST:
             {
-                CljList *list = as_list(v);
+                // Direct cast - we already know it's a List from the switch case
+                // Using as_list() would call TAG() which fails when rc=0 (zombie mode)
+                CljList *list = (CljList*)v;
                 if (g_debug_output_active) {
-                    printf("🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n", v, list->first, list->rest);
+                    printf("🔍 release_object_deep: Freeing LIST object %p, first=%p, rest=%p\n", v, list ? list->first : NULL, list ? list->rest : NULL);
                 }
                 // Release head and tail elements - RELEASE handles NULL
-                if (g_debug_output_active) {
-                    if (list->first) {
-                        printf("🔍 release_object_deep: Releasing list first element %p\n", list->first);
+                if (list) {
+                    if (g_debug_output_active) {
+                        if (list->first) {
+                            printf("🔍 release_object_deep: Releasing list first element %p\n", list->first);
+                        }
                     }
-                }
-                RELEASE(list->first);
-                if (g_debug_output_active) {
-                    if (list->rest) {
-                        printf("🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
+                    RELEASE(list->first);
+                    if (g_debug_output_active) {
+                        if (list->rest) {
+                            printf("🔍 release_object_deep: Releasing list rest element %p\n", list->rest);
+                        }
                     }
+                    RELEASE(list->rest);
                 }
-                RELEASE(list->rest);
             }
             break;
 
         case CLJ_AST_NODE:
             {
-                CljASTNode *node = as_ast_node(v);
+                // Direct cast - we already know it's an AST node from the switch case
+                // Using as_ast_node() would call TAG() which fails when rc=0 (zombie mode)
+                CljASTNode *node = (CljASTNode*)v;
                 if (!node) {
                     break;
                 }
@@ -794,7 +779,9 @@ static void release_object_default(CljObject *v) {
             
         case CLJ_ATOM:
             {
-                CljAtom *atom = as_atom(v);
+                // Direct cast - we already know it's an Atom from the switch case
+                // Using as_atom() would call TAG() which fails on zombie objects
+                CljAtom *atom = (CljAtom*)v;
                 if (atom) {
                     // Release the atom's value - RELEASE handles NULL, nil, and immediates safely
                     RELEASE(atom->value);

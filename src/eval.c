@@ -91,7 +91,7 @@ static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, Cl
 
 // Evaluation context structures are defined in function_call.h
 
-#include "map.h"
+#include <subjective-c/map.h>
 #include "runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -1690,10 +1690,11 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         fn_env_stack = RETAIN(ctx->env_stack);
     } else {
         // Fallback: Create env_stack from env if provided, otherwise use namespace mappings
-        fn_env_stack = env ? make_list(env, NULL) : NULL;
-        if (!fn_env_stack && st && st->current_ns && st->current_ns->mappings) {
-            fn_env_stack = make_list(st->current_ns->mappings, NULL);
+        CljMap *env_source = env;
+        if (!env_source && st && st->current_ns) {
+            env_source = st->current_ns->mappings;
         }
+        fn_env_stack = env_source ? make_list(env_source, NULL) : NULL;
     }
 
     // Create function object
@@ -2390,7 +2391,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
             // resolved_value can come from map_get (pointer) or ns_resolve (safe)
             // map_get returns only pointer, ns_resolve returns safe value
             // Since we can't distinguish, use RETAIN+AUTORELEASE for safety
-            return AUTORELEASE(RETAIN(resolved_value));
+            return AUTORELEASE(RETAIN(resolved_value)); // question this!!
         }
 
         // Only call as_symbol when needed (error paths)

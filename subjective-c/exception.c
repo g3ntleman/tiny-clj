@@ -15,7 +15,6 @@
 #include "strings.h"  // For to_cstring
 #include "value.h"  // For make_string
 #include "strings.h"  // For CljString
-#include <subjective-c/callbacks.h>  // For clj_to_string
 
 // Stacktrace support
 #ifdef __APPLE__
@@ -75,7 +74,7 @@ CLJException* make_exception(const char *type, const char *message, const char *
 #ifdef DEBUG
     // Always generate stacktrace in DEBUG builds
     exc->stacktrace = stacktrace();  // Can be NULL on error
-    exc->object = NULL;  // Initialize to NULL
+    exc->object = 0;  // Initialize to 0 (unset)
 #else
     // Release builds: no stacktrace field
 #endif
@@ -126,7 +125,7 @@ static CLJException clj_oom_exception_data = {
     .col = 0
 #ifdef DEBUG
     , .stacktrace = NULL,
-    .object = NULL
+    .object = 0
 #endif
 };
 
@@ -352,20 +351,9 @@ void print_exception(CLJException *ex) {
     
 #ifdef DEBUG
     // Print object if available (but skip for zombie objects to avoid secondary errors)
-    if (ex->object) {
-        // Check if object is a zombie before trying to print it
-        // Zombie objects have rc == ZOMBIE_RC (-1)
-        CljObject *obj = ex->object;
-        if (obj->rc != ZOMBIE_RC) {
-            CljString *obj_str = clj_to_string(ex->object);
-            if (obj_str) {
-                fprintf(stderr, " object: %s @%p", string_data(obj_str), (void*)ex->object);
-                RELEASE(obj_str);
-            }
-        } else {
-            // Zombie object - print address and type name
-            fprintf(stderr, " object: <zombie %s> @%p", clj_type_name(obj->type), (void*)ex->object);
-        }
+    if (ex->object != 0) {
+        // Address-only: never dereference here (may be a zombie/invalid pointer)
+        fprintf(stderr, " object: @%p", (void*)(uintptr_t)ex->object);
     }
     
     fprintf(stderr, "\n");

@@ -64,7 +64,8 @@ bool is_autoreleased(CljObject *obj);
             CljObject *_obj = (CljObject*)_tmp; \
             if (!is_singleton(_obj)) { \
                 memory_profiler_track_object_destruction(_obj); \
-                _obj->rc = ZOMBIE_RC; \
+                /* Don't free - keep object at rc=0 for inspection */ \
+                /* rc is already 0 from release() */ \
             } \
         } \
     } while(0)

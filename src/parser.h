@@ -16,7 +16,7 @@
 #include "reader.h"
 #include "value.h"  // Must be included before namespace.h (value.h includes symbol.h)
 #include "namespace.h"
-#include "map.h"  // For CljMap
+#include <subjective-c/map.h>  // For CljMap
 
 
 // === Legacy API (deprecated - use ID API) ===

@@ -10,7 +10,7 @@
 #include "value.h"
 #include "symbol.h"
 #include "vector.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "strings.h"
 #include "kv_macros.h"
 #include "list.h"

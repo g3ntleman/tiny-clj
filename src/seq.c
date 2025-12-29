@@ -10,7 +10,7 @@
 #include "list.h"
 #include "vector.h"
 #include "strings.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "symbol.h"
 #include <string.h>
 #include <stdlib.h>

@@ -9,10 +9,10 @@
  */
 
 #include "regex.h"
-#include "subjective-c/common.h"
-#include "subjective-c/value.h"
-#include "subjective-c/memory.h"
-#include "subjective-c/object.h"
+#include <subjective-c/common.h>
+#include <subjective-c/value.h>
+#include <subjective-c/memory.h>
+#include <subjective-c/object.h>
 #include "../external/tiny_regex.h"
 #include <string.h>
 #include <stdio.h>

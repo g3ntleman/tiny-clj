@@ -9,7 +9,7 @@
 // Include map.h for CljMap type
 // Note: This may create a circular dependency if value.h includes namespace.h
 // But since CljMap is an anonymous struct typedef, we can't use forward declaration
-#include "map.h"
+#include <subjective-c/map.h>
 
 // Namespace structure - subtype of CljObject
 #pragma GCC diagnostic push
