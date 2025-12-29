@@ -784,6 +784,35 @@ TEST(test_require_quoted_symbol) {
 
 }
 
+TEST(test_require_is_idempotent_by_default) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // Prepare libs/test/require_idempotent.clj.
+    // The loaded value must change if the file is re-evaluated.
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs"));
+    TEST_ASSERT_EQUAL_INT(0, ensure_dir("libs/test"));
+    const char *file_path = "libs/test/require_idempotent.clj";
+    const char *src = "(ns test.require-idempotent)\n(def loaded-token (gensym))\n";
+    TEST_ASSERT_EQUAL_INT(0, write_file(file_path, src));
+
+    // First require captures token.
+    CljObject *token1 = eval_string(
+        "(do (require 'test.require-idempotent) test.require-idempotent/loaded-token)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(token1);
+    TEST_ASSERT_TRUE(TAG(token1) == CLJ_SYMBOL);
+
+    // Second require should NOT re-evaluate the file.
+    CljObject *token2 = eval_string(
+        "(do (require 'test.require-idempotent) test.require-idempotent/loaded-token)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(token2);
+    TEST_ASSERT_TRUE(TAG(token2) == CLJ_SYMBOL);
+
+    TEST_ASSERT_EQUAL_PTR_MESSAGE(token1, token2,
+        "require should be idempotent (no reload) without :reload");
+}
+
 TEST(test_require_nonexistent_file) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 

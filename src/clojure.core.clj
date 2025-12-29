@@ -31,6 +31,9 @@ R"CLOJURE(
 ^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
 (defn count [coll] :native)
 
+^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
+(defn not [x] :native)
+
 ^#^{:doc "Internal helper. Creates a LazySeq from a 0-arity thunk."}
 (defn lazy-seq* [f] :native)
 
@@ -253,14 +256,16 @@ R"CLOJURE(
 ^#^{:doc "Threads the expr through the forms. Inserts x as the second item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the second item in second form, etc."}
 (defmacro -> [x & forms]
   (let [thread-step (fn thread-step [x forms]
-                      (if (nil? forms)
+                      (if (empty? forms)
                         x
                         (let [form (first forms)
                               threaded (if (list? form)
                                          (let [op (first form)
                                                args (rest form)]
                                            (cons op (cons x args)))
-                                         (list form x))
+                                         (if (symbol? form)
+                                           (list form x)
+                                           (list 'clojure.core/list form x)))
                               rest-forms (next forms)]
                           (if (nil? rest-forms)
                             threaded
@@ -270,18 +275,20 @@ R"CLOJURE(
 ^#^{:doc "Threads the expr through the forms. Inserts x as the last item in the first form, making a list of it if it is not a list already. If there are more forms, inserts the first form as the last item in second form, etc."}
 (defmacro ->> [x & forms]
   (let [append-last (fn append-last [lst val]
-                      (if (nil? lst)
+                      (if (empty? lst)
                         (list val)
-                        (if (nil? (rest lst))
+                        (if (nil? (next lst))
                           (list (first lst) val)
                           (cons (first lst) (append-last (rest lst) val)))))
         thread-step (fn thread-step [x forms]
-                      (if (nil? forms)
+                      (if (empty? forms)
                         x
                         (let [form (first forms)
                               threaded (if (list? form)
                                          (append-last form x)
-                                         (list form x))
+                                         (if (symbol? form)
+                                           (list form x)
+                                           (list 'clojure.core/list form x)))
                               rest-forms (next forms)]
                           (if (nil? rest-forms)
                             threaded
@@ -298,12 +305,17 @@ R"CLOJURE(
 ^#^{:doc "When expr is not nil, threads it into the first form (via ->), and when that result is not nil, through the next etc"}
 (defmacro some-> [expr & forms]
   (let [g (gensym)
-        steps (map (fn [step] (list 'if (list 'nil? g) 'nil (list '-> g step)))
-                   forms)]
-    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
-          (if (empty? steps)
-            g
-            (last steps)))))
+    build-bindings (fn build-bindings [fs]
+         (if (empty? fs)
+           (list)
+           (let [step (first fs)
+             threaded (if (keyword? step)
+                (list 'get g step)
+                (list '-> g step))
+             guarded (list 'if (list 'nil? g) 'nil threaded)]
+             (cons g (cons guarded (build-bindings (rest fs)))))))]
+    (list 'let (vec (cons g (cons expr (build-bindings forms))))
+      g)))
 
 ^#^{:doc "When expr is not nil, threads it into the first form (via ->>), and when that result is not nil, through the next etc"}
 (defmacro some->> [expr & forms]
@@ -320,24 +332,30 @@ R"CLOJURE(
   (if (not (even? (count clauses)))
     (throw "cond-> requires an even number of clauses"))
   (let [g (gensym)
-        steps (map (fn [[test step]] (list 'if test (list '-> g step) g))
-                   (partition 2 clauses))]
-    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
-          (if (empty? steps)
-            g
-            (last steps)))))
+        build-bindings (fn build-bindings [cs]
+                         (if (empty? cs)
+                           (list)
+                           (let [test (first cs)
+                                 step (second cs)
+                                 guarded (list 'if test (list '-> g step) g)]
+                             (cons g (cons guarded (build-bindings (rest (rest cs))))))))]
+    (list 'let (vec (cons g (cons expr (build-bindings clauses))))
+          g)))
 
 ^#^{:doc "Takes an expression and a set of test/form pairs. Threads expr (via ->>) through each form for which the corresponding test expression is true. Note that, unlike cond branching, cond->> threading does not short circuit after the first true test expression."}
 (defmacro cond->> [expr & clauses]
   (if (not (even? (count clauses)))
     (throw "cond->> requires an even number of clauses"))
   (let [g (gensym)
-        steps (map (fn [[test step]] (list 'if test (list '->> g step) g))
-                   (partition 2 clauses))]
-    (list 'let (vec (concat (list g expr) (interleave (repeat g) (butlast steps))))
-          (if (empty? steps)
-            g
-            (last steps)))))
+        build-bindings (fn build-bindings [cs]
+                         (if (empty? cs)
+                           (list)
+                           (let [test (first cs)
+                                 step (second cs)
+                                 guarded (list 'if test (list '->> g step) g)]
+                             (cons g (cons guarded (build-bindings (rest (rest cs))))))))]
+    (list 'let (vec (cons g (cons expr (build-bindings clauses))))
+          g)))
 
 ; ============================================================================
 ; Native Functions - now we can use defn
@@ -497,8 +515,6 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns true if x is not nil, false otherwise."}
 (defn some? [x] (not (nil? x)))
-^#^{:doc "Returns the logical complement of x. Returns true if x is false or nil, false otherwise."}
-(defn not [x] :native)
 ^#^{:doc "Returns true if x is the value true, false otherwise."}
 (defn true? [x] (identical? x true))
 ^#^{:doc "Returns true if x is the value false, false otherwise."}

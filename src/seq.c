@@ -85,6 +85,13 @@ static void lazy_seq_realize(CljLazySeq *lazy) {
             ID one_arg[1] = {seq_obj};
             first_val = native_first(one_arg, 1);
             rest_val = native_rest(one_arg, 1);
+
+            // Important: if the sequence is non-empty but its first element is
+            // nil, native_first returns NULL. Store SYM_NIL internally so we
+            // can distinguish (nil) from an empty sequence.
+            if (!first_val) {
+                first_val = (ID)SYM_NIL;
+            }
         }
     }
     builtin_set_eval_state(NULL);
