@@ -49,20 +49,47 @@ brew install cmake
 
 ## Quick Start
 
+### Building
+
+Tiny-CLJ uses a single `build/` directory for all build configurations. The build type is specified when configuring CMake:
+
 ```bash
-# Build
-cmake . && make -j
+# Debug Build (default, includes debugging symbols and memory profiling)
+cmake -DCMAKE_BUILD_TYPE=Debug -B build
+cmake --build build
 
-# REPL
-./tiny-clj-repl
+# Release Build (optimized for performance)
+cmake -DCMAKE_BUILD_TYPE=Release -B build
+cmake --build build
 
-# Tests
-ctest --output-on-failure
+# Embedded Build (ultra-compact for <150KB target)
+cmake -DCMAKE_BUILD_TYPE=Embedded -B build
+cmake --build build
+```
+
+**Note:** All executables are placed in the `build/` directory. The build type and configuration information is displayed when starting the REPL or running unit tests.
+
+### Running
+
+```bash
+# REPL (shows build information at startup)
+./build/tiny-clj-repl
+
+# Unit Tests (shows build information at startup)
+./build/unit-tests
 
 # Examples
-./tiny-clj-repl --no-core -e "(+ 1 2)"
-./tiny-clj-repl -f program.clj
+./build/tiny-clj-repl --no-core -e "(+ 1 2)"
+./build/tiny-clj-repl -f program.clj
 ```
+
+### Build Information
+
+Build information (type, date, compiler, enabled features) is automatically displayed:
+- **REPL**: When starting the REPL
+- **Unit Tests**: When running unit tests
+
+This helps identify which build configuration is currently active and how it was built.
 
 ## Architecture
 - **Core Types:** `CljObject` with specific structs for vectors, lists, maps, strings, symbols, exceptions

@@ -83,6 +83,7 @@ target_include_directories(subjective-c-tests
         ${CMAKE_SOURCE_DIR}               # For <subjective-c/...> includes
         ${CMAKE_CURRENT_SOURCE_DIR}       # For "subjective-c.h" in tests
         ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_BINARY_DIR}                # For build_info.h
 )
 # Unity Tests - Always in Debug mode for comprehensive testing
 # Force Debug build regardless of CMAKE_BUILD_TYPE using generator expressions

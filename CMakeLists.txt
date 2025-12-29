@@ -73,6 +73,16 @@ add_subdirectory(subjective-c)
 # Set output directory for all executables to "build"
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
 
+# Generate build_info.h from template
+configure_file(
+    "${CMAKE_SOURCE_DIR}/build_info.h.in"
+    "${CMAKE_BINARY_DIR}/build_info.h"
+    @ONLY
+)
+
+# Make build_info.h available to all targets
+include_directories(${CMAKE_BINARY_DIR})
+
 # Source files (without main.c - main is target-specific)
 list(APPEND SOURCES
     src/clojure_core.c
