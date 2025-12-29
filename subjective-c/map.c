@@ -84,16 +84,14 @@ ID map_get(CljMap *map, ID key, ID not_found) {
  * Returns owned object (rc=1, no AUTORELEASE).
  */
 static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
-  // Retain input map to ensure it stays alive during iteration
-  RETAIN(map);
   if (map && TAG(map) == CLJ_MAP) {
     CljObject *key_obj = (CljObject*)key;
     CljObject *value_obj = (CljObject*)value;
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
 
 #if 1
-  // COW HOT-PATH: RC=1 → in-place mutation
-  if (map->base.rc == 1) {
+    // COW HOT-PATH: RC=1 → in-place mutation
+    if (map->base.rc == 1) {
     // Check if key exists - update value (linear search necessary)
     // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
     int found_idx = -1;
@@ -114,7 +112,6 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
     if (found_idx >= 0) {
       // Key found: update in-place (no branches after this)
       ASSIGN(KV_VALUE(map->data, found_idx), value_obj);
-      RELEASE(map);  // Balance the retain at the start
       return map;  // Return SAME map
     }
 
@@ -125,15 +122,14 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
       ASSIGN(KV_KEY(map->data, idx), key_obj);
       ASSIGN(KV_VALUE(map->data, idx), value_obj);
       map->count++;
-      RELEASE(map);  // Balance the retain at the start
       return map;  // Return SAME map
     }
 
     // Out of capacity - need to grow (fall through to COW path)
-  }
+    }
 #endif
 
-  // COW path: RC>1 or capacity insufficient → create new map
+    // COW path: RC>1 or capacity insufficient → create new map
   int new_capacity = map->capacity;
   if (map->count >= map->capacity) {
     new_capacity = map->capacity * 2;
@@ -145,7 +141,6 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
   size_t data_size = (size_t)new_capacity * 2 * sizeof(CljObject*);
   CljMap *new_map = (CljMap*)malloc(struct_size + data_size);
   if (!new_map) {
-    RELEASE(map);  // Balance the retain at the start
     throw_oom();
   }
 
@@ -159,21 +154,16 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
     new_map->data[i] = NULL;
   }
 
-  // Copy existing entries with RETAIN
+  // Copy existing entries
   bool key_found = false;
   int new_idx = 0;
 
   MAP_FOR_EACH(map, k, v) {
-    // Fast path: pointer comparison first (for interned symbols/keywords)
-    if (k == key_obj) {
+    // Check if key matches (pointer comparison first, then structural)
+    bool key_matches = (k == key_obj) || (k && key_obj && clj_equal(k, key_obj));
+    
+    if (key_matches) {
       // Key found - update value
-      ASSIGN(KV_KEY(new_map->data, new_idx), k);
-      ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
-      key_found = true;
-      new_idx++;
-    } else if (k && key_obj && clj_equal(k, key_obj)) {
-      // Key found - update value (structural comparison)
-      // Note: If key_obj is NULL, k must also be NULL to match (already handled above)
       ASSIGN(KV_KEY(new_map->data, new_idx), k);
       ASSIGN(KV_VALUE(new_map->data, new_idx), value_obj);
       key_found = true;
@@ -198,14 +188,10 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
 
   // ASSERT removed for performance - was verifying with map_get after every map_assoc
 
-  // Release the input map we retained
-  RELEASE(map);
-
   return new_map;  // owned (rc=1)
   }
 
   // Error case: invalid map or wrong type
-  RELEASE(map);  // Balance the retain at the start
   return map;  // Return original map on error
 }
 
@@ -224,10 +210,6 @@ CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
   if (!b) return a;
 
   CljMap *result = a;
-  // Retain result to ensure it stays alive during map_assoc calls
-  // map_assoc_core will also retain its input, but we need to ensure
-  // result stays alive between calls
-  RETAIN(result);
 
   MAP_FOR_EACH(b, key, value) {
     // nil keys are valid in Clojure maps - don't skip them
@@ -238,23 +220,19 @@ CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
       }
     }
     CljMap *old_result = result;
-    // map_assoc will retain its input internally, so result is safe during the call
+    // map_assoc returns autoreleased object
     result = map_assoc(result, key, value);
     if (result != old_result) {
       // map_assoc returned a new map (autoreleased)
       // Retain it to ensure it stays alive during iteration
       result = RETAIN(result);
-      // Release the old result we retained
-      RELEASE(old_result);
     }
     // If result == old_result, map_assoc modified in-place
-    // The RETAIN at the start ensures it stays alive
+    // Original 'a' stays alive (caller's responsibility in single-threaded system)
   }
-
-  // Release the result we retained
-  RELEASE(result);
   
-  // Return result (autoreleased from map_assoc, or original 'a')
+  // Return result (autoreleased from map_assoc if new, or original 'a' if in-place)
+  // If result was retained, caller must release it
   return result;
 }
 

@@ -256,7 +256,7 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   if (target_ns && target_ns->name == SYM_CLOJURE_CORE) {
     CljSymbol *math_alias = intern_symbol_global("Math");
     if (math_alias && SYM_CLOJURE_CORE) {
-      ns_set_alias(target_ns, (CljObject*)math_alias, (CljObject*)SYM_CLOJURE_CORE);
+      ns_set_alias(target_ns, math_alias, SYM_CLOJURE_CORE);
     }
   }
 

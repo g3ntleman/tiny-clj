@@ -11,7 +11,7 @@
  * @param v CljObject to print
  * @return Newly allocated C-string representation (caller must free)
  */
-const char* print_ast(CljObject *v);
+const char* print_ast(ID v);
 #endif // DEBUG
 
 /**

@@ -930,11 +930,11 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
  * @param alias Alias symbol to look up
  * @return Namespace name symbol or NULL if not found
  */
-CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
+ID ns_get_alias(CljNamespace *ns, ID alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
     
     // Look up alias in aliases map
-    CljObject *ns_name = map_get(ns->aliases, alias, NULL);
+    ID ns_name = map_get(ns->aliases, alias, NULL);
     return ns_name;
 }
 
@@ -944,7 +944,7 @@ CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias) {
  * @param alias Alias symbol
  * @param ns_name Namespace name symbol
  */
-void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name) {
+void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name) {
     if (!ns || !alias || !ns_name) return;
     
     // Create or update aliases map

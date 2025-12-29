@@ -12,7 +12,7 @@
 
 #ifdef DEBUG
 // Print AST as Clojure code for debugging
-static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_size, int *offset) {
+static void print_ast_recursive(ID v, int depth, char *buf, size_t buf_size, int *offset) {
     if (!v) {
         *offset += snprintf(buf + *offset, buf_size - *offset, "nil");
         return;
@@ -34,11 +34,12 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
         return;
     }
 
-    switch (v->type) {
+    CljObject *obj = (CljObject*)v;
+    switch (obj->type) {
         case CLJ_SYMBOL: {
             CljSymbol *sym = as_symbol(v);
             // Check if this is SYM_NIL (nil symbol) - distinguish from evaluated nil (NULL)
-            if (v == (CljObject*)SYM_NIL) {
+            if (v == SYM_NIL) {
                 *offset += snprintf(buf + *offset, buf_size - *offset, "SYM:nil");
             } else if (sym && sym->cname) {
                 // Output symbol name with SYM: prefix to distinguish from evaluated values
@@ -147,13 +148,13 @@ static void print_ast_recursive(CljObject *v, int depth, char *buf, size_t buf_s
         }
 
         default:
-            *offset += snprintf(buf + *offset, buf_size - *offset, "#<type:%d>", v->type);
+            *offset += snprintf(buf + *offset, buf_size - *offset, "#<type:%d>", obj->type);
             break;
     }
 }
 
 // Print AST structure for debugging
-const char* print_ast(CljObject *v) {
+const char* print_ast(ID v) {
     char *buf = ALLOC(char, 4096);
     if (!buf) return strdup("#<error: out of memory>");
 

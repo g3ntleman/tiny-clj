@@ -470,10 +470,10 @@ ID native_first(ID *args, unsigned int argc) {
     switch (TAG(coll)) {
         case CLJ_LIST: {
             // Direct access for lists (already a seq) - no allocation needed
-            CljObject *first = LIST_FIRST((CljList*)coll);
+            ID first = LIST_FIRST((CljList*)coll);
             // Arguments are evaluated, but list elements might still be SYM_NIL
             // Convert SYM_NIL to NULL (nil representation)
-            return (first == (CljObject*)SYM_NIL) ? NULL : first;
+            return (first == SYM_NIL) ? NULL : first;
         }
 
         case CLJ_SEQ: {
@@ -1971,7 +1971,7 @@ ID native_print_ast(ID *args, unsigned int argc) {
         return NULL;
     }
     
-    const char *ast_str = print_ast((CljObject*)arg);
+    const char *ast_str = print_ast(arg);
     if (ast_str) {
         printf("%s\n", ast_str);
         // print_ast returns a newly allocated string that must be freed
@@ -1994,7 +1994,7 @@ ID native_ast_string(ID *args, unsigned int argc) {
         return make_string("SYM:nil");
     }
     
-    const char *ast_str = print_ast((CljObject*)arg);
+    const char *ast_str = print_ast(arg);
     if (ast_str) {
         CljString *result = make_string(ast_str);
         // print_ast returns a newly allocated string that must be freed
@@ -2020,7 +2020,7 @@ static int32_t apply_saturation(int32_t acc_fixed) {
 // Helper function to create fixed-point result
 static ID create_fixed_result(int32_t acc_fixed) {
     acc_fixed = apply_saturation(acc_fixed);
-    return ((CljObject*)(uintptr_t)((acc_fixed << TAG_BITS) | TAG_FIXED));
+    return (ID)(uintptr_t)((acc_fixed << TAG_BITS) | TAG_FIXED);
 }
 
 // Helper function to throw arithmetic overflow exceptions (DRY principle)
@@ -2977,7 +2977,7 @@ static void copy_all_symbols_to_namespace(CljNamespace *source_ns, CljNamespace 
  * @param st Evaluation state
  * @return true on success, false on error
  */
-static bool process_require_spec(CljObject *spec, EvalState *st) {
+static bool process_require_spec(ID spec, EvalState *st) {
     if (!spec || !st) return false;
 
     const char *ns_name = NULL;
@@ -3129,7 +3129,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
                 // It should be set by the time we reach here if :as was in the vector
                 // CRITICAL: Use same logic as the working case (line 2412) for consistency
                 if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-                    CljObject *ns_name_sym = (CljObject*)intern_symbol_global(ns_name);
+                    ID ns_name_sym = intern_symbol_global(ns_name);
                     if (ns_name_sym) {
                         ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
                     }
@@ -3231,7 +3231,7 @@ static bool process_require_spec(CljObject *spec, EvalState *st) {
     CljNamespace *loaded_ns = ns_find(ns_name);
     if (loaded_ns) {
         if (alias_sym && TAG(alias_sym) == CLJ_SYMBOL) {
-            CljObject *ns_name_sym = (CljObject*)intern_symbol_global(ns_name);
+            ID ns_name_sym = intern_symbol_global(ns_name);
             if (ns_name_sym) {
                 ns_set_alias(st->current_ns, alias_sym, ns_name_sym);
             }
@@ -3352,7 +3352,7 @@ ID native_require(ID *args, unsigned int argc) {
     }
 
     for (unsigned int i = 0; i < argc; i++) {
-        if (!process_require_spec((CljObject*)normalized_specs[i], st)) {
+        if (!process_require_spec(normalized_specs[i], st)) {
             for (unsigned int j = 0; j < argc; j++) {
                 if (needs_release[j]) {
                     RELEASE(normalized_specs[j]);
@@ -4924,7 +4924,7 @@ ID native_re_seq(ID *args, unsigned int argc) {
     CljList *reversed = NULL;
     while (result) {
         CljList *next = as_list(result->rest);
-        result->rest = (CljObject*)reversed;
+        result->rest = (ID)reversed;
         reversed = result;
         result = next;
     }
@@ -4967,8 +4967,8 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
     // No need for special cache handling
 
     // Register the builtin in target namespace
-    CljObject *symbol = (CljObject*)intern_symbol_global(symbol_name);
-    CljObject *func_obj = make_named_func(func, NULL, cname);
+    ID symbol = intern_symbol_global(symbol_name);
+    ID func_obj = make_named_func(func, NULL, cname);
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);
 
