@@ -11,7 +11,7 @@
 #include "meta.h"
 #include "object.h"
 #include "runtime.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "memory.h"
 #include "kv_macros.h"
 #include "reader.h"

@@ -90,8 +90,8 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
 
 #if 1
-    // COW HOT-PATH: RC=1 → in-place mutation
-    if (map->base.rc == 1) {
+  // COW HOT-PATH: RC=1 → in-place mutation
+  if (map->base.rc == 1) {
     // Check if key exists - update value (linear search necessary)
     // OPTIMIZATION: Fast path for pointer equality (interned symbols/keywords)
     int found_idx = -1;
@@ -126,10 +126,10 @@ static CljMap* map_assoc_core(CljMap* map, ID key, ID value) {
     }
 
     // Out of capacity - need to grow (fall through to COW path)
-    }
+  }
 #endif
 
-    // COW path: RC>1 or capacity insufficient → create new map
+  // COW path: RC>1 or capacity insufficient → create new map
   int new_capacity = map->capacity;
   if (map->count >= map->capacity) {
     new_capacity = map->capacity * 2;

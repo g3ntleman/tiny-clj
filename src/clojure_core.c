@@ -9,7 +9,7 @@
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
 #include "eval.h"  // For SYM_DEF, SYM_NS
-#include "map.h"     // For map_get
+#include <subjective-c/map.h>     // For map_get
 #include "parser.h"  // For eval_parsed
 #include <stdbool.h>
 #include <stdio.h>

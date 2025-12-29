@@ -31,7 +31,6 @@ OLD_FUNCTIONS=(
 # Header-Dateien, die aktualisiert werden müssen
 HEADER_FILES=(
     "src/vector.h"
-    "src/map.h"
     "src/string.h"
     "src/seq.h"
     "src/parser.h"

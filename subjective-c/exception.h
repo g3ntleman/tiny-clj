@@ -11,6 +11,7 @@
 #include "common.h"
 #include <setjmp.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 // Forward declaration for CljString
@@ -26,7 +27,7 @@ typedef struct {
     int col;
 #ifdef DEBUG
     struct CljString *stacktrace;  // Stacktrace as CljString (can be NULL)
-    CljObject *object;             // General object field (e.g., zombie object, can be NULL)
+    uintptr_t object;              // Address-only (do not dereference, not retained); 0 if unset
 #endif
 } CLJException;
 

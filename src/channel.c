@@ -1,5 +1,5 @@
 #include "channel.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "value.h"
 #include "symbol.h"
 #include "exception.h"  // For throw_oom

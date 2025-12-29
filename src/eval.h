@@ -2,7 +2,7 @@
 #define FUNCTION_CALL_H
 
 #include "object.h"
-#include "map.h"  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
+#include <subjective-c/map.h>  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
 #include "namespace.h"
 #include "list.h"
 #include "environment.h"  // For CallFrame

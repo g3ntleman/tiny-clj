@@ -3,7 +3,7 @@
 
 #include "object.h"
 #include "value.h"
-#include "map.h"
+#include <subjective-c/map.h>
 
 // Meta registry for metadata (only when ENABLE_META is defined)
 #ifdef ENABLE_META

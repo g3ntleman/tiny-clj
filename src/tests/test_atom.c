@@ -15,7 +15,7 @@
 #include "../atom.h"
 #include "../namespace.h"
 #include "../symbol.h"
-#include "../map.h"
+#include <subjective-c/map.h>
 #include "../kv_macros.h"
 #include "../reader.h"
 #include "../eval.h"

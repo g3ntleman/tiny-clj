@@ -12,7 +12,7 @@
 #include <string.h>
 #include "environment.h"
 
-#include "map.h"
+#include <subjective-c/map.h>
 #include "memory.h"
 #include "runtime.h"
 #include "symbol.h"

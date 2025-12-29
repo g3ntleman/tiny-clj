@@ -5,7 +5,7 @@
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "object.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "list.h"
 #include "exception.h"
 #include "runtime.h"
@@ -169,10 +169,6 @@ static int ns_init_registry(void) {
     }
     
     CljMap *ns_map = make_map(16);
-    if (!ns_map) {
-        return -1; // OOM
-    }
-    
     CljMap *transient_map = map_transient(ns_map);
     RELEASE(ns_map); // map_transient() retains the result
     g_runtime.ns_registry = transient_map;
@@ -204,7 +200,7 @@ int ns_reset_registry(void) {
  * 
  * @param name Namespace name (must not be NULL)
  * @param file Optional filename associated with the namespace (can be NULL)
- * @return New namespace object with rc=0, or NULL on error
+ * @return New namespace object with rc=1, or NULL on error
  */
 CljNamespace* make_namespace(const char *cname, const char *file) {
     if (!cname) return NULL;
@@ -212,8 +208,11 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     // Create a new namespace using ALLOC (initializes base.type and base.rc)
     CljNamespace *ns = ALLOC(CljNamespace, 1);
     if (!ns) return NULL;
-    
-    // ALLOC already sets base.type = CLJ_NAMESPACE and base.rc = 0
+
+    // Ensure namespace starts as a valid retained object.
+    // Zombie mode uses rc==0 to detect freed objects, so rc must not be 0 here.
+    ns->base.type = CLJ_NAMESPACE;
+    ns->base.rc = 1;
     
     // Get or intern the namespace name symbol
     CljSymbol *name_symbol = intern_symbol_global(cname);
@@ -226,20 +225,12 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     }
     
     ns->name = name_symbol; // Use the interned symbol
-    ns->mappings = make_map(64); // Increased capacity for clojure.core
-    if (!ns->mappings) {
-        free(ns);
-        return NULL;
-    }
+    ns->mappings = make_map(32); // Increased capacity for clojure.core
     
     ns->macro_mappings = NULL;  // Lazy initialization in register_macro
     
     ns->aliases = make_map(16);
-    if (!ns->aliases) {
-        RELEASE(ns->mappings);
-        free(ns);
-        return NULL;
-    }
+
     
     ns->filename = file ? strdup(file) : NULL;
     if (file && !ns->filename) {
@@ -273,8 +264,7 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     // Create a new namespace using make_namespace (DRY principle)
     CljNamespace *ns = make_namespace(cname, file);
     if (!ns) return NULL;
-    
-    RETAIN(ns);
+
     CljMap *new_registry = map_conj(g_runtime.ns_registry, name_symbol, ns);
     if (!new_registry) {
         // Capacity exceeded - grow the map
@@ -298,12 +288,9 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     g_runtime.ns_registry = new_registry;
     
     if (ns->name == SYM_CLOJURE_CORE) {
-        RETAIN(ns);
         CljMap *new_registry_with_null = map_conj(g_runtime.ns_registry, NULL, ns);
         if (new_registry_with_null) {
             g_runtime.ns_registry = new_registry_with_null;
-        } else {
-            RELEASE(ns);
         }
     }
     
@@ -724,7 +711,8 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     if (user_ns && user_ns != clojure_core) {
         if (user_ns->mappings) {
             RELEASE(user_ns->mappings);
-            user_ns->mappings = make_map(16);
+            ASSIGN(user_ns->mappings, make_map(16));
+
         }
     }
     
@@ -875,21 +863,17 @@ void ns_define(CljNamespace *ns, ID symbol, ID value) {
         qualified_symbol = sym;  // Fallback to original if helper fails
     }
     
-    // Create or update mappings
-    if (!ns->mappings) {
-        // OPTIMIZATION: Start with capacity 32 to reduce map growth during namespace loading
-        ns->mappings = make_map(32);
-    }
-    
+    CLJ_ASSERT(ns->mappings != NULL);
+
     // Store symbol-value binding (overwrites existing)
     // For def: store qualified symbol (e.g., user/my-var)
     // IMPORTANT: Use owned/in-place update to keep rc==1 during core load (COW hot path).
     map_assoc_inplace(&ns->mappings, qualified_symbol, value);
 
-    // Provide unqualified alias so direct map_get on the original symbol works (useful for tests/debuggers)
-    if (sym && !sym->ns_name && sym != qualified_symbol) {
-        map_assoc_inplace(&ns->mappings, sym, value);
-    }
+    // // Provide unqualified alias so direct map_get on the original symbol works (useful for tests/debuggers)
+    // if (sym && !sym->ns_name && sym != qualified_symbol) {
+    //     map_assoc_inplace(&ns->mappings, sym, value);
+    // }
     
     // OPTIMIZATION: Invalidate resolve cache completely instead of removing individual symbols
     // This avoids ~23 map_assoc() calls per require and is more efficient.
@@ -907,10 +891,8 @@ void ns_define_refer(CljNamespace *ns, ID symbol, ID value) {
         return;
     }
     
-    // Create or update mappings
-    if (!ns->mappings) {
-        ns->mappings = make_map(32);
-    }
+    CLJ_ASSERT(ns->mappings != NULL);
+ 
 
     // DRY: Use helper function for qualified symbol (for consistency with def/defn entries)
     // Store qualified symbol for consistency with def/defn entries

@@ -9,7 +9,7 @@
 #ifndef TINY_CLJ_REGEX_H
 #define TINY_CLJ_REGEX_H
 
-#include "subjective-c/object.h"
+#include <subjective-c/object.h>
 #include "types.h"
 #include <stdbool.h>
 

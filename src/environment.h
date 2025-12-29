@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include "object.h"
 #include "value.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "list.h"
 #include "symbol.h"
 

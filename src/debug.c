@@ -167,22 +167,16 @@ const char* print_ast(ID v) {
 #endif // DEBUG
 
 /**
- * @brief Check if an object is a zombie (freed but not deallocated)
+ * @brief Check if an object is a zombie (already freed)
  * @param o Object to check (can be NULL or immediate)
  * @return true if object is a zombie, false otherwise
- * @note Zombie objects have rc == ZOMBIE_RC (-1) and are only present in DEBUG builds
  */
 bool is_zombie(ID o) {
     if (!o || IS_IMMEDIATE(o)) {
         return false;  // NULL and immediates cannot be zombies
     }
 
-#ifdef DEBUG
     CljObject *obj = (CljObject*)o;
-    return obj->rc == ZOMBIE_RC;
-#else
-    // In release builds, zombie mode is not available
-    return false;
-#endif
+    return obj->rc == 0;
 }
 

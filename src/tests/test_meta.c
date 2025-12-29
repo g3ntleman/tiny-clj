@@ -12,7 +12,7 @@
 #include "../reader.h"
 #include "../eval.h"
 #include "../list.h"
-#include "../map.h"
+#include <subjective-c/map.h>
 #include "../kv_macros.h"
 #include "../runtime.h"
 #include "../object.h"

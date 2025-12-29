@@ -4,7 +4,7 @@
 #include "exception.h"
 #include "event_loop.h"
 #include "error_messages.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "seq.h"
 #include "strings.h"
 

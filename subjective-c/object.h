@@ -108,10 +108,10 @@ static inline CljType TAG(ID obj) {
     // If zombie mode is enabled, objects are marked as zombies when freed
     // This check will catch use-after-free errors before they cause corruption
 #ifdef ZOMBIE_ENABLED
-    // Only check rc if zombie mode is enabled (avoids unnecessary access)
+    // In zombie mode, rc=0 means the object is a zombie (freed but not DEALLOCed)
     // Access rc field - if this crashes, it means the pointer was invalid
     // and we would have crashed anyway when accessing type
-    if (obj_ptr->rc == ZOMBIE_RC) {
+    if (obj_ptr->rc == 0) {
         // This is a use-after-free error! The object was freed but we're still accessing it.
         // Report the error with detailed information
         const char *type_name = "unknown";
@@ -119,7 +119,7 @@ static inline CljType TAG(ID obj) {
             type_name = clj_type_name(type);
         }
         throw_exception_formatted("ZombieAccessError", __FILE__, __LINE__, 0,
-                "Use-after-free detected: Attempted to access freed object %p (type=%s, rc=ZOMBIE_RC). "
+                "Use-after-free detected: Attempted to access freed object %p (type=%s, rc=0). "
                 "This object was freed but is still being accessed. Check for dangling pointers or missing RETAIN.",
                 obj_ptr, type_name);
         // Return a safe default to prevent further crashes
@@ -137,7 +137,7 @@ static inline bool is_singleton(CljObject *obj) {
         return true;
     }
 #ifdef DEBUG
-    if (obj->rc == ZOMBIE_RC) {
+    if (obj->rc == 0) {
         return false;
     }
 #endif

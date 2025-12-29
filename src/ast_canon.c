@@ -17,7 +17,7 @@
 #include "strings.h"
 #include "list.h"
 #include "vector.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "namespace.h"
 #include "memory.h"
 #include "ast.h"

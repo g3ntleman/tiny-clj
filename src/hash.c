@@ -3,13 +3,13 @@
 #include "hash.h"
 #include "symbol.h"
 #include "vector.h"
-#include "map.h"
+#include <subjective-c/map.h>
 #include "list.h"
 #include "strings.h"
 #include "value.h"
 #include "object.h"
 #include "kv_macros.h"
-#include "subjective-c/callbacks.h"
+#include <subjective-c/callbacks.h>
 
 #define FNV1A_OFFSET 2166136261u
 #define FNV1A_PRIME  16777619u

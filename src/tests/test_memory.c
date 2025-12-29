@@ -266,8 +266,8 @@ TEST(test_zombie_detection) {
         TEST_ASSERT_NOT_NULL(strstr(ex->message, "zombie"));
         
         // Verify zombie object is stored in exception
-        TEST_ASSERT_NOT_NULL(ex->object);
-        TEST_ASSERT_EQUAL_PTR(obj, ex->object);
+        TEST_ASSERT_TRUE(ex->object != 0);
+        TEST_ASSERT_TRUE(ex->object == (uintptr_t)obj);
         
         // Verify object is marked as zombie
         TEST_ASSERT_EQUAL_INT(ZOMBIE_RC, obj->rc);

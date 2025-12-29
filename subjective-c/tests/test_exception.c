@@ -66,7 +66,7 @@ TEST(test_stacktrace_toggle) {
             CljString *st = caught_ex->stacktrace;
             TEST_ASSERT_TRUE(st->length >= 0);
         }
-        TEST_ASSERT_NULL(caught_ex->object);
+    TEST_ASSERT_TRUE(caught_ex->object == 0);
 #endif
     } END_TRY
     
