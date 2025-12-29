@@ -54,7 +54,7 @@ bool is_autoreleased(CljObject *obj);
 #endif // DEBUG
 
 #define ALLOC(type, count) ((type*) alloc(sizeof(type), (count), TYPE_OF(type)))
-#define ALLOC_SIMPLE(obj_type) ((CljObject*) alloc(sizeof(CljObject), 1, obj_type))
+#define ALLOC_SIMPLE(obj_type) (ID) alloc(sizeof(CljObject), 1, obj_type)
 
 #ifdef DEBUG
     #ifdef ZOMBIE_ENABLED

@@ -38,7 +38,7 @@ CljMap* make_map(int capacity) {
   size_t data_size = (size_t)capacity * 2 * sizeof(CljObject*);
   size_t total_size = struct_size + data_size;
 
-  CljMap *map = (CljMap*)malloc(total_size);
+  CljMap *map = (CljMap*)alloc(total_size, 1, CLJ_MAP);
   if (!map) {
     throw_oom();
   }
