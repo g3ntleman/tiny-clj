@@ -30,6 +30,13 @@ R"CLOJURE(
 (defn cons [x seq] :native)
 ^#^{:doc "Returns the number of items in the collection. (count nil) returns 0. Also works on strings, arrays, and Java Collections."}
 (defn count [coll] :native)
+
+^#^{:doc "Internal helper. Creates a LazySeq from a 0-arity thunk."}
+(defn lazy-seq* [f] :native)
+
+^#^{:doc "Takes a body of expressions and yields a LazySeq that will evaluate them once when realized."}
+(defmacro lazy-seq [& body]
+  (list 'clojure.core/lazy-seq* (cons 'fn (cons [] body))))
 ^#^{:doc "Creates a new vector containing the args."}
 (defn vector [& args] :native)
 ^#^{:doc "Returns a vector of the contents of coll."}
@@ -93,9 +100,7 @@ R"CLOJURE(
 (def second (fn [coll] (first (rest coll))))
 ^#^{:doc "Returns true if coll has no items - same as (not (seq coll)). Please use the idiom (seq coll) when testing whether a collection is non-empty."}
 (def empty? (fn [coll] 
-  (if coll
-    (= (count coll) 0)
-    true)))
+  (not (seq coll))))
 ; ============================================================================
 ; Map Functions (native implementations with docstrings)
 ; ============================================================================
@@ -166,8 +171,20 @@ R"CLOJURE(
 ; ============================================================================
 ; Sequence Helper Functions (needed by Threading Macros)
 ; ============================================================================
-^#^{:doc "Returns a lazy seq representing the concatenation of the elements in x and y."}
-(defn concat [x y] :native)
+^#^{:doc "Internal 2-arity helper for concat (native)."}
+(defn concat2 [x y] :native)
+
+^#^{:doc "Returns a seq representing the concatenation of the elements in colls. Implemented as a macro (no multi-arity support yet) that expands into nested calls to clojure.core/concat2."}
+(defmacro concat [& colls]
+  (let [build (fn build [xs]
+                (if (empty? xs)
+                  (list 'clojure.core/list)
+                  (if (empty? (rest xs))
+                    (list 'clojure.core/seq (first xs))
+                    (if (empty? (rest (rest xs)))
+                      (list 'clojure.core/concat2 (first xs) (second xs))
+                      (list 'clojure.core/concat2 (first xs) (build (rest xs)))))))]
+    (build colls)))
 
 ^#^{:doc "Returns the last item in coll, in linear time."}
 (defn last [coll]
@@ -199,8 +216,23 @@ R"CLOJURE(
           (cons (first coll)
                 (interleave-repeat val (rest coll))))))
 
+^#^{:doc "Internal helper for (repeat n x): builds a finite list."}
+(defn repeat-n-list [n x]
+  (if (<= n 0)
+    (list)
+    (cons x (repeat-n-list (dec n) x))))
+
 ^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
-(defn repeat [n x] :native)
+(defn repeat [& args]
+  (if (= (count args) 1)
+    (let [x (first args)]
+      (lazy-seq
+        (cons x (repeat x))))
+    (if (= (count args) 2)
+      (let [n (first args)
+            x (second args)]
+        (vec (repeat-n-list n x)))
+      (throw "repeat requires 1 or 2 arguments"))))
 
 ^#^{:doc "Returns a lazy sequence of lists of n items each."}
 (defn partition [n coll]
@@ -574,8 +606,7 @@ R"CLOJURE(
 ; ============================================================================
 ^#^{:doc "Returns a lazy seq of numbers from start (inclusive) to end (exclusive), by step, where start defaults to 0, step to 1, and end to infinity."}
 (defn range [& args] :native)
-^#^{:doc "Returns a lazy (infinite!, or length n if supplied) sequence of xs."}
-(defn repeat [x] :native)
+; repeat is defined earlier (lazy, variadic)
 ^#^{:doc "Returns the nth next of coll, (seq coll) when n is 0."}
 (defn nthnext [coll n] :native)
 ^#^{:doc "Returns the first logical true value of (pred x) for any x in coll, else nil. Native implementation."}
@@ -1032,38 +1063,53 @@ R"CLOJURE(
           Handles nested quasiquotes and splicing."}
 (def quasiquote-fn
   (fn [form]
-    (cond
-      ; Check for unquote: (unquote x) -> x
-      (and (list? form) (= (first form) 'unquote))
-        (second form)
-      
-      ; Check for unquote-splice: (unquote-splice x) -> error (must be inside list)
-      (and (list? form) (= (first form) 'unquote-splice))
-        (throw (str "unquote-splice not in list context: " form))
-      
-      ; Handle lists with potential splicing
-      (list? form)
-        (let [process-elem (fn [acc elem]
-                             (if (and (list? elem) (= (first elem) 'unquote-splice))
-                               ; Splice: concat acc with the elements of (second elem)
-                               ; The (second elem) will be evaluated at runtime, so we need to ensure it's a seq
-                               (list 'concat acc (list 'seq (second elem)))
-                               ; Normal: conj the recursively processed elem
-                               (list 'conj acc (list 'quasiquote-fn (list 'quote elem)))))]
-          (reduce process-elem (list 'list) form))
-      
-      ; Handle vectors - similar to lists but return vector
-      (vector? form)
-        (list 'vec (list 'quasiquote-fn (list 'quote (seq form))))
-      
-      ; Handle maps - quote keys and values
-      (map? form)
-        (list 'into {} (list 'map (fn [[k v]] [(list 'quasiquote-fn (list 'quote k))
-                                                (list 'quasiquote-fn (list 'quote v))])
-                             (seq form)))
-      
-      ; Symbols, keywords, and other atoms - quote them
-      :else
-        (list 'quote form))))
+    (let [unquote? (fn [x]
+                     (and (list? x)
+                          (symbol? (first x))
+                          (= (name (first x)) "unquote")))
+          unquote-splice? (fn [x]
+                            (and (list? x)
+                                 (symbol? (first x))
+                                 (= (name (first x)) "unquote-splice")))]
+      (cond
+        ; Check for unquote: (unquote x) -> x
+        (unquote? form)
+          (second form)
+
+        ; Check for unquote-splice: (unquote-splice x) -> error (must be inside list)
+        (unquote-splice? form)
+          (throw (str "unquote-splice not in list context: " form))
+
+        ; Handle lists with potential splicing
+        (list? form)
+          (let [process-elem (fn [acc elem]
+                               (cond
+                                 (unquote-splice? elem)
+                                   ; Splice: concat2 acc with elements of (second elem)
+                                   ; Use clojure.core/concat2 directly (macro-free) because quasiquote
+                                   ; evaluates the builder expression at runtime.
+                                   (list 'clojure.core/concat2 acc (list 'clojure.core/seq (second elem)))
+
+                                 :else
+                                   ; Normal element: append one element in order
+                                   (list 'clojure.core/concat2
+                                         acc
+                                         (list 'clojure.core/list
+                                         (quasiquote-fn elem)))))]
+            (reduce process-elem (list 'clojure.core/list) form))
+
+        ; Handle vectors - similar to lists but return vector
+        (vector? form)
+          (list 'vec (list 'quasiquote-fn (list 'quote (seq form))))
+
+        ; Handle maps - quote keys and values
+        (map? form)
+          (list 'into {} (list 'map (fn [[k v]] [(list 'quasiquote-fn (list 'quote k))
+                                                  (list 'quasiquote-fn (list 'quote v))])
+                               (seq form)))
+
+        ; Symbols, keywords, and other atoms - quote them
+        :else
+          (list 'quote form)))))
 
 )CLOJURE"

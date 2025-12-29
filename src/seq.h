@@ -8,6 +8,7 @@
 #ifndef TINY_CLJ_SEQ_H
 #define TINY_CLJ_SEQ_H
 
+#include "common.h"  // For CLJ_ASSERT
 #include "object.h"
 #include <stdbool.h>
 
@@ -126,6 +127,31 @@ typedef struct {
     SeqIterator iter;       // Embedded stack iterator
 } CljSeqIterator;
 
+// ============================================================================
+// LAZY SEQ (Heap-based)
+// ============================================================================
+
+/**
+ * @brief Heap-allocated lazy sequence.
+ *
+ * LazySeq realization model:
+ * - Before realization: first == NOT_FOUND and thunk is a 0-arity thunk that
+ *   produces a seqable value.
+ * - After realization: first holds the first element (may be NULL for a nil
+ *   element), cached_rest holds the rest sequence, and thunk is released.
+ */
+typedef struct {
+    CljObject base;     // Base object (CLJ_LAZY_SEQ type)
+    ID first;           // NOT_FOUND until realized; then first element (may be NULL)
+    ID thunk;           // 0-arity thunk producing the sequence body (released after realization)
+    ID cached_rest;     // NOT_FOUND until realized; then rest sequence (may be NULL for empty)
+} CljLazySeq;
+
+/**
+ * @brief Create a lazy sequence backed by a 0-arity thunk.
+ */
+CljLazySeq* make_lazy_seq(ID thunk);
+
 /**
  * @brief Create heap-allocated seq (legacy compatibility)
  */
@@ -152,6 +178,17 @@ bool is_seq(ID obj);
  */
 static inline CljSeqIterator* as_seq(ID obj) {
     return (TAG((CljObject*)obj) == CLJ_SEQ) ? (CljSeqIterator*)obj : NULL;
+}
+
+/**
+ * @brief Cast to CljLazySeq.
+ */
+static inline CljLazySeq* as_lazy_seq(ID obj) {
+    return (TAG((CljObject*)obj) == CLJ_LAZY_SEQ) ? (CljLazySeq*)obj : NULL;
+}
+
+static inline bool is_lazy_seq(ID obj) {
+    return obj && TAG((CljObject*)obj) == CLJ_LAZY_SEQ;
 }
 
 #ifdef __cplusplus

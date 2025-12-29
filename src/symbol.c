@@ -203,6 +203,7 @@ DEFINE_EXTERN_SYMBOL(sym_nth_data, "nth");
 DEFINE_EXTERN_SYMBOL(sym_first_data, "first");
 DEFINE_EXTERN_SYMBOL(sym_rest_data, "rest");
 DEFINE_EXTERN_SYMBOL(sym_concat_data, "concat");
+DEFINE_EXTERN_SYMBOL(sym_concat2_data, "concat2");
 DEFINE_EXTERN_SYMBOL(sym_count_data, "count");
 
 // Extern symbol structs for native functions (compile-time initialization, statically allocated)
@@ -241,6 +242,7 @@ DEFINE_EXTERN_SYMBOL(sym_quot_data, "quot");
 DEFINE_EXTERN_SYMBOL(sym_bit_shift_left_data, "bit-shift-left");
 DEFINE_EXTERN_SYMBOL(sym_range_data, "range");
 DEFINE_EXTERN_SYMBOL(sym_repeat_data, "repeat");
+DEFINE_EXTERN_SYMBOL(sym_lazy_seq_star_data, "lazy-seq*");
 DEFINE_EXTERN_SYMBOL(sym_math_sqrt_data, "Math/sqrt");
 DEFINE_EXTERN_SYMBOL(sym_sqrt_data, "sqrt");
 DEFINE_EXTERN_SYMBOL(sym_format_data, "format");

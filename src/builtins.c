@@ -51,6 +51,7 @@ ID native_quot(ID *args, unsigned int argc);
 ID native_bit_shift_left(ID *args, unsigned int argc);
 ID native_range(ID *args, unsigned int argc);
 ID native_repeat(ID *args, unsigned int argc);
+ID native_lazy_seq_star(ID *args, unsigned int argc);
 ID native_math_sqrt(ID *args, unsigned int argc);
 // String functions moved to builtins_strings.c
 ID native_symbol(ID *args, unsigned int argc);
@@ -501,7 +502,7 @@ ID native_seq(ID *args, unsigned int argc) {
     if (!coll || !is_seqable(coll)) return NULL;
     if (TAG(coll) == CLJ_LIST || TAG(coll) == CLJ_AST_NODE) {
         CljList *list_data = as_list(coll);
-        return LIST_FIRST(list_data) ? AUTORELEASE(RETAIN(coll)) : NULL;
+        return list_empty(list_data) ? NULL : AUTORELEASE(RETAIN(coll));
     }
     CljSeqIterator *seq = make_seq(coll);
     return seq ? AUTORELEASE((ID)seq) : NULL;
@@ -621,7 +622,7 @@ ID native_concat(ID *args, unsigned int argc) {
 
     // If x is empty/nil, return y (or empty list if y is nil)
     if (!x || (list_type_matches(TAG(x)) && !list_count(as_list(x)))) {
-        return y ? RETAIN(y) : AUTORELEASE(make_list(NULL, NULL));
+        return y ? RETAIN(y) : empty_list();
     }
 
     // If y is nil, return x
@@ -647,12 +648,16 @@ ID native_concat(ID *args, unsigned int argc) {
     }
     
     // Build list from elements (reverse order)
+    if (count == 0) {
+        return empty_list();
+    }
+
     CljList *result = NULL;
     for (int i = count - 1; i >= 0; i--) {
         result = make_list(elements[i], result);
     }
     
-    return AUTORELEASE(result ? result : make_list(NULL, NULL));
+    return AUTORELEASE(result);
 }
 
 // nnext: (next (next coll)) - returns the next of the next
@@ -2355,6 +2360,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_bit_shift_left_data.sym, native_bit_shift_left},
     {&sym_range_data.sym, native_range},
     {&sym_repeat_data.sym, native_repeat},
+    {&sym_lazy_seq_star_data.sym, native_lazy_seq_star},
     {&sym_math_sqrt_data.sym, native_math_sqrt},
     {&sym_sqrt_data.sym, native_math_sqrt},
     {&sym_format_data.sym, native_format},
@@ -2375,6 +2381,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_first_data.sym, native_first},
     {&sym_rest_data.sym, native_rest},
     {&sym_concat_data.sym, native_concat},
+    {&sym_concat2_data.sym, native_concat},
     {&sym_next_data.sym, native_next},
     {&sym_nnext_data.sym, native_nnext},
     {&sym_nthnext_data.sym, native_nthnext},
@@ -3863,6 +3870,7 @@ ID native_bit_shift_left(ID *args, unsigned int argc) {
 
 ID native_range(ID *args, unsigned int argc) {
     CHECK_ARITY_RANGE(argc, 1, 3, "range");
+ID native_lazy_seq_star(ID *args, unsigned int argc);
 
     int start = 0, end = 0, step = 1;
 
@@ -3966,6 +3974,23 @@ ID native_repeat(ID *args, unsigned int argc) {
     }
 
     return AUTORELEASE(vec);
+}
+
+ID native_lazy_seq_star(ID *args, unsigned int argc) {
+    CLJ_ASSERT(args != NULL);
+
+    if (!validate_builtin_args(argc, 1, "lazy-seq*")) return NULL;
+
+    ID f = args[0];
+    if (!f || IS_IMMEDIATE(f) || !(TAG(f) == CLJ_FUNC || TAG(f) == CLJ_CLOSURE)) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "lazy-seq* requires a function (0-arity thunk)",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
+
+    CljLazySeq *lazy = make_lazy_seq(f);
+    return lazy ? AUTORELEASE((ID)lazy) : NULL;
 }
 
 ID native_math_sqrt(ID *args, unsigned int argc) {
@@ -4577,8 +4602,9 @@ ID native_char_p(ID *args, unsigned int argc) {
 
 ID native_list_p(ID *args, unsigned int argc) {
     CHECK_ARITY(argc, 1, "list?");
-    // Only CLJ_LIST is a true list (ASTNodes are internal compiler artifacts)
-    return (args[0] && TAG(args[0]) == CLJ_LIST) ? clj_true : clj_false;
+    // Treat CLJ_LIST and CLJ_AST_NODE as list-like. Macros/quasiquote operate on
+    // parsed forms, which are typically CLJ_AST_NODE.
+    return (args[0] && list_type_matches(TAG(args[0]))) ? clj_true : clj_false;
 }
 
 // native_time removed: time is now only a special form (eval_time)
