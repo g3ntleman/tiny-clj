@@ -10,6 +10,7 @@
 #include "../tiny_clj.h"
 #include "../event_loop.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
+#include "build_info.h"
 #include <time.h>
 
 // Forward declaration for clojure_core_set_quiet

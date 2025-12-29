@@ -1,0 +1,56 @@
+// build_info.h.in - Template for build information
+// This file is processed by CMake to generate build_info.h
+#ifndef BUILD_INFO_H
+#define BUILD_INFO_H
+
+#define BUILD_TYPE "@CMAKE_BUILD_TYPE@"
+#define BUILD_DATE __DATE__
+#define BUILD_TIME __TIME__
+#define BUILD_COMPILER "@CMAKE_C_COMPILER_ID@"
+#define BUILD_COMPILER_VERSION "@CMAKE_C_COMPILER_VERSION@"
+#define BUILD_CMAKE_VERSION "@CMAKE_VERSION@"
+#define BUILD_SOURCE_DIR "@CMAKE_SOURCE_DIR@"
+
+// Build-Features
+#ifdef DEBUG
+#define BUILD_DEBUG_ENABLED 1
+#else
+#define BUILD_DEBUG_ENABLED 0
+#endif
+
+#ifdef ENABLE_MEMORY_PROFILING
+#define BUILD_MEMORY_PROFILING_ENABLED 1
+#else
+#define BUILD_MEMORY_PROFILING_ENABLED 0
+#endif
+
+#ifdef ZOMBIE_ENABLED
+#define BUILD_ZOMBIE_MODE_ENABLED 1
+#else
+#define BUILD_ZOMBIE_MODE_ENABLED 0
+#endif
+
+#ifdef ENABLE_META
+#define BUILD_META_ENABLED 1
+#else
+#define BUILD_META_ENABLED 0
+#endif
+
+// Helper function to print build info
+// Note: Requires <stdio.h> to be included before this header
+static inline void print_build_info(void) {
+    printf("=== Build Information ===\n");
+    printf("Build Type: %s\n", BUILD_TYPE);
+    printf("Build Date: %s %s\n", BUILD_DATE, BUILD_TIME);
+    printf("Compiler: %s %s\n", BUILD_COMPILER, BUILD_COMPILER_VERSION);
+    printf("CMake Version: %s\n", BUILD_CMAKE_VERSION);
+    printf("Features:\n");
+    printf("  - Debug: %s\n", BUILD_DEBUG_ENABLED ? "Enabled" : "Disabled");
+    printf("  - Memory Profiling: %s\n", BUILD_MEMORY_PROFILING_ENABLED ? "Enabled" : "Disabled");
+    printf("  - Zombie Mode: %s\n", BUILD_ZOMBIE_MODE_ENABLED ? "Enabled" : "Disabled");
+    printf("  - Meta: %s\n", BUILD_META_ENABLED ? "Enabled" : "Disabled");
+    printf("=======================\n");
+}
+
+#endif // BUILD_INFO_H
+

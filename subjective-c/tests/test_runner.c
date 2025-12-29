@@ -9,6 +9,7 @@
 #include "test_registry.h"
 #include "unity.h"
 #include "unity/src/unity_internals.h"  // For Unity.TestFile and Unity.CurrentTestLineNumber
+#include "build_info.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -181,6 +182,9 @@ static void print_usage(const char *program_name) {
 }
 
 int main(int argc, char **argv) {
+    // Print build information at startup
+    print_build_info();
+    
     // Initialize autorelease pool before running tests
     autorelease_pool_init();
     
