@@ -1456,8 +1456,23 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
     }
 #endif // ENABLE_META
 
-    // Return the symbol that was actually stored (Clojure-compatible: def returns the var/symbol, not the value)
-    return sym;
+    // Return the symbol key that was actually stored in the namespace mappings.
+    // For non-core namespaces, ns_define qualifies & interns unqualified symbols
+    // (e.g. user/test-fn). Returning that canonical key keeps (def ...) consistent
+    // with direct map_get-based lookups in tests and tooling.
+    CljSymbol *ret_sym = sym;
+    if (st->current_ns && sym && sym->cname) {
+        if (st->current_ns->name == SYM_CLOJURE_CORE) {
+            ret_sym = intern_symbol_global(sym->cname);
+        } else if (sym->ns_name && st->current_ns->name && sym->ns_name == st->current_ns->name) {
+            ret_sym = sym;
+        } else if (sym->ns_name && sym->ns_name->cname) {
+            ret_sym = sym;
+        } else if (st->current_ns->name && st->current_ns->name->cname) {
+            ret_sym = intern_symbol(st->current_ns->name, sym->cname);
+        }
+    }
+    return ret_sym;
 }
 
 ID eval_ns(CljList *list, CljMap *env, EvalState *st) {

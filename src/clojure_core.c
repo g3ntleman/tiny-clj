@@ -297,6 +297,7 @@ int load_clojure_core(EvalState *st) {
       CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
         // clojure.core is already loaded - return success without reloading
+        clojure_core->loaded = true;
         if (original_ns) {
           st->current_ns = original_ns;
         }
@@ -310,6 +311,10 @@ int load_clojure_core(EvalState *st) {
   st->current_ns = clojure_core;
   
   bool ok = eval_core_source(clojure_core_code, "clojure.core.clj", st);
+
+  if (ok) {
+    clojure_core->loaded = true;
+  }
   
   // Restore original namespace after loading
   if (original_ns) {

@@ -810,39 +810,64 @@ ID native_cons(ID *args, unsigned int argc) {
 
     if (!elem) elem = NULL;
 
-    ID result = NULL;
-
-    // nil oder leer
+    // nil tail -> singleton list
     if (!coll) {
-        result = make_list(elem, NULL);
+        CljList *result = make_list(elem, NULL);
         return AUTORELEASE(result);
     }
 
-    // Type-based handling
-    switch (TAG(coll)) {
-        case CLJ_LIST:
-        case CLJ_SEQ: {
-            // Treat empty list like nil
-            CljList *list = coll;
-            if (list_count(list) == 0) {
-                result = make_list(elem, NULL);
-            } else {
-                result = make_list(elem, list);
-            }
+    // Proper list-like tails (lists and parsed AST lists)
+    if (list_type_matches(TAG(coll))) {
+        CljList *list = as_list(coll);
+        // Treat empty list singleton like nil for cons
+        if (list_empty(list)) {
+            CljList *result = make_list(elem, NULL);
             return AUTORELEASE(result);
+        }
+        CljList *result = make_list(elem, list);
+        return AUTORELEASE(result);
+    }
+
+    // Other seqables: return a seq with elem prepended.
+    // We represent this as a realized LazySeq (no thunk): first is elem and
+    // cached_rest is a seq over coll (or nil if coll is empty).
+    if (is_seqable(coll)) {
+        // Build a strong tail reference.
+        // - Existing seq/lazy-seq: retain the argument (caller may release after the call).
+        // - Other seqables: create a new seq wrapper (rc=1) and transfer ownership.
+        ID tail = NULL;
+        unsigned char tag = TAG(coll);
+        if (tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ) {
+            tail = RETAIN(coll);
+        } else {
+            tail = (ID)make_seq(coll);  // may be NULL if empty
         }
 
-        default: {
-            // Vektor oder andere → zu Seq konvertieren
-            CljSeqIterator *seq = make_seq(coll);
-            if (!seq) {
-                result = make_list(elem, NULL);
-            } else {
-                result = make_list(elem, (CljList*)seq);
+        CljLazySeq *lazy = (CljLazySeq*)malloc(sizeof(CljLazySeq));
+        if (!lazy) {
+            if (tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ) {
+                RELEASE(tail);
+            } else if (tail) {
+                RELEASE(tail);
             }
-            return AUTORELEASE(result);
+            return NULL;
         }
+
+        lazy->base.type = CLJ_LAZY_SEQ;
+        lazy->base.rc = 1;
+        lazy->base.flags = 0;
+
+        // Preserve nil elements using SYM_NIL internally.
+        lazy->first = RETAIN(elem ? elem : (ID)SYM_NIL);
+        lazy->thunk = NULL;
+        lazy->cached_rest = tail;  // already a strong ref (or NULL)
+
+        return AUTORELEASE((ID)lazy);
     }
+
+    // Non-seqable tail: fall back to singleton list (historical behavior)
+    CljList *result = make_list(elem, NULL);
+    return AUTORELEASE(result);
 }
 
 // List function that creates a list from its arguments
@@ -3088,45 +3113,8 @@ static bool process_require_spec(ID spec, EvalState *st) {
     // A namespace might exist because native functions were registered, but Clojure code hasn't been loaded yet
     CljNamespace *existing = ns_find(ns_name);
     if (existing) {
-        // Check if namespace has been fully loaded by checking for a marker function
-        // For clojure.core, check if inc exists (core function)
-        // For clojure.string, check if blank? exists (first Clojure function defined)
-        // OPTIMIZATION: Cache symbol lookups to avoid repeated intern_symbol calls
-        // CRITICAL: Namespace mappings use qualified symbols as keys, so we must use a qualified symbol
-        bool needs_loading = true;
-        if (strcmp(ns_name, "clojure.core") == 0 && existing->mappings) {
-            // clojure.core is loaded from C code, so if it has mappings, it's fully loaded
-            // Check for a marker function like 'inc' to confirm it's loaded
-            static CljSymbol *cached_inc_sym = NULL;
-            if (!cached_inc_sym) {
-                cached_inc_sym = intern_symbol_global("inc");
-            }
-            if (cached_inc_sym) {
-                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-                ID inc_func = map_get(existing->mappings, cached_inc_sym, NOT_FOUND);
-                if (inc_func != NOT_FOUND) {
-                    needs_loading = false; // inc found - namespace is fully loaded
-                }
-            }
-        } else if (strcmp(ns_name, "clojure.string") == 0 && existing->mappings) {
-            static CljSymbol *cached_blank_sym = NULL;
-            if (!cached_blank_sym) {
-                CljSymbol *ns_sym = intern_symbol_global("clojure.string");
-                if (ns_sym) {
-                    cached_blank_sym = intern_symbol(ns_sym, "blank?");
-                }
-            }
-            if (cached_blank_sym) {
-                // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-                // nil (NULL) is a valid value in Clojure, so we can't use NULL as not_found
-                ID blank_func = map_get(existing->mappings, cached_blank_sym, NOT_FOUND);
-                if (blank_func != NOT_FOUND) {
-                    needs_loading = false; // blank? found - namespace is fully loaded
-                }
-            }
-        }
-
-        if (!needs_loading) {
+        // Generic idempotence: if namespace source has been loaded once, don't re-evaluate.
+        if (existing->loaded) {
             // Namespace already fully loaded - just set alias/refer if needed
             // CRITICAL: Ensure st->current_ns is valid before setting alias
             // This is the namespace where the alias should be stored
@@ -3209,6 +3197,8 @@ static bool process_require_spec(ID spec, EvalState *st) {
         st->current_ns = target_ns;
     }
     bool ok = eval_source_in_current_state(source, source_path, st);
+    // Mark as loaded even if partially successful (tiny-clj keeps partial-load tolerance).
+    target_ns->loaded = true;
     // Restore original namespace
     if (st && orig_ns) {
         st->current_ns = orig_ns;

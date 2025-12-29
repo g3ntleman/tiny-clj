@@ -231,6 +231,8 @@ CljNamespace* make_namespace(const char *cname, const char *file) {
     
     ns->aliases = make_map(16);
 
+    ns->loaded = false;
+
     
     ns->filename = file ? strdup(file) : NULL;
     if (file && !ns->filename) {
