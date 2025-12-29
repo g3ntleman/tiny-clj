@@ -21,6 +21,7 @@
 #include "function.h"  // For CljFunction
 #include "namespace.h"  // For CljNamespace
 #include "hashmap.h"  // For CljHashMap
+#include "seq.h"  // For CljLazySeq
 #include <subjective-c/thread_local.h>
 #include <string.h>
 #include <execinfo.h>
@@ -639,7 +640,7 @@ static void release_object_default(CljObject *v) {
                     VECTOR_FOR_EACH(vec, elem) {
                         RELEASE(elem);
                     }
-                    // Note: data array wird automatisch freigegeben
+                    // Note: data array is automatically freed
                 }
             }
             break;
@@ -647,7 +648,7 @@ static void release_object_default(CljObject *v) {
         case CLJ_VECTOR_TRANSIENT_WEAK:
             {
                 // For CLJ_VECTOR_TRANSIENT_WEAK, elements are not retained or released (weak references)
-                // Note: data array wird automatisch freigegeben
+                // Note: data array is automatically freed
             }
             break;
             
@@ -792,6 +793,18 @@ static void release_object_default(CljObject *v) {
         case CLJ_SEQ:
             // CljSeqIterator contains only stack-allocated iterator state
             // No heap-allocated data to release (container is a borrowed reference)
+            break;
+
+        case CLJ_LAZY_SEQ:
+            {
+                // Direct cast - avoid TAG() which may throw in zombie mode.
+                CljLazySeq *lazy_seq = (CljLazySeq*)v;
+                if (lazy_seq) {
+                    RELEASE(lazy_seq->thunk);
+                    RELEASE(lazy_seq->first);
+                    RELEASE(lazy_seq->cached_rest);
+                }
+            }
             break;
             
         case CLJ_NAMESPACE:

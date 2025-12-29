@@ -553,7 +553,7 @@ CljNamespace* ns_find_for_object(CljObject *obj) {
 // Fast lookup with symbol (avoids intern_symbol call - DRY principle)
 // NOTE: name_symbol can be NULL (nil) - that's a valid key in Clojure maps
 CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol) {
-    // Programmierfehler: ns_registry muss initialisiert sein
+    // Programming error: ns_registry must be initialized
     CLJ_ASSERT(g_runtime.ns_registry != NULL);
     // map_get accepts NULL as a valid key (nil can be used as key in Clojure)
     ID ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
@@ -776,7 +776,7 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
 }
 
 CljObject* eval_catch(CljObject *form, EvalState *st) {
-    // Vereinfachte catch-Implementierung
+    // Simplified catch implementation
     return eval_try(form, st);
 }
 

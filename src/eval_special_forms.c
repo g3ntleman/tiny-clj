@@ -9,6 +9,7 @@
 #include "function.h"
 #include "macro.h"
 #include "meta.h"
+#include "ast.h"
 
 // Special Form evaluation functions with unified signature (exported for symbol initialization)
 ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
@@ -288,9 +289,6 @@ ID eval_special_form_dispatch(CljList *list,
 static CljFunction *g_quasiquote_fn = NULL;
 
 ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    (void)env;  // Unused - quasiquote doesn't evaluate in current env
-    (void)ctx;
-    
     // Get the expression to quasiquote: (quasiquote expr)
     ID expr = list_get_element(list, 1);
     if (!expr) return NULL;
@@ -312,17 +310,25 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
         return NULL;
     }
     
-    // Delegate to Clojure quasiquote-fn
-    // CRITICAL: Don't evaluate expr - pass it directly to quasiquote-fn
-    // quasiquote-fn needs to process unquote/unquote-splice forms before evaluation
+    // Delegate to Clojure quasiquote-fn to get an expansion form.
+    // Then evaluate that expansion in the *current* env/ctx so unquote and
+    // unquote-splice can see lexical bindings (Clojure-compatible behavior).
+    // Finally, return (quote <value>) so callers doing (eval (quasiquote ...))
+    // still get the intended data structure.
     ID args[] = { expr };
-    ID result = eval_function_call((CljObject*)g_quasiquote_fn, args, 1, NULL, st);
-    
-    // The result is the expanded form - evaluate it
-    if (result) {
-        return eval_body(result, env, st, ctx);
+    ID expansion = eval_function_call((CljObject*)g_quasiquote_fn, args, 1, NULL, st);
+    if (!expansion) {
+        return NULL;
     }
-    return NULL;
+
+    ID value = eval_body(expansion, env, st, ctx);
+    if (value == SYM_NIL) {
+        value = NULL;
+    }
+
+    CljList *quoted_arg = make_ast_list(value, NULL);
+    CljList *quoted_form = make_ast_list(SYM_QUOTE, quoted_arg);
+    return AUTORELEASE(quoted_form);
 }
 
 // ============================================================================

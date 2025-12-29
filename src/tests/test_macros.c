@@ -363,7 +363,7 @@ TEST(test_unquote_splice_with_unquote) {
     TEST_ASSERT_NOT_NULL(result);
     assert_list(result);
     CljList *lst = as_list(result);
-    TEST_ASSERT_EQUAL_INT(4, list_count(lst));  // a, 99, 1, 2, c
+    TEST_ASSERT_EQUAL_INT(5, list_count(lst));  // a, 99, 1, 2, c
     
     // Verify first element is 'a (symbol)
     ID first = lst->first;

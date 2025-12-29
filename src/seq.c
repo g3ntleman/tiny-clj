@@ -6,6 +6,8 @@
  */
 
 #include "seq.h"
+#include "builtins.h"  // builtin_get_eval_state, builtin_set_eval_state, native_first/rest/seq
+#include "eval.h"      // eval_function_call
 #include "value.h"
 #include "list.h"
 #include "vector.h"
@@ -14,6 +16,86 @@
 #include "symbol.h"
 #include <string.h>
 #include <stdlib.h>
+
+// Unit tests may define this symbol to provide an EvalState for LazySeq
+// realization. Provide a weak NULL default so non-test binaries link.
+__attribute__((weak)) EvalState* g_test_eval_state = NULL;
+
+CljLazySeq* make_lazy_seq(ID thunk) {
+    if (!thunk) return NULL;
+
+    CljLazySeq *lazy = (CljLazySeq*)malloc(sizeof(CljLazySeq));
+    if (!lazy) return NULL;
+
+    lazy->base.type = CLJ_LAZY_SEQ;
+    lazy->base.rc = 1;
+    lazy->base.flags = 0;
+
+    // NOT_FOUND indicates "not realized".
+    lazy->first = NOT_FOUND;
+    lazy->thunk = RETAIN(thunk);
+    lazy->cached_rest = NOT_FOUND;
+
+    return lazy;
+}
+
+static void lazy_seq_realize(CljLazySeq *lazy) {
+    if (!lazy) return;
+    if (lazy->first != NOT_FOUND && lazy->cached_rest != NOT_FOUND) {
+        return;
+    }
+
+    // No generator: treat as empty.
+    if (!lazy->thunk) {
+        lazy->first = NULL;
+        lazy->cached_rest = NULL;
+        return;
+    }
+
+    // Resolve EvalState.
+    EvalState *st = builtin_get_eval_state();
+    if (!st) {
+        if (g_test_eval_state) {
+            st = g_test_eval_state;
+        } else {
+            st = get_global_eval_state();
+        }
+    }
+
+    if (!st) {
+        // Cannot evaluate without state.
+        lazy->first = NULL;
+        lazy->cached_rest = NULL;
+        return;
+    }
+
+    // Evaluate thunk once to produce the sequence body.
+    builtin_set_eval_state(st);
+    ID seq_val = eval_function_call(lazy->thunk, NULL, 0, NULL, st);
+
+    ID first_val = NULL;
+    ID rest_val = NULL;
+
+    if (seq_val) {
+        // Normalize through seq/first/rest to preserve existing semantics
+        // (notably: nil elements vs empty sequences).
+        ID seq_args[1] = {seq_val};
+        ID seq_obj = native_seq(seq_args, 1);
+        if (seq_obj) {
+            ID one_arg[1] = {seq_obj};
+            first_val = native_first(one_arg, 1);
+            rest_val = native_rest(one_arg, 1);
+        }
+    }
+    builtin_set_eval_state(NULL);
+
+    // Cache results and release generator.
+    // Use ASSIGN to retain cached values and release previous sentinels safely.
+    ASSIGN(lazy->first, first_val);
+    ASSIGN(lazy->cached_rest, rest_val);
+    RELEASE(lazy->thunk);
+    lazy->thunk = NULL;
+}
 
 static ID make_map_entry_vector(CljMap *map, int index) {
     if (!map || index < 0 || index >= map->count) {
@@ -89,6 +171,14 @@ bool seq_iter_init(SeqIterator *iter, ID obj) {
             *iter = seq->iter;  // Struct copy
             return true;
         }
+
+        case CLJ_LAZY_SEQ: {
+            // Lazy sequence - iterate by repeatedly taking rest.
+            iter->state.list.current = (CljObject*)obj;
+            iter->state.list.index = 0;
+            iter->seq_type = CLJ_LAZY_SEQ;
+            return true;
+        }
         
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
@@ -155,6 +245,14 @@ ID seq_iter_first(const SeqIterator *iter) {
             }
             return NULL;
         }
+
+        case CLJ_LAZY_SEQ: {
+            CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
+            if (!lazy) return NULL;
+            lazy_seq_realize(lazy);
+            ID first = lazy->first;
+            return (first == SYM_NIL) ? NULL : first;
+        }
         
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
@@ -200,21 +298,43 @@ bool seq_iter_next(SeqIterator *iter) {
             if (iter->state.list.current) {
                 CljList *node = as_list(iter->state.list.current);
                 CljObject *rest = LIST_REST(node);
-                // Check if rest is a non-empty list
-                // Use list_empty to properly handle list with nil element
+
+                // If rest is a proper list node, keep iterating list nodes.
+                // Use list_empty to properly handle list with nil element.
                 if (rest && list_type_matches(TAG(rest))) {
                     CljList *rest_list = as_list(rest);
-                    // Only continue if rest is not empty
                     if (!list_empty(rest_list)) {
                         iter->state.list.current = rest;
                         iter->state.list.index++;
                         return true;
                     }
                 }
+
+                // Support "improper" list tails that are still seqable (e.g. LazySeq).
+                // Advance by re-initializing the iterator from the tail.
+                if (rest && is_seqable(rest)) {
+                    if (seq_iter_init(iter, rest)) {
+                        return !seq_iter_empty(iter);
+                    }
+                }
             }
             // Mark as exhausted
             iter->state.list.current = NULL;
             return false;
+        }
+
+        case CLJ_LAZY_SEQ: {
+            CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
+            if (!lazy) return false;
+            lazy_seq_realize(lazy);
+            ID rest = lazy->cached_rest;
+
+            // Advance by re-initializing iterator from cached rest.
+            // This preserves laziness (rest may itself be a LazySeq).
+            if (!seq_iter_init(iter, rest)) {
+                return false;
+            }
+            return !seq_iter_empty(iter);
         }
         
         case CLJ_VECTOR:
@@ -287,6 +407,13 @@ bool seq_iter_empty(const SeqIterator *iter) {
     switch (iter->seq_type) {
         case CLJ_LIST:
             return iter->state.list.current == NULL;
+
+        case CLJ_LAZY_SEQ: {
+            CljLazySeq *lazy = as_lazy_seq(iter->state.list.current);
+            if (!lazy) return true;
+            lazy_seq_realize(lazy);
+            return lazy->first == NULL && lazy->cached_rest == NULL;
+        }
         
         case CLJ_VECTOR:
         case CLJ_VECTOR_TRANSIENT_WEAK:
@@ -346,7 +473,7 @@ CljSeqIterator* make_seq(ID obj) {
         if (vec && vector_count(vec) == 0) return NULL;
     } else if (list_type_matches(obj_tag)) {
         CljList *list = as_list((CljObject*)obj);
-        if (!LIST_FIRST(list)) return NULL;
+        if (list_empty(list)) return NULL;
     } else if (obj_tag == CLJ_MAP || obj_tag == CLJ_MAP_TRANSIENT) {
         CljMap *map = as_map(obj);
         if (!map || map->count == 0) return NULL;
@@ -536,6 +663,7 @@ bool is_seqable(ID obj) {
         case CLJ_MAP:
         case CLJ_STRING:
         case CLJ_SEQ:  // Sequences are seqable
+        case CLJ_LAZY_SEQ:
         // Note: nil is now represented as NULL
             return true;
         default:
@@ -548,6 +676,6 @@ bool is_seq(ID obj) {
     if (list_type_matches(TAG(obj))) {
         return true;
     }
-    return TAG(obj) == CLJ_SEQ;
+    return TAG(obj) == CLJ_SEQ || TAG(obj) == CLJ_LAZY_SEQ;
 }
 
