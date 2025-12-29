@@ -709,11 +709,12 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     // This clears any definitions from previous tests (e.g., helper, main from test_recur)
     CljNamespace *clojure_core = ns_find_by_symbol(SYM_CLOJURE_CORE);
     if (user_ns && user_ns != clojure_core) {
-        if (user_ns->mappings) {
-            RELEASE(user_ns->mappings);
-            ASSIGN(user_ns->mappings, make_map(16));
-
-        }
+        // Replace mappings with a fresh map for test isolation.
+        // make_map() returns an owned object (rc=1). ASSIGN() retains the new value,
+        // so we balance that retain to keep the adopted map at rc=1.
+        CljMap *fresh = make_map(16);
+        ASSIGN(user_ns->mappings, fresh);
+        RELEASE(fresh);
     }
     
     // Ensure current_ns is set to "user" (with clean mappings)

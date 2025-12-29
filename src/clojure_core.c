@@ -270,6 +270,9 @@ int load_clojure_core(EvalState *st) {
     return 0;
   }
 
+  // Preserve caller namespace; loading core should not permanently change it.
+  CljNamespace *original_ns = st->current_ns;
+
   // CRITICAL: Ensure clojure.core namespace exists
   // evalstate_set_ns will create the namespace if it doesn't exist
   evalstate_set_ns(st, "clojure.core");
@@ -294,6 +297,9 @@ int load_clojure_core(EvalState *st) {
       CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
         // clojure.core is already loaded - return success without reloading
+        if (original_ns) {
+          st->current_ns = original_ns;
+        }
         return 1;
       }
     }
@@ -302,14 +308,11 @@ int load_clojure_core(EvalState *st) {
   // CRITICAL: Ensure st->current_ns points to the namespace from registry
   // This ensures all def operations store in the correct namespace
   st->current_ns = clojure_core;
-
-  // Save original namespace to restore after loading
-  CljNamespace *original_ns = st->current_ns;
   
   bool ok = eval_core_source(clojure_core_code, "clojure.core.clj", st);
   
   // Restore original namespace after loading
-  if (original_ns && original_ns != clojure_core) {
+  if (original_ns) {
     st->current_ns = original_ns;
   }
 
