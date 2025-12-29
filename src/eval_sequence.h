@@ -12,13 +12,13 @@ extern "C" {
 static inline ID eval_and_call_native_with_context(CljList *list,
                                        CljMap *env,
                                                     ID (*native_func)(ID*, unsigned int),
-                                                    int max_args,
+                                                    unsigned int max_args,
                                                     const EvalContext *ctx) {
     int total_count = list_count(list);
     unsigned int argc = total_count > 0 ? (unsigned int)(total_count - 1) : 0;
     if (argc > max_args) {
         return throw_exception_formatted(EXCEPTION_ARITY, __FILE__, __LINE__, 0,
-            "Wrong number of args (%d) passed to: %s", argc, native_func ? "sequence-op" : "unknown");
+            "Wrong number of args (%u) passed to: %s", argc, native_func ? "sequence-op" : "unknown");
     }
 
     ID args_stack[16];

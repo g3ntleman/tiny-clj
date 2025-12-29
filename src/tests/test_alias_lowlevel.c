@@ -161,7 +161,7 @@ TEST(test_lowlevel_ns_set_alias_stores) {
     TEST_ASSERT_NOT_NULL(ns_name_sym);
     
     // Set alias
-    ns_set_alias(test_ns, (CljObject *)alias_sym, (CljObject *)ns_name_sym);
+    ns_set_alias(test_ns, alias_sym, ns_name_sym);
     
     // Verify: aliases map should exist
     TEST_ASSERT_NOT_NULL_MESSAGE(test_ns->aliases, "aliases map should be created");

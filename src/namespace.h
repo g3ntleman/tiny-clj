@@ -56,8 +56,8 @@ void ns_cleanup(void);
 int ns_reset_registry(void);  // Reset and reinitialize namespace registry
 
 // Namespace alias functions
-CljObject* ns_get_alias(CljNamespace *ns, CljObject *alias);
-void ns_set_alias(CljNamespace *ns, CljObject *alias, CljObject *ns_name);
+ID ns_get_alias(CljNamespace *ns, ID alias);
+void ns_set_alias(CljNamespace *ns, ID alias, ID ns_name);
 
 // EvalState functions
 EvalState* get_global_eval_state(void);  // Get global thread-local EvalState

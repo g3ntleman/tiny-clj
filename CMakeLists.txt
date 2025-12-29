@@ -283,9 +283,9 @@ add_executable(tiny-clj-profile
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
-target_compile_definitions(tiny-clj-profile PRIVATE ENABLE_PROFILING ENABLE_META)
+target_compile_definitions(tiny-clj-profile PRIVATE ENABLE_PROFILING ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
-    COMPILE_FLAGS "-g -O2 -fno-omit-frame-pointer"
+    COMPILE_FLAGS "-g -O2 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 

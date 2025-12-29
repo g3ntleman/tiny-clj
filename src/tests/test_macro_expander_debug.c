@@ -67,7 +67,7 @@ TEST(test_macro_expander_debug_isolated) {
     
 #ifdef DEBUG
     // Debug output removed for silent test execution
-    const char *parsed_ast = print_ast((CljObject*)parsed);
+    const char *parsed_ast = print_ast(parsed);
     (void)parsed_ast; // Suppress unused variable warning
     free((void*)parsed_ast);
 #endif
@@ -78,7 +78,7 @@ TEST(test_macro_expander_debug_isolated) {
     
 #ifdef DEBUG
     // Debug output removed for silent test execution
-    const char *canon_ast = print_ast((CljObject*)canonicalized);
+    const char *canon_ast = print_ast(canonicalized);
     (void)canon_ast; // Suppress unused variable warning
     free((void*)canon_ast);
     
@@ -93,7 +93,7 @@ TEST(test_macro_expander_debug_isolated) {
             
             if (is_immediate && first_tag != CLJ_SYMBOL) {
                 // Debug output removed for silent test execution
-                const char *first_ast = print_ast((CljObject*)list->first);
+                const char *first_ast = print_ast(list->first);
                 (void)first_ast; // Suppress unused variable warning
                 free((void*)first_ast);
             }
@@ -136,7 +136,7 @@ TEST(test_macro_expander_debug_with_macro) {
     
 #ifdef DEBUG
     // Debug output removed for silent test execution
-    const char *parsed_ast = print_ast((CljObject*)parsed);
+    const char *parsed_ast = print_ast(parsed);
     (void)parsed_ast; // Suppress unused variable warning
     free((void*)parsed_ast);
 #endif
@@ -147,7 +147,7 @@ TEST(test_macro_expander_debug_with_macro) {
 #ifdef DEBUG
     // Debug output removed for silent test execution
     if (canonicalized) {
-        const char *canon_ast = print_ast((CljObject*)canonicalized);
+        const char *canon_ast = print_ast(canonicalized);
         (void)canon_ast; // Suppress unused variable warning
         free((void*)canon_ast);
     }
