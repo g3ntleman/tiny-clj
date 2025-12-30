@@ -13,6 +13,7 @@
 #include "value.h"
 #include "eval.h"
 #include "strings.h"
+#include "vector.h"
 #include "../to_string.h"
 #include "../repl.h"
 
@@ -479,5 +480,43 @@ TEST(test_repl_functions_work_after_core_load) {
     // Test: REPL functions should work after core is loaded
     CljObject *result = eval_string("(clojure.repl/dir 'clojure.core)", g_test_eval_state);
     TEST_ASSERT_TRUE(result == NULL || TAG(result) == CLJ_NIL);
+}
+
+// ============================================================================
+// STACKTRACE TESTS
+// ============================================================================
+
+TEST(test_stacktrace_stack_trace_returns_vector_of_strings) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    // 1) require clojure.stacktrace
+    CljObject *req_result = eval_string("(require 'clojure.stacktrace)", g_test_eval_state);
+    (void)req_result;
+
+    // 2) create/capture exception value using Clojure try/catch (division by zero)
+    CljObject *ex_obj = eval_string("(try (/ 1 0) (catch Exception e e))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(ex_obj, "try/catch should return an exception value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_EXCEPTION, TAG(ex_obj), "captured value should be an exception");
+
+    // 3) call (clojure.stacktrace/stack-trace e)
+    CljObject *trace_obj = eval_string(
+        "(let [e (try (/ 1 0) (catch Exception e e))] (clojure.stacktrace/stack-trace e))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL_MESSAGE(trace_obj, "stack-trace should return a vector (possibly empty)");
+
+    // 4) assert it returns a vector and that every element is a string
+    TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_VECTOR, TAG(trace_obj), "stack-trace should return a vector");
+    CljVector *trace_vec = as_vector(trace_obj);
+    TEST_ASSERT_NOT_NULL(trace_vec);
+
+    int n = vector_count(trace_vec);
+    for (int i = 0; i < n; i++) {
+        ID frame = vector_nth(trace_vec, i);
+        TEST_ASSERT_NOT_NULL_MESSAGE(frame, "stack-trace frame should not be nil");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(CLJ_STRING, TAG(frame), "every stack-trace frame should be a string");
+    }
+
+    if (trace_obj && !IS_IMMEDIATE(trace_obj)) RELEASE(trace_obj);
+    if (ex_obj && !IS_IMMEDIATE(ex_obj)) RELEASE(ex_obj);
 }
 

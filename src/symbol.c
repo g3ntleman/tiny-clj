@@ -527,6 +527,9 @@ void init_special_symbols() {
     if (SYM_IF && (SYM_IF->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_IF)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_if;
     }
+    if (SYM_TRY && (SYM_TRY->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_TRY)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_try;
+    }
     if (SYM_WHEN && (SYM_WHEN->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_WHEN)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_when;
     }

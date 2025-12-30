@@ -30,9 +30,7 @@ void meta_registry_init() {
 }
 
 void meta_registry_cleanup() {
-    if (g_runtime.meta_registry) {
-        RELEASE(g_runtime.meta_registry);
-    }
+    RELEASE(g_runtime.meta_registry);
     g_runtime.meta_registry = NULL;
 }
 

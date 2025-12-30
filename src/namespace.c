@@ -181,10 +181,8 @@ static int ns_init_registry(void) {
  */
 int ns_reset_registry(void) {
     // Cleanup existing registry if present
-    if (g_runtime.ns_registry) {
-        RELEASE(g_runtime.ns_registry);
-        g_runtime.ns_registry = NULL;
-    }
+    RELEASE(g_runtime.ns_registry);
+    g_runtime.ns_registry = NULL;
     
     // Cache will be automatically rebuilt when needed via ns_find_by_symbol
     
