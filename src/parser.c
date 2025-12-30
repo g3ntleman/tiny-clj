@@ -1240,8 +1240,8 @@ ID parse(const char *input, EvalState *st) {
  */
 static ID merge_metadata_with_object(ID obj, ID new_meta) {
   if (!obj || !new_meta) {
-    if (new_meta) RELEASE(new_meta);
-    if (obj) RELEASE(obj);
+    RELEASE(new_meta);
+    RELEASE(obj);
     return NULL;
   }
 
@@ -1283,7 +1283,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
   (void)reader;  // Unused parameter
   (void)st;      // Unused parameter
   if (!obj) {
-    if (meta) RELEASE(meta);
+    RELEASE(meta);
     return NULL;
   }
 
@@ -1317,7 +1317,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
   }
 #endif // ENABLE_META
 
-  if (meta) RELEASE(meta);
+  RELEASE(meta);
   return AUTORELEASE(obj);
 }
 

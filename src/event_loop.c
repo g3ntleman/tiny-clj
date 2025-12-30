@@ -353,12 +353,12 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
             result_channel_close(result_chan);
             RELEASE(result_chan);
         }
-        if (fn) RELEASE(fn);
+        RELEASE(fn);
         return false;
     }
     
     // Retain result_chan before releasing task_map, since it's part of the map
-    if (result_chan) RETAIN(result_chan);
+    RETAIN(result_chan);
     RELEASE(task_map);
     
     CljObject *result = NULL;

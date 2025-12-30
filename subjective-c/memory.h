@@ -82,9 +82,12 @@ bool is_autoreleased(CljObject *obj);
     } while(0)
     #endif
 
+    // NOTE: These macros are NULL-safe (nil is represented as NULL). Avoiding
+    // retain/release/autorelease calls for NULL reduces overhead and code size,
+    // which matters for embedded builds.
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
-        if (!IS_IMMEDIATE(_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             retain((CljObject*)_id); \
         } \
         _id; \
@@ -92,7 +95,7 @@ bool is_autoreleased(CljObject *obj);
 
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
-        if (!IS_IMMEDIATE(_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             release((CljObject*)_id); \
         } \
         _id; \
@@ -100,7 +103,7 @@ bool is_autoreleased(CljObject *obj);
 
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (!IS_IMMEDIATE(_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             autorelease((CljObject*)_id); \
         } \
         _id; \
@@ -122,9 +125,10 @@ bool is_autoreleased(CljObject *obj);
         } \
     } while(0)
 
+    // NULL-safe (nil == NULL); avoid calls for NULL for embedded friendliness.
     #define RETAIN(obj) ({ \
         ID _id = (obj); \
-        if (!IS_IMMEDIATE(_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             retain((CljObject*)_id); \
         } \
         _id; \
@@ -132,7 +136,7 @@ bool is_autoreleased(CljObject *obj);
 
     #define RELEASE(obj) ({ \
         ID _id = (obj); \
-        if (!IS_IMMEDIATE(_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             release((CljObject*)_id); \
         } \
         _id; \
@@ -140,7 +144,7 @@ bool is_autoreleased(CljObject *obj);
 
     #define AUTORELEASE(obj) ({ \
         ID _id = (obj); \
-        if (!IS_IMMEDIATE(_id)) { \
+        if (_id && !IS_IMMEDIATE(_id)) { \
             autorelease((CljObject*)_id); \
         } \
         _id; \

@@ -503,8 +503,8 @@ CljMap* make_map_from_stack(CljObject **pairs, int pair_count) {
         CljObject *key = KV_KEY(pairs, i);
         CljObject *value = KV_VALUE(pairs, i);
         KV_ASSIGN_PAIR(map->data, i, key, value);
-        if (key) RETAIN(key);
-        if (value) RETAIN(value);
+        RETAIN(key);
+        RETAIN(value);
     }
     map->count = pair_count;
     return map;

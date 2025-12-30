@@ -33,6 +33,7 @@ progress.marks
 *.csv
 
 # Local scratch
+tmp
 tmp/
 # Test binaries
 test-*
