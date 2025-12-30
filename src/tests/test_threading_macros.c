@@ -349,7 +349,6 @@ TEST(test_threading_macroexpand_thread_first) {
 }
 
 TEST(test_threading_macroexpand_thread_last) {
-    TEST_IGNORE_MESSAGE("Test crashes - needs investigation");
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
     // Verify macroexpansion: (macroexpand '(->> [1 2 3] (map inc)))

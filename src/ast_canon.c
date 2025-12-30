@@ -259,7 +259,6 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         CljSymbolToken *token = (CljSymbolToken*)expr;
         CljSymbol *sym = canonicalize_symbol_token(token, st);
         if (sym) {
-            RELEASE(token);  // Free the token after conversion
             return sym;
         }
         return expr;  // Conversion failed (invalid symbol) - leave as token
@@ -323,8 +322,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                 if (!list_type_matches(expanded_tag)) {
                     // Expanded form is not a list - this shouldn't happen for threading macros
                     // but handle it gracefully by wrapping in a list
-                    CljList *wrapped = make_list(expanded, NULL);
-                    expanded = (ID)wrapped;
+                    expanded = AUTORELEASE(make_list(expanded, NULL));
                 }
                 
                 // Recursively canonicalize the expanded form
@@ -347,9 +345,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                         CljVector *expanded = destructure(st, bindings);
                         if (expanded) {
                             // Rebuild: (let expanded-bindings body...)
-                            CljList *new_rest = make_list(expanded, rest1->rest ? as_list(rest1->rest) : NULL);
-                            CljList *new_list = make_list(first, new_rest);
-                            RELEASE(list);
+                            ID new_rest = AUTORELEASE(make_list(expanded, rest1->rest ? as_list(rest1->rest) : NULL));
+                            ID new_list = AUTORELEASE(make_list(first, as_list(new_rest)));
                             return canonicalize_expr(new_list, st, in_quote);
                         }
                         // destructure not available (bootstrap) - skip transformation
@@ -414,11 +411,10 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                         }
                         
                         // Rebuild: (loop loop-bindings new-body)
-                        CljList *new_list = make_list(first,
-                                                      make_list(loop_bindings,
-                                                                make_list(new_body, NULL)));
-                        RELEASE(list);
-                        return canonicalize_expr(new_list, st, in_quote);
+                        ID loop_form = AUTORELEASE(make_list(first,
+                                                            make_list(loop_bindings,
+                                                                      make_list(new_body, NULL))));
+                        return canonicalize_expr(loop_form, st, in_quote);
                     }
                 }
             }
@@ -455,11 +451,10 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
                             CljList *let_form = make_list(SYM_LET,
                                                           make_list(expanded_let_bindings,
                                                                     make_list(body, NULL)));
-                            CljList *new_list = named
-                                ? make_list(first, make_list(second, make_list(new_params, make_list(let_form, NULL))))
-                                : make_list(first, make_list(new_params, make_list(let_form, NULL)));
-                            RELEASE(list);
-                            return canonicalize_expr(new_list, st, in_quote);
+                            ID new_form = named
+                                ? (ID)make_list(first, make_list(second, make_list(new_params, make_list(let_form, NULL))))
+                                : (ID)make_list(first, make_list(new_params, make_list(let_form, NULL)));
+                            return canonicalize_expr(AUTORELEASE(new_form), st, in_quote);
                         }
                     }
                 }
@@ -482,8 +477,8 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         
         // Create appropriate container based on context
         ID result = in_quote 
-            ? (ID)make_list((CljObject*)first, (CljList*)rest)
-            : (ID)make_ast_node(first, rest);
+            ? AUTORELEASE(make_list((CljObject*)first, (CljList*)rest))
+            : AUTORELEASE(make_ast_node(first, (CljObject*)rest));
         
         if (!result) {
             return expr;  // Out of memory - return original
@@ -491,8 +486,6 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         
         // Copy metadata (no recursive canonicalization - metadata has no symbol tokens)
         move_meta(expr, result);
-        
-        RELEASE(list);
         return result;
     }
     
@@ -530,8 +523,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         move_meta(vec, new_vec);
         
         if (count > 16) free(canon_elems);
-        RELEASE(vec);
-        return new_vec;
+        return AUTORELEASE(new_vec);
     }
     
     if (tag == CLJ_MAP) {
@@ -557,8 +549,7 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         
         if (changed && new_map) {
             move_meta(map, new_map);
-            RELEASE(map);
-            return new_map;
+            return AUTORELEASE(new_map);
         }
         
         return expr;  // No changes needed

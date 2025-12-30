@@ -7,12 +7,12 @@
 #include "list.h"
 
 struct CljNamespace;
+struct CljSymbol;
 
 typedef struct {
     CljObject base;
     ID (*fn)(ID*args, unsigned int argc);
-    void *env;
-    const char *name;
+    struct CljSymbol *name_sym;
 } CljCFunc;
 
 typedef struct {

@@ -151,6 +151,10 @@ ID native_meta(ID *args, unsigned int argc);
 ID native_with_meta(ID *args, unsigned int argc);
 ID nth2(ID *args, unsigned int argc);
 
+#if defined(DEBUG) && !defined(ESP32_BUILD)
+ID native_stacktrace_str(ID *args, unsigned int argc);
+#endif
+
 static CljNamespace* namespace_from_value(ID value);
 static int compare_symbol_names(const void *a, const void *b);
 
@@ -1742,27 +1746,18 @@ ID native_vec(ID *args, unsigned int argc) {
     return AUTORELEASE(vec);
 }
 
-// make_func() wrapper removed - use make_named_func(fn, env, NULL) directly
+// make_func() wrapper removed - use make_named_func(fn, name_sym) directly
 
-ID make_named_func(BuiltinFn fn, void *env, const char *cname) {
+ID make_named_func(BuiltinFn fn, CljSymbol *name_sym) {
     CljCFunc *func = ALLOC(CljCFunc, 1);
     if (!func) return NULL;
 
     func->base.type = CLJ_FUNC;
     func->base.rc = 1;
     func->fn = fn;
-    func->env = env;
 
-    // Safely handle name parameter
-    if (cname && strlen(cname) > 0) {
-        // Allocate memory for the name to avoid issues with string literals
-        func->name = ALLOC(char, strlen(cname) + 1);
-        if (func->name) {
-            strcpy((char*)func->name, cname);
-        }
-    } else {
-        func->name = NULL;
-    }
+    // Name is stored as an interned symbol (singleton), so we can safely borrow it.
+    func->name_sym = name_sym;
 
     return func;
 }
@@ -2346,6 +2341,26 @@ ID native_retain_count(ID *args, unsigned int argc) {
     return fixnum(rc);
 }
 
+#if defined(DEBUG) && !defined(ESP32_BUILD)
+// clojure.stacktrace/stacktrace-str: return native (C) backtrace string captured in CLJException
+// Intended to be used by libs/clojure/stacktrace.clj to build vector-of-frames on demand.
+ID native_stacktrace_str(ID *args, unsigned int argc) {
+    CHECK_ARITY(argc, 1, "stacktrace-str");
+
+    ID ex_obj = args[0];
+    if (!ex_obj || TAG(ex_obj) != CLJ_EXCEPTION) {
+        return NULL;
+    }
+
+    CLJException *ex = (CLJException*)ex_obj;
+    if (!ex->stacktrace) {
+        return NULL;
+    }
+
+    return AUTORELEASE(RETAIN((ID)ex->stacktrace));
+}
+#endif
+
 ID native_meta(ID *args, unsigned int argc);
 
 // ============================================================================
@@ -2356,6 +2371,18 @@ typedef struct {
     CljSymbol *clojure_symbol;  // Clojure function symbol (e.g., &sym_trim_data.sym)
     BuiltinFn native_func;      // Native C function pointer
 } NativeFunctionEntry;
+
+#if defined(DEBUG) && !defined(ESP32_BUILD)
+// Qualified-name entry for clojure.stacktrace/stacktrace-str.
+// We store it as an un-namespaced static symbol and rely on native_function_lookup's
+// qualified-name string fallback (avoids eager symbol-table init for clojure.stacktrace).
+static StaticSymbolData sym_stacktrace_str_qualified_data = {
+    .sym = { .base = { .type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE },
+             .ns_name = NULL,
+             .unqualified = NULL,
+             .cname = "clojure.stacktrace/stacktrace-str" }
+};
+#endif
 
 // Compile-time initialized lookup table (DRY: avoids runtime initialization)
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
@@ -2370,6 +2397,9 @@ static const NativeFunctionEntry native_function_table[] = {
     // clojure.repl functions
     {&sym_source_data.sym, native_source},
     {&sym_dir_data.sym, native_repl_dir},
+#if defined(DEBUG) && !defined(ESP32_BUILD)
+    {&sym_stacktrace_str_qualified_data.sym, native_stacktrace_str},
+#endif
     {&sym_retain_count_data.sym, native_retain_count},
     // clojure.core functions
     {&sym_meta_data.sym, native_meta},
@@ -4984,7 +5014,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
 
     // Register the builtin in target namespace
     ID symbol = intern_symbol_global(symbol_name);
-    ID func_obj = make_named_func(func, NULL, cname);
+    ID func_obj = make_named_func(func, intern_symbol_global(cname));
     if (symbol && func_obj) {
         ns_define(target_ns, symbol, func_obj);
 

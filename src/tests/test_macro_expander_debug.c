@@ -55,6 +55,8 @@ TEST(test_macro_expander_debug_isolated) {
     // First, manually register a macro function
     CljSymbol *double_sym = intern_symbol_global("double");
     CljNamespace *user_ns = st->current_ns;
+    (void)double_sym;
+    (void)user_ns;
     
     // Create a macro function that expands (double x) to (* x 2)
     // We'll use eval_string to create the macro, but we need list and quote first

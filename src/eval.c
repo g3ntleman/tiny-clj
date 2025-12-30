@@ -175,7 +175,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
         // Set EvalState for builtins that need it (eval, read-string)
         extern void builtin_set_eval_state(EvalState *st);
         builtin_set_eval_state(st);
-        ID result = native_func->fn((CljObject**)args, argc);
+        ID result = native_func->fn(args, argc);
         builtin_set_eval_state(NULL); // Clear after call
         return result;
     }
@@ -189,9 +189,17 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     // Arity check - variadic functions accept >= required params
     int param_count = func->params ? vector_count(func->params) : 0;
     int8_t vi = func->variadic_index;
-    if ((vi < 0 ? argc != param_count : argc < vi)) {
-        throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
-        return NULL;
+    unsigned int required = (param_count > 0) ? (unsigned int)param_count : 0;
+    if (vi < 0) {
+        if (argc != required) {
+            throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+            return NULL;
+        }
+    } else {
+        if (argc < (unsigned int)vi) {
+            throw_exception(EXCEPTION_ARITY, "Arity mismatch in function call", NULL, 0, 0);
+            return NULL;
+        }
     }
 
     // OPTIMIZATION: Use static arrays instead of STACK_ALLOC to avoid alloca overhead
@@ -1659,7 +1667,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
         }
         
         // Create and return native function object
-        return AUTORELEASE(make_named_func(native_func, NULL, fn_name->cname));
+        return AUTORELEASE(make_named_func(native_func, fn_name));
     }
 
     // Convert parameter list/vector to array

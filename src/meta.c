@@ -105,16 +105,14 @@ CljMap* make_location_meta(void *reader_ptr, void *st_ptr) {
     }
     
     // Add :line (Clojure-compatible)
-    // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+    // Use *_inplace to avoid map_assoc()'s unconditional AUTORELEASE.
     if (SYM_KW_LINE) {
-        CljMap *updated_map = map_assoc(location_map, SYM_KW_LINE, fixnum(line));
-        ASSIGN(location_map, updated_map);
+        map_assoc_inplace(&location_map, SYM_KW_LINE, fixnum(line));
     }
     
     // Add :column (Clojure-compatible)
     if (kw_column) {
-        CljMap *updated_map = map_assoc(location_map, kw_column, fixnum(column));
-        ASSIGN(location_map, updated_map);
+        map_assoc_inplace(&location_map, kw_column, fixnum(column));
     }
     
     // Add :file (Clojure-compatible) - file information not available from EvalState
@@ -122,8 +120,7 @@ CljMap* make_location_meta(void *reader_ptr, void *st_ptr) {
     
     // Add :ns (Clojure-compatible, if available)
     if (SYM_KW_NS && ns_name) {
-        CljMap *updated_map = map_assoc(location_map, SYM_KW_NS, ns_name);
-        ASSIGN(location_map, updated_map);
+        map_assoc_inplace(&location_map, SYM_KW_NS, ns_name);
     }
     
     return location_map;
@@ -148,8 +145,10 @@ CljMap* meta_merge(CljMap *existing_meta, CljMap *location_meta) {
         if (!key) continue;
         ID existing_value = map_get(existing_meta, key, NOT_FOUND);
         if (existing_value == NOT_FOUND) {
-            CljMap *base = missing_entries ? missing_entries : map_empty();
-            ASSIGN(missing_entries, map_assoc(base, key, value));
+            if (!missing_entries) {
+                missing_entries = map_empty();
+            }
+            map_assoc_inplace(&missing_entries, key, value);
             has_missing = 1;
         }
     }
@@ -160,7 +159,12 @@ CljMap* meta_merge(CljMap *existing_meta, CljMap *location_meta) {
     }
     
     CljMap *result = as_map(RETAIN(existing_meta));
-    ASSIGN(result, map_merge(result, missing_entries, false));
+    // Apply missing entries directly to avoid map_merge(), which uses map_assoc()
+    // and can create autorelease churn.
+    MAP_FOR_EACH(missing_entries, key, value) {
+        if (!key) continue;
+        map_assoc_inplace(&result, key, value);
+    }
     RELEASE(missing_entries);
     
     return result;
@@ -177,8 +181,7 @@ CljMap* meta_merge_with_precedence(CljMap *existing_meta, CljMap *form_meta) {
     // Add/overwrite all entries from form_meta (form takes precedence)
     MAP_FOR_EACH(form_meta, key, value) {
         if (!key) continue;
-        CljMap *new_result = map_assoc(result, key, value);
-        ASSIGN(result, new_result);
+        map_assoc_inplace(&result, key, value);
     }
     
     // Also add keys from existing_meta that don't exist in form_meta
@@ -186,8 +189,7 @@ CljMap* meta_merge_with_precedence(CljMap *existing_meta, CljMap *form_meta) {
         if (!key) continue;
         ID form_value = map_get(as_map(form_meta), key, NOT_FOUND);
         if (form_value == NOT_FOUND) {
-            CljMap *new_result = map_assoc(result, key, value);
-            ASSIGN(result, new_result);
+            map_assoc_inplace(&result, key, value);
         }
     }
     

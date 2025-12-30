@@ -25,7 +25,7 @@ static inline ID eval_and_call_native_with_context(CljList *list,
     ID *args = alloc_obj_array(argc, args_stack);
     if (!args) return NULL;
 
-    int i = 0;
+    unsigned int i = 0;
     LIST_FOR_EACH(LIST_REST(list), elem) {
         if (i >= argc) break;
         // Note: args[i] can be NULL (nil), which is a valid argument
