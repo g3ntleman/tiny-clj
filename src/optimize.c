@@ -253,14 +253,12 @@ CljObject* transform_recursive_tail_calls(CljObject *body, CljObject *func_name,
         }
 
         CljObject *cond_to_use = t_cond ? t_cond : cond;
-        if (t_cond != cond && cond_to_use) {
-            RETAIN(cond_to_use);
-        }
+        if (t_cond != cond) RETAIN(cond_to_use);
 
         CljList *new_if = build_list((CljObject*)SYM_IF, cond_to_use, t_then);
         if (!new_if) {
             if (t_cond && t_cond != cond) RELEASE(t_cond);
-            if (cond_to_use != cond && cond_to_use) RELEASE(cond_to_use);
+            if (cond_to_use != cond) RELEASE(cond_to_use);
             RELEASE(t_then);
             RELEASE(t_else);
             return NULL;

@@ -11,6 +11,27 @@
 #include "meta.h"
 #include "ast.h"
 
+static inline bool sym_name_eq(ID obj, const char *name) {
+    if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
+    CljSymbol *sym = as_symbol(obj);
+    if (!sym || !sym->cname) return false;
+    return strcmp(sym->cname, name) == 0;
+}
+
+static void eval_finally_clause(CljList *finally_clause,
+                                CljMap *env,
+                                EvalState *st,
+                                const EvalContext *ctx) {
+    if (!finally_clause) return;
+    int clen = list_count(finally_clause);
+    for (int i = 1; i < clen; i++) {
+        ID expr = list_get_element(finally_clause, i);
+        if (!expr) continue;
+        ID r = eval_body(expr, env, st, ctx);
+        RELEASE(r);
+    }
+}
+
 // Special Form evaluation functions with unified signature (exported for symbol initialization)
 ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     int argc = list_count(list);
@@ -202,6 +223,136 @@ ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContex
 ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     (void)ctx;  // Unused
     return eval_dotimes(list, env, st);
+}
+
+ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    int argc = list_count(list);
+    if (argc < 2) return NULL;
+
+    // Establish base env (match other wrappers: fall back to current namespace mappings).
+    CljMap *base_env = env;
+    if (!base_env && st && st->current_ns) {
+        base_env = st->current_ns->mappings;
+    }
+
+    // Split body expressions from catch/finally clauses.
+    int clause_start = argc;
+    for (int i = 1; i < argc; i++) {
+        ID elem = list_get_element(list, i);
+        if (!elem || TAG(elem) != CLJ_LIST) continue;
+        CljList *clause = as_list(elem);
+        ID first = clause ? LIST_FIRST(clause) : NULL;
+        if (first == (ID)SYM_CATCH || first == (ID)SYM_FINALLY ||
+            sym_name_eq(first, "catch") || sym_name_eq(first, "finally")) {
+            clause_start = i;
+            break;
+        }
+    }
+
+    // Find optional finally clause.
+    CljList *finally_clause = NULL;
+    for (int i = clause_start; i < argc; i++) {
+        ID elem = list_get_element(list, i);
+        if (!elem || TAG(elem) != CLJ_LIST) continue;
+        CljList *clause = as_list(elem);
+        ID first = clause ? LIST_FIRST(clause) : NULL;
+        if (first == (ID)SYM_FINALLY || sym_name_eq(first, "finally")) {
+            finally_clause = clause;
+            break;
+        }
+    }
+
+    ID result = NULL;
+    TRY {
+        for (int i = 1; i < clause_start; i++) {
+            ID expr = list_get_element(list, i);
+            if (!expr) continue;
+            ASSIGN(result, eval_body(expr, base_env, st, ctx));
+        }
+        eval_finally_clause(finally_clause, base_env, st, ctx);
+        return result;
+    } CATCH(ex) {
+        // Exception value is a first-class CLJ_EXCEPTION object.
+        ID ex_obj = RETAIN((ID)ex);
+
+        ID handler_result = NULL;
+        bool handled = false;
+
+        for (int i = clause_start; i < argc; i++) {
+            ID elem = list_get_element(list, i);
+            if (!elem || TAG(elem) != CLJ_LIST) continue;
+            CljList *clause = as_list(elem);
+            ID first = clause ? LIST_FIRST(clause) : NULL;
+            if (first != (ID)SYM_CATCH && !sym_name_eq(first, "catch")) continue;
+
+            // Supported catch clause shapes:
+            // - (catch sym body...)
+            // - (catch Type sym body...)
+            int clen = list_count(clause);
+            int binding_index = -1;
+            int body_start = -1;
+
+            if (clen >= 4) {
+                ID binding = list_get_element(clause, 2);
+                if (binding && TAG(binding) == CLJ_SYMBOL) {
+                    binding_index = 2;
+                    body_start = 3;
+                }
+            }
+            if (binding_index < 0 && clen >= 3) {
+                ID binding = list_get_element(clause, 1);
+                if (binding && TAG(binding) == CLJ_SYMBOL) {
+                    binding_index = 1;
+                    body_start = 2;
+                }
+            }
+            if (binding_index < 0 || body_start < 0 || body_start >= clen) {
+                continue;
+            }
+
+            ID binding_sym = list_get_element(clause, binding_index);
+
+            CljMap *catch_env = NULL;
+            if (base_env && TAG(base_env) == CLJ_MAP) {
+                catch_env = RETAIN(map_assoc(base_env, binding_sym, ex_obj));
+            } else {
+                catch_env = (CljMap*)make_map(4);
+                if (catch_env) {
+                    ASSIGN(catch_env, map_assoc(catch_env, binding_sym, ex_obj));
+                }
+            }
+
+            if (!catch_env) {
+                continue;
+            }
+
+            for (int j = body_start; j < clen; j++) {
+                ID body_expr = list_get_element(clause, j);
+                if (!body_expr) continue;
+                ASSIGN(handler_result, eval_body(body_expr, catch_env, st, ctx));
+            }
+
+            RELEASE(catch_env);
+            handled = true;
+            break;
+        }
+
+        eval_finally_clause(finally_clause, base_env, st, ctx);
+
+        RELEASE(ex_obj);
+
+        if (!handled) {
+            CLJException *exc = (CLJException*)ex;
+            throw_exception(exc->type[0] != '\0' ? exc->type : EXCEPTION_RUNTIME,
+                            exc->message[0] != '\0' ? exc->message : "Unknown error",
+                            exc->file, exc->line, exc->col);
+            return NULL;
+        }
+
+        return handler_result;
+    } END_TRY
+
+    return result;
 }
 
 ID eval_handle_recur(CljList *list, const EvalContext *ctx) {

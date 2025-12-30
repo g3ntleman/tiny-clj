@@ -1252,6 +1252,12 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
         }
     }
 
+    // Fallback: Some runtimes may intern "try" before special symbols are registered,
+    // resulting in a non-special symbol (flags unset). Treat it as a special form by name.
+    if (original_op_sym && original_op_sym->cname && strcmp(original_op_sym->cname, "try") == 0) {
+        return eval_special_try(list, effective_env, effective_st, ctx);
+    }
+
     // Resolve operator symbol
     // CRITICAL: Pass ctx to allow environment chaining lookup (for functions defined in let)
     ID resolved_op = resolve_list_operator(op, effective_env, effective_st, ctx, call_node);
@@ -2209,9 +2215,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
         if (!sym_val || TAG(sym_val) != CLJ_SYMBOL) {
             if (has_frame) frame_release(let_frame);
-            if (parent_stack_owned && parent_stack) {
-                RELEASE(parent_stack);
-            }
+            if (parent_stack_owned) RELEASE(parent_stack);
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                            "let binding must be a symbol",
                            NULL, 0, 0);
@@ -2292,9 +2296,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         frame_release(let_frame);
         RELEASE(frame_env_stack);
     }
-    if (parent_stack_owned && parent_stack) {
-        RELEASE(parent_stack);
-    }
+    if (parent_stack_owned) RELEASE(parent_stack);
     return result;
 }
 
