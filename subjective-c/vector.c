@@ -288,7 +288,6 @@ static CljVector* vector_insert_at_core(CljVector* vec, unsigned int index, ID i
             if (is_transient) {
                 new_vec->base.type = CLJ_VECTOR_TRANSIENT;
             }
-            RELEASE(v);
             v = new_vec;
             vec = new_vec;
         }
@@ -342,6 +341,12 @@ static CljVector* vector_insert_at_core(CljVector* vec, unsigned int index, ID i
  */
 CljVector* vector_insert_at(CljVector* vec, unsigned int index, ID item) {
     CljVector* result = vector_insert_at_core(vec, index, item);
+    if (result && result != vec) {
+        unsigned char from_tag = TAG(vec);
+        if (from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+            RELEASE(vec);
+        }
+    }
     return AUTORELEASE(result);
 }
 
@@ -477,7 +482,6 @@ static CljVector* vector_conj_core(CljVector* vec, ID item) {
             CljVector *new_v = make_vector_copy(v, newcap);
             // Preserve vector type
             new_v->base.type = vec_type;
-            RELEASE(v);
             v = new_v;  // Use new vector for adding item
             vec = new_v;  // Update return value
         }
@@ -539,6 +543,12 @@ static CljVector* vector_conj_core(CljVector* vec, ID item) {
  */
 CljVector* vector_conj(CljVector* vec, ID item) {
     CljVector* result = vector_conj_core(vec, item);
+    if (result && result != vec) {
+        unsigned char from_tag = TAG(vec);
+        if (from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+            RELEASE(vec);
+        }
+    }
     return AUTORELEASE(result);
 }
 
@@ -589,7 +599,6 @@ static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value
                 // Ensure new capacity is at least index + 1, minimum 4
                 int newcap = MAX(MAX(old_vec->capacity * 2, (int)index + 1), 4);
                 CljVector *new_vec = make_vector_copy(old_vec, newcap);
-                RELEASE(old_vec);
                 old_vec = new_vec;
                 vec = new_vec;  // Update vec to point to new vector
             }
@@ -643,6 +652,12 @@ static CljVector* vector_assoc_core(CljVector* vec, unsigned int index, ID value
  */
 CljVector* vector_assoc(CljVector* vec, unsigned int index, ID value) {
     CljVector* result = vector_assoc_core(vec, index, value);
+    if (result && result != vec) {
+        unsigned char from_tag = TAG(vec);
+        if (from_tag == CLJ_VECTOR_TRANSIENT || from_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
+            RELEASE(vec);
+        }
+    }
     return AUTORELEASE(result);
 }
 

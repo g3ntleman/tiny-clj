@@ -359,7 +359,18 @@ void print_exception(CLJException *ex) {
     fprintf(stderr, "\n");
     
     // Print stacktrace if available (compact)
-    if (ex->stacktrace) {
+    // Default: enabled (Clojure/JVM-like). Can be disabled via env var.
+    bool print_stacktrace = true;
+#if !defined(ESP32_BUILD)
+    static int s_print_stacktrace = -1;
+    if (s_print_stacktrace < 0) {
+        const char *v = getenv("TINY_CLJ_PRINT_STACKTRACE");
+        s_print_stacktrace = (!v || !v[0] || strcmp(v, "0") != 0) ? 1 : 0;
+    }
+    print_stacktrace = (s_print_stacktrace == 1);
+#endif
+
+    if (print_stacktrace && ex->stacktrace) {
         fprintf(stderr, "Stack trace:\n");
         // Use string_data macro to get C-string from CljString
         const char *stacktrace_str = string_data((CljString*)ex->stacktrace);

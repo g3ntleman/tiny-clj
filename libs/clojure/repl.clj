@@ -64,17 +64,6 @@
 ;; Utility Functions
 ;; ============================================================================
 
-;; pst - Print stack trace (simplified)
-;; Note: Full implementation requires:
-;;   1. Exception persistence: Store last exception in *e variable
-;;   2. Clojure-level stack traces: Map C functions to Clojure function names
-;;   3. EvalState integration: Track function calls with namespace/name info
-;;   4. Currently only C-level stack traces available (via backtrace)
-;; In Clojure/JVM: Prints the stack trace of the last exception (*e)
-^#^{:doc "Prints the last stack trace (placeholder implementation)."}
-(defn pst []
-  (println "Stack trace not yet fully implemented"))
-
 ;; find-doc - Find documentation matching a pattern across all namespaces
 ^#^{:doc "Searches docstrings in all loaded namespaces for the given pattern string."}
 (defn find-doc [pattern]
@@ -95,4 +84,23 @@
       (doseq [ns-obj (all-ns)]
         (search-ns ns-obj))
       nil)))
+
+
+;; ==========================================================================
+;; Stacktraces
+;; ==========================================================================
+
+;; pst - Print stack trace
+;; In JVM Clojure: (pst) prints stack trace for last exception *e.
+;; Tiny-CLJ currently doesn't persist last exception, so (pst) prints a hint.
+;; Use (pst e) inside a (catch Exception e ...) block.
+^#^{:doc "Prints a stack trace. Use (pst e) inside (catch Exception e ...)."}
+(defn pst
+  [& args]
+  (if (empty? args)
+    (core/println "pst: no last exception (*e*) available; use (pst e) in (catch ...)")
+    (let [e (core/first args)]
+      ;; Load clojure.stacktrace only if pst is invoked.
+      (require 'clojure.stacktrace)
+      (clojure.stacktrace/print-stack-trace e))))
 

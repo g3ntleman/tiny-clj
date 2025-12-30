@@ -486,8 +486,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     reader_skip_all(reader);
 
     // Create transient vector for efficient building
-    CljValue vec = make_vector(6, CLJ_VECTOR);
-    CljValue tvec = vector_transient((CljVector*)vec);
+    CljVector *vec = make_vector(6, CLJ_VECTOR);
+    CljVector *tvec = vector_transient(vec);
     RELEASE(vec);  // Release original, use transient
 
     while (!reader_eof(reader) && reader_peek_char(reader) != ']') {
@@ -502,8 +502,8 @@ static ID parse_vector(Reader *reader, EvalState *st) {
         return NULL;
       }
 
-      // Use vector_conj for transient vectors (guaranteed in-place)
-      tvec = vector_conj((CljVector*)tvec, value);
+      // Use *_inplace to avoid vector_conj()'s unconditional AUTORELEASE.
+      vector_conj_inplace(&tvec, value);
       if (!tvec) {
         throw_parser_exception("Failed to append to vector", reader);
         return NULL;
@@ -512,7 +512,7 @@ static ID parse_vector(Reader *reader, EvalState *st) {
     }
 
     // Convert back to persistent vector
-    vec = vector_persistent((CljVector*)tvec);
+    vec = (CljVector*)vector_persistent(tvec);
     RELEASE(tvec);
 
     if (reader_eof(reader) || !reader_match(reader, ']')) {
@@ -1360,7 +1360,7 @@ static ID parse_meta(Reader *reader, EvalState *st) {
     }
 
     // Associate keyword with true
-    ASSIGN(meta_map, map_assoc(meta_map, keyword_meta, clj_true));
+    map_assoc_inplace(&meta_map, keyword_meta, clj_true);
     RELEASE(keyword_meta);
 
     // Parse the object (which might have more metadata)
@@ -1451,11 +1451,11 @@ static ID parse_anon_fn(Reader *reader, EvalState *st) {
   // Note: Full implementation would scan body for %1, %2, etc. and create appropriate params
   CljSymbol *fn_sym = intern_symbol_global("fn");
   CljSymbol *percent_sym = intern_symbol_global("%");
-  CljValue param_vec = make_vector(1, CLJ_VECTOR);
-  vector_conj((CljVector*)param_vec, percent_sym);
+  CljVector *param_vec = make_vector(1, CLJ_VECTOR);
+  vector_conj_inplace(&param_vec, percent_sym);
 
   // Create (fn [%] body)
-  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list(param_vec, make_ast_list(body, NULL))));
+  return AUTORELEASE(make_ast_list(fn_sym, make_ast_list((ID)param_vec, make_ast_list(body, NULL))));
 }
 
 /**

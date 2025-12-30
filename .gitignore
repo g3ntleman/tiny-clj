@@ -12,6 +12,8 @@ tiny-cli.txt
 .vscode/
 # Build artifacts
 build/
+build-debug/
+build-*/
 CMakeCache.txt
 CMakeFiles/
 Makefile
@@ -29,6 +31,9 @@ benchmark_history.csv
 benchmark_output.txt
 progress.marks
 *.csv
+
+# Local scratch
+tmp/
 # Test binaries
 test-*
 run-tests

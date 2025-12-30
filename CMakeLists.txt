@@ -71,7 +71,9 @@ include_directories(${CMAKE_SOURCE_DIR} include src external)
 add_subdirectory(subjective-c)
 
 # Set output directory for all executables to "build"
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
+if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY OR CMAKE_RUNTIME_OUTPUT_DIRECTORY STREQUAL "")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build")
+endif()
 
 # Generate build_info.h from template
 configure_file(

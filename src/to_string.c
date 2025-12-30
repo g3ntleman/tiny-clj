@@ -175,16 +175,20 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_FUNC: {
             CljCFunc *native_func = (CljCFunc*)v;
-            if (native_func->name) {
+            const char *native_name = (native_func->name_sym && native_func->name_sym->cname)
+                ? native_func->name_sym->cname
+                : NULL;
+
+            if (native_name) {
                 // Find namespace containing this function to get fully qualified name
                 CljNamespace *ns = ns_find_for_object((CljObject*)v);
                 const char *ns_name = (ns && ns->name && ns->name->cname) ? ns->name->cname : NULL;
                 
                 // Calculate length for fully qualified name if namespace is available
                 if (ns_name) {
-                    return 20 + strlen(ns_name) + strlen(native_func->name); // "#<native function NS/NAME>"
+                    return 20 + strlen(ns_name) + strlen(native_name); // "#<native function NS/NAME>"
                 } else {
-                    return 19 + strlen(native_func->name); // "#<native function NAME>"
+                    return 19 + strlen(native_name); // "#<native function NAME>"
                 }
             }
             return 20; // "#<native function>"
@@ -255,14 +259,13 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             CljRegex *re = (CljRegex*)v;
             const char *pattern = regex_pattern_string(re);
             // Format: #"pattern"
-            return 2 + strlen(pattern) + 1; // #" + pattern + "
+            return 3 + strlen(pattern); // 2 chars (#") + pattern + closing "
         }
 
         default:
-            return 9; // "#<unknown>"
+            return 10; // "#<unknown>"
     }
 }
-
 // Recursive helper: Build string into buffer
 static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, bool escape_strings) {
     if (!v) {
@@ -441,17 +444,21 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_FUNC: {
             CljCFunc *native_func = (CljCFunc*)v;
-            if (native_func->name) {
+            const char *native_name = (native_func->name_sym && native_func->name_sym->cname)
+                ? native_func->name_sym->cname
+                : NULL;
+
+            if (native_name) {
                 // Find namespace containing this function to get fully qualified name
                 CljNamespace *ns = ns_find_for_object((CljObject*)v);
                 const char *ns_name = (ns && ns->name && ns->name->cname) ? ns->name->cname : NULL;
                 
                 // Build fully qualified name if namespace is available
                 if (ns_name) {
-                    int written = snprintf(buffer + *offset, 256, "#<native function %s/%s>", ns_name, native_func->name);
+                    int written = snprintf(buffer + *offset, 256, "#<native function %s/%s>", ns_name, native_name);
                     *offset += written;
                 } else {
-                    int written = snprintf(buffer + *offset, 256, "#<native function %s>", native_func->name);
+                    int written = snprintf(buffer + *offset, 256, "#<native function %s>", native_name);
                     *offset += written;
                 }
             } else {

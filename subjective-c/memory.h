@@ -22,6 +22,15 @@ bool is_pointer_in_data_segment(const void *ptr);
 bool is_pointer_on_stack(const void *ptr);
 void throw_oom(void) __attribute__((noreturn));
 
+/** @brief Get the reference count of an object
+ *
+ * @param obj Object to check
+ * @return Reference count of the object, or 0 for immediate values/NULL
+ *
+ * Primarily intended for debugging/diagnostics.
+ */
+int retain_count(ID obj);
+
 // Autorelease pool API (checkpoint-based implementation)
 void autorelease_pool_init(void);     // Call once at startup
 void autorelease_pool_push(void);      // Push new checkpoint
@@ -32,15 +41,6 @@ void autorelease_pool_destroy(void);
 bool is_autorelease_pool_active(void);
 
 #ifdef DEBUG
-/** @brief Get the reference count of an object (debug only)
- * 
- * @param obj Object to check
- * @return Reference count of the object, or 0 for immediate values/NULL
- * 
- * Debug-only function to inspect the reference count of an object.
- * Immediate values (fixnums, chars, etc.) always return 0.
- */
-int retain_count(ID obj);
 /** @brief Check if an object is in the autorelease pool (O(n) search)
  * 
  * @param obj Object to check

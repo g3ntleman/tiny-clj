@@ -254,9 +254,20 @@ void release(CljObject *v) {
     // Check for double-free BEFORE decrementing (ALWAYS, not just in DEBUG)
     // This detects attempts to release already-freed objects
     if (v->rc == 0) {
-        printf("❌ DOUBLE-FREE! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
-        printf("🔍 Stack trace for object %p:\n", v);
-        // Print stack trace or more debugging info
+        fprintf(stderr, "❌ DOUBLE-FREE! Object %p (type=%s) already freed\n", v, clj_type_name(v->type));
+        fprintf(stderr, "🔍 Backtrace (most recent call first):\n");
+        void *trace[64];
+        int trace_count = backtrace(trace, (int)(sizeof(trace) / sizeof(trace[0])));
+        char **symbols = backtrace_symbols(trace, trace_count);
+        if (symbols) {
+            for (int i = 0; i < trace_count; i++) {
+                fprintf(stderr, "  %s\n", symbols[i]);
+            }
+            free(symbols);
+        } else {
+            fprintf(stderr, "  <backtrace_symbols failed>\n");
+        }
+        fflush(stderr);
         throw_exception_formatted("UseAfterFreeError", __FILE__, __LINE__, 0,
             "Double-free detected! Object %p (type=%s) was already freed (rc=0). "
             "This indicates the object was released more times than retained, "
@@ -557,7 +568,6 @@ void autorelease_pool_destroy(void) {
  * reference counting. For other objects, returns the actual reference count.
  * Note: AUTORELEASE objects are not counted as they are deferred.
  */
-#ifdef DEBUG
 int retain_count(ID obj) {
     if (!obj || IS_IMMEDIATE(obj)) return 0;
     
@@ -571,7 +581,7 @@ int retain_count(ID obj) {
     // Return actual retain count for tracked objects
     return obj_ptr->rc;
 }
-#endif // DEBUG
+
 
 // ============================================================================
 // DEEP OBJECT RELEASE IMPLEMENTATION
