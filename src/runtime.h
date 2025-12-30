@@ -5,7 +5,7 @@
  * - STACK_ALLOC: Stack allocation using alloca() for temporary data
  * - ALLOC: Heap allocation using malloc() for persistent data
  * - ALLOC_ZERO: Zero-initialized heap allocation using calloc()
- * - Function call limits for STM32 compatibility
+ * - Function call limits for embedded compatibility
  * - Builtin function registration system
  */
 
@@ -25,7 +25,7 @@
 // Allocate `count` objects of type `type` on the stack
 #define STACK_ALLOC(type, count) ((type*) alloca(sizeof(type) * (count)))
 
-// Maximum number of function parameters (STM32-safe)
+// Maximum number of function parameters (embedded-safe)
 #define MAX_FUNCTION_PARAMS 32
 
 // Maximum stack depth for function calls

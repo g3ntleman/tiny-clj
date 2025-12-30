@@ -13,7 +13,7 @@
 
 // Portable Thread-Local Storage macro
 // On single-threaded systems, it expands to nothing (zero overhead)
-#if defined(SINGLE_THREADED) || defined(__STDC_NO_THREADS__) || defined(STM32)
+#if defined(SINGLE_THREADED) || defined(__STDC_NO_THREADS__) || defined(ESP32_BUILD)
     #define THREAD_LOCAL  /* nothing */
 #else
     #define THREAD_LOCAL _Thread_local

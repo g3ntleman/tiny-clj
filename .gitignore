@@ -44,9 +44,6 @@ CTestTestfile.cmake
 tiny-clj-repl
 tiny-clj-esp32
 tiny-clj-esp32-repl
-tiny-clj-stm32
-tiny-clj-stm32-main
-tiny-clj-stm32-repl
 build-release/
 *.exe
 *.bin

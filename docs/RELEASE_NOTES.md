@@ -127,7 +127,7 @@
   - Zeitgesteuerte Queue mit sortierter Einfügung für effiziente Timer-Verarbeitung
   - Transiente Vektoren für effiziente Timer-Verwaltung im Runtime
   - Umfassende Timer-Tests mit 15+ Testfällen
-  - Alle Timer-Funktionen sind STM32-kompatibel und in Embedded-Builds enthalten
+  - Alle Timer-Funktionen sind in Embedded-Builds (ESP32) enthalten
 
 ### Code Refactoring & Architecture Improvements (Latest)
 - **Object.c Refactoring**: Auslagerung von Funktionen aus object.c in thematische Dateien
@@ -210,7 +210,7 @@
 - **Comparison Operators**: Complete set of comparison operators (=, <, >, <=, >=) with type promotion
 - **DRY Refactoring**: Eliminated code duplication in comparison operators (~200 lines reduced)
 - **Memory Safety**: Fixed immediate value handling in memory management
-- **Release Target Optimization**: Separate STM32 builds optimized for embedded deployment
+- **Release Target Optimization**: Separate embedded builds optimized for ESP32 deployment
 
 ## Q16.13 Fixed-Point Implementation
 - **Type System**: Q16.13 Fixed-Point stored as immediate values (no heap allocation)
@@ -228,8 +228,8 @@
 
 ## Release Target Optimization
 - **tiny-clj-repl**: 569KB (development with memory profiling)
-- **tiny-clj-stm32-main**: 84KB (minimal embedded build)
-- **tiny-clj-stm32**: 327KB (embedded REPL)
+- **Minimal embedded build**: 84KB
+- **Embedded REPL build**: 327KB
 - **Optimizations**: -Os -DNDEBUG -ffunction-sections with dead code elimination
 
 ## Changes

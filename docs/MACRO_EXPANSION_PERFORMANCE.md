@@ -330,7 +330,7 @@ if (op && TAG(op) == CLJ_SYMBOL) {
 
 ## Empfehlungen
 
-### Für Embedded-Systeme (ESP32, STM32)
+### Für Embedded-Systeme (ESP32)
 
 1. **Expansion-Caching implementieren** - **KRITISCH!**
 2. **Macro-Registry-Optimierung** - Symbol-Pointer-Vergleich
