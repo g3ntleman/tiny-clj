@@ -61,7 +61,7 @@ Next Priority
   - `(cancel-timer timer-id)` - Timer-Abbruch anhand ID
   - Zeitgesteuerte Queue mit sortierter Einfügung
   - Transiente Vektoren für effiziente Timer-Verwaltung
-  - STM32-kompatibel und in Embedded-Builds enthalten
+  - Für Embedded-Builds (ESP32) geeignet
   - Umfassende Timer-Tests (15+ Testfälle)
 - Core Control Flow: `(let)` Implementation: ✅ COMPLETED
   - Implement `(let)` special form for local variable binding

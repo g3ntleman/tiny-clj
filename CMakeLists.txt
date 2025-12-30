@@ -36,7 +36,7 @@ else()
 endif()
 
 # Ultra-compact build for <150KB target (embedded deployment)
-# Target: ARM Cortex-M (32-bit) for ESP32
+# Target: size-focused embedded build settings (ESP32)
 set(CMAKE_C_FLAGS_EMBEDDED "${CMAKE_C_FLAGS_EMBEDDED} -Os -DNDEBUG -ffunction-sections -fdata-sections -fvisibility=hidden -flto -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-stack-protector -fomit-frame-pointer -fno-ident -fno-common")
 if(APPLE)
   # For macOS testing: use size-optimized build (simulate embedded constraints)
@@ -142,49 +142,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 else()
     target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
 endif()
-
-# STM32-optimized sources (no memory profiling for embedded)
-set(STM32_SOURCES
-    src/clojure_core.c
-    src/types.c
-    src/object.c
-    src/builtins.c
-    src/builtins_strings.c
-    src/runtime.c
-    src/namespace.c
-    src/symbol.c
-    src/symbol_token.c
-    src/parser.c
-    src/ast_canon.c
-    src/reader.c
-    src/eval.c
-    src/function.c
-    src/optimize.c
-    src/environment.c
-    src/equality.c
-    src/hash.c
-    src/event_loop.c
-    src/channel.c
-    src/list.c
-    src/ast.c
-    src/atom.c
-    src/file_utils.c
-    src/debug.c
-    src/seq.c
-    src/error_messages.c
-    src/numeric_utils.c
-    src/validation.c
-    src/args_utils.c
-    src/meta.c
-    src/eval_arithmetic.c
-    src/eval_comparison.c
-    src/eval_sequence.c
-    src/eval_special_forms.c
-    src/to_string.c
-    src/macro.c
-    src/regex.c
-    external/tiny_regex.c
-)
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
 add_executable(tiny-clj-esp32
@@ -298,27 +255,6 @@ target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
 target_compile_definitions(tiny-clj-profile PRIVATE ENABLE_PROFILING ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
     COMPILE_FLAGS "-g -O2 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer"
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-)
-
-# STM32-optimized REPL (no test code, includes memory profiling for REPL)
-add_executable(tiny-clj-esp32-repl
-    src/repl.c
-    src/platform_stm32.c
-    src/line_editor.c
-    src/memory_profiler.c
-    ${STM32_SOURCES}
-)
-target_link_libraries(tiny-clj-esp32-repl PRIVATE subjective-c)
-# STM32 REPL Build - No Meta in Release, Optimized
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-esp32-repl PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
-else()
-    target_compile_definitions(tiny-clj-esp32-repl PRIVATE ENABLE_META ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=1)
-endif()
-set_target_properties(tiny-clj-esp32-repl PROPERTIES
-    COMPILE_FLAGS "-Os -DNDEBUG -ffunction-sections -fdata-sections"
-    LINK_FLAGS "-Wl,-dead_strip"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 

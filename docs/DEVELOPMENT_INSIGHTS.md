@@ -1449,7 +1449,7 @@ static void test_group_memory(void) {
 | **Test Groups** | Manual | Automatic |
 | **Memory Profiling** | ✅ | ✅ |
 | **WITH_AUTORELEASE_POOL** | ✅ | ✅ |
-| **STM32 Compatible** | ✅ | ✅ |
+| **Embedded Friendly (ESP32)** | ✅ | ✅ |
 
 ### Migration Strategy
 
@@ -1575,4 +1575,4 @@ void test_exception_example(void) {
 
 ### Conclusion
 
-Unity Test Framework provides a modern, flexible testing solution that enhances the project's testing capabilities while maintaining compatibility with existing memory management and STM32 constraints. The command-line parameter support enables efficient test isolation and debugging, making it an ideal replacement for MinUnit while preserving the project's core testing features.
+Unity Test Framework provides a modern, flexible testing solution that enhances the project's testing capabilities while maintaining compatibility with existing memory management and embedded constraints. The command-line parameter support enables efficient test isolation and debugging, making it an ideal replacement for MinUnit while preserving the project's core testing features.

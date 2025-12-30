@@ -491,9 +491,7 @@ static CljList* frame_chain_to_env_stack(CallFrame *frame, CljList *parent_stack
 
     CljList *new_stack = make_list(frame_map, parent_with_frames);
     RELEASE(frame_map);
-    if (parent_with_frames) {
-        RELEASE(parent_with_frames);
-    }
+    RELEASE(parent_with_frames);
     return new_stack;
 }
 
@@ -2020,9 +2018,7 @@ ID eval_for(CljList *list, CljMap *env) {
             if (new_env) {
                 // Evaluate body with new binding
                 ID body_result = eval_body_with_env(body, new_env, NULL);
-                if (body_result) {
-                    RELEASE(body_result);
-                }
+                RELEASE(body_result);
 
                 // Clean up environment
                 RELEASE(new_env);
@@ -2088,9 +2084,7 @@ ID eval_doseq(CljList *list, CljMap *env) {
             if (new_env) {
                 // Evaluate body with new binding
                 ID body_result = eval_body_with_env(body, new_env, NULL);
-                if (body_result) {
-                    RELEASE(body_result);
-                }
+                RELEASE(body_result);
 
                 // Clean up environment
                 RELEASE(new_env);
@@ -2252,9 +2246,7 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
                 if (func) {
                     ASSIGN(func->env_stack, frame_env_stack);
                 }
-                if (frame_env_stack) {
-                    RELEASE(frame_env_stack);
-                }
+                RELEASE(frame_env_stack);
             }
         }
 
@@ -2572,9 +2564,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
             } else {
                 body_result = eval_body(body_list, new_env, eval_st, NULL);
             }
-            if (body_result) {
-                RELEASE(body_result);
-            }
+            RELEASE(body_result);
 
             // Clean up environment
             RELEASE(new_env);
@@ -2582,9 +2572,7 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
     }
 
     // Clean up base_env if we created it
-    if (base_env != env && base_env) {
-        RELEASE(base_env);
-    }
+    if (base_env != env) RELEASE(base_env);
 
     return AUTORELEASE(NULL);
 }

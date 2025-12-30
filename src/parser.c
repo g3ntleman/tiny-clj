@@ -7,7 +7,7 @@
  * - Supports meta-data parsing (^metadata, #^{...}, (with-meta obj meta))
  * - Handles comments (line comments ; and block comments #| ... |#)
  * - Stack-allocated parsing for memory efficiency
- * - STM32-compatible implementation
+ * - Embedded-friendly implementation
  */
 
 #include "parser.h"

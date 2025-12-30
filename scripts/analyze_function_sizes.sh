@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # Function Size Analysis Script
-# Analyzes which functions generate the most object code for tiny-clj-stm32
+# Analyzes which functions generate the most object code for the embedded build
 
 set -e
 
-TARGET="build/tiny-clj-stm32"
-STM32_TOOLCHAIN="arm-none-eabi-"
+TARGET="build/tiny-clj-esp32"
 OUTPUT_FILE="Reports/function_size_analysis.md"
 TOP_COUNT=20
 
@@ -28,9 +27,7 @@ if [ ! -f "$TARGET" ]; then
     echo "Please build the project first:"
     echo "  cmake -DCMAKE_BUILD_TYPE=MinSizeRel . && make -j4"
     echo ""
-    echo "Note: This script analyzes the macOS build. For STM32-specific analysis:"
-    echo "  cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/stm32.cmake -DCMAKE_BUILD_TYPE=MinSizeRel ."
-    echo "  make -j4"
+    echo "Note: This script analyzes a local build artifact."
     exit 1
 fi
 
@@ -53,11 +50,9 @@ TARGET_TYPE=$(file "$TARGET" 2>/dev/null | grep -o "Mach-O\|ELF" || echo "UNKNOW
 if [ "$TARGET_TYPE" = "Mach-O" ]; then
     echo "Detected: macOS Mach-O executable"
     echo "Note: This analysis includes macOS-specific symbols (__mh_execute_header, etc.)"
-    echo "For STM32-specific analysis, use STM32 toolchain build"
     echo ""
 elif [ "$TARGET_TYPE" = "ELF" ]; then
-    echo "Detected: ELF executable (STM32/ARM)"
-    echo "This is the correct target for STM32 optimization analysis"
+    echo "Detected: ELF executable"
     echo ""
 else
     echo "Unknown target type. Proceeding with analysis..."
@@ -76,7 +71,7 @@ FUNCTIONS_DATA=$(nm "$TARGET" | grep ' [Tt] ' | awk '{
         # Remove leading underscores
         gsub(/^_+/, "", name)
         gsub(/@.*$/, "", name)
-        # Skip macOS-specific symbols that don'\''t exist on STM32
+        # Skip macOS-specific symbols that don't exist on embedded targets
         if (name != "" && name != "__mh_execute_header" && name != "__mh_dylib_header") {
             print addr " " name
         }
@@ -219,13 +214,9 @@ EOF
 # Add target-specific notes
 if [ "$TARGET_TYPE" = "Mach-O" ]; then
     cat >> "$OUTPUT_FILE" << EOF
-**⚠️ macOS Analysis:** This report analyzes a macOS Mach-O executable, which includes macOS-specific symbols that don't exist on STM32 targets.
+**⚠️ macOS Analysis:** This report analyzes a macOS Mach-O executable, which includes macOS-specific symbols that don't exist on embedded targets.
 
-**For STM32 Optimization:** Use STM32 toolchain build:
-\`\`\`bash
-cmake -DCMAKE_TOOLCHAIN_FILE=toolchains/stm32.cmake -DCMAKE_BUILD_TYPE=MinSizeRel .
-make -j4
-\`\`\`
+**For embedded analysis:** Build an ELF using your embedded toolchain and re-run this script against that artifact.
 
 **macOS-specific symbols to ignore:**
 - \`__mh_execute_header\` - Mach-O header (not optimizable)
@@ -235,13 +226,12 @@ make -j4
 EOF
 elif [ "$TARGET_TYPE" = "ELF" ]; then
     cat >> "$OUTPUT_FILE" << EOF
-**✅ STM32 Analysis:** This report analyzes an ELF executable suitable for STM32 targets.
+**✅ Embedded ELF Analysis:** This report analyzes an ELF executable suitable for embedded targets.
 
-**STM32-specific optimizations:**
-- Focus on ARM Cortex-M instruction set efficiency
+**Embedded-focused optimizations:**
 - Consider function inlining for small, frequently called functions
 - Optimize for flash memory constraints
-- Use STM32-specific compiler flags (-Os, -ffunction-sections, etc.)
+- Use size-focused compiler/linker flags (-Os, -ffunction-sections, -fdata-sections, gc-sections, etc.)
 
 EOF
 fi

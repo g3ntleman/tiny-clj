@@ -161,7 +161,7 @@
 
 ## Empfehlung
 
-### Für Embedded-Systeme (ESP32, STM32):
+### Für Embedded-Systeme (ESP32):
 **Vergleich bei vollständiger Macro-Syntax-Unterstützung:**
 
 **Option 1 (Macro-Expander):** ~2000-3100 Zeilen

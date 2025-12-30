@@ -5,7 +5,7 @@
 
 ## Overview
 
-tiny-clj is an embedded-first Clojure interpreter written in pure C99/C11 for microcontrollers (ESP32, ARM Cortex-M) and desktop platforms.
+tiny-clj is an embedded-first Clojure interpreter written in pure C99/C11 for microcontrollers (ESP32) and desktop platforms.
 
 ## Implementation Status
 
