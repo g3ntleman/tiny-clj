@@ -20,9 +20,13 @@
 // Flag to track if summary was already printed
 static bool g_summary_printed = false;
 static clock_t g_start_time = 0;
+static bool g_unity_started = false;
 
 // Signal handler to print summary on crash
 static void print_summary_on_exit(void) {
+    if (!g_unity_started) {
+        return;
+    }
     if (!g_summary_printed) {
         fflush(stdout);
         fflush(stderr);
@@ -198,47 +202,102 @@ int main(int argc, char **argv) {
     set_memory_leak_reporting_enabled(false);
     set_memory_verbose_mode(false);
 #endif
-    
-    UNITY_BEGIN();
-    g_start_time = clock();
-    clock_t start_time = g_start_time;
-    
+
+    // Parse command-line args (supports multiple options in any order).
+    bool show_help = false;
+    bool list_tests = false;
+    bool quiet = false;
     bool show_memory_summary = false;
+    const char **test_patterns = NULL;
+    int test_pattern_count = 0;
+
     if (argc > 1) {
-        if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
-            print_usage(argv[0]);
-            return 0;
-        } else if (strcmp(argv[1], "--list") == 0) {
-            subjective_c_test_registry_list_all();
-            return 0;
-        } else if (strcmp(argv[1], "--quiet") == 0) {
-#ifdef ENABLE_MEMORY_PROFILING
-            set_memory_leak_reporting_enabled(false);
-#endif
-            run_tests_by_registry();
-        } else if (strcmp(argv[1], "--memory-summary") == 0) {
+        test_patterns = (const char**)calloc((size_t)argc, sizeof(const char*));
+        if (!test_patterns) {
+            fprintf(stderr, "ERROR: out of memory\n");
+            return 1;
+        }
+    }
+
+    for (int i = 1; i < argc; i++) {
+        const char *arg = argv[i];
+        if (!arg) {
+            continue;
+        }
+
+        if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+            show_help = true;
+        } else if (strcmp(arg, "--list") == 0) {
+            list_tests = true;
+        } else if (strcmp(arg, "--quiet") == 0) {
+            quiet = true;
+        } else if (strcmp(arg, "--memory-summary") == 0) {
 #ifdef TINY_CLJ_TEST_RUNNER
             show_memory_summary = true;
-#ifdef ENABLE_MEMORY_PROFILING
-            set_memory_verbose_mode(false);
-            set_memory_leak_reporting_enabled(true);
-#endif
-            run_tests_by_registry();
 #else
             printf("--memory-summary is only available for tiny-clj tests\n");
+            free((void*)test_patterns);
             return 1;
 #endif
-        } else if (strcmp(argv[1], "--test") == 0 || strcmp(argv[1], "-test") == 0) {
-            if (argc < 3) {
+        } else if (strcmp(arg, "--test") == 0 || strcmp(arg, "-test") == 0) {
+            if (i + 1 >= argc) {
+                print_usage(argv[0]);
+                free((void*)test_patterns);
                 return 1;
             }
-            run_specific_test(argv[2]);
+            const char *pattern = argv[++i];
+            if (!pattern) {
+                print_usage(argv[0]);
+                free((void*)test_patterns);
+                return 1;
+            }
+            test_patterns[test_pattern_count++] = pattern;
         } else {
-            run_tests_by_registry();
+            fprintf(stderr, "ERROR: unknown option '%s'\n\n", arg);
+            print_usage(argv[0]);
+            free((void*)test_patterns);
+            return 1;
+        }
+    }
+
+    if (show_help) {
+        print_usage(argv[0]);
+        free((void*)test_patterns);
+        return 0;
+    }
+    if (list_tests) {
+        subjective_c_test_registry_list_all();
+        free((void*)test_patterns);
+        return 0;
+    }
+
+#ifdef ENABLE_MEMORY_PROFILING
+    if (quiet && !show_memory_summary) {
+        set_memory_leak_reporting_enabled(false);
+    }
+#endif
+
+#ifdef ENABLE_MEMORY_PROFILING
+    if (show_memory_summary) {
+        set_memory_verbose_mode(false);
+        set_memory_leak_reporting_enabled(true);
+    }
+#endif
+
+    UNITY_BEGIN();
+    g_unity_started = true;
+    g_start_time = clock();
+    clock_t start_time = g_start_time;
+
+    if (test_pattern_count > 0) {
+        for (int i = 0; i < test_pattern_count; i++) {
+            run_specific_test(test_patterns[i]);
         }
     } else {
         run_tests_by_registry();
     }
+
+    free((void*)test_patterns);
     
     clock_t end_time = clock();
     double elapsed = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
