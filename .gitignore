@@ -32,6 +32,10 @@ benchmark_output.txt
 progress.marks
 *.csv
 
+# Sample output artifacts
+/sample_*.txt
+/benchmark_profile_sample.txt
+
 # Local scratch
 tmp
 tmp/
