@@ -849,11 +849,7 @@ ID native_cons(ID *args, unsigned int argc) {
 
         CljLazySeq *lazy = (CljLazySeq*)malloc(sizeof(CljLazySeq));
         if (!lazy) {
-            if (tag == CLJ_SEQ || tag == CLJ_LAZY_SEQ) {
-                RELEASE(tail);
-            } else if (tail) {
-                RELEASE(tail);
-            }
+            RELEASE(tail);
             return NULL;
         }
 
@@ -932,9 +928,7 @@ ID native_reduce(ID *args, unsigned int argc) {
         ID current = seq_iter_first(&iter);
         ID call_args[2] = {acc, current};
         ID new_acc = eval_function_call(fn, call_args, 2, NULL, st);
-        if (acc_owned) {
-            RELEASE(acc);
-        }
+        if (acc_owned) RELEASE(acc);
         acc = new_acc;
         acc_owned = true;
         seq_iter_next(&iter);

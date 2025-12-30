@@ -116,11 +116,9 @@ static ID throw_ambiguous_symbol_error(CljSymbol *sym,
 __attribute__((unused)) static void release_namespace_callback(ID key, ID value) {
     (void)key; // Unused - we only need the value (namespace)
     CljNamespace *ns = (CljNamespace*)value;
-    if (ns) {
-        // Release namespace object (CljObject subtype)
-        // release_object_deep() will handle freeing filename, mappings, and aliases
-        RELEASE(ns);
-    }
+    // Release namespace object (CljObject subtype)
+    // release_object_deep() will handle freeing filename, mappings, and aliases
+    RELEASE(ns);
 }
 
 // Helper function to grow transient map when capacity is exceeded
