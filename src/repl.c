@@ -421,7 +421,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 #endif
 
-    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.1", platform_name());
+    printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
     print_build_info();
 #ifdef ENABLE_LINE_EDITING
     // Line editor needs blocking input for proper character handling

@@ -98,6 +98,12 @@ This helps identify which build configuration is currently active and how it was
 - **Memory:** Manual reference counting with `retain`, `release`, and `autorelease` pools
 - **REPL:** Supports `--no-core`, `-e/--eval`, and `-f/--file` for scripted evaluation
 
+## Deviations from Clojure
+
+Tiny-CLJ aims to follow Clojure closely, but there are some intentional differences:
+
+- **Compile-time macroexpansion argument cap:** during compile-time macroexpansion, Tiny-CLJ currently passes at most **20** arguments to the macro function; additional arguments are ignored. Clojure does not impose such a cap.
+
 ## Documentation
 See `docs/` directory for detailed documentation:
 - **`ROADMAP.md`** - Planned work and status
