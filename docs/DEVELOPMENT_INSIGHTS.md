@@ -1390,7 +1390,7 @@ The project has been enhanced with Unity Test Framework integration, providing a
 
 #### Test Organization
 ```
-unity-tests (single target)
+unit-tests (single target)
 ├── unity_test_runner.c     # Central test runner with CLI
 ├── memory_tests.c          # Memory management tests
 ├── parser_tests.c          # Parser functionality tests
@@ -1398,7 +1398,7 @@ unity-tests (single target)
 ```
 
 #### Key Features
-- **Single Target**: One executable (`unity-tests`) with multiple test files
+- **Single Target**: One executable (`unit-tests`) with multiple test files
 - **Command-Line Parameters**: Flexible test execution and isolation
 - **Memory Profiling**: Integrated with existing memory management
 - **Test Fixtures**: Global `setUp()`/`tearDown()` with `WITH_AUTORELEASE_POOL`
@@ -1409,15 +1409,15 @@ unity-tests (single target)
 #### Running Tests
 ```bash
 # All tests (17 tests)
-./unity-tests
+./unit-tests
 
 # Specific test suites
-./unity-tests memory        # Memory tests (5 tests)
-./unity-tests parser        # Parser tests (6 tests)
-./unity-tests exception     # Exception tests (6 tests)
+./unit-tests memory        # Memory tests (5 tests)
+./unit-tests parser        # Parser tests (6 tests)
+./unit-tests exception     # Exception tests (6 tests)
 
 # Help
-./unity-tests --help
+./unit-tests --help
 ```
 
 #### Test Structure
@@ -1510,7 +1510,7 @@ void test_memory_allocation(void) {
 ### Future Enhancements
 
 #### Planned Features
-- **Individual Test Execution**: `./unity-tests memory allocation`
+- **Individual Test Execution**: `./unit-tests memory allocation`
 - **Test Categories**: Core, data, control, api, memory, error, ui
 - **Parallel Execution**: Multiple test suites simultaneously
 - **Test Reporting**: JUnit XML output for CI/CD
@@ -1525,7 +1525,7 @@ void test_memory_allocation(void) {
 
 ```cmake
 # Unity Test Framework (central runner with separate test files)
-add_executable(unity-tests
+add_executable(unit-tests
     src/tests/unity_test_runner.c
     src/tests/memory_tests.c
     src/tests/parser_tests.c
@@ -1533,8 +1533,8 @@ add_executable(unity-tests
     external/unity/src/unity.c
     ${SOURCES}
 )
-target_compile_definitions(unity-tests PRIVATE ENABLE_META DEBUG ENABLE_MEMORY_PROFILING)
-target_include_directories(unity-tests PRIVATE external/unity/src)
+target_compile_definitions(unit-tests PRIVATE ENABLE_META DEBUG ENABLE_MEMORY_PROFILING)
+target_include_directories(unit-tests PRIVATE external/unity/src)
 ```
 
 ### Debugging and Development
@@ -1543,8 +1543,8 @@ target_include_directories(unity-tests PRIVATE external/unity/src)
 1. **Write test** in appropriate `.c` file
 2. **Declare function** in `unity_test_runner.c`
 3. **Add to test group** in runner
-4. **Test individually**: `./unity-tests <suite>`
-5. **Verify integration**: `./unity-tests all`
+4. **Test individually**: `./unit-tests <suite>`
+5. **Verify integration**: `./unit-tests all`
 
 #### Common Patterns
 ```c
