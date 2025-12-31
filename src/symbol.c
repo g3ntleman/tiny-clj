@@ -49,6 +49,7 @@ CljSymbol *SYM_THROW = NULL;
 CljSymbol *SYM_FINALLY = NULL;
 CljSymbol *SYM_VAR = NULL;
 CljSymbol *SYM_NS = NULL;
+CljSymbol *SYM_BINDING = NULL;
 CljSymbol *SYM_TIME = NULL;
 CljSymbol *SYM_GO = NULL;
 CljSymbol *SYM_DEREF = NULL;
@@ -181,6 +182,7 @@ DEFINE_STATIC_SPECIAL_SYMBOL(sym_throw_data, "throw");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_finally_data, "finally");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_var_data, "var");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_ns_data, "ns");
+DEFINE_STATIC_SPECIAL_SYMBOL(sym_binding_data, "binding");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_time_data, "time");
 DEFINE_STATIC_SPECIAL_SYMBOL(sym_go_data, "go");
 
@@ -381,6 +383,7 @@ void init_special_symbols() {
     // Built-in functions - static structs with symbol table registration
     INIT_SPECIAL_SYMBOL(SYM_DEF, sym_def_data);
     INIT_SPECIAL_SYMBOL(SYM_NS, sym_ns_data);
+    INIT_SPECIAL_SYMBOL(SYM_BINDING, sym_binding_data);
     INIT_SPECIAL_SYMBOL(SYM_TIME, sym_time_data);
     INIT_SPECIAL_SYMBOL(SYM_GO, sym_go_data);
 
@@ -568,6 +571,9 @@ void init_special_symbols() {
     }
     if (SYM_TIME && (SYM_TIME->base.flags & CLJ_FLAG_SPECIAL)) {
         ((CljSpecialSymbol*)SYM_TIME)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_time;
+    }
+    if (SYM_BINDING && (SYM_BINDING->base.flags & CLJ_FLAG_SPECIAL)) {
+        ((CljSpecialSymbol*)SYM_BINDING)->eval_fn = (SpecialFormEvalFn_Placeholder)(SpecialFormEvalFn)eval_special_binding;
     }
     // Note: SYM_DOTIMES is handled inline in eval.c, not as Special Form
     

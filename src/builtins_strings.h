@@ -9,6 +9,9 @@
 #define TINY_CLJ_BUILTINS_STRINGS_H
 
 #include "object.h"
+#include "runtime.h"  // BuiltinFn
+
+struct CljSymbol;
 
 // String concatenation (variadic): (str & args)
 ID native_str(ID *args, unsigned int argc);
@@ -36,6 +39,10 @@ ID native_string_reverse(ID *args, unsigned int argc);
 
 // Format string: (format fmt & args)
 ID native_format(ID *args, unsigned int argc);
+
+// Native lookup hook for clojure.string :native stubs.
+// (The main lookup lives in builtins.c, but clojure.string is split out.)
+BuiltinFn builtins_strings_native_function_lookup(struct CljSymbol *symbol);
 
 #endif // TINY_CLJ_BUILTINS_STRINGS_H
 

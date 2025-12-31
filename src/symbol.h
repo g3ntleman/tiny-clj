@@ -71,6 +71,7 @@ extern CljSymbol *SYM_DESTRUCTURE;
 extern CljSymbol *SYM_THROW;
 extern CljSymbol *SYM_FINALLY;
 extern CljSymbol *SYM_NS;
+extern CljSymbol *SYM_BINDING;
 extern CljSymbol *SYM_GO;
 extern CljSymbol *SYM_TIME;
 extern CljSymbol *SYM_DEREF;

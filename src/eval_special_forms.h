@@ -32,6 +32,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
+ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 

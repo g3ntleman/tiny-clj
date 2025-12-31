@@ -80,7 +80,7 @@ static inline void update_debug_output_active(void) {
 // Zombie mode is controlled by ZOMBIE_ENABLED macro at compile time
 // No runtime variable needed - if ZOMBIE_ENABLED is defined, zombie mode is active
 #ifdef ZOMBIE_ENABLED
-#warning "ZOMBIE_ENABLED is active - objects will NOT be freed, but marked as zombies"
+// Intentionally no compile-time warning: this project reports zombie mode via runtime build info.
 #endif
 #else
 // Release builds: zombie mode not available

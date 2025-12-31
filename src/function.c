@@ -81,6 +81,10 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     if (allocate_function_params(func, params, param_count) != 0) {
         return NULL;
     }
+
+    // Cache param count and params array pointer for hot call paths
+    func->param_count = (uint8_t)param_count;
+    func->params_array = func->params ? vector_as_array(func->params) : NULL;
     
     return func;
 }

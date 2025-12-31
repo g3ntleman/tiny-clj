@@ -187,7 +187,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     }
 
     // Arity check - variadic functions accept >= required params
-    int param_count = func->params ? vector_count(func->params) : 0;
+    int param_count = (int)func->param_count;
     int8_t vi = func->variadic_index;
     unsigned int required = (param_count > 0) ? (unsigned int)param_count : 0;
     if (vi < 0) {
@@ -206,7 +206,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     ID current_args[16];
     ID recur_args[16];
     int used_recur_slots = 0;
-    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
+    ID *params_array = func->params_array;
     
     // Variadic handling: build effective params/values only when needed
     ID variadic_params[16];
@@ -243,7 +243,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     CallFrame call_frame_storage;
     CallFrame *call_frame = &call_frame_storage;
     frame_init(call_frame, NULL);
-    frame_set_bindings(call_frame, NULL, effective_params, current_args, current_argc);
+    frame_set_bindings_init(call_frame, NULL, effective_params, current_args, current_argc);
 
     // Legacy: Keep env_stack for closure environment (func->env_stack)
     // This is only used for closure bindings, not function parameters
@@ -889,6 +889,35 @@ void reset_eval_arg_depth(void) {
 // Helper functions for eval_list refactoring
 // ============================================================================
 
+static inline bool is_dynamic_var_symbol(const CljSymbol *symbol) {
+    if (!symbol || !symbol->cname) return false;
+    const char *name = symbol->cname;
+    if (name[0] != '*') return false;
+    size_t len = strlen(name);
+    return len >= 2 && name[len - 1] == '*';
+}
+
+static inline ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
+    if (!st || !symbol || !st->dynamic_bindings) {
+        return NOT_FOUND;
+    }
+
+    unsigned int depth = vector_count(st->dynamic_bindings);
+    for (unsigned int i = depth; i > 0; i--) {
+        ID frame_id = vector_nth(st->dynamic_bindings, i - 1);
+        if (!frame_id || TAG(frame_id) != CLJ_MAP) {
+            continue;
+        }
+        ID v = map_get((CljMap*)frame_id, (ID)symbol, NOT_FOUND);
+        if (v != NOT_FOUND) {
+            // v may be NULL (nil) - that's a valid binding value.
+            return v;
+        }
+    }
+
+    return NOT_FOUND;
+}
+
 // Handle recur special form
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
@@ -898,6 +927,7 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     }
 
     CljSymbol *op_sym = as_symbol(op);
+    bool op_is_dynamic = is_dynamic_var_symbol(op_sym);
 
     // === HOT PATH: ctx vorhanden (typisch für fib und andere rekursive Funktionen) ===
     if (ctx) {
@@ -910,7 +940,8 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         }
         
         // 2) Callsite-Cache (gecachte Funktionen wie fib selbst)
-        if (call_node && g_runtime.resolve_cache_epoch != 0) {
+        // IMPORTANT: Dynamic vars must never use callsite caches.
+        if (!op_is_dynamic && call_node && g_runtime.resolve_cache_epoch != 0) {
             ID cached_call = ast_node_get_cached_resolution(call_node, op_sym, g_runtime.resolve_cache_epoch);
             if (cached_call) {
                 return cached_call;
@@ -918,8 +949,9 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         }
         
         // 3) Resolve-Cache (globaler Cache für Namespace-Symbole)
+        // IMPORTANT: Dynamic vars must never use the resolve cache.
         EvalState *ctx_st = get_eval_state(ctx, st);
-        if (g_runtime.resolve_cache && ctx_st) {
+        if (!op_is_dynamic && g_runtime.resolve_cache && ctx_st) {
             CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
             ID cached = resolve_cache_lookup_value(cache_ns_key, op);
             if (cached) {
@@ -963,7 +995,7 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     }
 
     CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
-    bool allow_callsite_cache = call_node && op_sym && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
+    bool allow_callsite_cache = call_node && op_sym && !op_is_dynamic && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
 
     // OPTIMIZATION: Qualified symbols skip env_stack - go direct to namespace
     // Unqualified symbols check env_stack first (let bindings, closures)
@@ -997,7 +1029,7 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     resolved = eval_symbol(op_sym, ctx_st);
     
     // Cache namespace lookups for future calls
-    if (resolved && ctx_st && ctx_st->current_ns && TAG(resolved) != CLJ_SYMBOL) {
+    if (!op_is_dynamic && resolved && ctx_st && ctx_st->current_ns && TAG(resolved) != CLJ_SYMBOL) {
         if (!g_runtime.resolve_cache) {
             ASSIGN(g_runtime.resolve_cache, make_map(RESOLVE_CACHE_SIZE));
         }
@@ -1791,13 +1823,22 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
         return symbol;
     }
 
-    // Special handling for *ns*
-    if (symbol == SYM_NS_STAR) {
-        if (st && st->current_ns && st->current_ns->name) {
-            return st->current_ns->name;
+    // Dynamic vars: if an earmuffed symbol is dynamically bound, return its binding.
+    // Values may be NULL (nil) and are stored directly in binding maps.
+    if (is_dynamic_var_symbol(symbol)) {
+        ID bound = dynamic_binding_lookup(st, symbol);
+        if (bound != NOT_FOUND) {
+            return bound;
         }
-        CljNamespace *user_ns = ns_get_or_create("user", NULL);
-        return (user_ns && user_ns->name) ? user_ns->name : NULL;
+    }
+
+    // *ns* is represented as the current namespace object.
+    // This makes it dynamically bindable by updating EvalState.current_ns in (binding ...).
+    if (symbol == SYM_NS_STAR) {
+        if (st && st->current_ns) {
+            return (ID)st->current_ns;
+        }
+        return (ID)ns_get_or_create("user", NULL);
     }
 
     // CRITICAL: Handle qualified symbols (symbol->ns_name is set during parsing)
@@ -2474,108 +2515,93 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
 
     // Parse arguments directly without evaluation
     CljList *list_data = as_list(list);
-    if (!list_data->rest) {
-        return NULL;
-    }
+    if (!list_data || !list_data->rest) return NULL;
 
-    // Extract binding vector/list (first argument after dotimes)
-    CljObject *binding_list = NULL;
-    CljObject *body_list = NULL;
+    // Extract binding vector/list (first argument after dotimes) and body forms.
+    CljList *args_list = as_list(list_data->rest);
+    if (!args_list) return NULL;
+    ID binding_list = LIST_FIRST(args_list);
+    ID body_list = LIST_REST(args_list); // list of body expressions (may be NULL)
 
-    if (list_data->rest && list_type_matches(TAG(list_data->rest))) {
-        CljList *args_list = as_list(list_data->rest);
-        binding_list = args_list->first;
-        body_list = args_list->rest; // Rest contains all body expressions
-    }
-
-    if (!binding_list || !body_list) {
-        return NULL;
-    }
+    if (!binding_list) return NULL;
 
     // Parse binding: [var n] - support both vectors and lists
-    CljObject *var = NULL;
-    CljObject *n_obj = NULL;
+    ID var = NULL;
+    ID n_obj = NULL;
 
-    if (binding_list && TAG(binding_list) == CLJ_VECTOR) {
-        // Use nth function to safely access vector elements
-        var = nth2((ID[]){binding_list, fixnum(0)}, 2);
-        n_obj = nth2((ID[]){binding_list, fixnum(1)}, 2);
-    } else if (binding_list && list_type_matches(TAG(binding_list))) {
+    if (TAG(binding_list) == CLJ_VECTOR) {
+        CljVector *vec = as_vector(binding_list);
+        if (!vec || vector_count(vec) < 2) return NULL;
+        var = vector_nth(vec, 0);
+        n_obj = vector_nth(vec, 1);
+    } else if (list_type_matches(TAG(binding_list))) {
         CljList *binding_data = as_list(binding_list);
-        if (!binding_data->first || !binding_data->rest) {
-            return NULL;
-        }
+        if (!binding_data || !binding_data->first) return NULL;
         var = binding_data->first;
         CljList *rest_list = as_list(binding_data->rest);
-        if (!rest_list || !rest_list->first) {
-            return NULL;
-        }
+        if (!rest_list || !rest_list->first) return NULL;
         n_obj = rest_list->first;
     } else {
         return NULL;
     }
 
-    if (!var || !n_obj) {
-        return NULL;
+    if (!var || TAG(var) != CLJ_SYMBOL || !n_obj) return NULL;
+
+    // Evaluate n (once). Keep behavior compatible with the existing implementation:
+    // - If n is a symbol, resolve it from env/namespace.
+    // - If n is an expression/list, evaluate it.
+    ID n_evaluated = NULL;
+    if (TAG(n_obj) == CLJ_SYMBOL) {
+        n_evaluated = resolve_symbol_in_env_with_frame(NULL, env, NULL, n_obj, st);
+    } else if (list_type_matches(TAG(n_obj))) {
+        n_evaluated = eval_body(n_obj, env, st, NULL);
+    } else {
+        n_evaluated = n_obj;
     }
 
-    // Evaluate n_obj if it's a symbol (e.g., when dotimes is used inside let)
-    CljObject *n_evaluated = (TAG(n_obj) == CLJ_SYMBOL)
-        ? resolve_symbol_in_env_with_frame(NULL, env, NULL, n_obj, st)
-        : n_obj;
-
-    if (!n_evaluated || TAG(n_evaluated) != CLJ_INT) {
-        return NULL;
-    }
-
+    if (!n_evaluated || TAG(n_evaluated) != CLJ_INT) return NULL;
     int n = as_fixnum((CljValue)n_evaluated);
+    if (n <= 0) return AUTORELEASE(NULL);
 
-    // Namespace mappings are now resolved via resolve_symbol_in_env
-    // No need to pre-add them to the environment
-    CljMap *base_env = env;
+    // Loop var binding: use a stack CallFrame to avoid allocating a new map/env each iteration.
+    CallFrame dotimes_frame;
+    frame_init(&dotimes_frame, NULL);
+    ID dotimes_params[1] = { var };
+    dotimes_frame.params = dotimes_params;
+    dotimes_frame.param_count = 1;
 
-    // Execute body n times
+    // Evaluate body with context so symbol lookup hits frame_lookup.
+    EvalContext dotimes_ctx = {
+        .env = env,
+        .env_stack = NULL,
+        .frame = &dotimes_frame,
+        .st = st,
+        .recur_args = NULL,
+        .recur_arg_count = NULL,
+        .recur_param_count = 0
+    };
+
+    EvalState *eval_st = st ? st : builtin_get_eval_state();
+    dotimes_ctx.st = eval_st;
+
     for (int i = 0; i < n; i++) {
-        // Extend environment with loop variable binding
-        CljMap *new_env = NULL;
-        if (base_env && TAG(base_env) == CLJ_MAP) {
-            CljValue i_value = fixnum((int32_t)i);
-            new_env = RETAIN(map_assoc(base_env, var, i_value));
-        } else {
-            new_env = (CljMap*)make_map(4);
-            if (new_env) {
-                CljValue i_value = fixnum((int32_t)i);
-                ASSIGN(new_env, map_assoc(new_env, var, i_value));
+        dotimes_frame.values[0] = frame_encode_value(fixnum((int32_t)i));
+
+        ID body_result = NULL;
+        if (body_list && list_type_matches(TAG(body_list))) {
+            CljList *body_items = as_list(body_list);
+            LIST_FOR_EACH(body_items, body_expr) {
+                if (!body_expr) continue;
+                RELEASE(body_result);
+                body_result = eval_body(body_expr, env, eval_st, &dotimes_ctx);
             }
+        } else if (body_list) {
+            body_result = eval_body(body_list, env, eval_st, &dotimes_ctx);
         }
-
-        if (new_env) {
-            // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
-            EvalState *eval_st = st ? st : builtin_get_eval_state();
-
-            // Evaluate body expressions
-            CljObject *body_result = NULL;
-            if (body_list && list_type_matches(TAG(body_list))) {
-                CljList *body_items = as_list(body_list);
-                LIST_FOR_EACH(body_items, body_expr) {
-                    if (body_result) {
-                        RELEASE(body_result);
-                    }
-                    body_result = eval_body(body_expr, new_env, eval_st, NULL);
-                }
-            } else {
-                body_result = eval_body(body_list, new_env, eval_st, NULL);
-            }
-            RELEASE(body_result);
-
-            // Clean up environment
-            RELEASE(new_env);
-        }
+        RELEASE(body_result);
     }
 
-    // Clean up base_env if we created it
-    if (base_env != env) RELEASE(base_env);
-
+    frame_release(&dotimes_frame);
     return AUTORELEASE(NULL);
 }
 

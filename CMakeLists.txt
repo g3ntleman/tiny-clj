@@ -92,6 +92,7 @@ list(APPEND SOURCES
     src/object.c
     src/builtins.c
     src/builtins_strings.c
+    src/builtins_regex.c
     src/runtime.c
     src/namespace.c
     src/symbol.c
@@ -154,6 +155,7 @@ add_executable(tiny-clj-esp32
     src/object.c
     src/builtins.c
     src/builtins_strings.c
+    src/builtins_regex.c
     src/runtime.c
     src/namespace.c
     src/symbol.c
@@ -268,6 +270,7 @@ add_executable(unit-tests
     subjective-c/tests/test_runner.c
     src/tests/unity_test_runner.c
     subjective-c/tests/test_registry.c
+    src/tests/test_memory_macros.c
     src/tests/test_parser.c
     src/tests/test_utf8_emoji.c
     src/tests/test_exception.c
