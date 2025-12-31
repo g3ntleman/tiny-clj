@@ -12,6 +12,7 @@
 #include "tiny_clj.h"
 #include "memory.h"
 #include "parser.h"  // For eval_parsed
+#include "vector.h"
 #include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
 // Helper context for namespace search in ns_resolve()
@@ -596,6 +597,14 @@ EvalState* get_global_eval_state(void) {
             throw_exception(EXCEPTION_RUNTIME, "Failed to create user namespace", NULL, 0, 0);
             return NULL;
         }
+
+        // Dynamic binding stack: transient vector used as push/pop stack.
+        // Frames stored are maps (Symbol -> value), where value may be NULL (nil).
+        g_eval_state.dynamic_bindings = vector_transient(empty_vector());
+        if (!g_eval_state.dynamic_bindings) {
+            throw_exception(EXCEPTION_RUNTIME, "Failed to create dynamic binding stack", NULL, 0, 0);
+            return NULL;
+        }
         g_eval_state_initialized = true;
     }
     return &g_eval_state;
@@ -607,6 +616,10 @@ void reset_eval_state(void) {
         free(g_eval_state.stack);
         g_eval_state.stack = NULL;
     }
+    if (g_eval_state.dynamic_bindings && !IS_IMMEDIATE(g_eval_state.dynamic_bindings)) {
+        RELEASE(g_eval_state.dynamic_bindings);
+        g_eval_state.dynamic_bindings = NULL;
+    }
     if (g_eval_state.expr && !IS_IMMEDIATE(g_eval_state.expr)) {
         RELEASE(g_eval_state.expr);
         g_eval_state.expr = NULL;
@@ -617,6 +630,12 @@ void reset_eval_state(void) {
     }
     memset(&g_eval_state, 0, sizeof(EvalState));
     g_eval_state.current_ns = ns_get_or_create("user", NULL);
+
+    g_eval_state.dynamic_bindings = vector_transient(empty_vector());
+    if (!g_eval_state.dynamic_bindings) {
+        throw_exception(EXCEPTION_RUNTIME, "Failed to create dynamic binding stack", NULL, 0, 0);
+        return;
+    }
     g_eval_state_initialized = true;
 }
 
@@ -735,6 +754,15 @@ void parse_error(const char *msg, EvalState *st) {
     throw_exception(EXCEPTION_PARSE, msg, NULL, 0, 0);
 }
 
+static inline bool sym_cname_eq(ID obj, const char *name) {
+    if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
+    CljSymbol *sym = (CljSymbol*)obj;
+    if (!sym || !sym->cname) return false;
+    const char *slash = strrchr(sym->cname, '/');
+    const char *simple = slash ? (slash + 1) : sym->cname;
+    return strcmp(simple, name) == 0;
+}
+
 
 // Try/Catch-Implementierung using TRY/CATCH macros
 CljObject* eval_try(CljObject *form, EvalState *st) {
@@ -751,18 +779,50 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
         // Search for catch clauses
         for (int i = 2; i < list_count(as_list(form)); i++) {
             CljObject *clause = list_nth(as_list(form), i);
-            ID first_elem = LIST_FIRST(as_list(clause));
-            if (is_list(clause) && first_elem == SYM_CATCH) {
-                CljObject *sym = list_nth(as_list(clause), 1);
-                CljObject *body = list_nth(as_list(clause), 2);
-                
-                // Bind variable (sym = err) - simplified
-                // CRITICAL: map_assoc may return a new map (COW), so we must use the result
-                CljMap *updated_mappings = map_assoc(st->current_ns->mappings, sym, ex);
-                ASSIGN(st->current_ns->mappings, updated_mappings);
-                result = eval_parsed(body, st, NULL);
-                return result;
+            if (!is_list(clause)) continue;
+
+            CljList *clause_list = as_list(clause);
+            if (!clause_list) continue;
+
+            ID first_elem = LIST_FIRST(clause_list);
+            if (first_elem != (ID)SYM_CATCH && !sym_cname_eq(first_elem, "catch")) {
+                continue;
             }
+
+            // Supported catch clause shapes:
+            // - (catch sym body...)
+            // - (catch Type sym body...)
+            int clen = list_count(clause_list);
+            int binding_index = -1;
+            int body_start = -1;
+
+            if (clen >= 4) {
+                // (catch Type sym body...)
+                binding_index = 2;
+                body_start = 3;
+            } else if (clen >= 3) {
+                // (catch sym body...)
+                binding_index = 1;
+                body_start = 2;
+            } else {
+                continue;
+            }
+
+            ID binding_sym = list_nth(clause_list, binding_index);
+            if (!binding_sym || TAG(binding_sym) != CLJ_SYMBOL) continue;
+
+            // Bind variable (sym = err) - simplified
+            // CRITICAL: map_assoc may return a new map (COW), so we must use the result
+            CljMap *updated_mappings = map_assoc(st->current_ns->mappings, binding_sym, (ID)ex);
+            ASSIGN(st->current_ns->mappings, updated_mappings);
+
+            // Evaluate catch body (support multiple expressions)
+            for (int j = body_start; j < clen; j++) {
+                CljObject *body_expr = list_nth(clause_list, j);
+                if (!body_expr) continue;
+                result = eval_parsed(body_expr, st, NULL);
+            }
+            return result;
         }
         // No catch clause found - re-throw (handler is already popped!)
         throw_exception(strlen(ex->type) > 0 ? ex->type : "Error", 

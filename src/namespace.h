@@ -35,6 +35,7 @@ typedef struct {
     int sp;
     int stack_capacity;
     struct CljVector *pool;
+    struct CljVector *dynamic_bindings; // transient vector: stack of binding frame maps
     int finished;
     CljNamespace *current_ns; // current namespace (*ns*)
 } EvalState;

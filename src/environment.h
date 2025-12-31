@@ -40,6 +40,23 @@ void frame_init(CallFrame *frame, CallFrame *parent);
 /** Replace frame contents with provided bindings (copies pointers, retains values) */
 void frame_set_bindings(CallFrame *frame, CallFrame *parent, ID *params, ID *values, int count);
 
+// Fast path for initializing a fresh frame (assumes no active bindings to release).
+// Copies pointers and retains values.
+static inline void frame_set_bindings_init(CallFrame *frame, CallFrame *parent, ID *params, ID *values, int count) {
+    if (!frame) return;
+    if (count < 0) count = 0;
+
+    frame->parent = parent;
+    frame->params = params;  // Borrowed pointer
+    frame->param_count = count;
+
+    for (int i = 0; i < count; i++) {
+        ID value = values ? values[i] : NULL;
+        RETAIN(value);
+        frame->values[i] = frame_encode_value(value);
+    }
+}
+
 /** Look up a symbol in the frame chain (returns true if binding exists, even if value is nil) */
 bool frame_lookup(CallFrame *frame, ID symbol, ID *out_value);
 

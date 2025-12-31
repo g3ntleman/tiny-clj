@@ -5,6 +5,7 @@
 #include <subjective-c/map.h>
 #include "vector.h"
 #include "list.h"
+#include <stdint.h>
 
 struct CljNamespace;
 struct CljSymbol;
@@ -18,6 +19,8 @@ typedef struct {
 typedef struct {
     CljObject base;
     CljVector *params;  // Parameter vector (can be NULL if no parameters)
+    ID *params_array;   // Cached raw params array (borrowed from params)
+    uint8_t param_count; // Cached vector_count(params)
     ID body;  // Function body (AST to evaluate)
     CljList *env_stack;  // Environment stack (list of maps) - idiomatic Clojure-style
     const char *name;

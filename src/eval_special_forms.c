@@ -10,6 +10,24 @@
 #include "macro.h"
 #include "meta.h"
 #include "ast.h"
+#include "strings.h"
+
+#include <string.h>
+
+static inline bool is_earmuffed_dynamic_symbol(CljSymbol *sym) {
+    if (!sym || !sym->cname) return false;
+    const char *name = sym->cname;
+    if (name[0] != '*') return false;
+    size_t len = strlen(name);
+    return len >= 2 && name[len - 1] == '*';
+}
+
+static inline void pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
+    if (!st) return;
+    while (st->dynamic_bindings && vector_count(st->dynamic_bindings) > depth) {
+        vector_pop_inplace(&st->dynamic_bindings);
+    }
+}
 
 static inline bool sym_name_eq(ID obj, const char *name) {
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
@@ -54,10 +72,25 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
 }
 
 ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
-    ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
+    // Hot-path: avoid repeated list_get_element/list_nth traversals.
+    // Structure: (if cond then else?)
+    if (!list) return NULL;
+
+    CljList *args = as_list(LIST_REST(list));
+    if (!args) return NULL;
+
+    ID cond_expr = LIST_FIRST(args);
+    CljList *then_node = as_list(LIST_REST(args));
+    if (!then_node) return NULL;
+    ID then_expr = LIST_FIRST(then_node);
+    CljList *else_node = as_list(LIST_REST(then_node));
+    ID else_expr = else_node ? LIST_FIRST(else_node) : NULL;
+
+    ID cond_val = eval_arg_from_expr_with_context(cond_expr, env, st, ctx);
     bool truthy = clj_is_truthy(cond_val);
     RELEASE(cond_val);
-    ID branch = truthy ? list_get_element(list, 2) : list_get_element(list, 3);
+
+    ID branch = truthy ? then_expr : else_expr;
     if (!branch) return NULL;
     return eval_body(branch, env, st, ctx);
 }
@@ -239,7 +272,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     int clause_start = argc;
     for (int i = 1; i < argc; i++) {
         ID elem = list_get_element(list, i);
-        if (!elem || TAG(elem) != CLJ_LIST) continue;
+        if (!elem || !list_type_matches(TAG(elem))) continue;
         CljList *clause = as_list(elem);
         ID first = clause ? LIST_FIRST(clause) : NULL;
         if (first == (ID)SYM_CATCH || first == (ID)SYM_FINALLY ||
@@ -253,7 +286,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     CljList *finally_clause = NULL;
     for (int i = clause_start; i < argc; i++) {
         ID elem = list_get_element(list, i);
-        if (!elem || TAG(elem) != CLJ_LIST) continue;
+        if (!elem || !list_type_matches(TAG(elem))) continue;
         CljList *clause = as_list(elem);
         ID first = clause ? LIST_FIRST(clause) : NULL;
         if (first == (ID)SYM_FINALLY || sym_name_eq(first, "finally")) {
@@ -280,7 +313,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 
         for (int i = clause_start; i < argc; i++) {
             ID elem = list_get_element(list, i);
-            if (!elem || TAG(elem) != CLJ_LIST) continue;
+            if (!elem || !list_type_matches(TAG(elem))) continue;
             CljList *clause = as_list(elem);
             ID first = clause ? LIST_FIRST(clause) : NULL;
             if (first != (ID)SYM_CATCH && !sym_name_eq(first, "catch")) continue;
@@ -353,6 +386,143 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
     } END_TRY
 
     return result;
+}
+
+ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    int argc = list_count(list);
+    if (argc < 2) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "binding expects a bindings vector");
+        return NULL;
+    }
+
+    if (!st || !st->dynamic_bindings) {
+        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                  "binding requires an evaluation state with dynamic bindings");
+        return NULL;
+    }
+
+    // Base env for evaluating init forms and body (match other wrappers).
+    CljMap *base_env = env;
+    if (!base_env && st->current_ns) {
+        base_env = st->current_ns->mappings;
+    }
+
+    ID bindings_obj = list_get_element(list, 1);
+    if (!bindings_obj || TAG(bindings_obj) != CLJ_VECTOR) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "binding expects a vector of bindings");
+        return NULL;
+    }
+
+    CljVector *bindings_vec = as_vector(bindings_obj);
+    unsigned int bind_count = vector_count(bindings_vec);
+    if ((bind_count % 2) != 0) {
+        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                  "binding vector must contain an even number of forms");
+        return NULL;
+    }
+
+    unsigned int base_depth = vector_count(st->dynamic_bindings);
+    CljNamespace *saved_ns = st->current_ns;
+
+    // Build a single frame map: Symbol -> value (value may be NULL/nil).
+    // IMPORTANT: Use NOT_FOUND sentinel when looking up so NULL values remain distinguishable from missing.
+    CljMap *frame = make_map((int)(bind_count / 2));
+    if (!frame) {
+        return NULL;
+    }
+
+    CljNamespace *bound_ns = NULL;
+
+    // Evaluate init forms in the *current* dynamic context (before pushing the new frame).
+    for (unsigned int i = 0; i < bind_count; i += 2) {
+        ID sym_id = vector_nth(bindings_vec, i);
+        ID expr_id = vector_nth(bindings_vec, i + 1);
+
+        if (!sym_id || TAG(sym_id) != CLJ_SYMBOL) {
+            RELEASE(frame);
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "binding keys must be symbols");
+            return NULL;
+        }
+
+        CljSymbol *sym = as_symbol(sym_id);
+        if (!is_earmuffed_dynamic_symbol(sym)) {
+            const char *name = sym && sym->cname ? sym->cname : "<unknown>";
+            RELEASE(frame);
+            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                      "binding requires dynamic vars (earmuffed symbols), got %s", name);
+            return NULL;
+        }
+
+        ID value = expr_id ? eval_body(expr_id, base_env, st, ctx) : NULL;
+
+        // If binding *ns*, accept namespace object (preferred) or resolve symbol/string to namespace.
+        if (sym == SYM_NS_STAR) {
+            if (!value) {
+                RELEASE(frame);
+                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                          "*ns* cannot be bound to nil");
+                return NULL;
+            }
+            int tag = TAG(value);
+            if (tag == CLJ_NAMESPACE) {
+                bound_ns = (CljNamespace*)value;
+            } else if (tag == CLJ_SYMBOL) {
+                bound_ns = ns_find_by_symbol(as_symbol(value));
+            } else if (tag == CLJ_STRING) {
+                bound_ns = ns_find(string_data(value));
+            } else {
+                RELEASE(frame);
+                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                          "*ns* must be a namespace, symbol, or string");
+                return NULL;
+            }
+            if (!bound_ns) {
+                RELEASE(frame);
+                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                          "Namespace not found");
+                return NULL;
+            }
+            value = (ID)bound_ns;
+        }
+
+        map_assoc_inplace(&frame, sym_id, value);
+        RELEASE(value);
+    }
+
+    // Push the new frame and run body; unwind stack even if an exception escapes.
+    vector_conj_inplace(&st->dynamic_bindings, frame);
+    RELEASE(frame);
+
+    if (bound_ns) {
+        st->current_ns = bound_ns;
+    }
+
+    ID result = NULL;
+    TRY {
+        for (int i = 2; i < argc; i++) {
+            ID expr = list_get_element(list, i);
+            if (!expr) {
+                ASSIGN(result, NULL);
+                continue;
+            }
+            ASSIGN(result, eval_body(expr, base_env, st, ctx));
+        }
+        pop_dynamic_bindings_to(st, base_depth);
+        st->current_ns = saved_ns;
+        return result;
+    } CATCH(ex) {
+        pop_dynamic_bindings_to(st, base_depth);
+        st->current_ns = saved_ns;
+        // Re-throw after cleanup.
+        throw_exception(strlen(ex->type) > 0 ? ex->type : "Error",
+                        strlen(ex->message) > 0 ? ex->message : "Unknown error",
+                        ex->file, ex->line, ex->col);
+    } END_TRY
+
+    return NULL;
 }
 
 ID eval_handle_recur(CljList *list, const EvalContext *ctx) {

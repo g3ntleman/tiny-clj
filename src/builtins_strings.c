@@ -13,12 +13,14 @@
 #include <stdbool.h>
 #include <math.h>
 #include "object.h"
+#include "builtins_strings.h"
 #include "value.h"
 #include "memory.h"
 #include "strings.h"
 #include "to_string.h"
 #include "exception.h"
 #include "builtins.h"
+#include "symbol.h"
 
 // ============================================================================
 // STRING FUNCTIONS
@@ -613,5 +615,67 @@ ID native_format(ID *args, unsigned int argc) {
     }
 
     return AUTORELEASE(result);
+}
+
+// ============================================================================
+// clojure.string native lookup (used by :native stubs)
+// ============================================================================
+
+typedef struct {
+    CljSymbol *clojure_symbol;
+    BuiltinFn native_func;
+} BuiltinsStringsNativeFunctionEntry;
+
+static const BuiltinsStringsNativeFunctionEntry builtins_strings_native_function_table[] = {
+    {&sym_trim_data.sym, native_trim},
+    {&sym_upper_case_data.sym, native_upper_case},
+    {&sym_lower_case_data.sym, native_lower_case},
+    {&sym_pad_left_data.sym, native_pad_left},
+    {&sym_last_index_of_data.sym, native_last_index_of},
+    {&sym_string_reverse_data.sym, native_string_reverse},
+    {NULL, NULL}
+};
+
+BuiltinFn builtins_strings_native_function_lookup(CljSymbol *symbol) {
+    if (!symbol) return NULL;
+
+    const char *cname = symbol->cname;
+    const char *ns_name = (symbol->ns_name) ? symbol->ns_name->cname : NULL;
+
+    char qualified_name[128];
+    if (ns_name) {
+        snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
+    }
+
+    for (int i = 0; builtins_strings_native_function_table[i].clojure_symbol != NULL; i++) {
+        CljSymbol *table_sym = builtins_strings_native_function_table[i].clojure_symbol;
+        if (!table_sym) continue;
+
+        if (table_sym == symbol) {
+            return builtins_strings_native_function_table[i].native_func;
+        }
+
+        if (!cname || !table_sym->cname) continue;
+
+        const char *table_ns = table_sym->ns_name ? table_sym->ns_name->cname : NULL;
+
+        if (ns_name) {
+            if (table_ns && strcmp(table_ns, ns_name) == 0 && strcmp(table_sym->cname, cname) == 0) {
+                return builtins_strings_native_function_table[i].native_func;
+            }
+            if (!table_ns && strcmp(table_sym->cname, qualified_name) == 0) {
+                return builtins_strings_native_function_table[i].native_func;
+            }
+            if (!table_ns && strcmp(ns_name, "clojure.core") == 0 && strcmp(table_sym->cname, cname) == 0) {
+                return builtins_strings_native_function_table[i].native_func;
+            }
+        } else {
+            if (strcmp(table_sym->cname, cname) == 0) {
+                return builtins_strings_native_function_table[i].native_func;
+            }
+        }
+    }
+
+    return NULL;
 }
 
