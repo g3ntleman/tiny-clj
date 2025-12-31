@@ -48,7 +48,7 @@ TEST(test_dotimes_missing_body) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for missing body
 }
 

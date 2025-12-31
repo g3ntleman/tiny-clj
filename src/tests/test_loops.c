@@ -25,7 +25,7 @@ TEST_SHARED(test_dotimes_zero_iterations) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
@@ -40,7 +40,7 @@ TEST_SHARED(test_dotimes_negative_iterations) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
@@ -55,7 +55,7 @@ TEST_SHARED(test_dotimes_large_iterations) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
 }
 
@@ -70,7 +70,7 @@ TEST_SHARED(test_dotimes_invalid_binding_format) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for invalid format
 }
 
@@ -85,7 +85,7 @@ TEST_SHARED(test_dotimes_non_numeric_count) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for non-numeric count
 }
 
@@ -94,7 +94,7 @@ TEST_SHARED(test_dotimes_null_input) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation with NULL
-    CljObject *result = eval_dotimes(NULL, env, g_test_eval_state);
+    CljObject *result = eval_dotimes(NULL, env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // Should return NULL for NULL input
 }
 
@@ -116,11 +116,21 @@ TEST_SHARED(test_dotimes_simple_iteration_count) {
     CljMap *env = AUTORELEASE(make_map(4));
     
     // Test dotimes evaluation
-    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state);
+    CljObject *result = eval_dotimes(as_list(dotimes_call), env, g_test_eval_state, NULL);
     TEST_ASSERT_TRUE(result == NULL); // dotimes always returns nil
     
     // The test passes if no errors occur and the function returns NULL
     // This verifies that the loop executed 3 times without crashing
+}
+
+TEST_SHARED(test_dotimes_lexical_n_and_body_bindings) {
+    // Regression: dotimes must be able to resolve let-bound symbols for its count
+    // and also allow the body to see outer lexical bindings.
+    // (let [n 5 a (atom 0)] (dotimes [i n] (swap! a inc)) (deref a)) => 5
+    ID result = eval_string("(let [n 5 a (atom 0)] (dotimes [i n] (swap! a inc)) (deref a))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(5, as_fixnum(result));
 }
 
 
