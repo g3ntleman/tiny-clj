@@ -187,7 +187,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     }
 
     // Arity check - variadic functions accept >= required params
-    int param_count = (int)func->param_count;
+    int param_count = func->params ? (int)vector_count(func->params) : 0;
     int8_t vi = func->variadic_index;
     unsigned int required = (param_count > 0) ? (unsigned int)param_count : 0;
     if (vi < 0) {
@@ -206,7 +206,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
     ID current_args[16];
     ID recur_args[16];
     int used_recur_slots = 0;
-    ID *params_array = func->params_array;
+    ID *params_array = func->params ? vector_as_array(func->params) : NULL;
     
     // Variadic handling: build effective params/values only when needed
     ID variadic_params[16];
