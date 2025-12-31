@@ -74,7 +74,7 @@ run-tests
 
 # Debug and test binaries
 debug_parser
-unity-tests
+unit-tests
 unity-memory-tests
 test_debug
 test_release
