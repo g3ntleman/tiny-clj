@@ -247,18 +247,17 @@ ID eval_special_recur(CljList *list, CljMap *env, EvalState *st, const EvalConte
 
 ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_time: list must not be NULL");
-    (void)ctx;  // Unused
     CljMap *time_env = env;
     if (!time_env && st && st->current_ns) {
         time_env = st->current_ns->mappings;
     }
-    return eval_time(list, time_env, st);
+    return eval_time(list, time_env, st, ctx);
 }
 
 ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(list != NULL && "eval_special_dotimes: list must not be NULL");
     (void)ctx;  // Unused
-    return eval_dotimes(list, env, st);
+        return eval_dotimes(list, env, st, ctx);
 }
 
 ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {

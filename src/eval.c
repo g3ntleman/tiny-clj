@@ -140,7 +140,7 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
 
 // Forward declarations
 ID eval_body_with_params(ID body, const EvalContext *ctx);
-ID eval_time(CljList *list, CljMap *env, EvalState *st);
+ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
 // is_special_symbol is now in symbol.c
@@ -1356,7 +1356,7 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     if (original_op_sym == SYM_DOTIMES) {
         // OPTIMIZATION: Use thread-local EvalState instead of creating temporary
         EvalState *eval_st = effective_st ? effective_st : builtin_get_eval_state();
-        return eval_dotimes(list, effective_env, eval_st);
+        return eval_dotimes(list, effective_env, eval_st, ctx);
     }
 
     // Try function call
@@ -2304,23 +2304,17 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
         binding_index++;
     }
 
-    CljList *frame_env_stack = NULL;
-    CljMap *frame_env_head = NULL;
     if (has_frame) {
-        frame_env_stack = frame_chain_to_env_stack(let_frame, parent_stack);
-        let_ctx.env_stack = frame_env_stack;
-        // Keep frame for direct symbol resolution (frame_lookup is faster than map lookup)
+        // Keep frame for direct symbol resolution; avoid materializing a heap env_stack for the let body.
+        // Closures created inside let still get a captured env_stack via frame_chain_to_env_stack at bind time.
         let_ctx.frame = let_frame;
-        if (frame_env_stack && LIST_FIRST(frame_env_stack)) {
-            frame_env_head = (CljMap*)LIST_FIRST(frame_env_stack);
-            let_ctx.env = frame_env_head;
-        }
+        let_ctx.env_stack = parent_stack;
     }
 
     ID result = NULL;
     int list_len = list_count(list);
     if (list_len > 2) {
-        CljMap *body_env = frame_env_head ? frame_env_head : env;
+        CljMap *body_env = let_ctx.env ? let_ctx.env : env;
         for (int i = 2; i < list_len; i++) {
             ID body_expr = list_get_element(list, i);
             if (!body_expr) continue;
@@ -2337,7 +2331,6 @@ ID eval_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
 
     if (has_frame) {
         frame_release(let_frame);
-        RELEASE(frame_env_stack);
     }
     if (parent_stack_owned) RELEASE(parent_stack);
     return result;
@@ -2506,7 +2499,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
     return expr;
 }
 
-ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
+ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     CLJ_ASSERT(env != NULL);
     // (dotimes [var n] expr)
     // Executes expr n times with var bound to 0, 1, ..., n-1
@@ -2549,17 +2542,12 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
 
     if (!var || TAG(var) != CLJ_SYMBOL || !n_obj) return NULL;
 
-    // Evaluate n (once). Keep behavior compatible with the existing implementation:
-    // - If n is a symbol, resolve it from env/namespace.
-    // - If n is an expression/list, evaluate it.
-    ID n_evaluated = NULL;
-    if (TAG(n_obj) == CLJ_SYMBOL) {
-        n_evaluated = resolve_symbol_in_env_with_frame(NULL, env, NULL, n_obj, st);
-    } else if (list_type_matches(TAG(n_obj))) {
-        n_evaluated = eval_body(n_obj, env, st, NULL);
-    } else {
-        n_evaluated = n_obj;
-    }
+    EvalContext local_ctx = {0};
+    CljList *owned_stack = NULL;
+    const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_stack);
+
+    // Evaluate n (once) using the current lexical context.
+    ID n_evaluated = eval_arg_from_expr_with_context(n_obj, env, st, effective_ctx);
 
     if (!n_evaluated || TAG(n_evaluated) != CLJ_INT) return NULL;
     int n = as_fixnum((CljValue)n_evaluated);
@@ -2567,21 +2555,15 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
 
     // Loop var binding: use a stack CallFrame to avoid allocating a new map/env each iteration.
     CallFrame dotimes_frame;
-    frame_init(&dotimes_frame, NULL);
+    frame_init(&dotimes_frame, effective_ctx ? effective_ctx->frame : NULL);
     ID dotimes_params[1] = { var };
     dotimes_frame.params = dotimes_params;
     dotimes_frame.param_count = 1;
 
     // Evaluate body with context so symbol lookup hits frame_lookup.
-    EvalContext dotimes_ctx = {
-        .env = env,
-        .env_stack = NULL,
-        .frame = &dotimes_frame,
-        .st = st,
-        .recur_args = NULL,
-        .recur_arg_count = NULL,
-        .recur_param_count = 0
-    };
+    EvalContext dotimes_ctx = effective_ctx ? *effective_ctx : (EvalContext){0};
+    dotimes_ctx.env = dotimes_ctx.env ? dotimes_ctx.env : env;
+    dotimes_ctx.frame = &dotimes_frame;
 
     EvalState *eval_st = st ? st : builtin_get_eval_state();
     dotimes_ctx.st = eval_st;
@@ -2604,13 +2586,14 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st) {
     }
 
     frame_release(&dotimes_frame);
+    if (owned_stack) RELEASE(owned_stack);
     return AUTORELEASE(NULL);
 }
 
 // ============================================================================
 // EVAL_TIME - Time measurement special form implementation
 // ============================================================================
-ID eval_time(CljList *list, CljMap *env, EvalState *st) {
+ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // (time expr)
     if (!list || !st) {
         return NULL;
@@ -2638,31 +2621,9 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st) {
         eval_env = (CljMap*)st->current_ns->mappings;
     }
 
-    // Evaluate the expression using eval_list with the provided environment
-    // This ensures that functions like + are available from the environment
-    CljObject *result = NULL;
-    if (expr && list_type_matches(TAG(expr))) {
-        result = eval_list(as_list(expr), eval_env, st, NULL);
-    } else if (expr && TAG(expr) == CLJ_SYMBOL) {
-        // For symbols, look up in environment (if provided) or namespace
-        if (eval_env && TAG(eval_env) == CLJ_MAP) {
-            CljObject *resolved = map_get((CljValue)eval_env, (CljValue)expr, NULL);
-            result = AUTORELEASE(resolved);
-        }
-        // If not found in environment, try namespace lookup
-        if (!result && st) {
-            CljObject *resolved = ns_resolve(st, as_symbol(expr));
-            result = AUTORELEASE(resolved);
-        }
-    } else {
-        // Literal value - return as-is (no memory management needed for immediates)
-        result = expr;
-        // For heap objects, use AUTORELEASE to match eval_list behavior
-        // expr is already retained by caller, so just use AUTORELEASE
-        if (result && !IS_IMMEDIATE(result)) {
-            result = AUTORELEASE(result);
-        }
-    }
+    // Evaluate the expression in the current lexical context.
+    // Use eval_env so namespace-bound symbols (e.g. +) are available.
+    ID result = eval_body((ID)expr, eval_env, st, ctx);
 
     // End timing
     gettimeofday(&end, NULL);

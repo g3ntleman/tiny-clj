@@ -10,7 +10,7 @@
 
 // Forward declaration
 int load_clojure_core(EvalState *st);
-ID eval_time(CljList *list, CljMap *env, EvalState *st);
+ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -106,7 +106,7 @@ TEST_SHARED(test_time_arity_validation) {
     
     // This should throw an exception for insufficient arguments
     TRY {
-        CljObject *result = eval_time(time_list, env, g_test_eval_state);
+        CljObject *result = eval_time(time_list, env, g_test_eval_state, NULL);
         TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
     } CATCH(ex) {
         // Exception is expected - test passes
@@ -132,7 +132,7 @@ TEST_SHARED(test_time_with_too_many_arguments) {
     
     // This should throw an exception for too many arguments
     TRY {
-        CljObject *result = eval_time(time_list, env, g_test_eval_state);
+        CljObject *result = eval_time(time_list, env, g_test_eval_state, NULL);
         TEST_ASSERT_TRUE(result == NULL); // Should return NULL after exception
     } CATCH(ex) {
         // Exception is expected - test passes
@@ -206,7 +206,7 @@ TEST_SHARED(test_time_with_dotimes) {
     CljMap *env = make_map(4);
     
     // Test time evaluation with dotimes
-    CljObject *result = eval_time(as_list(time_call), env, g_test_eval_state);
+    CljObject *result = eval_time(as_list(time_call), env, g_test_eval_state, NULL);
     
     // time should return the result of the evaluated expression
     // Since dotimes returns nil, time should also return nil
@@ -219,6 +219,31 @@ TEST_SHARED(test_time_with_dotimes) {
     RELEASE(time_call);
     // Don't RELEASE result - eval_time returns autoreleased object
     RELEASE(env);
+}
+
+TEST_SHARED(test_time_preserves_lexical_context) {
+    // Regression: (time ...) must preserve lexical bindings (let locals) when evaluating its argument.
+    // This mirrors the benchmark harness pattern: (time (dotimes [i iterations] ...)) inside a let.
+    ID result = eval_string("(let [n 3 a (atom 0)] (time (dotimes [i n] (swap! a inc))) (deref a))", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(result));
+}
+
+TEST_SHARED(test_time_dotimes_let_bindings_benchmark_pattern) {
+    // Regression: benchmark-like pattern where let-bound locals are referenced from
+    // both dotimes counts and body under (time ...).
+    // (let [iterations 5 runs 3 a (atom 0)]
+    //   (time (dotimes [i iterations] (dotimes [j runs] (swap! a inc))))
+    //   (deref a)) => 15
+    ID result = eval_string(
+        "(let [iterations 5 runs 3 a (atom 0)] "
+        "  (time (dotimes [i iterations] (dotimes [j runs] (swap! a inc)))) "
+        "  (deref a))",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_TRUE(is_fixnum(result));
+    TEST_ASSERT_EQUAL_INT(15, as_fixnum(result));
 }
 
 TEST_SHARED(test_time_returns_expression_result) {
