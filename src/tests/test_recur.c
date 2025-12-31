@@ -55,14 +55,46 @@ TEST(test_recur_arity_error) {
         return;
     }
 
-    // Test arity error with recur - simplified test
+    // Define a function where recur is called with too few args.
     CljObject *arity_def = eval_string("(def arity-test (fn [n acc] (if (= n 0) acc (recur (- n 1)))))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(arity_def);
 
-    // For now, just test that the function can be defined
-    // TODO: Implement proper arity checking for recur
-    TEST_ASSERT_TRUE(arity_def != NULL);
+    bool exception_caught = false;
+    TRY {
+        CljObject *result = eval_string("(arity-test 1 0)", g_test_eval_state);
+        (void)result;
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_ARITY, ex->type);
+        TEST_ASSERT_NOT_NULL_MESSAGE(ex->message, "Exception message should be set");
+        TEST_ASSERT_TRUE_MESSAGE(strstr(ex->message, "recur arity mismatch") != NULL,
+                                 "Exception message should mention recur arity mismatch");
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected ArityException for recur arity mismatch");
 
+}
+
+// Test that recur outside a function body throws
+TEST(test_recur_outside_function_throws) {
+    if (!g_test_eval_state) {
+        TEST_FAIL_MESSAGE("Failed to create EvalState");
+        return;
+    }
+
+    bool exception_caught = false;
+    TRY {
+        CljObject *result = eval_string("(recur)", g_test_eval_state);
+        (void)result;
+    } CATCH(ex) {
+        exception_caught = true;
+        TEST_ASSERT_NOT_NULL(ex);
+        TEST_ASSERT_EQUAL_STRING(EXCEPTION_RUNTIME, ex->type);
+        TEST_ASSERT_NOT_NULL_MESSAGE(ex->message, "Exception message should be set");
+        TEST_ASSERT_TRUE_MESSAGE(strstr(ex->message, "recur can only be used inside function bodies") != NULL,
+                                 "Exception message should mention recur can only be used inside function bodies");
+    } END_TRY
+    TEST_ASSERT_TRUE_MESSAGE(exception_caught, "Expected RuntimeException for recur outside function body");
 }
 
 // Test simple countdown with recur
