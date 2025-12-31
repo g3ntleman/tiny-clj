@@ -182,8 +182,17 @@ static void run_test_with_exception_handling(const SubjectiveCTestEntry *entry) 
                 print_exception(ex);
             }
         }
-        Unity.TestFailures++;
+        // IMPORTANT: Do not increment Unity.TestFailures directly here.
+        // Let UnityConcludeTest() print the FAIL line and increment failures exactly once.
         Unity.CurrentTestFailed = 1;
+
+        // Guard against exceptions thrown before UnityDefaultTestRun() had a chance
+        // to initialize Unity.CurrentTestName.
+        if (Unity.CurrentTestName == NULL) {
+            Unity.CurrentTestName = entry->qualified_name ? entry->qualified_name : entry->name;
+        }
+
+        UnityConcludeTest();
     } END_TRY
 }
 
@@ -254,20 +263,10 @@ void run_tests_by_registry_impl(void) {
     // Then: Run non-shared tests normally (one setUp/tearDown per test)
     for (size_t i = 0; i < test_count; i++) {
         if (strncmp(all_tests[i].group, "shared_", 7) != 0) {
-            TRY {
-                setUp();
-                set_unity_test_file_info(&all_tests[i]);
-                run_test_with_exception_handling(&all_tests[i]);
-                tearDown();
-            } CATCH(ex) {
-                // Exception in setUp/tearDown - mark test as failed
-                if (ex) {
-                    fprintf(stderr, "Exception in setUp/tearDown for %s: %s - %s\n", 
-                            all_tests[i].qualified_name, ex->type, ex->message);
-                }
-                Unity.TestFailures++;
-                Unity.CurrentTestFailed = 1;
-            } END_TRY
+            // UnityDefaultTestRun() already calls setUp()/tearDown().
+            // run_test_with_exception_handling() wraps UnityDefaultTestRun() in TRY/CATCH.
+            set_unity_test_file_info(&all_tests[i]);
+            run_test_with_exception_handling(&all_tests[i]);
         }
     }
 }
@@ -305,10 +304,8 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
         for (size_t i = 0; i < test_count; i++) {
             if (subjective_c_test_name_matches_pattern(all_tests[i].qualified_name, test_name_or_pattern) ||
                 subjective_c_test_name_matches_pattern(all_tests[i].name, test_name_or_pattern)) {
-                setUp();
                 set_unity_test_file_info(&all_tests[i]);
                 run_test_with_exception_handling(&all_tests[i]);
-                tearDown();
             }
         }
     } else {

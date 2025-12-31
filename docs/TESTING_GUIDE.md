@@ -31,21 +31,21 @@ Vollständige Unterstützung für `*`-Wildcards mit voll-qualifizierten Namen:
 ### Flexible Test-Ausführung
 ```bash
 # Einzelner Test mit voll-qualifiziertem Namen
-./unity-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test values/cljvalue_immediate_helpers
 
 # Pattern-Matching mit Wildcards über --test
-./unity-tests --test "values/*"
-./unity-tests --test "*/cljvalue_*"
-./unity-tests --test "*cljvalue_immediate*"
+./unit-tests --test "values/*"
+./unit-tests --test "*/cljvalue_*"
+./unit-tests --test "*cljvalue_immediate*"
 
 # Alle Tests auflisten (zeigt voll-qualifizierte Namen)
-./unity-tests --list
+./unit-tests --list
 
 # Alle Tests (default)
-./unity-tests
+./unit-tests
 
 # Hilfe
-./unity-tests --help
+./unit-tests --help
 ```
 
 ## 📁 System-Architektur
@@ -136,12 +136,12 @@ Tests verwenden jetzt das Schema `<group>/<test>`:
 
 ```bash
 # Spezifischen Test mit voll-qualifiziertem Namen ausführen
-./unity-tests --test values/cljvalue_immediate_helpers
-./unity-tests --test basics/list_count
-./unity-tests --test fixed_point/fixed_creation_and_conversion
+./unit-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test basics/list_count
+./unit-tests --test fixed_point/fixed_creation_and_conversion
 
 # Alle Tests auflisten (zeigt voll-qualifizierte Namen)
-./unity-tests --list
+./unit-tests --list
 ```
 
 ### Erweiterte Wildcard-Patterns
@@ -150,49 +150,49 @@ Unterstützt komplexe Wildcard-Patterns mit voll-qualifizierten Namen über `--t
 
 ```bash
 # Alle Tests einer Gruppe
-./unity-tests --test "values/*"
-./unity-tests --test "basics/*"
+./unit-tests --test "values/*"
+./unit-tests --test "basics/*"
 
 # Tests mit bestimmten Namen in beliebiger Gruppe
-./unity-tests --test "*/cljvalue_*"
-./unity-tests --test "*/parse_*"
+./unit-tests --test "*/cljvalue_*"
+./unit-tests --test "*/parse_*"
 
 # Tests mit bestimmten Teilen im Namen
-./unity-tests --test "*cljvalue_immediate*"
-./unity-tests --test "*cow*"
+./unit-tests --test "*cljvalue_immediate*"
+./unit-tests --test "*cow*"
 
 # Kombinierte Patterns
-./unity-tests --test "values/*immediate*"
-./unity-tests --test "*/*basic*"
+./unit-tests --test "values/*immediate*"
+./unit-tests --test "*/*basic*"
 
 # Exakte Test-Namen (ohne Wildcards)
-./unity-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test values/cljvalue_immediate_helpers
 ```
 
 ### Beispiele
 
 ```bash
 # Einzelner Test für schnelles Debugging
-./unity-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test values/cljvalue_immediate_helpers
 
 # Alle Tests einer Gruppe mit Wildcard
-./unity-tests --test "values/*"
-./unity-tests --test "fixed_point/*"
+./unit-tests --test "values/*"
+./unit-tests --test "fixed_point/*"
 
 # Tests mit bestimmten Namen in beliebiger Gruppe
-./unity-tests --test "*/cljvalue_*"
+./unit-tests --test "*/cljvalue_*"
 
 # Tests mit bestimmten Teilen im Namen
-./unity-tests --test "*cljvalue_immediate*"
+./unit-tests --test "*cljvalue_immediate*"
 
 # Verfügbare Tests anzeigen (voll-qualifizierte Namen)
-./unity-tests --list
+./unit-tests --list
 
 # Alle Tests (wie bisher)
-./unity-tests
+./unit-tests
 
 # Alle Tests mit minimaler Ausgabe
-./unity-tests --quiet
+./unit-tests --quiet
 ```
 
 ## 🔧 Build-System
@@ -203,7 +203,7 @@ Das System ist vollständig in CMake integriert:
 
 ```cmake
 # Unity Test Framework (central runner with separate test files)
-add_executable(unity-tests
+add_executable(unit-tests
     src/tests/unity_test_runner.c
     src/tests/test_registry.c
     # ... weitere Test-Files
@@ -216,13 +216,13 @@ add_executable(unity-tests
 
 ```bash
 # Tests kompilieren
-make unity-tests
+make unit-tests
 
 # Tests ausführen
-./unity-tests
+./unit-tests
 
 # Mit spezifischen Tests
-./unity-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test values/cljvalue_immediate_helpers
 ```
 
 ## 📋 Test-Kategorien
@@ -232,13 +232,13 @@ make unity-tests
 Das alte Suite-basierte Interface funktioniert weiterhin:
 
 ```bash
-./unity-tests memory        # Memory-Tests
-./unity-tests parser        # Parser-Tests
-./unity-tests unit          # Unit-Tests
-./unity-tests namespace     # Namespace-Tests
-./unity-tests seq           # Sequence-Tests
-./unity-tests equal         # Equality-Tests
-./unity-tests cow-*         # COW-Tests
+./unit-tests memory        # Memory-Tests
+./unit-tests parser        # Parser-Tests
+./unit-tests unit          # Unit-Tests
+./unit-tests namespace     # Namespace-Tests
+./unit-tests seq           # Sequence-Tests
+./unit-tests equal         # Equality-Tests
+./unit-tests cow-*         # COW-Tests
 ```
 
 ### Neue Registry-basierte Tests
@@ -246,7 +246,7 @@ Das alte Suite-basierte Interface funktioniert weiterhin:
 Alle Tests mit `TEST()` sind automatisch verfügbar:
 
 ```bash
-./unity-tests --list        # Zeigt alle registrierten Tests mit voll-qualifizierten Namen
+./unit-tests --list        # Zeigt alle registrierten Tests mit voll-qualifizierten Namen
 ```
 
 ## 🐛 Debugging
@@ -257,10 +257,10 @@ Für schnelles Debugging einzelner Tests:
 
 ```bash
 # Spezifischen Test mit voll-qualifiziertem Namen ausführen
-./unity-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test values/cljvalue_immediate_helpers
 
 # Mit Debugger
-gdb ./unity-tests
+gdb ./unit-tests
 (gdb) run --test values/cljvalue_immediate_helpers
 ```
 
@@ -515,7 +515,7 @@ timeout 5 ./build/unit-tests -test "test_seq/seq_cow_multiple_sequences"
 
 ```bash
 # Alle Tests ausführen und nur Fehler anzeigen
-./unity-tests 2>&1 | grep -i "fail"
+./unit-tests 2>&1 | grep -i "fail"
 
 # Beispiel-Ausgabe:
 # Running: values/test_cljvalue_memory_efficiency
@@ -526,35 +526,35 @@ timeout 5 ./build/unit-tests -test "test_seq/seq_cow_multiple_sequences"
 
 ```bash
 # Einzelnen Test mit voll-qualifiziertem Namen ausführen
-./unity-tests --test values/cljvalue_memory_efficiency
+./unit-tests --test values/cljvalue_memory_efficiency
 
 # Test-Gruppe ausführen (um Bereich einzugrenzen)
-./unity-tests --test "values/*"
+./unit-tests --test "values/*"
 
 # Tests mit Wildcard-Pattern ausführen
-./unity-tests --test "values/*memory*"
+./unit-tests --test "values/*memory*"
 ```
 
 #### 3. Debugging-Workflow
 
 ```bash
 # 1. Alle Tests ausführen
-./unity-tests
+./unit-tests
 
 # 2. Bei Fehlern: Fehlermeldung analysieren
-./unity-tests 2>&1 | grep -A 5 -B 5 "FAIL"
+./unit-tests 2>&1 | grep -A 5 -B 5 "FAIL"
 
 # 3. Spezifischen Test isolieren
-./unity-tests --test values/test_name
+./unit-tests --test values/test_name
 
 # 3b. Oder Test-Gruppe isolieren
-./unity-tests --test "values/*"
+./unit-tests --test "values/*"
 
 # 3c. Oder Tests mit Wildcard isolieren
-./unity-tests --test "values/*test_name*"
+./unit-tests --test "values/*test_name*"
 
 # 4. Test reparieren und erneut testen
-./unity-tests --test values/test_name
+./unit-tests --test values/test_name
 ```
 
 #### 4. Häufige Fehlermuster
@@ -611,16 +611,16 @@ TEST(test_my_function) {
 
 ```bash
 # Alle Tests mit Details (voll-qualifizierte Namen)
-./unity-tests --list
+./unit-tests --list
 
 # Spezifischen Test mit Memory-Info
-./unity-tests --test values/cljvalue_immediate_helpers
+./unit-tests --test values/cljvalue_immediate_helpers
 
 # Pattern mit Details
-./unity-tests --test "values/*"
+./unit-tests --test "values/*"
 
 # Gruppe mit Details
-./unity-tests --test "values/*"
+./unit-tests --test "values/*"
 ```
 
 ### Test-Fixes basierend auf tatsächlichem Verhalten
