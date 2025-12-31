@@ -69,6 +69,14 @@ cmake --build build
 
 **Note:** All executables are placed in the `build/` directory. The build type and configuration information is displayed when starting the REPL or running unit tests.
 
+### ESP32 Binary Size
+
+For size comparisons, use a **Release** (or Embedded) build. Debug builds are much larger.
+
+```bash
+./scripts/measure_esp32_size.sh build-release
+```
+
 ### Running
 
 ```bash
