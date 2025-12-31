@@ -14,22 +14,6 @@
 #include "vector.h"
 #include "symbol.h"  // For SYM_AMP
 
-// Conservative, compact detection: only treat real `(recur ...)` forms as recur usage.
-// This avoids false positives for quoted data that contains the symbol `recur`.
-static bool body_contains_recur(ID expr) {
-    if (!expr || IS_IMMEDIATE(expr)) return false;
-    if (!list_type_matches(TAG(expr))) return false;
-
-    CljList *list = as_list(expr);
-    if (!list) return false;
-    if (LIST_FIRST(list) == (ID)SYM_RECUR) return true;
-
-    LIST_FOR_EACH(list, el) {
-        if (body_contains_recur(el)) return true;
-    }
-    return false;
-}
-
 /**
  * @brief Allocate and initialize parameter vector for function
  * @param func Function object to allocate params for
@@ -101,10 +85,6 @@ CljFunction* make_function(ID *params, int param_count, ID body, CljList *env_st
     // Cache param count and params array pointer for hot call paths
     func->param_count = (uint8_t)param_count;
     func->params_array = func->params ? vector_as_array(func->params) : NULL;
-
-    // Cache whether this function can ever use `recur`.
-    // This is an optimization hint only; false positives are safe.
-    func->has_recur = body_contains_recur(body) ? 1 : 0;
     
     return func;
 }
