@@ -14,7 +14,7 @@
 
 typedef struct CallFrame {
     struct CallFrame *parent;  // Parent frame (for nested calls)
-    ID *params;                // Pointer to func->params_array (borrowed, no RETAIN)
+    ID *params;                // Pointer to params array (borrowed, no RETAIN)
     int param_count;           // Number of active bindings
     ID values[CALLFRAME_MAX_PARAMS];  // Fixed size to avoid dynamic stack allocation
 } CallFrame;
