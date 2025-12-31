@@ -21,6 +21,10 @@ struct CljSymbol {
     const char *cname;
 };
 
+// Dynamic vars are "earmuffed" symbols: *foo*
+// Implemented in symbol.c to avoid duplicating code in every translation unit.
+bool is_earmuffed_dynamic_symbol(const CljSymbol *sym);
+
 // Type-safe casting
 static inline CljSymbol* as_symbol(ID obj) {
     return (CljSymbol*)assert_type((CljObject*)obj, CLJ_SYMBOL);

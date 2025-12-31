@@ -326,14 +326,14 @@ CljObject *autorelease(CljObject *v) {
 
     // Require active autorelease pool
     if (g_pool.cp_count == 0) {
+        // In DEBUG builds, throw exception to catch programming errors
+        // In release builds, silently ignore (object will be leaked, but program continues)
+    #ifdef DEBUG
         // Safety: check if v is valid before accessing v->type
         CljType type_val = CLJ_NIL;
         if (v && (uintptr_t)v >= 0x1000) {
             type_val = v->type;
         }
-        // In DEBUG builds, throw exception to catch programming errors
-        // In release builds, silently ignore (object will be leaked, but program continues)
-#ifdef DEBUG
         throw_exception_formatted("AutoreleasePoolError", __FILE__, __LINE__, 0,
                 "autorelease() called without active autorelease pool! Object %p (type=%s) will not be automatically freed. "
                 "This indicates missing autorelease_pool_push() or premature autorelease_pool_pop().", 
@@ -402,7 +402,9 @@ bool is_autoreleased(CljObject *obj) {
  * Inline for performance (growth is rare but in hot path).
  */
 static inline void autorelease_pool_grow(void) {
+#ifdef DEBUG
     uint32_t old_capacity = g_pool.cp_capacity;
+#endif
     uint32_t new_capacity = g_pool.cp_capacity * 2;
     g_pool.checkpoints = (uint32_t*)realloc(g_pool.checkpoints, sizeof(uint32_t) * new_capacity);
     g_pool.cp_capacity = new_capacity;
