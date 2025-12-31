@@ -43,6 +43,13 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
 else()
     message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 endif()
+
+# Size-focused embedded builds: avoid pulling in printf-style formatting code.
+# Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
+if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"))
+    target_compile_definitions(subjective-c PUBLIC DISABLE_STRING_FORMATTING)
+    message(STATUS "subjective-c: DISABLE_STRING_FORMATTING enabled")
+endif()
 # CMake automatically applies CMAKE_C_FLAGS_<CONFIG> based on build type
 # No need to manually set COMPILE_FLAGS - CMake handles this automatically
 

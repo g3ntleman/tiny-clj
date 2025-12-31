@@ -739,6 +739,13 @@ void evalstate_reset(EvalState **st_ptr, bool load_core) {
     evalstate_set_ns(st, "user");
 }
 
+void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
+    if (!st) return;
+    while (st->dynamic_bindings && vector_count(st->dynamic_bindings) > depth) {
+        vector_pop_inplace(&st->dynamic_bindings);
+    }
+}
+
 // Exception handling
 void eval_error(const char *msg, EvalState *st) {
     if (!st) return;
@@ -754,7 +761,7 @@ void parse_error(const char *msg, EvalState *st) {
     throw_exception(EXCEPTION_PARSE, msg, NULL, 0, 0);
 }
 
-static inline bool sym_cname_eq(ID obj, const char *name) {
+static INLINE bool sym_cname_eq(ID obj, const char *name) {
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
     CljSymbol *sym = (CljSymbol*)obj;
     if (!sym || !sym->cname) return false;
@@ -825,8 +832,8 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
             return result;
         }
         // No catch clause found - re-throw (handler is already popped!)
-        throw_exception(strlen(ex->type) > 0 ? ex->type : "Error", 
-                       strlen(ex->message) > 0 ? ex->message : "Unknown error",
+        throw_exception(ex->type[0] != '\0' ? ex->type : "Error", 
+                   ex->message[0] != '\0' ? ex->message : "Unknown error",
                        ex->file, ex->line, ex->col);
     } END_TRY
     

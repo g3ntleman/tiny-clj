@@ -1,5 +1,6 @@
 #include "eval_special_forms.h"
 #include "eval.h"
+#include "common.h"
 #include "channel.h"
 #include "event_loop.h"
 #include "vector.h"
@@ -14,22 +15,7 @@
 
 #include <string.h>
 
-static inline bool is_earmuffed_dynamic_symbol(CljSymbol *sym) {
-    if (!sym || !sym->cname) return false;
-    const char *name = sym->cname;
-    if (name[0] != '*') return false;
-    size_t len = strlen(name);
-    return len >= 2 && name[len - 1] == '*';
-}
-
-static inline void pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
-    if (!st) return;
-    while (st->dynamic_bindings && vector_count(st->dynamic_bindings) > depth) {
-        vector_pop_inplace(&st->dynamic_bindings);
-    }
-}
-
-static inline bool sym_name_eq(ID obj, const char *name) {
+static INLINE bool sym_name_eq(ID obj, const char *name) {
     CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
     if (!name) return false;
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
@@ -410,14 +396,12 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
     CLJ_ASSERT(list != NULL && "eval_special_binding: list must not be NULL");
     int argc = list_count(list);
     if (argc < 2) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "binding expects a bindings vector");
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding expects a bindings vector", __FILE__, __LINE__, 0);
         return NULL;
     }
 
     if (!st || !st->dynamic_bindings) {
-        throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                  "binding requires an evaluation state with dynamic bindings");
+        throw_exception(EXCEPTION_RUNTIME, "binding requires an evaluation state with dynamic bindings", __FILE__, __LINE__, 0);
         return NULL;
     }
 
@@ -429,16 +413,14 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
     ID bindings_obj = list_get_element(list, 1);
     if (!bindings_obj || TAG(bindings_obj) != CLJ_VECTOR) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "binding expects a vector of bindings");
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding expects a vector of bindings", __FILE__, __LINE__, 0);
         return NULL;
     }
 
     CljVector *bindings_vec = as_vector(bindings_obj);
     unsigned int bind_count = vector_count(bindings_vec);
     if ((bind_count % 2) != 0) {
-        throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                  "binding vector must contain an even number of forms");
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding vector must contain an even number of forms", __FILE__, __LINE__, 0);
         return NULL;
     }
 
@@ -461,17 +443,22 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
         if (!sym_id || TAG(sym_id) != CLJ_SYMBOL) {
             RELEASE(frame);
-            throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                      "binding keys must be symbols");
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "binding keys must be symbols", __FILE__, __LINE__, 0);
             return NULL;
         }
 
         CljSymbol *sym = as_symbol(sym_id);
         if (!is_earmuffed_dynamic_symbol(sym)) {
-            const char *name = sym && sym->cname ? sym->cname : "<unknown>";
             RELEASE(frame);
+#ifdef DISABLE_STRING_FORMATTING
+            throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                            "binding requires dynamic vars (earmuffed symbols)",
+                            __FILE__, __LINE__, 0);
+#else
+            const char *name = sym && sym->cname ? sym->cname : "<unknown>";
             throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                                       "binding requires dynamic vars (earmuffed symbols), got %s", name);
+#endif
             return NULL;
         }
 
@@ -481,8 +468,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
         if (sym == SYM_NS_STAR) {
             if (!value) {
                 RELEASE(frame);
-                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                          "*ns* cannot be bound to nil");
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "*ns* cannot be bound to nil", __FILE__, __LINE__, 0);
                 return NULL;
             }
             int tag = TAG(value);
@@ -494,14 +480,14 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
                 bound_ns = ns_find(string_data(value));
             } else {
                 RELEASE(frame);
-                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                          "*ns* must be a namespace, symbol, or string");
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                                "*ns* must be a namespace, symbol, or string",
+                                __FILE__, __LINE__, 0);
                 return NULL;
             }
             if (!bound_ns) {
                 RELEASE(frame);
-                throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
-                                          "Namespace not found");
+                throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, "Namespace not found", __FILE__, __LINE__, 0);
                 return NULL;
             }
             value = (ID)bound_ns;
@@ -529,15 +515,15 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
             }
             ASSIGN(result, eval_body(expr, base_env, st, ctx));
         }
-        pop_dynamic_bindings_to(st, base_depth);
+        evalstate_pop_dynamic_bindings_to(st, base_depth);
         st->current_ns = saved_ns;
         return result;
     } CATCH(ex) {
-        pop_dynamic_bindings_to(st, base_depth);
+        evalstate_pop_dynamic_bindings_to(st, base_depth);
         st->current_ns = saved_ns;
         // Re-throw after cleanup.
-        throw_exception(strlen(ex->type) > 0 ? ex->type : "Error",
-                        strlen(ex->message) > 0 ? ex->message : "Unknown error",
+        throw_exception(ex->type[0] != '\0' ? ex->type : "Error",
+                        ex->message[0] != '\0' ? ex->message : "Unknown error",
                         ex->file, ex->line, ex->col);
     } END_TRY
 

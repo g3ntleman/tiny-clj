@@ -105,7 +105,7 @@ void set_suppress_time_output(bool suppress) {
 }
 
 // Resolve cache helpers ----------------------------------------------------
-static inline CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) {
+static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) {
     if (op_sym && op_sym->ns_name) {
         return op_sym->ns_name;
     }
@@ -115,7 +115,7 @@ static inline CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) 
     return NULL;
 }
 
-static inline ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
+static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return NULL;
     }
@@ -144,7 +144,7 @@ ID eval_time(CljList *list, CljMap *env, EvalState *st);
 ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
 // is_special_symbol is now in symbol.c
-static inline bool is_builtin_function(CljSymbol *symbol);
+static INLINE bool is_builtin_function(CljSymbol *symbol);
 
 
 
@@ -334,7 +334,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
 
 // DRY: Central symbol resolution function with environment stack support
 // Resolves symbol by searching through environment stack (list of maps)
-static inline CljMap* env_stack_head(CljList *stack) {
+static INLINE CljMap* env_stack_head(CljList *stack) {
     if (stack && list_type_matches(TAG(stack))) {
         ID first = LIST_FIRST(stack);
         if (first && TAG(first) == CLJ_MAP) {
@@ -344,7 +344,7 @@ static inline CljMap* env_stack_head(CljList *stack) {
     return NULL;
 }
 
-static inline CljMap *get_closure_env(const EvalContext *ctx) {
+static INLINE CljMap *get_closure_env(const EvalContext *ctx) {
     if (!ctx) {
         return NULL;
     }
@@ -355,7 +355,7 @@ static inline CljMap *get_closure_env(const EvalContext *ctx) {
     return ctx->env;
 }
 
-static inline EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallback) {
+static INLINE EvalState *get_eval_state(const EvalContext *ctx, EvalState *fallback) {
     if (ctx && ctx->st) {
         return ctx->st;
     }
@@ -404,7 +404,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
 }
 
 // Extended version that also searches in CallFrame
-static inline ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
+static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
         return NULL;
     }
@@ -889,15 +889,11 @@ void reset_eval_arg_depth(void) {
 // Helper functions for eval_list refactoring
 // ============================================================================
 
-static inline bool is_dynamic_var_symbol(const CljSymbol *symbol) {
-    if (!symbol || !symbol->cname) return false;
-    const char *name = symbol->cname;
-    if (name[0] != '*') return false;
-    size_t len = strlen(name);
-    return len >= 2 && name[len - 1] == '*';
+static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol) {
+    return is_earmuffed_dynamic_symbol(symbol);
 }
 
-static inline ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
+static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
     if (!st || !symbol || !st->dynamic_bindings) {
         return NOT_FOUND;
     }
@@ -921,7 +917,7 @@ static inline ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
 // Handle recur special form
 // Resolve operator symbol from environment or namespace
 // DRY: Uses central resolve_symbol_in_env function
-static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
+static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const EvalContext *ctx, CljASTNode *call_node) {
     if (!op || TAG(op) != CLJ_SYMBOL) {
         return op;
     }
@@ -1046,7 +1042,7 @@ static inline ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
 }
 
 // Handle function call from resolved operator
-static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
+static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalState *st, ID op, const EvalContext *ctx) {
     if (!op) return NULL;
 
     // Handle keywords as functions (for map lookup)
@@ -1133,7 +1129,7 @@ static inline ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
     return NULL; // Not a function
 }
 
-static inline ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     ID args[16];
     unsigned int argc = 0;
     unsigned char fn_tag = TAG(fn);
@@ -1307,12 +1303,18 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
 
     // Tier 3: Sequence operations (inline dispatch)
     // Note: Only return if result is non-NULL, otherwise continue to try other operations
-    if (original_op_sym == SYM_FIRST) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_first, 1, ctx); if (r) return r; }
-    if (original_op_sym == SYM_REST)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_rest, 1, ctx); if (r) return r; }
-    if (original_op_sym == SYM_CONS)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_cons, 2, ctx); if (r) return r; }
-    if (original_op_sym == SYM_SEQ) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_seq, 1, ctx); if (r) return r; }
-    if (original_op_sym == SYM_NEXT)  { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_next, 1, ctx); if (r) return r; }
-    if (original_op_sym == SYM_COUNT) { CljObject *r = eval_and_call_native_with_context(list, effective_env, native_count, 1, ctx); if (r) return r; }
+    ID (*seq_native)(ID*, unsigned int) = NULL;
+    unsigned int seq_max_args = 0;
+    if (original_op_sym == SYM_FIRST) { seq_native = native_first; seq_max_args = 1; }
+    else if (original_op_sym == SYM_REST) { seq_native = native_rest; seq_max_args = 1; }
+    else if (original_op_sym == SYM_CONS) { seq_native = native_cons; seq_max_args = 2; }
+    else if (original_op_sym == SYM_SEQ) { seq_native = native_seq; seq_max_args = 1; }
+    else if (original_op_sym == SYM_NEXT) { seq_native = native_next; seq_max_args = 1; }
+    else if (original_op_sym == SYM_COUNT) { seq_native = native_count; seq_max_args = 1; }
+    if (seq_native) {
+        ID r = eval_and_call_native_with_context(list, effective_env, seq_native, seq_max_args, ctx);
+        if (r) return r;
+    }
 
     // Tier 4: String and I/O operations
     if (original_op_sym == SYM_STR) {
@@ -1783,7 +1785,7 @@ ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalCon
 
 // Check if symbol is a builtin function (+, -, *, /, etc.)
 // Uses compact array-based lookup for smaller code size
-static inline bool is_builtin_function(CljSymbol *symbol) {
+static INLINE bool is_builtin_function(CljSymbol *symbol) {
     if (!symbol) return false;
     return (symbol == SYM_PLUS ||
             symbol == SYM_MINUS ||

@@ -70,6 +70,9 @@ void evalstate_free(EvalState *st);  // No-op for global state (for compatibilit
 void evalstate_set_ns(EvalState *st, const char *ns_name);
 void evalstate_reset(EvalState **st_ptr, bool load_core);
 
+// Dynamic binding stack helpers
+void evalstate_pop_dynamic_bindings_to(EvalState *st, unsigned int depth);
+
 // Exception handling
 void eval_error(const char *msg, EvalState *st);
 void parse_error(const char *msg, EvalState *st);

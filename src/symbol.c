@@ -21,6 +21,20 @@
 
 // Note: Symbols have SINGLETON_RC and are never released
 
+bool is_earmuffed_dynamic_symbol(const CljSymbol *sym) {
+    if (!sym || !sym->cname) return false;
+    const char *name = sym->cname;
+    if (name[0] != '*') return false;
+    const char *p = name + 1;
+    if (!*p) return false;
+    char last = '\0';
+    while (*p) {
+        last = *p;
+        p++;
+    }
+    return last == '*';
+}
+
 // Globale Symbol-Pointer Definitionen
 CljSymbol *SYM_TRY = NULL;
 CljSymbol *SYM_CATCH = NULL;

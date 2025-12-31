@@ -156,24 +156,31 @@ const char *EXCEPTION_ZOMBIE_ACCESS = "ZombieAccessException";
  */
 void* throw_exception_formatted(const char *type, const char *file, int line, int code, 
                               const char *format, ...) {
+    // Use generic RuntimeException if type is NULL
+    const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
+
+#ifdef DISABLE_STRING_FORMATTING
+    // Embedded size build: avoid pulling in printf/vsnprintf formatting code.
+    // Keep the callsites/API but sacrifice formatted messages.
+    const char *msg = (format != NULL) ? format : "Err";
+    CLJException *exception = make_exception(exception_type, msg, file, line, code);
+#else
     char message[512];  // Increased buffer size for longer messages
     va_list args;
-    
+
     va_start(args, format);
     int result = vsnprintf(message, sizeof(message), format, args);
     va_end(args);
-    
+
     // Additional safety: ensure null termination if message was truncated
     if (result >= (int)sizeof(message)) {
         // Message was truncated - ensure null termination
         message[sizeof(message)-1] = '\0';
     }
-    
-    // Use generic RuntimeException if type is NULL
-    const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
-    
+
     // Create exception and use the unified function (file path will be shortened in print_exception)
     CLJException *exception = make_exception(exception_type, message, file, line, code);
+#endif
     if (!exception) {
 #ifdef DEBUG
         fprintf(stderr, "FAILED TO ALLOCATE FORMATTED EXCEPTION\n");
