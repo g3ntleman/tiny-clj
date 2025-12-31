@@ -11,8 +11,10 @@ static inline CljVector* as_vector(ID obj) {
     // NULL is valid (nil)
     // TAG() already handles NULL safely (returns CLJ_NIL)
     // CLJ_ASSERT already has #ifdef DEBUG internally
+#ifdef DEBUG
     CljType tag;
     CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_VECTOR || tag == CLJ_VECTOR_TRANSIENT_WEAK || tag == CLJ_VECTOR_TRANSIENT)));
+#endif
     return (CljVector*)obj;
 }
 

@@ -18,8 +18,10 @@ static inline CljMap* as_map(ID obj) {
     // NULL is valid (nil)
     // TAG() already handles NULL safely (returns CLJ_NIL)
     // CLJ_ASSERT already has #ifdef DEBUG internally
+#ifdef DEBUG
     CljType tag;
     CLJ_ASSERT(((tag = TAG(obj)), (obj == NULL || tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT)));
+#endif
     return (CljMap*)obj;
 }
 
