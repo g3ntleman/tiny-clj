@@ -195,12 +195,13 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
       const char *ns_name = target_ns && target_ns->name && target_ns->name->cname 
                             ? target_ns->name->cname 
                             : "clojure.core";
-      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
+      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode.
+      // Additionally, always show errors for (def ...) forms even in quiet mode,
+      // since silent def failures can leave clojure.core partially loaded.
       bool is_clojure_repl = target_ns && target_ns->name && 
                              target_ns->name->cname && 
                              strcmp(target_ns->name->cname, "clojure.repl") == 0;
-      // Always show errors for clojure.repl (not clojure.core), or if not in quiet mode
-      if (!g_core_quiet || is_clojure_repl) {
+      if (!g_core_quiet || is_clojure_repl || is_def_expr) {
         fprintf(stderr, "[%s] Failed to eval form #%d%s: %s (%s:%d) [%s]\n",
                 ns_name,
                 expr_count + 1,

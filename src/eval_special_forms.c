@@ -30,6 +30,8 @@ static inline void pop_dynamic_bindings_to(EvalState *st, unsigned int depth) {
 }
 
 static inline bool sym_name_eq(ID obj, const char *name) {
+    CLJ_ASSERT(name != NULL && "sym_name_eq: name must not be NULL");
+    if (!name) return false;
     if (!obj || TAG(obj) != CLJ_SYMBOL) return false;
     CljSymbol *sym = as_symbol(obj);
     if (!sym || !sym->cname) return false;
@@ -52,6 +54,7 @@ static void eval_finally_clause(CljList *finally_clause,
 
 // Special Form evaluation functions with unified signature (exported for symbol initialization)
 ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_cond: list must not be NULL");
     int argc = list_count(list);
     if (argc <= 1) return NULL;
 
@@ -74,6 +77,7 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
 ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     // Hot-path: avoid repeated list_get_element/list_nth traversals.
     // Structure: (if cond then else?)
+    CLJ_ASSERT(list != NULL && "eval_special_if: list must not be NULL");
     if (!list) return NULL;
 
     CljList *args = as_list(LIST_REST(list));
@@ -96,6 +100,7 @@ ID eval_special_if(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 }
 
 ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_when: list must not be NULL");
     ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
     bool truthy = cond_val ? clj_is_truthy(cond_val) : false;
     RELEASE(cond_val);
@@ -114,6 +119,7 @@ ID eval_special_when(CljList *list, CljMap *env, EvalState *st, const EvalContex
 }
 
 ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_while: list must not be NULL");
     int list_len = list_count(list);
     while (true) {
         ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
@@ -136,6 +142,7 @@ ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalConte
 }
 
 ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_do: list must not be NULL");
     int list_len = list_count(list);
     ID result = NULL;
     for (int i = 1; i < list_len; i++) {
@@ -148,6 +155,7 @@ ID eval_special_do(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 }
 
 ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_and: list must not be NULL");
     int argc = list_count(list);
     if (argc <= 1) return clj_true;
     ID result = clj_true;
@@ -163,6 +171,7 @@ ID eval_special_and(CljList *list, CljMap *env, EvalState *st, const EvalContext
 }
 
 ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_or: list must not be NULL");
     int argc = list_count(list);
     if (argc <= 1) return NULL;
     ID result = NULL;
@@ -178,6 +187,7 @@ ID eval_special_or(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 }
 
 ID eval_special_quote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_quote: list must not be NULL");
     (void)env; (void)st; (void)ctx;  // Unused
     ID quoted_expr = list_get_element(list, 1);
     if (!quoted_expr) return NULL;
@@ -185,6 +195,7 @@ ID eval_special_quote(CljList *list, CljMap *env, EvalState *st, const EvalConte
 }
 
 ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_go: list must not be NULL");
     (void)ctx;  // Unused
     int argc = list_count(list);
     CljList *do_list = NULL;
@@ -223,6 +234,7 @@ ID eval_special_go(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 
 // Wrapper functions for existing special form evaluators
 ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_fn: list must not be NULL");
     CljMap *fn_env = env;
     if (!fn_env && st && st->current_ns) {
         fn_env = st->current_ns->mappings;
@@ -231,20 +243,24 @@ ID eval_special_fn(CljList *list, CljMap *env, EvalState *st, const EvalContext 
 }
 
 ID eval_special_let(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_let: list must not be NULL");
     return eval_let(list, env, st, ctx);
 }
 
 ID eval_special_var(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_var: list must not be NULL");
     (void)ctx;  // Unused
     return eval_var(list, env, st);
 }
 
 ID eval_special_recur(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_recur: list must not be NULL");
     (void)env; (void)st;  // Unused
     return eval_handle_recur(list, ctx);
 }
 
 ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_time: list must not be NULL");
     (void)ctx;  // Unused
     CljMap *time_env = env;
     if (!time_env && st && st->current_ns) {
@@ -254,11 +270,13 @@ ID eval_special_time(CljList *list, CljMap *env, EvalState *st, const EvalContex
 }
 
 ID eval_special_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_dotimes: list must not be NULL");
     (void)ctx;  // Unused
     return eval_dotimes(list, env, st);
 }
 
 ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_try: list must not be NULL");
     int argc = list_count(list);
     if (argc < 2) return NULL;
 
@@ -389,6 +407,7 @@ ID eval_special_try(CljList *list, CljMap *env, EvalState *st, const EvalContext
 }
 
 ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_binding: list must not be NULL");
     int argc = list_count(list);
     if (argc < 2) {
         throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
@@ -597,6 +616,8 @@ ID eval_special_form_dispatch(CljList *list,
                               EvalState *st,
                               const EvalContext *ctx,
                               CljSymbol *op_sym) {
+    CLJ_ASSERT(op_sym != NULL && "eval_special_form_dispatch: op_sym must not be NULL");
+    if (!op_sym) return NULL;
     CljSpecialSymbol *special = as_special_symbol(op_sym);
     if (!special || !special->eval_fn) return NULL;
     return special->eval_fn(list, env, st, ctx);
@@ -610,6 +631,9 @@ ID eval_special_form_dispatch(CljList *list,
 static CljFunction *g_quasiquote_fn = NULL;
 
 ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_quasiquote: list must not be NULL");
+    CLJ_ASSERT(st != NULL && "eval_special_quasiquote: st must not be NULL");
+    if (!st) return NULL;
     // Get the expression to quasiquote: (quasiquote expr)
     ID expr = list_get_element(list, 1);
     if (!expr) return NULL;
@@ -657,6 +681,9 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
 // ============================================================================
 
 ID eval_special_defmacro(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
+    CLJ_ASSERT(list != NULL && "eval_special_defmacro: list must not be NULL");
+    CLJ_ASSERT(st != NULL && "eval_special_defmacro: st must not be NULL");
+    if (!st) return NULL;
     (void)ctx;
     
     // Parse: (defmacro name [params] body) or (defmacro name docstring [params] body)
