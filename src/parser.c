@@ -14,7 +14,7 @@
 #include "eval.h"
 #include "list.h"
 #include "ast.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include <string.h>
 #ifdef PROFILE_STARTUP
 #include <time.h>
@@ -26,7 +26,7 @@
 #include "value.h"
 #include "symbol.h"
 #include "meta.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "ast_canon.h"
 #include <ctype.h>
 #include <stdio.h>

@@ -2,6 +2,7 @@
 ;; Tests performance of def, defn, ns before and after conversion to builtins
 
 ;; Test 1: def performance (1000 iterations)
+^#^{:doc "Benchmark: evaluates many (def ...) forms via eval/read-string."}
 (defn test-def-performance []
   (println "Testing def performance...")
   (time
@@ -9,6 +10,7 @@
       (eval (read-string (str "(def test-var-" i " " i ")"))))))
 
 ;; Test 2: defn performance (1000 iterations)  
+^#^{:doc "Benchmark: evaluates many (defn ...) forms via eval/read-string."}
 (defn test-defn-performance []
   (println "Testing defn performance...")
   (time
@@ -16,6 +18,7 @@
       (eval (read-string (str "(defn test-fn-" i " [x] (+ x " i "))"))))))
 
 ;; Test 3: ns performance (100 iterations)
+^#^{:doc "Benchmark: evaluates many (ns ...) forms via eval/read-string."}
 (defn test-ns-performance []
   (println "Testing ns performance...")
   (time
@@ -23,6 +26,7 @@
       (eval (read-string (str "(ns user.test" i ")"))))))
 
 ;; Test 4: Combined workload test
+^#^{:doc "Benchmark: mixed workload of def/defn/ns via eval/read-string."}
 (defn test-combined-workload []
   (println "Testing combined workload...")
   (time
@@ -37,6 +41,7 @@
         (eval (read-string (str "(ns user.perf" i ")")))))))
 
 ;; Run all benchmarks
+^#^{:doc "Runs the full special-forms benchmark suite."}
 (defn run-all-benchmarks []
   (println "=== Special Forms Performance Benchmarks ===")
   (println "Baseline measurements (before conversion to builtins)")

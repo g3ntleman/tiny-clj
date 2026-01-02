@@ -1,6 +1,7 @@
 ;; Sleep Benchmark to test time function
 ;; This should show measurable timing
 
+^#^{:doc "Runs a simple sleep-based benchmark using (time ...) and (sleep)."}
 (defn benchmark-sleep []
   (println "Running sleep benchmark...")
   (time

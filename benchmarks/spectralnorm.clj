@@ -6,9 +6,11 @@
 ;; TODO: Replace with (ns clojure.benchmarksgame.spectralnorm) when require/use available
 
 ;; === Benchmark Implementation ===
+^#^{:doc "Kernel function A(i,j) used by the spectral norm benchmark."}
 (defn a [i j]
   (/ 1.0 (+ i j 1)))
 
+^#^{:doc "Computes A*v and stores into av (vector)."}
 (defn multiply-av [v av]
   (let [n (count v)]
     (loop [i 0 av' av]
@@ -21,6 +23,7 @@
           (recur (inc i) av''))
         av'))))
 
+^#^{:doc "Computes A^T*v and stores into atv (vector)."}
 (defn multiply-atv [v atv]
   (let [n (count v)]
     (loop [i 0 atv' atv]
@@ -33,6 +36,7 @@
           (recur (inc i) atv''))
         atv'))))
 
+^#^{:doc "Runs the spectral norm benchmark for size n and prints the resulting value."}
 (defn spectral-norm [n]
   (let [u (vec (repeat n 1.0))
         v (vec (repeat n 0.0))]

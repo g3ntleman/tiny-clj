@@ -1,4 +1,4 @@
-#include "object.h"
+#include <subjective-c/object.h>
 #include "eval.h"
 #include "symbol.h"
 #include <stdio.h>
@@ -27,10 +27,10 @@
 #include "value.h"
 #include "environment.h"
 #include "ast.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "event_loop.h"
 #include "channel.h"
-#include "strings.h"  // For pr_str
+#include <subjective-c/strings.h>  // For pr_str
 #include "to_string.h"  // For is_special_symbol
 #include "eval_arithmetic.h"
 #include "eval_comparison.h"

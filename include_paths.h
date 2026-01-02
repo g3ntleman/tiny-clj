@@ -28,7 +28,7 @@
 // #include "unity.h"  // Located in external/unity/src/unity.h
 
 // Core Tiny-CLJ headers
-// #include "object.h"     // Located in src/object.h
+// #include <subjective-c/object.h>     // Located in subjective-c/object.h
 // #include "memory.h"     // Located in src/memory.h
 // #include "value.h"      // Located in src/value.h
 // #include "types.h"      // Located in src/types.h

@@ -10,10 +10,12 @@
 ;; ============================================================================
 
 ;; doc helpers
+^#^{:doc "Normalizes a namespace value to its printable string form (or nil)."}
 (defn normalize-ns-name [ns-val]
   (when ns-val
     (core/str ns-val)))
 
+^#^{:doc "Internal helper to print documentation metadata map m in a Clojure-like format."}
 (defn print-doc [m]
   (core/println "-------------------------")
   (let [ns-val (core/get m :ns)
@@ -41,8 +43,7 @@
 ;; doc - Print documentation for a var
 ;; Note: Requires metadata support
 ;; Format matches Clojure/JVM: 25 dashes, name, params (if available), doc
-^#^{:doc "Prints documentation for x (var, function, or symbol). Uses metadata to show name, arglists, and docstring."
-    :macro true}
+^#^{:doc "Prints documentation for x (var, function, or symbol). Uses metadata to show name, arglists, and docstring." :macro true}
 (defn doc [x]
   (if-let [m (meta x)]
     (print-doc m)

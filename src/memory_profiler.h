@@ -39,7 +39,7 @@
 #ifndef TINY_CLJ_MEMORY_PROFILER_H
 #define TINY_CLJ_MEMORY_PROFILER_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include <stdbool.h>
 
 // Forward declaration to avoid circular include

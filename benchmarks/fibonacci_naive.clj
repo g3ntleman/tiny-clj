@@ -2,6 +2,7 @@
 ;; Uses the same naive recursive algorithm on both Clojure and tiny-clj
 ;; Uses (time) for consistent measurement on both sides
 
+^#^{:doc "Computes Fibonacci(n) using the classic naive recursive definition."}
 (defn fib [n]
   (if (< n 2)
     n

@@ -7,7 +7,7 @@
 
 #include "optimize.h"
 #include "common.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "symbol.h"
 #include "exception.h"
 #include "list.h"

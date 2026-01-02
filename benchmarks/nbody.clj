@@ -6,6 +6,7 @@
 ;; TODO: Replace with (ns clojure.benchmarksgame.nbody) when require/use available
 
 ;; === Benchmark Implementation ===
+^#^{:doc "Advances the n-body system one step by dt and returns the updated bodies vector."}
 (defn advance [bodies dt]
   (let [n (count bodies)]
     (loop [i 0
@@ -40,6 +41,7 @@
                  (assoc new-bodies i [x y z vx' vy' vz' m])))
         new-bodies))))
 
+^#^{:doc "Computes total energy (kinetic + potential) for the given bodies."}
 (defn energy [bodies]
   (let [n (count bodies)]
     (loop [i 0 e 0.0]
@@ -63,6 +65,7 @@
             (recur (inc i) e'')))
         e))))
 
+^#^{:doc "Runs the n-body benchmark for n iterations and prints energy before/after."}
 (defn nbody [n]
   (let [pi 3.141592653589793
         solar-mass 4.0

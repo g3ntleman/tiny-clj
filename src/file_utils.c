@@ -4,7 +4,7 @@
  */
 
 #include "file_utils.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "memory.h"
 #include "exception.h"
 #include <stdio.h>

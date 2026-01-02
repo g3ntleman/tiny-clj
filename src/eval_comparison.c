@@ -2,7 +2,7 @@
 #include "eval.h"
 #include "error_messages.h"
 #include "exception.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 
 typedef enum { COMP_LT, COMP_GT, COMP_LE, COMP_GE, COMP_EQ } ComparisonOp;
 

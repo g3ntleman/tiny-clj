@@ -1,5 +1,5 @@
 #include "platform.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "parser.h"
 #include "namespace.h"
 #include "builtins.h"

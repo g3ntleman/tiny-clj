@@ -5,6 +5,7 @@
 (ns clojure.benchmarksgame.fibonacci)
 
 ;; Original recursive implementation from Benchmarks Game
+^#^{:doc "Computes Fibonacci(n) using the classic naive recursive definition."}
 (defn fib [n]
   (if (< n 2)
     n
@@ -13,6 +14,7 @@
 ;; Benchmark execution
 ;; Run (fib 20) five times and measure the total execution time.
 ;; Result of fib 20 should be 6765.
+^#^{:doc "Runs the fibonacci benchmark (fib 20 multiple times) and prints the final result."}
 (defn run-benchmark []
   (time
     (dotimes [_ 5]

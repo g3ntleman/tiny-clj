@@ -2,14 +2,17 @@
 
 #include "hash.h"
 #include "symbol.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "list.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "value.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "kv_macros.h"
 #include <subjective-c/callbacks.h>
+
+#include <subjective-c/instant.h>
+#include <subjective-c/uuid.h>
 
 #define FNV1A_OFFSET 2166136261u
 #define FNV1A_PRIME  16777619u
@@ -90,6 +93,21 @@ uint32_t clj_hash_full(ID value) {
         case CLJ_MAP:
         case CLJ_MAP_TRANSIENT: return hash_map((CljMap*)value);
         case CLJ_LIST: return hash_list((CljList*)value);
+        case CLJ_INSTANT: {
+            CljInstant *inst = (CljInstant*)value;
+            uint32_t h = FNV1A_OFFSET;
+            h = FNV_MIX(h, (uint32_t)inst->days);
+            h = FNV_MIX(h, (uint32_t)inst->ms);
+            return h;
+        }
+        case CLJ_UUID: {
+            CljUUID *u = (CljUUID*)value;
+            uint32_t h = FNV1A_OFFSET;
+            for (int i = 0; i < 16; i++) {
+                h = FNV_MIX(h, u->bytes[i]);
+            }
+            return h;
+        }
         default: return (uint32_t)(uintptr_t)value;
     }
 }

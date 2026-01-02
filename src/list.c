@@ -2,7 +2,7 @@
 #include "memory.h"
 #include "value.h"
 #include "symbol.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "exception.h"
 #include "types.h"  // For SINGLETON_RC
 #include <stdio.h>   // For snprintf

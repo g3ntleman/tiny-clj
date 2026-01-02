@@ -6,6 +6,7 @@
 ;; TODO: Replace with (ns clojure.benchmarksgame.mandelbrot) when require/use available
 
 ;; === Benchmark Implementation ===
+^#^{:doc "Runs a Mandelbrot benchmark for the given image size and prints a summary."}
 (defn mandelbrot [size]
   (let [sum (atom 0)]
     (doseq [y (range size)]

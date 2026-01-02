@@ -9,7 +9,7 @@
 
 #include <stdlib.h>
 #include "meta.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "runtime.h"
 #include <subjective-c/map.h>
 #include "memory.h"

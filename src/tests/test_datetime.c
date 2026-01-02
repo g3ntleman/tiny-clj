@@ -62,24 +62,24 @@ TEST_SHARED(test_time_returns_expression_result) {
 }
 
 // ============================================================================
-// NOW TESTS (atomic timestamp as map)
+// NOW TESTS (atomic timestamp as Instant)
 // ============================================================================
 
-TEST(test_now_returns_map) {
+TEST(test_now_returns_instant) {
     ID result = eval_string("(now)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(TAG(result) == CLJ_MAP);
+    TEST_ASSERT_TRUE(TAG(result) == CLJ_INSTANT);
 }
 
-TEST(test_now_has_days_key) {
-    ID result = eval_string("(:days (now))", g_test_eval_state);
+TEST(test_now_has_days_value) {
+    ID result = eval_string("(instant-days (now))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_TRUE(as_fixnum(result) > 19000);  // After 2022
 }
 
-TEST(test_now_has_ms_key) {
-    ID result = eval_string("(:ms (now))", g_test_eval_state);
+TEST(test_now_has_ms_value) {
+    ID result = eval_string("(instant-ms (now))", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(is_fixnum(result));
     int ms = as_fixnum(result);

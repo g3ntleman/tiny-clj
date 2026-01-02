@@ -43,10 +43,13 @@ typedef enum {
     CLJ_HASHMAP = 40,
     // Reserve 50+ for tiny-clj specific types if needed
     CLJ_REGEX = 50,
-    CLJ_LAZY_SEQ = 52
+    CLJ_LAZY_SEQ = 52,
+    // New tiny-clj runtime types
+    CLJ_INSTANT = 54,
+    CLJ_UUID = 56
 } CljType;
 
-#define CLJ_TYPE_COUNT (CLJ_LAZY_SEQ + 1)
+#define CLJ_TYPE_COUNT (CLJ_UUID + 1)
 
 const char* clj_type_name(CljType type);
 

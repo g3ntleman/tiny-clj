@@ -40,7 +40,7 @@
 
 #include "memory_profiler.h"
 #include "memory.h"  // For LOGF macro
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include "types.h"
 #include <stdio.h>

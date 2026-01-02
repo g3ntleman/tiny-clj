@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_EVENT_LOOP_H
 #define TINY_CLJ_EVENT_LOOP_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include <subjective-c/map.h>  // Must be included before namespace.h (map.h -> value.h -> symbol.h)
 #include "namespace.h"
 #include <stdbool.h>

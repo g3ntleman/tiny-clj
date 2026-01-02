@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_BUILTINS_H
 #define TINY_CLJ_BUILTINS_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "namespace.h"  // For EvalState
 #include "runtime.h"
 

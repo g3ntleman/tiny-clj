@@ -88,7 +88,6 @@ include_directories(${CMAKE_BINARY_DIR})
 # Source files (without main.c - main is target-specific)
 list(APPEND SOURCES
     src/clojure_core.c
-    src/types.c
     src/object.c
     src/builtins.c
     src/builtins_strings.c
@@ -151,7 +150,6 @@ add_executable(tiny-clj-esp32
     src/event_loop.c
     src/channel.c
     src/clojure_core.c
-    src/types.c
     src/object.c
     src/builtins.c
     src/builtins_strings.c
@@ -291,6 +289,7 @@ add_executable(unit-tests
     src/tests/test_clojure_core_loading.c
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_datetime.c
+    src/tests/test_instant_uuid.c
     src/tests/test_loops.c
     src/tests/test_go_blocks.c
     src/tests/test_fixed_point.c
@@ -462,7 +461,6 @@ target_compile_options(unit-tests PRIVATE "-fmacro-prefix-map=${CMAKE_SOURCE_DIR
 # Common source files for all test suites
 set(COMMON_TEST_SOURCES
     src/object.c
-    src/types.c
     src/atom.c
     src/symbol.c
     src/namespace.c

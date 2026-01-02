@@ -13,7 +13,7 @@
 #include "list.h"
 #include "memory.h"
 #include "regex.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "value.h"
 
 // regex?: Returns true if x is a compiled regex pattern

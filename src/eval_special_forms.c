@@ -3,7 +3,7 @@
 #include "common.h"
 #include "channel.h"
 #include "event_loop.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "exception.h"
 #include "environment.h"
 #include "runtime.h"
@@ -11,7 +11,7 @@
 #include "macro.h"
 #include "meta.h"
 #include "ast.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 
 #include <string.h>
 

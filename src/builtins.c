@@ -10,8 +10,8 @@
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
-#include "object.h"
-#include "vector.h"
+#include <subjective-c/object.h>
+#include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "atom.h"
 #include "kv_macros.h"
@@ -27,7 +27,7 @@
 #include "exception.h"
 #include "list.h"
 #include "function.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "to_string.h"
 #include "event_loop.h"
 #include "reader.h"
@@ -35,6 +35,7 @@
 #include "meta.h"
 #include "eval.h"
 #include "macro.h"
+#include <subjective-c/instant.h>
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -139,6 +140,9 @@ ID native_atom(ID *args, unsigned int argc);
 ID native_deref(ID *args, unsigned int argc);
 ID native_reset_bang(ID *args, unsigned int argc);
 ID native_swap_bang(ID *args, unsigned int argc);
+ID native_instant_p(ID *args, unsigned int argc);
+ID native_instant_days(ID *args, unsigned int argc);
+ID native_instant_ms(ID *args, unsigned int argc);
 #ifndef ESP32_BUILD
 ID native_slurp(ID *args, unsigned int argc);
 ID native_spit(ID *args, unsigned int argc);
@@ -4764,11 +4768,31 @@ ID native_now(ID *args, unsigned int argc) {
     int32_t sec_in_day = tv.tv_sec % 86400;
     int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
     
-    // Build result map {:days N :ms M}
-    return AUTORELEASE(make_map_kv(
-        intern_symbol_global(":days"), fixnum(days),
-        intern_symbol_global(":ms"), fixnum(millis),
-        NOT_FOUND));
+    // Return Instant (days + millis-in-day)
+    return AUTORELEASE(clj_make_instant(days, millis));
+}
+
+ID native_instant_p(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "instant?")) return NULL;
+    return (TAG(args[0]) == CLJ_INSTANT) ? (ID)clj_true : (ID)clj_false;
+}
+
+ID native_instant_days(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "instant-days")) return NULL;
+    if (TAG(args[0]) != CLJ_INSTANT) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "instant-days expects an Instant");
+    }
+    return fixnum(clj_instant_days(args[0]));
+}
+
+ID native_instant_ms(ID *args, unsigned int argc) {
+    if (!validate_builtin_args(argc, 1, "instant-ms")) return NULL;
+    if (TAG(args[0]) != CLJ_INSTANT) {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                "instant-ms expects an Instant");
+    }
+    return fixnum(clj_instant_ms(args[0]));
 }
 
 // do: Evaluate expressions sequentially, return last value
@@ -4921,6 +4945,9 @@ void register_builtins() {
     
     // Time functions
     register_builtin_in_core("now", native_now);
+    register_builtin_in_core("instant?", native_instant_p);
+    register_builtin_in_core("instant-days", native_instant_days);
+    register_builtin_in_core("instant-ms", native_instant_ms);
     
     // Macro functions
     register_builtin_in_core("get-macro", native_get_macro);

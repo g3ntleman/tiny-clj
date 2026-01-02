@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_AST_H
 #define TINY_CLJ_AST_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include "symbol.h"
 #include <stdint.h>

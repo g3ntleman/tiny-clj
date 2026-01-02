@@ -4,7 +4,7 @@
 #include "common.h"  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include <subjective-c/map.h>
 #include "list.h"
 #include "exception.h"
@@ -12,7 +12,7 @@
 #include "tiny_clj.h"
 #include "memory.h"
 #include "parser.h"  // For eval_parsed
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "kv_macros.h"  // For KV_KEY, KV_VALUE
 
 // Helper context for namespace search in ns_resolve()

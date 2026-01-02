@@ -1,7 +1,7 @@
 #ifndef ARGS_UTILS_H
 #define ARGS_UTILS_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include <stdbool.h>
 

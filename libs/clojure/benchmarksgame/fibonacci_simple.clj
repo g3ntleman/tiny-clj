@@ -1,3 +1,4 @@
+^#^{:doc "Computes Fibonacci(n) using the classic naive recursive definition (benchmarksgame helper)."}
 (defn fib [n]
   (if (< n 2)
     n

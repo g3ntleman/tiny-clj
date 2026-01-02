@@ -16,7 +16,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <stdarg.h>
-#include "object.h"
+#include <subjective-c/object.h>
 #include "memory.h"
 #include "runtime.h"
 #include "seq.h"
@@ -25,11 +25,11 @@
 #include "kv_macros.h"
 #include "namespace.h"
 #include "exception.h"  // For ExceptionHandler definition
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "function.h"
 #include "list.h"
 #include "symbol.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "byte_array.h"
 #include "value.h"  // For string_empty_singleton
 

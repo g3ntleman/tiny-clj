@@ -5,7 +5,7 @@ const char* clj_type_name(CljType type) {
     if (type < 0 || type >= CLJ_TYPE_COUNT) {
         return "Invalid";
     }
-    
+
     switch (type) {
         case CLJ_INT: return "Integer";
         case CLJ_CHAR: return "Character";
@@ -33,9 +33,9 @@ const char* clj_type_name(CljType type) {
         case CLJ_HASHMAP: return "HashMap";
         case CLJ_REGEX: return "Regex";
         case CLJ_LAZY_SEQ: return "LazySeq";
+        case CLJ_INSTANT: return "Instant";
+        case CLJ_UUID: return "UUID";
         case CLJ_NIL: return "Nil";
         default: return "Unknown";
     }
 }
-
-
