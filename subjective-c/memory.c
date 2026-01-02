@@ -59,6 +59,10 @@ typedef struct {
 // Thread-local pool state
 static THREAD_LOCAL AutoreleasePoolState g_pool = {0};
 
+#ifdef DEBUG
+static THREAD_LOCAL uint32_t g_pool_peak_count = 0;
+#endif
+
 // External reference to verbose mode
 extern bool g_memory_verbose_mode;
 
@@ -159,6 +163,10 @@ void autorelease_pool_init(void) {
     g_pool.cp_capacity = POOL_CHECKPOINT_CAPACITY;
     g_pool.checkpoints = (uint32_t*)malloc(sizeof(uint32_t) * g_pool.cp_capacity);
     g_pool.cp_count = 0;
+
+#ifdef DEBUG
+    g_pool_peak_count = 0;
+#endif
 }
 
 static void init_release_dispatch(void) {
@@ -358,11 +366,37 @@ CljObject *autorelease(CljObject *v) {
     
     // Append object (no RETAIN - COW friendly!)
     g_pool.items[g_pool.count++] = v;
+
+#ifdef DEBUG
+    if (g_pool.count > g_pool_peak_count) {
+        g_pool_peak_count = g_pool.count;
+    }
+#endif
     
     // Track for memory profiling
     MEMORY_PROFILER_TRACK_AUTORELEASE(v);
     
     return v;
+}
+
+uint32_t autorelease_pool_peak_count(void) {
+#ifdef DEBUG
+    return g_pool_peak_count;
+#else
+    return 0;
+#endif
+}
+
+void autorelease_pool_peak_reset(void) {
+#ifdef DEBUG
+    if (!g_pool.items) {
+        g_pool_peak_count = 0;
+        return;
+    }
+    g_pool_peak_count = g_pool.count;
+#else
+    // no-op in non-debug builds
+#endif
 }
 
 #ifdef DEBUG
