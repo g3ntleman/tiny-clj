@@ -4769,7 +4769,7 @@ ID native_now(ID *args, unsigned int argc) {
     int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
     
     // Return Instant (days + millis-in-day)
-    return AUTORELEASE(clj_make_instant(days, millis));
+    return AUTORELEASE(clj_make_instant(days, (uint32_t)millis));
 }
 
 ID native_instant_p(ID *args, unsigned int argc) {
@@ -4792,7 +4792,7 @@ ID native_instant_ms(ID *args, unsigned int argc) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "instant-ms expects an Instant");
     }
-    return fixnum(clj_instant_ms(args[0]));
+    return fixnum((int32_t)clj_instant_ms(args[0]));
 }
 
 // do: Evaluate expressions sequentially, return last value
