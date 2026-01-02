@@ -78,7 +78,7 @@ void setUp(void) {
         g_runtime.builtins_registered = true;
     }
         
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
         MEMORY_PROFILER_INIT();
         enable_memory_profiling(true);
         set_memory_verbose_mode(false);
@@ -334,7 +334,7 @@ void run_specific_test_impl(const char *test_name_or_pattern) {
 
 // Tiny-CLJ specific cleanup function (called from test_runner.c)
 void tiny_clj_test_cleanup(bool show_memory_summary) {
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     if (show_memory_summary) {
         // Memory profiling without printf output (silent mode for tests)
         memory_profiler_print_stats("All Tests Complete");

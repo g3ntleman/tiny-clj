@@ -12,7 +12,6 @@ typedef struct CljASTNode {
     CljObject base;
     CljObject *first;
     CljObject *rest;
-    CljObject *metadata;
     CljObject *callsite_cache;
 } CljASTNode;
 
@@ -21,10 +20,6 @@ struct CljList* make_ast_list(ID first, struct CljList *rest);
 
 CljASTNode* as_ast_node(ID obj);
 bool is_ast_node(ID obj);
-
-void ast_node_set_metadata(CljASTNode *node, CljObject *meta);
-CljObject* ast_node_get_metadata(const CljASTNode *node);
-
 void ast_node_set_callsite_cache(CljASTNode *node, CljObject *cache);
 CljObject* ast_node_get_callsite_cache(const CljASTNode *node);
 

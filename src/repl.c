@@ -132,57 +132,63 @@ static void repl_process_event_loop(EvalState *st) {
 bool eval_multiform_string(const char *code, EvalState *st) {
     bool result = true; // Start optimistic
 
-    // Use WITH_AUTORELEASE_POOL for automatic cleanup
-    WITH_AUTORELEASE_POOL({
-        Reader reader;
-        reader_init(&reader, code);
-        reader_set_source_name(&reader, "<repl input>");
+    Reader reader;
+    reader_init(&reader, code);
+    reader_set_source_name(&reader, "<repl input>");
 
-        // Loop: Parse and evaluate each expression until EOF
-        while (!reader_is_eof(&reader)) {
-            // Skip whitespace and comments
-            reader_skip_all(&reader);
+    // Loop: Parse and evaluate each expression until EOF
+    while (!reader_is_eof(&reader)) {
+        // Skip whitespace and comments
+        reader_skip_all(&reader);
 
-            // Check if we're at EOF after skipping whitespace
+        // Check if we're at EOF after skipping whitespace
+        if (reader_is_eof(&reader)) {
+            break;
+        }
+
+        AUTORELEASE_POOL_BEGIN();
+        bool should_break = false;
+
+        // Save current namespace in local variable before TRY - preserved by setjmp
+        CljNamespace *saved_ns = st ? st->current_ns : NULL;
+
+        // Use TRY/CATCH to handle exceptions for each expression
+        TRY {
+            CljValue parsed = parse_from_reader(&reader, st);
+            ID eval_result = eval_parsed_value(parsed, st);
+            print_result(eval_result);
+
+            // Check for EOF after processing (in case this was the last expression)
             if (reader_is_eof(&reader)) {
-                break;
+                should_break = true; // Normal EOF, exit loop after pool pop
             }
 
-            // Save current namespace in local variable before TRY - preserved by setjmp
-            CljNamespace *saved_ns = st ? st->current_ns : NULL;
+        } CATCH(ex) {
+            // Restore namespace from local variable on exception
+            if (st && saved_ns) {
+                st->current_ns = saved_ns;
+            }
+            // Print exception and continue with next expression
+            print_exception((CLJException*)ex);
+            result = false; // Mark as failed, but continue processing
+            // Note: History is saved after evaluation in run_interactive_repl
+            // No need to save here to avoid double-saving and memory issues
 
-            // Use TRY/CATCH to handle exceptions for each expression
-            TRY {
-                CljValue parsed = parse_from_reader(&reader, st);
-                ID eval_result = eval_parsed_value(parsed, st);
-                print_result(eval_result);
+            // Skip to next line to avoid infinite loop on same expression
+            while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
+                reader_next(&reader);
+            }
+            if (!reader_is_eof(&reader)) {
+                reader_next(&reader); // consume the newline
+            }
+        } END_TRY
 
-                // Check for EOF after processing (in case this was the last expression)
-                if (reader_is_eof(&reader)) {
-                    break; // Normal EOF, exit loop
-                }
+        AUTORELEASE_POOL_END();
 
-            } CATCH(ex) {
-                // Restore namespace from local variable on exception
-                if (st && saved_ns) {
-                    st->current_ns = saved_ns;
-                }
-                // Print exception and continue with next expression
-                print_exception((CLJException*)ex);
-                result = false; // Mark as failed, but continue processing
-                // Note: History is saved after evaluation in run_interactive_repl
-                // No need to save here to avoid double-saving and memory issues
-
-                // Skip to next line to avoid infinite loop on same expression
-                while (!reader_is_eof(&reader) && reader_current(&reader) != '\n') {
-                    reader_next(&reader);
-                }
-                if (!reader_is_eof(&reader)) {
-                    reader_next(&reader); // consume the newline
-                }
-            } END_TRY
+        if (should_break) {
+            break;
         }
-    });
+    }
 
     return result;
 }
@@ -398,11 +404,11 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 #if !defined(DEBUG)
     CLJ_UNUSED(zombie_mode);
 #endif
-#if !defined(DEBUG) && !defined(ENABLE_MEMORY_PROFILING)
+#if !defined(DEBUG) && !(defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED)
     CLJ_UNUSED(memory_debug);
 #endif
     // Initialize memory profiling DIRECTLY before the first prompt
-#ifdef ENABLE_MEMORY_PROFILING
+#if defined(MEMORY_PROFILING_ENABLED) && MEMORY_PROFILING_ENABLED
     MEMORY_PROFILER_INIT();
     enable_memory_profiling(true);
 
@@ -423,7 +429,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
     printf("tiny-clj %s REPL (platform = %s). Ctrl-D to exit. \n", "0.2", platform_name());
     print_build_info();
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Line editor needs blocking input for proper character handling
     platform_set_stdin_nonblocking(0);
     // Enable raw mode for proper escape sequence handling
@@ -439,7 +445,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     print_prompt(st, true);
     prompt_shown = true;
 
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Initialize line editor
     LineEditor *editor = line_editor_new(platform_get_char, platform_put_char, platform_put_string);
     if (!editor) {
@@ -484,7 +490,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
         // Unified input processing
         bool got_input = false;
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
         LineEditor *editor = get_line_editor();
         if (editor) {
             int result = line_editor_process_input(editor);
@@ -543,7 +549,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
             printf("Error: Too many closing parentheses\n");
             // Add to history before clearing
             if (acc[0] != '\0') {
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
                 LineEditor *editor = get_line_editor();
                 if (editor) {
                     line_editor_add_to_history(editor, acc);
@@ -566,7 +572,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
 
         // Add to history and save after each expression evaluation (success or failure)
         if (acc[0] != '\0') {
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
             LineEditor *editor = get_line_editor();
             if (editor) {
                 line_editor_add_to_history(editor, acc);
@@ -593,7 +599,7 @@ __attribute__((unused)) static bool run_interactive_repl(EvalState *st, bool zom
     }
 
     // Auto-Save History on REPL exit
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     WITH_AUTORELEASE_POOL({
         LineEditor *ed = get_line_editor();
         if (ed) {
@@ -699,7 +705,18 @@ int main(int argc, char **argv) {
             clock_t t4 = clock();
 #endif
             // Load clojure.core in autorelease pool to handle AUTORELEASE calls
+#ifdef DEBUG
+            if (memory_debug) {
+                autorelease_pool_peak_reset();
+            }
+#endif
             load_clojure_core(st);
+#ifdef DEBUG
+            if (memory_debug) {
+                fprintf(stderr, "[DEBUG] autorelease_pool peak during load_clojure_core: %u\n",
+                        (unsigned)autorelease_pool_peak_count());
+            }
+#endif
 #ifdef PROFILE_STARTUP
             clock_t t5 = clock();
             fprintf(stderr, "[PROFILE] load_clojure_core: %.2f ms\n", (double)(t5 - t4) * 1000.0 / CLOCKS_PER_SEC);
@@ -834,7 +851,7 @@ int main(int argc, char **argv) {
     // Interactive REPL
     run_interactive_repl(st, zombie_mode, memory_debug);
 
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
     // Restore terminal settings
     platform_set_raw_mode(0);
 #endif

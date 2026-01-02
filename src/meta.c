@@ -2,10 +2,10 @@
  * Metadata Management
  * 
  * Functions for managing metadata on Clojure objects.
- * Only compiled when ENABLE_META is defined.
+ * Only compiled when META_ENABLED is enabled.
  */
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
 
 #include <stdlib.h>
 #include "meta.h"
@@ -194,5 +194,5 @@ CljMap* meta_merge_with_precedence(CljMap *existing_meta, CljMap *form_meta) {
     return result;
 }
 
-#endif // ENABLE_META
+#endif // META_ENABLED
 

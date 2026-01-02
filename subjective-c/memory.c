@@ -762,12 +762,11 @@ static void release_object_default(CljObject *v) {
                     break;
                 }
                 if (g_debug_output_active) {
-                    printf("🔍 release_object_deep: Freeing AST node %p, first=%p, rest=%p, meta=%p, cache=%p\n",
-                           v, node->first, node->rest, node->metadata, node->callsite_cache);
+                    printf("🔍 release_object_deep: Freeing AST node %p, first=%p, rest=%p, cache=%p\n",
+                           v, node->first, node->rest, node->callsite_cache);
                 }
                 RELEASE(node->first);
                 RELEASE(node->rest);
-                RELEASE(node->metadata);
                 RELEASE(node->callsite_cache);
             }
             break;

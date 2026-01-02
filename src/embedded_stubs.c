@@ -2,14 +2,14 @@
  * Embedded Stubs for Tiny-CLJ Minimal Build
  * 
  * Provides minimal implementations for features disabled in embedded builds.
- * This file is only compiled when DISABLE_* flags are set.
+ * This file is only compiled when *_ENABLED=0 feature flags are set.
  */
 
 #include <subjective-c/object.h>
 #include "value.h"
 #include "memory.h"
 
-#ifdef DISABLE_ERROR_MESSAGES
+#if defined(ERROR_MESSAGES_ENABLED) && !ERROR_MESSAGES_ENABLED
 // Stub implementations for error messages when disabled
 const char *ERR_EXPECTED_NUMBER = "Err";
 const char *ERR_WRONG_ARITY_ZERO = "Err";
@@ -31,48 +31,13 @@ const char *ERR_FIXED_OVERFLOW_MULTIPLICATION = "Err";
 const char *ERR_FIXED_OVERFLOW_ADDITION = "Err";
 #endif
 
-#ifdef DISABLE_MEMORY_PROFILER
-// Stub implementations for memory profiler when disabled
-void memory_profiler_track_retain(CljObject *obj) {
-    (void)obj; // Suppress unused parameter warning
-}
-
-void memory_profiler_track_release(CljObject *obj) {
-    (void)obj; // Suppress unused parameter warning
-}
-
-void memory_profiler_track_autorelease(CljObject *obj) {
-    (void)obj; // Suppress unused parameter warning
-}
-
-void memory_profiler_track_alloc(CljObject *obj) {
-    (void)obj; // Suppress unused parameter warning
-}
-
-void memory_profiler_track_dealloc(CljObject *obj) {
-    (void)obj; // Suppress unused parameter warning
-}
-
-void memory_profiler_print_stats(void) {
-    // No-op
-}
-
-void memory_profiler_reset_stats(void) {
-    // No-op
-}
-
-void set_memory_verbose_mode(bool verbose) {
-    (void)verbose; // Suppress unused parameter warning
-}
-#endif
-
 // Vectors are required - no stubs needed
-// DISABLE_VECTOR_OPERATIONS is no longer supported
+// VECTOR_OPERATIONS_ENABLED is always on
 
 // Maps are required - no stubs needed
-// DISABLE_MAP_OPERATIONS is no longer supported
+// MAP_OPERATIONS_ENABLED is always on
 
-#ifdef DISABLE_COMPLEX_PARSING
+#if defined(COMPLEX_PARSING_ENABLED) && !COMPLEX_PARSING_ENABLED
 // Stub implementations for complex parsing when disabled
 CljObject *parse_vector(CljObject *tokens, int *pos) {
     (void)tokens;

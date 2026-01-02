@@ -449,7 +449,7 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
         CljSymbol *sym = as_symbol(sym_id);
         if (!is_earmuffed_dynamic_symbol(sym)) {
             RELEASE(frame);
-#ifdef DISABLE_STRING_FORMATTING
+#if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
             throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                             "binding requires dynamic vars (earmuffed symbols)",
                             __FILE__, __LINE__, 0);

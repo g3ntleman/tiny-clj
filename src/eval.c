@@ -1472,7 +1472,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
 
     // Apply metadata to value
     // In Clojure, metadata from ^#^{...} (def ...) is applied to the value
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     if (value) {
         unsigned char value_tag = TAG(value);
         ID form_meta = meta_get(list);
@@ -1500,7 +1500,7 @@ ID eval_def(CljList *list, CljMap *env, EvalState *st) {
             meta_set(value, form_meta);
         }
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     // Return the symbol key that was actually stored in the namespace mappings.
     // For non-core namespaces, ns_define qualifies & interns unqualified symbols

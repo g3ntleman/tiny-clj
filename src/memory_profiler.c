@@ -1,5 +1,3 @@
-#ifndef DISABLE_MEMORY_PROFILER
-
 /*
  * Memory Profiler Implementation for Tiny-CLJ
  * 
@@ -88,7 +86,7 @@ bool g_memory_verbose_mode = false;
 // MEMORY HOOKS IMPLEMENTATION
 // ============================================================================
 
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
 // Global hook function (only one hook supported for simplicity)
 static MemoryHookFunc g_hook_func = NULL;
 
@@ -208,6 +206,11 @@ void memory_profiler_reset(void) {
     memset(g_memory_stats.retains_by_type, 0, sizeof(g_memory_stats.retains_by_type));
     memset(g_memory_stats.releases_by_type, 0, sizeof(g_memory_stats.releases_by_type));
     memset(g_memory_stats.autoreleases_by_type, 0, sizeof(g_memory_stats.autoreleases_by_type));
+
+#ifdef DEBUG
+    // Keep autorelease peak scoped to the same profiling window as MemoryStats.
+    autorelease_pool_peak_reset();
+#endif
 }
 
 /**
@@ -262,6 +265,10 @@ static void print_memory_table(const MemoryStats *stats, const char *test_name, 
                stats->total_allocations, stats->total_deallocations, 
                stats->peak_memory_usage, stats->current_memory_usage, stats->memory_leaks);
     }
+
+#ifdef DEBUG
+    LOGF(stdout, "📌 Autorelease Peak Count: %u\n", (unsigned)autorelease_pool_peak_count());
+#endif
     
     // Compact object type breakdown - only show types with activity
     bool has_activity = false;
@@ -477,6 +484,9 @@ void memory_profiler_check_leaks(const char *location) {
             printf("   │ Total Leaks:        %10zu allocations                    │\n", g_memory_stats.memory_leaks);
             printf("   │ Current Memory:     %10zu bytes                         │\n", g_memory_stats.current_memory_usage);
             printf("   │ Peak Memory:       %10zu bytes                         │\n", g_memory_stats.peak_memory_usage);
+#ifdef DEBUG
+            printf("   │ Autorelease Peak:   %10u items                         │\n", (unsigned)autorelease_pool_peak_count());
+#endif
             printf("   │ Allocations:        %10zu                               │\n", g_memory_stats.total_allocations);
             printf("   │ Deallocations:      %10zu                               │\n", g_memory_stats.total_deallocations);
             printf("   └─────────────────────────────────────────────────────────┘\n");
@@ -591,14 +601,14 @@ void memory_profiler_print_diff(MemoryStats diff, const char *test_name) {
     (void)test_name; /* no-op */ 
 }
 
-#endif // DEBUG
+#endif // MEMORY_PROFILING_ENABLED
 
 // ============================================================================
 // MEMORY PROFILING CONTROL (ALWAYS AVAILABLE)
 // ============================================================================
 
 void enable_memory_profiling(bool enabled) {
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     g_memory_profiling_enabled = enabled;
     if (enabled) {
         // Reset statistics when enabling profiling
@@ -617,7 +627,7 @@ void enable_memory_profiling(bool enabled) {
 }
 
 bool is_memory_profiling_enabled(void) {
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     return g_memory_profiling_enabled;
 #else
     return false;
@@ -634,7 +644,7 @@ bool is_memory_leak_reporting_enabled(void) {
 }
 
 void set_memory_verbose_mode(bool verbose) {
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     g_memory_verbose_mode = verbose;
     // Update cached debug output flag in memory.c
     extern void memory_update_debug_output_active(void);
@@ -643,6 +653,4 @@ void set_memory_verbose_mode(bool verbose) {
     (void)verbose; // Suppress unused parameter warning
 #endif
 }
-
-#endif // DISABLE_MEMORY_PROFILER
 

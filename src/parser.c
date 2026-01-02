@@ -1297,7 +1297,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     meta_set(obj, meta);
   }
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
   // Automatically add source code location metadata
   CljMap *location_meta = (CljMap*)make_location_meta(reader, st);
   if (location_meta) {
@@ -1320,7 +1320,7 @@ static ID apply_metadata_to_object(Reader *reader, EvalState *st, ID meta, ID ob
     }
     RELEASE(location_meta);
   }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
   RELEASE(meta);
   return AUTORELEASE(obj);

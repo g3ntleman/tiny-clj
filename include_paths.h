@@ -9,16 +9,16 @@
 #define INCLUDE_PATHS_H
 
 // Common compiler definitions
-#ifndef ENABLE_MEMORY_PROFILING
-#define ENABLE_MEMORY_PROFILING
+#ifndef MEMORY_PROFILING_ENABLED
+#define MEMORY_PROFILING_ENABLED 1
 #endif
 
 #ifndef DEBUG
 #define DEBUG
 #endif
 
-#ifndef ENABLE_META
-#define ENABLE_META
+#ifndef META_ENABLED
+#define META_ENABLED 1
 #endif
 
 // Include path hints for IDEs and linters

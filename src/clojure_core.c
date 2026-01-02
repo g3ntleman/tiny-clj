@@ -114,11 +114,17 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     while (!reader_is_eof(&reader)) {
       reader_skip_all(&reader);
       if (reader_is_eof(&reader)) break;
+
+      // Keep autorelease pool tracking bounded per top-level form.
+      // NOTE: We intentionally use AUTORELEASE_POOL_BEGIN/END (not WITH_AUTORELEASE_POOL)
+      // so loop control flow stays obvious and we don't accidentally "continue" a do/while(0).
+      AUTORELEASE_POOL_BEGIN();
       
 #ifdef PROFILE_STARTUP
       clock_t parse_start = clock();
 #endif
-      CljValue form;
+      CljValue form = NULL;
+      bool parse_ok = true;
       TRY {
         form = value_by_parsing_expr(&reader, st);
       } CATCH(ex) {
@@ -129,17 +135,12 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
                     label, expr_count + 1, ex->type, ex->message);
           }
         }
-        expr_count++;
-        continue;  // Skip this expression and continue with next
+        parse_ok = false;
       } END_TRY
 #ifdef PROFILE_STARTUP
     g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
 #endif
-    if (!form) {
-      // Continue to next expression instead of breaking
-      expr_count++;
-      continue;
-    }
+    if (parse_ok && form) {
     
     // Evaluate with exception handling using TRY/CATCH
     TRY {
@@ -218,9 +219,11 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
       }
       
     } END_TRY
+    }
     
     // value_by_parsing_expr returns AUTORELEASE object
     
+    AUTORELEASE_POOL_END();
     expr_count++;
     }
   } CATCH(ex) {

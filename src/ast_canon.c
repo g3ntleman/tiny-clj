@@ -38,7 +38,7 @@
 
 // Move metadata from source to destination (clears source entry to prevent leaks)
 static INLINE void move_meta(ID src, ID dst) {
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     ID meta = meta_get(src);
     if (meta) {
         meta_set(dst, meta);
@@ -50,6 +50,30 @@ static INLINE void move_meta(ID src, ID dst) {
 }
 
 static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote);
+
+// Canonicalize a list tail (rest chain) into plain CLJ_LIST cons cells.
+// Important: This must NOT run macro expansion / destructuring on the tail itself.
+// It only canonicalizes each element (which may itself be a list expression).
+static CljList* canonicalize_rest_to_plain_list(ID rest_expr, EvalState *st, bool in_quote) {
+    if (!rest_expr) return NULL;
+    if (!list_type_matches(TAG(rest_expr))) return NULL;
+
+    CljList *src = as_list(rest_expr);
+    ID first = canonicalize_expr(src->first, st, in_quote);
+    CljList *rest = src->rest ? canonicalize_rest_to_plain_list(src->rest, st, in_quote) : NULL;
+
+    // Fast path: already a plain list and nothing changed.
+    if (TAG(rest_expr) == CLJ_LIST && first == src->first && (ID)rest == src->rest) {
+        return src;
+    }
+
+    ID node = AUTORELEASE(make_list(first, rest));
+    if (!node) {
+        return src;  // OOM: fall back to original
+    }
+    move_meta(rest_expr, node);
+    return as_list(node);
+}
 
 // ============================================================================
 // DESTRUCTURING SUPPORT (compile-time transformation)
@@ -464,21 +488,23 @@ static ID canonicalize_expr(ID expr, EvalState *st, bool in_quote) {
         }
         // ========== END DESTRUCTURING TRANSFORMATION ==========
         
-        // Canonicalize rest of list
-        ID rest = list->rest ? canonicalize_expr(list->rest, st, child_in_quote) : NULL;
-        
-        // Early exit if nothing changed AND no type conversion needed
-        // - in_quote needs CLJ_LIST (convert ASTNode to List)
-        // - normal context needs CLJ_AST_NODE (convert List to ASTNode)
+        // Canonicalize rest of list into plain CLJ_LIST cons cells.
+        // This ensures only the callsite head becomes CLJ_AST_NODE.
+        CljList *rest_list = list->rest ? canonicalize_rest_to_plain_list(list->rest, st, child_in_quote) : NULL;
+
+        // Early exit if nothing changed AND representation is already correct.
+        // - in_quote: entire list must be CLJ_LIST
+        // - normal: head must be CLJ_AST_NODE, tail should be CLJ_LIST
         bool correct_type = in_quote ? (tag == CLJ_LIST) : (tag == CLJ_AST_NODE);
-        if (correct_type && first == list->first && rest == list->rest) {
+        bool tail_is_plain_list = (!list->rest) || (TAG(list->rest) == CLJ_LIST);
+        if (correct_type && tail_is_plain_list && first == list->first && (ID)rest_list == list->rest) {
             return expr;
         }
-        
+
         // Create appropriate container based on context
-        ID result = in_quote 
-            ? AUTORELEASE(make_list((CljObject*)first, (CljList*)rest))
-            : AUTORELEASE(make_ast_node(first, (CljObject*)rest));
+        ID result = in_quote
+            ? AUTORELEASE(make_list(first, rest_list))
+            : AUTORELEASE(make_ast_node(first, (CljObject*)rest_list));
         
         if (!result) {
             return expr;  // Out of memory - return original

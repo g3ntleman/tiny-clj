@@ -89,10 +89,10 @@ void exception_print_native_backtrace(void);
  *   - Release:   INLINE expands to 'inline'     -> function may be inlined
  *   - Profiling: INLINE expands to 'noinline'   -> function appears in profiler
  *
- * Enable profiling mode by defining ENABLE_PROFILING:
- *   cmake -DCMAKE_C_FLAGS="-DENABLE_PROFILING" ..
+ * Enable profiling mode by defining PROFILING_ENABLED=1:
+ *   cmake -DCMAKE_C_FLAGS="-DPROFILING_ENABLED=1" ..
  */
-#ifdef ENABLE_PROFILING
+#if defined(PROFILING_ENABLED) && PROFILING_ENABLED
 #define INLINE __attribute__((noinline))
 #else
 #define INLINE inline

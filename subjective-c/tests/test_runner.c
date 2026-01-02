@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
     signal(SIGABRT, signal_handler);
     atexit(print_summary_on_exit);
     
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     enable_memory_profiling(true);
     set_memory_leak_reporting_enabled(false);
     set_memory_verbose_mode(false);
@@ -271,13 +271,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     if (quiet && !show_memory_summary) {
         set_memory_leak_reporting_enabled(false);
     }
 #endif
 
-#ifdef ENABLE_MEMORY_PROFILING
+#if MEMORY_PROFILING_ENABLED
     if (show_memory_summary) {
         set_memory_verbose_mode(false);
         set_memory_leak_reporting_enabled(true);

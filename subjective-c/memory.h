@@ -4,6 +4,7 @@
 #include "object.h"
 #include "memory_profiler.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
 
@@ -39,6 +40,21 @@ void autorelease_pool_cleanup_after_exception(void);
 void autorelease_pool_cleanup_all(void);
 void autorelease_pool_destroy(void);
 bool is_autorelease_pool_active(void);
+
+#ifdef DEBUG
+/** @brief Get the peak autorelease pool item count since last reset.
+ *
+ * Tracks max of internal pool 'count' (number of tracked autoreleased objects).
+ * Intended for diagnosing peak autorelease tracking overhead.
+ */
+uint32_t autorelease_pool_peak_count(void);
+
+/** @brief Reset the peak autorelease pool counter.
+ *
+ * After reset, peak is at least the current pool count.
+ */
+void autorelease_pool_peak_reset(void);
+#endif
 
 #ifdef DEBUG
 /** @brief Check if an object is in the autorelease pool (O(n) search)
@@ -157,7 +173,7 @@ bool is_autoreleased(CljObject *obj);
     #define REFERENCE_COUNT(obj) (0)  // Not available in release builds
 #endif
 
-#if defined(ENABLE_MEMORY_PROFILING)
+#if MEMORY_PROFILING_ENABLED
     static inline void logf_impl(FILE *stream, const char *fmt, ...) __attribute__((format(printf,2,3)));
     static inline void logf_impl(FILE *stream, const char *fmt, ...) {
         va_list ap; va_start(ap, fmt); vfprintf(stream, fmt, ap); va_end(ap);

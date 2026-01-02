@@ -10,7 +10,7 @@
 #include <stdio.h>
 #include <limits.h>  // For UINT_MAX
 
-#ifdef ENABLE_LINE_EDITING
+#if defined(LINE_EDITING_ENABLED) && LINE_EDITING_ENABLED
 // Global line editor instance
 static LineEditor *global_editor = NULL;
 
@@ -669,4 +669,4 @@ void line_editor_reset_history_index(LineEditor *editor) {
     // Nothing to do when line editing is disabled
 }
 
-#endif // ENABLE_LINE_EDITING
+#endif // LINE_EDITING_ENABLED
