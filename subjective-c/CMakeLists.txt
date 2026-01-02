@@ -50,8 +50,8 @@ endif()
 # Size-focused embedded builds: avoid pulling in printf-style formatting code.
 # Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
 if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake"))
-    target_compile_definitions(subjective-c PUBLIC DISABLE_STRING_FORMATTING)
-    message(STATUS "subjective-c: DISABLE_STRING_FORMATTING enabled")
+    target_compile_definitions(subjective-c PUBLIC STRING_FORMATTING_ENABLED=0)
+    message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0")
 endif()
 # CMake automatically applies CMAKE_C_FLAGS_<CONFIG> based on build type
 # No need to manually set COMPILE_FLAGS - CMake handles this automatically
@@ -100,8 +100,8 @@ target_include_directories(subjective-c-tests
 target_compile_definitions(subjective-c-tests PRIVATE
     DEBUG
     UNITY_TESTS
-    ENABLE_MEMORY_PROFILING
-    ENABLE_META
+    MEMORY_PROFILING_ENABLED=1
+    META_ENABLED=1
     UNITY_INCLUDE_EXEC_TIME
     ZOMBIE_ENABLED
 )

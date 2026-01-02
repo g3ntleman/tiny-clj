@@ -11,9 +11,9 @@ set(COMMON_INCLUDE_DIRS
 
 # Common compiler definitions
 set(COMMON_COMPILE_DEFINITIONS
-    ENABLE_MEMORY_PROFILING
+    MEMORY_PROFILING_ENABLED=1
     DEBUG
-    ENABLE_META
+    META_ENABLED=1
 )
 
 # Function to apply common settings to a target

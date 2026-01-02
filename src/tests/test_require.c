@@ -350,7 +350,7 @@ TEST(test_require_trim_metadata) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
 #ifdef DEBUG
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Load clojure.string namespace
     (void)eval_string("(require 'clojure.string)", g_test_eval_state);
     
@@ -384,7 +384,7 @@ TEST(test_require_trim_metadata) {
                                      ":doc value should be a string");
         }
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 #endif // DEBUG
 }
 
@@ -393,7 +393,7 @@ TEST(test_require_trim_meta_function) {
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
     
 #ifdef DEBUG
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Load clojure.string namespace
     (void)eval_string("(require 'clojure.string)", g_test_eval_state);
     
@@ -414,7 +414,7 @@ TEST(test_require_trim_meta_function) {
                                      ":doc value should be a string");
         }
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 #endif // DEBUG
 }
 

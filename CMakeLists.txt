@@ -10,7 +10,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -DENABLE_META -DZOMBIE_ENABLED")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=1 -DMETA_ENABLED=1 -DZOMBIE_ENABLED")
 set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG}")
 # Unity's setjmp/longjmp should be compatible with our exception system
 # Both use separate jmp_buf stacks, so they should work together
@@ -140,7 +140,7 @@ target_link_libraries(tiny-clj PRIVATE subjective-c)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj PRIVATE)
 else()
-    target_compile_definitions(tiny-clj PRIVATE ENABLE_META)
+    target_compile_definitions(tiny-clj PRIVATE META_ENABLED=1)
 endif()
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -194,11 +194,11 @@ target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 
 # ESP32 Production Build - No Meta, Optimized
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS DISABLE_ERROR_MESSAGES DISABLE_STRING_FORMATTING)
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0 DEBUG_SYMBOLS_ENABLED=0 ERROR_MESSAGES_ENABLED=0 STRING_FORMATTING_ENABLED=0)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Embedded")
-    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0 DISABLE_DEBUG_SYMBOLS DISABLE_ERROR_MESSAGES DISABLE_STRING_FORMATTING DISABLE_META DISABLE_COMPLEX_PARSING)
+    target_compile_definitions(tiny-clj-esp32 PRIVATE ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0 DEBUG_SYMBOLS_ENABLED=0 ERROR_MESSAGES_ENABLED=0 STRING_FORMATTING_ENABLED=0 META_ENABLED=0 COMPLEX_PARSING_ENABLED=0)
 else()
-    target_compile_definitions(tiny-clj-esp32 PRIVATE ENABLE_META ESP32_BUILD DISABLE_MEMORY_PROFILING ENABLE_LINE_EDITING=0)
+    target_compile_definitions(tiny-clj-esp32 PRIVATE META_ENABLED=1 ESP32_BUILD REPL_ENABLED=0 MEMORY_PROFILING_ENABLED=0 LINE_EDITING_ENABLED=0)
 endif()
 set_target_properties(tiny-clj-esp32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS_EMBEDDED}"
@@ -227,18 +227,18 @@ add_executable(tiny-clj-repl
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 # Output directory is set globally to "build"
-# REPL Build - Always enable ENABLE_META for macOS REPL
+# REPL Build - Always enable META_ENABLED for macOS REPL
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META ENABLE_LINE_EDITING)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=1 LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
     # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
-    target_compile_definitions(tiny-clj-repl PRIVATE ENABLE_META DEBUG ENABLE_LINE_EDITING ENABLE_MEMORY_PROFILING)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=1 DEBUG LINE_EDITING_ENABLED=1 MEMORY_PROFILING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer"
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=1 -fno-omit-frame-pointer"
         LINK_FLAGS ""
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
@@ -252,9 +252,9 @@ add_executable(tiny-clj-profile
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
-target_compile_definitions(tiny-clj-profile PRIVATE ENABLE_PROFILING ENABLE_META ENABLE_MEMORY_PROFILING DEBUG)
+target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=1 MEMORY_PROFILING_ENABLED=1 DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
-    COMPILE_FLAGS "-g -O2 -DDEBUG -DENABLE_MEMORY_PROFILING -fno-omit-frame-pointer"
+    COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=1 -fno-omit-frame-pointer"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
@@ -341,8 +341,8 @@ target_include_directories(unit-tests
 # Since unit-tests is always built in Debug mode, DEBUG will be set via CMAKE_BUILD_TYPE
 target_compile_definitions(subjective-c PRIVATE 
     UNITY_TESTS 
-    ENABLE_MEMORY_PROFILING 
-    ENABLE_META 
+    MEMORY_PROFILING_ENABLED=1
+    META_ENABLED=1
     UNITY_INCLUDE_EXEC_TIME 
     ZOMBIE_ENABLED
 )
@@ -361,7 +361,7 @@ if(ENABLE_ASAN)
         # Use target_link_options to properly set linker flags
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -384,7 +384,7 @@ if(ENABLE_ASAN)
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -401,7 +401,7 @@ else()
         # macOS: disable dead_strip to preserve all functions (including test registrations)
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -421,7 +421,7 @@ else()
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;ENABLE_MEMORY_PROFILING;ENABLE_META;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -508,8 +508,8 @@ set(COMMON_TEST_SOURCES
 # ============================================================================
 
 # Meta-Funktionalität wird jetzt pro-Target basierend auf Build-Type konfiguriert
-# Release builds: ENABLE_META deaktiviert (kleinere Binaries, bessere Performance)
-# Debug builds: ENABLE_META aktiviert (für Development/Debugging)
+# Release builds: META_ENABLED deaktiviert (kleinere Binaries, bessere Performance)
+# Debug builds: META_ENABLED aktiviert (für Development/Debugging)
 
 # ============================================================================
 # CUSTOM TARGETS

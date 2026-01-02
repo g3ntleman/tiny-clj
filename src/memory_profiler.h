@@ -1,5 +1,3 @@
-#ifndef DISABLE_MEMORY_PROFILER
-
 /*
  * Memory Profiler for Tiny-CLJ
  * 
@@ -38,6 +36,17 @@
 
 #ifndef TINY_CLJ_MEMORY_PROFILER_H
 #define TINY_CLJ_MEMORY_PROFILER_H
+
+// Feature switches (positive naming)
+// MEMORY_PROFILER_ENABLED controls whether the profiler implementation is built.
+// MEMORY_PROFILING_ENABLED controls whether profiling hooks/macros are active.
+#ifndef MEMORY_PROFILER_ENABLED
+#define MEMORY_PROFILER_ENABLED 1
+#endif
+
+#ifndef MEMORY_PROFILING_ENABLED
+#define MEMORY_PROFILING_ENABLED 0
+#endif
 
 #include <subjective-c/object.h>
 #include <stdbool.h>
@@ -270,8 +279,8 @@ void memory_test_start(const char *test_name);
  */
 void memory_test_end(const char *test_name);
 
-#ifdef ENABLE_MEMORY_PROFILING
-// Enable memory profiling when ENABLE_MEMORY_PROFILING is defined
+#if MEMORY_PROFILING_ENABLED
+// Enable memory profiling when MEMORY_PROFILING_ENABLED is set
 
 // Memory usage macros
 #define MEMORY_PROFILER_INIT() memory_profiler_init()
@@ -315,7 +324,7 @@ void memory_test_end(const char *test_name);
 
 #define MEMORY_PROFILER_COMPARE_STATS(before, after, test_name) ((void)0)
 
-#endif // DEBUG
+#endif // MEMORY_PROFILING_ENABLED
 
 // ============================================================================
 // MEMORY PROFILING FOR TESTS
@@ -383,7 +392,5 @@ void memory_test_end(const char *test_name);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // DISABLE_MEMORY_PROFILER
 
 #endif /* TINY_CLJ_MEMORY_PROFILER_H */

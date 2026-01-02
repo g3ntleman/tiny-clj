@@ -101,7 +101,7 @@ TEST(test_parse_metadata) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
@@ -115,7 +115,7 @@ TEST(test_parse_metadata) {
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     evalstate_free(eval_state);
 }
@@ -129,7 +129,7 @@ TEST(test_parse_metadata_keyword_shorthand) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
@@ -142,7 +142,7 @@ TEST(test_parse_metadata_keyword_shorthand) {
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(meta_value == clj_true);
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     evalstate_free(eval_state);
 }
@@ -156,7 +156,7 @@ TEST(test_parse_metadata_hash_caret) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
@@ -170,7 +170,7 @@ TEST(test_parse_metadata_hash_caret) {
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     evalstate_free(eval_state);
 }
@@ -184,7 +184,7 @@ TEST(test_parse_metadata_combined) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
@@ -198,7 +198,7 @@ TEST(test_parse_metadata_combined) {
         TEST_ASSERT_NOT_NULL(meta_value);
         TEST_ASSERT_TRUE(clj_equal((CljObject*)meta_value, (CljObject*)kw_value));
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     evalstate_free(eval_state);
 }
@@ -212,7 +212,7 @@ TEST(test_parse_metadata_multiple_keywords) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
@@ -229,7 +229,7 @@ TEST(test_parse_metadata_multiple_keywords) {
         TEST_ASSERT_TRUE(private_value == clj_true);
         TEST_ASSERT_TRUE(dynamic_value == clj_true);
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     evalstate_free(eval_state);
 }
@@ -243,7 +243,7 @@ TEST(test_parse_metadata_mixed) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(TAG(result) == CLJ_STRING);
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Test that metadata is stored
     ID meta = meta_get(result);
     TEST_ASSERT_NOT_NULL(meta);
@@ -261,7 +261,7 @@ TEST(test_parse_metadata_mixed) {
         // doc_value should be a string "test"
         TEST_ASSERT_TRUE((CljObject*)doc_value && TAG((CljObject*)doc_value) == CLJ_STRING);
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     evalstate_free(eval_state);
 }
@@ -568,7 +568,7 @@ TEST(test_parse_nil_literal) {
 // META INFORMATION TESTS
 // ============================================================================
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
 
 TEST(test_meta_set_and_get) {
     EvalState *eval_state = evalstate_new(false);
@@ -766,7 +766,7 @@ TEST(test_meta_clear) {
     evalstate_free(eval_state);
 }
 
-#endif // ENABLE_META
+#endif // META_ENABLED
 
 // ============================================================================
 // READER MACRO #() TESTS

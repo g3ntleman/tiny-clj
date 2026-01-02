@@ -5,8 +5,8 @@
 #include "value.h"
 #include <subjective-c/map.h>
 
-// Meta registry for metadata (only when ENABLE_META is defined)
-#ifdef ENABLE_META
+// Meta registry for metadata (only when META_ENABLED is enabled)
+#if defined(META_ENABLED) && META_ENABLED
 // Forward declarations (to avoid circular dependencies)
 struct Reader;
 struct EvalState;

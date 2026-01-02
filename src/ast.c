@@ -13,7 +13,6 @@ CljASTNode* make_ast_node(ID first, CljObject *rest) {
     node->base.rc = 1;
     node->first = RETAIN(first);
     node->rest = RETAIN(rest);
-    node->metadata = NULL;
     node->callsite_cache = NULL;
 
     return node;
@@ -33,16 +32,6 @@ CljASTNode* as_ast_node(ID obj) {
 
 bool is_ast_node(ID obj) {
     return obj && TAG(obj) == CLJ_AST_NODE;
-}
-
-void ast_node_set_metadata(CljASTNode *node, CljObject *meta) {
-    if (!node) return;
-    ASSIGN(node->metadata, meta);
-}
-
-CljObject* ast_node_get_metadata(const CljASTNode *node) {
-    if (!node) return NULL;
-    return node->metadata;
 }
 
 void ast_node_set_callsite_cache(CljASTNode *node, CljObject *cache) {

@@ -159,7 +159,7 @@ void* throw_exception_formatted(const char *type, const char *file, int line, in
     // Use generic RuntimeException if type is NULL
     const char *exception_type = (type != NULL) ? type : EXCEPTION_RUNTIME;
 
-#ifdef DISABLE_STRING_FORMATTING
+#if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
     // Embedded size build: avoid pulling in printf/vsnprintf formatting code.
     // Keep the callsites/API but sacrifice formatted messages.
     const char *msg = (format != NULL) ? format : "Err";

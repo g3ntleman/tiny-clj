@@ -2571,7 +2571,7 @@ ID native_meta(ID *args, unsigned int argc) {
         return NULL; // nil -> nil
     }
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // If obj is a symbol, resolve it to get the actual value (function, var, etc.)
     // This allows (meta trim) to work by resolving trim to the function first
     ID target_obj = obj;
@@ -2591,7 +2591,7 @@ ID native_meta(ID *args, unsigned int argc) {
         RETAIN(meta); // meta_get doesn't retain, so we need to retain for return
         return meta;
     }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
     return NULL; // No metadata -> nil
 }
@@ -2622,7 +2622,7 @@ ID native_with_meta(ID *args, unsigned int argc) {
         return NULL;
     }
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
     // Set metadata on the object
     // NOTE: This mutates the object. For true immutability, we'd need to copy.
     // For now, this matches the common pattern in embedded Clojure implementations.
@@ -4856,7 +4856,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
         ns_define(target_ns, symbol, func_obj);
 
         // Add metadata to native function (:name and :ns)
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
         // Ensure special symbols are initialized
         init_special_symbols();
 
@@ -4881,7 +4881,7 @@ static void register_builtin_in_core(const char *cname, BuiltinFn func) {
             meta_set(func_obj, meta_map);
             RELEASE(meta_map);
         }
-#endif // ENABLE_META
+#endif // META_ENABLED
 
         // Builtin registered successfully
     } else {

@@ -106,6 +106,22 @@ This helps identify which build configuration is currently active and how it was
 - **Memory:** Manual reference counting with `retain`, `release`, and `autorelease` pools
 - **REPL:** Supports `--no-core`, `-e/--eval`, and `-f/--file` for scripted evaluation
 
+## Feature Flags
+
+Feature flags are compile-time defines. All feature toggles are **positive** `*_ENABLED` macros (use `0`/`1`). `DEBUG` is separate.
+
+Common flags:
+- `META_ENABLED` (metadata support)
+- `MEMORY_PROFILER_ENABLED` (compile the memory-profiler implementation)
+- `MEMORY_PROFILING_ENABLED` (activate profiling hooks/macros)
+- `LINE_EDITING_ENABLED` (REPL line editor)
+- `STRING_FORMATTING_ENABLED` (formatted exceptions via `vsnprintf`)
+- `ERROR_MESSAGES_ENABLED` (full error message strings)
+- `COMPLEX_PARSING_ENABLED` (vector/map parsing helpers)
+- `REPL_ENABLED` (REPL features; embedded builds typically set `0`)
+
+Note: `ZOMBIE_ENABLED` is a debug aid for lifetime bugs (does not reflect real freeing).
+
 ## Deviations from Clojure
 
 Tiny-CLJ aims to follow Clojure closely, but there are some intentional differences:

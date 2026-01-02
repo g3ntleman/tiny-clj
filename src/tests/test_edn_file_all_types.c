@@ -73,6 +73,14 @@ TEST(test_edn_file_all_supported_types) {
 
     size_t len = 0;
     char *src = read_entire_file(path, &len);
+    if (!src && errno == ENOENT && path[0] != '/') {
+        char alt[1024];
+        snprintf(alt, sizeof(alt), "../%s", path);
+        src = read_entire_file(alt, &len);
+        if (src) {
+            snprintf(path, sizeof(path), "%s", alt);
+        }
+    }
     if (!src) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Failed to read EDN fixture: %s (errno=%d)", path, errno);

@@ -403,7 +403,7 @@ TEST(test_meta_contains_line_info) {
     assert_meta_has_line_info(meta_result, "(meta nil?) should include :line metadata");
 }
 
-#ifdef ENABLE_META
+#if defined(META_ENABLED) && META_ENABLED
 // ============================================================================
 // TEST: Clojure metadata semantics
 // ============================================================================
