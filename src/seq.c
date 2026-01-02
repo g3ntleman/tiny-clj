@@ -10,8 +10,8 @@
 #include "eval.h"      // eval_function_call
 #include "value.h"
 #include "list.h"
-#include "vector.h"
-#include "strings.h"
+#include <subjective-c/vector.h>
+#include <subjective-c/strings.h>
 #include <subjective-c/map.h>
 #include "symbol.h"
 #include <string.h>

@@ -3,6 +3,7 @@
 ;; TODO: time-now muss noch implementiert werden
 
 ;; Benchmark-System
+^#^{:doc "Führt func iterations-mal aus und liefert eine Ergebnis-Map mit Timing-Daten (in Mikrosekunden)."}
 (defn run-benchmark [name func iterations]
   (let [start-time (time-now)
         _ (dotimes [i iterations] (func))
@@ -13,6 +14,7 @@
      :duration-micros duration
      :avg-per-iteration (/ duration iterations)}))
 
+^#^{:doc "Gibt ein Benchmark-Ergebnis (Map aus run-benchmark) menschenlesbar auf stdout aus."}
 (defn print-benchmark-result [result]
   (println (str "📊 " (:name result) ":"))
   (println (str "   Iterations: " (:iterations result)))
@@ -20,9 +22,11 @@
   (println (str "   Avg per iteration: " (:avg-per-iteration result) "μs"))
   (println ""))
 
+^#^{:doc "Formatiert ein einzelnes Benchmark-Ergebnis als eine Textzeile."}
 (defn format-benchmark-result [result]
   (str (:name result) ": " (:duration-micros result) "μs (avg: " (:avg-per-iteration result) "μs)\n"))
 
+^#^{:doc "Formatiert eine Sequenz von Benchmark-Ergebnissen zu einem String."}
 (defn format-all-results [results]
   (if (empty? results)
     ""
@@ -32,6 +36,7 @@
         first-result
         (str first-result (format-all-results rest-results))))))
 
+^#^{:doc "Speichert Benchmark-Ergebnisse in eine Datei (über spit) und gibt den Zielpfad aus."}
 (defn save-benchmark-results [results filename]
   (let [content (str "Benchmark Results:\n"
                      "================\n\n"
@@ -39,6 +44,7 @@
     (spit filename content)
     (println (str "✅ Results saved to " filename))))
 
+^#^{:doc "Führt alle Benchmarks aus, druckt Ergebnisse, und speichert sie in benchmark_results.clj."}
 (defn run-all-benchmarks []
   (println "🚀 Clojure Benchmark System")
   (println "============================")

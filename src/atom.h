@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_ATOM_H
 #define TINY_CLJ_ATOM_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "common.h"  // For CLJ_ASSERT
 
 // CljAtom struct definition

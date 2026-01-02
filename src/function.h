@@ -1,9 +1,9 @@
 #ifndef TINY_CLJ_FUNCTION_H
 #define TINY_CLJ_FUNCTION_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include <subjective-c/map.h>
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "list.h"
 #include <stdint.h>
 
@@ -21,8 +21,8 @@ typedef struct {
     CljVector *params;  // Parameter vector (can be NULL if no parameters)
     ID body;  // Function body (AST to evaluate)
     CljList *env_stack;  // Environment stack (list of maps) - idiomatic Clojure-style
-    const char *name;
-    struct CljNamespace *ns;
+    const char *name; // could we reference a symbol here instead?
+    struct CljNamespace *ns;  // could we reference a symbol here instead?
     int8_t variadic_index;  // -1 = not variadic, >= 0 = index of & in params
 } CljFunction;
 

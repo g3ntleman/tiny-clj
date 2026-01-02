@@ -6,7 +6,7 @@
  */
 
 #include "value.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "memory.h"
 #include <stdio.h>

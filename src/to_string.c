@@ -35,6 +35,9 @@
 #include "runtime.h"
 #include "regex.h"
 
+#include <subjective-c/instant.h>
+#include <subjective-c/uuid.h>
+
 // Global flag for special form rendering mode
 static bool g_print_special_forms_as_tags = true;
 
@@ -260,6 +263,19 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             const char *pattern = regex_pattern_string(re);
             // Format: #"pattern"
             return 3 + strlen(pattern); // 2 chars (#") + pattern + closing "
+        }
+
+        case CLJ_INSTANT: {
+            CljInstant *inst = (CljInstant*)v;
+            char buf[64];
+            return (size_t)snprintf(buf, sizeof(buf), "#inst {:days %d :ms %d}", inst->days, inst->ms);
+        }
+
+        case CLJ_UUID: {
+            char uuid[37];
+            clj_uuid_to_cstring((ID)v, uuid);
+            char buf[80];
+            return (size_t)snprintf(buf, sizeof(buf), "#uuid \"%s\"", uuid);
         }
 
         default:
@@ -497,6 +513,21 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 if (!first) {
                     buffer[*offset] = ' ';
                     *offset += 1;
+
+        case CLJ_INSTANT: {
+            CljInstant *inst = (CljInstant*)v;
+            int written = snprintf(buffer + *offset, 64, "#inst {:days %d :ms %d}", inst->days, inst->ms);
+            *offset += (size_t)written;
+            return;
+        }
+
+        case CLJ_UUID: {
+            char uuid[37];
+            clj_uuid_to_cstring((ID)v, uuid);
+            int written = snprintf(buffer + *offset, 80, "#uuid \"%s\"", uuid);
+            *offset += (size_t)written;
+            return;
+        }
                 }
                 to_string_build_string(element, buffer, offset, escape_strings);
                 first = false;

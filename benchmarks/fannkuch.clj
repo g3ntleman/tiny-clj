@@ -6,6 +6,7 @@
 ;; TODO: Replace with (ns clojure.benchmarksgame.fannkuch) when require/use available
 
 ;; === Benchmark Implementation ===
+^#^{:doc "Runs the fannkuch benchmark for n and prints checksum and max flips."}
 (defn fannkuch [n]
   (let [count (atom 0)
         max-flips (atom 0)

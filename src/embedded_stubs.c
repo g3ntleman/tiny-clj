@@ -5,7 +5,7 @@
  * This file is only compiled when DISABLE_* flags are set.
  */
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include "memory.h"
 

@@ -95,10 +95,15 @@
 ;; =============================================================================
 
 ^#^{:doc "Converts a raw timestamp {:days d :ms m} to a full date-time map with :year :month :day :hour :minute :second :millis. Original :days and :ms are preserved."}
-(defn date-time [{:keys [days ms] :as raw}]
-  (merge raw
-         (civil-from-days days)
-         (time-from-millis ms)))
+(defn date-time [t]
+  (let [{:keys [days ms] :as raw}
+        (cond
+          (instant? t) {:days (instant-days t) :ms (instant-ms t)}
+          (map? t) t
+          :else (throw (Exception. "date-time expects an Instant or map")))]
+    (merge raw
+           (civil-from-days days)
+           (time-from-millis ms))))
 
 ^#^{:doc "Converts a date-time map back to raw {:days :ms} format. Uses existing :days/:ms if present, otherwise calculates from components."}
 (defn to-raw [{:keys [days ms year month day hour minute second millis] :as dt}]

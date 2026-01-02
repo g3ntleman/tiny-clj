@@ -1,5 +1,6 @@
 ;; Simple Fibonacci Benchmark for tiny-clj
 
+^#^{:doc "Computes Fibonacci(n) using the classic naive recursive definition."}
 (defn fib [n]
   (if (< n 2)
     n

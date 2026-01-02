@@ -2,8 +2,8 @@
 #include "common.h"
 #include "exception.h"
 #include "memory.h"
-#include "strings.h"
-#include "vector.h"
+#include <subjective-c/strings.h>
+#include <subjective-c/vector.h>
 
 #include <string.h>
 

@@ -2,6 +2,7 @@
 ;; Tests more complex expressions where performance differences should be visible
 
 ;; Test 1: Nested def operations (should show Builtin advantage)
+^#^{:doc "Benchmark: repeatedly defines vars via (def (symbol ...))."}
 (defn test-nested-defs []
   (let [iterations 1000]
     (time
@@ -9,6 +10,7 @@
         (def (symbol (str "test-var-" i)) i)))))
 
 ;; Test 2: Multiple namespace switches (should show Builtin advantage)
+^#^{:doc "Benchmark: repeatedly switches namespaces and defines a var."}
 (defn test-namespace-switches []
   (let [iterations 100]
     (time
@@ -17,6 +19,7 @@
         (def test-var i)))))
 
 ;; Test 3: Complex arithmetic with multiple operations
+^#^{:doc "Benchmark: arithmetic loop with +/*/-// operations."}
 (defn test-complex-arithmetic []
   (let [iterations 10000]
     (time
@@ -24,6 +27,7 @@
         (+ (* i 2) (- i 1) (/ i 2))))))
 
 ;; Test 4: Function calls with multiple arguments
+^#^{:doc "Benchmark: loop with a single + call over multiple args."}
 (defn test-function-calls []
   (let [iterations 5000]
     (time
@@ -31,6 +35,7 @@
         (+ i i i i i)))))
 
 ;; Test 5: Nested function calls
+^#^{:doc "Benchmark: loop with nested arithmetic expressions."}
 (defn test-nested-calls []
   (let [iterations 2000]
     (time

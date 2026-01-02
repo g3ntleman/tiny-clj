@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include <subjective-c/map.h>
 #include "list.h"

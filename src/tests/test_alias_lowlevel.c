@@ -9,7 +9,7 @@
 #include "namespace.h"
 #include "function_call.h"
 #include "value.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "builtins.h"
 #include <sys/stat.h>
 #include <errno.h>

@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_META_H
 #define TINY_CLJ_META_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include <subjective-c/map.h>
 

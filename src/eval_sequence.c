@@ -6,7 +6,7 @@
 #include "error_messages.h"
 #include <subjective-c/map.h>
 #include "seq.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 
 ID eval_and_call_native_with_context(CljList *list,
                                      CljMap *env,

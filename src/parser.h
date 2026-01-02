@@ -11,7 +11,7 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "exception.h"
 #include "reader.h"
 #include "value.h"  // Must be included before namespace.h (value.h includes symbol.h)

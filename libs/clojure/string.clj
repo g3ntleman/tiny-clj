@@ -10,6 +10,7 @@
 
 ;; Helper: Check if character is whitespace
 ;; Using character literals (now supported in tiny-clj)
+^#^{:doc "Returns true if character c is whitespace (space, tab, newline, or return)."}
 (defn whitespace? [c]
   (or (= c \space)
       (= c \tab)
@@ -21,6 +22,7 @@
 ;; ============================================================================
 
 ;; blank? - True if s is nil, empty, or contains only whitespace
+^#^{:doc "Returns true if s is nil, empty, or contains only whitespace."}
 (defn blank? [s]
   (if (nil? s)
     true
@@ -30,6 +32,7 @@
         (= (count trimmed) 0)))))
 
 ;; capitalize - Converts first character to upper-case, rest to lower-case
+^#^{:doc "Returns s with its first character upper-cased and the rest lower-cased. Returns s unchanged if nil or empty."}
 (defn capitalize [s]
   (if (or (nil? s) (= (count s) 0))
     s
@@ -38,6 +41,7 @@
       (str (clojure.string/upper-case first-char) (clojure.string/lower-case rest-str)))))
 
 ;; ends-with? - True if s ends with substr
+^#^{:doc "Returns true if string s ends with substring substr."}
 (defn ends-with? [s substr]
   (if (or (nil? s) (nil? substr))
     false
@@ -51,6 +55,7 @@
             (= last-idx (- s-len substr-len))))))))
 
 ;; escape - Escapes characters using cmap
+^#^{:doc "Returns a string where each character of s is replaced using cmap when present. cmap maps 1-character strings to replacement values."}
 (defn escape [s cmap]
   (if (or (nil? s) (= (count s) 0))
     s
@@ -70,10 +75,12 @@
           (clojure.string/join "" result))))))
 
 ;; includes? - True if s includes substr
+^#^{:doc "Returns true if s contains substr."}
 (defn includes? [s substr]
   (not (nil? (index-of s substr nil))))
 
 ;; index-of - Returns index of value in s, optionally searching from from-index
+^#^{:doc "Returns the index of value in s, or nil if not found. If from-index is provided, starts searching from that index."}
 (defn index-of [s value from-index]
   (if (or (nil? s) (nil? value))
     nil
@@ -92,6 +99,7 @@
           (step s value s-len value-len start-idx))))))
 
 ;; join - Joins collection with separator
+^#^{:doc "Joins the strings in coll, inserting separator between elements. Treats nil separator as \"\"."}
 (defn join [separator coll]
   (if (empty? coll)
     ""
@@ -103,6 +111,7 @@
         (str first-elem sep (join sep rest-coll))))))
 
 ;; join2 - Iterative implementation using recur (works without TCO)
+^#^{:doc "Joins coll with separator like join, using an iterative strategy to avoid deep recursion."}
 (defn join2 [separator coll]
   (if (empty? coll)
     ""
@@ -150,6 +159,7 @@
 (defn reverse [s] :native)
 
 ;; starts-with? - True if s starts with substr
+^#^{:doc "Returns true if string s starts with substring substr."}
 (defn starts-with? [s substr]
   (if (or (nil? s) (nil? substr))
     false
@@ -161,6 +171,7 @@
 (defn trim [s] :native)
 
 ;; triml - Removes whitespace from left
+^#^{:doc "Removes leading whitespace from string s. Returns s unchanged if nil or empty."}
 (defn triml [s]
   (if (or (nil? s) (= (count s) 0))
     s
@@ -175,6 +186,7 @@
       (trim-left s 0))))
 
 ;; trimr - Removes whitespace from right
+^#^{:doc "Removes trailing whitespace from string s. Returns s unchanged if nil or empty."}
 (defn trimr [s]
   (if (or (nil? s) (= (count s) 0))
     s
@@ -189,6 +201,7 @@
       (trim-right s (- (count s) 1)))))
 
 ;; trim-newline - Removes trailing newlines
+^#^{:doc "Removes trailing newline characters (\\n and \\r) from string s."}
 (defn trim-newline [s]
   (if (or (nil? s) (= (count s) 0))
     s
@@ -212,6 +225,7 @@
 
 ;; split - Splits string on separator (String or Regex)
 ;; String version works without TRE
+^#^{:doc "Splits string s on separator re (currently treated as a string). Optional limit behaves like Clojure's split: when >0, returns at most limit parts."}
 (defn split [s re limit]
   (if (nil? s)
     nil
@@ -246,6 +260,7 @@
 
 ;; replace - Replaces all instances of match with replacement
 ;; String version works without TRE
+^#^{:doc "Replaces all occurrences of match in s with replacement. Currently supports string match (no regex)."}
 (defn replace [s match replacement]
   (if (or (nil? s) (nil? match))
     s
@@ -276,6 +291,7 @@
 
 ;; replace-first - Replaces first instance of match with replacement
 ;; String version works without TRE
+^#^{:doc "Replaces the first occurrence of match in s with replacement. Currently supports string match (no regex)."}
 (defn replace-first [s match replacement]
   (if (or (nil? s) (nil? match))
     s
@@ -294,6 +310,7 @@
             (str before replacement after)))))))
 
 ;; split-lines - Splits on newlines
+^#^{:doc "Splits string s into lines. Normalizes CRLF (\\r\\n) to LF (\\n) first."}
 (defn split-lines [s]
   (if (or (nil? s) (= (count s) 0))
     (vector)
@@ -307,6 +324,7 @@
 ;; ============================================================================
 
 ;; re-quote-replacement - Escapes replacement string
+^#^{:doc "Escapes replacement string s for use in regex replacement contexts by prefixing $ and \\ with \\\\ (string-based implementation)."}
 (defn re-quote-replacement [s]
   (if (or (nil? s) (= (count s) 0))
     s

@@ -1,6 +1,6 @@
 #include "debug.h"
-#include "object.h"
-#include "strings.h"
+#include <subjective-c/object.h>
+#include <subjective-c/strings.h>
 #include "list.h"
 #include "symbol.h"
 #include "value.h"

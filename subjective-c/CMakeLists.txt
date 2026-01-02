@@ -13,6 +13,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(SUBJECTIVE_C_SOURCES
     subjective_c_init.c
     value.c
+    types.c
     memory.c
     strings.c
     vector.c
@@ -21,6 +22,8 @@ set(SUBJECTIVE_C_SOURCES
     byte_array.c
     hashmap.c
     callbacks.c
+    instant.c
+    uuid.c
 )
 
 add_library(subjective-c STATIC ${SUBJECTIVE_C_SOURCES})
@@ -79,7 +82,7 @@ set(SUBJECTIVE_C_TEST_SOURCES
     ${CMAKE_SOURCE_DIR}/src/equality.c
     ${CMAKE_SOURCE_DIR}/src/error_messages.c
     ${CMAKE_SOURCE_DIR}/src/object.c
-    ${CMAKE_SOURCE_DIR}/src/types.c
+    ${CMAKE_SOURCE_DIR}/subjective-c/types.c
     ${CMAKE_SOURCE_DIR}/src/list.c
 )
 

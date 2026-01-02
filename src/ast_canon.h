@@ -1,7 +1,7 @@
 #ifndef AST_CANON_H
 #define AST_CANON_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "namespace.h"
 
 /**

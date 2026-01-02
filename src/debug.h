@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_DEBUG_H
 #define TINY_CLJ_DEBUG_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include <stdio.h>
 #include <stdbool.h>
 

@@ -2,20 +2,24 @@
 ;; Testet nur die grundlegenden Funktionen
 
 ;; Benchmark-Funktionen
+^#^{:doc "Berechnet Fibonacci(n) iterativ über tail-recursion (via fib-helper)."}
 (defn fib [n] 
   (if (< n 2) 
     n 
     (fib-helper 0 1 n)))
 
+^#^{:doc "Helper für fib: führt i Schritte einer Fibonacci-Iteration aus (tail-recursive)."}
 (defn fib-helper [a b i] 
   (if (= i 0) 
     a 
     (recur b (+ a b) (- i 1))))
 
+^#^{:doc "Einfacher Arithmetic-Workload für Benchmarking."}
 (defn test-arithmetic [] 
   (+ 1 2 3 4 5))
 
 ;; Einfacher Benchmark-Test
+^#^{:doc "Führt einen minimalen Benchmark-Lauf aus (Fibonacci + Arithmetic + Timing)."}
 (defn simple-benchmark []
   (println "🚀 Simple Benchmark Test")
   (println "========================")

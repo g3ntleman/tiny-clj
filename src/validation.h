@@ -1,7 +1,7 @@
 #ifndef VALIDATION_H
 #define VALIDATION_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include <stdbool.h>
 

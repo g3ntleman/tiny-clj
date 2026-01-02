@@ -8,7 +8,7 @@
 #include "namespace.h"
 #include "symbol.h"
 #include <subjective-c/map.h>
-#include "object.h"
+#include <subjective-c/object.h>
 #include "kv_macros.h"
 #include "value.h"
 #include "to_string.h"

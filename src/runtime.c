@@ -4,7 +4,7 @@
 // It's not directly used in runtime.c, but namespace.h needs it for CljSymbol definition
 #include "namespace.h"
 #include "meta.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "memory.h"
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()

@@ -2,7 +2,7 @@
 #define NUMERIC_UTILS_H
 
 #include "value.h"
-#include "object.h"
+#include <subjective-c/object.h>
 
 /**
  * @brief Extract numeric values from two CljObjects and promote them to float

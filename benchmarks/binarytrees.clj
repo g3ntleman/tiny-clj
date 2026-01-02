@@ -6,6 +6,7 @@
 ;; TODO: Replace with (ns clojure.benchmarksgame.binarytrees) when require/use available
 
 ;; === Benchmark Implementation ===
+^#^{:doc "Creates a binary tree represented as [item left right] of given depth."}
 (defn make-tree [item depth]
   (if (zero? depth)
     [item nil nil]
@@ -13,12 +14,14 @@
           d (dec depth)]
       [item (make-tree i d) (make-tree i d)])))
 
+^#^{:doc "Computes the check value of a tree created by make-tree."}
 (defn check-tree [tree]
   (if (nil? tree)
     0
     (let [[item left right] tree]
       (+ item (check-tree left) (check-tree right)))))
 
+^#^{:doc "Runs the binarytrees benchmark for depth n and prints results."}
 (defn binary-trees [n]
   (let [min-depth 4
         max-depth (max (+ min-depth 2) n)]

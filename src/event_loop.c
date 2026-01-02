@@ -6,7 +6,7 @@
 #include "channel.h"
 #include "types.h"  // For ZOMBIE_RC, clj_type_name
 #include "runtime.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "value.h"  // For as_fixnum, clj_true
 #include "kv_macros.h"  // For KV_VALUE

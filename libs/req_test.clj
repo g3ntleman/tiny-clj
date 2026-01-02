@@ -1,6 +1,7 @@
 (ns req-test)
 
 ;; join - Joins collection with separator (copied from clojure.string - complex version)
+^#^{:doc "Joins elements of coll into a string separated by separator (nil treated as \"\"). Returns \"\" for empty coll."}
 (defn join [separator coll]
   (if (empty? coll)
     ""
@@ -34,6 +35,7 @@
           (concat-strings result)))))
 
 ;; Stub implementation of trim function without metadata
+^#^{:doc "Stub implementation of trim; currently returns s unchanged."}
 (defn trim [s]
   (if (or (nil? s) (= (count s) 0))
     s

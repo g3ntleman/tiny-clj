@@ -1,7 +1,7 @@
 #ifndef TINY_CLJ_LIST_H
 #define TINY_CLJ_LIST_H
 
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include "exception.h"
 #include "ast.h"

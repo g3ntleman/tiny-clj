@@ -6,14 +6,17 @@
  */
 
 #include <string.h>
-#include "object.h"
+#include <subjective-c/object.h>
 #include "value.h"
 #include "symbol.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include <subjective-c/map.h>
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "kv_macros.h"
 #include "list.h"
+
+#include <subjective-c/instant.h>
+#include <subjective-c/uuid.h>
 
 // Forward declaration for string_empty_singleton
 extern CljString* string_empty_singleton;
@@ -120,6 +123,18 @@ bool clj_equal_full(ID a, ID b) {
             }
             // Both should be NULL at the same time
             return curr_a == curr_b;
+        }
+
+        case CLJ_INSTANT: {
+            CljInstant *ia = (CljInstant*)a;
+            CljInstant *ib = (CljInstant*)b;
+            return ia->days == ib->days && ia->ms == ib->ms;
+        }
+
+        case CLJ_UUID: {
+            CljUUID *ua = (CljUUID*)a;
+            CljUUID *ub = (CljUUID*)b;
+            return memcmp(ua->bytes, ub->bytes, 16) == 0;
         }
 
         // Reference types - only pointer comparison (already handled by a == b)

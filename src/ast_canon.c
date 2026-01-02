@@ -12,11 +12,11 @@
 
 #include "ast_canon.h"
 #include "common.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "symbol.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "list.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "namespace.h"
 #include "memory.h"

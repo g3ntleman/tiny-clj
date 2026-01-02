@@ -28,8 +28,8 @@
 
 (def hierarchy-registry (atom {}))
 
+^#^{:doc "Fügt eine Hierarchie-Beziehung hinzu: tag ist ein Kind von parent."}
 (defn derive [tag parent]
-  "Fügt eine Hierarchie-Beziehung hinzu: tag ist ein Kind von parent"
   (swap! hierarchy-registry 
          (fn [h]
            (update h tag (fn [parents]
@@ -37,12 +37,12 @@
                             (conj parents parent)
                             #{parent}))))))
 
+^#^{:doc "Gibt die direkten Eltern (Set) eines Tags zurück."}
 (defn parents [tag]
-  "Gibt die direkten Eltern eines Tags zurück"
   (get @hierarchy-registry tag))
 
+^#^{:doc "Gibt alle Vorfahren eines Tags zurück (transitive closure)."}
 (defn ancestors [tag]
-  "Gibt alle Vorfahren eines Tags zurück (transitive closure)"
   (let [direct-parents (parents tag)]
     (if (empty? direct-parents)
       #{}
@@ -56,8 +56,8 @@
             (recur (clojure.set/union result new-parents)
                    (concat (rest to-process) new-parents))))))))
 
+^#^{:doc "Prüft, ob child ein Kind von parent ist (inkl. transitiver Beziehungen)."}
 (defn isa? [child parent]
-  "Prüft ob child ein Kind von parent ist (inkl. transitiver Beziehungen)"
   (or (= child parent)
       (contains? (ancestors child) parent)))
 
@@ -71,8 +71,8 @@
 ;; 2. Die Dispatch-Funktion speichern
 ;; 3. Eine leere Method-Registry initialisieren
 
+^#^{:doc "Erstellt eine neue Multi-Method und registriert sie in multi-method-registry."}
 (defn defmulti-impl [name dispatch-fn]
-  "Erstellt eine neue Multi-Method"
   (swap! multi-method-registry 
          (fn [registry]
            (assoc registry name {:dispatch-fn dispatch-fn
@@ -91,8 +91,8 @@
 ;; ----------------------------------------------------------------------------
 ;; Syntax: (defmethod multi-name dispatch-value [params] body)
 
+^#^{:doc "Fügt eine Methode (method-fn) für dispatch-value zu einer Multi-Method hinzu."}
 (defn defmethod-impl [multi-name dispatch-value method-fn]
-  "Fügt eine Methode zu einer Multi-Method hinzu"
   (swap! multi-method-registry
          (fn [registry]
            (let [mm (get registry multi-name)]
@@ -106,8 +106,8 @@
 ;; Method-Auswahl zur Laufzeit
 ;; ----------------------------------------------------------------------------
 
+^#^{:doc "Findet die passende Methode für dispatch-value aus methods (exakt oder via Hierarchie)."}
 (defn find-matching-method [methods dispatch-value]
-  "Findet die passende Methode für einen Dispatch-Wert"
   ;; 1. Exakte Übereinstimmung
   (if-let [method (get methods dispatch-value)]
     method
@@ -126,8 +126,8 @@
                                 candidates)]
             (second (first sorted))))))))
 
+^#^{:doc "Dispatcht eine Multi-Method anhand ihres :dispatch-fn und wendet die passende Methode auf args an."}
 (defn multi-method-dispatch [multi-name args]
-  "Führt den Dispatch für eine Multi-Method aus"
   (let [mm (get @multi-method-registry multi-name)]
     (if (not mm)
       (throw (Exception. (str "Multi-method " multi-name " not found"))))
@@ -170,8 +170,8 @@
 ;; ----------------------------------------------------------------------------
 
 ;; prefer-method: Priorität für Methoden mit gleicher Spezifität
+^#^{:doc "Setzt eine Präferenz: dispatch-val-x wird dispatch-val-y vorgezogen (bei gleicher Spezifität)."}
 (defn prefer-method-impl [multi-name dispatch-val-x dispatch-val-y]
-  "Setzt Priorität: dispatch-val-x wird dispatch-val-y vorgezogen"
   (swap! multi-method-registry
          (fn [registry]
            (let [mm (get registry multi-name)]
@@ -187,8 +187,8 @@
                registry)))))
 
 ;; remove-method: Entfernt eine Methode
+^#^{:doc "Entfernt die Methode für dispatch-value aus einer Multi-Method."}
 (defn remove-method-impl [multi-name dispatch-value]
-  "Entfernt eine Methode aus einer Multi-Method"
   (swap! multi-method-registry
          (fn [registry]
            (let [mm (get registry multi-name)]

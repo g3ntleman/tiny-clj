@@ -6,16 +6,16 @@
 #include "eval.h"  // For eval_parsed_value
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
-#include "object.h"
+#include <subjective-c/object.h>
 #include "exception.h"
 #include "builtins.h"
 #include "memory_profiler.h"
 #include "line_editor.h"
-#include "strings.h"
+#include <subjective-c/strings.h>
 #include "to_string.h"
 #include "reader.h"
 #include "runtime.h"
-#include "vector.h"
+#include <subjective-c/vector.h>
 #include "memory.h"
 #include "value.h"
 #include "event_loop.h"

@@ -1,6 +1,7 @@
 ;; Computer Language Benchmarks Game - Simple Binary Trees
 ;; Simplified version for tiny-clj compatibility
 
+^#^{:doc "Creates a binary tree represented as [item left right] of given depth."}
 (defn make-tree [item depth]
   (if (zero? depth)
     [item nil nil]
@@ -8,6 +9,7 @@
           d (- depth 1)]
       [item (make-tree i d) (make-tree i d)])))
 
+^#^{:doc "Computes the check value of a tree created by make-tree."}
 (defn check-tree [tree]
   (if (nil? tree)
     0
