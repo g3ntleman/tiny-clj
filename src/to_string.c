@@ -268,7 +268,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_INSTANT: {
             CljInstant *inst = (CljInstant*)v;
             char buf[64];
-            return (size_t)snprintf(buf, sizeof(buf), "#inst {:days %d :ms %d}", inst->days, inst->ms);
+            return (size_t)snprintf(buf, sizeof(buf), "#inst {:days %d :ms %u}", inst->days, (unsigned)inst->ms);
         }
 
         case CLJ_UUID: {
@@ -513,10 +513,19 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 if (!first) {
                     buffer[*offset] = ' ';
                     *offset += 1;
+                }
+                to_string_build_string(element, buffer, offset, escape_strings);
+                first = false;
+                seq_iter_next(&temp_iter);
+            }
+            buffer[*offset] = ')';
+            *offset += 1;
+            return;
+        }
 
         case CLJ_INSTANT: {
             CljInstant *inst = (CljInstant*)v;
-            int written = snprintf(buffer + *offset, 64, "#inst {:days %d :ms %d}", inst->days, inst->ms);
+            int written = snprintf(buffer + *offset, 64, "#inst {:days %d :ms %u}", inst->days, (unsigned)inst->ms);
             *offset += (size_t)written;
             return;
         }
@@ -526,15 +535,6 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             clj_uuid_to_cstring((ID)v, uuid);
             int written = snprintf(buffer + *offset, 80, "#uuid \"%s\"", uuid);
             *offset += (size_t)written;
-            return;
-        }
-                }
-                to_string_build_string(element, buffer, offset, escape_strings);
-                first = false;
-                seq_iter_next(&temp_iter);
-            }
-            buffer[*offset] = ')';
-            *offset += 1;
             return;
         }
 
