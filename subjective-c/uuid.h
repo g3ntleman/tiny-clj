@@ -8,7 +8,12 @@
 typedef struct CljUUID {
     CljObject base;
     uint8_t bytes[16];
+    uint32_t hash;
 } CljUUID;
+
+// UUIDs are immutable, so their hash can be computed lazily and cached.
+// Convention: hash==0 means "not computed yet" (rarely, a real hash could be 0;
+// in that case it will be recomputed on each call, but correctness is preserved).
 
 static inline bool clj_is_uuid(ID v) {
     return TAG(v) == CLJ_UUID;
