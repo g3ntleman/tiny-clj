@@ -741,7 +741,12 @@ static ID parse_character(Reader *reader, EvalState *st) {
   }
   cname[pos] = '\0';
 
-  if (pos > 0) {
+  if (pos == 1) {
+    // Single-character literal (e.g. \a, \1, \n)
+    return character((unsigned char)cname[0]);
+  }
+
+  if (pos > 1) {
     // Named character literal - use switch on first char for performance
     switch (cname[0]) {
       case 's':

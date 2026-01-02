@@ -1,0 +1,167 @@
+#include "tests_common.h"
+
+#include <errno.h>
+
+static char *read_entire_file(const char *path, size_t *out_len) {
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        return NULL;
+    }
+
+    if (fseek(fp, 0, SEEK_END) != 0) {
+        fclose(fp);
+        return NULL;
+    }
+
+    long size = ftell(fp);
+    if (size < 0) {
+        fclose(fp);
+        return NULL;
+    }
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        fclose(fp);
+        return NULL;
+    }
+
+    char *buf = (char*)malloc((size_t)size + 1);
+    if (!buf) {
+        fclose(fp);
+        return NULL;
+    }
+
+    size_t n = fread(buf, 1, (size_t)size, fp);
+    fclose(fp);
+
+    if (n != (size_t)size) {
+        free(buf);
+        return NULL;
+    }
+
+    buf[n] = '\0';
+    if (out_len) {
+        *out_len = n;
+    }
+    return buf;
+}
+
+static void build_fixture_path(char *out, size_t out_size) {
+    const char *self = __FILE__;
+    const char *slash = strrchr(self, '/');
+    if (!slash) {
+        snprintf(out, out_size, "fixtures/all_types.edn");
+        return;
+    }
+    size_t dir_len = (size_t)(slash - self);
+    snprintf(out, out_size, "%.*s/fixtures/all_types.edn", (int)dir_len, self);
+}
+
+static ID map_get_required(CljMap *m, const char *kw_name) {
+    CljSymbol *kw = intern_symbol_global(kw_name);
+    TEST_ASSERT_NOT_NULL(kw);
+    ID v = map_get(m, (ID)kw, NOT_FOUND);
+    TEST_ASSERT_NOT_NULL_MESSAGE(v, kw_name);
+    TEST_ASSERT_NOT_EQUAL_MESSAGE((ID)NOT_FOUND, v, kw_name);
+    return v;
+}
+
+TEST(test_edn_file_all_supported_types) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    char path[1024];
+    build_fixture_path(path, sizeof(path));
+
+    size_t len = 0;
+    char *src = read_entire_file(path, &len);
+    if (!src) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Failed to read EDN fixture: %s (errno=%d)", path, errno);
+        TEST_FAIL_MESSAGE(msg);
+    }
+
+    Reader reader;
+    reader_init_with_source(&reader, src, path);
+
+    ID parsed = parse_expr(&reader, g_test_eval_state);
+
+    TEST_ASSERT_NOT_NULL(parsed);
+    TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(parsed));
+
+    reader_skip_all(&reader);
+    TEST_ASSERT_TRUE(reader_is_eof(&reader));
+
+    CljMap *m = as_map(parsed);
+    TEST_ASSERT_NOT_NULL(m);
+
+    // nil literal is represented as SYM_NIL by this parser
+    ID v_nil = map_get_required(m, ":nil");
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(v_nil));
+    TEST_ASSERT_EQUAL_PTR(SYM_NIL, v_nil);
+
+    ID v_true = map_get_required(m, ":true");
+    TEST_ASSERT_EQUAL_PTR(clj_true, v_true);
+
+    ID v_false = map_get_required(m, ":false");
+    TEST_ASSERT_EQUAL_PTR(clj_false, v_false);
+
+    assert_fixnum((CljObject*)map_get_required(m, ":int"), 42);
+    assert_fixnum((CljObject*)map_get_required(m, ":neg-int"), -7);
+
+    free(src);
+
+    ID v_float = map_get_required(m, ":float");
+    TEST_ASSERT_TRUE(is_fixed(v_float));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.5f, (float)as_fixed(v_float));
+
+    assert_string((CljObject*)map_get_required(m, ":string"), "hello\nworld");
+    assert_string((CljObject*)map_get_required(m, ":escaped"), "quote: \" backslash: \\");
+
+    ID v_char_a = map_get_required(m, ":char-a");
+    TEST_ASSERT_TRUE(is_character(v_char_a));
+    TEST_ASSERT_EQUAL_INT('a', (int)as_character(v_char_a));
+
+    ID v_char_nl = map_get_required(m, ":char-newline");
+    TEST_ASSERT_TRUE(is_character(v_char_nl));
+    TEST_ASSERT_EQUAL_INT('\n', (int)as_character(v_char_nl));
+
+    ID v_kw = map_get_required(m, ":keyword");
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(v_kw));
+    TEST_ASSERT_EQUAL_STRING(":kw", as_symbol((CljValue)v_kw)->cname);
+
+    ID v_sym = map_get_required(m, ":symbol");
+    TEST_ASSERT_EQUAL_INT(CLJ_SYMBOL, TAG(v_sym));
+    TEST_ASSERT_EQUAL_STRING("foo", as_symbol((CljValue)v_sym)->cname);
+
+    ID v_vec = map_get_required(m, ":vector");
+    assert_vector((CljObject*)v_vec);
+    CljVector *vec = as_vector(v_vec);
+    TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 0)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(vector_nth(vec, 1)));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(vec, 2)));
+
+    ID v_list = map_get_required(m, ":list");
+    assert_list((CljObject*)v_list);
+    TEST_ASSERT_EQUAL_INT(3, list_count(as_list(v_list)));
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(list_nth(as_list(v_list), 0)));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(list_nth(as_list(v_list), 1)));
+    TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_nth(as_list(v_list), 2)));
+
+    ID v_map = map_get_required(m, ":map");
+    assert_map((CljObject*)v_map);
+    CljMap *inner = as_map(v_map);
+    ID a_val = map_get(inner, (ID)intern_symbol_global(":a"), NOT_FOUND);
+    ID b_val = map_get(inner, (ID)intern_symbol_global(":b"), NOT_FOUND);
+    TEST_ASSERT_NOT_EQUAL((ID)NOT_FOUND, a_val);
+    TEST_ASSERT_NOT_EQUAL((ID)NOT_FOUND, b_val);
+    TEST_ASSERT_EQUAL_INT(1, as_fixnum(a_val));
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(b_val));
+
+    ID v_empty_vec = map_get_required(m, ":empty-vector");
+    assert_vector((CljObject*)v_empty_vec);
+    TEST_ASSERT_EQUAL_INT(0, vector_count(as_vector(v_empty_vec)));
+
+    ID v_empty_map = map_get_required(m, ":empty-map");
+    assert_map((CljObject*)v_empty_map);
+    TEST_ASSERT_EQUAL_INT(0, map_count(as_map(v_empty_map)));
+}
