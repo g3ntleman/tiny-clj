@@ -290,6 +290,7 @@ add_executable(unit-tests
     src/tests/test_memory_leak_fibonacci.c
     src/tests/test_datetime.c
     src/tests/test_instant_uuid.c
+    src/tests/test_edn_file_all_types.c
     src/tests/test_loops.c
     src/tests/test_go_blocks.c
     src/tests/test_fixed_point.c
