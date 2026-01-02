@@ -102,11 +102,14 @@ uint32_t clj_hash_full(ID value) {
         }
         case CLJ_UUID: {
             CljUUID *u = (CljUUID*)value;
-            uint32_t h = FNV1A_OFFSET;
-            for (int i = 0; i < 16; i++) {
-                h = FNV_MIX(h, u->bytes[i]);
+            if (u->hash == 0) {
+                uint32_t h = FNV1A_OFFSET;
+                for (int i = 0; i < 16; i++) {
+                    h = FNV_MIX(h, u->bytes[i]);
+                }
+                u->hash = h;
             }
-            return h;
+            return u->hash;
         }
         default: return (uint32_t)(uintptr_t)value;
     }
