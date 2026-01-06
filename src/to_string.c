@@ -217,6 +217,33 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
             size_t len = 2; // "( )"
             SeqIterator temp_iter = seq->iter;
             bool first = true;
+
+            // Avoid hidden allocations when iterating maps: seq_iter_first() for CLJ_MAP
+            // materializes a temporary entry vector ([k v]). For printing, we can
+            // format that representation directly.
+            if (temp_iter.seq_type == CLJ_MAP) {
+                CljMap *map = (CljMap*)temp_iter.state.map.map;
+                int index = temp_iter.state.map.index;
+                int count = temp_iter.state.map.count;
+                while (map && index < count) {
+                    ID key = (ID)map->data[index * 2];
+                    ID value = (ID)map->data[index * 2 + 1];
+
+                    if (!first) len += 1; // space between seq elements
+
+                    // Entry vector syntax: [k v]
+                    len += 1; // '['
+                    len += to_string_calc_length((CljObject*)key, escape_strings);
+                    len += 1; // space
+                    len += to_string_calc_length((CljObject*)value, escape_strings);
+                    len += 1; // ']'
+
+                    first = false;
+                    index++;
+                }
+                return len;
+            }
+
             while (!seq_iter_empty(&temp_iter)) {
                 CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
                 // nil elements are valid - to_string_calc_length handles NULL
@@ -507,6 +534,38 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             *offset += 1;
             SeqIterator temp_iter = seq->iter;
             bool first = true;
+
+            // Avoid hidden allocations for map sequences (see calc_length variant).
+            if (temp_iter.seq_type == CLJ_MAP) {
+                CljMap *map = (CljMap*)temp_iter.state.map.map;
+                int index = temp_iter.state.map.index;
+                int count = temp_iter.state.map.count;
+                while (map && index < count) {
+                    ID key = (ID)map->data[index * 2];
+                    ID value = (ID)map->data[index * 2 + 1];
+
+                    if (!first) {
+                        buffer[*offset] = ' ';
+                        *offset += 1;
+                    }
+
+                    buffer[*offset] = '[';
+                    *offset += 1;
+                    to_string_build_string((CljObject*)key, buffer, offset, escape_strings);
+                    buffer[*offset] = ' ';
+                    *offset += 1;
+                    to_string_build_string((CljObject*)value, buffer, offset, escape_strings);
+                    buffer[*offset] = ']';
+                    *offset += 1;
+
+                    first = false;
+                    index++;
+                }
+                buffer[*offset] = ')';
+                *offset += 1;
+                return;
+            }
+
             while (!seq_iter_empty(&temp_iter)) {
                 CljObject *element = (CljObject*)seq_iter_first(&temp_iter);
                 // nil elements are valid - to_string_build_string handles NULL
