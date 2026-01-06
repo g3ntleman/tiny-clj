@@ -112,7 +112,7 @@ TEST(test_atom_swap_simple) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
-    if (inc_func) {
+    if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {};
         ID result = atom_swap(atom, inc_func, args, 0);
         TEST_ASSERT_NOT_NULL(result);
@@ -135,7 +135,7 @@ TEST(test_atom_swap_with_args) {
     CljSymbol *plus_sym = intern_symbol_global("+");
     ID plus_func = ns_resolve(g_test_eval_state, plus_sym);
     
-    if (plus_func) {
+    if (plus_func && plus_func != NOT_FOUND) {
         ID args[] = {fixnum(5)};
         ID result = atom_swap(atom, plus_func, args, 1);
         TEST_ASSERT_NOT_NULL(result);
@@ -158,7 +158,7 @@ TEST(test_atom_swap_persists) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
-    if (inc_func) {
+    if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {};
         atom_swap(atom, inc_func, args, 0);
         
@@ -181,7 +181,7 @@ TEST(test_atom_swap_multiple_times) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
-    if (inc_func) {
+    if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {};
         for (int i = 0; i < 5; i++) {
             ID result = atom_swap(atom, inc_func, args, 0);
@@ -239,7 +239,7 @@ TEST(test_atom_builtin_swap_bang) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
-    if (inc_func) {
+    if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {atom, inc_func};
         ID result = native_swap_bang(args, 2);
         TEST_ASSERT_NOT_NULL(result);
@@ -337,7 +337,7 @@ TEST(test_atom_swap_invalid_atom) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
-    if (inc_func) {
+    if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {fixnum(42), inc_func};
         TRY {
             (void)native_swap_bang(args, 2);
@@ -367,7 +367,7 @@ TEST(test_atom_real_world_usage) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     ID inc_func = ns_resolve(g_test_eval_state, inc_sym);
     
-    if (inc_func) {
+    if (inc_func && inc_func != NOT_FOUND) {
         ID args[] = {};
         // Increment multiple times
         for (int i = 0; i < 10; i++) {

@@ -460,7 +460,7 @@ TEST(test_let_lowlevel_eval_arg_symbol_resolution) {
         bool contains = map_contains((CljMap*)let_env, (CljValue)i_sym);
         TEST_ASSERT_TRUE_MESSAGE(contains, "map_contains should find symbol 'i' in let_env");
         
-        CljValue found = map_get((CljMap*)let_env, (CljValue)i_sym, NULL);
+        CljValue found = map_get_sentinel((CljMap*)let_env, (CljValue)i_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(found, "map_get should find symbol 'i' in let_env");
         TEST_ASSERT_TRUE(found && TAG(found) == CLJ_ATOM);
         

@@ -774,7 +774,7 @@ TEST(test_def_isolated_problem) {
     TEST_ASSERT_TRUE(test_value_sym && TAG(test_value_sym) == CLJ_SYMBOL);
 
     CljObject *resolved = ns_resolve(g_test_eval_state, (CljSymbol*)test_value_sym);
-    if (resolved) {
+    if (resolved && resolved != NOT_FOUND) {
         TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "Resolved value should be a fixnum");
         TEST_ASSERT_EQUAL_INT_MESSAGE(42, as_fixnum((CljValue)resolved), "Resolved value should be 42");
         RELEASE(resolved);
@@ -852,7 +852,7 @@ TEST(test_def_function_isolated_problem) {
     }
 
     // Step 5: Try to get the value directly from the map
-    CljObject *direct_map_value = map_get(g_test_eval_state->current_ns->mappings, test_fn_sym, NULL);
+    CljObject *direct_map_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, test_fn_sym, NULL);
     if (direct_map_value) {
         TEST_ASSERT_TRUE_MESSAGE(direct_map_value && TAG(direct_map_value) == CLJ_FUNC || direct_map_value && TAG(direct_map_value) == CLJ_CLOSURE,
                                  "Direct map lookup should return a function");
@@ -862,7 +862,7 @@ TEST(test_def_function_isolated_problem) {
 
     // Step 6: Try to resolve the symbol directly via ns_resolve
     CljObject *resolved = ns_resolve(g_test_eval_state, as_symbol(test_fn_sym));
-    if (resolved) {
+    if (resolved && resolved != NOT_FOUND) {
         TEST_ASSERT_TRUE_MESSAGE(resolved && TAG(resolved) == CLJ_FUNC || resolved && TAG(resolved) == CLJ_CLOSURE,
                                  "Resolved value should be a function");
     } else {

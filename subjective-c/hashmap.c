@@ -88,7 +88,7 @@ static unsigned int find_slot(CljHashMap *map, ID key) {
     return start_idx;
 }
 
-ID hashmap_get(CljHashMap *map, ID key, ID not_found) {
+ID hashmap_get_sentinel(CljHashMap *map, ID key, ID not_found) {
     if (!map) return not_found;
     // key can be NULL (nil is a valid key)
     unsigned int idx = find_slot(map, key);

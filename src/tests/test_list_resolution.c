@@ -17,7 +17,7 @@ TEST(test_list_in_namespace) {
     
     // Try to resolve list from namespace
     CljObject *list_value = ns_resolve(g_test_eval_state, (CljSymbol *)list_sym);
-    TEST_ASSERT_NOT_NULL_MESSAGE(list_value, "list should be resolvable from namespace");
+    TEST_ASSERT_TRUE_MESSAGE(list_value && list_value != NOT_FOUND, "list should be resolvable from namespace");
     
     // Check if it's a function
     TEST_ASSERT_TRUE_MESSAGE(list_value && TAG(list_value) == CLJ_FUNC || list_value && TAG(list_value) == CLJ_CLOSURE,
@@ -60,7 +60,7 @@ TEST(test_list_in_clojure_core_clj) {
     
     // Try to resolve list
     CljObject *list_value = ns_resolve(g_test_eval_state, (CljSymbol *)list_sym);
-    TEST_ASSERT_NOT_NULL_MESSAGE(list_value, "list should be resolvable in clojure.core namespace");
+    TEST_ASSERT_TRUE_MESSAGE(list_value && list_value != NOT_FOUND, "list should be resolvable in clojure.core namespace");
     
     // Switch back to user namespace
     evalstate_set_ns(g_test_eval_state, "user");
@@ -88,7 +88,7 @@ TEST(test_list_available_in_evalstate) {
     
     // Resolve list using EvalState (g_test_eval_state from setUp)
     CljObject *list_func = ns_resolve(g_test_eval_state, (CljSymbol *)list_sym);
-    TEST_ASSERT_NOT_NULL_MESSAGE(list_func, "list should be resolvable via ns_resolve(st, list_sym)");
+    TEST_ASSERT_TRUE_MESSAGE(list_func && list_func != NOT_FOUND, "list should be resolvable via ns_resolve(st, list_sym)");
     
     // Verify it's a function (builtin)
     TEST_ASSERT_TRUE_MESSAGE(list_func && TAG(list_func) == CLJ_FUNC || list_func && TAG(list_func) == CLJ_CLOSURE,

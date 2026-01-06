@@ -99,8 +99,9 @@ static ID destructure_fn = NULL;
 // Call Clojure (destructure bindings), returns NULL if not available (bootstrap)
 static CljVector* destructure(EvalState *st, CljVector *bindings) {
     if (!destructure_fn) {
-        destructure_fn = ns_resolve(st, SYM_DESTRUCTURE);
-        if (!destructure_fn) return NULL;  // Bootstrap: not loaded yet
+        ID resolved = ns_resolve(st, SYM_DESTRUCTURE);
+        if (resolved == NOT_FOUND || !resolved) return NULL;  // Bootstrap: not loaded yet
+        destructure_fn = resolved;
     }
     
     ID args[] = { bindings };

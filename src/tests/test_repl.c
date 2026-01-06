@@ -51,7 +51,7 @@ TEST(test_repl_doc_function_exists) {
     TEST_ASSERT_NOT_NULL(repl_ns);
     TEST_ASSERT_NOT_NULL(repl_ns->mappings);
     
-    CljObject *doc_func = (CljObject*)map_get(repl_ns->mappings, doc_sym, NULL);
+    CljObject *doc_func = (CljObject*)map_get_sentinel(repl_ns->mappings, doc_sym, NULL);
     TEST_ASSERT_NOT_NULL(doc_func);
     TEST_ASSERT_TRUE(TAG(doc_func) == CLJ_FUNC || TAG(doc_func) == CLJ_CLOSURE);
 }
@@ -89,6 +89,7 @@ TEST(test_repl_doc_extracts_metadata) {
     CljObject *meta_func = eval_string("meta", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_func, "meta function should exist");
     
+#if defined(META_ENABLED) && META_ENABLED
     // Get metadata directly
     CljObject *meta_meta = eval_string("(meta meta)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL_MESSAGE(meta_meta, "meta should have metadata");
@@ -99,9 +100,14 @@ TEST(test_repl_doc_extracts_metadata) {
     TEST_ASSERT_NOT_NULL_MESSAGE(doc_key, ":doc keyword should exist");
     
     CljMap *meta_map = (CljMap*)meta_meta;
-    ID doc_value = map_get(meta_map, doc_key, NULL);
+    ID doc_value = map_get_sentinel(meta_map, doc_key, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(doc_value, ":doc should exist in metadata");
     TEST_ASSERT_TRUE_MESSAGE(TAG(doc_value) == CLJ_STRING, ":doc should be a string");
+#else
+    // With metadata compiled out, meta should return nil
+    CljObject *meta_meta = eval_string("(meta meta)", g_test_eval_state);
+    TEST_ASSERT_NULL_MESSAGE(meta_meta, "meta should return nil when META_ENABLED=0");
+#endif
     
     // Now test that doc can be called on meta and doesn't throw an error
     CljObject *doc_result = eval_string("(clojure.repl/doc meta)", g_test_eval_state);
@@ -125,7 +131,11 @@ TEST(test_repl_doc_with_function_with_metadata) {
     
     // Verify the function has metadata
     CljObject *fn_meta = eval_string("(meta test-doc-fn)", g_test_eval_state);
+#if defined(META_ENABLED) && META_ENABLED
     TEST_ASSERT_NOT_NULL_MESSAGE(fn_meta, "function should have metadata");
+#else
+    TEST_ASSERT_NULL_MESSAGE(fn_meta, "function metadata should be nil when META_ENABLED=0");
+#endif
     
     // Call doc on the function
     CljObject *doc_result = eval_string("(clojure.repl/doc test-doc-fn)", g_test_eval_state);
@@ -207,7 +217,7 @@ TEST(test_repl_source_exists_in_namespace) {
     TEST_ASSERT_NOT_NULL(repl_ns);
     TEST_ASSERT_NOT_NULL(repl_ns->mappings);
     
-    CljObject *source_func = (CljObject*)map_get(repl_ns->mappings, source_sym, NULL);
+    CljObject *source_func = (CljObject*)map_get_sentinel(repl_ns->mappings, source_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(source_func, "source function should exist in clojure.repl namespace");
     TEST_ASSERT_TRUE_MESSAGE(TAG(source_func) == CLJ_FUNC || TAG(source_func) == CLJ_CLOSURE,
                             "source should be a function");
@@ -273,7 +283,7 @@ TEST(test_repl_dir_function_exists) {
     TEST_ASSERT_NOT_NULL(repl_ns);
     TEST_ASSERT_NOT_NULL(repl_ns->mappings);
     
-    CljObject *dir_func = (CljObject*)map_get(repl_ns->mappings, dir_sym, NULL);
+    CljObject *dir_func = (CljObject*)map_get_sentinel(repl_ns->mappings, dir_sym, NULL);
     TEST_ASSERT_NOT_NULL(dir_func);
     TEST_ASSERT_TRUE(TAG(dir_func) == CLJ_FUNC || TAG(dir_func) == CLJ_CLOSURE);
 }
@@ -328,7 +338,7 @@ TEST(test_repl_pst_function_exists) {
     TEST_ASSERT_NOT_NULL(repl_ns);
     TEST_ASSERT_NOT_NULL(repl_ns->mappings);
     
-    CljObject *pst_func = (CljObject*)map_get(repl_ns->mappings, pst_sym, NULL);
+    CljObject *pst_func = (CljObject*)map_get_sentinel(repl_ns->mappings, pst_sym, NULL);
     TEST_ASSERT_NOT_NULL(pst_func);
     TEST_ASSERT_TRUE(TAG(pst_func) == CLJ_FUNC || TAG(pst_func) == CLJ_CLOSURE);
 }
@@ -361,7 +371,7 @@ TEST(test_repl_find_doc_function_exists) {
     TEST_ASSERT_NOT_NULL(repl_ns);
     TEST_ASSERT_NOT_NULL(repl_ns->mappings);
     
-    CljObject *find_doc_func = (CljObject*)map_get(repl_ns->mappings, find_doc_sym, NULL);
+    CljObject *find_doc_func = (CljObject*)map_get_sentinel(repl_ns->mappings, find_doc_sym, NULL);
     TEST_ASSERT_NOT_NULL(find_doc_func);
     TEST_ASSERT_TRUE(TAG(find_doc_func) == CLJ_FUNC || TAG(find_doc_func) == CLJ_CLOSURE);
 }
@@ -380,7 +390,7 @@ TEST(test_repl_find_doc_can_be_called) {
     CljSymbol *find_doc_sym = intern_symbol(SYM_CLOJURE_REPL, "find-doc");
     CljNamespace *repl_ns = ns_find("clojure.repl");
     TEST_ASSERT_NOT_NULL(repl_ns);
-    CljObject *find_doc_func = map_get(repl_ns->mappings, find_doc_sym, NULL);
+    CljObject *find_doc_func = map_get_sentinel(repl_ns->mappings, find_doc_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(find_doc_func, "find-doc function should exist");
     
     // Test: find-doc can be called (simplified implementation)
@@ -430,7 +440,7 @@ TEST(test_repl_namespace_has_all_functions) {
         CljSymbol *func_sym = intern_symbol(SYM_CLOJURE_REPL, expected_functions[i]);
         TEST_ASSERT_NOT_NULL_MESSAGE(func_sym, "Function symbol should exist");
         
-        CljObject *func = (CljObject*)map_get(repl_ns->mappings, func_sym, NULL);
+        CljObject *func = (CljObject*)map_get_sentinel(repl_ns->mappings, func_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(func, 
             "Function should exist in clojure.repl namespace");
         TEST_ASSERT_TRUE_MESSAGE(

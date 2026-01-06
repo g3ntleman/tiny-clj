@@ -42,7 +42,6 @@
 #include "builtins_strings.h"
 #include "builtins_regex.h"
 
-extern ID eval_body_with_env(ID body, CljMap *env);
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
 ID native_mul_variadic(ID *args, unsigned int argc);
@@ -1181,7 +1180,7 @@ ID native_update(ID *args, unsigned int argc) {
     }
     
     // Get current value (nil if not found)
-    ID current_val = map_get(coll, key, NULL);
+    ID current_val = map_get_sentinel(coll, key, NULL);
     
     // Build function call args: [current_val, extra_args...]
     unsigned int fn_argc = 1 + (argc - 3);
@@ -1334,7 +1333,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
     if (keys_tag == CLJ_VECTOR || keys_tag == CLJ_VECTOR_TRANSIENT || keys_tag == CLJ_VECTOR_TRANSIENT_WEAK) {
         VECTOR_FOR_EACH(keys, key) {
             if (map_contains(source, key)) {
-                ID val = map_get(source, key, NULL);
+                ID val = map_get(source, key);
                 ASSIGN(result, map_assoc(result, key, val));
             }
         }
@@ -1342,7 +1341,7 @@ ID native_select_keys(ID *args, unsigned int argc) {
         CljList *list = keys;
         LIST_FOR_EACH(list, key) {
             if (map_contains(source, key)) {
-                ID val = map_get(source, key, NULL);
+                ID val = map_get(source, key);
                 ASSIGN(result, map_assoc(result, key, val));
             }
         }
@@ -1380,7 +1379,7 @@ ID native_find(ID *args, unsigned int argc) {
         return NULL;  // Key not found
     }
     
-    ID val = map_get(map, key, NULL);
+    ID val = map_get(map, key);
     
     // Return [key value] vector
     CljVector *entry = make_vector(2, CLJ_VECTOR);
@@ -1492,7 +1491,7 @@ ID native_get(ID *args, unsigned int argc) {
 
     int tag = TAG(map);
     if (tag == CLJ_MAP || tag == CLJ_MAP_TRANSIENT) {
-        return map_get(map, key, not_found);
+        return map_get_sentinel(map, key, not_found);
     }
 
     return not_found ? not_found : NULL; // Return not_found or nil for unsupported types
@@ -2231,7 +2230,7 @@ ID native_source(ID *args, unsigned int argc) {
     }
     
     // If we have a function, print its full definition AST: (fn [params*] body)
-    if (target_func && TAG(target_func) == CLJ_CLOSURE) {
+    if (target_func != NOT_FOUND && target_func && TAG(target_func) == CLJ_CLOSURE) {
         CljFunction *fn = as_function(target_func);
         if (fn) {
     ID params_id = NULL;
@@ -2580,7 +2579,7 @@ ID native_meta(ID *args, unsigned int argc) {
         // Forward declaration for static variable
         if (g_current_eval_state && g_current_eval_state->current_ns) {
             ID resolved = ns_resolve(g_current_eval_state, (CljSymbol*)obj);
-            if (resolved) {
+            if (resolved != NOT_FOUND) {
                 target_obj = resolved;
             }
         }
@@ -2975,9 +2974,9 @@ static void copy_symbols_to_namespace(CljNamespace *source_ns, CljNamespace *tar
             }
         }
 
-        // Look up symbol in source namespace
-        CljObject *val = map_get((CljValue)source_ns->mappings, (CljValue)lookup_sym, NULL);
-        if (val) {
+        // Look up symbol in source namespace (missing -> NOT_FOUND, nil is a valid value)
+        CljObject *val = map_get(source_ns->mappings, lookup_sym);
+        if (val != NOT_FOUND) {
             // Copy to target namespace using ns_define_refer for :refer (stores unqualified symbol)
             ns_define_refer(target_ns, sym, val);
         }

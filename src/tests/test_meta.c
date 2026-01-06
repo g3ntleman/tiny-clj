@@ -28,7 +28,7 @@ static void assert_meta_has_line_info(CljObject *meta_result, const char *contex
     TEST_ASSERT_NOT_NULL(kw_line);
 
     CljMap *meta_map = (CljMap*)meta_result;
-    ID line_value = map_get(meta_map, kw_line, NULL);
+    ID line_value = map_get_sentinel(meta_map, kw_line, NULL);
 
     TEST_ASSERT_NOT_NULL_MESSAGE(line_value, context);
     TEST_ASSERT_TRUE_MESSAGE(is_fixnum(line_value), context);
@@ -327,7 +327,7 @@ TEST(test_meta_qualified_symbol) {
     }
     TEST_ASSERT_NOT_NULL_MESSAGE(trim_sym, "trim symbol should exist");
     
-    ID trim_func = map_get(string_ns->mappings, trim_sym, NOT_FOUND);
+    ID trim_func = map_get(string_ns->mappings, trim_sym);
     if (trim_func == NOT_FOUND) {
         trim_func = NULL;
     }
@@ -350,7 +350,7 @@ TEST(test_meta_qualified_symbol) {
         }
         TEST_ASSERT_NOT_NULL_MESSAGE(qualified_trim_sym, "Should be able to create qualified trim symbol");
         
-        trim_func = qualified_trim_sym ? map_get(string_ns->mappings, qualified_trim_sym, NOT_FOUND) : NULL;
+        trim_func = qualified_trim_sym ? map_get(string_ns->mappings, qualified_trim_sym) : NULL;
         if (trim_func == NOT_FOUND) {
             trim_func = NULL;
         }
@@ -376,8 +376,8 @@ TEST(test_meta_qualified_symbol) {
     TEST_ASSERT_NOT_NULL(kw_ns);
     
     CljMap *meta_map = (CljMap*)meta_result;
-    ID name_value = map_get(meta_map, kw_name, NULL);
-    ID ns_value = map_get(meta_map, kw_ns, NULL);
+    ID name_value = map_get_sentinel(meta_map, kw_name, NULL);
+    ID ns_value = map_get_sentinel(meta_map, kw_ns, NULL);
     
     TEST_ASSERT_NOT_NULL_MESSAGE(name_value, 
                                  "metadata should contain :name key");

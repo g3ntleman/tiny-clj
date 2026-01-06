@@ -25,7 +25,10 @@ typedef struct {
 CljHashMap* make_hashmap(unsigned int capacity);
 
 // Lookup - O(1) amortized with Linear Probing
-ID hashmap_get(CljHashMap *map, ID key, ID not_found);
+ID hashmap_get_sentinel(CljHashMap *map, ID key, ID not_found);
+static inline ID hashmap_get(CljHashMap *map, ID key) {
+    return hashmap_get_sentinel(map, key, NOT_FOUND);
+}
 int hashmap_contains(CljHashMap *map, ID key);  // Returns int (like map_contains)
 
 // Modification (COW) - returns new or same map

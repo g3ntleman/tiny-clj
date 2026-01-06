@@ -85,7 +85,8 @@ bool clj_equal_full(ID a, ID b) {
             CljMap *map_b = as_map(b);
             if (map_a->count != map_b->count) return false;
             MAP_FOR_EACH(map_a, key_a, val_a) {
-                ID val_b = map_get((CljMap*)b, key_a, NULL);
+                ID val_b = map_get(map_b, key_a);
+                if (val_b == NOT_FOUND) return false;
                 if (!clj_equal(val_a, val_b)) return false;
             }
             return true;

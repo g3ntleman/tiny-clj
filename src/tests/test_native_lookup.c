@@ -73,7 +73,7 @@ TEST(test_defn_native_registers_in_namespace) {
         TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core->mappings, "clojure.core mappings should exist");
         
         CljSymbol *count_sym = intern_symbol_global("count");
-        CljObject *count_value = map_get(clojure_core->mappings, count_sym, NULL);
+        CljObject *count_value = map_get_sentinel(clojure_core->mappings, count_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(count_value, "count should be in clojure.core namespace");
         TEST_ASSERT_TRUE_MESSAGE(TAG(count_value) == CLJ_FUNC, "count should be a function");
     });

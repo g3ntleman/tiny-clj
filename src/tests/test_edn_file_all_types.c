@@ -59,7 +59,7 @@ static void build_fixture_path(char *out, size_t out_size) {
 static ID map_get_required(CljMap *m, const char *kw_name) {
     CljSymbol *kw = intern_symbol_global(kw_name);
     TEST_ASSERT_NOT_NULL(kw);
-    ID v = map_get(m, (ID)kw, NOT_FOUND);
+    ID v = map_get(m, (ID)kw);
     TEST_ASSERT_NOT_NULL_MESSAGE(v, kw_name);
     TEST_ASSERT_NOT_EQUAL_MESSAGE((ID)NOT_FOUND, v, kw_name);
     return v;
@@ -158,8 +158,8 @@ TEST(test_edn_file_all_supported_types) {
     ID v_map = map_get_required(m, ":map");
     assert_map((CljObject*)v_map);
     CljMap *inner = as_map(v_map);
-    ID a_val = map_get(inner, (ID)intern_symbol_global(":a"), NOT_FOUND);
-    ID b_val = map_get(inner, (ID)intern_symbol_global(":b"), NOT_FOUND);
+    ID a_val = map_get(inner, (ID)intern_symbol_global(":a"));
+    ID b_val = map_get(inner, (ID)intern_symbol_global(":b"));
     TEST_ASSERT_NOT_EQUAL((ID)NOT_FOUND, a_val);
     TEST_ASSERT_NOT_EQUAL((ID)NOT_FOUND, b_val);
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(a_val));

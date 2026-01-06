@@ -635,7 +635,8 @@ static CljSymbol* symbol_table_find(CljSymbol *ns_name, const char *cname) {
     if (!cname || !g_runtime.symbol_table) return NULL;
     
     CljString *key = make_symbol_key(ns_name, cname);
-    return (CljSymbol*)hashmap_get(g_runtime.symbol_table, key, NULL);
+    ID result = hashmap_get(g_runtime.symbol_table, key);
+    return (result == NOT_FOUND) ? NULL : (CljSymbol*)result;
 }
 
 // Add symbol to the table - O(1) HashMap insert

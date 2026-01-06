@@ -34,7 +34,7 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     
     // Initially closed should be false
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
-    CljObject *closed_val = map_get(chan, kw_closed, NULL);
+    CljObject *closed_val = map_get_sentinel(chan, kw_closed, NULL);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_FALSE);
     
@@ -54,10 +54,10 @@ TEST(test_go_enqueues_and_result_channel_receives_value) {
     
     // Channel should have value 3 and be closed
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljObject *val = map_get(chan, kw_value, NULL);
+    CljObject *val = map_get_sentinel(chan, kw_value, NULL);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)val));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum((CljValue)val));
-    closed_val = map_get(chan, kw_closed, NULL);
+    closed_val = map_get_sentinel(chan, kw_closed, NULL);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
     
@@ -119,11 +119,11 @@ TEST(test_go_exception_closes_channel_without_value) {
     // Channel should be closed and have no value
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljObject *closed_val = map_get(chan, kw_closed, NULL);
+    CljObject *closed_val = map_get_sentinel(chan, kw_closed, NULL);
     TEST_ASSERT_NOT_NULL(closed_val);
     TEST_ASSERT_TRUE(is_special((CljValue)closed_val));
     TEST_ASSERT_TRUE(as_special((CljValue)closed_val) == SPECIAL_TRUE);
-    CljValue val = map_get(chan, kw_value, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
     // When no value is set (error case), :value key exists but value is NULL
     // make_result_channel sets :value to NULL, so map_get returns NULL
     // After error, we don't update :value, so it remains NULL
@@ -165,8 +165,8 @@ TEST(test_go_success_puts_value_high_level) {
     // After successful execution, channel should have value 3 and be closed
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
-    CljValue val = map_get(chan, kw_value, NULL);
-    CljValue closed_val = map_get(chan, kw_closed, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
+    CljValue closed_val = map_get_sentinel(chan, kw_closed, NULL);
     
     TEST_ASSERT_NOT_NULL((CljObject*)val);
     TEST_ASSERT_TRUE(is_fixnum(val));
@@ -197,7 +197,7 @@ TEST(test_go_nil_value_in_channel) {
     // Initially :value should be nil (from make_result_channel)
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
-    CljValue val_before = map_get(chan, kw_value, NULL);
+    CljValue val_before = map_get_sentinel(chan, kw_value, NULL);
     TEST_ASSERT_NULL(val_before);  // Should be nil initially
     
     // Run next task - should write nil to channel
@@ -216,12 +216,12 @@ TEST(test_go_nil_value_in_channel) {
     
     // After execution, channel should have nil value and be closed
     // Clojure-compatibility: nil is a valid value that can be sent through channels
-    CljValue val_after = map_get(chan, kw_value, NULL);
+    CljValue val_after = map_get_sentinel(chan, kw_value, NULL);
     // Note: map_get returns NULL for nil values, but map_contains confirms the key exists
     TEST_ASSERT_TRUE(map_contains(chan, kw_value));  // Key should exist
     TEST_ASSERT_NULL(val_after);  // Value should be nil (NULL)
     
-    CljValue closed_val = map_get(chan, kw_closed, NULL);
+    CljValue closed_val = map_get_sentinel(chan, kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val);
     TEST_ASSERT_TRUE(is_special(closed_val));
     TEST_ASSERT_TRUE(as_special(closed_val) == SPECIAL_TRUE);  // Should be closed
@@ -277,7 +277,7 @@ TEST(test_channel_is_transient_map_and_mutable) {
     
     // Channel should be mutated in-place (same pointer)
     // Clojure-compatibility: Channels are mutable like promises
-    CljValue val = map_get(chan, kw_value, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)val);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
@@ -323,7 +323,7 @@ TEST(test_channel_mutation_after_run_next_task) {
     // Clojure-compatibility: Channels are mutable like promises
     
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljValue val = map_get(chan, kw_value, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
     
     // Check if value was set (should be set since channel is mutated in-place)
     TEST_ASSERT_NOT_NULL((CljObject*)val);
@@ -349,8 +349,8 @@ TEST(test_direct_channel_creation_and_mutation) {
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
     CljObject *kw_closed = (CljObject*)intern_symbol(NULL, ":closed");
     
-    CljValue val = map_get(chan, kw_value, NULL);
-    CljValue closed = map_get(chan, kw_closed, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
+    CljValue closed = map_get_sentinel(chan, kw_closed, NULL);
     
     TEST_ASSERT_NULL(val);  // Should be NULL initially
     TEST_ASSERT_NOT_NULL((CljObject*)closed);
@@ -362,7 +362,7 @@ TEST(test_direct_channel_creation_and_mutation) {
     result_channel_put(chan, val_42);
     
     // Verify channel has value (mutated in-place)
-    CljValue new_val = map_get(chan, kw_value, NULL);
+    CljValue new_val = map_get_sentinel(chan, kw_value, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)new_val);
     TEST_ASSERT_TRUE(is_fixnum(new_val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(new_val));
@@ -371,7 +371,7 @@ TEST(test_direct_channel_creation_and_mutation) {
     result_channel_close(chan);
     
     // Verify closed channel (mutated in-place)
-    CljValue closed_val = map_get(chan, kw_closed, NULL);
+    CljValue closed_val = map_get_sentinel(chan, kw_closed, NULL);
     TEST_ASSERT_NOT_NULL((CljObject*)closed_val);
     TEST_ASSERT_TRUE(is_special(closed_val));
     TEST_ASSERT_TRUE(as_special(closed_val) == SPECIAL_TRUE);
@@ -408,7 +408,7 @@ TEST(test_event_loop_run_next_mutates_channel) {
     // Clojure-compatibility: Channels are mutable like promises
     
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljValue val = map_get(chan, kw_value, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
     
     // Check if value was set (should be set since channel is mutated in-place)
     TEST_ASSERT_NOT_NULL((CljObject*)val);
@@ -469,7 +469,7 @@ TEST(test_run_next_task_recursive_in_go_block) {
     
     // Check if channel has value (the go-block should have completed)
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljValue val = map_get(chan, kw_value, NULL);
+    CljValue val = map_get_sentinel(chan, kw_value, NULL);
     
     // The value should be 42 (the go-block's return value)
     // Note: run-next-task inside the go-block might not work as a yield,
@@ -515,7 +515,7 @@ TEST(test_run_next_task_recursive_with_nested_go_block) {
     
     // Check if first channel has value
     CljObject *kw_value = (CljObject*)intern_symbol(NULL, ":value");
-    CljValue val1 = map_get(chan1, kw_value, NULL);
+    CljValue val1 = map_get_sentinel(chan1, kw_value, NULL);
     
     // The value should be 42 (the go-block's return value)
     if (val1) {

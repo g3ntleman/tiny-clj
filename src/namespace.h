@@ -46,6 +46,7 @@ typedef struct {
 CljNamespace* make_namespace(const char *cname, const char *file);
 CljNamespace* ns_get_or_create(const char *cname, const char *file);
 ID ns_resolve(EvalState *st, CljSymbol *sym);
+ID ns_resolve_in(CljNamespace *current_ns, CljSymbol *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *cname);

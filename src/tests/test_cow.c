@@ -116,8 +116,8 @@ TEST(test_cow_inplace_mutation_rc_one) {
         TEST_ASSERT_EQUAL_PTR((CljValue)map, (CljValue)new_map3); // Same pointer! (in-place)
         
         // Verify entries
-        CljValue val1 = map_get((CljMap*)map, fixnum(1), NULL);
-        CljValue val2 = map_get((CljMap*)map, fixnum(2), NULL);
+        CljValue val1 = map_get_sentinel((CljMap*)map, fixnum(1), NULL);
+        CljValue val2 = map_get_sentinel((CljMap*)map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1);
         TEST_ASSERT_NOT_NULL(val2);
         TEST_ASSERT_EQUAL_INT(11, as_fixnum(val1)); // Updated value
@@ -146,15 +146,15 @@ TEST(test_cow_copy_on_write_rc_greater_one) {
         TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map); // NEW pointer!
         
         // Verify original map unchanged
-        CljValue val1_orig = map_get((CljMap*)map, fixnum(1), NULL);
-        CljValue val2_orig = map_get((CljMap*)map, fixnum(2), NULL);
+        CljValue val1_orig = map_get_sentinel((CljMap*)map, fixnum(1), NULL);
+        CljValue val2_orig = map_get_sentinel((CljMap*)map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1_orig);
         TEST_ASSERT_NULL(val2_orig);  // Original doesn't have key=2
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1_orig));
         
         // Verify new map has both entries
-        CljValue val1_new = map_get((CljMap*)new_map, fixnum(1), NULL);
-        CljValue val2_new = map_get((CljMap*)new_map, fixnum(2), NULL);
+        CljValue val1_new = map_get_sentinel((CljMap*)new_map, fixnum(1), NULL);
+        CljValue val2_new = map_get_sentinel((CljMap*)new_map, fixnum(2), NULL);
         TEST_ASSERT_NOT_NULL(val1_new);
         TEST_ASSERT_NOT_NULL(val2_new);
         TEST_ASSERT_EQUAL_INT(10, as_fixnum(val1_new));
@@ -184,7 +184,7 @@ TEST(test_cow_original_map_unchanged) {
         TEST_ASSERT_EQUAL(2, map->count); // Original unchanged
         
         // New map should have 3 entries
-        CljValue val3 = map_get((CljMap*)new_map, fixnum(3), NULL);
+        CljValue val3 = map_get_sentinel((CljMap*)new_map, fixnum(3), NULL);
         TEST_ASSERT_NOT_NULL(val3);
         TEST_ASSERT_EQUAL_INT(30, as_fixnum(val3));
         
@@ -272,8 +272,8 @@ TEST(test_cow_closure_environment_sharing) {
         TEST_ASSERT_NOT_EQUAL((CljValue)env, (CljValue)new_env); // NEW pointer!
         
         // Verify original env unchanged
-        CljValue orig_x = map_get((CljMap*)env, intern_symbol_global("x"), NULL);
-        CljValue orig_y = map_get((CljMap*)env, intern_symbol_global("y"), NULL);
+        CljValue orig_x = map_get_sentinel((CljMap*)env, intern_symbol_global("x"), NULL);
+        CljValue orig_y = map_get_sentinel((CljMap*)env, intern_symbol_global("y"), NULL);
         TEST_ASSERT_NOT_NULL(orig_x);
         TEST_ASSERT_NULL(orig_y);  // Original doesn't have y
         TEST_ASSERT_EQUAL_INT(1, as_fixnum(orig_x));
@@ -320,7 +320,7 @@ TEST(test_cow_real_clojure_simulation) {
         
         // Verify some entries in the final map
         for (int i = 0; i < 100; i += 20) {
-            CljValue val = map_get((CljMap*)current_env, fixnum(i), NULL);
+            CljValue val = map_get_sentinel((CljMap*)current_env, fixnum(i), NULL);
             TEST_ASSERT_NOT_NULL(val);
             TEST_ASSERT_EQUAL_INT(i * 10, as_fixnum(val));
         }
@@ -348,13 +348,13 @@ TEST(test_cow_actual_cow_demonstration) {
         TEST_ASSERT_NOT_EQUAL((CljValue)map, (CljValue)new_map);
         
         // Verify original unchanged
-        CljValue val3_orig = map_get((CljMap*)map, fixnum(3), NULL);
+        CljValue val3_orig = map_get_sentinel((CljMap*)map, fixnum(3), NULL);
         TEST_ASSERT_NULL(val3_orig);
         
         // Verify new map has all entries
-        CljValue val1_new = map_get((CljMap*)new_map, fixnum(1), NULL);
-        CljValue val2_new = map_get((CljMap*)new_map, fixnum(2), NULL);
-        CljValue val3_new = map_get((CljMap*)new_map, fixnum(3), NULL);
+        CljValue val1_new = map_get_sentinel((CljMap*)new_map, fixnum(1), NULL);
+        CljValue val2_new = map_get_sentinel((CljMap*)new_map, fixnum(2), NULL);
+        CljValue val3_new = map_get_sentinel((CljMap*)new_map, fixnum(3), NULL);
         TEST_ASSERT_NOT_NULL(val1_new);
         TEST_ASSERT_NOT_NULL(val2_new);
         TEST_ASSERT_NOT_NULL(val3_new);
@@ -388,7 +388,7 @@ TEST(test_map_assoc_autorelease_with_assign) {
         TEST_ASSERT_TRUE(map->base.rc >= 1);  // RC should be at least 1
         
         // H5: map_get should find the value
-        ID retrieved = map_get(map, key, NOT_FOUND);
+        ID retrieved = map_get(map, key);
         TEST_ASSERT_TRUE(retrieved != NOT_FOUND);
         
         // H3: Value should be correct fixnum
@@ -416,9 +416,9 @@ TEST(test_map_assoc_multiple_assign_sequence) {
         ASSIGN(map, map_assoc(map, key3, fixnum(30)));
         
         // All values should be retrievable
-        ID v1 = map_get(map, key1, NOT_FOUND);
-        ID v2 = map_get(map, key2, NOT_FOUND);
-        ID v3 = map_get(map, key3, NOT_FOUND);
+        ID v1 = map_get(map, key1);
+        ID v2 = map_get(map, key2);
+        ID v3 = map_get(map, key3);
         
         TEST_ASSERT_TRUE(v1 != NOT_FOUND);
         TEST_ASSERT_TRUE(v2 != NOT_FOUND);

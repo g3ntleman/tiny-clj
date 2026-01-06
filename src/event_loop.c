@@ -60,8 +60,8 @@ static CljMap* task_to_map(CljObject *fn, CljMap *result_chan) {
 static bool task_from_map(CljMap *task_map, CljObject **fn, CljMap **result_chan) {
     if (!task_map) return false;
     
-    ID fn_val = map_get(task_map, KW_FN, NULL);
-    ID result_chan_val = map_get(task_map, KW_RESULT_CHAN, NULL);
+    ID fn_val = map_get_sentinel(task_map, KW_FN, NULL);
+    ID result_chan_val = map_get_sentinel(task_map, KW_RESULT_CHAN, NULL);
     
     if (!fn_val) return false;
     
@@ -97,7 +97,7 @@ static CljMap* task_timer_to_map(CljObject *fn, int scheduled_sec, int scheduled
 // Task Getter functions (static inline for performance)
 // Works for both normal tasks and timer tasks
 static inline ID task_get_fn(CljMap *task_map) {
-    return map_get(task_map, KW_FN, NULL);
+    return map_get_sentinel(task_map, KW_FN, NULL);
 }
 
 // Timer-Task Getter functions (optimized with direct index access O(1))
@@ -401,7 +401,7 @@ bool event_loop_run_next(CljMap *env, EvalState *st) {
         CLJ_ASSERT((void*)chan == chan_ptr_before);
         
         CljObject *kw_closed = (CljObject*)intern_symbol_global(":closed");
-        CljValue closed_val = map_get(chan, (CljValue)kw_closed, NULL);
+        CljValue closed_val = map_get_sentinel(chan, (CljValue)kw_closed, NULL);
         CLJ_ASSERT(closed_val != NULL);
         CLJ_ASSERT(is_special(closed_val));
         CLJ_ASSERT(as_special(closed_val) == SPECIAL_TRUE);

@@ -338,7 +338,7 @@ int load_clojure_core(EvalState *st) {
   if (clojure_core && clojure_core->mappings) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     if (inc_sym) {
-      CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
+      CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (inc_value && (TAG(inc_value) == CLJ_FUNC || TAG(inc_value) == CLJ_CLOSURE)) {
         // clojure.core is already loaded - return success without reloading
         clojure_core->loaded = true;
@@ -375,7 +375,7 @@ int load_clojure_core(EvalState *st) {
   if (clojure_core && clojure_core->mappings) {
     CljSymbol *inc_sym = intern_symbol_global("inc");
     if (inc_sym) {
-      CljObject *inc_value = (CljObject*)map_get((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
+      CljObject *inc_value = (CljObject*)map_get_sentinel((CljValue)clojure_core->mappings, (CljValue)inc_sym, NULL);
       if (!inc_value) {
         return 0;
       }

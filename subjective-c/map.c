@@ -56,7 +56,7 @@ CljMap* make_map(int capacity) {
   return map;
 }
 
-ID map_get(CljMap *map, ID key, ID not_found) {
+ID map_get_sentinel(CljMap *map, ID key, ID not_found) {
   if (map) {
     // Note: key can be NULL (nil) - that's a valid key in Clojure!
     CljObject *key_obj = (CljObject*)key;
@@ -214,7 +214,7 @@ CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite) {
   MAP_FOR_EACH(b, key, value) {
     // nil keys are valid in Clojure maps - don't skip them
     if (!overwrite) {
-      ID existing_value = map_get(result, key, NOT_FOUND);
+      ID existing_value = map_get(result, key);
       if (existing_value != NOT_FOUND) {
         continue;
       }

@@ -53,7 +53,7 @@ TEST(test_hashmap_put_get_single) {
     map = adopt_hashmap(map, hashmap_assoc(map, key, value));
     TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
     
-    ID result = hashmap_get(map, key, NULL);
+    ID result = hashmap_get_sentinel(map, key, NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
@@ -82,7 +82,7 @@ TEST(test_hashmap_put_get_multiple) {
     
     // Retrieve all keys
     for (int i = 0; i < 10; i++) {
-        ID result = hashmap_get(map, keys[i], NULL);
+        ID result = hashmap_get_sentinel(map, keys[i], NULL);
         TEST_ASSERT_NOT_NULL(result);
         TEST_ASSERT_EQUAL_PTR(values[i], result);
     }
@@ -110,8 +110,8 @@ TEST(test_hashmap_linear_probing_collision) {
     TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, k2));
     
     // Both should be retrievable (Linear Probing handles collision)
-    TEST_ASSERT_EQUAL_PTR(v1, hashmap_get(map, k1, NULL));
-    TEST_ASSERT_EQUAL_PTR(v2, hashmap_get(map, k2, NULL));
+    TEST_ASSERT_EQUAL_PTR(v1, hashmap_get_sentinel(map, k1, NULL));
+    TEST_ASSERT_EQUAL_PTR(v2, hashmap_get_sentinel(map, k2, NULL));
     
     RELEASE(map);
     RELEASE(k1);
@@ -135,7 +135,7 @@ TEST(test_hashmap_overwrite_same_map) {
     TEST_ASSERT_EQUAL_PTR(map_before, map);
     TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
     
-    ID result = hashmap_get(map, k1, NULL);
+    ID result = hashmap_get_sentinel(map, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v2, result);
     
     RELEASE(map);
@@ -161,11 +161,11 @@ TEST(test_hashmap_overwrite_cow) {
     TEST_ASSERT_NOT_EQUAL(map_before, map);
     TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
     
-    ID result = hashmap_get(map, k1, NULL);
+    ID result = hashmap_get_sentinel(map, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v2, result);
     
     // Original should still have old value
-    ID orig_result = hashmap_get(map_before, k1, NULL);
+    ID orig_result = hashmap_get_sentinel(map_before, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v1, orig_result);
     
     RELEASE(map);
@@ -180,7 +180,7 @@ TEST(test_hashmap_not_found) {
     CljString *nonexistent = make_test_string("nonexistent");
     CljString *not_found_sentinel = make_test_string("NOT_FOUND");
     
-    ID result = hashmap_get(map, nonexistent, not_found_sentinel);
+    ID result = hashmap_get_sentinel(map, nonexistent, not_found_sentinel);
     TEST_ASSERT_EQUAL_PTR(not_found_sentinel, result);
     
     RELEASE(map);
@@ -205,7 +205,7 @@ TEST(test_hashmap_remove_rc1) {
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
     
     // Key should not be found
-    ID result = hashmap_get(map, k1, NULL);
+    ID result = hashmap_get_sentinel(map, k1, NULL);
     TEST_ASSERT_NULL(result);
     
     RELEASE(map);
@@ -230,11 +230,11 @@ TEST(test_hashmap_remove_cow) {
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
     
     // Key should not be found in new map
-    ID result = hashmap_get(map, k1, NULL);
+    ID result = hashmap_get_sentinel(map, k1, NULL);
     TEST_ASSERT_NULL(result);
     
     // Original should still have the key
-    ID orig_result = hashmap_get(map_before, k1, NULL);
+    ID orig_result = hashmap_get_sentinel(map_before, k1, NULL);
     TEST_ASSERT_EQUAL_PTR(v1, orig_result);
     
     RELEASE(map);
@@ -263,7 +263,7 @@ TEST(test_hashmap_probe_over_tombstone) {
     
     // Second key should still be retrievable (Linear Probing over tombstone)
     TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, k2));
-    TEST_ASSERT_EQUAL_PTR(v2, hashmap_get(map, k2, NULL));
+    TEST_ASSERT_EQUAL_PTR(v2, hashmap_get_sentinel(map, k2, NULL));
     
     RELEASE(map);
     RELEASE(k1);
@@ -293,7 +293,7 @@ TEST(test_hashmap_rehash_on_load) {
     
     // All keys should still be retrievable after rehash
     for (int i = 0; i < 10; i++) {
-        TEST_ASSERT_EQUAL_PTR(values[i], hashmap_get(map, keys[i], NULL));
+        TEST_ASSERT_EQUAL_PTR(values[i], hashmap_get_sentinel(map, keys[i], NULL));
     }
     
     RELEASE(map);
@@ -398,7 +398,7 @@ TEST(test_hashmap_many_entries) {
     // Verify all entries are retrievable (tests Linear Probing with many entries)
     for (int i = 0; i < 1000; i++) {
         TEST_ASSERT_EQUAL_INT(1, hashmap_contains(map, keys[i]));
-        TEST_ASSERT_EQUAL_PTR(values[i], hashmap_get(map, keys[i], NULL));
+        TEST_ASSERT_EQUAL_PTR(values[i], hashmap_get_sentinel(map, keys[i], NULL));
     }
     
     RELEASE(map);
@@ -417,13 +417,13 @@ TEST(test_hashmap_nil_as_key_assoc_and_get) {
     TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
     
     // Get value using nil key
-    ID result = hashmap_get(map, NULL, NOT_FOUND);
+    ID result = hashmap_get(map, NULL);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
     // Verify NOT_FOUND is returned for non-existent key
     CljString *non_existent_key = make_test_string("nonexistent");
-    ID not_found_result = hashmap_get(map, non_existent_key, NOT_FOUND);
+    ID not_found_result = hashmap_get(map, non_existent_key);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, not_found_result);
     
     RELEASE(map);
@@ -444,7 +444,7 @@ TEST(test_hashmap_nil_as_key_remove) {
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
     
     // Verify nil key is not found after removal
-    ID result = hashmap_get(map, NULL, NOT_FOUND);
+    ID result = hashmap_get(map, NULL);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
     
     RELEASE(map);
@@ -460,20 +460,20 @@ TEST(test_hashmap_nil_as_value_assoc_and_get) {
     TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
     
     // Get nil value
-    ID result = hashmap_get(map, key, NOT_FOUND);
+    ID result = hashmap_get(map, key);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_NULL(result);
     
     // Update to non-nil value
     CljString *new_value = make_test_string("new-value");
     map = adopt_hashmap(map, hashmap_assoc(map, key, new_value));
-    result = hashmap_get(map, key, NOT_FOUND);
+    result = hashmap_get(map, key);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_EQUAL_PTR(new_value, result);
     
     // Set back to nil
     map = adopt_hashmap(map, hashmap_assoc(map, key, NULL));
-    result = hashmap_get(map, key, NOT_FOUND);
+    result = hashmap_get(map, key);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_NULL(result);
     
@@ -495,7 +495,7 @@ TEST(test_hashmap_nil_as_value_remove) {
     TEST_ASSERT_EQUAL_UINT(0, hashmap_count(map));
     
     // Verify key is not found after removal
-    ID result = hashmap_get(map, key, NOT_FOUND);
+    ID result = hashmap_get(map, key);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
     
     RELEASE(map);
@@ -516,12 +516,12 @@ TEST(test_hashmap_nil_key_and_value_together) {
     TEST_ASSERT_EQUAL_UINT(2, hashmap_count(map));
     
     // Verify nil key with nil value
-    ID nil_result = hashmap_get(map, NULL, NOT_FOUND);
+    ID nil_result = hashmap_get(map, NULL);
     TEST_ASSERT_TRUE(nil_result != NOT_FOUND);
     TEST_ASSERT_NULL(nil_result);
     
     // Verify non-nil key
-    ID other_result = hashmap_get(map, non_nil_key, NOT_FOUND);
+    ID other_result = hashmap_get(map, non_nil_key);
     TEST_ASSERT_TRUE(other_result != NOT_FOUND);
     TEST_ASSERT_EQUAL_PTR(non_nil_value, other_result);
     
@@ -530,10 +530,10 @@ TEST(test_hashmap_nil_key_and_value_together) {
     TEST_ASSERT_EQUAL_UINT(1, hashmap_count(map));
     
     // Verify nil key is gone but other key remains
-    ID nil_after_remove = hashmap_get(map, NULL, NOT_FOUND);
+    ID nil_after_remove = hashmap_get(map, NULL);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, nil_after_remove);
     
-    ID other_after_remove = hashmap_get(map, non_nil_key, NOT_FOUND);
+    ID other_after_remove = hashmap_get(map, non_nil_key);
     TEST_ASSERT_TRUE(other_after_remove != NOT_FOUND);
     TEST_ASSERT_EQUAL_PTR(non_nil_value, other_after_remove);
     
