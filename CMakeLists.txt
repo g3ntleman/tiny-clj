@@ -1,6 +1,22 @@
 cmake_minimum_required(VERSION 3.10)
 project(tiny-clj)
 
+# Feature flags (compile-time): all are positive *_ENABLED macros (0/1)
+option(TINYCLJ_META_ENABLED "Enable metadata support (META_ENABLED)" ON)
+option(TINYCLJ_MEMORY_PROFILING_ENABLED "Enable memory profiling hooks (MEMORY_PROFILING_ENABLED)" ON)
+
+if(TINYCLJ_META_ENABLED)
+    set(TINYCLJ_META_ENABLED_VALUE 1)
+else()
+    set(TINYCLJ_META_ENABLED_VALUE 0)
+endif()
+
+if(TINYCLJ_MEMORY_PROFILING_ENABLED)
+    set(TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE 1)
+else()
+    set(TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE 0)
+endif()
+
 # Include common paths configuration
 include(cmake_include_paths.cmake)
 
@@ -10,7 +26,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Compiler flags
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=1 -DMETA_ENABLED=1 -DZOMBIE_ENABLED")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -DDEBUG -DZOMBIE_ENABLED")
 set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG}")
 # Unity's setjmp/longjmp should be compatible with our exception system
 # Both use separate jmp_buf stacks, so they should work together
@@ -140,7 +156,7 @@ target_link_libraries(tiny-clj PRIVATE subjective-c)
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(tiny-clj PRIVATE)
 else()
-    target_compile_definitions(tiny-clj PRIVATE META_ENABLED=1)
+    target_compile_definitions(tiny-clj PRIVATE META_ENABLED=${TINYCLJ_META_ENABLED_VALUE})
 endif()
 
 # ESP32-optimized embedded interpreter (no REPL, executes startup-code.clj)
@@ -227,18 +243,18 @@ add_executable(tiny-clj-repl
 )
 target_link_libraries(tiny-clj-repl PRIVATE subjective-c)
 # Output directory is set globally to "build"
-# REPL Build - Always enable META_ENABLED for macOS REPL
+# REPL Build
 # Debug in Debug mode, Release in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=1 LINE_EDITING_ENABLED=1)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=${TINYCLJ_META_ENABLED_VALUE} LINE_EDITING_ENABLED=1)
     set_target_properties(tiny-clj-repl PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
     # Release: use CMAKE_C_FLAGS_RELEASE (set above with -O3 -DNDEBUG)
 else()
-    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=1 DEBUG LINE_EDITING_ENABLED=1 MEMORY_PROFILING_ENABLED=1)
+    target_compile_definitions(tiny-clj-repl PRIVATE META_ENABLED=${TINYCLJ_META_ENABLED_VALUE} DEBUG LINE_EDITING_ENABLED=1 MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE})
     set_target_properties(tiny-clj-repl PROPERTIES
-        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=1 -fno-omit-frame-pointer"
+        COMPILE_FLAGS "-g -O0 -DDEBUG -DMEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
         LINK_FLAGS ""
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     )
@@ -252,9 +268,9 @@ add_executable(tiny-clj-profile
     ${SOURCES}
 )
 target_link_libraries(tiny-clj-profile PRIVATE subjective-c)
-target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=1 MEMORY_PROFILING_ENABLED=1 DEBUG)
+target_compile_definitions(tiny-clj-profile PRIVATE PROFILING_ENABLED=1 META_ENABLED=${TINYCLJ_META_ENABLED_VALUE} MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} DEBUG)
 set_target_properties(tiny-clj-profile PROPERTIES
-    COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=1 -fno-omit-frame-pointer"
+    COMPILE_FLAGS "-g -O2 -DDEBUG -DMEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE} -fno-omit-frame-pointer"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
@@ -362,7 +378,7 @@ if(ENABLE_ASAN)
         # Use target_link_options to properly set linker flags
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -385,7 +401,7 @@ if(ENABLE_ASAN)
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer -fsanitize=address"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -402,7 +418,7 @@ else()
         # macOS: disable dead_strip to preserve all functions (including test registrations)
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
@@ -422,7 +438,7 @@ else()
         # Linux/other: disable gc-sections to preserve all functions
         set_target_properties(unit-tests PROPERTIES
             COMPILE_FLAGS "-g -O0 -DDEBUG -DUNITY_TESTS -fno-omit-frame-pointer"
-            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=1;META_ENABLED=1;UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
+            COMPILE_DEFINITIONS "DEBUG;UNITY_TESTS;MEMORY_PROFILING_ENABLED=${TINYCLJ_MEMORY_PROFILING_ENABLED_VALUE};META_ENABLED=${TINYCLJ_META_ENABLED_VALUE};UNITY_INCLUDE_EXEC_TIME;ZOMBIE_ENABLED"
             # Force Debug configuration regardless of CMAKE_BUILD_TYPE
             COMPILE_OPTIONS "$<$<CONFIG:Debug>:-g;-O0;-DDEBUG>"
             COMPILE_OPTIONS "$<$<CONFIG:Release>:-g;-O0;-DDEBUG>"
