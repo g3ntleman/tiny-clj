@@ -1189,7 +1189,6 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
 static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) {
     ID args[16];
     unsigned int argc = 0;
-    unsigned char fn_tag = TAG(fn);
 
     // Hot path: Most calls have <= 2 args (fib, +, -, <, etc.)
     // Avoid a loop in the common case: unroll traversal for 0..2 args.
