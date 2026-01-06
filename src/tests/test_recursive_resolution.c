@@ -23,7 +23,7 @@ TEST(test_function_registered_before_body_evaluation) {
     CljSymbol *fn_sym = intern_symbol_global("simple");
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
-    TEST_ASSERT_NOT_NULL(fn_value);
+    TEST_ASSERT_TRUE(fn_value && fn_value != NOT_FOUND);
     TEST_ASSERT_TRUE(fn_value && TAG(fn_value) == CLJ_FUNC || fn_value && TAG(fn_value) == CLJ_CLOSURE);
     
 }
@@ -45,7 +45,7 @@ TEST(test_recursive_function_name_resolvable) {
     CljSymbol *fn_sym = intern_symbol_global("factorial");
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
     
-    TEST_ASSERT_NOT_NULL(fn_value);
+    TEST_ASSERT_TRUE(fn_value && fn_value != NOT_FOUND);
     TEST_ASSERT_TRUE(fn_value && TAG(fn_value) == CLJ_FUNC || fn_value && TAG(fn_value) == CLJ_CLOSURE);
     
 }
@@ -59,7 +59,7 @@ TEST(test_ns_resolve_during_definition) {
     // Before evaluation, function should not be in namespace
     CljSymbol *fn_sym = intern_symbol_global("test-fn");
     CljObject *fn_value_before = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
-    TEST_ASSERT_NULL(fn_value_before);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, fn_value_before);
     
     // Evaluate defn
     CljValue result = eval_string(defn_code, g_test_eval_state);
@@ -67,7 +67,7 @@ TEST(test_ns_resolve_during_definition) {
     
     // After evaluation, function should be in namespace
     CljObject *fn_value_after = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
-    TEST_ASSERT_NOT_NULL(fn_value_after);
+    TEST_ASSERT_TRUE(fn_value_after && fn_value_after != NOT_FOUND);
     TEST_ASSERT_TRUE(fn_value_after && TAG(fn_value_after) == CLJ_FUNC || fn_value_after && TAG(fn_value_after) == CLJ_CLOSURE);
     
 }
@@ -81,13 +81,13 @@ TEST(test_symbol_resolution_in_eval_body_with_params) {
     // Get the function from namespace
     CljSymbol *fn_sym = intern_symbol_global("test-fn");
     CljObject *fn_value = (CljObject*)ns_resolve(g_test_eval_state, fn_sym);
-    TEST_ASSERT_NOT_NULL(fn_value);
+    TEST_ASSERT_TRUE(fn_value && fn_value != NOT_FOUND);
     
     // Try to resolve the symbol using ns_resolve with NULL st
     CljObject *resolved = (CljObject*)ns_resolve(NULL, fn_sym);
     
     // Should find the function (searches all namespaces)
-    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(resolved && resolved != NOT_FOUND);
     
 }
 
@@ -120,7 +120,7 @@ TEST(test_eval_body_with_params_symbol_in_arithmetic) {
     CljObject *resolved = (CljObject*)ns_resolve(NULL, fn_sym);
     
     // Should find the function
-    TEST_ASSERT_NOT_NULL(resolved);
+    TEST_ASSERT_TRUE(resolved && resolved != NOT_FOUND);
     TEST_ASSERT_TRUE(resolved && TAG(resolved) == CLJ_FUNC || resolved && TAG(resolved) == CLJ_CLOSURE);
     
 }

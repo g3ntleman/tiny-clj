@@ -148,7 +148,8 @@ bool clj_equal_default(ID a, ID b) {
                 ID key = KV_KEY(map_a->data, i);
                 if (key) {
                     ID val_a = KV_VALUE(map_a->data, i);
-                    ID val_b = map_get(map_b, key, NULL);
+                    ID val_b = map_get(map_b, key);
+                    if (val_b == NOT_FOUND) return false;
                     if (!clj_equal_default(val_a, val_b)) return false;
                 }
             }
@@ -169,7 +170,8 @@ bool clj_equal_default(ID a, ID b) {
             ID key;
             ID val_a;
             HASHMAP_FOR_EACH(hm_a, key, val_a) {
-                ID val_b = hashmap_get(hm_b, key, NULL);
+                ID val_b = hashmap_get(hm_b, key);
+                if (val_b == NOT_FOUND) return false;
                 if (!clj_equal(val_a, val_b)) return false;
             }
             return true;

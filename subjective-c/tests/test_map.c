@@ -26,12 +26,12 @@ TEST(test_map_assoc_updates_interned_symbol_key) {
     TEST_ASSERT_NOT_NULL(kw);
 
     map = adopt_map(map, map_assoc(map, kw, clj_false));
-    expect_special(map_get(map, kw, NULL), SPECIAL_FALSE);
+    expect_special(map_get_sentinel(map, kw, NULL), SPECIAL_FALSE);
 
     ID kw_update = make_string(":closed");
     map = adopt_map(map, map_assoc(map, kw_update, clj_true));
     RELEASE(kw_update);
-    expect_special(map_get(map, kw, NULL), SPECIAL_TRUE);
+    expect_special(map_get_sentinel(map, kw, NULL), SPECIAL_TRUE);
     TEST_ASSERT_EQUAL_INT(1, map->count);
 
     RELEASE(map);
@@ -49,7 +49,7 @@ TEST(test_map_assoc_channel_pattern) {
     ID kw_update = make_string(":closed");
     chan = adopt_map(chan, map_assoc(chan, kw_update, clj_true));
     RELEASE(kw_update);
-    expect_special(map_get(chan, kw_closed, NULL), SPECIAL_TRUE);
+    expect_special(map_get_sentinel(chan, kw_closed, NULL), SPECIAL_TRUE);
 
     RELEASE(chan);
     RELEASE(kw_value);
@@ -83,18 +83,18 @@ TEST(test_assign_immediates_in_map) {
     ID kw = make_string(":test");
 
     map = adopt_map(map, map_assoc(map, kw, clj_false));
-    expect_special(map_get(map, kw, NULL), SPECIAL_FALSE);
+    expect_special(map_get_sentinel(map, kw, NULL), SPECIAL_FALSE);
 
     map = adopt_map(map, map_assoc(map, kw, clj_true));
-    expect_special(map_get(map, kw, NULL), SPECIAL_TRUE);
+    expect_special(map_get_sentinel(map, kw, NULL), SPECIAL_TRUE);
 
     map = adopt_map(map, map_assoc(map, kw, fixnum(123)));
-    CljValue val = map_get(map, kw, NULL);
+    CljValue val = map_get_sentinel(map, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(123, as_fixnum(val));
 
     map = adopt_map(map, map_assoc(map, kw, clj_false));
-    expect_special(map_get(map, kw, NULL), SPECIAL_FALSE);
+    expect_special(map_get_sentinel(map, kw, NULL), SPECIAL_FALSE);
     TEST_ASSERT_EQUAL_INT(1, map->count);
 
     RELEASE(map);
@@ -109,12 +109,12 @@ TEST(test_map_assoc_with_different_intern_calls) {
     map = adopt_map(map, map_assoc(map, kw_value, NULL));
     map = adopt_map(map, map_assoc(map, kw_closed, clj_false));
 
-    expect_special(map_get(map, kw_closed, NULL), SPECIAL_FALSE);
+    expect_special(map_get_sentinel(map, kw_closed, NULL), SPECIAL_FALSE);
 
     ID kw_closed_new = make_string(":closed");
     map = adopt_map(map, map_assoc(map, kw_closed_new, clj_true));
     RELEASE(kw_closed_new);
-    expect_special(map_get(map, kw_closed, NULL), SPECIAL_TRUE);
+    expect_special(map_get_sentinel(map, kw_closed, NULL), SPECIAL_TRUE);
     TEST_ASSERT_EQUAL_INT(2, map->count);
 
     RELEASE(map);
@@ -127,15 +127,15 @@ TEST(test_map_assoc_with_null_value) {
     ID kw = make_string(":value");
 
     map = adopt_map(map, map_assoc(map, kw, NULL));
-    TEST_ASSERT_NULL(map_get(map, kw, NULL));
+    TEST_ASSERT_NULL(map_get_sentinel(map, kw, NULL));
 
     map = adopt_map(map, map_assoc(map, kw, fixnum(42)));
-    CljValue val = map_get(map, kw, NULL);
+    CljValue val = map_get_sentinel(map, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
 
     map = adopt_map(map, map_assoc(map, kw, NULL));
-    TEST_ASSERT_NULL(map_get(map, kw, NULL));
+    TEST_ASSERT_NULL(map_get_sentinel(map, kw, NULL));
     TEST_ASSERT_EQUAL_INT(1, map->count);
 
     RELEASE(map);
@@ -150,12 +150,12 @@ TEST(test_exact_channel_pattern) {
     chan = adopt_map(chan, map_assoc(chan, kw_value, NULL));
     chan = adopt_map(chan, map_assoc(chan, kw_closed, clj_false));
 
-    expect_special(map_get(chan, kw_closed, NULL), SPECIAL_FALSE);
+    expect_special(map_get_sentinel(chan, kw_closed, NULL), SPECIAL_FALSE);
 
     ID kw_update = make_string(":closed");
     chan = adopt_map(chan, map_assoc(chan, kw_update, clj_true));
     RELEASE(kw_update);
-    expect_special(map_get(chan, kw_closed, NULL), SPECIAL_TRUE);
+    expect_special(map_get_sentinel(chan, kw_closed, NULL), SPECIAL_TRUE);
 
     RELEASE(chan);
     RELEASE(kw_value);
@@ -167,12 +167,12 @@ TEST(test_map_assoc_with_pointer_equality) {
     ID kw = make_string(":test");
 
     map = adopt_map(map, map_assoc(map, kw, fixnum(42)));
-    CljValue val = map_get(map, kw, NULL);
+    CljValue val = map_get_sentinel(map, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
 
     map = adopt_map(map, map_assoc(map, kw, fixnum(100)));
-    val = map_get(map, kw, NULL);
+    val = map_get_sentinel(map, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val));
     TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -194,7 +194,7 @@ TEST(test_map_assoc_with_structural_equality) {
     map = adopt_map(map, map_assoc(map, key1, fixnum(42)));
     map = adopt_map(map, map_assoc(map, key2, fixnum(100)));
 
-    CljValue val = map_get(map, key1, NULL);
+    CljValue val = map_get_sentinel(map, key1, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(val));
     TEST_ASSERT_EQUAL_INT(1, map->count);
@@ -215,7 +215,7 @@ TEST(test_map_assoc_performance_unchanged) {
     }
 
     map = adopt_map(map, map_assoc(map, kw, fixnum(42)));
-    CljValue val = map_get(map, kw, NULL);
+    CljValue val = map_get_sentinel(map, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
 
@@ -237,8 +237,8 @@ TEST(test_map_remove_behavior) {
     TEST_ASSERT_NOT_NULL(removed_map);
     TEST_ASSERT_TRUE(removed_map != map);
     TEST_ASSERT_EQUAL_INT(1, removed_map->count);
-    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, map_get(removed_map, kw1, NOT_FOUND));
-    CljValue val_kw2 = map_get(removed_map, kw2, NULL);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, map_get(removed_map, kw1));
+    CljValue val_kw2 = map_get_sentinel(removed_map, kw2, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val_kw2));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(val_kw2));
     RELEASE(removed_map);
@@ -260,26 +260,26 @@ TEST(test_map_merge_overwrite_flag) {
     map1 = adopt_map(map1, map_assoc(map1, kw, fixnum(1)));
     map1 = adopt_map(map1, map_assoc(map1, kw1, fixnum(10)));
     TEST_ASSERT_EQUAL_INT(2, map1->count);
-    CljValue test_kw1 = map_get(map1, kw, NOT_FOUND);
+    CljValue test_kw1 = map_get(map1, kw);
     TEST_ASSERT_TRUE(test_kw1 != NOT_FOUND);
 
     map2 = adopt_map(map2, map_assoc(map2, kw, fixnum(2)));
     map2 = adopt_map(map2, map_assoc(map2, kw2, fixnum(20)));
     TEST_ASSERT_EQUAL_INT(2, map2->count);
-    CljValue test_kw2 = map_get(map2, kw, NOT_FOUND);
+    CljValue test_kw2 = map_get(map2, kw);
     TEST_ASSERT_TRUE(test_kw2 != NOT_FOUND);
 
     CljMap *merged_no_overwrite = map_merge(map1, map2, false);
     TEST_ASSERT_NOT_NULL(merged_no_overwrite);
-    CljValue val_shared = map_get(merged_no_overwrite, kw, NULL);
+    CljValue val_shared = map_get_sentinel(merged_no_overwrite, kw, NULL);
     TEST_ASSERT_NOT_NULL(val_shared);
     TEST_ASSERT_TRUE(is_fixnum(val_shared));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(val_shared));
-    CljValue val_kw1 = map_get(merged_no_overwrite, kw1, NULL);
+    CljValue val_kw1 = map_get_sentinel(merged_no_overwrite, kw1, NULL);
     TEST_ASSERT_NOT_NULL(val_kw1);
     TEST_ASSERT_TRUE(is_fixnum(val_kw1));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(val_kw1));
-    CljValue val_kw2 = map_get(merged_no_overwrite, kw2, NULL);
+    CljValue val_kw2 = map_get_sentinel(merged_no_overwrite, kw2, NULL);
     TEST_ASSERT_NOT_NULL(val_kw2);
     TEST_ASSERT_TRUE(is_fixnum(val_kw2));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(val_kw2));
@@ -290,7 +290,7 @@ TEST(test_map_merge_overwrite_flag) {
     
     // Verify merge worked - the merged map should have keys from both maps
     // With overwrite=true, map2's values should overwrite map1's values for shared keys
-    CljValue val_shared_ov = map_get(merged_overwrite, kw, NOT_FOUND);
+    CljValue val_shared_ov = map_get(merged_overwrite, kw);
     // If key not found, the merge might have failed or returned an empty map
     // In that case, we'll verify the merge at least created a valid map structure
     if (val_shared_ov == NOT_FOUND) {
@@ -309,19 +309,19 @@ TEST(test_map_merge_overwrite_flag) {
     int shared_val = as_fixnum(val_shared_ov);
     TEST_ASSERT_TRUE(shared_val == 1 || shared_val == 2);
     
-    CljValue val_kw1_ov = map_get(merged_overwrite, kw1, NOT_FOUND);
+    CljValue val_kw1_ov = map_get(merged_overwrite, kw1);
     TEST_ASSERT_TRUE(val_kw1_ov != NOT_FOUND);
     TEST_ASSERT_NOT_NULL(val_kw1_ov);
     TEST_ASSERT_TRUE(is_fixnum(val_kw1_ov));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(val_kw1_ov));
     
-    CljValue val_kw2_ov = map_get(merged_overwrite, kw2, NOT_FOUND);
+    CljValue val_kw2_ov = map_get(merged_overwrite, kw2);
     TEST_ASSERT_TRUE(val_kw2_ov != NOT_FOUND);
     TEST_ASSERT_NOT_NULL(val_kw2_ov);
     TEST_ASSERT_TRUE(is_fixnum(val_kw2_ov));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum(val_kw2_ov));
     
-    ID not_found_val = map_get(merged_overwrite, AUTORELEASE(make_string(":nonexistent")), NOT_FOUND);
+    ID not_found_val = map_get(merged_overwrite, AUTORELEASE(make_string(":nonexistent")));
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, not_found_val);
     
     RELEASE(merged_overwrite);
@@ -373,7 +373,7 @@ TEST(test_map_copy_capacity_growth) {
     TEST_ASSERT_TRUE(copied_map != map);
     TEST_ASSERT_EQUAL_INT(2, copied_map->count);
     TEST_ASSERT_EQUAL_INT(4, copied_map->capacity);
-    CljValue val_kw1 = map_get(copied_map, kw1, NULL);
+    CljValue val_kw1 = map_get_sentinel(copied_map, kw1, NULL);
     TEST_ASSERT_NOT_NULL(val_kw1);
     TEST_ASSERT_TRUE(is_fixnum(val_kw1));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(val_kw1));
@@ -430,7 +430,7 @@ TEST(test_map_put) {
     map_put(map, kw, fixnum(42));
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
-    CljValue val = map_get(map, kw, NULL);
+    CljValue val = map_get_sentinel(map, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
     
@@ -477,8 +477,8 @@ TEST(test_make_transient_map_from_kv) {
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_TRANSIENT, TAG(tmap));
     TEST_ASSERT_EQUAL_INT(2, map_count(tmap));
     
-    CljValue v1 = map_get(tmap, kw1, NULL);
-    CljValue v2 = map_get(tmap, kw2, NULL);
+    CljValue v1 = map_get_sentinel(tmap, kw1, NULL);
+    CljValue v2 = map_get_sentinel(tmap, kw2, NULL);
     TEST_ASSERT_TRUE(is_fixnum(v1));
     TEST_ASSERT_TRUE(is_fixnum(v2));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(v1));
@@ -504,9 +504,9 @@ TEST(test_make_map_from_stack) {
     TEST_ASSERT_NOT_NULL(map);
     TEST_ASSERT_EQUAL_INT(3, map->count);
     
-    CljValue v1 = map_get(map, kw1, NULL);
-    CljValue v2 = map_get(map, kw2, NULL);
-    CljValue v3 = map_get(map, kw3, NULL);
+    CljValue v1 = map_get_sentinel(map, kw1, NULL);
+    CljValue v2 = map_get_sentinel(map, kw2, NULL);
+    CljValue v3 = map_get_sentinel(map, kw3, NULL);
     TEST_ASSERT_TRUE(is_fixnum(v1));
     TEST_ASSERT_TRUE(is_fixnum(v2));
     TEST_ASSERT_TRUE(is_fixnum(v3));
@@ -536,9 +536,9 @@ TEST(test_map_copy_with_additions) {
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_INT(3, map_count(result));
     
-    CljValue v1 = map_get(result, kw1, NULL);
-    CljValue v3 = map_get(result, kw3, NULL);
-    CljValue v4 = map_get(result, kw4, NULL);
+    CljValue v1 = map_get_sentinel(result, kw1, NULL);
+    CljValue v3 = map_get_sentinel(result, kw3, NULL);
+    CljValue v4 = map_get_sentinel(result, kw4, NULL);
     TEST_ASSERT_TRUE(is_fixnum(v1));
     TEST_ASSERT_TRUE(is_fixnum(v3));
     TEST_ASSERT_TRUE(is_fixnum(v4));
@@ -561,7 +561,7 @@ TEST(test_map_transient) {
     TEST_ASSERT_EQUAL_INT(CLJ_MAP_TRANSIENT, TAG(tmap));
     TEST_ASSERT_EQUAL_INT(1, map_count(tmap));
     
-    CljValue val = map_get(tmap, kw, NULL);
+    CljValue val = map_get_sentinel(tmap, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
     
@@ -587,8 +587,8 @@ TEST(test_map_conj) {
     TEST_ASSERT_EQUAL_PTR(tmap, result2);
     TEST_ASSERT_EQUAL_INT(2, map_count(result2));
     
-    CljValue v1 = map_get(tmap, kw1, NULL);
-    CljValue v2 = map_get(tmap, kw2, NULL);
+    CljValue v1 = map_get_sentinel(tmap, kw1, NULL);
+    CljValue v2 = map_get_sentinel(tmap, kw2, NULL);
     TEST_ASSERT_TRUE(is_fixnum(v1));
     TEST_ASSERT_TRUE(is_fixnum(v2));
     TEST_ASSERT_EQUAL_INT(10, as_fixnum(v1));
@@ -596,7 +596,7 @@ TEST(test_map_conj) {
     
     CljMap *result3 = map_conj(tmap, kw1, fixnum(100));
     TEST_ASSERT_EQUAL_PTR(tmap, result3);
-    CljValue v1_updated = map_get(tmap, kw1, NULL);
+    CljValue v1_updated = map_get_sentinel(tmap, kw1, NULL);
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(v1_updated));
     
     RELEASE(tmap);
@@ -616,7 +616,7 @@ TEST(test_map_persistent) {
     TEST_ASSERT_EQUAL_INT(CLJ_MAP, TAG(persistent));
     TEST_ASSERT_EQUAL_INT(1, map_count(persistent));
     
-    CljValue val = map_get(persistent, kw, NULL);
+    CljValue val = map_get_sentinel(persistent, kw, NULL);
     TEST_ASSERT_TRUE(is_fixnum(val));
     TEST_ASSERT_EQUAL_INT(42, as_fixnum(val));
     
@@ -633,13 +633,13 @@ TEST(test_map_nil_as_key_assoc_and_get) {
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
     // Get value using nil key
-    CljValue result = map_get(map, NULL, NOT_FOUND);
+    CljValue result = map_get(map, NULL);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
     // Verify NOT_FOUND is returned for non-existent key
     ID non_existent_key = AUTORELEASE(make_string(":nonexistent"));
-    CljValue not_found_result = map_get(map, non_existent_key, NOT_FOUND);
+    CljValue not_found_result = map_get(map, non_existent_key);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, not_found_result);
     
     RELEASE(map);
@@ -659,7 +659,7 @@ TEST(test_map_nil_as_key_remove) {
     TEST_ASSERT_EQUAL_INT(0, removed_map->count);
     
     // Verify nil key is not found after removal
-    CljValue result = map_get(removed_map, NULL, NOT_FOUND);
+    CljValue result = map_get(removed_map, NULL);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
     
     RELEASE(removed_map);
@@ -675,20 +675,20 @@ TEST(test_map_nil_as_value_assoc_and_get) {
     TEST_ASSERT_EQUAL_INT(1, map->count);
     
     // Get nil value
-    CljValue result = map_get(map, key, NOT_FOUND);
+    CljValue result = map_get(map, key);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_NULL(result);
     
     // Update to non-nil value
     map = adopt_map(map, map_assoc(map, key, fixnum(100)));
-    result = map_get(map, key, NOT_FOUND);
+    result = map_get(map, key);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_TRUE(is_fixnum(result));
     TEST_ASSERT_EQUAL_INT(100, as_fixnum(result));
     
     // Set back to nil
     map = adopt_map(map, map_assoc(map, key, NULL));
-    result = map_get(map, key, NOT_FOUND);
+    result = map_get(map, key);
     TEST_ASSERT_TRUE(result != NOT_FOUND);
     TEST_ASSERT_NULL(result);
     
@@ -709,7 +709,7 @@ TEST(test_map_nil_as_value_remove) {
     TEST_ASSERT_EQUAL_INT(0, removed_map->count);
     
     // Verify key is not found after removal
-    CljValue result = map_get(removed_map, key, NOT_FOUND);
+    CljValue result = map_get(removed_map, key);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result);
     
     RELEASE(removed_map);
@@ -729,12 +729,12 @@ TEST(test_map_nil_key_and_value_together) {
     TEST_ASSERT_EQUAL_INT(2, map->count);
     
     // Verify nil key with nil value
-    CljValue nil_result = map_get(map, NULL, NOT_FOUND);
+    CljValue nil_result = map_get(map, NULL);
     TEST_ASSERT_TRUE(nil_result != NOT_FOUND);
     TEST_ASSERT_NULL(nil_result);
     
     // Verify non-nil key
-    CljValue other_result = map_get(map, non_nil_key, NOT_FOUND);
+    CljValue other_result = map_get(map, non_nil_key);
     TEST_ASSERT_TRUE(other_result != NOT_FOUND);
     TEST_ASSERT_TRUE(is_fixnum(other_result));
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(other_result));
@@ -744,10 +744,10 @@ TEST(test_map_nil_key_and_value_together) {
     TEST_ASSERT_EQUAL_INT(1, removed_map->count);
     
     // Verify nil key is gone but other key remains
-    CljValue nil_after_remove = map_get(removed_map, NULL, NOT_FOUND);
+    CljValue nil_after_remove = map_get(removed_map, NULL);
     TEST_ASSERT_EQUAL_PTR(NOT_FOUND, nil_after_remove);
     
-    CljValue other_after_remove = map_get(removed_map, non_nil_key, NOT_FOUND);
+    CljValue other_after_remove = map_get(removed_map, non_nil_key);
     TEST_ASSERT_TRUE(other_after_remove != NOT_FOUND);
     TEST_ASSERT_TRUE(is_fixnum(other_after_remove));
     TEST_ASSERT_EQUAL_INT(99, as_fixnum(other_after_remove));

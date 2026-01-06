@@ -108,12 +108,20 @@ void set_suppress_time_output(bool suppress) {
 }
 
 // Resolve cache helpers ----------------------------------------------------
-static INLINE CljSymbol* resolve_cache_ns_key(CljSymbol *op_sym, EvalState *st) {
+static INLINE CljNamespace *get_resolve_ns(const EvalContext *ctx, EvalState *st) {
+    if (ctx && ctx->resolve_ns) {
+        return ctx->resolve_ns;
+    }
+    return st ? st->current_ns : NULL;
+}
+
+static INLINE CljSymbol* resolve_cache_ns_key_ctx(CljSymbol *op_sym, const EvalContext *ctx, EvalState *st) {
     if (op_sym && op_sym->ns_name) {
         return op_sym->ns_name;
     }
-    if (st && st->current_ns && st->current_ns->name) {
-        return st->current_ns->name;
+    CljNamespace *resolve_ns = get_resolve_ns(ctx, st);
+    if (resolve_ns && resolve_ns->name) {
+        return resolve_ns->name;
     }
     return NULL;
 }
@@ -122,12 +130,12 @@ static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return NULL;
     }
-    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key, NOT_FOUND);
+    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key);
     if (ns_cache_id == NOT_FOUND || !ns_cache_id) {
         return NULL;
     }
     CljMap *ns_cache = (CljMap*)ns_cache_id;
-    ID cached = map_get(ns_cache, op, NOT_FOUND);
+    ID cached = map_get(ns_cache, op);
     if (cached == NOT_FOUND || !cached) {
         return NULL;
     }
@@ -138,7 +146,7 @@ static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return;
     }
-    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key, NOT_FOUND);
+    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key);
     CljMap *ns_cache = (ns_cache_id == NOT_FOUND) ? NULL : (CljMap*)ns_cache_id;
     if (!ns_cache) {
         ns_cache = make_map(RESOLVE_CACHE_SIZE);
@@ -152,6 +160,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx);
 ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_fn_with_context(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const EvalContext *ctx);
+static INLINE ID eval_symbol_with_resolve_ns(CljSymbol *symbol, EvalState *st, CljNamespace *resolve_ns);
 // is_special_symbol is now in symbol.c
 static INLINE bool is_builtin_function(CljSymbol *symbol);
 
@@ -281,6 +290,7 @@ ID eval_function_call(ID fn, ID *args, unsigned int argc, CljMap *env, EvalState
             .env_stack = call_env_stack,  // Closure environment only
             .frame = call_frame,          // Stack-based frame for parameters
             .st = st,
+            .resolve_ns = func->ns ? func->ns : (st ? st->current_ns : NULL),
             .recur_args = recur_args,
             .recur_arg_count = &recur_arg_count,
             .recur_param_count = param_count  // Fixed for this function
@@ -383,6 +393,7 @@ static const EvalContext* ensure_eval_context(CljMap *env,
             .env_stack = env ? make_list(env, NULL) : NULL,
             .frame = NULL,
             .st = st,
+            .resolve_ns = st ? st->current_ns : NULL,
             .recur_args = NULL,
             .recur_arg_count = NULL,
             .recur_param_count = 0
@@ -433,46 +444,13 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
         }
     }
 
-    // OPTIMIZATION: If no env_stack and no fallback_env, go direct to namespace
-    // This is common for function calls like (fib ...) where fib is in namespace
-    if (!env_stack && !fallback_env) {
-        // Fast-path: check current namespace mappings directly so a "found but nil" value is preserved.
-        if (st && st->current_ns && st->current_ns->mappings) {
-            ID resolved = map_get(st->current_ns->mappings, sym, NOT_FOUND);
-            if (resolved != NOT_FOUND) {
-                return resolved ? resolved : (ID)SYM_NIL;
-            }
-        }
-
-        // Dynamic vars can be bound to nil (NULL) and must be treated as resolved.
-        if (st) {
-            CljSymbol *sym_obj = as_symbol(sym);
-            if (sym_obj && is_dynamic_var_symbol(sym_obj)) {
-                ID bound = dynamic_binding_lookup(st, sym_obj);
-                if (bound != NOT_FOUND) {
-                    return bound ? bound : (ID)SYM_NIL;
-                }
-            }
-        }
-
-        // Final fallback: full symbol resolution (may throw on unresolved).
-        if (st) {
-            ID resolved_ns = eval_symbol(as_symbol(sym), st);
-            if (resolved_ns && resolved_ns != sym) {
-                return resolved_ns;
-            }
-        }
-
-        return NOT_FOUND;
-    }
-
     // Search env_stack (for let bindings, closure captures)
     CljList *current_stack = env_stack;
     while (current_stack && list_type_matches(TAG(current_stack))) {
         ID env_obj_id = LIST_FIRST(current_stack);
         if (env_obj_id && TAG(env_obj_id) == CLJ_MAP) {
             CljMap *env = (CljMap*)env_obj_id;
-            ID resolved = map_get(env, sym, NOT_FOUND);
+            ID resolved = map_get(env, sym);
             if (resolved != NOT_FOUND) {
                 return resolved ? resolved : (ID)SYM_NIL;
             }
@@ -487,15 +465,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
     }
     
     if (fallback_env) {
-        ID resolved = map_get(fallback_env, sym, NOT_FOUND);
-        if (resolved != NOT_FOUND) {
-            return resolved ? resolved : (ID)SYM_NIL;
-        }
-    }
-
-    // Fallback to namespace mappings directly (preserves "found but nil").
-    if (st && st->current_ns && st->current_ns->mappings) {
-        ID resolved = map_get(st->current_ns->mappings, sym, NOT_FOUND);
+        ID resolved = map_get(fallback_env, sym);
         if (resolved != NOT_FOUND) {
             return resolved ? resolved : (ID)SYM_NIL;
         }
@@ -509,14 +479,6 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
             if (bound != NOT_FOUND) {
                 return bound ? bound : (ID)SYM_NIL;
             }
-        }
-    }
-
-    // Final fallback: full symbol resolution.
-    if (st) {
-        ID resolved_ns = eval_symbol(as_symbol(sym), st);
-        if (resolved_ns && resolved_ns != sym) {
-            return resolved_ns;
         }
     }
 
@@ -567,7 +529,7 @@ ID eval_body_with_env(ID body, CljMap *env, EvalState *st) {
     switch (body_obj->type) {
         case CLJ_SYMBOL: {
             // Look up symbol in environment
-            return map_get((CljMap*)env, body, NULL);
+            return map_get_sentinel((CljMap*)env, body, NULL);
         }
 
         case CLJ_LIST:
@@ -633,9 +595,13 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         // ns_resolve takes CljObject* (only objects, not immediates) and returns ID
         // body is a symbol (CljObject*), so we can pass it directly
         EvalState *ctx_state_after_env = get_eval_state(ctx, NULL);
-        if (ctx_state_after_env) {
-            ID resolved_id = ns_resolve(ctx_state_after_env, as_symbol(body));
-            if (resolved_id) {
+        {
+            CljNamespace *resolve_ns = get_resolve_ns(ctx, ctx_state_after_env);
+            ID resolved_id = ns_resolve_in(resolve_ns, as_symbol(body));
+            if (resolved_id != NOT_FOUND) {
+                if (!resolved_id || resolved_id == SYM_NIL) {
+                    return NULL;
+                }
                 // This can happen if a symbol is stored in namespace instead of its value
                 // In this case, we should throw an exception instead of returning the symbol
                 if (!IS_IMMEDIATE(resolved_id) && TAG(resolved_id) == CLJ_SYMBOL) {
@@ -813,7 +779,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // because nil (NULL) is a valid value
             if (env && TAG(env) == CLJ_MAP) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
-                ID result_id = map_get((CljMap*)env, body, NOT_FOUND);
+                ID result_id = map_get((CljMap*)env, body);
                 if (result_id != NOT_FOUND) {
                     return (CljObject*)result_id;
                 }
@@ -822,7 +788,7 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // If not found in local environment, try namespace
             if (st && st->current_ns && st->current_ns->mappings) {
                 // Use sentinel to distinguish "key not found" from "value is nil"
-                ID result_id = map_get(st->current_ns->mappings, body, NOT_FOUND);
+                ID result_id = map_get(st->current_ns->mappings, body);
                 if (result_id != NOT_FOUND) {
                     return (CljObject*)result_id;
                 }
@@ -967,7 +933,7 @@ static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
         if (!frame_id || TAG(frame_id) != CLJ_MAP) {
             continue;
         }
-        ID v = map_get((CljMap*)frame_id, (ID)symbol, NOT_FOUND);
+        ID v = map_get((CljMap*)frame_id, (ID)symbol);
         if (v != NOT_FOUND) {
             // v may be NULL (nil) - that's a valid binding value.
             return v;
@@ -1011,7 +977,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         // IMPORTANT: Dynamic vars must never use the resolve cache.
         EvalState *ctx_st = get_eval_state(ctx, st);
         if (!op_is_dynamic && g_runtime.resolve_cache && ctx_st) {
-            CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
+            CljSymbol *cache_ns_key = resolve_cache_ns_key_ctx(op_sym, ctx, ctx_st);
             ID cached = resolve_cache_lookup_value(cache_ns_key, op);
             if (cached) {
                 // Populate callsite cache for future hits
@@ -1028,6 +994,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     CljList *owned_env_stack = NULL;
     const EvalContext *effective_ctx = ensure_eval_context(env, st, ctx, &local_ctx, &owned_env_stack);
     ID resolved = NULL;
+    bool resolved_found = false;
     CljMap *closure_env = effective_ctx ? get_closure_env(effective_ctx) : NULL;
     EvalState *ctx_st = get_eval_state(effective_ctx, st);
     CljMap *resolve_env = closure_env ? closure_env : env;
@@ -1053,7 +1020,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         return return_value;
     }
 
-    CljSymbol *cache_ns_key = resolve_cache_ns_key(op_sym, ctx_st);
+    CljSymbol *cache_ns_key = resolve_cache_ns_key_ctx(op_sym, effective_ctx, ctx_st);
     bool allow_callsite_cache = call_node && op_sym && !op_is_dynamic && !resolve_stack && g_runtime.resolve_cache_epoch != 0;
 
     // OPTIMIZATION: Qualified symbols skip env_stack - go direct to namespace
@@ -1066,9 +1033,10 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         while (current && list_type_matches(TAG(current))) {
             ID env_obj = LIST_FIRST(current);
             if (env_obj && TAG(env_obj) == CLJ_MAP) {
-                ID found = map_get((CljMap*)env_obj, op, NOT_FOUND);
+                ID found = map_get((CljMap*)env_obj, op);
                 if (found != NOT_FOUND) {
                     resolved = found;
+                    resolved_found = true;
                     break;
                 }
             }
@@ -1077,7 +1045,7 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
         }
     }
 
-    if (resolved) {
+    if (resolved_found) {
         RELEASE(owned_env_stack);
         return resolved;
     }
@@ -1085,10 +1053,11 @@ static INLINE ID resolve_list_operator(ID op, CljMap *env, EvalState *st, const 
     // Namespace lookup - this result can be cached
     // For qualified symbols, this is the primary lookup path
     // For unqualified symbols, this is the fallback after env_stack
-    resolved = eval_symbol(op_sym, ctx_st);
+    // Resolve operator in lexical namespace (ctx->resolve_ns) while keeping *ns* dynamic.
+    resolved = eval_symbol_with_resolve_ns(op_sym, ctx_st, get_resolve_ns(effective_ctx, ctx_st));
     
     // Cache namespace lookups for future calls
-    if (!op_is_dynamic && resolved && ctx_st && ctx_st->current_ns && TAG(resolved) != CLJ_SYMBOL) {
+    if (!op_is_dynamic && resolved && cache_ns_key && TAG(resolved) != CLJ_SYMBOL) {
         if (!g_runtime.resolve_cache) {
             ASSIGN(g_runtime.resolve_cache, make_map(RESOLVE_CACHE_SIZE));
         }
@@ -1122,7 +1091,7 @@ static INLINE ID eval_function_call_from_list(CljList *list, CljMap *env, EvalSt
                 }
             }
             if (arg && TAG(arg) == CLJ_MAP) {
-                ID result = map_get((CljValue)arg, (CljValue)op, NULL);
+                ID result = map_get_sentinel((CljValue)arg, (CljValue)op, NULL);
                 RELEASE(arg);
                 return RETAIN(result);
             }
@@ -1222,31 +1191,76 @@ static INLINE ID call_function_with_args_and_context(ID fn, CljList *list, CljMa
         }
     }
 
-    CljNamespace *saved_ns = st ? st->current_ns : NULL;
-    CljNamespace *target_ns = NULL;
-    if (fn_tag == CLJ_CLOSURE) {
-        CljFunction *closure_fn = (CljFunction*)fn;
-        target_ns = closure_fn->ns;
-    }
-
-    bool switched_ns = false;
-    if (st && target_ns && st->current_ns != target_ns) {
-        st->current_ns = target_ns;
-        switched_ns = true;
-    }
-
-    // Call function - no TRY/CATCH needed, exception cleanup happens in outer handler
+    // Call function - do NOT mutate st->current_ns for closures.
+    // Lexical symbol resolution is handled via EvalContext.resolve_ns inside eval_function_call.
     ID result = eval_function_call(fn, args, argc, env, st);
-
-    // Restore namespace after successful call (st guaranteed non-NULL if switched_ns)
-    if (switched_ns) {
-        st->current_ns = saved_ns;
-    }
 
     if (result == SYM_NIL) {
         return NULL;
     }
     return AUTORELEASE(result);
+}
+
+// Internal: resolve symbols in the context of a specific lexical namespace.
+// Keeps dynamic *ns* behavior (SYM_NS_STAR uses st->current_ns).
+static INLINE ID eval_symbol_with_resolve_ns(CljSymbol *symbol, EvalState *st, CljNamespace *resolve_ns) {
+    if (!symbol) {
+        return NULL;
+    }
+
+    // Special case: nil evaluates to NULL
+    if (symbol == SYM_NIL) {
+        return NULL;
+    }
+
+    // Keywords evaluate to themselves
+    if (IS_KEYWORD(symbol)) {
+        return symbol;
+    }
+
+    // Dynamic vars: if an earmuffed symbol is dynamically bound, return its binding.
+    // Values may be NULL (nil) and are stored directly in binding maps.
+    if (is_dynamic_var_symbol(symbol)) {
+        ID bound = dynamic_binding_lookup(st, symbol);
+        if (bound != NOT_FOUND) {
+            return bound;
+        }
+    }
+
+    // *ns* is represented as the current namespace object (dynamic).
+    if (symbol == SYM_NS_STAR) {
+        if (st && st->current_ns) {
+            return (ID)st->current_ns;
+        }
+        return (ID)ns_get_or_create("user", NULL);
+    }
+
+    // Qualified symbols resolve independent of lexical namespace.
+    if (symbol->ns_name && symbol->ns_name->cname) {
+        return eval_symbol(symbol, st);
+    }
+
+    // Check special forms first - they return themselves
+    if (is_special_symbol(symbol)) {
+        return symbol;
+    }
+
+    // Builtins resolve via namespace (lexical resolve namespace)
+    ID value = ns_resolve_in(resolve_ns, symbol);
+    if (value != NOT_FOUND) {
+        if (!value || value == SYM_NIL) {
+            return NULL;
+        }
+        return value;
+    }
+
+    if (is_builtin_function(symbol)) {
+        return symbol;
+    }
+
+    const char *cname = symbol->cname ? symbol->cname : "unknown";
+    throw_exception_formatted(NULL, __FILE__, __LINE__, 0, "Unable to resolve symbol: %s in this context", cname);
+    return NULL;
 }
 
 // List evaluation (optionally accepts EvalContext for recur support)
@@ -1677,16 +1691,21 @@ ID eval_var(CljList *list, CljMap *env, EvalState *st) {
 
     // Look up the symbol in the current namespace
     ID value = ns_resolve(st, sym);
-    if (!value) {
+    if (value == NOT_FOUND) {
         // Try to find the symbol in the current namespace mappings
         CljMap *mappings = st->current_ns->mappings;
         if (mappings) {
-            value = map_get((CljValue)mappings, sym_obj, NULL);
+            value = map_get(mappings, sym_obj);
         }
     }
 
-    if (!value) {
+    if (value == NOT_FOUND) {
         eval_error("var: symbol not found", st);
+        return NULL;
+    }
+
+    // Normalize SYM_NIL to runtime nil (NULL)
+    if (value == SYM_NIL) {
         return NULL;
     }
 
@@ -1953,7 +1972,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
             // This avoids expensive re-interning (find_symbol + strcmp) in hot paths
             // The parser already creates the correct qualified symbol pointer
             // CRITICAL: Use sentinel to distinguish "key not found" from "value is nil"
-            ID resolved = map_get(target_ns->mappings, symbol, NOT_FOUND);
+            ID resolved = map_get(target_ns->mappings, symbol);
             if (resolved != NOT_FOUND) {
                 // Found in target namespace - return it (can be NULL/nil, which is valid)
                 return resolved;
@@ -1963,7 +1982,7 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
                 symbol_alias = intern_symbol_global(symbol->cname);
             }
             if (symbol_alias && symbol_alias != symbol) {
-                resolved = map_get(target_ns->mappings, symbol_alias, NOT_FOUND);
+                resolved = map_get(target_ns->mappings, symbol_alias);
                 if (resolved != NOT_FOUND) {
                     return resolved;
                 }
@@ -2001,10 +2020,10 @@ ID eval_symbol(CljSymbol *symbol, EvalState *st) {
     // CRITICAL: All functions must be registered in the namespace (via register_builtins()
     // or via :native stubs in clojure.core.clj). No fallback to native_function_lookup
     // to avoid hiding errors where functions are used before they are defined.
-    ID value = ns_resolve(st, symbol);
-    if (value) {
-        // Special case: If value is SYM_NIL, return NULL
-        if (value == SYM_NIL) {
+    ID value = ns_resolve_in(st ? st->current_ns : NULL, symbol);
+    if (value != NOT_FOUND) {
+        // Normalize nil representations
+        if (!value || value == SYM_NIL) {
             return NULL;
         }
         // ns_resolve returns a value that is safe to use in our scope
@@ -2466,6 +2485,7 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         }
         
         ID resolved_value = NULL;
+        bool resolved_found = false;
         
         // If context is provided with env_stack, use resolve_symbol_in_env
         // to search through the entire environment stack (for nested let blocks)
@@ -2493,18 +2513,20 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                     }
                 }
                 resolved_value = resolved_id;
+                resolved_found = true;
             }
             // Not found in env_stack or still a symbol, fall through to namespace resolution
         }
         
         if (!resolved_value && env && TAG(env) == CLJ_MAP) {
             // Use sentinel to distinguish "key not found" from "value is nil"
-            ID resolved_id = map_get(env, expr, NOT_FOUND);
+            ID resolved_id = map_get(env, expr);
             if (resolved_id != NOT_FOUND) {
                 // Key exists in map (value may be NULL/nil)
                 // map_get returns retained value, eval_arg should return AUTORELEASE
                 if (!resolved_id) return NULL; // nil
                 resolved_value = resolved_id;
+                resolved_found = true;
             }
         }
 
@@ -2522,13 +2544,21 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
                 }
             }
 
-            CljObject *resolved = ns_resolve(st, as_symbol(expr));
-            if (resolved) {
+            CljNamespace *resolve_ns = get_resolve_ns(ctx, st);
+            ID resolved = ns_resolve_in(resolve_ns, as_symbol(expr));
+            if (resolved != NOT_FOUND) {
+                resolved_found = true;
+                if (!resolved || resolved == SYM_NIL) {
+                    return NULL;
+                }
                 resolved_value = resolved;
             }
         }
 
-        if (resolved_value) {
+        if (resolved_found) {
+            if (!resolved_value) {
+                return NULL;
+            }
             if (IS_IMMEDIATE(resolved_value)) {
                 return resolved_value;
             }

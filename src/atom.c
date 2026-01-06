@@ -73,7 +73,7 @@ ID atom_swap(CljAtom *atom, ID fn, ID *args, unsigned int argc) {
         // ns_resolve searches clojure.core even if current_ns is different
         // Pass NULL for st to use default namespace - ns_resolve will still search clojure.core
         ID resolved = ns_resolve(NULL, as_symbol(fn));
-        if (resolved) {
+        if (resolved != NOT_FOUND) {
             // resolved is retained by the map, so we can use it directly
             // No need to RELEASE old fn (it's a parameter) or RETAIN resolved (already retained)
             fn = resolved;

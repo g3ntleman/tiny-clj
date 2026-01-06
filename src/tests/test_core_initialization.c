@@ -49,7 +49,7 @@ TEST(test_core_initialization_inc_loaded) {
     }
     
     // Try direct map_get
-    CljObject *inc_value = map_get(map, inc_sym, NULL);
+    CljObject *inc_value = map_get_sentinel(map, inc_sym, NULL);
     
     if (!inc_value && !found_inc) {
         char msg[512];
@@ -82,7 +82,7 @@ TEST(test_core_initialization_arithmetic_functions) {
     
     for (int i = 0; i < num_functions; i++) {
         CljSymbol *sym = intern_symbol_global(functions[i]);
-        CljObject *value = map_get(clojure_core->mappings, sym, NULL);
+        CljObject *value = map_get_sentinel(clojure_core->mappings, sym, NULL);
         
         if (!value) {
             missing_count++;
@@ -112,7 +112,7 @@ TEST(test_core_initialization_plus_available) {
     TEST_ASSERT_NOT_NULL(plus_sym);
     
     // Check if + is in clojure.core mappings (should be registered by register_builtins)
-    CljObject *plus_value = map_get(clojure_core->mappings, plus_sym, NULL);
+    CljObject *plus_value = map_get_sentinel(clojure_core->mappings, plus_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(plus_value, 
                                  "+ should be in clojure.core mappings (registered by register_builtins)");
 }
@@ -131,7 +131,7 @@ TEST(test_clojure_core_loads_inc) {
     CljNamespace *clojure_core_before = ns_find_by_symbol(SYM_CLOJURE_CORE);
     bool already_loaded = (clojure_core_before != NULL && 
                           clojure_core_before->mappings != NULL &&
-                          map_get(clojure_core_before->mappings, inc_sym, NULL) != NULL);
+                          map_get_sentinel(clojure_core_before->mappings, inc_sym, NULL) != NULL);
     
     // Only load clojure.core if it's not already loaded
     // (setUp() already loads it, so this avoids double-loading)
@@ -145,7 +145,7 @@ TEST(test_clojure_core_loads_inc) {
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core cache should be set");
     
     if (clojure_core && clojure_core->mappings) {
-        CljObject *inc_value = map_get(clojure_core->mappings, inc_sym, NULL);
+        CljObject *inc_value = map_get_sentinel(clojure_core->mappings, inc_sym, NULL);
         
         if (!inc_value) {
             CljMap *map = clojure_core->mappings;
@@ -201,7 +201,7 @@ TEST(test_clojure_core_loads_all_functions) {
     bool already_loaded = (clojure_core_before != NULL && 
                           clojure_core_before->mappings != NULL &&
                           inc_sym != NULL &&
-                          map_get(clojure_core_before->mappings, inc_sym, NULL) != NULL);
+                          map_get_sentinel(clojure_core_before->mappings, inc_sym, NULL) != NULL);
     
     // Only load clojure.core if it's not already loaded
     // (setUp() already loads it, so this avoids double-loading)
@@ -223,7 +223,7 @@ TEST(test_clojure_core_loads_all_functions) {
         
         for (int i = 0; i < num_functions; i++) {
             CljSymbol *sym = intern_symbol_global(functions[i]);
-            CljObject *value = map_get(clojure_core->mappings, sym, NULL);
+            CljObject *value = map_get_sentinel(clojure_core->mappings, sym, NULL);
             
             if (!value) {
                 missing_count++;
@@ -290,7 +290,7 @@ TEST(test_def_inc_evaluation_during_load) {
             if (g_test_eval_state->current_ns->name && g_test_eval_state->current_ns->name->cname) {
                 qualified_inc_sym = intern_symbol(g_test_eval_state->current_ns->name, "inc");
             }
-            CljObject *inc_value = qualified_inc_sym ? map_get(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL) : NULL;
+            CljObject *inc_value = qualified_inc_sym ? map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL) : NULL;
             
             if (!inc_value) {
                 CljMap *map = g_test_eval_state->current_ns->mappings;
@@ -349,7 +349,7 @@ TEST(test_plus_available_during_fn_evaluation) {
     TEST_ASSERT_NOT_NULL_MESSAGE(clojure_core, "clojure.core should exist");
     
     if (clojure_core && clojure_core->mappings) {
-        CljObject *plus_value = map_get(clojure_core->mappings, plus_sym, NULL);
+        CljObject *plus_value = map_get_sentinel(clojure_core->mappings, plus_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(plus_value, 
                                     "+ should be in clojure.core mappings");
     }
@@ -419,10 +419,8 @@ TEST(test_def_stores_symbol_even_if_value_null) {
         }
         TEST_ASSERT_NOT_NULL_MESSAGE(qualified_test_var_sym, "Should be able to create qualified symbol");
         
-        // map_get can return NULL both for nil values and missing keys, so use sentinel to distinguish
         CljObject *test_var_value_check = map_get(g_test_eval_state->current_ns->mappings,
-                                                  qualified_test_var_sym,
-                                                  NOT_FOUND);
+                              qualified_test_var_sym);
         bool found_key = (test_var_value_check != NOT_FOUND);
         
         TEST_ASSERT_TRUE_MESSAGE(found_key, 

@@ -14,7 +14,7 @@
 static CljFunction* lookup_macro(CljNamespace *ns, CljSymbol *name) {
     if (!ns || !name || !ns->macro_mappings) return NULL;
 
-    CljObject *found = map_get(ns->macro_mappings, (CljObject*)name, NULL);
+    CljObject *found = map_get_sentinel(ns->macro_mappings, (CljObject*)name, NULL);
     // Macros are CLJ_CLOSURE (interpreted functions), not CLJ_FUNC (native)
     return (found && TAG(found) == CLJ_CLOSURE) ? as_function(found) : NULL;
 }

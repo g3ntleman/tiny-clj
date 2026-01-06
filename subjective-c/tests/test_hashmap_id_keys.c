@@ -40,7 +40,7 @@ TEST(test_hashmap_string_key) {
     map = adopt_hashmap(map, hashmap_assoc(map, key, value));
     TEST_ASSERT_NOT_NULL(map);
     
-    ID result = hashmap_get(map, key, NULL);
+    ID result = hashmap_get_sentinel(map, key, NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
@@ -61,7 +61,7 @@ TEST(test_hashmap_fixnum_key) {
     map = adopt_hashmap(map, hashmap_assoc(map, key, value));
     TEST_ASSERT_NOT_NULL(map);
     
-    ID result = hashmap_get(map, key, NULL);
+    ID result = hashmap_get_sentinel(map, key, NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
@@ -77,7 +77,7 @@ TEST(test_hashmap_nil_key) {
     map = adopt_hashmap(map, hashmap_assoc(map, NULL, value));
     TEST_ASSERT_NOT_NULL(map);
     
-    ID result = hashmap_get(map, NULL, NULL);
+    ID result = hashmap_get_sentinel(map, NULL, NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_PTR(value, result);
     
@@ -107,13 +107,13 @@ TEST(test_hashmap_mixed_keys) {
     TEST_ASSERT_EQUAL_UINT(3, hashmap_count(map));
     
     // Prüfe alle Keys
-    ID result1 = hashmap_get(map, str_key, NULL);
+    ID result1 = hashmap_get_sentinel(map, str_key, NULL);
     TEST_ASSERT_EQUAL_PTR(str_val, result1);
     
-    ID result2 = hashmap_get(map, int_key, NULL);
+    ID result2 = hashmap_get_sentinel(map, int_key, NULL);
     TEST_ASSERT_EQUAL_PTR(int_val, result2);
     
-    ID result3 = hashmap_get(map, NULL, NULL);
+    ID result3 = hashmap_get_sentinel(map, NULL, NULL);
     TEST_ASSERT_EQUAL_PTR(nil_val, result3);
     
     RELEASE(str_key);

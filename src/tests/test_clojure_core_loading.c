@@ -38,7 +38,7 @@ TEST(test_count_in_clojure_core_after_loading) {
         TEST_ASSERT_NOT_NULL(clojure_core);
         
         CljSymbol *count_sym = intern_symbol_global("count");
-        CljObject *count_value = map_get(clojure_core->mappings, count_sym, NULL);
+        CljObject *count_value = map_get_sentinel(clojure_core->mappings, count_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(count_value, "count should be in clojure.core namespace");
         TEST_ASSERT_TRUE_MESSAGE(TAG(count_value) == CLJ_FUNC, "count should be a function");
     });
@@ -57,7 +57,7 @@ TEST(test_first_in_clojure_core_after_loading) {
         TEST_ASSERT_NOT_NULL(clojure_core);
         
         CljSymbol *first_sym = intern_symbol_global("first");
-        CljObject *first_value = map_get(clojure_core->mappings, first_sym, NULL);
+        CljObject *first_value = map_get_sentinel(clojure_core->mappings, first_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(first_value, "first should be in clojure.core namespace");
         TEST_ASSERT_TRUE_MESSAGE(TAG(first_value) == CLJ_FUNC, "first should be a function");
     });

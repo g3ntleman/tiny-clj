@@ -23,7 +23,7 @@ TEST_SHARED(test_aaa_map_assoc_autorelease_fixnum) {
     ASSIGN(map, map_assoc(map, key, value));
     
     // Retrieve value - this is what fails in namespace tests
-    ID retrieved = map_get(map, key, NOT_FOUND);
+    ID retrieved = map_get(map, key);
     
     // Critical assertions
     TEST_ASSERT_TRUE_MESSAGE(retrieved != NOT_FOUND, "Value should be found");
@@ -53,7 +53,7 @@ TEST_SHARED(test_aab_ns_define_resolve_pattern) {
     CljObject *resolved = ns_resolve(g_test_eval_state, test_sym);
     
     // Critical assertions
-    TEST_ASSERT_NOT_NULL_MESSAGE(resolved, "resolved should not be NULL");
+    TEST_ASSERT_TRUE_MESSAGE(resolved && resolved != NOT_FOUND, "resolved should not be NULL/NOT_FOUND");
     TEST_ASSERT_TRUE_MESSAGE(is_fixnum((CljValue)resolved), "resolved should be fixnum");
     TEST_ASSERT_EQUAL_MESSAGE(99, as_fixnum((CljValue)resolved), "Value should be 99");
     

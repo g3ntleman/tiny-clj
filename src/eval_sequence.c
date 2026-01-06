@@ -50,7 +50,7 @@ ID eval_map_lookup(CljList *list, CljMap *env, EvalState *st, const EvalContext 
     ID key = eval_arg_with_context(list, 1, env, st, ctx);
     if (!key) return NULL;
 
-    ID result = map_get((CljValue)map, (CljValue)key, NULL);
+    ID result = map_get_sentinel((CljValue)map, (CljValue)key, NULL);
     RELEASE(key);
     return result;
 }

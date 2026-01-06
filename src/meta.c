@@ -55,7 +55,8 @@ void meta_set(ID v, ID meta) {
 
 ID meta_get(ID v) {
     if (!v || !g_runtime.meta_registry) return NULL;
-    return hashmap_get(g_runtime.meta_registry, v, NULL);
+    ID result = hashmap_get(g_runtime.meta_registry, v);
+    return (result == NOT_FOUND) ? NULL : result;
 }
 
 void meta_clear(ID v) {
@@ -141,7 +142,7 @@ CljMap* meta_merge(CljMap *existing_meta, CljMap *location_meta) {
     
     MAP_FOR_EACH(location_meta, key, value) {
         if (!key) continue;
-        ID existing_value = map_get(existing_meta, key, NOT_FOUND);
+        ID existing_value = map_get(existing_meta, key);
         if (existing_value == NOT_FOUND) {
             if (!missing_entries) {
                 missing_entries = map_empty();
@@ -185,7 +186,7 @@ CljMap* meta_merge_with_precedence(CljMap *existing_meta, CljMap *form_meta) {
     // Also add keys from existing_meta that don't exist in form_meta
     MAP_FOR_EACH(existing_meta, key, value) {
         if (!key) continue;
-        ID form_value = map_get(as_map(form_meta), key, NOT_FOUND);
+        ID form_value = map_get(as_map(form_meta), key);
         if (form_value == NOT_FOUND) {
             map_assoc_inplace(&result, key, value);
         }

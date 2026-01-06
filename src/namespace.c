@@ -83,14 +83,16 @@ static void search_namespace_callback(ID key, ID value) {
             }
         }
         
-        ID found = map_get(ns->mappings, lookup_sym, NULL);
-        if (found) {
-            if (!g_ns_search_ctx->result) {
-                // First result found - store it and continue searching
-                g_ns_search_ctx->result = found;
+        // IMPORTANT: mapping values may legitimately be nil (NULL), so we must
+        // not use pointer-truthiness to detect presence.
+        if (map_contains(ns->mappings, lookup_sym)) {
+            ID found = map_get(ns->mappings, lookup_sym);
+            if (!g_ns_search_ctx->result_ns) {
+                // First namespace found - store it and continue searching
+                g_ns_search_ctx->result = (found == NOT_FOUND) ? NULL : found;
                 g_ns_search_ctx->result_ns = ns;
             } else {
-                // Second result found - mark as ambiguous and stop searching
+                // Second namespace found - mark as ambiguous and stop searching
                 g_ns_search_ctx->ambiguous = true;
                 g_ns_search_ctx->second_ns = ns;
                 // Note: We can't stop map_foreach early, but this prevents further processing
@@ -255,7 +257,7 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
     CljSymbol *name_symbol = intern_symbol_global(cname);
     if (!name_symbol) return NULL;
     
-    CljObject *ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
+    CljObject *ns_obj = map_get_sentinel(g_runtime.ns_registry, name_symbol, NULL);
     if (ns_obj) {
         return (CljNamespace*)ns_obj;
     }
@@ -297,17 +299,24 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
 }
 
 ID ns_resolve(EvalState *st, CljSymbol *sym) {
+    CljNamespace *current_ns = st ? st->current_ns : NULL;
+    return ns_resolve_in(current_ns, sym);
+}
+
+ID ns_resolve_in(CljNamespace *current_ns, CljSymbol *sym) {
     CLJ_ASSERT(sym != NULL);
-    
+
     // Keywords evaluate to themselves - no namespace resolution needed
     if (IS_KEYWORD(sym)) {
         return sym;
     }
-    
-    // Use default namespace if st is NULL (eliminates need for temporary EvalState instances)
-    CljNamespace *current_ns = st ? st->current_ns : ns_get_or_create("user", NULL);
+
+    // Default namespace if not provided
     if (!current_ns) {
-        return NULL;
+        current_ns = ns_get_or_create("user", NULL);
+    }
+    if (!current_ns) {
+        return NOT_FOUND;
     }
     
     // Handle qualified symbols (symbol->ns_name is set during parsing or interning)
@@ -321,7 +330,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         // We must intern the namespace name to get the same pointer as stored in registry
         CljSymbol *interned_ns_name = sym->ns_name;  // Already a CljSymbol*
         if (!interned_ns_name) {
-            return NULL; // Failed to intern namespace name
+            return NOT_FOUND; // Failed to determine namespace name
         }
         CljNamespace *target_ns = ns_find_by_symbol(interned_ns_name);
         // Fallback to ns_find if ns_find_by_symbol didn't find it (handles cases where symbol pointers differ)
@@ -332,7 +341,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // OPTIMIZATION: Fast path - try direct lookup with existing symbol pointer first
             // The symbol from AST canonicalization is already interned, so pointer equality
             // should work if the mapping was created with the same symbol pointer.
-            ID resolved = map_get(target_ns->mappings, sym, NOT_FOUND);
+            ID resolved = map_get(target_ns->mappings, sym);
             if (resolved != NOT_FOUND) {
                 return resolved;  // Found (can be NULL/nil, which is valid)
             }
@@ -341,12 +350,12 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // This handles cases where symbol pointers differ (e.g., from different parsing sessions)
             CljSymbol *interned_sym = intern_symbol(sym->ns_name, sym->cname);
             if (!interned_sym) {
-                return NULL; // Failed to intern
+                return NOT_FOUND; // Failed to intern
             }
             // CRITICAL: Namespace mappings now use fully qualified symbols as keys
             // Use the interned qualified symbol for lookup (ensures pointer equality)
             // Use sentinel to distinguish "key not found" from "value is nil"
-            resolved = map_get(target_ns->mappings, interned_sym, NOT_FOUND);
+            resolved = map_get(target_ns->mappings, interned_sym);
             if (resolved != NOT_FOUND) {
                 return resolved;  // Found (can be NULL/nil, which is valid)
             }
@@ -356,14 +365,14 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
             // unqualified version to keep lookups robust.
             CljSymbol *unqualified_sym = intern_symbol_global(sym->cname);
             if (unqualified_sym) {
-                resolved = map_get(target_ns->mappings, unqualified_sym, NOT_FOUND);
+                resolved = map_get(target_ns->mappings, unqualified_sym);
                 if (resolved != NOT_FOUND) {
                     return resolved;
                 }
             }
         }
         // Qualified symbol not found in target namespace
-        return NULL;
+        return NOT_FOUND;
     }
     
     // Unqualified symbol - check current namespace first (before cache)
@@ -372,7 +381,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     // ns_define() stores unqualified aliases for non-core namespaces, so this should work
     // for most cases without needing to qualify+intern.
     if (current_ns && current_ns->mappings) {
-        ID v = map_get(current_ns->mappings, sym, NOT_FOUND);
+        ID v = map_get(current_ns->mappings, sym);
         if (v != NOT_FOUND) {
             // Symbol found in current namespace - return it immediately
             // No ambiguity check needed: current namespace always takes precedence
@@ -398,7 +407,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     // CRITICAL: For def, symbols are stored qualified (e.g., user/my-var)
     // For :refer :all, symbols are also stored qualified (clojure.core is handled separately)
     if (current_ns && current_ns->mappings) {
-        ID v = map_get(current_ns->mappings, qualified_sym, NOT_FOUND);
+        ID v = map_get(current_ns->mappings, qualified_sym);
         if (v != NOT_FOUND) {
             // Symbol found in current namespace - return it immediately
             // No ambiguity check needed: current namespace always takes precedence
@@ -420,7 +429,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
         // OPTIMIZATION: Use symbol directly - map_get uses structural equality as fallback
         // This avoids expensive intern_symbol_global call in hot path
         // map_get will use clj_equal if pointer equality fails
-        ID resolved = map_get(clojure_core->mappings, sym, NOT_FOUND);
+        ID resolved = map_get(clojure_core->mappings, sym);
         if (resolved != NOT_FOUND) {
             return resolved;
         }
@@ -465,7 +474,7 @@ ID ns_resolve(EvalState *st, CljSymbol *sym) {
     }
     
     // Symbol not found - don't cache NULL values (would waste cache space)
-    return NULL;
+    return NOT_FOUND;
 }
 
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename) {
@@ -489,7 +498,7 @@ void ns_register(CljNamespace *ns) {
     }
     
     // Check if namespace is already registered
-    CljObject *existing = map_get(g_runtime.ns_registry, ns->name, NULL);
+    CljObject *existing = map_get_sentinel(g_runtime.ns_registry, ns->name, NULL);
     if (existing == (CljObject*)ns) {
         return; // Already registered
     }
@@ -555,7 +564,7 @@ CljNamespace* ns_find_by_symbol(CljSymbol *name_symbol) {
     // Programming error: ns_registry must be initialized
     CLJ_ASSERT(g_runtime.ns_registry != NULL);
     // map_get accepts NULL as a valid key (nil can be used as key in Clojure)
-    ID ns_obj = map_get(g_runtime.ns_registry, name_symbol, NULL);
+    ID ns_obj = map_get_sentinel(g_runtime.ns_registry, name_symbol, NULL);
     return ns_obj;
 }
 
@@ -982,7 +991,7 @@ ID ns_get_alias(CljNamespace *ns, ID alias) {
     if (!ns || !alias || !ns->aliases) return NULL;
     
     // Look up alias in aliases map
-    ID ns_name = map_get(ns->aliases, alias, NULL);
+    ID ns_name = map_get_sentinel(ns->aliases, alias, NULL);
     return ns_name;
 }
 

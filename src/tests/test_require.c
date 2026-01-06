@@ -101,7 +101,8 @@ TEST(test_require_blank_resolution) {
     evalstate_free(temp_st);
     
     // blank? should be available if it was loaded correctly
-    TEST_ASSERT_NOT_NULL_MESSAGE(blank_func, "blank? should be resolvable from clojure.string namespace");
+    TEST_ASSERT_TRUE_MESSAGE(blank_func && blank_func != NOT_FOUND,
+                             "blank? should be resolvable from clojure.string namespace");
     
     // Verify it's a function
     if (blank_func) {
@@ -359,7 +360,7 @@ TEST(test_require_trim_metadata) {
     TEST_ASSERT_NOT_NULL_MESSAGE(trim_sym, "trim symbol should exist");
     
     ID trim_func = ns_resolve(g_test_eval_state, trim_sym);
-    TEST_ASSERT_NOT_NULL_MESSAGE(trim_func, "trim function should be resolvable");
+    TEST_ASSERT_TRUE_MESSAGE(trim_func && trim_func != NOT_FOUND, "trim function should be resolvable");
     TEST_ASSERT_TRUE_MESSAGE(TAG(trim_func) == CLJ_FUNC, "trim should be a native function");
     
     // Check that metadata exists
@@ -374,7 +375,7 @@ TEST(test_require_trim_metadata) {
         CljSymbol *doc_key = intern_symbol_global(":doc");
         TEST_ASSERT_NOT_NULL(doc_key);
         
-        ID doc_value = map_get((CljMap*)trim_meta, doc_key, NOT_FOUND);
+        ID doc_value = map_get((CljMap*)trim_meta, doc_key);
         
         TEST_ASSERT_TRUE_MESSAGE(doc_value != NOT_FOUND, 
                                  "trim metadata should have :doc key");

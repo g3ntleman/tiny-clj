@@ -505,7 +505,7 @@ TEST(test_defn_test_fn_evaluated) {
         if (ns->name && ns->name->cname) {
             qualified_test_fn_sym = intern_symbol(ns->name, "test-fn");
         }
-        ID test_fn_value = qualified_test_fn_sym ? map_get(ns->mappings, qualified_test_fn_sym, NULL) : NULL;
+        ID test_fn_value = qualified_test_fn_sym ? map_get_sentinel(ns->mappings, qualified_test_fn_sym, NULL) : NULL;
         TEST_ASSERT_NOT_NULL_MESSAGE(test_fn_value,
                                      "'test-fn' should be in namespace mappings after eval_defn");
 
@@ -545,7 +545,7 @@ TEST(test_defn_add_stored_in_namespace) {
         }
         TEST_ASSERT_NOT_NULL_MESSAGE(qualified_add_sym, "Should be able to create qualified symbol");
 
-        ID add_value = map_get(ns->mappings, qualified_add_sym, NULL);
+        ID add_value = map_get_sentinel(ns->mappings, qualified_add_sym, NULL);
         TEST_ASSERT_NOT_NULL_MESSAGE(add_value,
                                      "'add' should be in namespace mappings after defn");
 

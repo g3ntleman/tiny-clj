@@ -167,7 +167,7 @@ TEST(test_inc_symbol_interning_during_load) {
     
     if (clojure_core && clojure_core->mappings) {
         // Check if inc_sym_after is in the mappings
-        CljObject *inc_value = map_get(clojure_core->mappings, inc_sym_after, NULL);
+        CljObject *inc_value = map_get_sentinel(clojure_core->mappings, inc_sym_after, NULL);
         
         if (!inc_value) {
             CljMap *map = clojure_core->mappings;
@@ -266,17 +266,17 @@ TEST(test_inc_symbol_pointer_consistency) {
             // Try lookup with the symbol returned by def first
             CljObject *inc_value = NULL;
             if (stored_symbol) {
-                inc_value = map_get(g_test_eval_state->current_ns->mappings, stored_symbol, NULL);
+                inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, stored_symbol, NULL);
             }
             
             // If not found, try with qualified symbol from symbol table
             if (!inc_value && qualified_inc_sym) {
-                inc_value = map_get(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL);
+                inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_inc_sym, NULL);
             }
             
             // If still not found, try with unqualified symbol (for clojure.core compatibility)
             if (!inc_value) {
-                inc_value = map_get(g_test_eval_state->current_ns->mappings, inc_sym_after, NULL);
+                inc_value = map_get_sentinel(g_test_eval_state->current_ns->mappings, inc_sym_after, NULL);
             }
             
             if (!inc_value) {
@@ -343,7 +343,7 @@ TEST(test_map_get_with_interned_symbols) {
     TEST_ASSERT_NOT_NULL_MESSAGE(qualified_test_sym, "Should be able to create qualified symbol");
     
     // Try to retrieve using the qualified symbol pointer
-    CljObject *retrieved = map_get(g_test_eval_state->current_ns->mappings, qualified_test_sym, NULL);
+    CljObject *retrieved = map_get_sentinel(g_test_eval_state->current_ns->mappings, qualified_test_sym, NULL);
     TEST_ASSERT_NOT_NULL_MESSAGE(retrieved, 
                                  "Should retrieve value using interned symbol pointer");
     
@@ -505,14 +505,46 @@ TEST(test_namespace_error_handling) {
     CljSymbol *non_existent = intern_symbol_global("non-existent-var");
     CljObject *resolved = ns_resolve(g_test_eval_state, non_existent);
 
-    TEST_ASSERT_NULL(resolved); // Should return NULL for non-existent symbol
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, resolved); // Missing symbol -> NOT_FOUND
 
     // Test with NULL st parameter (should use default namespace)
     CljObject *result1 = ns_resolve(NULL, non_existent);
-    TEST_ASSERT_NULL(result1); // Non-existent symbol should return NULL even with NULL st
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, result1); // Missing symbol -> NOT_FOUND even with NULL st
 
     // Cleanup
     RELEASE(non_existent);
+}
+
+// Regression: ns_resolve must distinguish "found nil" (NULL) from "missing" (NOT_FOUND)
+TEST(test_ns_resolve_nil_vs_missing) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(g_test_eval_state->current_ns);
+
+    CljSymbol *nil_sym = intern_symbol_global("nil-var");
+    TEST_ASSERT_NOT_NULL(nil_sym);
+
+    CljSymbol *ns_name_sym = g_test_eval_state->current_ns->name
+        ? g_test_eval_state->current_ns->name
+        : intern_symbol_global("user");
+    TEST_ASSERT_NOT_NULL(ns_name_sym);
+
+    CljSymbol *nil_sym_qualified = intern_symbol(ns_name_sym, "nil-var");
+    TEST_ASSERT_NOT_NULL(nil_sym_qualified);
+
+    // Define var with nil (NULL) value
+    ns_define(g_test_eval_state->current_ns, nil_sym_qualified, NULL);
+
+    ID resolved_nil = ns_resolve(g_test_eval_state, nil_sym);
+    TEST_ASSERT_NULL(resolved_nil);
+
+    CljSymbol *missing_sym = intern_symbol_global("definitely-missing-var");
+    TEST_ASSERT_NOT_NULL(missing_sym);
+    ID resolved_missing = ns_resolve(g_test_eval_state, missing_sym);
+    TEST_ASSERT_EQUAL_PTR(NOT_FOUND, resolved_missing);
+
+    RELEASE(missing_sym);
+    RELEASE(nil_sym_qualified);
+    RELEASE(nil_sym);
 }
 
 // Test clojure.core cache initialization
@@ -632,8 +664,8 @@ TEST(test_resolve_list_operator_uses_cache) {
     // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
     TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
     CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljMap *ns_cache = (CljMap*)map_get(g_runtime.resolve_cache, ns_key, NULL);
-    CljObject *cached_inc = ns_cache ? (CljObject*)map_get(ns_cache, inc_sym, NULL) : NULL;
+    CljMap *ns_cache = (CljMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
+    CljObject *cached_inc = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
     TEST_ASSERT_NOT_NULL_MESSAGE(cached_inc, "resolve_cache should contain 'inc' after first function call");
 
     // Second function call - should use cache (faster path)
@@ -691,8 +723,8 @@ TEST(test_resolve_cache_invalidation_on_redefinition) {
     // The resolve_cache is hierarchical: namespace_symbol -> symbol -> resolved_value
     TEST_ASSERT_NOT_NULL(g_runtime.resolve_cache);
     CljSymbol *ns_key = g_test_eval_state->current_ns->name;
-    CljMap *ns_cache = (CljMap*)map_get(g_runtime.resolve_cache, ns_key, NULL);
-    CljObject *cached = ns_cache ? (CljObject*)map_get(ns_cache, inc_sym, NULL) : NULL;
+    CljMap *ns_cache = (CljMap*)map_get_sentinel(g_runtime.resolve_cache, ns_key, NULL);
+    CljObject *cached = ns_cache ? (CljObject*)map_get_sentinel(ns_cache, inc_sym, NULL) : NULL;
     TEST_ASSERT_NOT_NULL_MESSAGE(cached, "resolve_cache should contain 'inc' after first function call");
 
     // Now redefine 'inc' in user namespace (shadowing clojure.core)
@@ -899,7 +931,7 @@ TEST(test_require_with_refer) {
         ? g_test_eval_state->current_ns->name : intern_symbol_global("user");
     CljSymbol *func_sym_qualified = intern_symbol(ns_name_sym, "func");
     TEST_ASSERT_NOT_NULL(func_sym_qualified);
-    CljObject *func_val = map_get(g_test_eval_state->current_ns->mappings, func_sym_qualified, NULL);
+    CljObject *func_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, func_sym_qualified, NULL);
     TEST_ASSERT_NOT_NULL(func_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)func_val));
     TEST_ASSERT_EQUAL(200, as_fixnum((CljValue)func_val));
@@ -932,8 +964,8 @@ TEST(test_require_with_refer_all) {
     TEST_ASSERT_NOT_NULL(var1_sym_qualified);
     TEST_ASSERT_NOT_NULL(var2_sym_qualified);
 
-    CljObject *var1_val = map_get(g_test_eval_state->current_ns->mappings, var1_sym_qualified, NULL);
-    CljObject *var2_val = map_get(g_test_eval_state->current_ns->mappings, var2_sym_qualified, NULL);
+    CljObject *var1_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var1_sym_qualified, NULL);
+    CljObject *var2_val = map_get_sentinel(g_test_eval_state->current_ns->mappings, var2_sym_qualified, NULL);
     TEST_ASSERT_NOT_NULL(var1_val);
     TEST_ASSERT_NOT_NULL(var2_val);
     TEST_ASSERT_TRUE(is_fixnum((CljValue)var1_val));
@@ -1059,7 +1091,7 @@ TEST(test_ns_get_or_create_uses_map) {
 
     // Verify it's in the map
     CljSymbol *name_sym = intern_symbol(NULL, "test-map-ns");
-    CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_sym, NULL);
+    CljObject *found = map_get_sentinel(g_runtime.ns_registry, name_sym, NULL);
     TEST_ASSERT_EQUAL_PTR(ns1, (CljNamespace*)found);
 
     // Get or create again - should return same namespace
@@ -1092,12 +1124,12 @@ TEST(test_ns_register_uses_map) {
     ns_register(ns);
 
     // Verify it's in the map
-    CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
+    CljObject *found = map_get_sentinel(g_runtime.ns_registry, ns->name, NULL);
     TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
 
     // Register again - should be idempotent
     ns_register(ns);
-    CljObject *found2 = map_get((CljValue)g_runtime.ns_registry, (CljValue)ns->name, NULL);
+    CljObject *found2 = map_get_sentinel(g_runtime.ns_registry, ns->name, NULL);
     TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found2);
 }
 
@@ -1138,8 +1170,8 @@ TEST(test_ns_registry_iteration) {
     // Verify both are in the map
     CljSymbol *sym1 = intern_symbol(NULL, "iter-test-1");
     CljSymbol *sym2 = intern_symbol(NULL, "iter-test-2");
-    CljObject *found1 = map_get((CljValue)g_runtime.ns_registry, (CljValue)sym1, NULL);
-    CljObject *found2 = map_get((CljValue)g_runtime.ns_registry, (CljValue)sym2, NULL);
+    CljObject *found1 = map_get_sentinel(g_runtime.ns_registry, sym1, NULL);
+    CljObject *found2 = map_get_sentinel(g_runtime.ns_registry, sym2, NULL);
     TEST_ASSERT_EQUAL_PTR(ns1, (CljNamespace*)found1);
     TEST_ASSERT_EQUAL_PTR(ns2, (CljNamespace*)found2);
 }
@@ -1160,7 +1192,7 @@ TEST(test_ns_registry_map_conj_handles_new_instance) {
 
         // Verify it's in the registry
         CljSymbol *name_sym = intern_symbol(NULL, ns_name);
-        CljObject *found = map_get((CljValue)g_runtime.ns_registry, (CljValue)name_sym, NULL);
+        CljObject *found = map_get_sentinel(g_runtime.ns_registry, name_sym, NULL);
         TEST_ASSERT_EQUAL_PTR(ns, (CljNamespace*)found);
     }
 
@@ -1204,8 +1236,8 @@ TEST(test_ns_map_returns_mappings) {
     CljSymbol *sym2_qualified = intern_symbol(intern_symbol_global("test-ns-map"), "test-var2");
     TEST_ASSERT_NOT_NULL(sym1_qualified);
     TEST_ASSERT_NOT_NULL(sym2_qualified);
-    CljObject *found_val1 = (CljObject*)map_get(mappings, sym1_qualified, NULL);
-    CljObject *found_val2 = (CljObject*)map_get(mappings, sym2_qualified, NULL);
+    CljObject *found_val1 = (CljObject*)map_get_sentinel(mappings, sym1_qualified, NULL);
+    CljObject *found_val2 = (CljObject*)map_get_sentinel(mappings, sym2_qualified, NULL);
     TEST_ASSERT_NOT_NULL(found_val1);
     TEST_ASSERT_NOT_NULL(found_val2);
     TEST_ASSERT_EQUAL(100, as_fixnum((CljValue)found_val1));
@@ -1264,7 +1296,7 @@ TEST(test_ns_map_current_namespace) {
     CljMap *mappings = (CljMap*)result;
     CljSymbol *test_sym_qualified = intern_symbol(intern_symbol_global(current_ns_name), "current-ns-var");
     TEST_ASSERT_NOT_NULL(test_sym_qualified);
-    CljObject *found = (CljObject*)map_get(mappings, test_sym_qualified, NULL);
+    CljObject *found = (CljObject*)map_get_sentinel(mappings, test_sym_qualified, NULL);
     TEST_ASSERT_NOT_NULL(found);
     TEST_ASSERT_EQUAL(42, as_fixnum((CljValue)found));
 
@@ -1452,8 +1484,8 @@ TEST(test_ambiguous_symbol_with_clojure_core) {
     CljSymbol *map_conflict_qualified = intern_symbol(intern_symbol_global("test.conflict"), "map");
     TEST_ASSERT_NOT_NULL(map_core_qualified);
     TEST_ASSERT_NOT_NULL(map_conflict_qualified);
-    (void)map_get(clojure_core->mappings, map_core_qualified, NULL);  // Check if map exists in clojure.core (may be NULL if not loaded, but that's OK for this test)
-    ID map_conflict = map_get(conflict_ns->mappings, map_conflict_qualified, NULL);
+    (void)map_get_sentinel(clojure_core->mappings, map_core_qualified, NULL);  // Check if map exists in clojure.core (may be NULL if not loaded, but that's OK for this test)
+    ID map_conflict = map_get_sentinel(conflict_ns->mappings, map_conflict_qualified, NULL);
     TEST_ASSERT_NOT_NULL(map_conflict);
 
     // Try to use unqualified symbol - should resolve to clojure.core's map (Clojure-compatible behavior)
@@ -1550,7 +1582,7 @@ TEST(test_core_namespace_find_inc) {
         TEST_ASSERT_TRUE_MESSAGE(true, debug_msg);
         
         // Use map_get to find inc in mappings
-        ID inc_value = map_get(core_ns->mappings, inc_sym, NOT_FOUND);
+        ID inc_value = map_get(core_ns->mappings, inc_sym);
         
         // Debug: Check if we found something
         if (inc_value == NOT_FOUND) {

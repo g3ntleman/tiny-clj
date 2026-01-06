@@ -31,7 +31,10 @@ static inline CljMap* map_empty(void) {
     extern CljMap *map_empty_singleton;
     return map_empty_singleton;
 }
-ID map_get(CljMap *map, ID key, ID not_found);
+ID map_get_sentinel(CljMap *map, ID key, ID not_found);
+static inline ID map_get(CljMap *map, ID key) {
+    return map_get_sentinel(map, key, NOT_FOUND);
+}
 CljMap* map_assoc(CljMap* map, ID key, ID value);
 CljMap* map_merge(CljMap* a, CljMap* b, bool overwrite);
 ID map_keys(CljMap *map);
