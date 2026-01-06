@@ -39,6 +39,9 @@
 #include "eval_sequence.h"
 #include "eval_special_forms.h"
 
+#include <signal.h>
+extern __attribute__((weak)) volatile sig_atomic_t g_clojure_core_last_form;
+
 static void rewrite_recursive_calls_in_slot(ID *slot, CljSymbol *unqualified, CljSymbol *qualified) {
     if (!slot || !unqualified || !qualified) {
         return;
@@ -119,18 +122,24 @@ static INLINE ID resolve_cache_lookup_value(CljSymbol *ns_key, ID op) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return NULL;
     }
-    CljMap *ns_cache = (CljMap*)map_get(g_runtime.resolve_cache, ns_key, NULL);
-    if (!ns_cache) {
+    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key, NOT_FOUND);
+    if (ns_cache_id == NOT_FOUND || !ns_cache_id) {
         return NULL;
     }
-    return map_get(ns_cache, op, NULL);
+    CljMap *ns_cache = (CljMap*)ns_cache_id;
+    ID cached = map_get(ns_cache, op, NOT_FOUND);
+    if (cached == NOT_FOUND || !cached) {
+        return NULL;
+    }
+    return cached;
 }
 
 static void resolve_cache_store_value(CljSymbol *ns_key, ID op, ID resolved) {
     if (!ns_key || !g_runtime.resolve_cache) {
         return;
     }
-    CljMap *ns_cache = (CljMap*)map_get(g_runtime.resolve_cache, ns_key, NULL);
+    ID ns_cache_id = map_get(g_runtime.resolve_cache, ns_key, NOT_FOUND);
+    CljMap *ns_cache = (ns_cache_id == NOT_FOUND) ? NULL : (CljMap*)ns_cache_id;
     if (!ns_cache) {
         ns_cache = make_map(RESOLVE_CACHE_SIZE);
     }
@@ -403,16 +412,23 @@ static const EvalContext* ensure_eval_context(CljMap *env,
     return local_ctx;
 }
 
+// Forward declarations (defined later in this file)
+static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol);
+static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol);
+
 // Extended version that also searches in CallFrame
 static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fallback_env, CallFrame *frame, ID sym, EvalState *st) {
     if (!sym || TAG(sym) != CLJ_SYMBOL) {
-        return NULL;
+        return NOT_FOUND;
     }
 
     // Fast-path: Check frame first (most common case for parameters)
     if (frame) {
         ID frame_value = NOT_FOUND;
         if (frame_lookup(frame, sym, &frame_value)) {
+            if (frame_value == NOT_FOUND) {
+                return (ID)SYM_NIL;
+            }
             return frame_value;
         }
     }
@@ -420,13 +436,34 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
     // OPTIMIZATION: If no env_stack and no fallback_env, go direct to namespace
     // This is common for function calls like (fib ...) where fib is in namespace
     if (!env_stack && !fallback_env) {
+        // Fast-path: check current namespace mappings directly so a "found but nil" value is preserved.
+        if (st && st->current_ns && st->current_ns->mappings) {
+            ID resolved = map_get(st->current_ns->mappings, sym, NOT_FOUND);
+            if (resolved != NOT_FOUND) {
+                return resolved ? resolved : (ID)SYM_NIL;
+            }
+        }
+
+        // Dynamic vars can be bound to nil (NULL) and must be treated as resolved.
+        if (st) {
+            CljSymbol *sym_obj = as_symbol(sym);
+            if (sym_obj && is_dynamic_var_symbol(sym_obj)) {
+                ID bound = dynamic_binding_lookup(st, sym_obj);
+                if (bound != NOT_FOUND) {
+                    return bound ? bound : (ID)SYM_NIL;
+                }
+            }
+        }
+
+        // Final fallback: full symbol resolution (may throw on unresolved).
         if (st) {
             ID resolved_ns = eval_symbol(as_symbol(sym), st);
             if (resolved_ns && resolved_ns != sym) {
                 return resolved_ns;
             }
         }
-        return NULL;
+
+        return NOT_FOUND;
     }
 
     // Search env_stack (for let bindings, closure captures)
@@ -437,7 +474,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
             CljMap *env = (CljMap*)env_obj_id;
             ID resolved = map_get(env, sym, NOT_FOUND);
             if (resolved != NOT_FOUND) {
-                return resolved;
+                return resolved ? resolved : (ID)SYM_NIL;
             }
         }
 
@@ -452,11 +489,30 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
     if (fallback_env) {
         ID resolved = map_get(fallback_env, sym, NOT_FOUND);
         if (resolved != NOT_FOUND) {
-            return resolved;
+            return resolved ? resolved : (ID)SYM_NIL;
         }
     }
 
-    // Fallback to namespace
+    // Fallback to namespace mappings directly (preserves "found but nil").
+    if (st && st->current_ns && st->current_ns->mappings) {
+        ID resolved = map_get(st->current_ns->mappings, sym, NOT_FOUND);
+        if (resolved != NOT_FOUND) {
+            return resolved ? resolved : (ID)SYM_NIL;
+        }
+    }
+
+    // Dynamic vars can be bound to nil (NULL) and must be treated as resolved.
+    if (st) {
+        CljSymbol *sym_obj = as_symbol(sym);
+        if (sym_obj && is_dynamic_var_symbol(sym_obj)) {
+            ID bound = dynamic_binding_lookup(st, sym_obj);
+            if (bound != NOT_FOUND) {
+                return bound ? bound : (ID)SYM_NIL;
+            }
+        }
+    }
+
+    // Final fallback: full symbol resolution.
     if (st) {
         ID resolved_ns = eval_symbol(as_symbol(sym), st);
         if (resolved_ns && resolved_ns != sym) {
@@ -464,7 +520,7 @@ static INLINE ID resolve_symbol_in_env_with_frame(CljList *env_stack, CljMap *fa
         }
     }
 
-    return NULL;
+    return NOT_FOUND;
 }
 
 // Convert a CallFrame chain into a heap-based env_stack for closures
@@ -550,8 +606,8 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
             CljMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, ctx_env_map, ctx->frame, body, get_eval_state(ctx, NULL));
             const char *log_sym = (body_sym && body_sym->cname) ? body_sym->cname : "<anon>";
-            if (resolved_id) {
-                if (resolved_id == NOT_FOUND) {
+            if (resolved_id != NOT_FOUND) {
+                if (!resolved_id || resolved_id == SYM_NIL) {
                     return NULL;
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
@@ -570,8 +626,7 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                         return NULL;
                     }
                 }
-                ID ret_val = AUTORELEASE(RETAIN(resolved_id));
-                return ret_val;
+                return AUTORELEASE(RETAIN(resolved_id));
             }
         }
         // If still not found, try namespace lookup (for recursive function calls)
@@ -776,7 +831,15 @@ ID eval_body(ID body, CljMap *env, EvalState *st, const EvalContext *ctx) {
             // If still not found, try global symbol resolution (includes clojure.core)
             // This is important for built-in functions like inc, dec, etc.
             if (st) {
-                ID resolved = eval_symbol(as_symbol(body), st);
+                CljSymbol *sym = as_symbol(body);
+                if (sym && is_dynamic_var_symbol(sym)) {
+                    ID bound = dynamic_binding_lookup(st, sym);
+                    if (bound != NOT_FOUND) {
+                        return bound; // may be NULL for nil
+                    }
+                }
+
+                ID resolved = eval_symbol(sym, st);
                 if (resolved) {
                     // Special case: nil should evaluate to NULL (not SYM_NIL)
                     if (resolved == SYM_NIL) {
@@ -1235,6 +1298,17 @@ ID eval_list(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx) 
     // Check if op is a symbol and resolve it
     CljObject *original_op = op;
     unsigned char original_op_tag = op ? TAG(op) : 0;
+
+#ifdef DEBUG
+    if (original_op_tag == CLJ_SYMBOL) {
+        const char *dbg = getenv("TINYCLJ_DEBUG_EVAL_LIST_OP");
+        if (dbg && dbg[0] == '1' && (&g_clojure_core_last_form != NULL) && g_clojure_core_last_form == 210) {
+            fprintf(stderr, "[debug] eval_list: form=%d list=%p op=%p tag=%u\n",
+                    (int)g_clojure_core_last_form, (void*)list, (void*)op, (unsigned)original_op_tag);
+            fflush(stderr);
+        }
+    }
+#endif
     CljSymbol *original_op_sym = (original_op_tag == CLJ_SYMBOL) ? as_symbol(op) : NULL;
 
     // === HOT PATH: Callsite-Cache für gecachte Funktionen (fib, etc.) ===
@@ -2062,16 +2136,18 @@ ID eval_for(CljList *list, CljMap *env) {
         while (!seq_empty((CljObject*)seq)) {
             CljObject *element = (CljObject*)seq_first((CljObject*)seq);
 
-            // Create new environment with binding using helper
-            CljMap *new_env = extend_env_with_binding(env, var, element);
-            if (new_env) {
-                // Evaluate body with new binding
-                ID body_result = eval_body_with_env(body, new_env, NULL);
-                RELEASE(body_result);
+            WITH_AUTORELEASE_POOL({
+                // Create new environment with binding using helper
+                CljMap *new_env = extend_env_with_binding(env, var, element);
+                if (new_env) {
+                    // Evaluate body with new binding
+                    ID body_result = eval_body_with_env(body, new_env, NULL);
+                    RELEASE(body_result);
 
-                // Clean up environment
-                RELEASE(new_env);
-            }
+                    // Clean up environment
+                    RELEASE(new_env);
+                }
+            });
 
             // Move to next element
             CljObject *next = (CljObject*)seq_next((CljObject*)seq);
@@ -2128,16 +2204,18 @@ ID eval_doseq(CljList *list, CljMap *env) {
         while (!seq_empty((CljObject*)seq)) {
             CljObject *element = (CljObject*)seq_first((CljObject*)seq);
 
-            // Create new environment with binding using helper
-            CljMap *new_env = extend_env_with_binding(env, var, element);
-            if (new_env) {
-                // Evaluate body with new binding
-                ID body_result = eval_body_with_env(body, new_env, NULL);
-                RELEASE(body_result);
+            WITH_AUTORELEASE_POOL({
+                // Create new environment with binding using helper
+                CljMap *new_env = extend_env_with_binding(env, var, element);
+                if (new_env) {
+                    // Evaluate body with new binding
+                    ID body_result = eval_body_with_env(body, new_env, NULL);
+                    RELEASE(body_result);
 
-                // Clean up environment
-                RELEASE(new_env);
-            }
+                    // Clean up environment
+                    RELEASE(new_env);
+                }
+            });
 
 
             CljObject *next = (CljObject*)seq_next((CljObject*)seq);
@@ -2394,8 +2472,8 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         if (ctx) {
             EvalState *eval_st = get_eval_state(ctx, st);
             ID resolved_id = resolve_symbol_in_env_with_frame(ctx->env_stack, env, ctx->frame, expr, eval_st);
-            if (resolved_id) {
-                if (resolved_id == NOT_FOUND) {
+            if (resolved_id != NOT_FOUND) {
+                if (!resolved_id || resolved_id == SYM_NIL) {
                     return NULL;
                 }
                 // CRITICAL: If resolved_id is still a symbol (not a value), throw exception
@@ -2431,6 +2509,19 @@ ID eval_arg_from_expr_with_context(ID expr, CljMap *env, EvalState *st, const Ev
         }
 
         if (!resolved_value) {
+            // Dynamic vars may be bound to nil; allow use in argument position.
+            if (st) {
+                CljSymbol *sym = as_symbol(expr);
+                if (sym && is_dynamic_var_symbol(sym)) {
+                    ID bound = dynamic_binding_lookup(st, sym);
+                    if (bound != NOT_FOUND) {
+                        if (!bound) return NULL;
+                        if (IS_IMMEDIATE(bound)) return bound;
+                        return AUTORELEASE(RETAIN(bound));
+                    }
+                }
+            }
+
             CljObject *resolved = ns_resolve(st, as_symbol(expr));
             if (resolved) {
                 resolved_value = resolved;
@@ -2571,18 +2662,20 @@ ID eval_dotimes(CljList *list, CljMap *env, EvalState *st, const EvalContext *ct
     for (int i = 0; i < n; i++) {
         dotimes_frame.values[0] = frame_encode_value(fixnum((int32_t)i));
 
-        ID body_result = NULL;
-        if (body_list && list_type_matches(TAG(body_list))) {
-            CljList *body_items = as_list(body_list);
-            LIST_FOR_EACH(body_items, body_expr) {
-                if (!body_expr) continue;
-                RELEASE(body_result);
-                body_result = eval_body(body_expr, env, eval_st, &dotimes_ctx);
+        WITH_AUTORELEASE_POOL({
+            ID body_result = NULL;
+            if (body_list && list_type_matches(TAG(body_list))) {
+                CljList *body_items = as_list(body_list);
+                LIST_FOR_EACH(body_items, body_expr) {
+                    if (!body_expr) continue;
+                    RELEASE(body_result);
+                    body_result = eval_body(body_expr, env, eval_st, &dotimes_ctx);
+                }
+            } else if (body_list) {
+                body_result = eval_body(body_list, env, eval_st, &dotimes_ctx);
             }
-        } else if (body_list) {
-            body_result = eval_body(body_list, env, eval_st, &dotimes_ctx);
-        }
-        RELEASE(body_result);
+            RELEASE(body_result);
+        });
     }
 
     frame_release(&dotimes_frame);
