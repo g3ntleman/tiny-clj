@@ -335,6 +335,11 @@ add_executable(unit-tests
     src/tests/test_dynamic_binding.c
     src/tests/test_core_functions.c
     src/tests/test_regex.c
+    src/tests/test_alias_lowlevel.c
+    src/tests/test_string.c
+    src/tests/test_vector.c
+    src/tests/test_time.c
+    src/tests/test_closure_symbol_resolution.c
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)

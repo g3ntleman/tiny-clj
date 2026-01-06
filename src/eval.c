@@ -563,6 +563,9 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
         CljSymbol *body_sym = as_symbol(body);
         CLJ_ASSERT(body_sym != NULL && "TAG(body)==CLJ_SYMBOL but as_symbol returned NULL");
 
+        // NOTE: Do NOT treat special symbols or dynamic vars as self-evaluating here.
+        // Lexical bindings (let/params) must be able to shadow them in value position.
+
         // Use central symbol resolution function (DRY: handles environment stack and frames)
         if (ctx) {
             CljMap *ctx_env_map = ctx->env_stack ? env_stack_head(ctx->env_stack) : NULL;
@@ -590,6 +593,28 @@ ID eval_body_with_params(ID body, const EvalContext *ctx) {
                 }
                 return AUTORELEASE(RETAIN(resolved_id));
             }
+        }
+
+        // Dynamic vars (earmuffed symbols) are resolved dynamically, not lexically.
+        // This is critical for closures: *ns* must reflect the caller's current namespace.
+        EvalState *ctx_state_for_dynamic = get_eval_state(ctx, NULL);
+        if (!ctx_state_for_dynamic) ctx_state_for_dynamic = builtin_get_eval_state();
+        if (body_sym && body_sym->cname && strcmp(body_sym->cname, "*ns*") == 0) {
+            if (ctx_state_for_dynamic && ctx_state_for_dynamic->current_ns) {
+                return (ID)ctx_state_for_dynamic->current_ns;
+            }
+            return (ID)ns_get_or_create("user", NULL);
+        }
+        if (body_sym && is_dynamic_var_symbol(body_sym)) {
+            ID bound = dynamic_binding_lookup(ctx_state_for_dynamic, body_sym);
+            if (bound != NOT_FOUND) {
+                return bound;
+            }
+        }
+
+        // Special forms evaluate to themselves only if not lexically bound.
+        if (is_special_symbol(body_sym)) {
+            return body;
         }
         // If still not found, try namespace lookup (for recursive function calls)
         // ns_resolve takes CljObject* (only objects, not immediates) and returns ID

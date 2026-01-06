@@ -7,10 +7,8 @@
 #include "tests_common.h"
 #include "symbol.h"
 #include "namespace.h"
-#include "function_call.h"
-#include "value.h"
-#include <subjective-c/vector.h>
 #include "builtins.h"
+#include <subjective-c/vector.h>
 #include <sys/stat.h>
 #include <errno.h>
 

@@ -4,13 +4,14 @@
     {
       "label": "build-repl",
       "type": "shell",
-      "command": "make",
-      "args": ["tiny-clj-repl"],
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -B build && cmake --build build --target tiny-clj-repl",
       "group": {
         "kind": "build",
         "isDefault": false
       },
-      "problemMatcher": ["$gcc"],
+      "problemMatcher": [
+        "$gcc"
+      ],
       "presentation": {
         "reveal": "silent",
         "panel": "shared"
@@ -19,13 +20,14 @@
     {
       "label": "build-all",
       "type": "shell",
-      "command": "make",
-      "args": ["all"],
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -B build && cmake --build build",
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "problemMatcher": ["$gcc"],
+      "problemMatcher": [
+        "$gcc"
+      ],
       "presentation": {
         "reveal": "always",
         "panel": "shared"
@@ -34,13 +36,14 @@
     {
       "label": "build-tests",
       "type": "shell",
-      "command": "make",
-      "args": ["unity-tests"],
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -B build && cmake --build build --target unit-tests",
       "group": {
         "kind": "test",
         "isDefault": true
       },
-      "problemMatcher": ["$gcc"],
+      "problemMatcher": [
+        "$gcc"
+      ],
       "presentation": {
         "reveal": "always",
         "panel": "shared"
@@ -49,9 +52,30 @@
     {
       "label": "run-repl",
       "type": "shell",
-      "command": "make tiny-clj-repl && ./build/tiny-clj-repl",
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -B build && cmake --build build --target tiny-clj-repl && ./build/tiny-clj-repl",
       "group": "none",
       "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false
+    },
+    {
+      "label": "run-tests",
+      "type": "shell",
+      "command": "cmake -DCMAKE_BUILD_TYPE=Debug -B build && cmake --build build --target unit-tests && ./build/unit-tests",
+      "group": {
+        "kind": "test",
+        "isDefault": false
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
       "presentation": {
         "echo": true,
         "reveal": "always",
@@ -64,4 +88,3 @@
     }
   ]
 }
-

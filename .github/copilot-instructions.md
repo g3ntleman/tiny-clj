@@ -3,16 +3,22 @@
 - **Big Picture:** Core evaluation and types are implemented around a central CljObject abstraction; parser/tokenizer produce CljObject trees; evaluation uses C-implemented builtins and manual reference counting (retain/release/autorelease).
 
 **Build & Test (quick commands)**
-- **Build local REPL:** `make tiny-clj-repl` or use the workspace task `build-repl` (runs `make tiny-clj-repl`). Built artifacts appear in the `build/` directory. See [Makefile](../Makefile) and [CMakeLists.txt](../CMakeLists.txt).
+- **Build local REPL:** `make tiny-clj-repl` or use the workspace task `build-repl` (runs `make tiny-clj-repl`). Built artifacts appear in the `build/` directory.
 - **Full build:** `make all` or workspace task `build-all`.
-- **Unit tests:** `make unity-tests` then run `./build/unit-tests` or use workspace task `build-tests` (runs `make unity-tests`). See docs/TESTING_GUIDE.md and the [unity-tests](../unity-tests) directory.
+- **Unit tests:** `make unit-tests` then run `./build/unit-tests` or use workspace task `build-tests` (runs `make unit-tests`). See docs/TESTING_GUIDE.md and the `src/tests/` directory.
+- **Unit test options:**
+  - `./build/unit-tests --help` - Show all available options
+  - `./build/unit-tests --list` - List all available tests
+  - `./build/unit-tests --test <name>` - Run specific test(s) (supports wildcards like `test_map/*`)
+  - `./build/unit-tests --quiet` - Reduce memory leak reporting for cleaner output
+  - `./build/unit-tests --memory-summary` - Show memory profiler summary after tests
 - **Embedded targets:** `make tiny-clj-esp32` and `make tiny-clj-esp32-repl`. ESP32 workflow may require OpenOCD/GDB and ESP toolchain; see docs and tiny-clj-esp32 directories.
 
 **Key Files & Directories**
 - **README.md:** high-level architecture, build examples, and primary objectives. See [README.md](../README.md).
 - **CMakeLists.txt / Makefile:** primary build configuration (CMake-generated). See [CMakeLists.txt](../CMakeLists.txt) and [Makefile](../Makefile).
 - **docs/**: important guidance (MEMORY_POLICY.md, RC-COW.md, TESTING_GUIDE.md, PERFORMANCE_GUIDE.md). See [docs](../docs) for memory and profiling details.
-- **unity-tests/**: unit-test harness and tests using the Unity framework.
+- **src/tests/**: unit-test harness and tests using the Unity framework.
 - **tiny-clj-esp32, tiny-clj-esp32-repl:** embedded-specific code and targets.
 
 **Project-Specific Patterns & Conventions**
