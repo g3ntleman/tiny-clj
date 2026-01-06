@@ -9,8 +9,6 @@
 #include "namespace.h"
 #include "builtins.h"
 #include <subjective-c/vector.h>
-#include <sys/stat.h>
-#include <errno.h>
 
 // Forward declaration - we need to access process_require_spec
 // Since it's static, we'll test through native_require instead
@@ -21,20 +19,6 @@ extern void builtin_set_eval_state(EvalState *st);
 static void load_clojure_string_namespace(void) {
     CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
     (void)req_result;
-}
-
-static int ensure_dir(const char *path) {
-    if (mkdir(path, 0777) == 0) return 0;
-    if (errno == EEXIST) return 0;
-    return -1;
-}
-
-static int write_file(const char *path, const char *content) {
-    FILE *fp = fopen(path, "w");
-    if (!fp) return -1;
-    if (content && *content) fputs(content, fp);
-    fclose(fp);
-    return 0;
 }
 
 // ============================================================================
