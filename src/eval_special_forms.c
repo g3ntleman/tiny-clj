@@ -108,22 +108,38 @@ ID eval_special_while(CljList *list, CljMap *env, EvalState *st, const EvalConte
     CLJ_ASSERT(list != NULL && "eval_special_while: list must not be NULL");
     int list_len = list_count(list);
     while (true) {
-        ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
-        if (!cond_val || !clj_is_truthy(cond_val)) {
-            RELEASE(cond_val);
+        bool should_exit = false;
+        bool should_error = false;
+
+        WITH_AUTORELEASE_POOL({
+            ID cond_val = eval_arg_with_context(list, 1, env, st, ctx);
+            if (!cond_val || !clj_is_truthy(cond_val)) {
+                RELEASE(cond_val);
+                should_exit = true;
+            } else {
+                RELEASE(cond_val);
+
+                ID result = NULL;
+                for (int i = 2; i < list_len; i++) {
+                    ID body_expr = list_get_element(list, i);
+                    if (body_expr) {
+                        ASSIGN(result, eval_body(body_expr, env, st, ctx));
+                        if (!result && i < list_len - 1) {
+                            should_error = true;
+                            break;
+                        }
+                    }
+                }
+                RELEASE(result);
+            }
+        });
+
+        if (should_exit) {
             return NULL;
         }
-        RELEASE(cond_val);
-
-        ID result = NULL;
-        for (int i = 2; i < list_len; i++) {
-            ID body_expr = list_get_element(list, i);
-            if (body_expr) {
-                ASSIGN(result, eval_body(body_expr, env, st, ctx));
-                if (!result && i < list_len - 1) return NULL;
-            }
+        if (should_error) {
+            return NULL;
         }
-        RELEASE(result);
     }
 }
 
@@ -426,8 +442,8 @@ ID eval_special_binding(CljList *list, CljMap *env, EvalState *st, const EvalCon
     unsigned int base_depth = vector_count(st->dynamic_bindings);
     CljNamespace *saved_ns = st->current_ns;
 
-    // Build a single frame map: Symbol -> value (value may be NULL/nil).
-    // IMPORTANT: Use NOT_FOUND sentinel when looking up so NULL values remain distinguishable from missing.
+    // Build a single frame map: Symbol -> value.
+    // NOTE: nil values are stored as DYNAMIC_BINDING_NIL so they remain distinguishable from missing.
     CljMap *frame = make_map((int)(bind_count / 2));
     if (!frame) {
         return NULL;
@@ -627,7 +643,7 @@ ID eval_special_quasiquote(CljList *list, CljMap *env, EvalState *st, const Eval
     if (!g_quasiquote_fn) {
         CljSymbol *sym = intern_symbol_global("quasiquote-fn");
         CljObject *resolved = sym ? ns_resolve(st, sym) : NULL;
-        if (resolved && TAG(resolved) == CLJ_CLOSURE) {
+        if (resolved != NOT_FOUND && resolved && TAG(resolved) == CLJ_CLOSURE) {
             g_quasiquote_fn = as_function(resolved);
         }
     }

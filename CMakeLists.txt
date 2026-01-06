@@ -316,6 +316,7 @@ add_executable(unit-tests
     src/tests/test_map.c
     src/tests/test_cow.c
     src/tests/test_special_forms.c
+    src/tests/test_dynamic_binding.c
     src/tests/test_core_functions.c
     src/tests/test_regex.c
     external/unity/src/unity.c

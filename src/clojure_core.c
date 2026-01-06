@@ -11,12 +11,28 @@
 #include "eval.h"  // For SYM_DEF, SYM_NS
 #include <subjective-c/map.h>     // For map_get
 #include "parser.h"  // For eval_parsed
+#include "to_string.h" // For pr_str debug printing
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
+#include <signal.h>
+
+// Crash diagnostics: last top-level form index being processed while loading clojure.core.
+// Used by crash handlers and optional debug logging.
+volatile sig_atomic_t g_clojure_core_last_form = 0;
+
 static bool g_core_quiet = false;
+
+static int getenv_int(const char *name, int default_value) {
+  const char *v = getenv(name);
+  if (!v || !v[0]) return default_value;
+  char *end = NULL;
+  long n = strtol(v, &end, 10);
+  if (end == v) return default_value;
+  return (int)n;
+}
 
 
 // Clojure core code for Tiny-Clj interpreter
@@ -107,6 +123,12 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
   
   int expr_count = 0;
   int success_count = 0;
+
+  // Debug controls for pinpointing bad core forms.
+  // - TINYCLJ_DEBUG_CORE_FORM=N prints pr_str(form) for form N.
+  // - TINYCLJ_DEBUG_CORE_STOP_AFTER=N returns after completing form N (useful to avoid crashes).
+  const int debug_form = getenv_int("TINYCLJ_DEBUG_CORE_FORM", 0);
+  const int stop_after_form = getenv_int("TINYCLJ_DEBUG_CORE_STOP_AFTER", 0);
   
   // Wrap entire parsing loop in TRY/CATCH to catch any unhandled ParseErrors
   TRY {
@@ -114,6 +136,9 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     while (!reader_is_eof(&reader)) {
       reader_skip_all(&reader);
       if (reader_is_eof(&reader)) break;
+
+      // Update crash diagnostics as early as possible for this iteration.
+      g_clojure_core_last_form = expr_count + 1;
 
       // Keep autorelease pool tracking bounded per top-level form.
       // NOTE: We intentionally use AUTORELEASE_POOL_BEGIN/END (not WITH_AUTORELEASE_POOL)
@@ -141,6 +166,13 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     g_parse_time_ms += (double)(clock() - parse_start) * 1000.0 / CLOCKS_PER_SEC;
 #endif
     if (parse_ok && form) {
+
+    if (debug_form > 0 && (expr_count + 1) == debug_form) {
+      CljString *s = pr_str((ID)form);
+      const char *printed = (s) ? s->data : "<unprintable>";
+      fprintf(stderr, "[%s] DEBUG core form #%d: %s\n", label, expr_count + 1, printed);
+      fflush(stderr);
+    }
     
     // Evaluate with exception handling using TRY/CATCH
     TRY {
@@ -225,6 +257,14 @@ static bool eval_core_source(const char *src, const char *source_name, EvalState
     
     AUTORELEASE_POOL_END();
     expr_count++;
+
+    if (stop_after_form > 0 && expr_count >= stop_after_form) {
+      if (!g_core_quiet) {
+        fprintf(stderr, "[%s] DEBUG stopping after core form #%d (TINYCLJ_DEBUG_CORE_STOP_AFTER)\n",
+                label, expr_count);
+      }
+      return true;
+    }
     }
   } CATCH(ex) {
     // ParseError or other exception during clojure.core loading
