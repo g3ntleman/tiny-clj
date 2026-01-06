@@ -39,14 +39,16 @@ TEST_SHARED(test_nth_with_default_and_bounds) {
     TEST_ASSERT_TRUE(is_fixnum((CljValue)x));
     TEST_ASSERT_EQUAL_INT(20, as_fixnum((CljValue)x));
 
-    // Out-of-bounds mit Default => exception (not default value)
-    CljObject *d = NULL;
-    TRY {
-        d = eval_string("(nth [10 20 30] 5 :na)", g_test_eval_state);
-    } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
-    } END_TRY
-    TEST_ASSERT_NULL(d);
+        // Out-of-bounds mit Default => default value (no exception)
+        CljObject *d = NULL;
+        TRY {
+            d = eval_string("(nth [10 20 30] 5 :na)", g_test_eval_state);
+        } CATCH(ex) {
+            TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds");
+        } END_TRY
+        TEST_ASSERT_NOT_NULL_MESSAGE(d, "nth should return :na for out-of-bounds");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(d) == CLJ_SYMBOL && IS_KEYWORD(d),
+            "nth should return :na keyword for out-of-bounds");
 
 }
 
@@ -82,13 +84,15 @@ TEST_SHARED(test_nth_with_lists) {
     TEST_ASSERT_NULL(out);
 
     // Out-of-bounds with default => exception (not default value)
-    CljObject *out_default = NULL;
-    TRY {
-        out_default = eval_string("(nth '(10 20 30) 5 :not-found)", g_test_eval_state);
-    } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
-    } END_TRY
-    TEST_ASSERT_NULL(out_default);
+        CljObject *out_default = NULL;
+        TRY {
+            out_default = eval_string("(nth '(10 20 30) 5 :not-found)", g_test_eval_state);
+        } CATCH(ex) {
+            TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds");
+        } END_TRY
+        TEST_ASSERT_NOT_NULL_MESSAGE(out_default, "nth should return :not-found for out-of-bounds");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(out_default) == CLJ_SYMBOL && IS_KEYWORD(out_default),
+            "nth should return :not-found keyword for out-of-bounds");
 
     // Empty list => exception
     CljObject *empty = NULL;
@@ -99,14 +103,16 @@ TEST_SHARED(test_nth_with_lists) {
     } END_TRY
     TEST_ASSERT_NULL(empty);
 
-    // Empty list with default => exception (not default value)
+    // Empty list with default => default value (no exception)
     CljObject *empty_default = NULL;
     TRY {
         empty_default = eval_string("(nth '() 0 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for empty list");
     } END_TRY
-    TEST_ASSERT_NULL(empty_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(empty_default, "nth should return :default for empty list");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(empty_default) == CLJ_SYMBOL && IS_KEYWORD(empty_default),
+        "nth should return :default keyword for empty list");
 
     // List with nil elements
     // (nth '(1 nil 3) 1) => nil
@@ -172,14 +178,16 @@ TEST_SHARED(test_nth_with_sequences) {
     } END_TRY
     TEST_ASSERT_NULL(seq_out);
 
-    // Out-of-bounds with sequence and default => exception (not default value)
+    // Out-of-bounds with sequence and default => default value (no exception)
     CljObject *seq_out_default = NULL;
     TRY {
         seq_out_default = eval_string("(nth (rest '(10 20)) 5 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds sequence");
     } END_TRY
-    TEST_ASSERT_NULL(seq_out_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(seq_out_default, "nth should return :default for out-of-bounds sequence");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(seq_out_default) == CLJ_SYMBOL && IS_KEYWORD(seq_out_default),
+        "nth should return :default keyword for out-of-bounds sequence");
 
 }
 
@@ -196,13 +204,15 @@ TEST_SHARED(test_nth_edge_cases) {
     TEST_ASSERT_NULL(neg);
 
     // Negative index with default => exception (not default value)
-    CljObject *neg_default = NULL;
-    TRY {
-        neg_default = eval_string("(nth [10 20 30] -1 :default)", g_test_eval_state);
-    } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
-    } END_TRY
-    TEST_ASSERT_NULL(neg_default);
+        CljObject *neg_default = NULL;
+        TRY {
+            neg_default = eval_string("(nth [10 20 30] -1 :default)", g_test_eval_state);
+        } CATCH(ex) {
+            TEST_FAIL_MESSAGE("nth with default should not throw exception for negative index");
+        } END_TRY
+        TEST_ASSERT_NOT_NULL_MESSAGE(neg_default, "nth should return :default for negative index");
+        TEST_ASSERT_TRUE_MESSAGE(TAG(neg_default) == CLJ_SYMBOL && IS_KEYWORD(neg_default),
+            "nth should return :default keyword for negative index");
 
     // nil collection => exception
     CljObject *nil_coll = NULL;
@@ -213,14 +223,16 @@ TEST_SHARED(test_nth_edge_cases) {
     } END_TRY
     TEST_ASSERT_NULL(nil_coll);
 
-    // nil collection with default => exception (not default value)
+    // nil collection with default => default value (no exception)
     CljObject *nil_coll_default = NULL;
     TRY {
         nil_coll_default = eval_string("(nth nil 0 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for nil collection");
     } END_TRY
-    TEST_ASSERT_NULL(nil_coll_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(nil_coll_default, "nth should return :default for nil collection");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(nil_coll_default) == CLJ_SYMBOL && IS_KEYWORD(nil_coll_default),
+        "nth should return :default keyword for nil collection");
 
     // First element (index 0)
     CljObject *first = eval_string("(nth [10 20 30] 0)", g_test_eval_state);
@@ -243,14 +255,16 @@ TEST_SHARED(test_nth_edge_cases) {
     } END_TRY
     TEST_ASSERT_NULL(just_out);
 
-    // Just out of bounds with default => exception (not default value)
+    // Just out of bounds with default => default value (no exception)
     CljObject *just_out_default = NULL;
     TRY {
         just_out_default = eval_string("(nth [10 20 30] 3 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds");
     } END_TRY
-    TEST_ASSERT_NULL(just_out_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(just_out_default, "nth should return :default for out-of-bounds");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(just_out_default) == CLJ_SYMBOL && IS_KEYWORD(just_out_default),
+        "nth should return :default keyword for out-of-bounds");
 
     // Large index => exception
     CljObject *large = NULL;
@@ -261,14 +275,16 @@ TEST_SHARED(test_nth_edge_cases) {
     } END_TRY
     TEST_ASSERT_NULL(large);
 
-    // Large index with default => exception (not default value)
+    // Large index with default => default value (no exception)
     CljObject *large_default = NULL;
     TRY {
         large_default = eval_string("(nth [10 20 30] 1000 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds");
     } END_TRY
-    TEST_ASSERT_NULL(large_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(large_default, "nth should return :default for large out-of-bounds");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(large_default) == CLJ_SYMBOL && IS_KEYWORD(large_default),
+        "nth should return :default keyword for large out-of-bounds");
 
     // Single element vector
     CljObject *single = eval_string("(nth [42] 0)", g_test_eval_state);
@@ -356,14 +372,16 @@ TEST_SHARED(test_nth_nil_elements) {
         TEST_ASSERT_NULL(nil_with_default);  // nil element, not default
     }
 
-    // Out-of-bounds with default => exception (not default value)
+    // Out-of-bounds with default => default value (no exception)
     CljObject *out_with_default = NULL;
     TRY {
         out_with_default = eval_string("(nth [1 nil 3] 3 :default)", g_test_eval_state);
     } CATCH(ex) {
-        TEST_ASSERT_NOT_NULL(ex);
+        TEST_FAIL_MESSAGE("nth with default should not throw exception for out-of-bounds");
     } END_TRY
-    TEST_ASSERT_NULL(out_with_default);
+    TEST_ASSERT_NOT_NULL_MESSAGE(out_with_default, "nth should return :default for out-of-bounds");
+    TEST_ASSERT_TRUE_MESSAGE(TAG(out_with_default) == CLJ_SYMBOL && IS_KEYWORD(out_with_default),
+        "nth should return :default keyword for out-of-bounds");
 
 }
 
