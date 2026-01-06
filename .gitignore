@@ -10,6 +10,7 @@ tiny-cli.txt
 **/*.o
 **/*.d
 .vscode/
+!.vscode/tasks.json
 # Build artifacts
 build/
 build-debug/

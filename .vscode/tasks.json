@@ -1,0 +1,67 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-repl",
+      "type": "shell",
+      "command": "make",
+      "args": ["tiny-clj-repl"],
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "problemMatcher": ["$gcc"],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build-all",
+      "type": "shell",
+      "command": "make",
+      "args": ["all"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build-tests",
+      "type": "shell",
+      "command": "make",
+      "args": ["unity-tests"],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "run-repl",
+      "type": "shell",
+      "command": "make tiny-clj-repl && ./build/tiny-clj-repl",
+      "group": "none",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false
+      },
+      "isBackground": false
+    }
+  ]
+}
+
