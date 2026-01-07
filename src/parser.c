@@ -28,6 +28,8 @@
 #include "meta.h"
 #include <subjective-c/strings.h>
 #include "ast_canon.h"
+#include <subjective-c/instant.h>
+#include <subjective-c/uuid.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -146,6 +148,149 @@ static ID parse_list(Reader *reader, EvalState *st);
 static ID parse_list_rest(Reader *reader, EvalState *st);
 static ID parse_string_internal(Reader *reader, EvalState *st);
 static ID parse_symbol(Reader *reader, EvalState *st);
+
+static bool parse_uint_n(const char *s, int n, int *out) {
+  int v = 0;
+  for (int i = 0; i < n; i++) {
+    char c = s[i];
+    if (c < '0' || c > '9') {
+      return false;
+    }
+    v = v * 10 + (c - '0');
+  }
+  *out = v;
+  return true;
+}
+
+static int32_t days_from_civil_utc(int year, int month, int day) {
+  // Howard Hinnant algorithm; returns days since 1970-01-01.
+  // Matches libs/tinyclj/datetime.clj days-from-civil.
+  int y = (month <= 2) ? (year - 1) : year;
+  int era = (y >= 0 ? y : y - 399) / 400;
+  unsigned yoe = (unsigned)(y - era * 400);
+  unsigned mp = (unsigned)((month > 2) ? (month - 3) : (month + 9));
+  unsigned doy = (unsigned)((153 * mp + 2) / 5 + (unsigned)day - 1);
+  unsigned doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
+  int64_t z = (int64_t)era * 146097 + (int64_t)doe;
+  return (int32_t)(z - 719468);
+}
+
+static ID make_instant_from_iso_utc_string(Reader *reader, const char *iso) {
+  // Accept:
+  //   YYYY-MM-DDTHH:MM:SSZ
+  //   YYYY-MM-DDTHH:MM:SS.mmmZ
+  // UTC-only (requires trailing 'Z').
+  if (!iso) {
+    throw_parser_exception("#inst expects a non-null string", reader);
+    return NULL;
+  }
+
+  size_t len = strlen(iso);
+  int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, millis = 0;
+
+  bool has_millis = false;
+  if (len == 20) {
+    // YYYY-MM-DDTHH:MM:SSZ
+    has_millis = false;
+  } else if (len == 24) {
+    // YYYY-MM-DDTHH:MM:SS.mmmZ
+    has_millis = true;
+  } else {
+    throw_parser_exception("Invalid #inst format (expected ISO-8601 UTC)", reader);
+    return NULL;
+  }
+
+  if (!parse_uint_n(iso + 0, 4, &year) ||
+      iso[4] != '-' ||
+      !parse_uint_n(iso + 5, 2, &month) ||
+      iso[7] != '-' ||
+      !parse_uint_n(iso + 8, 2, &day) ||
+      iso[10] != 'T' ||
+      !parse_uint_n(iso + 11, 2, &hour) ||
+      iso[13] != ':' ||
+      !parse_uint_n(iso + 14, 2, &minute) ||
+      iso[16] != ':' ||
+      !parse_uint_n(iso + 17, 2, &second)) {
+    throw_parser_exception("Invalid #inst format (bad date/time fields)", reader);
+    return NULL;
+  }
+
+  if (has_millis) {
+    if (iso[19] != '.' || !parse_uint_n(iso + 20, 3, &millis)) {
+      throw_parser_exception("Invalid #inst format (bad milliseconds)", reader);
+      return NULL;
+    }
+    if (iso[23] != 'Z') {
+      throw_parser_exception("Invalid #inst format (UTC-only; expected trailing Z)", reader);
+      return NULL;
+    }
+  } else {
+    if (iso[19] != 'Z') {
+      throw_parser_exception("Invalid #inst format (UTC-only; expected trailing Z)", reader);
+      return NULL;
+    }
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 ||
+      minute < 0 || minute > 59 || second < 0 || second > 59 || millis < 0 || millis > 999) {
+    throw_parser_exception("Invalid #inst format (out-of-range fields)", reader);
+    return NULL;
+  }
+
+  int32_t days = days_from_civil_utc(year, month, day);
+  uint32_t ms = (uint32_t)(hour * 3600000 + minute * 60000 + second * 1000 + millis);
+  return AUTORELEASE(clj_make_instant(days, ms));
+}
+
+static ID parse_tagged_literal(Reader *reader, EvalState *st) {
+  // Parse: #<tag> <value>
+  reader_consume(reader); // '#'
+  reader_skip_all(reader);
+
+  ID tag_obj = parse_symbol(reader, st);
+  if (!tag_obj || TAG(tag_obj) != CLJ_SYMBOL) {
+    throw_parser_exception("Invalid tagged literal: expected symbol tag", reader);
+    return NULL;
+  }
+  const char *tag = as_symbol((CljValue)tag_obj)->cname;
+  if (!tag) {
+    throw_parser_exception("Invalid tagged literal: missing tag name", reader);
+    return NULL;
+  }
+
+  reader_skip_all(reader);
+  ID val = parse_expr(reader, st);
+  if (!val) {
+    throw_parser_exception("Invalid tagged literal: missing value", reader);
+    return NULL;
+  }
+
+  if (strcmp(tag, "uuid") == 0) {
+    if (TAG(val) != CLJ_STRING) {
+      throw_parser_exception("#uuid expects a string", reader);
+      return NULL;
+    }
+    const char *s = clj_string_data(as_clj_string((CljValue)val));
+    ID u = AUTORELEASE(clj_uuid_from_string(s));
+    if (!u) {
+      throw_parser_exception("Invalid #uuid string", reader);
+      return NULL;
+    }
+    return u;
+  }
+
+  if (strcmp(tag, "inst") == 0) {
+    if (TAG(val) != CLJ_STRING) {
+      throw_parser_exception("#inst expects a string", reader);
+      return NULL;
+    }
+    const char *s = clj_string_data(as_clj_string((CljValue)val));
+    return make_instant_from_iso_utc_string(reader, s);
+  }
+
+  throw_parser_exception("Unknown tagged literal", reader);
+  return NULL;
+}
 static ID parse_character(Reader *reader, EvalState *st);
 static CljObject* make_number_by_parsing(Reader *reader, EvalState *st);
 
@@ -184,7 +329,7 @@ ID parse_expr(Reader *reader, EvalState *st) {
         return parse_meta_map(reader, st);
       if (next == '(')
         return parse_anon_fn(reader, st);
-      break;
+      return parse_tagged_literal(reader, st);
     }
 
     case '[':

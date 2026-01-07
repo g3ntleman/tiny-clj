@@ -5680,7 +5680,7 @@ ID native_now(ID *args, unsigned int argc)
 
 ID native_instant_p(ID *args, unsigned int argc)
 {
-    if (!validate_builtin_args(argc, 1, "instant?"))
+    if (!validate_builtin_args(argc, 1, "inst?"))
         return NULL;
     return (TAG(args[0]) == CLJ_INSTANT) ? (ID)clj_true : (ID)clj_false;
 }
@@ -5875,7 +5875,7 @@ void register_builtins()
 
     // Time functions
     register_builtin_in_core("now", native_now);
-    register_builtin_in_core("instant?", native_instant_p);
+    register_builtin_in_core("inst?", native_instant_p);
     register_builtin_in_core("instant-days", native_instant_days);
     register_builtin_in_core("instant-ms", native_instant_ms);
 

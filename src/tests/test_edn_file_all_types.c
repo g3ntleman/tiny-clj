@@ -1,6 +1,10 @@
 #include "tests_common.h"
 
+#include "../to_string.h"
+
 #include <errno.h>
+#include <subjective-c/instant.h>
+#include <subjective-c/uuid.h>
 
 static char *read_entire_file(const char *path, size_t *out_len) {
     FILE *fp = fopen(path, "rb");
@@ -172,4 +176,42 @@ TEST(test_edn_file_all_supported_types) {
     ID v_empty_map = map_get_required(m, ":empty-map");
     assert_map((CljObject*)v_empty_map);
     TEST_ASSERT_EQUAL_INT(0, map_count(as_map(v_empty_map)));
+
+    ID v_inst = map_get_required(m, ":instant");
+    TEST_ASSERT_EQUAL_INT(CLJ_INSTANT, TAG(v_inst));
+    TEST_ASSERT_EQUAL_INT(0, clj_instant_days(v_inst));
+    TEST_ASSERT_EQUAL_INT(0, (int)clj_instant_ms(v_inst));
+
+    ID v_uuid = map_get_required(m, ":uuid");
+    TEST_ASSERT_EQUAL_INT(CLJ_UUID, TAG(v_uuid));
+    char uuid_buf[37];
+    clj_uuid_to_cstring(v_uuid, uuid_buf);
+    TEST_ASSERT_EQUAL_STRING("f81d4fae-7dec-11d0-a765-00a0c91e6bf6", uuid_buf);
+}
+
+TEST(test_tagged_literals_roundtrip_inst_uuid) {
+    TEST_ASSERT_NOT_NULL(g_test_eval_state);
+
+    ID inst = AUTORELEASE(clj_make_instant(0, 0));
+    CljString *inst_str = pr_str(inst);
+    TEST_ASSERT_NOT_NULL(inst_str);
+
+    Reader inst_reader;
+    reader_init_with_source(&inst_reader, clj_string_data(inst_str), "<inst roundtrip>");
+    ID inst_parsed = parse_expr(&inst_reader, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(inst_parsed);
+    TEST_ASSERT_TRUE(clj_equal(inst, inst_parsed));
+    RELEASE(inst_str);
+
+    ID uuid = AUTORELEASE(clj_uuid_from_string("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"));
+    TEST_ASSERT_NOT_NULL(uuid);
+    CljString *uuid_str = pr_str(uuid);
+    TEST_ASSERT_NOT_NULL(uuid_str);
+
+    Reader uuid_reader;
+    reader_init_with_source(&uuid_reader, clj_string_data(uuid_str), "<uuid roundtrip>");
+    ID uuid_parsed = parse_expr(&uuid_reader, g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(uuid_parsed);
+    TEST_ASSERT_TRUE(clj_equal(uuid, uuid_parsed));
+    RELEASE(uuid_str);
 }
