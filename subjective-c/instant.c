@@ -4,7 +4,7 @@
 #include "memory.h"
 
 ID clj_make_instant(int32_t days, uint32_t ms) {
-    CljInstant *inst = (CljInstant*)alloc(sizeof(CljInstant), 1, CLJ_INSTANT);
+    CljInstant *inst = ALLOC(CljInstant, 1);
     inst->base.type = CLJ_INSTANT;
     inst->base.flags = 0;
     inst->base.rc = 1;
