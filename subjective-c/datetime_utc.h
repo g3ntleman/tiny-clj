@@ -6,7 +6,7 @@
 // UTC-only date algorithms + ISO-8601 instant parsing/formatting.
 // These are used by native code paths like the reader/parser and pr-str.
 
-int32_t tinyclj_days_from_civil_utc(int year, int month, int day);
+int32_t clj_days_from_civil_utc(int year, int month, int day);
 void tinyclj_civil_from_days_utc(int32_t unix_days, int *out_year, int *out_month, int *out_day);
 
 // Parses ISO-8601 UTC instants:

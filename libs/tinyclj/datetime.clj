@@ -46,7 +46,7 @@
 ;; Civil date algorithms (native)
 ;; =============================================================================
 
-;; Consolidated with native code in src/datetime_utc.c via :native stubs.
+;; Consolidated with native code in subjective-c/datetime_utc.c via :native stubs.
 
 ^#^{:doc "Converts days since Unix epoch (1970-01-01) to a civil date map {:year y :month m :day d}. Native implementation."}
 (defn civil-from-days [unix-days] :native)

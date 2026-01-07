@@ -129,7 +129,6 @@ list(APPEND SOURCES
     src/file_utils.c
     src/debug.c
     src/seq.c
-    src/datetime_utc.c
     src/error_messages.c
     src/memory_profiler.c
     src/numeric_utils.c
@@ -188,7 +187,6 @@ add_executable(tiny-clj-esp32
     src/atom.c
     src/debug.c
     src/seq.c
-    src/datetime_utc.c
     src/error_messages.c
     src/memory_profiler.c
     src/numeric_utils.c

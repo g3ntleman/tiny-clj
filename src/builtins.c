@@ -36,7 +36,7 @@
 #include "eval.h"
 #include "macro.h"
 #include <subjective-c/instant.h>
-#include "datetime_utc.h"
+#include <subjective-c/datetime_utc.h>
 #ifdef DEBUG
 #include "debug.h"
 #endif
@@ -5755,16 +5755,13 @@ ID native_datetime_civil_from_days(ID *args, unsigned int argc)
     tinyclj_civil_from_days_utc(unix_days, &year, &month, &day);
 
     // Keys are keywords (symbols with ':' prefix)
-    ID kw_year = intern_symbol_global(":year");
-    ID kw_month = intern_symbol_global(":month");
-    ID kw_day = intern_symbol_global(":day");
-    if (!kw_year || !kw_month || !kw_day)
+    if (!SYM_KW_YEAR || !SYM_KW_MONTH || !SYM_KW_DAY)
         return NULL;
 
     CljMap *m = map_empty();
-    ASSIGN(m, map_assoc(m, kw_year, fixnum(year)));
-    ASSIGN(m, map_assoc(m, kw_month, fixnum(month)));
-    ASSIGN(m, map_assoc(m, kw_day, fixnum(day)));
+    ASSIGN(m, map_assoc(m, SYM_KW_YEAR, fixnum(year)));
+    ASSIGN(m, map_assoc(m, SYM_KW_MONTH, fixnum(month)));
+    ASSIGN(m, map_assoc(m, SYM_KW_DAY, fixnum(day)));
     return (ID)m;
 }
 
@@ -5783,7 +5780,7 @@ ID native_datetime_days_from_civil(ID *args, unsigned int argc)
     int month = as_fixnum(args[1]);
     int day = as_fixnum(args[2]);
 
-    int32_t unix_days = tinyclj_days_from_civil_utc(year, month, day);
+    int32_t unix_days = clj_days_from_civil_utc(year, month, day);
     return fixnum((int)unix_days);
 }
 
@@ -5804,21 +5801,15 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
                                          "format-iso expects a map");
     }
 
-    ID kw_year = intern_symbol_global(":year");
-    ID kw_month = intern_symbol_global(":month");
-    ID kw_day = intern_symbol_global(":day");
-    ID kw_hour = intern_symbol_global(":hour");
-    ID kw_minute = intern_symbol_global(":minute");
-    ID kw_second = intern_symbol_global(":second");
-    if (!kw_year || !kw_month || !kw_day || !kw_hour || !kw_minute || !kw_second)
+    if (!SYM_KW_YEAR || !SYM_KW_MONTH || !SYM_KW_DAY || !SYM_KW_HOUR || !SYM_KW_MINUTE || !SYM_KW_SECOND)
         return NULL;
 
-    ID v_year = map_get(map, kw_year);
-    ID v_month = map_get(map, kw_month);
-    ID v_day = map_get(map, kw_day);
-    ID v_hour = map_get(map, kw_hour);
-    ID v_minute = map_get(map, kw_minute);
-    ID v_second = map_get(map, kw_second);
+    ID v_year = map_get(map, SYM_KW_YEAR);
+    ID v_month = map_get(map, SYM_KW_MONTH);
+    ID v_day = map_get(map, SYM_KW_DAY);
+    ID v_hour = map_get(map, SYM_KW_HOUR);
+    ID v_minute = map_get(map, SYM_KW_MINUTE);
+    ID v_second = map_get(map, SYM_KW_SECOND);
 
     if (!is_fixnum(v_year) || !is_fixnum(v_month) || !is_fixnum(v_day) ||
         !is_fixnum(v_hour) || !is_fixnum(v_minute) || !is_fixnum(v_second))
@@ -5835,13 +5826,39 @@ ID native_datetime_format_iso(ID *args, unsigned int argc)
     int second = as_fixnum(v_second);
 
     char buf[32];
-    int written = snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
-                           year, month, day, hour, minute, second);
-    if (written < 0 || written >= (int)sizeof(buf))
+    // Fixed-width formatting without libc printf machinery.
+    // Enforce the supported range (ISO with 4-digit year).
+    if (year < 0 || year > 9999 ||
+        month < 0 || month > 99 ||
+        day < 0 || day > 99 ||
+        hour < 0 || hour > 99 ||
+        minute < 0 || minute > 99 ||
+        second < 0 || second > 99)
     {
-        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
-                                         "format-iso formatting buffer overflow");
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "format-iso expects :year in [0,9999] and other fields in [0,99]");
     }
+
+    buf[0] = (char)('0' + (year / 1000) % 10);
+    buf[1] = (char)('0' + (year / 100) % 10);
+    buf[2] = (char)('0' + (year / 10) % 10);
+    buf[3] = (char)('0' + year % 10);
+    buf[4] = '-';
+    buf[5] = (char)('0' + (month / 10) % 10);
+    buf[6] = (char)('0' + month % 10);
+    buf[7] = '-';
+    buf[8] = (char)('0' + (day / 10) % 10);
+    buf[9] = (char)('0' + day % 10);
+    buf[10] = 'T';
+    buf[11] = (char)('0' + (hour / 10) % 10);
+    buf[12] = (char)('0' + hour % 10);
+    buf[13] = ':';
+    buf[14] = (char)('0' + (minute / 10) % 10);
+    buf[15] = (char)('0' + minute % 10);
+    buf[16] = ':';
+    buf[17] = (char)('0' + (second / 10) % 10);
+    buf[18] = (char)('0' + second % 10);
+    buf[19] = '\0';
 
     return AUTORELEASE(make_string(buf));
 }

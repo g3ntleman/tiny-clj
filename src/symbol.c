@@ -119,6 +119,14 @@ CljSymbol *SYM_KW_NATIVE = NULL;
 CljSymbol *SYM_KW_AS = NULL;
 CljSymbol *SYM_KW_REFER = NULL;
 
+// Datetime keywords
+CljSymbol *SYM_KW_YEAR = NULL;
+CljSymbol *SYM_KW_MONTH = NULL;
+CljSymbol *SYM_KW_DAY = NULL;
+CljSymbol *SYM_KW_HOUR = NULL;
+CljSymbol *SYM_KW_MINUTE = NULL;
+CljSymbol *SYM_KW_SECOND = NULL;
+
 // Global symbols for namespace names (for fast comparison)
 CljSymbol *SYM_CLOJURE_CORE = NULL;
 CljSymbol *SYM_CLOJURE_STRING = NULL;
@@ -338,6 +346,13 @@ DEFINE_STATIC_SYMBOL(sym_kw_native_data, ":native");
 DEFINE_STATIC_SYMBOL(sym_kw_as_data, ":as");
 DEFINE_STATIC_SYMBOL(sym_kw_refer_data, ":refer");
 
+DEFINE_STATIC_SYMBOL(sym_kw_year_data, ":year");
+DEFINE_STATIC_SYMBOL(sym_kw_month_data, ":month");
+DEFINE_STATIC_SYMBOL(sym_kw_day_data, ":day");
+DEFINE_STATIC_SYMBOL(sym_kw_hour_data, ":hour");
+DEFINE_STATIC_SYMBOL(sym_kw_minute_data, ":minute");
+DEFINE_STATIC_SYMBOL(sym_kw_second_data, ":second");
+
 // Additional symbols for optimization (used in hot path)
 DEFINE_STATIC_SYMBOL(sym_ns_star_data, "*ns*");
 
@@ -529,6 +544,18 @@ void init_special_symbols() {
     INIT_SYMBOL(SYM_KW_AS, sym_kw_as_data);
 
     INIT_SYMBOL(SYM_KW_REFER, sym_kw_refer_data);
+
+    INIT_SYMBOL(SYM_KW_YEAR, sym_kw_year_data);
+
+    INIT_SYMBOL(SYM_KW_MONTH, sym_kw_month_data);
+
+    INIT_SYMBOL(SYM_KW_DAY, sym_kw_day_data);
+
+    INIT_SYMBOL(SYM_KW_HOUR, sym_kw_hour_data);
+
+    INIT_SYMBOL(SYM_KW_MINUTE, sym_kw_minute_data);
+
+    INIT_SYMBOL(SYM_KW_SECOND, sym_kw_second_data);
 
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);

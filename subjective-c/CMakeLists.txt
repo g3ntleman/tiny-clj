@@ -22,6 +22,7 @@ set(SUBJECTIVE_C_SOURCES
     byte_array.c
     hashmap.c
     callbacks.c
+    datetime_utc.c
     instant.c
     uuid.c
 )

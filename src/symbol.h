@@ -131,6 +131,14 @@ extern CljSymbol *SYM_KW_NATIVE;
 extern CljSymbol *SYM_KW_AS;
 extern CljSymbol *SYM_KW_REFER;
 
+// Datetime keyword symbols
+extern CljSymbol *SYM_KW_YEAR;
+extern CljSymbol *SYM_KW_MONTH;
+extern CljSymbol *SYM_KW_DAY;
+extern CljSymbol *SYM_KW_HOUR;
+extern CljSymbol *SYM_KW_MINUTE;
+extern CljSymbol *SYM_KW_SECOND;
+
 // Namespace name symbols
 extern CljSymbol *SYM_CLOJURE_CORE;
 extern CljSymbol *SYM_CLOJURE_STRING;

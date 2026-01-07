@@ -1,4 +1,4 @@
-#include "datetime_utc.h"
+#include <subjective-c/datetime_utc.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -17,7 +17,7 @@ static bool parse_uint_n(const char *s, int n, int *out) {
   return true;
 }
 
-int32_t tinyclj_days_from_civil_utc(int year, int month, int day) {
+int32_t clj_days_from_civil_utc(int year, int month, int day) {
   // Howard Hinnant algorithm; returns days since 1970-01-01.
   int y = (month <= 2) ? (year - 1) : year;
   int era = (y >= 0 ? y : y - 399) / 400;
@@ -98,7 +98,7 @@ const char *tinyclj_parse_iso8601_utc_instant(const char *iso, int32_t *out_days
     return "Invalid #inst format (out-of-range fields)";
   }
 
-  int32_t days = tinyclj_days_from_civil_utc(year, month, day);
+  int32_t days = clj_days_from_civil_utc(year, month, day);
   uint32_t ms = (uint32_t)(hour * 3600000 + minute * 60000 + second * 1000 + millis);
 
   if (out_days) {
