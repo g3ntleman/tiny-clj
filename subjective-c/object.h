@@ -40,6 +40,8 @@ void *throw_exception_formatted(const char *type, const char *file, int line, in
 #define TYPE_OF_CLJException CLJ_EXCEPTION
 #define TYPE_OF_CljSeqIterator CLJ_SEQ
 #define TYPE_OF_CljByteArray CLJ_BYTE_ARRAY
+#define TYPE_OF_CljInstant CLJ_INSTANT
+#define TYPE_OF_CljUUID CLJ_UUID
 #define TYPE_OF_CljAtom CLJ_ATOM
 #define TYPE_OF_int CLJ_INT
 #define TYPE_OF_double CLJ_FLOAT
