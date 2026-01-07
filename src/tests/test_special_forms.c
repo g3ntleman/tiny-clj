@@ -61,6 +61,47 @@ TEST(test_special_or_dispatch) {
     (void)eval_string("(or false false)", g_test_eval_state);
 }
 
+TEST(test_special_cond_basic_match) {
+    ID result = eval_string("(cond false 1 true 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
+TEST(test_special_cond_no_match_returns_nil) {
+    ID result = eval_string("(cond false 1 false 2)", g_test_eval_state);
+    TEST_ASSERT_NULL(result);
+}
+
+TEST(test_special_cond_else) {
+    ID result = eval_string("(cond false 1 :else 2)", g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(2, as_fixnum(result));
+}
+
+TEST(test_special_cond_allows_nil_expr_and_short_circuits) {
+    // Regression: a previous implementation treated `nil` expr as “missing”
+    // and continued evaluating later clauses.
+    ID result = eval_string(
+        "(do (def x (atom 0)) "
+        "    (cond true nil (do (swap! x inc) true) 1) "
+        "    @x)",
+        g_test_eval_state);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(0, as_fixnum(result));
+}
+
+TEST(test_special_cond_odd_number_of_forms_throws) {
+    bool did_throw = false;
+    TRY {
+        // (cond test expr test) -> odd number of forms after `cond`
+        (void)eval_string("(cond true 1 false)", g_test_eval_state);
+    } CATCH(ex) {
+        did_throw = true;
+        TEST_ASSERT_EQUAL_STRING("IllegalArgumentException", ex->type);
+    } END_TRY
+    TEST_ASSERT_TRUE(did_throw);
+}
+
 // ============================================================================
 // TEST: All Special Forms Have Valid Function Pointers
 // ============================================================================
@@ -98,6 +139,10 @@ TEST(test_all_special_symbols_have_eval_fn) {
     CljSpecialSymbol *sym_quote = as_special_symbol(SYM_QUOTE);
     TEST_ASSERT_NOT_NULL(sym_quote);
     TEST_ASSERT_NOT_NULL(sym_quote->eval_fn);
+
+    CljSpecialSymbol *sym_cond = as_special_symbol(SYM_COND);
+    TEST_ASSERT_NOT_NULL(sym_cond);
+    TEST_ASSERT_NOT_NULL(sym_cond->eval_fn);
 }
 
 // ============================================================================
