@@ -38,7 +38,7 @@
 #include <subjective-c/instant.h>
 #include <subjective-c/uuid.h>
 
-#include "datetime_utc.h"
+#include <subjective-c/datetime_utc.h>
 
 static size_t format_instant_iso_utc(char *buf, size_t buf_size, const CljInstant *inst) {
     return tinyclj_format_inst_literal_iso8601_utc(buf, buf_size, inst->days, inst->ms);
