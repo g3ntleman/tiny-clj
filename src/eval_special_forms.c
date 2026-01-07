@@ -44,16 +44,26 @@ ID eval_special_cond(CljList *list, CljMap *env, EvalState *st, const EvalContex
     int argc = list_count(list);
     if (argc <= 1) return NULL;
 
-    for (int i = 1; i < argc; i += 2) {
-        if (i + 1 >= argc) break;
+    // `cond` expects pairs: test expr test expr ...
+    // In Clojure, an odd number of forms is an error (macroexpansion-time).
+    // Here `cond` is a special form, so validate at runtime.
+    if (((argc - 1) % 2) != 0) {
+        throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
+                        "cond requires an even number of forms",
+                        __FILE__, __LINE__, 0);
+        return NULL;
+    }
 
+    for (int i = 1; i < argc; i += 2) {
         ID test = list_get_element(list, i);
         ID expr = list_get_element(list, i + 1);
 
-        if (!test || !expr) continue;
-
+        // `test` and `expr` may legitimately be NULL (nil literal).
+        // `eval_body` and `RELEASE` are nil-safe.
         ID test_result = eval_body(test, env, st, ctx);
-        if (clj_is_truthy(test_result)) {
+        bool truthy = clj_is_truthy(test_result);
+        RELEASE(test_result);
+        if (truthy) {
             return eval_body(expr, env, st, ctx);
         }
     }
