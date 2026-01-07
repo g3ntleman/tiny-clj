@@ -10,6 +10,7 @@ tiny-cli.txt
 **/*.o
 **/*.d
 .vscode/
+!.vscode/
 !.vscode/tasks.json
 # Build artifacts
 build/
@@ -61,6 +62,10 @@ __pycache__/
 .Python
 venv/
 .venv/
+
+# Tooling caches (do not commit)
+.clj-kondo/
+.lsp/
 
 # System files
 .DS_Store

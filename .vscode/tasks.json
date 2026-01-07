@@ -14,7 +14,8 @@
       ],
       "presentation": {
         "reveal": "silent",
-        "panel": "shared"
+        "panel": "shared",
+        "showReuseMessage": false
       }
     },
     {
@@ -30,7 +31,8 @@
       ],
       "presentation": {
         "reveal": "always",
-        "panel": "shared"
+        "panel": "shared",
+        "showReuseMessage": false
       }
     },
     {
@@ -46,7 +48,8 @@
       ],
       "presentation": {
         "reveal": "always",
-        "panel": "shared"
+        "panel": "shared",
+        "showReuseMessage": false
       }
     },
     {
