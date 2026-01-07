@@ -1,29 +1,27 @@
 ; all supported EDN literals for tiny-clj parser (includes tagged literals)
-{
-  :nil nil
-  :true true
-  :false false
+{:nil nil
+ :true true
+ :false false
 
-  :int 42
-  :neg-int -7
-  :float 3.5
+ :int 42
+ :neg-int -7
+ :float 3.5
 
-  :string "hello\nworld"
-  :escaped "quote: \" backslash: \\"
+ :string "hello\nworld"
+ :escaped "quote: \" backslash: \\"
 
-  :char-a \a
-  :char-newline \newline
+ :char-a \a
+ :char-newline \newline
 
-  :keyword :kw
-  :symbol foo
+ :keyword :kw
+ :symbol foo
 
-  :vector [1 2 3]
-  :list (1 2 3)
+ :vector [1 2 3]
+ :list (1 2 3)
 
-  :map {:a 1 :b 2}
-  :empty-vector []
-  :empty-map {}
+ :map {:a 1 :b 2}
+ :empty-vector []
+ :empty-map {}
 
-  :instant #inst "1970-01-01T00:00:00.000Z"
-  :uuid #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"
-}
+ :instant #inst "1970-01-01T00:00:00.000Z"
+ :uuid #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"}

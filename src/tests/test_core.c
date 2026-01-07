@@ -300,9 +300,9 @@ TEST(test_native_nilp_low_level) {
     TEST_ASSERT_TRUE(result3 == clj_false);
     
     // Test truthiness of clj_false
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)clj_false));
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result));
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result3));
+    TEST_ASSERT_FALSE(clj_is_truthy(clj_false));
+    TEST_ASSERT_FALSE(clj_is_truthy(result));
+    TEST_ASSERT_FALSE(clj_is_truthy(result3));
     
     // Test via make_named_func and CljCFunc->fn (simulating eval_function_call)
     ID func_obj = make_named_func(native_nilp, intern_symbol_global("nil?"));

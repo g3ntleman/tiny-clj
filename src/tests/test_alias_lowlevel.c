@@ -17,7 +17,7 @@ extern void builtin_set_eval_state(EvalState *st);
 
 // Helper functions
 static void load_clojure_string_namespace(void) {
-    CljObject *req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
+    ID req_result = eval_string("(require 'clojure.string)", g_test_eval_state);
     (void)req_result;
 }
 

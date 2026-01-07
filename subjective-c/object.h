@@ -160,11 +160,11 @@ static inline bool is_singleton(CljObject *obj)
 }
 
 bool clj_equal(ID a, ID b);
-static inline bool clj_is_truthy(CljObject *v)
+static inline bool clj_is_truthy(ID v)
 {
     if (v)
     {
-        if (((uintptr_t)v & 0x7) == 5)
+        if (((uintptr_t)v & 0x7) == CLJ_BOOL)
         {
             uint8_t special = (uint8_t)((uintptr_t)v >> 3);
             if (special == 0)

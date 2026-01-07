@@ -32,7 +32,7 @@ int main() {
 
     // Load and execute startup code
     DEBUG_PRINT("Loading startup code...");
-    CljObject *result = eval_string(startup_code, state);
+    ID result = eval_string(startup_code, state);
     if (!result) {
         DEBUG_PRINT("ERROR: Failed to load startup code");
         return 1;

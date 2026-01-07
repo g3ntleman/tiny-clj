@@ -6,30 +6,36 @@
 #include <subjective-c/instant.h>
 #include <subjective-c/uuid.h>
 
-static char *read_entire_file(const char *path, size_t *out_len) {
+static char *read_entire_file(const char *path, size_t *out_len)
+{
     FILE *fp = fopen(path, "rb");
-    if (!fp) {
+    if (!fp)
+    {
         return NULL;
     }
 
-    if (fseek(fp, 0, SEEK_END) != 0) {
+    if (fseek(fp, 0, SEEK_END) != 0)
+    {
         fclose(fp);
         return NULL;
     }
 
     long size = ftell(fp);
-    if (size < 0) {
+    if (size < 0)
+    {
         fclose(fp);
         return NULL;
     }
 
-    if (fseek(fp, 0, SEEK_SET) != 0) {
+    if (fseek(fp, 0, SEEK_SET) != 0)
+    {
         fclose(fp);
         return NULL;
     }
 
-    char *buf = (char*)malloc((size_t)size + 1);
-    if (!buf) {
+    char *buf = (char *)malloc((size_t)size + 1);
+    if (!buf)
+    {
         fclose(fp);
         return NULL;
     }
@@ -37,22 +43,26 @@ static char *read_entire_file(const char *path, size_t *out_len) {
     size_t n = fread(buf, 1, (size_t)size, fp);
     fclose(fp);
 
-    if (n != (size_t)size) {
+    if (n != (size_t)size)
+    {
         free(buf);
         return NULL;
     }
 
     buf[n] = '\0';
-    if (out_len) {
+    if (out_len)
+    {
         *out_len = n;
     }
     return buf;
 }
 
-static void build_fixture_path(char *out, size_t out_size) {
+static void build_fixture_path(char *out, size_t out_size)
+{
     const char *self = __FILE__;
     const char *slash = strrchr(self, '/');
-    if (!slash) {
+    if (!slash)
+    {
         snprintf(out, out_size, "fixtures/all_types.edn");
         return;
     }
@@ -60,7 +70,8 @@ static void build_fixture_path(char *out, size_t out_size) {
     snprintf(out, out_size, "%.*s/fixtures/all_types.edn", (int)dir_len, self);
 }
 
-static ID map_get_required(CljMap *m, const char *kw_name) {
+static ID map_get_required(CljMap *m, const char *kw_name)
+{
     CljSymbol *kw = intern_symbol_global(kw_name);
     TEST_ASSERT_NOT_NULL(kw);
     ID v = map_get(m, (ID)kw);
@@ -69,7 +80,8 @@ static ID map_get_required(CljMap *m, const char *kw_name) {
     return v;
 }
 
-TEST(test_edn_file_all_supported_types) {
+TEST(test_edn_file_all_supported_types)
+{
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
     char path[1024];
@@ -77,15 +89,18 @@ TEST(test_edn_file_all_supported_types) {
 
     size_t len = 0;
     char *src = read_entire_file(path, &len);
-    if (!src && errno == ENOENT && path[0] != '/') {
+    if (!src && errno == ENOENT && path[0] != '/')
+    {
         char alt[1024];
         snprintf(alt, sizeof(alt), "../%s", path);
         src = read_entire_file(alt, &len);
-        if (src) {
+        if (src)
+        {
             snprintf(path, sizeof(path), "%s", alt);
         }
     }
-    if (!src) {
+    if (!src)
+    {
         char msg[256];
         snprintf(msg, sizeof(msg), "Failed to read EDN fixture: %s (errno=%d)", path, errno);
         TEST_FAIL_MESSAGE(msg);
@@ -116,8 +131,8 @@ TEST(test_edn_file_all_supported_types) {
     ID v_false = map_get_required(m, ":false");
     TEST_ASSERT_EQUAL_PTR(clj_false, v_false);
 
-    assert_fixnum((CljObject*)map_get_required(m, ":int"), 42);
-    assert_fixnum((CljObject*)map_get_required(m, ":neg-int"), -7);
+    assert_fixnum((CljObject *)map_get_required(m, ":int"), 42);
+    assert_fixnum((CljObject *)map_get_required(m, ":neg-int"), -7);
 
     free(src);
 
@@ -125,8 +140,8 @@ TEST(test_edn_file_all_supported_types) {
     TEST_ASSERT_TRUE(is_fixed(v_float));
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 3.5f, (float)as_fixed(v_float));
 
-    assert_string((CljObject*)map_get_required(m, ":string"), "hello\nworld");
-    assert_string((CljObject*)map_get_required(m, ":escaped"), "quote: \" backslash: \\");
+    assert_string((CljObject *)map_get_required(m, ":string"), "hello\nworld");
+    assert_string((CljObject *)map_get_required(m, ":escaped"), "quote: \" backslash: \\");
 
     ID v_char_a = map_get_required(m, ":char-a");
     TEST_ASSERT_TRUE(is_character(v_char_a));
@@ -145,7 +160,7 @@ TEST(test_edn_file_all_supported_types) {
     TEST_ASSERT_EQUAL_STRING("foo", as_symbol((CljValue)v_sym)->cname);
 
     ID v_vec = map_get_required(m, ":vector");
-    assert_vector((CljObject*)v_vec);
+    assert_vector((CljObject *)v_vec);
     CljVector *vec = as_vector(v_vec);
     TEST_ASSERT_EQUAL_INT(3, vector_count(vec));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(vector_nth(vec, 0)));
@@ -153,14 +168,14 @@ TEST(test_edn_file_all_supported_types) {
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(vector_nth(vec, 2)));
 
     ID v_list = map_get_required(m, ":list");
-    assert_list((CljObject*)v_list);
+    assert_list((CljObject *)v_list);
     TEST_ASSERT_EQUAL_INT(3, list_count(as_list(v_list)));
     TEST_ASSERT_EQUAL_INT(1, as_fixnum(list_nth(as_list(v_list), 0)));
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(list_nth(as_list(v_list), 1)));
     TEST_ASSERT_EQUAL_INT(3, as_fixnum(list_nth(as_list(v_list), 2)));
 
     ID v_map = map_get_required(m, ":map");
-    assert_map((CljObject*)v_map);
+    assert_map((CljObject *)v_map);
     CljMap *inner = as_map(v_map);
     ID a_val = map_get(inner, (ID)intern_symbol_global(":a"));
     ID b_val = map_get(inner, (ID)intern_symbol_global(":b"));
@@ -170,11 +185,11 @@ TEST(test_edn_file_all_supported_types) {
     TEST_ASSERT_EQUAL_INT(2, as_fixnum(b_val));
 
     ID v_empty_vec = map_get_required(m, ":empty-vector");
-    assert_vector((CljObject*)v_empty_vec);
+    assert_vector((CljObject *)v_empty_vec);
     TEST_ASSERT_EQUAL_INT(0, vector_count(as_vector(v_empty_vec)));
 
     ID v_empty_map = map_get_required(m, ":empty-map");
-    assert_map((CljObject*)v_empty_map);
+    assert_map((CljObject *)v_empty_map);
     TEST_ASSERT_EQUAL_INT(0, map_count(as_map(v_empty_map)));
 
     ID v_inst = map_get_required(m, ":instant");
@@ -189,10 +204,11 @@ TEST(test_edn_file_all_supported_types) {
     TEST_ASSERT_EQUAL_STRING("f81d4fae-7dec-11d0-a765-00a0c91e6bf6", uuid_buf);
 }
 
-TEST(test_tagged_literals_roundtrip_inst_uuid) {
+TEST(test_tagged_literals_roundtrip_inst_uuid)
+{
     TEST_ASSERT_NOT_NULL(g_test_eval_state);
 
-    ID inst = AUTORELEASE(clj_make_instant(0, 0));
+    ID inst = AUTORELEASE(make_instant(0, 0));
     CljString *inst_str = pr_str(inst);
     TEST_ASSERT_NOT_NULL(inst_str);
 
