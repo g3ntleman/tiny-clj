@@ -26,7 +26,7 @@ TEST(test_instant_pr_str_shape) {
     ID a = AUTORELEASE(clj_make_instant(1, 2));
     CljString *s = pr_str(a);
     TEST_ASSERT_NOT_NULL(s);
-    TEST_ASSERT_EQUAL_STRING("#inst {:days 1 :ms 2}", clj_string_data(s));
+    TEST_ASSERT_EQUAL_STRING("#inst \"1970-01-02T00:00:00.002Z\"", clj_string_data(s));
     RELEASE(s);
 }
 

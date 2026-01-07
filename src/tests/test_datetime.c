@@ -252,27 +252,15 @@ TEST(test_datetime_time_roundtrip) {
 // --- date-time / to-raw high-level API tests ---
 
 TEST(test_datetime_date_time_api) {
-    // Convert raw timestamp to full date-time map
+    // Convert Instant to full date-time map
     ID result = eval_string(
         "(do (require 'tinyclj.datetime)"
-        "    (let [dt (tinyclj.datetime/date-time {:days 0 :ms 43200000})]"
+        "    (let [dt (tinyclj.datetime/date-time #inst \"1970-01-01T12:00:00.000Z\")]"
         "      (and (= 1970 (:year dt))"
         "           (= 1 (:month dt))"
         "           (= 1 (:day dt))"
         "           (= 12 (:hour dt))"
         "           (= 0 (:minute dt)))))",
-        g_test_eval_state);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));
-}
-
-TEST(test_datetime_to_raw_api) {
-    // Convert date-time map back to raw format
-    ID result = eval_string(
-        "(do (require 'tinyclj.datetime)"
-        "    (let [raw (tinyclj.datetime/to-raw {:year 2000 :month 1 :day 1 :hour 12 :minute 0 :second 0})]"
-        "      (and (= 10957 (:days raw))"
-        "           (= 43200000 (:ms raw)))))",
         g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result));

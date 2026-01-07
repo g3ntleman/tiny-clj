@@ -38,6 +38,49 @@
 #include <subjective-c/instant.h>
 #include <subjective-c/uuid.h>
 
+static void civil_from_days_utc(int32_t unix_days, int *out_year, int *out_month, int *out_day) {
+    // Howard Hinnant algorithm; inverse of days-from-civil.
+    int64_t z = (int64_t)unix_days + 719468;
+    int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+    int64_t doe = z - era * 146097;
+    int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    int64_t y = yoe + era * 400;
+    int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    int64_t mp = (5 * doy + 2) / 153;
+    int64_t d = doy - (153 * mp + 2) / 5 + 1;
+    int64_t m = mp + (mp < 10 ? 3 : -9);
+    y += (m <= 2);
+
+    *out_year = (int)y;
+    *out_month = (int)m;
+    *out_day = (int)d;
+}
+
+static size_t format_instant_iso_utc(char *buf, size_t buf_size, const CljInstant *inst) {
+    int year = 0, month = 0, day = 0;
+    civil_from_days_utc(inst->days, &year, &month, &day);
+
+    uint32_t ms = inst->ms;
+    uint32_t hour = ms / 3600000u;
+    ms %= 3600000u;
+    uint32_t minute = ms / 60000u;
+    ms %= 60000u;
+    uint32_t second = ms / 1000u;
+    uint32_t millis = ms % 1000u;
+
+    return (size_t)snprintf(
+        buf,
+        buf_size,
+        "#inst \"%04d-%02d-%02dT%02u:%02u:%02u.%03uZ\"",
+        year,
+        month,
+        day,
+        (unsigned)hour,
+        (unsigned)minute,
+        (unsigned)second,
+        (unsigned)millis);
+}
+
 // Global flag for special form rendering mode
 static bool g_print_special_forms_as_tags = true;
 
@@ -295,7 +338,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_INSTANT: {
             CljInstant *inst = (CljInstant*)v;
             char buf[64];
-            return (size_t)snprintf(buf, sizeof(buf), "#inst {:days %d :ms %u}", inst->days, (unsigned)inst->ms);
+            return format_instant_iso_utc(buf, sizeof(buf), inst);
         }
 
         case CLJ_UUID: {
@@ -584,8 +627,8 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_INSTANT: {
             CljInstant *inst = (CljInstant*)v;
-            int written = snprintf(buffer + *offset, 64, "#inst {:days %d :ms %u}", inst->days, (unsigned)inst->ms);
-            *offset += (size_t)written;
+            size_t written = format_instant_iso_utc(buffer + *offset, 64, inst);
+            *offset += written;
             return;
         }
 
