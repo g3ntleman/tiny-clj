@@ -324,36 +324,36 @@ TEST(test_truthiness_comprehensive) {
     WITH_AUTORELEASE_POOL({
         // ===== FALSY VALUES =====
         // nil (NULL) is falsy
-        TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)NULL));
+        TEST_ASSERT_FALSE(clj_is_truthy(NULL));
         
         // false is falsy
         CljValue false_val = clj_false;
-        TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)false_val));
+        TEST_ASSERT_FALSE(clj_is_truthy(false_val));
         
         // ===== TRUTHY VALUES =====
         // true is truthy
         CljValue true_val = clj_true;
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)true_val));
+        TEST_ASSERT_TRUE(clj_is_truthy(true_val));
         
         // Fixnums are truthy (including 0)
         CljValue fixnum_zero = fixnum(0);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_zero));
+        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_zero));
         
         CljValue fixnum_one = fixnum(1);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_one));
+        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_one));
         
         CljValue fixnum_negative = fixnum(-1);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_negative));
+        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_negative));
         
         CljValue fixnum_large = fixnum(42);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixnum_large));
+        TEST_ASSERT_TRUE(clj_is_truthy(fixnum_large));
         
         // Characters are truthy
         CljValue char_val = character('A');
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)char_val));
+        TEST_ASSERT_TRUE(clj_is_truthy(char_val));
         
         CljValue char_zero = character('\0');
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)char_zero));
+        TEST_ASSERT_TRUE(clj_is_truthy(char_zero));
         
         // Strings are truthy (including empty strings)
         CljObject *empty_string = AUTORELEASE(make_string(""));
@@ -367,12 +367,12 @@ TEST(test_truthiness_comprehensive) {
         // Keywords are truthy
         CljSymbol *keyword = AUTORELEASE(intern_symbol_global(":test"));
         TEST_ASSERT_NOT_NULL(keyword);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)keyword));
+        TEST_ASSERT_TRUE(clj_is_truthy(keyword));
         
         // Symbols are truthy
         CljSymbol *symbol = AUTORELEASE(intern_symbol_global("test"));
         TEST_ASSERT_NOT_NULL(symbol);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)symbol));
+        TEST_ASSERT_TRUE(clj_is_truthy(symbol));
         
         // Empty list is truthy (in Clojure, empty collections are truthy)
         // Note: empty_list() returns a singleton, which should be truthy
@@ -382,23 +382,23 @@ TEST(test_truthiness_comprehensive) {
         // Non-empty list is truthy
         CljList *non_empty_list = AUTORELEASE(make_list(fixnum(1), NULL));
         TEST_ASSERT_NOT_NULL(non_empty_list);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_list));
+        TEST_ASSERT_TRUE(clj_is_truthy(non_empty_list));
         
         // Empty vector is truthy
         CljVector *empty_vec = AUTORELEASE(make_vector(0, CLJ_VECTOR));
         TEST_ASSERT_NOT_NULL(empty_vec);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)empty_vec));
+        TEST_ASSERT_TRUE(clj_is_truthy(empty_vec));
         
         // Non-empty vector is truthy
         CljVector *non_empty_vec = AUTORELEASE(make_vector(1, CLJ_VECTOR));
         TEST_ASSERT_NOT_NULL(non_empty_vec);
         non_empty_vec = vector_conj(non_empty_vec, fixnum(1));
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)non_empty_vec));
+        TEST_ASSERT_TRUE(clj_is_truthy(non_empty_vec));
         
         // Empty map is truthy
         CljMap *empty_map = AUTORELEASE(make_map(0));
         TEST_ASSERT_NOT_NULL(empty_map);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)empty_map));
+        TEST_ASSERT_TRUE(clj_is_truthy(empty_map));
         
         // Non-empty map is truthy
         CljMap *non_empty_map = AUTORELEASE(make_map(4));
@@ -406,14 +406,14 @@ TEST(test_truthiness_comprehensive) {
         // map_assoc always returns a new map (COW disabled)
         CljMap *new_map = AUTORELEASE(map_assoc(non_empty_map, (CljValue)intern_symbol_global(":key"), fixnum(1)));
         TEST_ASSERT_NOT_NULL(new_map);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)new_map));
+        TEST_ASSERT_TRUE(clj_is_truthy(new_map));
         
         // Fixed-point numbers are truthy (including 0.0)
         CljValue fixed_val = fixed(3.14f);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixed_val));
+        TEST_ASSERT_TRUE(clj_is_truthy(fixed_val));
         
         CljValue fixed_zero = fixed(0.0f);
-        TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)fixed_zero));
+        TEST_ASSERT_TRUE(clj_is_truthy(fixed_zero));
         
         // ===== EDGE CASES =====
         // Test with eval_string for high-level truthiness checks

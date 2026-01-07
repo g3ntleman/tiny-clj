@@ -227,22 +227,22 @@ TEST(test_special_form_and) {
     // (and) => true
     ID result1 = eval_string("(and)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result1);
-    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result1));
+    TEST_ASSERT_TRUE(clj_is_truthy(result1));
 
     // (and true true) => true
     ID result2 = eval_string("(and true true)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result2));
+    TEST_ASSERT_TRUE(clj_is_truthy(result2));
 
     // (and true false) => false
     ID result3 = eval_string("(and true false)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result3));
+    TEST_ASSERT_FALSE(clj_is_truthy(result3));
 
     // (and false true) => false (short-circuit)
     ID result4 = eval_string("(and false true)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result4));
+    TEST_ASSERT_FALSE(clj_is_truthy(result4));
 
     // result1, result2, result3, result4 are automatically managed by eval_string
 }
@@ -255,12 +255,12 @@ TEST(test_special_form_or) {
     CljValue nil_val = NULL;
     TEST_ASSERT_NULL(nil_val);
     // clj_is_truthy expects CljObject*, not CljValue
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)nil_val));
+    TEST_ASSERT_FALSE(clj_is_truthy(nil_val));
 
     // (or) => nil
     ID result1 = eval_string("(or)", g_test_eval_state);
     if (result1) {
-        TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result1));
+        TEST_ASSERT_FALSE(clj_is_truthy(result1));
     } else {
         // nil is NULL in our system - this is correct!
     }
@@ -268,17 +268,17 @@ TEST(test_special_form_or) {
     // (or false false) => false
     ID result2 = eval_string("(or false false)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result2);
-    TEST_ASSERT_FALSE(clj_is_truthy((CljObject*)result2));
+    TEST_ASSERT_FALSE(clj_is_truthy(result2));
 
     // (or false true) => true
     ID result3 = eval_string("(or false true)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result3);
-    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result3));
+    TEST_ASSERT_TRUE(clj_is_truthy(result3));
 
     // (or true false) => true (short-circuit)
     ID result4 = eval_string("(or true false)", g_test_eval_state);
     TEST_ASSERT_NOT_NULL(result4);
-    TEST_ASSERT_TRUE(clj_is_truthy((CljObject*)result4));
+    TEST_ASSERT_TRUE(clj_is_truthy(result4));
 
     // result1, result2, result3, result4 are automatically managed by eval_string
 }

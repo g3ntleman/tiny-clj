@@ -13,9 +13,9 @@ TEST(test_now_returns_instant) {
 }
 
 TEST(test_instant_equality_and_hash) {
-    ID a = AUTORELEASE(clj_make_instant(123, 456));
-    ID b = AUTORELEASE(clj_make_instant(123, 456));
-    ID c = AUTORELEASE(clj_make_instant(123, 457));
+    ID a = AUTORELEASE(make_instant(123, 456));
+    ID b = AUTORELEASE(make_instant(123, 456));
+    ID c = AUTORELEASE(make_instant(123, 457));
 
     TEST_ASSERT_TRUE(clj_equal(a, b));
     TEST_ASSERT_FALSE(clj_equal(a, c));
@@ -23,7 +23,7 @@ TEST(test_instant_equality_and_hash) {
 }
 
 TEST(test_instant_pr_str_shape) {
-    ID a = AUTORELEASE(clj_make_instant(1, 2));
+    ID a = AUTORELEASE(make_instant(1, 2));
     CljString *s = pr_str(a);
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_STRING("#inst \"1970-01-02T00:00:00.002Z\"", clj_string_data(s));

@@ -36,11 +36,17 @@
 #include "eval.h"
 #include "macro.h"
 #include <subjective-c/instant.h>
+#include "datetime_utc.h"
 #ifdef DEBUG
 #include "debug.h"
 #endif
 #include "builtins_strings.h"
 #include "builtins_regex.h"
+
+// tinyclj.datetime native functions (used by :native stubs)
+ID native_datetime_civil_from_days(ID *args, unsigned int argc);
+ID native_datetime_days_from_civil(ID *args, unsigned int argc);
+ID native_datetime_format_iso(ID *args, unsigned int argc);
 
 ID native_add_variadic(ID *args, unsigned int argc);
 ID native_sub_variadic(ID *args, unsigned int argc);
@@ -2799,6 +2805,24 @@ static StaticSymbolData sym_stacktrace_str_qualified_data = {
             .cname = "clojure.stacktrace/stacktrace-str"}};
 #endif
 
+// Qualified-name entries for tinyclj.datetime native stubs.
+// Stored as pseudo-qualified cname and rely on native_function_lookup's qualified-name fallback.
+static StaticSymbolData sym_tinyclj_datetime_civil_from_days_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.datetime/civil-from-days"}};
+static StaticSymbolData sym_tinyclj_datetime_days_from_civil_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.datetime/days-from-civil"}};
+static StaticSymbolData sym_tinyclj_datetime_format_iso_qualified_data = {
+    .sym = {.base = {.type = CLJ_SYMBOL, .rc = SINGLETON_RC, .flags = CLJ_FLAG_NATIVE},
+            .ns_name = NULL,
+            .unqualified = NULL,
+            .cname = "tinyclj.datetime/format-iso"}};
+
 // Compile-time initialized lookup table (DRY: avoids runtime initialization)
 // Uses static symbol data structures (&sym_*_data.sym) for compile-time references
 static const NativeFunctionEntry native_function_table[] = {
@@ -2809,6 +2833,12 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_stacktrace_str_qualified_data.sym, native_stacktrace_str},
 #endif
     {&sym_retain_count_data.sym, native_retain_count},
+
+    // tinyclj.datetime functions
+    {&sym_tinyclj_datetime_civil_from_days_qualified_data.sym, native_datetime_civil_from_days},
+    {&sym_tinyclj_datetime_days_from_civil_qualified_data.sym, native_datetime_days_from_civil},
+    {&sym_tinyclj_datetime_format_iso_qualified_data.sym, native_datetime_format_iso},
+
     // clojure.core functions
     {&sym_meta_data.sym, native_meta},
     {&sym_with_meta_data.sym, native_with_meta},
@@ -5675,7 +5705,7 @@ ID native_now(ID *args, unsigned int argc)
     int32_t millis = sec_in_day * 1000 + tv.tv_usec / 1000;
 
     // Return Instant (days + millis-in-day)
-    return AUTORELEASE(clj_make_instant(days, (uint32_t)millis));
+    return AUTORELEASE(make_instant(days, (uint32_t)millis));
 }
 
 ID native_instant_p(ID *args, unsigned int argc)
@@ -5707,6 +5737,113 @@ ID native_instant_ms(ID *args, unsigned int argc)
                                          "instant-ms expects an Instant");
     }
     return fixnum((int32_t)clj_instant_ms(args[0]));
+}
+
+// tinyclj.datetime/civil-from-days: (civil-from-days unix-days) => {:year y :month m :day d}
+ID native_datetime_civil_from_days(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 1, "civil-from-days"))
+        return NULL;
+    if (!is_fixnum(args[0]))
+    {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "civil-from-days expects an integer days value");
+    }
+
+    int32_t unix_days = (int32_t)as_fixnum(args[0]);
+    int year = 0, month = 0, day = 0;
+    tinyclj_civil_from_days_utc(unix_days, &year, &month, &day);
+
+    // Keys are keywords (symbols with ':' prefix)
+    ID kw_year = intern_symbol_global(":year");
+    ID kw_month = intern_symbol_global(":month");
+    ID kw_day = intern_symbol_global(":day");
+    if (!kw_year || !kw_month || !kw_day)
+        return NULL;
+
+    CljMap *m = map_empty();
+    ASSIGN(m, map_assoc(m, kw_year, fixnum(year)));
+    ASSIGN(m, map_assoc(m, kw_month, fixnum(month)));
+    ASSIGN(m, map_assoc(m, kw_day, fixnum(day)));
+    return (ID)m;
+}
+
+// tinyclj.datetime/days-from-civil: (days-from-civil year month day) => unix-days
+ID native_datetime_days_from_civil(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 3, "days-from-civil"))
+        return NULL;
+    if (!is_fixnum(args[0]) || !is_fixnum(args[1]) || !is_fixnum(args[2]))
+    {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "days-from-civil expects integer year month day");
+    }
+
+    int year = as_fixnum(args[0]);
+    int month = as_fixnum(args[1]);
+    int day = as_fixnum(args[2]);
+
+    int32_t unix_days = tinyclj_days_from_civil_utc(year, month, day);
+    return fixnum((int)unix_days);
+}
+
+// tinyclj.datetime/format-iso: (format-iso {:year y :month m :day d :hour h :minute min :second sec}) => "YYYY-MM-DDTHH:MM:SS"
+ID native_datetime_format_iso(ID *args, unsigned int argc)
+{
+    if (!validate_builtin_args(argc, 1, "format-iso"))
+        return NULL;
+
+    ID map = args[0];
+    if (!map)
+        return NULL;
+
+    unsigned char tag = TAG(map);
+    if (tag != CLJ_MAP && tag != CLJ_MAP_TRANSIENT)
+    {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "format-iso expects a map");
+    }
+
+    ID kw_year = intern_symbol_global(":year");
+    ID kw_month = intern_symbol_global(":month");
+    ID kw_day = intern_symbol_global(":day");
+    ID kw_hour = intern_symbol_global(":hour");
+    ID kw_minute = intern_symbol_global(":minute");
+    ID kw_second = intern_symbol_global(":second");
+    if (!kw_year || !kw_month || !kw_day || !kw_hour || !kw_minute || !kw_second)
+        return NULL;
+
+    ID v_year = map_get(map, kw_year);
+    ID v_month = map_get(map, kw_month);
+    ID v_day = map_get(map, kw_day);
+    ID v_hour = map_get(map, kw_hour);
+    ID v_minute = map_get(map, kw_minute);
+    ID v_second = map_get(map, kw_second);
+
+    if (!is_fixnum(v_year) || !is_fixnum(v_month) || !is_fixnum(v_day) ||
+        !is_fixnum(v_hour) || !is_fixnum(v_minute) || !is_fixnum(v_second))
+    {
+        return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
+                                         "format-iso expects integer :year :month :day :hour :minute :second");
+    }
+
+    int year = as_fixnum(v_year);
+    int month = as_fixnum(v_month);
+    int day = as_fixnum(v_day);
+    int hour = as_fixnum(v_hour);
+    int minute = as_fixnum(v_minute);
+    int second = as_fixnum(v_second);
+
+    char buf[32];
+    int written = snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
+                           year, month, day, hour, minute, second);
+    if (written < 0 || written >= (int)sizeof(buf))
+    {
+        return throw_exception_formatted(EXCEPTION_RUNTIME, __FILE__, __LINE__, 0,
+                                         "format-iso formatting buffer overflow");
+    }
+
+    return AUTORELEASE(make_string(buf));
 }
 
 // do: Evaluate expressions sequentially, return last value
