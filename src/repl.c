@@ -1,5 +1,5 @@
 #include "platform.h"
-#include "common.h"
+#include <subjective-c/common.h>
 #include "tiny_clj.h"
 #include "repl.h"
 #include "parser.h"
@@ -7,7 +7,7 @@
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include <subjective-c/object.h>
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "builtins.h"
 #include "memory_profiler.h"
 #include "line_editor.h"
@@ -16,8 +16,8 @@
 #include "reader.h"
 #include "runtime.h"
 #include <subjective-c/vector.h>
-#include "memory.h"
-#include "value.h"
+#include <subjective-c/memory.h>
+#include <subjective-c/value.h>
 #include "event_loop.h"
 #include "file_utils.h"
 #include "meta.h"

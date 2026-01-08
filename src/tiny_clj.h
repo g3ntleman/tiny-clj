@@ -6,7 +6,7 @@
 
 #include <stdbool.h>
 #include <subjective-c/object.h>
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 

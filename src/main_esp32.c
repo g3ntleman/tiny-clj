@@ -4,10 +4,10 @@
 #include "namespace.h"
 #include "builtins.h"
 #include "runtime.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "eval.h"
 #include "reader.h"
-#include "value.h"
+#include <subjective-c/value.h>
 #include "debug.h"
 #include <stdio.h>
 #include <stdlib.h>

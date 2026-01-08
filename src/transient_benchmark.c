@@ -5,10 +5,10 @@
  * for both vectors and maps.
  */
 
-#include "value.h"
+#include <subjective-c/value.h>
 #include <subjective-c/vector.h>
 #include <subjective-c/map.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>

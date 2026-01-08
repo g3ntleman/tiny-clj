@@ -1,5 +1,5 @@
 #include "ast.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "list.h"
 
 CljASTNode* make_ast_node(ID first, CljObject *rest) {

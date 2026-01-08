@@ -1,6 +1,6 @@
 #include "eval_arithmetic.h"
 #include "builtins.h"
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "error_messages.h"
 #include "numeric_utils.h"
 #include <subjective-c/strings.h>

@@ -14,11 +14,11 @@
 #include <math.h>
 #include <subjective-c/object.h>
 #include "builtins_strings.h"
-#include "value.h"
-#include "memory.h"
+#include <subjective-c/value.h>
+#include <subjective-c/memory.h>
 #include <subjective-c/strings.h>
 #include "to_string.h"
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "builtins.h"
 #include "symbol.h"
 

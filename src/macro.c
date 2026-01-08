@@ -8,7 +8,7 @@
 
 #include "macro.h"
 #include <subjective-c/map.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 
 // Internal: Look up a macro by symbol in the given namespace
 static CljFunction* lookup_macro(CljNamespace *ns, CljSymbol *name) {

@@ -1,9 +1,9 @@
 #include "tests_common.h"
 #include <subjective-c/object.h>
 #include "list.h"
-#include "value.h"
+#include <subjective-c/value.h>
 #include <subjective-c/strings.h>
-#include "types.h"
+#include <subjective-c/types.h>
 #include <subjective-c/vector.h>
 #include "eval.h"
 #include "symbol.h"

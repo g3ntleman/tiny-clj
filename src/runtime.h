@@ -13,7 +13,7 @@
 #define TINY_CLJ_RUNTIME_H
 
 #include <subjective-c/object.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include <subjective-c/vector.h>
 #include <subjective-c/hashmap.h>
 #include "namespace.h"

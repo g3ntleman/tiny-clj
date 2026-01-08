@@ -13,7 +13,7 @@
 #include "environment.h"
 
 #include <subjective-c/map.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "runtime.h"
 #include "symbol.h"
 #include "list.h"

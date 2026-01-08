@@ -9,12 +9,12 @@
 #include <stdbool.h>
 
 #include "builtins_regex.h"
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "list.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include <subjective-c/regex.h>
 #include <subjective-c/strings.h>
-#include "value.h"
+#include <subjective-c/value.h>
 
 // regex?: Returns true if x is a compiled regex pattern
 ID native_regex_p(ID *args, unsigned int argc) {

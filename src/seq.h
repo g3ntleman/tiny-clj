@@ -8,7 +8,7 @@
 #ifndef TINY_CLJ_SEQ_H
 #define TINY_CLJ_SEQ_H
 
-#include "common.h"  // For CLJ_ASSERT
+#include <subjective-c/common.h>  // For CLJ_ASSERT
 #include <subjective-c/object.h>
 #include <stdbool.h>
 

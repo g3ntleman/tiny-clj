@@ -8,7 +8,7 @@
 #include "symbol.h"
 #include "namespace.h"
 #include "function_call.h"
-#include "value.h"
+#include <subjective-c/value.h>
 #include <sys/stat.h>
 #include <errno.h>
 

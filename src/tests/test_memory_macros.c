@@ -5,8 +5,8 @@
  */
 
 #include "tests_common.h"
-#include "value.h"
-#include "memory.h"
+#include <subjective-c/value.h>
+#include <subjective-c/memory.h>
 
 TEST(test_memory_macros_null_safe) {
     // nil is represented as NULL; macros must tolerate this.

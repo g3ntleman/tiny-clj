@@ -1,7 +1,7 @@
 #include "tests_common.h"
 #include "eval.h"
 #include "symbol.h"
-#include "value.h"
+#include <subjective-c/value.h>
 
 ID eval_time(CljList *list, CljMap *env, EvalState *st, const EvalContext *ctx);
 

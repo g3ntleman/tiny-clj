@@ -5,7 +5,7 @@
 #include "namespace.h"
 #include "meta.h"
 #include <subjective-c/vector.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "eval.h"  // For reset_eval_arg_depth()
 #include "event_loop.h"     // For event_loop_clear()
 #include "macro.h"          // For macro_cache_reset()

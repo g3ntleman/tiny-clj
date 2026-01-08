@@ -1,7 +1,7 @@
 #include "eval_sequence.h"
 #include "eval.h"
 #include "builtins.h"
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "event_loop.h"
 #include "error_messages.h"
 #include <subjective-c/map.h>

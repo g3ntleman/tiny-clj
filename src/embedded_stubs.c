@@ -6,8 +6,8 @@
  */
 
 #include <subjective-c/object.h>
-#include "value.h"
-#include "memory.h"
+#include <subjective-c/value.h>
+#include <subjective-c/memory.h>
 
 #if defined(ERROR_MESSAGES_ENABLED) && !ERROR_MESSAGES_ENABLED
 // Stub implementations for error messages when disabled

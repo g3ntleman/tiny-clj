@@ -1,6 +1,6 @@
 #include "symbol_token.h"
-#include "memory.h"
-#include "common.h"
+#include <subjective-c/memory.h>
+#include <subjective-c/common.h>
 #include <string.h>
 #include <assert.h>
 

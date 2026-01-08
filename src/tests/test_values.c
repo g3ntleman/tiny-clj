@@ -5,7 +5,7 @@
  */
 
 #include "tests_common.h"
-#include "exception.h"
+#include <subjective-c/exception.h>
 
 // ============================================================================
 // TEST FIXTURES (setUp/tearDown defined in unity_test_runner.c)
