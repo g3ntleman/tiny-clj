@@ -12,7 +12,7 @@
 #include "exception.h"
 #include "list.h"
 #include "memory.h"
-#include "regex.h"
+#include <subjective-c/regex.h>
 #include <subjective-c/strings.h>
 #include "value.h"
 

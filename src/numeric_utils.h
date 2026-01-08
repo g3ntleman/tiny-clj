@@ -3,6 +3,8 @@
 
 #include "value.h"
 #include <subjective-c/object.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /**
  * @brief Extract numeric values from two CljObjects and promote them to float
@@ -35,5 +37,9 @@ typedef enum {
  * @return true if both objects are numeric, false otherwise
  */
 bool compare_numeric_values(ID a, ID b, CompareResult *result);
+
+size_t clj_uitoa(uint32_t value, char *buffer);
+size_t clj_itoa(int32_t value, char *buffer);
+size_t clj_ftoa(float value, char *buffer);
 
 #endif // NUMERIC_UTILS_H

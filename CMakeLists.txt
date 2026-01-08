@@ -141,8 +141,7 @@ list(APPEND SOURCES
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
-    src/regex.c
-    external/tiny_regex.c
+    
 )
 
 # Main executable (not built by default; use REPL)
@@ -199,8 +198,6 @@ add_executable(tiny-clj-esp32
     src/eval_special_forms.c
     src/to_string.c
     src/macro.c
-    src/regex.c
-    external/tiny_regex.c
 )
 target_link_libraries(tiny-clj-esp32 PRIVATE subjective-c)
 
@@ -339,7 +336,7 @@ add_executable(unit-tests
     src/tests/test_string.c
     src/tests/test_vector.c
     src/tests/test_time.c
-    src/tests/test_closure_symbol_resolution.c
+    # src/tests/test_closure_symbol_resolution.c  # File doesn't exist - commented out
     external/unity/src/unity.c
     # Note: src/repl.c, src/platform_macos.c, src/line_editor.c are NOT in ${SOURCES}
     # but are needed for unit-tests (test_repl.c uses repl functionality)

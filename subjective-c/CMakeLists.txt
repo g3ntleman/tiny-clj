@@ -25,6 +25,10 @@ set(SUBJECTIVE_C_SOURCES
     datetime_utc.c
     instant.c
     uuid.c
+        regex.c
+
+        # Regex engine (tiny-regex-c) compiled into subjective-c
+        ${CMAKE_SOURCE_DIR}/external/tiny_regex.c
 )
 
 add_library(subjective-c STATIC ${SUBJECTIVE_C_SOURCES})
@@ -35,18 +39,26 @@ target_include_directories(subjective-c
 )
 target_compile_features(subjective-c PUBLIC c_std_99)
 
-# Inherit build configuration from parent project based on CMAKE_BUILD_TYPE
-# This ensures subjective-c is built with the same build type as tiny-clj targets
-# Debug builds of tiny-clj should link Debug builds of subjective-c
-# Release builds of tiny-clj should link Release builds of subjective-c
-# Use generator expressions to support all build types properly
-# DEBUG is enabled for Debug builds (default if CMAKE_BUILD_TYPE is not set)
+# Inherit ALL build flags from parent project to ensure consistent compilation
+# This is critical for struct layout compatibility (e.g., CLJException size)
+target_compile_options(subjective-c PRIVATE
+    -Wall -Wextra
+    $<$<CONFIG:Debug>:-g;-O0;-DDEBUG;-DZOMBIE_ENABLED;-fno-omit-frame-pointer>
+    $<$<CONFIG:Release>:-O3;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden>
+    $<$<CONFIG:MinSizeRel>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden>
+    $<$<CONFIG:Embedded>:-Os;-DNDEBUG;-ffunction-sections;-fdata-sections;-fvisibility=hidden;-flto;-fno-unwind-tables;-fno-asynchronous-unwind-tables;-fno-stack-protector;-fomit-frame-pointer;-fno-ident;-fno-common>
+)
+
+# Ensure DEBUG is defined for Debug builds (critical for CLJException struct layout)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
-    target_compile_definitions(subjective-c PUBLIC DEBUG)
-    message(STATUS "subjective-c: DEBUG enabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
+    target_compile_definitions(subjective-c PUBLIC DEBUG ZOMBIE_ENABLED)
+    message(STATUS "subjective-c: DEBUG and ZOMBIE_ENABLED (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 else()
     message(STATUS "subjective-c: DEBUG disabled (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")
 endif()
+
+# Unity compatibility: flush stdout for error messages
+target_compile_definitions(subjective-c PUBLIC UNITY_USE_FLUSH_STDOUT)
 
 # Size-focused embedded builds: avoid pulling in printf-style formatting code.
 # Enable this for the embedded configuration and when cross-compiling with the ESP32 toolchain.
@@ -54,8 +66,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMA
     target_compile_definitions(subjective-c PUBLIC STRING_FORMATTING_ENABLED=0)
     message(STATUS "subjective-c: STRING_FORMATTING_ENABLED=0")
 endif()
-# CMake automatically applies CMAKE_C_FLAGS_<CONFIG> based on build type
-# No need to manually set COMPILE_FLAGS - CMake handles this automatically
+
+# ESP32-specific linker flags (if using ESP32 toolchain)
+if(NOT APPLE AND (CMAKE_BUILD_TYPE STREQUAL "Embedded" OR (DEFINED CMAKE_TOOLCHAIN_FILE AND CMAKE_TOOLCHAIN_FILE MATCHES "esp32\\.cmake")))
+    target_compile_options(subjective-c PRIVATE -mlongcalls)
+    message(STATUS "subjective-c: ESP32 -mlongcalls enabled")
+endif()
 
 # -----------------------------------------------------------------------------
 # Unity-based test executable (runs very early in migration)

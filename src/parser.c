@@ -69,6 +69,12 @@ static void throw_parser_exception(const char *message, Reader *reader) {
 }
 
 static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
+#if defined(STRING_FORMATTING_ENABLED) && !STRING_FORMATTING_ENABLED
+  // Embedded size build: avoid pulling in printf/vsnprintf formatting code.
+  // Keep the API but sacrifice formatted messages.
+  (void)reader;
+  throw_parser_exception((format != NULL) ? format : "Parse error", reader);
+#else
     enum { MSG_LEN = 256 };
     char buffer[MSG_LEN];
     va_list args;
@@ -76,6 +82,7 @@ static void throw_parser_exceptionf(Reader *reader, const char *format, ...) {
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
     throw_parser_exception(buffer, reader);
+#endif
 }
 
 // Stack-based parser constants

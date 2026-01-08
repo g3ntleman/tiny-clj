@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <assert.h>
 #include <math.h>
 #include <stdint.h>
@@ -33,12 +32,86 @@
 #include <subjective-c/kv_macros.h>
 #include <subjective-c/types.h>
 #include "runtime.h"
-#include "regex.h"
+#include <subjective-c/regex.h>
 
 #include <subjective-c/instant.h>
 #include <subjective-c/uuid.h>
 
 #include <subjective-c/datetime_utc.h>
+
+#include "numeric_utils.h"
+
+
+static void append_bytes(char *buffer, size_t *offset, const char *data, size_t len) {
+    memcpy(buffer + *offset, data, len);
+    *offset += len;
+}
+
+static void append_cstr(char *buffer, size_t *offset, const char *s) {
+    append_bytes(buffer, offset, s, strlen(s));
+}
+
+static void append_char(char *buffer, size_t *offset, char c) {
+    buffer[*offset] = c;
+    *offset += 1;
+}
+
+static void append_int32(char *buffer, size_t *offset, int32_t value) {
+    char tmp[32];
+    size_t n = clj_itoa(value, tmp);
+    append_bytes(buffer, offset, tmp, n);
+}
+
+static void append_fixed2(char *buffer, size_t *offset, float value) {
+    char tmp[32];
+    size_t n = clj_ftoa(value, tmp);
+    append_bytes(buffer, offset, tmp, n);
+}
+
+static size_t write_hex_no_prefix_uintptr(uintptr_t value, char *out) {
+    static const char hex[] = "0123456789abcdef";
+    size_t i = 0;
+    bool started = false;
+
+    for (int shift = (int)(sizeof(uintptr_t) * 8 - 4); shift >= 0; shift -= 4) {
+        uint8_t nibble = (uint8_t)((value >> shift) & 0x0F);
+        if (!started) {
+            if (nibble == 0 && shift != 0) {
+                continue;
+            }
+            started = true;
+        }
+        out[i++] = hex[nibble];
+    }
+
+    if (!started) {
+        out[i++] = '0';
+    }
+
+    return i;
+}
+
+static size_t hex_len_no_prefix_uintptr(uintptr_t value) {
+    char tmp[2 + sizeof(uintptr_t) * 2];
+    return write_hex_no_prefix_uintptr(value, tmp);
+}
+
+static void append_ptr_hex(char *buffer, size_t *offset, const void *ptr) {
+    append_bytes(buffer, offset, "0x", 2);
+    char tmp[2 + sizeof(uintptr_t) * 2];
+    size_t n = write_hex_no_prefix_uintptr((uintptr_t)ptr, tmp);
+    append_bytes(buffer, offset, tmp, n);
+}
+
+static void append_byte_hex2(char *buffer, size_t *offset, uint8_t value) {
+    static const char hex[] = "0123456789abcdef";
+    buffer[*offset + 0] = '0';
+    buffer[*offset + 1] = 'x';
+    buffer[*offset + 2] = hex[(value >> 4) & 0x0F];
+    buffer[*offset + 3] = hex[value & 0x0F];
+    *offset += 4;
+}
+
 
 static size_t format_instant_iso_utc(char *buf, size_t buf_size, const CljInstant *inst) {
     return tinyclj_format_inst_literal_iso8601_utc(buf, buf_size, inst->days, inst->ms);
@@ -81,7 +154,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
     if (is_immediate(val)) {
         if (is_fixnum(val)) {
             char buf[32];
-            return (size_t)snprintf(buf, sizeof(buf), "%d", as_fixnum(val));
+            return clj_itoa((int32_t)as_fixnum(val), buf);
         }
         if (is_special(val)) {
             uint8_t special = as_special(val);
@@ -93,7 +166,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         }
         if (is_fixed(val)) {
             char buf[32];
-            return (size_t)snprintf(buf, sizeof(buf), "%.2f", (double)as_fixed(val));
+            return clj_ftoa(as_fixed(val), buf);
         }
         if (is_character(val)) {
             return 1; // single character
@@ -263,21 +336,30 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
 
         case CLJ_EXCEPTION: {
             CLJException *exc = (CLJException*)v;
+            char tmp[32];
+            size_t line_len = clj_itoa((int32_t)exc->line, tmp);
+            size_t col_len = clj_itoa((int32_t)exc->col, tmp);
+
             if (exc->file[0] != '\0') {
-                return strlen(exc->type) + 2 + strlen(exc->message) + 5 + strlen(exc->file) + 20; // approximate
+                // "%s: %s at %s:%d:%d"
+                return strlen(exc->type) + 2 + strlen(exc->message) + 4 + strlen(exc->file) + 1 + line_len + 1 + col_len;
             }
-            return strlen(exc->type) + 2 + strlen(exc->message) + 30; // approximate
+            // "%s: %s at line %d, col %d"
+            return strlen(exc->type) + 2 + strlen(exc->message) + 9 + line_len + 6 + col_len;
         }
 
         case CLJ_ATOM: {
             CljAtom *atom = as_atom(v);
-            size_t len = 12; // "#<Atom@: >"
-            len += 20; // address
+            // "#<Atom@0x...: VALUE>"
+            size_t len = 7; // "#<Atom@"
+            len += 2 + hex_len_no_prefix_uintptr((uintptr_t)atom); // "0x" + address
+            len += 2; // ": "
             if (atom->value) {
                 len += to_string_calc_length((CljObject*)atom->value, escape_strings);
             } else {
                 len += 3; // "nil"
             }
+            len += 1; // ">"
             return len;
         }
 
@@ -307,8 +389,7 @@ static size_t to_string_calc_length(CljObject *v, bool escape_strings) {
         case CLJ_UUID: {
             char uuid[37];
             clj_uuid_to_cstring((ID)v, uuid);
-            char buf[80];
-            return (size_t)snprintf(buf, sizeof(buf), "#uuid \"%s\"", uuid);
+            return 7 + strlen(uuid) + 1; // "#uuid \"" + uuid + "\""
         }
 
         default:
@@ -326,8 +407,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
     CljValue val = (CljValue)v;
     if (is_immediate(val)) {
         if (is_fixnum(val)) {
-            int written = snprintf(buffer + *offset, 32, "%d", as_fixnum(val));
-            *offset += written;
+            append_int32(buffer, offset, (int32_t)as_fixnum(val));
             return;
         }
         // CRITICAL: Check is_special BEFORE is_fixed to correctly identify booleans
@@ -350,8 +430,7 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             }
         }
         if (is_fixed(val)) {
-            int written = snprintf(buffer + *offset, 32, "%.2f", (double)as_fixed(val));
-            *offset += written;
+            append_fixed2(buffer, offset, as_fixed(val));
             return;
         }
         if (is_character(val)) {
@@ -504,11 +583,15 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
                 
                 // Build fully qualified name if namespace is available
                 if (ns_name) {
-                    int written = snprintf(buffer + *offset, 256, "#<native function %s/%s>", ns_name, native_name);
-                    *offset += written;
+                    append_cstr(buffer, offset, "#<native function ");
+                    append_cstr(buffer, offset, ns_name);
+                    append_char(buffer, offset, '/');
+                    append_cstr(buffer, offset, native_name);
+                    append_char(buffer, offset, '>');
                 } else {
-                    int written = snprintf(buffer + *offset, 256, "#<native function %s>", native_name);
-                    *offset += written;
+                    append_cstr(buffer, offset, "#<native function ");
+                    append_cstr(buffer, offset, native_name);
+                    append_char(buffer, offset, '>');
                 }
             } else {
                 memcpy(buffer + *offset, "#<native function>", 19);
@@ -522,11 +605,13 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
             if (clj_func && clj_func->name) {
                 CljNamespace *ns = ns_find_for_object((CljObject*)v);
                 const char *ns_name = ns && ns->name && ns->name->cname ? ns->name->cname : NULL;
-                int written = snprintf(buffer + *offset, 256, "#<Clojure function %s%s%s>",
-                             ns_name ? ns_name : "",
-                             ns_name ? "/" : "",
-                             clj_func->name);
-                *offset += written;
+                append_cstr(buffer, offset, "#<Clojure function ");
+                if (ns_name) {
+                    append_cstr(buffer, offset, ns_name);
+                    append_char(buffer, offset, '/');
+                }
+                append_cstr(buffer, offset, clj_func->name);
+                append_char(buffer, offset, '>');
             } else {
                 memcpy(buffer + *offset, "#<Clojure function>", 19);
                 *offset += 19;
@@ -598,26 +683,39 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
         case CLJ_UUID: {
             char uuid[37];
             clj_uuid_to_cstring((ID)v, uuid);
-            int written = snprintf(buffer + *offset, 80, "#uuid \"%s\"", uuid);
-            *offset += (size_t)written;
+            append_cstr(buffer, offset, "#uuid \"");
+            append_cstr(buffer, offset, uuid);
+            append_char(buffer, offset, '"');
             return;
         }
 
         case CLJ_EXCEPTION: {
             CLJException *exc = (CLJException*)v;
-            int written = exc->file[0] != '\0'
-                ? snprintf(buffer + *offset, 1024, "%s: %s at %s:%d:%d",
-                          exc->type, exc->message, exc->file, exc->line, exc->col)
-                : snprintf(buffer + *offset, 512, "%s: %s at line %d, col %d",
-                          exc->type, exc->message, exc->line, exc->col);
-            *offset += written;
+            append_cstr(buffer, offset, exc->type);
+            append_cstr(buffer, offset, ": ");
+            append_cstr(buffer, offset, exc->message);
+
+            if (exc->file[0] != '\0') {
+                append_cstr(buffer, offset, " at ");
+                append_cstr(buffer, offset, exc->file);
+                append_char(buffer, offset, ':');
+                append_int32(buffer, offset, (int32_t)exc->line);
+                append_char(buffer, offset, ':');
+                append_int32(buffer, offset, (int32_t)exc->col);
+            } else {
+                append_cstr(buffer, offset, " at line ");
+                append_int32(buffer, offset, (int32_t)exc->line);
+                append_cstr(buffer, offset, ", col ");
+                append_int32(buffer, offset, (int32_t)exc->col);
+            }
             return;
         }
 
         case CLJ_ATOM: {
             CljAtom *atom = as_atom(v);
-            int written = snprintf(buffer + *offset, 256, "#<Atom@%p: ", (void*)atom);
-            *offset += written;
+            append_cstr(buffer, offset, "#<Atom@");
+            append_ptr_hex(buffer, offset, (const void*)atom);
+            append_cstr(buffer, offset, ": ");
             if (atom->value) {
                 to_string_build_string((CljObject*)atom->value, buffer, offset, escape_strings);
             } else {
@@ -631,16 +729,14 @@ static void to_string_build_string(CljObject *v, char *buffer, size_t *offset, b
 
         case CLJ_BYTE_ARRAY: {
             CljByteArray *ba = as_byte_array(v);
-            int written = snprintf(buffer + *offset, 256, "#<byte-array [");
-            *offset += written;
+            append_cstr(buffer, offset, "#<byte-array [");
             int preview_len = ba->length < 8 ? ba->length : 8;
             for (int i = 0; i < preview_len; i++) {
                 if (i > 0) {
                     buffer[*offset] = ' ';
                     *offset += 1;
                 }
-                written = snprintf(buffer + *offset, 10, "0x%02x", ba->data[i]);
-                *offset += written;
+                append_byte_hex2(buffer, offset, ba->data[i]);
             }
             if (ba->length > 8) {
                 memcpy(buffer + *offset, " ...", 4);

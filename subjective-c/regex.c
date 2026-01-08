@@ -1,6 +1,6 @@
 /*
- * Regex support for Tiny-CLJ
- * 
+ * Regex support for Tiny-CLJ (subjective-c)
+ *
  * Wrapper around tiny-regex-c by kokke (Public Domain / UNLICENSE)
  * https://github.com/kokke/tiny-regex-c
  *
@@ -8,14 +8,17 @@
  * re-pattern, re-find, re-matches, re-seq, regex?
  */
 
-#include "regex.h"
+#include <subjective-c/regex.h>
+
 #include <subjective-c/common.h>
-#include <subjective-c/value.h>
 #include <subjective-c/memory.h>
-#include <subjective-c/object.h>
-#include "../external/tiny_regex.h"
-#include <string.h>
+#include <subjective-c/value.h>
+
+#include <external/tiny_regex.h>
+
+#include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 // Maximum pattern length
 #define MAX_PATTERN_LEN 256
@@ -71,7 +74,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
         }
         return NULL;
     }
-    
+
     size_t len = strlen(pattern);
     if (len >= MAX_PATTERN_LEN) {
         if (error && error_size > 0) {
@@ -79,7 +82,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
         }
         return NULL;
     }
-    
+
     // Validate pattern for unsupported features
     const char *validation_error = validate_pattern(pattern);
     if (validation_error) {
@@ -88,7 +91,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
         }
         return NULL;
     }
-    
+
     // Test compile the pattern to check for syntax errors
     re_t compiled = re_compile(pattern);
     if (!compiled) {
@@ -97,7 +100,7 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
         }
         return NULL;
     }
-    
+
     // Allocate CljRegex object using alloc (handles type and profiling)
     CljRegex *re = (CljRegex *)alloc(sizeof(CljRegex), 1, CLJ_REGEX);
     // alloc() throws on OOM, so no NULL check needed
@@ -105,11 +108,11 @@ CljRegex *regex_compile(const char *pattern, char *error, size_t error_size) {
     // alloc() sets type/flags, but does not initialize rc.
     // Most constructors explicitly set rc=1; regex objects must do the same.
     re->header.rc = 1;
-    
+
     // Copy pattern
     memcpy(re->pattern, pattern, len + 1);
     re->pattern_len = len;
-    
+
     return re;
 }
 
@@ -119,14 +122,14 @@ void regex_free(CljRegex *re) {
     }
 }
 
-const char *regex_find(CljRegex *re, const char *str, 
+const char *regex_find(CljRegex *re, const char *str,
                        const char **match_start, const char **match_end) {
     if (!re || !str) {
         if (match_start) *match_start = NULL;
         if (match_end) *match_end = NULL;
         return NULL;
     }
-    
+
     // Recompile pattern (tiny-regex-c uses static storage)
     re_t compiled = re_compile(re->pattern);
     if (!compiled) {
@@ -134,39 +137,39 @@ const char *regex_find(CljRegex *re, const char *str,
         if (match_end) *match_end = NULL;
         return NULL;
     }
-    
+
     int match_len = 0;
     int match_idx = re_matchp(compiled, str, &match_len);
-    
+
     if (match_idx < 0) {
         if (match_start) *match_start = NULL;
         if (match_end) *match_end = NULL;
         return NULL;
     }
-    
+
     const char *start = str + match_idx;
     if (match_start) *match_start = start;
     if (match_end) *match_end = start + match_len;
-    
+
     return start;
 }
 
 bool regex_matches(CljRegex *re, const char *str) {
     if (!re || !str) return false;
-    
+
     // For re-matches, the entire string must match
     // We need to check if pattern matches from start to end
-    
+
     // Recompile pattern
     re_t compiled = re_compile(re->pattern);
     if (!compiled) return false;
-    
+
     int match_len = 0;
     int match_idx = re_matchp(compiled, str, &match_len);
-    
+
     // Match must start at index 0 and cover entire string
     if (match_idx != 0) return false;
-    
+
     size_t str_len = strlen(str);
     return (size_t)match_len == str_len;
 }

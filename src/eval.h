@@ -19,12 +19,6 @@ typedef struct {
     // Evaluation state
     EvalState *st;         // Evaluation state (can be NULL)
 
-    // Symbol resolution namespace
-    // Clojure-compat: unqualified symbols in a function body should resolve against
-    // the namespace where the function was defined (lexical), not the caller's *ns*.
-    // Dynamic *ns* is still read from st->current_ns.
-    CljNamespace *resolve_ns; // Namespace to use for unqualified symbol resolution (can be NULL)
-
     // Recur state
     ID *recur_args;        // Recur arguments (can be NULL)
     int *recur_arg_count;  // Pointer to recur argument count (can be NULL)
@@ -93,6 +87,5 @@ ID eval_string(const char* expr_str, EvalState *eval_state);
 // Common evaluation helpers
 ID* alloc_obj_array(int size, ID *stack_buffer);
 void free_obj_array(ID *array, ID *stack_buffer);
-CljObject* list_get_element(CljList *list, int index);
 
 #endif

@@ -299,22 +299,15 @@ CljNamespace* ns_get_or_create(const char *cname, const char *file) {
 }
 
 ID ns_resolve(EvalState *st, CljSymbol *sym) {
-    CljNamespace *current_ns = st ? st->current_ns : NULL;
-    return ns_resolve_in(current_ns, sym);
-}
-
-ID ns_resolve_in(CljNamespace *current_ns, CljSymbol *sym) {
     CLJ_ASSERT(sym != NULL);
-
+    
     // Keywords evaluate to themselves - no namespace resolution needed
     if (IS_KEYWORD(sym)) {
         return sym;
     }
-
-    // Default namespace if not provided
-    if (!current_ns) {
-        current_ns = ns_get_or_create("user", NULL);
-    }
+    
+    // Use default namespace if st is NULL (eliminates need for temporary EvalState instances)
+    CljNamespace *current_ns = st ? st->current_ns : ns_get_or_create("user", NULL);
     if (!current_ns) {
         return NOT_FOUND;
     }
@@ -606,6 +599,7 @@ EvalState* get_global_eval_state(void) {
             throw_exception(EXCEPTION_RUNTIME, "Failed to create user namespace", NULL, 0, 0);
             return NULL;
         }
+        g_eval_state.resolve_ns = g_eval_state.current_ns;
 
         // Dynamic binding stack: transient vector used as push/pop stack.
         // Frames stored are maps (Symbol -> value), where value may be NULL (nil).
@@ -639,6 +633,7 @@ void reset_eval_state(void) {
     }
     memset(&g_eval_state, 0, sizeof(EvalState));
     g_eval_state.current_ns = ns_get_or_create("user", NULL);
+    g_eval_state.resolve_ns = g_eval_state.current_ns;
 
     g_eval_state.dynamic_bindings = vector_transient(empty_vector());
     if (!g_eval_state.dynamic_bindings) {
@@ -692,7 +687,13 @@ void evalstate_set_ns(EvalState *st, const char *ns_name) {
     }
     
     if (ns) {
+        CljNamespace *old_current_ns = st->current_ns;
         st->current_ns = ns;
+        // Keep resolve_ns tracking current_ns unless it was intentionally overridden
+        // (e.g., during closure invocation).
+        if (st->resolve_ns == NULL || st->resolve_ns == old_current_ns) {
+            st->resolve_ns = ns;
+        }
     }
 }
 
