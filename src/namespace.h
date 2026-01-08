@@ -37,7 +37,8 @@ typedef struct {
     struct CljVector *pool;
     struct CljVector *dynamic_bindings; // transient vector: stack of binding frame maps
     int finished;
-    CljNamespace *current_ns; // current namespace (*ns*)
+    CljNamespace *current_ns; // dynamic current namespace (*ns*)
+    CljNamespace *resolve_ns; // namespace used for unqualified symbol resolution (defaults to current_ns)
 } EvalState;
 
 // Global namespace registry is now in g_runtime.ns_registry (CljMap*)
@@ -46,7 +47,6 @@ typedef struct {
 CljNamespace* make_namespace(const char *cname, const char *file);
 CljNamespace* ns_get_or_create(const char *cname, const char *file);
 ID ns_resolve(EvalState *st, CljSymbol *sym);
-ID ns_resolve_in(CljNamespace *current_ns, CljSymbol *sym);
 CljNamespace* ns_load_file(EvalState *st, const char *ns_name, const char *filename);
 void ns_register(CljNamespace *ns);
 CljNamespace* ns_find(const char *cname);

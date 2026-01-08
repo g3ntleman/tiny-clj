@@ -39,10 +39,9 @@ static inline bool is_keyword(ID obj) {
 #define IS_KEYWORD(obj) is_keyword(obj)
 
 // Check if a symbol is a special form (if, let, fn, def, do, quote, etc.)
-// O(1) check using flags field in CljObject
-static inline bool is_special_symbol(CljSymbol *symbol) {
-    return symbol && (symbol->base.flags & CLJ_FLAG_SPECIAL);
-}
+// O(1) check using address range comparison instead of flags
+// Note: This function is implemented in symbol.c to access the static g_special_symbols[] array
+bool is_special_symbol(CljSymbol *symbol);
 
 // Check if a symbol is a native/builtin function (first, rest, +, -, etc.)
 // O(1) check using flags field in CljObject
@@ -308,7 +307,7 @@ typedef struct CljSpecialSymbol {
 static inline CljSpecialSymbol* as_special_symbol(ID obj) {
     if (!obj || TAG(obj) != CLJ_SYMBOL) return NULL;
     CljSymbol *sym = (CljSymbol*)obj;
-    if (!(sym->base.flags & CLJ_FLAG_SPECIAL)) return NULL;
+    if (!is_special_symbol(sym)) return NULL;
     return (CljSpecialSymbol*)sym;
 }
 

@@ -75,7 +75,15 @@ static inline CljList* list_rest_safe(CljList *l) {
 }
 
 ID list_nth(CljList *list, int n);
+// NOTE: `list_count` is O(n) for linked lists.
+// Avoid calling it just to drive iteration; prefer `LIST_FOR_EACH` / `LIST_REST` traversal when possible.
 int list_count(CljList *list);
+// NOTE: `list_get_element` is discouraged.
+// It returns NULL both for a valid nil element *and* for out-of-bounds / malformed lists,
+// so callers cannot distinguish these cases.
+// Prefer `LIST_FIRST`/`LIST_REST`/`LIST_FOR_EACH` for traversal, or `list_nth` when the index
+// is provably in-bounds (and you want an exception on invalid indices).
+CljObject* list_get_element(CljList *list, int index);
 static inline bool is_list(ID v) {
     return is_list_like(v);
 }

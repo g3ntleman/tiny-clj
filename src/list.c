@@ -112,6 +112,8 @@ ID list_nth(CljList *list, int n) {
             "nth index %d is out of bounds for list", n);
 }
 
+// NOTE: O(n) traversal for linked lists.
+// Prefer single-pass traversal (e.g. LIST_FOR_EACH) in hot paths.
 int list_count(CljList *list) {
     if (!list) return 0;
     
@@ -131,5 +133,19 @@ int list_count(CljList *list) {
         count++;
     }
     return count;
+}
+
+CljObject* list_get_element(CljList *list, int index) {
+    if (!list || index < 0) return NULL;
+    CljList *node = list;
+    if (index == 0) return LIST_FIRST(node);
+    int i = 0;
+    while (i < index) {
+        CljObject *rest = LIST_REST(node);
+        if (!rest || !list_type_matches(TAG(rest))) return NULL;
+        node = as_list(rest);
+        i++;
+    }
+    return LIST_FIRST(node);
 }
 

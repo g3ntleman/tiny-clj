@@ -16,6 +16,7 @@
 #include "atom.h"
 #include "kv_macros.h"
 #include "numeric_utils.h"
+#include "format_utils.h"
 #include "runtime.h"
 #include "memory.h"
 #include "value.h"
@@ -185,9 +186,16 @@ static bool validate_builtin_args(unsigned int argc, unsigned int expected, cons
     if (argc != expected)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "%s requires exactly %u argument%s, got %u",
-                 func_name, expected, expected == 1 ? "" : "s", argc);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg), func_name);
+        pos = format_append(error_msg, pos, sizeof(error_msg), " requires exactly ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), expected);
+        pos = format_append(error_msg, pos, sizeof(error_msg), " argument");
+        if (expected != 1) {
+            pos = format_append_char(error_msg, pos, sizeof(error_msg), 's');
+        }
+        pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return false;
     }
@@ -199,8 +207,14 @@ ID nth2(ID *args, unsigned int argc)
     if (argc != 2 && argc != 3)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "nth requires exactly 2 or 3 argument%s, got %u",
-                 argc == 1 ? "" : "s", argc);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "nth requires exactly 2 or 3 argument");
+        if (argc != 1) {
+            pos = format_append_char(error_msg, pos, sizeof(error_msg), 's');
+        }
+        pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -354,9 +368,14 @@ ID native_subvec(ID *args, unsigned int argc)
     if (argc != 2 && argc != 3)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "subvec requires exactly 2 or 3 argument%s, got %u",
-                 argc == 1 ? "" : "s", argc);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "subvec requires exactly 2 or 3 argument");
+        if (argc != 1) {
+            pos = format_append_char(error_msg, pos, sizeof(error_msg), 's');
+        }
+        pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -641,9 +660,11 @@ ID native_next(ID *args, unsigned int argc)
         // Not seqable - throw exception with type name for debugging
         const char *type_name = clj_type_name(coll->type);
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "next not supported on this type: %s",
-                 type_name ? type_name : "unknown");
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "next not supported on this type: ");
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            type_name ? type_name : "unknown");
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT,
                         error_msg,
                         __FILE__, __LINE__, 0);
@@ -830,7 +851,9 @@ ID native_gensym(ID *args, unsigned int argc)
                              : "G__";
 
     char name[256];
-    snprintf(name, sizeof(name), "%s%lu", prefix, ++counter);
+    size_t pos = 0;
+    pos = format_append(name, pos, sizeof(name), prefix);
+    pos = format_append_ulong(name, pos, sizeof(name), ++counter);
     return intern_symbol_global(name);
 }
 
@@ -1040,8 +1063,10 @@ ID native_reduce(ID *args, unsigned int argc)
     if (argc != 2 && argc != 3)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "reduce requires exactly 2 or 3 arguments, got %u", argc);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "reduce requires exactly 2 or 3 arguments, got ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -2928,7 +2953,7 @@ static const NativeFunctionEntry native_function_table[] = {
     {&sym_ns_map_data.sym, native_ns_map},
     {&sym_find_ns_data.sym, native_find_ns},
     {&sym_all_ns_data.sym, native_all_ns},
-    {(CljSymbol *)&sym_do_data.sym, native_do},
+    {&sym_do_data.sym.base, native_do},
     {&sym_byte_array_data.sym, native_byte_array},
     {&sym_aget_data.sym, native_aget},
     {&sym_aset_data.sym, native_aset},
@@ -2964,10 +2989,13 @@ BuiltinFn native_function_lookup(CljSymbol *symbol)
     const char *ns_name = (symbol->ns_name) ? symbol->ns_name->cname : NULL;
 
     // Build qualified name once (if needed)
-    char qualified_name[128];
+    char qualified_name[128] = {0};
     if (ns_name)
     {
-        snprintf(qualified_name, sizeof(qualified_name), "%s/%s", ns_name, cname);
+        size_t pos = 0;
+        pos = format_append(qualified_name, pos, sizeof(qualified_name), ns_name);
+        pos = format_append_char(qualified_name, pos, sizeof(qualified_name), '/');
+        format_append(qualified_name, pos, sizeof(qualified_name), cname);
     }
 
     // Single pass through table with all checks
@@ -3176,9 +3204,14 @@ ID native_symbol(ID *args, unsigned int argc)
     if (argc != 1 && argc != 2)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "symbol requires exactly 1 or 2 argument%s, got %u",
-                 argc == 1 ? "" : "s", argc);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "symbol requires exactly 1 or 2 argument");
+        if (argc != 1) {
+            pos = format_append_char(error_msg, pos, sizeof(error_msg), 's');
+        }
+        pos = format_append(error_msg, pos, sizeof(error_msg), ", got ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -3408,8 +3441,11 @@ static char *read_file_cstr(const char *path, char *resolved_path, size_t resolv
     }
 
     char parent_path[512];
-    if (snprintf(parent_path, sizeof(parent_path), "../%s", path) < (int)sizeof(parent_path))
+    size_t path_len = strlen(path);
+    if (path_len + 3 < sizeof(parent_path))
     {
+        memcpy(parent_path, "../", 3);
+        memcpy(parent_path + 3, path, path_len + 1);
         buffer = read_file_once(parent_path);
         if (buffer)
         {
@@ -3417,8 +3453,10 @@ static char *read_file_cstr(const char *path, char *resolved_path, size_t resolv
             return buffer;
         }
     }
-    if (snprintf(parent_path, sizeof(parent_path), "../../%s", path) < (int)sizeof(parent_path))
+    if (path_len + 6 < sizeof(parent_path))
     {
+        memcpy(parent_path, "../../", 6);
+        memcpy(parent_path + 6, path, path_len + 1);
         buffer = read_file_once(parent_path);
         if (buffer)
         {
@@ -3798,8 +3836,10 @@ static bool process_require_spec(ID spec, EvalState *st)
     }
 
     // Search order: libs/<rel>, then <rel> (project root)
-    char libs_path[512];
-    snprintf(libs_path, sizeof(libs_path), "libs/%s", rel);
+    char libs_path[512] = {0};
+    size_t libs_pos = 0;
+    libs_pos = format_append(libs_path, libs_pos, sizeof(libs_path), "libs/");
+    format_append(libs_path, libs_pos, sizeof(libs_path), rel);
 
     char resolved_path[512];
     resolved_path[0] = '\0';
@@ -3821,9 +3861,16 @@ static bool process_require_spec(ID spec, EvalState *st)
     if (!source)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "Require failed: namespace '%s' not found (expected file %s or libs/%s)",
-                 ns_name, rel, rel);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "Require failed: namespace '");
+        pos = format_append(error_msg, pos, sizeof(error_msg), ns_name);
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "' not found (expected file ");
+        pos = format_append(error_msg, pos, sizeof(error_msg), rel);
+        pos = format_append(error_msg, pos, sizeof(error_msg), " or libs/");
+        pos = format_append(error_msg, pos, sizeof(error_msg), rel);
+        format_append_char(error_msg, pos, sizeof(error_msg), ')');
         throw_exception(EXCEPTION_FILE_NOT_FOUND, error_msg, __FILE__, __LINE__, 0);
         free(rel);
         return false;
@@ -4099,8 +4146,13 @@ ID native_spit(ID *args, unsigned int argc)
     if (!fp)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "Cannot open file '%s' for writing: %s", filename_str, strerror(errno));
+        const char *err = strerror(errno);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "Cannot open file '");
+        pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
+        pos = format_append(error_msg, pos, sizeof(error_msg), "' for writing: ");
+        format_append(error_msg, pos, sizeof(error_msg), err);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                         __FILE__, __LINE__, 0);
         return NULL;
@@ -4114,8 +4166,13 @@ ID native_spit(ID *args, unsigned int argc)
     if (bytes_written != content_len)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "Error writing to file '%s': %s", filename_str, strerror(errno));
+        const char *err = strerror(errno);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "Error writing to file '");
+        pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
+        pos = format_append(error_msg, pos, sizeof(error_msg), "': ");
+        format_append(error_msg, pos, sizeof(error_msg), err);
         fclose(fp);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                         __FILE__, __LINE__, 0);
@@ -4126,8 +4183,13 @@ ID native_spit(ID *args, unsigned int argc)
     if (fflush(fp) != 0)
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "Error flushing file '%s': %s", filename_str, strerror(errno));
+        const char *err = strerror(errno);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "Error flushing file '");
+        pos = format_append(error_msg, pos, sizeof(error_msg), filename_str);
+        pos = format_append(error_msg, pos, sizeof(error_msg), "': ");
+        format_append(error_msg, pos, sizeof(error_msg), err);
         fclose(fp);
         throw_exception(EXCEPTION_ILLEGAL_ARGUMENT, error_msg,
                         __FILE__, __LINE__, 0);
@@ -4762,8 +4824,10 @@ ID native_repeat(ID *args, unsigned int argc)
     else
     {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-                 "repeat requires 1 or 2 arguments, got %u", argc);
+        size_t pos = 0;
+        pos = format_append(error_msg, pos, sizeof(error_msg),
+                            "repeat requires 1 or 2 arguments, got ");
+        pos = format_append_uint(error_msg, pos, sizeof(error_msg), argc);
         throw_exception(EXCEPTION_ARITY, error_msg, __FILE__, __LINE__, 0);
         return NULL;
     }
@@ -5470,8 +5534,10 @@ ID native_keyword(ID *args, unsigned int argc)
         return NULL;
 
     // Create keyword by prepending ":"
-    char kw_name[256];
-    snprintf(kw_name, sizeof(kw_name), ":%s", name);
+    char kw_name[256] = {0};
+    size_t pos = 0;
+    pos = format_append_char(kw_name, pos, sizeof(kw_name), ':');
+    format_append(kw_name, pos, sizeof(kw_name), name);
 
     return intern_symbol_global(kw_name);
 }

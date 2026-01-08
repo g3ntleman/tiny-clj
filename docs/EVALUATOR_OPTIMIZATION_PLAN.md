@@ -53,10 +53,10 @@
 
 **Loesung:** TAG einmal am Anfang cachen.
 
-### 8. Special-Form Flag-Check ⏳
-**Problem:** `is_special_symbol()` iteriert durch eine Liste.
+### 8. Special-Form Erkennung (Pointer-Range) ✅
+**Problem:** `is_special_symbol()` sollte O(1) sein (kein lineares Scannen).
 
-**Loesung:** CLJ_FLAG_SPECIAL_FORM Flag hinzufuegen.
+**Loesung:** Special-Forms werden ueber stabile Pointer-Identitaet erkannt (kontiguierliches Special-Symbol-Array + Pointer-Range-Check). Kein zusaetzliches Flag-Bit noetig.
 
 ## Erwartete Gesamt-Verbesserung
 
@@ -66,7 +66,7 @@
 | Lazy as_symbol | ~2-3% |
 | Inline frame_lookup | ~3-5% |
 | TAG-Caching | ~2-3% |
-| Special-Form Flag | ~1-2% |
+| Special-Form Erkennung | ✅ |
 | **Gesamt** | **~15-20%** |
 
 ## Langfristige Optimierungen

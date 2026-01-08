@@ -62,7 +62,7 @@
         "echo": true,
         "reveal": "always",
         "focus": true,
-        "panel": "dedicated",
+        "panel": "shared",
         "showReuseMessage": false,
         "clear": false
       },
@@ -83,7 +83,7 @@
         "echo": true,
         "reveal": "always",
         "focus": true,
-        "panel": "dedicated",
+        "panel": "shared",
         "showReuseMessage": false,
         "clear": false
       },

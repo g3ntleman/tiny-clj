@@ -30,7 +30,23 @@ int main() {
     
     const char *cname = platform_name();
     char message[128];
-    snprintf(message, sizeof(message), "Hello from %s! (Final Optimized Version)", cname);
+    size_t pos = 0;
+    const size_t cap = sizeof(message);
+    const char *prefix = "Hello from ";
+    const char *suffix = "! (Final Optimized Version)";
+
+    while (*prefix && pos + 1 < cap) {
+        message[pos++] = *prefix++;
+    }
+    if (cname) {
+        while (*cname && pos + 1 < cap) {
+            message[pos++] = *cname++;
+        }
+    }
+    while (*suffix && pos + 1 < cap) {
+        message[pos++] = *suffix++;
+    }
+    message[pos] = '\0';
     platform_print(message);
     
     // Initialize global structures

@@ -65,7 +65,7 @@ extern CljObject g_not_found_sentinel;
  *
  *   Bit:  7   6   5   4   3   2   1   0
  *         └───┴───┘───┴───┘       │   │   │
- *         CompOp   ArithOp        │   │   └─ CLJ_FLAG_SPECIAL (0x01)
+ *         CompOp   ArithOp        │   │   └─ (unused/reserved)
  *         (0-3)    (0-3)          │   └───── CLJ_FLAG_ARITHMETIC (0x02)
  *                                 └───────── CLJ_FLAG_COMPARISON (0x04)
  *
@@ -75,7 +75,6 @@ extern CljObject g_not_found_sentinel;
  *   Example flags:  +  → 0x02,  -  → 0x12,  *  → 0x22,  /  → 0x32
  *                   <  → 0x04,  >  → 0x44,  <= → 0x84,  >= → 0xC4
  */
-#define CLJ_FLAG_SPECIAL 0x01
 #define CLJ_FLAG_ARITHMETIC 0x02
 #define CLJ_FLAG_COMPARISON 0x04
 #define CLJ_FLAG_NATIVE 0x08 // Native/builtin function (no macro lookup needed)
