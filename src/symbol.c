@@ -22,17 +22,7 @@
 // Note: Symbols have SINGLETON_RC and are never released
 
 bool is_earmuffed_dynamic_symbol(const CljSymbol *sym) {
-    if (!sym || !sym->cname) return false;
-    const char *name = sym->cname;
-    if (name[0] != '*') return false;
-    const char *p = name + 1;
-    if (!*p) return false;
-    char last = '\0';
-    while (*p) {
-        last = *p;
-        p++;
-    }
-    return last == '*';
+    return sym && ((sym->base.flags & CLJ_FLAG_DYNAMIC) != 0);
 }
 
 // Globale Symbol-Pointer Definitionen
@@ -622,6 +612,7 @@ void init_special_symbols() {
 
     // Additional symbols for hot path optimization
     INIT_SYMBOL(SYM_NS_STAR, sym_ns_star_data);
+    SYM_NS_STAR->base.flags |= CLJ_FLAG_DYNAMIC;
 
     // Clean up macros to avoid namespace pollution
     #undef INIT_SYMBOL
@@ -797,8 +788,10 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     // Assertion: name must not be empty
     CLJ_ASSERT(cname[0] != '\0' && "make_symbol: name cannot be empty");
 
+    size_t cname_len = strlen(cname);
+
     // Range check for name length (keep for safety)
-    if (strlen(cname) >= SYMBOL_NAME_MAX_LEN) {
+    if (cname_len >= SYMBOL_NAME_MAX_LEN) {
         return throw_exception_formatted(EXCEPTION_ILLEGAL_ARGUMENT, __FILE__, __LINE__, 0,
                 "Symbol name '%s' exceeds maximum length of %d characters",
                 cname, SYMBOL_NAME_MAX_LEN - 1);
@@ -814,6 +807,10 @@ static CljSymbol* make_symbol(const char *cname, CljSymbol *ns_name) {
     sym->base.type = CLJ_SYMBOL;
     sym->base.rc = SINGLETON_RC;  // Interned symbols are singletons - never freed
     sym->base.flags = 0;  // Initialize flags to 0 (no special flags by default)
+
+    if (cname_len > 1 && cname[0] == '*' && cname[cname_len - 1] == '*') {
+        sym->base.flags |= CLJ_FLAG_DYNAMIC;
+    }
 
     // Store strdup'd name for heap-allocated symbols
     sym->cname = strdup(cname);

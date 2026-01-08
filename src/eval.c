@@ -958,7 +958,7 @@ void reset_eval_arg_depth(void) {
 // ============================================================================
 
 static INLINE bool is_dynamic_var_symbol(const CljSymbol *symbol) {
-    return is_earmuffed_dynamic_symbol(symbol);
+    return symbol && ((symbol->base.flags & CLJ_FLAG_DYNAMIC) != 0);
 }
 
 static INLINE ID dynamic_binding_lookup(EvalState *st, CljSymbol *symbol) {
