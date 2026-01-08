@@ -2,14 +2,14 @@
 #include "eval.h"
 #include "symbol.h"
 #include <stdio.h>
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "function.h"
 #include "validation.h"
 #include "builtins.h"
 #include "optimize.h"
 #include "parser.h"  // For eval_parsed
 #include "reader.h"  // For Reader API (used by eval_string)
-#include "common.h"
+#include <subjective-c/common.h>
 
 // Branch prediction hints for hot paths
 #define LIKELY(x)   __builtin_expect(!!(x), 1)
@@ -21,10 +21,10 @@
 #include <string.h>
 #include "seq.h"
 #include "namespace.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "meta.h"
 #include "list.h"
-#include "value.h"
+#include <subjective-c/value.h>
 #include "environment.h"
 #include "ast.h"
 #include <subjective-c/vector.h>

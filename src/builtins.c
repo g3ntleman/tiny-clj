@@ -14,18 +14,18 @@
 #include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "atom.h"
-#include "kv_macros.h"
+#include <subjective-c/kv_macros.h>
 #include "numeric_utils.h"
 #include "format_utils.h"
 #include "runtime.h"
-#include "memory.h"
-#include "value.h"
+#include <subjective-c/memory.h>
+#include <subjective-c/value.h>
 #include "error_messages.h"
 #include "symbol.h" // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "seq.h"
-#include "byte_array.h"
-#include "exception.h"
+#include <subjective-c/byte_array.h>
+#include <subjective-c/exception.h>
 #include "list.h"
 #include "function.h"
 #include <subjective-c/strings.h>

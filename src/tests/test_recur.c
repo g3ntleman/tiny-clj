@@ -1,6 +1,6 @@
 #include "tests_common.h"
 #include "eval.h"
-#include "value.h"
+#include <subjective-c/value.h>
 #include "symbol.h"
 
 // Test factorial with recur

@@ -21,9 +21,9 @@
 #endif
 #include <subjective-c/map.h>
 #include <stdbool.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "utf8.h"
-#include "value.h"
+#include <subjective-c/value.h>
 #include "symbol.h"
 #include "meta.h"
 #include <subjective-c/strings.h>
@@ -31,9 +31,17 @@
 #include <subjective-c/instant.h>
 #include <subjective-c/uuid.h>
 #include <ctype.h>
+#include "format_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+
+static size_t format_append_hex_byte(char *dest, size_t offset, size_t capacity, unsigned char value) {
+  static const char digits[] = "0123456789abcdef";
+  offset = format_append_char(dest, offset, capacity, digits[(value >> 4) & 0x0F]);
+  offset = format_append_char(dest, offset, capacity, digits[value & 0x0F]);
+  return offset;
+}
 
 // Helper function for parser exceptions
 static void throw_parser_exception(const char *message, Reader *reader) {
@@ -443,8 +451,18 @@ ID parse_expr(Reader *reader, EvalState *st) {
 
   // Unknown character - throw exception with helpful message
   char msg[256];
-  snprintf(msg, sizeof(msg), "Unexpected character '%c' (0x%02x) at position %zu (line %d, col %d)",
-           (c >= 32 && c < 127) ? c : '?', (unsigned char)c, reader->index, reader->line, reader->column);
+  size_t msg_pos = 0;
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), "Unexpected character '");
+  msg_pos = format_append_char(msg, msg_pos, sizeof(msg), (c >= 32 && c < 127) ? c : '?');
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), "' (0x");
+  msg_pos = format_append_hex_byte(msg, msg_pos, sizeof(msg), (unsigned char)c);
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), ") at position ");
+  msg_pos = format_append_ulong(msg, msg_pos, sizeof(msg), (unsigned long)reader->index);
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), " (line ");
+  msg_pos = format_append_int(msg, msg_pos, sizeof(msg), reader->line);
+  msg_pos = format_append(msg, msg_pos, sizeof(msg), ", col ");
+  msg_pos = format_append_int(msg, msg_pos, sizeof(msg), reader->column);
+  (void)format_append_char(msg, msg_pos, sizeof(msg), ')');
   throw_parser_exception(msg, reader);
   return NULL;
 }
@@ -834,7 +852,9 @@ static ID parse_character(Reader *reader, EvalState *st) {
         break;
     }
     char msg[128];
-    snprintf(msg, sizeof(msg), "Unknown named character: \\%s", cname);
+    size_t msg_pos = 0;
+    msg_pos = format_append(msg, msg_pos, sizeof(msg), "Unknown named character: \\");
+    (void)format_append(msg, msg_pos, sizeof(msg), cname);
     throw_parser_exception(msg, reader);
     return NULL;
   } else {
@@ -993,7 +1013,9 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
         if (ns_name_sym && ns_name_sym->cname) {
           // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
           char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-          snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+          size_t kw_pos = 0;
+          kw_pos = format_append_char(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), ':');
+          (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), keyword_name);
           CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
           if (kw) {
             return AUTORELEASE(kw);  // No location meta for atoms
@@ -1012,7 +1034,9 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
           if (ns_name_sym) {
             // For keywords, keep the ':' prefix in cname for IS_KEYWORD to work
             char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-            snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", keyword_name);
+            size_t kw_pos = 0;
+            kw_pos = format_append_char(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), ':');
+            (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), keyword_name);
             CljSymbol *kw = intern_symbol(ns_name_sym, keyword_with_colon);
             if (kw) {
               return AUTORELEASE(kw);  // No location meta for atoms
@@ -1063,8 +1087,9 @@ static ID parse_symbol(Reader *reader, EvalState *st) {
       if (is_keyword_symbol) {
         // Add ':' prefix to symbol name for IS_KEYWORD to work
         char keyword_with_colon[SYMBOL_NAME_MAX_LEN];
-        snprintf(keyword_with_colon, sizeof(keyword_with_colon), ":%s", symbol_str);
-        keyword_with_colon[sizeof(keyword_with_colon) - 1] = '\0';
+        size_t kw_pos = 0;
+        kw_pos = format_append_char(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), ':');
+        (void)format_append(keyword_with_colon, kw_pos, sizeof(keyword_with_colon), symbol_str);
         CljSymbol *sym = intern_symbol(ns_name_sym, keyword_with_colon);
         if (sym) {
           return AUTORELEASE(sym);  // No location meta for atoms

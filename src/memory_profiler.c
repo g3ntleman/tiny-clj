@@ -37,10 +37,10 @@
  */
 
 #include "memory_profiler.h"
-#include "memory.h"  // For LOGF macro
+#include <subjective-c/memory.h>  // For LOGF macro
 #include <subjective-c/object.h>
-#include "value.h"
-#include "types.h"
+#include <subjective-c/value.h>
+#include <subjective-c/types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

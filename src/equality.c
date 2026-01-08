@@ -7,12 +7,12 @@
 
 #include <string.h>
 #include <subjective-c/object.h>
-#include "value.h"
+#include <subjective-c/value.h>
 #include "symbol.h"
 #include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include <subjective-c/strings.h>
-#include "kv_macros.h"
+#include <subjective-c/kv_macros.h>
 #include "list.h"
 
 #include <subjective-c/instant.h>

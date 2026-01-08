@@ -1,5 +1,5 @@
 #include "args_utils.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include <stdlib.h>
 
 /**

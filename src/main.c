@@ -1,12 +1,12 @@
 #include "platform.h"
 #include <subjective-c/object.h>
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "parser.h"
 #include "namespace.h"
 #include "symbol.h"
 #include "runtime.h"
 #include "tests/test_api.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include <stdio.h>
 #include <stdlib.h>
 

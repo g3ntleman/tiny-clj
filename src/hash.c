@@ -6,9 +6,9 @@
 #include <subjective-c/map.h>
 #include "list.h"
 #include <subjective-c/strings.h>
-#include "value.h"
+#include <subjective-c/value.h>
 #include <subjective-c/object.h>
-#include "kv_macros.h"
+#include <subjective-c/kv_macros.h>
 #include <subjective-c/callbacks.h>
 
 #include <subjective-c/instant.h>

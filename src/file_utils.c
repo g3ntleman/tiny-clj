@@ -6,8 +6,8 @@
 #include "file_utils.h"
 #include <subjective-c/strings.h>
 #include "format_utils.h"
-#include "memory.h"
-#include "exception.h"
+#include <subjective-c/memory.h>
+#include <subjective-c/exception.h>
 #include <string.h>
 #include <errno.h>
 

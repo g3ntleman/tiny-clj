@@ -2,7 +2,7 @@
 #define TINY_CLJ_NAMESPACE_H
 
 #include <subjective-c/object.h>
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "symbol.h"  // Include symbol.h for CljSymbol definition
 #include <stdbool.h>
 

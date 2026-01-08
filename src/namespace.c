@@ -1,19 +1,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include "common.h"  // For CLJ_ASSERT
+#include <subjective-c/common.h>  // For CLJ_ASSERT
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include <subjective-c/object.h>
 #include <subjective-c/map.h>
 #include "list.h"
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "runtime.h"
 #include "tiny_clj.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "parser.h"  // For eval_parsed
 #include <subjective-c/vector.h>
-#include "kv_macros.h"  // For KV_KEY, KV_VALUE
+#include <subjective-c/kv_macros.h>  // For KV_KEY, KV_VALUE
 
 // Helper context for namespace search in ns_resolve()
 struct ns_search_ctx {

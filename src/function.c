@@ -7,8 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "function.h"
-#include "value.h"  // For IS_IMMEDIATE macro
-#include "memory.h"
+#include <subjective-c/value.h>  // For IS_IMMEDIATE macro
+#include <subjective-c/memory.h>
 #include "runtime.h"
 #include <subjective-c/object.h>
 #include <subjective-c/vector.h>

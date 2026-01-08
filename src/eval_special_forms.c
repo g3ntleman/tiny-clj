@@ -1,10 +1,10 @@
 #include "eval_special_forms.h"
 #include "eval.h"
-#include "common.h"
+#include <subjective-c/common.h>
 #include "channel.h"
 #include "event_loop.h"
 #include <subjective-c/vector.h>
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "environment.h"
 #include "runtime.h"
 #include "function.h"

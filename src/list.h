@@ -2,8 +2,8 @@
 #define TINY_CLJ_LIST_H
 
 #include <subjective-c/object.h>
-#include "value.h"
-#include "exception.h"
+#include <subjective-c/value.h>
+#include <subjective-c/exception.h>
 #include "ast.h"
 #include <stdbool.h>
 

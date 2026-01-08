@@ -1,6 +1,6 @@
 {
   // Use compile_commands.json for accurate IntelliSense and navigation
-  "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json",
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
   "C_Cpp.default.cStandard": "c99",
   
   // Enable Go to Definition with Cmd+Click

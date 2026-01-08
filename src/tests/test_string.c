@@ -9,7 +9,7 @@
 #include "symbol.h"
 #include <subjective-c/map.h>
 #include <subjective-c/object.h>
-#include "kv_macros.h"
+#include <subjective-c/kv_macros.h>
 
 // Forward declaration
 int load_clojure_core(EvalState *st);

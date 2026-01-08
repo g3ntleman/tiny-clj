@@ -1,11 +1,11 @@
 // clojure.core.c
 
-#include "exception.h"
+#include <subjective-c/exception.h>
 #include "symbol.h"  // Must be included before namespace.h for CljSymbol definition
 #include "namespace.h"
 #include "tiny_clj.h"
 #include "reader.h"
-#include "value.h"  // For IS_IMMEDIATE macro
+#include <subjective-c/value.h>  // For IS_IMMEDIATE macro
 #include "runtime.h" // For g_runtime
 #include "list.h"    // For LIST_FIRST
 #include "eval.h"  // For SYM_DEF, SYM_NS

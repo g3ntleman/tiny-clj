@@ -11,7 +11,7 @@
  */
 
 #include "ast_canon.h"
-#include "common.h"
+#include <subjective-c/common.h>
 #include <subjective-c/object.h>
 #include "symbol.h"
 #include <subjective-c/strings.h>
@@ -19,7 +19,7 @@
 #include <subjective-c/vector.h>
 #include <subjective-c/map.h>
 #include "namespace.h"
-#include "memory.h"
+#include <subjective-c/memory.h>
 #include "ast.h"
 #include "parser.h"  // For resolve_alias_in_namespace
 #include "meta.h"    // For meta_get and meta_set

@@ -29,9 +29,9 @@
 
 // Core Tiny-CLJ headers
 // #include <subjective-c/object.h>     // Located in subjective-c/object.h
-// #include "memory.h"     // Located in src/memory.h
-// #include "value.h"      // Located in src/value.h
-// #include "types.h"      // Located in src/types.h
+// #include <subjective-c/memory.h>     // Located in subjective-c/memory.h
+// #include <subjective-c/value.h>      // Located in subjective-c/value.h
+// #include <subjective-c/types.h>      // Located in subjective-c/types.h
 // #include "memory_profiler.h"  // Located in src/memory_profiler.h
 
 #endif // INCLUDE_PATHS_H
