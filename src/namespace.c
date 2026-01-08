@@ -794,7 +794,8 @@ CljObject* eval_try(CljObject *form, EvalState *st) {
     } CATCH(ex) {
         // We arrived here via eval_error
         // Search for catch clauses
-        for (int i = 2; i < list_count(as_list(form)); i++) {
+        int form_len = list_count(as_list(form));
+        for (int i = 2; i < form_len; i++) {
             CljObject *clause = list_nth(as_list(form), i);
             if (!is_list(clause)) continue;
 
